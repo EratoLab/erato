@@ -270,6 +270,11 @@ pub enum ContentPart {
     /// of *prior-turn* history, the resolver drops it; for the *current
     /// turn* it renders the template against the current config + args.
     ActionFacetMarker(ContentPartActionFacetMarker),
+    /// Reference to the run directive of a delegated chat, resolved the same
+    /// way as `ActionFacetMarker`: metadata in the persisted snapshot, text
+    /// only in the request about to be sent, dropped when the snapshot is
+    /// replayed as prior-turn history.
+    DelegationPreambleMarker(ContentPartDelegationPreambleMarker),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -327,6 +332,17 @@ pub struct ContentPartActionFacetMarker {
     /// selected text for `outlook_rewrite_selection`, the compose body for
     /// `outlook_review_draft`).
     pub args: HashMap<String, String>,
+}
+
+/// The structured-brief fields of a delegated run, copied from the chat's
+/// provenance envelope at composition time. The preamble template itself is
+/// not carried: it is read from the config in force when the marker resolves.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct ContentPartDelegationPreambleMarker {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_output: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub constraints: Option<String>,
 }
 
 /// Statistics for a list of messages
@@ -456,9 +472,11 @@ impl MessageSchema {
                 ContentPart::TextFilePointer(_) => None,
                 ContentPart::ImageFilePointer(_) => None,
                 ContentPart::Image(_) => None,
-                // Markers are placeholders for the action-facet resolver and
-                // do not contribute to a message's full text representation.
-                ContentPart::ActionFacetMarker(_) => None,
+                // Markers are placeholders for the directive resolver and do
+                // not contribute to a message's full text representation.
+                ContentPart::ActionFacetMarker(_) | ContentPart::DelegationPreambleMarker(_) => {
+                    None
+                }
             })
             .collect::<Vec<&str>>()
             .join(" ")
@@ -1011,8 +1029,10 @@ impl InputMessage {
             ContentPart::TextFilePointer(_) => String::new(),
             ContentPart::ImageFilePointer(_) => String::new(),
             ContentPart::Image(_) => String::new(),
-            // Marker is metadata-only; rendering happens in the resolver.
-            ContentPart::ActionFacetMarker(_) => String::new(),
+            // Markers are metadata-only; rendering happens in the resolver.
+            ContentPart::ActionFacetMarker(_) | ContentPart::DelegationPreambleMarker(_) => {
+                String::new()
+            }
         }
     }
 }

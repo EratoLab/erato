@@ -787,6 +787,9 @@ export type ContentPart =
     }
   | (ContentPartActionFacetMarker & {
       content_type: "action_facet_marker";
+    })
+  | (ContentPartDelegationPreambleMarker & {
+      content_type: "delegation_preamble_marker";
     });
 
 export type ContentPartActionFacetMarker = {
@@ -802,6 +805,16 @@ export type ContentPartActionFacetMarker = {
    * Identifier of the action facet whose template should be rendered.
    */
   facet_id: string;
+};
+
+/**
+ * The structured-brief fields of a delegated run, copied from the chat's
+ * provenance envelope at composition time. The preamble template itself is
+ * not carried: it is read from the config in force when the marker resolves.
+ */
+export type ContentPartDelegationPreambleMarker = {
+  constraints?: null | undefined;
+  expected_output?: null | undefined;
 };
 
 export type ContentPartImage = {

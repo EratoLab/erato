@@ -158,6 +158,8 @@ async fn write_delegation_provenance(
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
             adopted_at: None,
+            expected_output: None,
+            constraints: None,
         }),
     };
     let chat = erato::db::entity::chats::Entity::find_by_id(chat_id)
@@ -1139,6 +1141,8 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
                     json!({
                         "assistant_id": DELEGATE_ASSISTANT_FIXED_ID,
                         "task": "CHILD-TASK-BRIEF: summarize the numbers",
+                        "expected_output": "EXPECTED-OUTPUT-SENTINEL: one number per line",
+                        "constraints": "CONSTRAINTS-SENTINEL: use only the attached figures",
                     }),
                 )]),
             );
@@ -1307,6 +1311,16 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
     assert!(provenance.origin_message_id.is_some());
     assert_eq!(provenance.depth, 1);
     assert!(provenance.rebase_cutoff.is_some());
+    // The structured brief lives in the envelope, not only in the parent's
+    // tool-call input — that copy sits in a chat the child cannot read.
+    assert_eq!(
+        provenance.expected_output.as_deref(),
+        Some("EXPECTED-OUTPUT-SENTINEL: one number per line")
+    );
+    assert_eq!(
+        provenance.constraints.as_deref(),
+        Some("CONSTRAINTS-SENTINEL: use only the attached figures")
+    );
     assert_eq!(child_chat.generation_state.as_deref(), Some("completed"));
     assert_eq!(
         shared_generation_event_types(&app_state.db, child_chat.id)
@@ -1316,6 +1330,45 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
         Some("stream_end"),
         "a resume tailing the child's shared stream has to see it close"
     );
+
+    // The child's stored first message is the brief a person would read, with
+    // none of the run directive in it.
+    let child_messages_response = server
+        .get(&format!("/api/v1beta/chats/{}/messages", child_chat.id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    child_messages_response.assert_status_ok();
+    let child_messages_json = child_messages_response.json::<Value>();
+    let child_user_message = child_messages_json["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["role"] == "user")
+        .expect("the child's user message");
+    let child_answer_message_id = child_messages_json["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["role"] == "assistant")
+        .expect("the child's answer")["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let child_user_text = child_user_message["content"][0]["text"].as_str().unwrap();
+    assert_eq!(child_user_text, "CHILD-TASK-BRIEF: summarize the numbers");
+    for machinery in [
+        "system-reminder",
+        "delegating conversation",
+        "Expected output:",
+        "Constraints:",
+    ] {
+        assert!(
+            !serde_json::to_string(child_user_message)
+                .unwrap()
+                .contains(machinery),
+            "the stored child message must not carry '{machinery}'"
+        );
+    }
 
     // The child's request head: delegate prompt + preamble, no origin head.
     let child_bodies = child_recorder.bodies();
@@ -1332,6 +1385,21 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
     assert!(!child_bodies[0].contains(ORIGIN_PROMPT_SENTINEL));
     assert!(child_bodies[0].contains("delegating conversation"));
     assert!(child_bodies[0].contains("system-reminder"));
+    // …and the composed request is where the structured brief reaches the
+    // model, rendered from the envelope rather than replayed from the message.
+    let child_directive = child_messages
+        .iter()
+        .find(|message| {
+            message["content"]
+                .as_str()
+                .is_some_and(|content| content.contains("<system-reminder>"))
+        })
+        .expect("the composed run directive");
+    assert_eq!(child_directive["role"], "user");
+    let child_directive_text = child_directive["content"].as_str().unwrap();
+    assert!(child_directive_text.contains("EXPECTED-OUTPUT-SENTINEL: one number per line"));
+    assert!(child_directive_text.contains("CONSTRAINTS-SENTINEL: use only the attached figures"));
+    assert!(!child_directive_text.contains("CHILD-TASK-BRIEF"));
 
     // Client-tool suppression: offered to the parent, absent in the child.
     // The recorder also sees the parent's chat-summary request (no tools), so
@@ -1367,6 +1435,39 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
             "the trace must never reach the origin model"
         );
     }
+
+    // Taking the run over ends the run directive: the owner is who the
+    // delegate is answering now, so it is neither re-derived for this turn nor
+    // replayed out of the first turn's snapshot.
+    let child_follow_up = submit_message(
+        &server,
+        &child_chat.id.to_string(),
+        Some(&child_answer_message_id),
+        "owner follow-up inside the run",
+        vec![],
+    )
+    .await;
+    assert!(extract_full_text_answer(&child_follow_up).contains("CHILD-ANSWER"));
+    let child_follow_up_body = child_recorder
+        .bodies()
+        .into_iter()
+        .find(|body| body.contains("owner follow-up inside the run"))
+        .expect("the adopted run's request");
+    for machinery in [
+        "system-reminder",
+        "delegating conversation",
+        "EXPECTED-OUTPUT-SENTINEL",
+        "CONSTRAINTS-SENTINEL",
+    ] {
+        assert!(
+            !child_follow_up_body.contains(machinery),
+            "an adopted run must not carry '{machinery}'"
+        );
+    }
+    assert!(
+        child_follow_up_body.contains("CHILD-TASK-BRIEF"),
+        "the brief itself still replays — it is a real message"
+    );
 }
 
 /// A call naming an assistant that was not offered refuses the call and the
@@ -2448,6 +2549,8 @@ async fn test_listing_hides_delegated_runs_and_exposes_provenance(pool: Pool<Pos
                 rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
                 depth: 1,
                 adopted_at: None,
+                expected_output: None,
+                constraints: None,
             },
             format!("Delegated run {index}"),
         )
@@ -2621,6 +2724,8 @@ async fn test_parked_delegated_chat_stays_reachable(pool: Pool<Postgres>) {
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
             adopted_at: None,
+            expected_output: None,
+            constraints: None,
         },
         "Parked delegated run".to_string(),
     )
@@ -3190,6 +3295,8 @@ async fn spawn_delegated_run(
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
             adopted_at: None,
+            expected_output: None,
+            constraints: None,
         },
         title.to_string(),
     )
@@ -3220,6 +3327,8 @@ async fn spawn_handoff_branch(
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
             adopted_at: None,
+            expected_output: None,
+            constraints: None,
         },
         "Handoff branch".to_string(),
     )
@@ -3607,6 +3716,8 @@ async fn test_submit_into_live_delegated_run_conflicts(pool: Pool<Postgres>) {
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
             adopted_at: None,
+            expected_output: None,
+            constraints: None,
         },
         "Continuable run".to_string(),
     )

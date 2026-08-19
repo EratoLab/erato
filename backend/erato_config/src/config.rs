@@ -2790,12 +2790,14 @@ pub struct AssistantsDelegationConfig {
     #[serde(default = "default_delegation_auto_archive_after_days")]
     pub auto_archive_after_days: u32,
 
-    // Directive rendered into the delegated chat's first turn, telling the
+    // Directive composed into every turn of a delegated chat, telling the
     // delegate it runs as a delegated worker and that its final message is
-    // returned to the origin chat as the task result. `{{expected_output_section}}`
-    // and `{{constraints_section}}` are replaced with formatted blocks when the
-    // origin model supplies the corresponding tool arguments, and with empty
-    // strings otherwise.
+    // returned to the origin chat as the task result. It is never stored in the
+    // chat's messages, and it stops once the user writes into the run
+    // themselves — from then on the delegate is talking to them.
+    // `{{expected_output_section}}` and `{{constraints_section}}` are replaced
+    // with formatted blocks when the origin model supplies the corresponding
+    // tool arguments, and with empty strings otherwise.
     #[serde(default = "default_delegation_preamble")]
     pub preamble: String,
 }

@@ -1195,12 +1195,11 @@ mod tests {
         }])
     }
 
-    /// Erato wraps the brief in the configured delegation preamble before it
-    /// becomes the delegate's first user message.
-    fn delegate_first_user_message() -> String {
-        format!(
-            "{DELEGATION_CHILD_BRIEF}\n\n<system-reminder>\nYou are working on a task that another conversation delegated to you. Your final message is returned to the delegating conversation as the result of this task; it is not shown to a person directly.\n</system-reminder>"
-        )
+    /// Erato composes the configured delegation preamble into a user message of
+    /// its own, ahead of the brief — which stays the delegate's last user
+    /// message, and so the one the turn mocks key on.
+    fn delegate_preamble_message() -> String {
+        "<system-reminder>\nYou are working on a task that another conversation delegated to you. Your final message is returned to the delegating conversation as the result of this task; it is not shown to a person directly.\n</system-reminder>".to_string()
     }
 
     fn match_default_mocks(
@@ -1252,7 +1251,8 @@ mod tests {
         let delegate_turn = match_default_mocks(
             json!([
                 {"role": "system", "content": delegate_system},
-                {"role": "user", "content": delegate_first_user_message()},
+                {"role": "user", "content": delegate_preamble_message()},
+                {"role": "user", "content": DELEGATION_CHILD_BRIEF},
             ]),
             None,
         );
@@ -1264,7 +1264,8 @@ mod tests {
         let delegate_after_tool = match_default_mocks(
             json!([
                 {"role": "system", "content": delegate_system},
-                {"role": "user", "content": delegate_first_user_message()},
+                {"role": "user", "content": delegate_preamble_message()},
+                {"role": "user", "content": DELEGATION_CHILD_BRIEF},
                 {"role": "assistant", "content": null},
                 {"role": "tool", "content": "{\"files\":[\"secret.txt\",\"secret2.txt\"]}"},
             ]),

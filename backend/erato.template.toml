@@ -357,10 +357,12 @@ chat_provider_ids = ["test-token-limit"]
 # # after cleanup_archived_max_age_days, so this requires cleanup_enabled.
 # # 0 never archives a run automatically (default: 7)
 # auto_archive_after_days = 7
-# # Directive rendered into the delegated chat's first turn. The delegate's own
-# # system prompt is untouched; this is additive. {{expected_output_section}} and
-# # {{constraints_section}} are replaced with formatted blocks when the origin
-# # model supplies the corresponding arguments, and with empty strings otherwise.
+# # Directive composed into every turn of a delegated chat, never stored in its
+# # messages, and dropped once the user writes into the run themselves. The
+# # delegate's own system prompt is untouched; this is additive.
+# # {{expected_output_section}} and {{constraints_section}} are replaced with
+# # formatted blocks when the origin model supplies the corresponding arguments,
+# # and with empty strings otherwise.
 # # The text below is the built-in default.
 # preamble = """
 # You are working on a task that another conversation delegated to you. Your final message is returned to the delegating conversation as the result of this task; it is not shown to a person directly.

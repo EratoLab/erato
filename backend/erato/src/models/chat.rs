@@ -72,6 +72,16 @@ pub struct ChatProvenance {
     /// automatic retention pass leaves it alone from then on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub adopted_at: Option<DateTimeWithTimeZone>,
+    /// Delegation only: the result shape the origin model asked for. Also
+    /// durable in that model's tool-call input, but that copy lives in a chat
+    /// this one cannot read and which may be deleted independently, so a run
+    /// keeps its own — it is what the preamble is rendered from every turn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_output: Option<String>,
+    /// Delegation only: the limits the delegate must work within. Same
+    /// reasoning as `expected_output`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub constraints: Option<String>,
 }
 
 impl AssistantConfiguration {

@@ -108,33 +108,33 @@ pub(crate) async fn resolve_file_pointers_in_generation_input(
     })
 }
 
-/// Sentinel tag wrapping a rendered action-facet directive in the user
-/// turn. Mirrors Claude Code's own `<system-reminder>` convention — the
-/// model has been trained to treat XML-tagged user content as authoritative
-/// guidance rather than ordinary user prose, while keeping the directive
-/// in the user turn (which Anthropic explicitly recommends for per-turn
-/// instructions and which preserves the system prompt cache).
-const ACTION_FACET_SENTINEL_OPEN: &str = "<system-reminder>";
-const ACTION_FACET_SENTINEL_CLOSE: &str = "</system-reminder>";
+/// Sentinel tag wrapping a rendered per-turn directive in the user turn.
+/// Mirrors Claude Code's own `<system-reminder>` convention — the model has
+/// been trained to treat XML-tagged user content as authoritative guidance
+/// rather than ordinary user prose, while keeping the directive in the user
+/// turn (which Anthropic explicitly recommends for per-turn instructions and
+/// which preserves the system prompt cache).
+const DIRECTIVE_SENTINEL_OPEN: &str = "<system-reminder>";
+const DIRECTIVE_SENTINEL_CLOSE: &str = "</system-reminder>";
 
-/// Resolve `ContentPart::ActionFacetMarker` entries by rendering the
-/// referenced facet template against the current `AppConfig` using the
-/// args captured at request time.
+/// Resolve the per-turn directive markers — `ContentPart::ActionFacetMarker`
+/// and `ContentPart::DelegationPreambleMarker` — by rendering their templates
+/// against the current `AppConfig`, using the arguments captured on the marker
+/// at composition time.
 ///
 /// Mirrors `resolve_file_pointers_in_generation_input` — the saved
 /// `generation_input_messages` carries metadata-only markers; rendering
 /// happens lazily here, immediately before the chat-request hits the LLM.
 ///
-/// Prior-turn markers are stripped earlier in
-/// `compose_prompt_messages`'s historical-replay step, so any marker that
-/// reaches this resolver belongs to the current turn and gets rendered.
-/// If the referenced facet config is missing (renamed/deleted), the
-/// marker is dropped with a warning rather than rendering empty text.
+/// Prior-turn markers are stripped earlier in `compose_prompt_messages`'s
+/// historical-replay step, so any marker that reaches this resolver belongs to
+/// the current turn and gets rendered. A marker whose template has gone
+/// missing (a renamed or deleted facet) is dropped with a warning rather than
+/// rendered as empty text.
 ///
-/// Output is wrapped in a `<system-reminder>` sentinel in the user turn
-/// (the marker carries `MessageRole::User`); see that comment for
-/// reasoning.
-pub(crate) fn resolve_action_facet_markers_in_generation_input(
+/// Output is wrapped in a `<system-reminder>` sentinel in the user turn (both
+/// markers carry `MessageRole::User`); see that comment for reasoning.
+pub(crate) fn resolve_directive_markers_in_generation_input(
     app_state: &AppState,
     generation_input_messages: GenerationInputMessages,
 ) -> GenerationInputMessages {
@@ -142,29 +142,37 @@ pub(crate) fn resolve_action_facet_markers_in_generation_input(
     let resolved_messages = generation_input_messages
         .messages
         .into_iter()
-        .filter_map(|input_message| match input_message.content {
-            ContentPart::ActionFacetMarker(marker) => {
-                let Some(config) = action_facet_configs.get(&marker.facet_id) else {
-                    tracing::warn!(
-                        facet_id = %marker.facet_id,
-                        "Action-facet config not found while resolving marker — dropping",
-                    );
-                    return None;
-                };
-                let rendered = render_placeholder_template(&config.template, &marker.args);
-                if rendered.is_empty() {
-                    return None;
+        .filter_map(|input_message| {
+            let rendered = match &input_message.content {
+                ContentPart::ActionFacetMarker(marker) => {
+                    let Some(config) = action_facet_configs.get(&marker.facet_id) else {
+                        tracing::warn!(
+                            facet_id = %marker.facet_id,
+                            "Action-facet config not found while resolving marker — dropping",
+                        );
+                        return None;
+                    };
+                    render_placeholder_template(&config.template, &marker.args)
                 }
-                let wrapped = format!(
-                    "{}\n{}\n{}",
-                    ACTION_FACET_SENTINEL_OPEN, rendered, ACTION_FACET_SENTINEL_CLOSE,
-                );
-                Some(InputMessage {
-                    role: input_message.role,
-                    content: ContentPart::Text(ContentPartText { text: wrapped }),
-                })
+                ContentPart::DelegationPreambleMarker(marker) => {
+                    crate::services::delegation::render_delegation_preamble(
+                        &app_state.config.assistants.delegation.preamble,
+                        marker.expected_output.as_deref(),
+                        marker.constraints.as_deref(),
+                    )
+                }
+                _ => return Some(input_message),
+            };
+            let rendered = rendered.trim();
+            if rendered.is_empty() {
+                return None;
             }
-            _ => Some(input_message),
+            let wrapped =
+                format!("{DIRECTIVE_SENTINEL_OPEN}\n{rendered}\n{DIRECTIVE_SENTINEL_CLOSE}");
+            Some(InputMessage {
+                role: input_message.role,
+                content: ContentPart::Text(ContentPartText { text: wrapped }),
+            })
         })
         .collect();
     GenerationInputMessages {

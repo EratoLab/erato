@@ -2613,7 +2613,7 @@ mod test_cases {
         assert!(matches!(resolved.messages[2].role, MessageRole::User));
 
         // The action facet prompt is now an ActionFacetMarker — rendering
-        // happens later in `resolve_action_facet_markers_in_generation_input`.
+        // happens later in `resolve_directive_markers_in_generation_input`.
         // Here we verify the marker is structurally present with the right
         // facet_id and args, which is what gets persisted to the DB.
         match &resolved.messages[1].content {
@@ -2837,7 +2837,7 @@ mod test_cases {
 
         // Verify action facet marker is present in a User-role message
         // (rendering happens later in
-        // `resolve_action_facet_markers_in_generation_input`).
+        // `resolve_directive_markers_in_generation_input`).
         let has_action_facet = resolved2.messages.iter().any(|m| {
             matches!(m.role, MessageRole::User)
                 && matches!(
@@ -2858,6 +2858,294 @@ mod test_cases {
             "Expected 5 messages (base_system + action_facet + user1 + assistant + user2), found {}",
             resolved2.messages.len()
         );
+    }
+
+    // ============================================================================
+    // Delegation preamble composition
+    // ============================================================================
+
+    /// A chat row carrying a delegation provenance envelope, as
+    /// `create_delegated_chat` writes it.
+    fn create_delegated_test_chat(
+        expected_output: Option<&str>,
+        constraints: Option<&str>,
+        adopted: bool,
+    ) -> chats::Model {
+        delegated_test_chat_with_kind(
+            crate::models::chat::ChatProvenanceKind::Delegation,
+            expected_output,
+            constraints,
+            adopted,
+        )
+    }
+
+    fn delegated_test_chat_with_kind(
+        kind: crate::models::chat::ChatProvenanceKind,
+        expected_output: Option<&str>,
+        constraints: Option<&str>,
+        adopted: bool,
+    ) -> chats::Model {
+        let assistant_id = Uuid::new_v4();
+        let configuration = crate::models::chat::AssistantConfiguration {
+            assistant_id,
+            provenance: Some(crate::models::chat::ChatProvenance {
+                kind,
+                origin_chat_id: Some(Uuid::new_v4()),
+                origin_message_id: None,
+                origin_assistant_id: None,
+                rebase_cutoff: None,
+                depth: 1,
+                adopted_at: adopted.then(|| chrono::Utc::now().into()),
+                expected_output: expected_output.map(str::to_string),
+                constraints: constraints.map(str::to_string),
+            }),
+        };
+        let mut chat = create_test_chat();
+        chat.assistant_id = Some(assistant_id);
+        chat.assistant_configuration = Some(configuration.to_json().unwrap());
+        chat
+    }
+
+    fn delegation_preamble_markers(
+        resolved: &ResolvedChatSequence,
+    ) -> Vec<&crate::models::message::ContentPartDelegationPreambleMarker> {
+        resolved
+            .messages
+            .iter()
+            .filter_map(|message| match &message.content {
+                ContentPart::DelegationPreambleMarker(marker) => Some(marker),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn delegated_run_composes_its_preamble_from_provenance() {
+        // The brief is the user message and stays untouched; the run directive
+        // is a separate marker built from the chat row's envelope.
+        let mut message_repo = MockMessageRepository::new();
+        let file_resolver = MockFileResolver::new();
+        let prompt_provider = MockPromptProvider::new().with_system_prompt("You are helpful.");
+
+        let chat = create_delegated_test_chat(
+            Some("A bullet list of file names."),
+            Some("Do not open anything outside the attachments."),
+            false,
+        );
+        let config = create_test_chat_provider_config();
+
+        let msg_id = Uuid::new_v4();
+        message_repo.add_message(msg_id, None, MessageRole::User, "List the mock files");
+
+        let abstract_seq = build_abstract_sequence(
+            &message_repo,
+            &prompt_provider,
+            &chat,
+            &msg_id,
+            vec![],
+            &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
+            None,
+        )
+        .await
+        .expect("Failed to build abstract sequence");
+
+        let (resolved, _) = resolve_sequence(abstract_seq, &message_repo, &file_resolver)
+            .await
+            .expect("Failed to resolve sequence");
+
+        let markers = delegation_preamble_markers(&resolved);
+        assert_eq!(markers.len(), 1, "expected exactly one preamble marker");
+        assert_eq!(
+            markers[0].expected_output.as_deref(),
+            Some("A bullet list of file names.")
+        );
+        assert_eq!(
+            markers[0].constraints.as_deref(),
+            Some("Do not open anything outside the attachments.")
+        );
+
+        // The directive sits in the user turn, ahead of the brief, and the
+        // brief itself carries none of it.
+        let preamble_index = resolved
+            .messages
+            .iter()
+            .position(|message| matches!(message.content, ContentPart::DelegationPreambleMarker(_)))
+            .unwrap();
+        assert!(matches!(
+            resolved.messages[preamble_index].role,
+            MessageRole::User
+        ));
+        let brief_index = resolved
+            .messages
+            .iter()
+            .position(|message| {
+                matches!(&message.content, ContentPart::Text(text) if text.text == "List the mock files")
+            })
+            .expect("the brief is the child's user message");
+        assert!(preamble_index < brief_index);
+    }
+
+    #[tokio::test]
+    async fn delegated_run_without_a_structured_brief_still_composes_the_preamble() {
+        let mut message_repo = MockMessageRepository::new();
+        let file_resolver = MockFileResolver::new();
+        let prompt_provider = MockPromptProvider::new().with_system_prompt("You are helpful.");
+
+        let chat = create_delegated_test_chat(None, None, false);
+        let config = create_test_chat_provider_config();
+
+        let msg_id = Uuid::new_v4();
+        message_repo.add_message(msg_id, None, MessageRole::User, "List the mock files");
+
+        let abstract_seq = build_abstract_sequence(
+            &message_repo,
+            &prompt_provider,
+            &chat,
+            &msg_id,
+            vec![],
+            &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
+            None,
+        )
+        .await
+        .expect("Failed to build abstract sequence");
+        let (resolved, _) = resolve_sequence(abstract_seq, &message_repo, &file_resolver)
+            .await
+            .expect("Failed to resolve sequence");
+
+        let markers = delegation_preamble_markers(&resolved);
+        assert_eq!(markers.len(), 1);
+        assert!(markers[0].expected_output.is_none());
+        assert!(markers[0].constraints.is_none());
+    }
+
+    #[tokio::test]
+    async fn adopted_run_and_non_delegated_chats_compose_no_preamble() {
+        let file_resolver = MockFileResolver::new();
+        let prompt_provider = MockPromptProvider::new().with_system_prompt("You are helpful.");
+        let config = create_test_chat_provider_config();
+
+        // Adoption ends the directive: the delegate is answering the owner now.
+        let adopted = create_delegated_test_chat(Some("A list."), None, true);
+        // A handoff carries provenance too, and must not pick this up.
+        let handoff = delegated_test_chat_with_kind(
+            crate::models::chat::ChatProvenanceKind::HandoffBranch,
+            Some("A list."),
+            None,
+            false,
+        );
+        // A chat the user started has no provenance at all.
+        let plain = create_test_chat();
+
+        for chat in [adopted, handoff, plain] {
+            let mut message_repo = MockMessageRepository::new();
+            let msg_id = Uuid::new_v4();
+            message_repo.add_message(msg_id, None, MessageRole::User, "Hello");
+
+            let abstract_seq = build_abstract_sequence(
+                &message_repo,
+                &prompt_provider,
+                &chat,
+                &msg_id,
+                vec![],
+                &config,
+                &ExperimentalFacetsConfig::default(),
+                &[],
+                None,
+            )
+            .await
+            .expect("Failed to build abstract sequence");
+            let (resolved, _) = resolve_sequence(abstract_seq, &message_repo, &file_resolver)
+                .await
+                .expect("Failed to resolve sequence");
+
+            assert!(delegation_preamble_markers(&resolved).is_empty());
+            // System + user, exactly as before delegation existed.
+            assert_eq!(resolved.messages.len(), 2);
+        }
+    }
+
+    #[tokio::test]
+    async fn adopting_a_run_also_drops_the_preamble_replayed_from_its_first_turn() {
+        // Turn 1 runs as a delegate and persists a snapshot carrying the
+        // marker. Turn 2 is the owner writing in, which adopts the run — the
+        // directive must be gone from the composed input, not just uninjected.
+        let mut message_repo = MockMessageRepository::new();
+        let file_resolver = MockFileResolver::new();
+        let prompt_provider = MockPromptProvider::new().with_system_prompt("You are helpful.");
+        let config = create_test_chat_provider_config();
+
+        let chat = create_delegated_test_chat(Some("A list."), None, false);
+
+        let msg1_id = Uuid::new_v4();
+        message_repo.add_message(msg1_id, None, MessageRole::User, "List the mock files");
+        let abstract_seq1 = build_abstract_sequence(
+            &message_repo,
+            &prompt_provider,
+            &chat,
+            &msg1_id,
+            vec![],
+            &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
+            None,
+        )
+        .await
+        .expect("Failed to build first abstract sequence");
+        let (resolved1, _) = resolve_sequence(abstract_seq1, &message_repo, &file_resolver)
+            .await
+            .expect("Failed to resolve first sequence");
+        assert_eq!(delegation_preamble_markers(&resolved1).len(), 1);
+
+        let msg2_id = Uuid::new_v4();
+        message_repo.add_message(msg2_id, Some(msg1_id), MessageRole::Assistant, "Done.");
+        message_repo.update_generation_input_messages(
+            msg2_id,
+            &GenerationInputMessages {
+                messages: resolved1.messages.clone(),
+            },
+        );
+
+        let adopted_chat = {
+            let mut adopted = chat.clone();
+            let mut configuration = crate::models::chat::parse_assistant_configuration(&adopted)
+                .unwrap()
+                .unwrap();
+            configuration.provenance.as_mut().unwrap().adopted_at = Some(chrono::Utc::now().into());
+            adopted.assistant_configuration = Some(configuration.to_json().unwrap());
+            adopted
+        };
+
+        let msg3_id = Uuid::new_v4();
+        message_repo.add_message(msg3_id, Some(msg2_id), MessageRole::User, "Now sort them");
+        let abstract_seq2 = build_abstract_sequence(
+            &message_repo,
+            &prompt_provider,
+            &adopted_chat,
+            &msg3_id,
+            vec![],
+            &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
+            None,
+        )
+        .await
+        .expect("Failed to build second abstract sequence");
+        let (resolved2, _) = resolve_sequence(abstract_seq2, &message_repo, &file_resolver)
+            .await
+            .expect("Failed to resolve second sequence");
+
+        assert!(
+            delegation_preamble_markers(&resolved2).is_empty(),
+            "the replayed snapshot must not carry the first turn's directive"
+        );
+        // The rest of the first turn still replays.
+        assert!(resolved2.messages.iter().any(|message| {
+            matches!(&message.content, ContentPart::Text(text) if text.text == "List the mock files")
+        }));
     }
 
     // ============================================================================
