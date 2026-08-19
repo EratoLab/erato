@@ -53,9 +53,9 @@ env:
   RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
 
 jobs:
-  lint:
+  lint-frontend:
     timeout-minutes: 10
-    name: "lint"
+    name: "lint (frontend)"
     runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
@@ -120,34 +120,15 @@ jobs:
         if: success() || failure()
         run: node scripts/generate-served-routes.mjs --check
 
-      - name: "Install Rustfmt"
-        run: rustup component add rustfmt
-        working-directory: backend
-
-      - name: "Install sqitch"
-        run: sudo apt install -y sqitch
-
       # Lint run section
       # Every step here should be conditional on "success() || failure()",
       # in order to prevent failing fast, so that we can run all linting steps in one run.
-
-      - name: "Lint Dockerfiles"
-        uses: jbergstroem/hadolint-gh-action@v1.12.2
-        if: success() || failure()
-        with:
-          dockerfile: Dockerfile.combined backend/Dockerfile backend/Dockerfile.sqitch-migrator backend/Dockerfile.mock-llm-server backend/Dockerfile.mock-mcp-server backend/ollama-smol/Dockerfile frontend/Dockerfile component-kit-example/Dockerfile
-          config_file: .hadolint.yaml
 
       - name: "Desktop sidecar protocol checks"
         working-directory: ./desktop-sidecar-protocol
         if: success() || failure()
         run: pnpm run check
 
-      - name: "rustfmt"
-        working-directory: ./backend
-        if: success() || failure()
-        run: cargo fmt --all --check
-      
       - name: "prettier"
         working-directory: ./frontend
         if: success() || failure()
@@ -183,16 +164,6 @@ jobs:
         if: success() || failure()
         run: pnpm run lint
 
-      - name: "Install uv"
-        if: success() || failure()
-        uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-
-      - name: "Check config documentation coverage"
-        if: success() || failure()
-        run: uv run site/scripts/check_config_reference_coverage.py
-
       - name: "Office add-in prettier"
         working-directory: ./office-addin
         if: success() || failure()
@@ -223,10 +194,65 @@ jobs:
         if: success() || failure()
         run: pnpm run test
 
+  lint-backend:
+    timeout-minutes: 10
+    name: "lint (backend)"
+    runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install Rustfmt"
+        run: rustup component add rustfmt
+        working-directory: backend
+
+      - name: "Install sqitch"
+        run: sudo apt install -y sqitch
+
+      # Every step here should be conditional on "success() || failure()",
+      # in order to prevent failing fast, so that we can run all linting steps in one run.
+      - name: "rustfmt"
+        working-directory: ./backend
+        if: success() || failure()
+        run: cargo fmt --all --check
+
       - name: "sqitch db summary up-to-date"
         working-directory: ./backend/sqitch
         if: success() || failure()
         run: ./generate_summary.sh --check
+
+  lint-infrastructure:
+    timeout-minutes: 10
+    name: "lint (infrastructure)"
+    runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.8.0
+
+      - name: "Setup Node.js"
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.2'
+          cache: 'pnpm'
+          cache-dependency-path: ./frontend/pnpm-lock.yaml
+
+      - name: "Install uv"
+        if: success() || failure()
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # Every step here should be conditional on "success() || failure()",
+      # in order to prevent failing fast, so that we can run all linting steps in one run.
+      - name: "Lint Dockerfiles"
+        uses: jbergstroem/hadolint-gh-action@v1.12.2
+        if: success() || failure()
+        with:
+          dockerfile: Dockerfile.combined backend/Dockerfile backend/Dockerfile.sqitch-migrator backend/Dockerfile.mock-llm-server backend/Dockerfile.mock-mcp-server backend/ollama-smol/Dockerfile frontend/Dockerfile component-kit-example/Dockerfile
+          config_file: .hadolint.yaml
 
       - name: "Install Helm"
         if: success() || failure()
@@ -330,6 +356,36 @@ jobs:
         working-directory: ./infrastructure/k3d/erato-local
         if: success() || failure()
         run: helm unittest --with-subchart=false .
+
+  lint-site-docs:
+    timeout-minutes: 10
+    name: "lint (site-docs)"
+    runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: "Check config documentation coverage"
+        if: success() || failure()
+        run: uv run site/scripts/check_config_reference_coverage.py
+
+  lint:
+    name: "lint"
+    needs: [lint-frontend, lint-backend, lint-infrastructure, lint-site-docs]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Verify lint jobs succeeded
+        run: |
+          test "${{ needs.lint-frontend.result }}" = "success"
+          test "${{ needs.lint-backend.result }}" = "success"
+          test "${{ needs.lint-infrastructure.result }}" = "success"
+          test "${{ needs.lint-site-docs.result }}" = "success"
 
   cargo-clippy:
     runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
