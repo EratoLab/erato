@@ -3,8 +3,8 @@
 
 use crate::test_app_state;
 use crate::test_utils::{
-    Event, RequestBodyRecorder, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT,
-    TestRequestAuthExt, parse_sse_events, setup_mock_llm_server_with_mocks,
+    Event, JwtTokenBuilder, RequestBodyRecorder, TEST_JWT_TOKEN, TEST_USER_ISSUER,
+    TEST_USER_SUBJECT, TestRequestAuthExt, parse_sse_events, setup_mock_llm_server_with_mocks,
 };
 use axum::Router;
 use axum::http;
@@ -4110,6 +4110,60 @@ fn listed_chat_ids(listing: &Value) -> Vec<String> {
         .collect()
 }
 
+/// Spawns a delegated run from `origin_chat_id` via the model layer and gives
+/// it one message, since listings join each chat's latest message.
+async fn spawn_listed_delegated_run(
+    app_state: &erato::state::AppState,
+    me_user_id: &str,
+    assistant_id: Uuid,
+    origin_chat_id: Uuid,
+    title: &str,
+) -> String {
+    let child = erato::models::chat::create_delegated_chat(
+        &app_state.db,
+        &rebuilt_policy(app_state).await,
+        &erato::policy::types::Subject::User(me_user_id.to_string()),
+        me_user_id,
+        assistant_id,
+        ChatProvenance {
+            kind: ChatProvenanceKind::Delegation,
+            origin_chat_id: Some(origin_chat_id),
+            origin_message_id: None,
+            origin_assistant_id: Some(assistant_id),
+            rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
+            depth: 1,
+            adopted_at: None,
+            expected_output: None,
+            constraints: None,
+            run_mode: None,
+        },
+        title.to_string(),
+    )
+    .await
+    .unwrap();
+    erato::models::message::submit_message(
+        &app_state.db,
+        &rebuilt_policy(app_state).await,
+        &erato::policy::types::Subject::User(me_user_id.to_string()),
+        &child.id,
+        json!({
+            "role": "user",
+            "content": [{"content_type": "text", "text": "delegated task"}],
+            "name": me_user_id,
+        }),
+        None,
+        None,
+        None,
+        &[],
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    child.id.to_string()
+}
+
 /// Listing matrix: delegated runs are hidden everywhere by default, visible
 /// with `include_delegated=true` (carrying provenance fields), tolerate a
 /// deleted origin, and compose with the type filter. Delegated runs do not
@@ -4295,6 +4349,190 @@ async fn test_listing_hides_delegated_runs_and_exposes_provenance(pool: Pool<Pos
         .find(|item| item["id"] == assistant.as_str())
         .and_then(|item| item["usage_count"].as_i64());
     assert_eq!(usage, None, "delegated runs must not feed the ranking");
+}
+
+/// The `origin_chat_id` filter narrows a listing to the runs spawned from one
+/// chat. It composes with `include_delegated` rather than overriding it (the
+/// filter alone matches nothing for delegated children), with the type
+/// filter, with search, and with pagination — where `total_count` must
+/// reflect the filtered set. An origin without children and another user
+/// asking for the same origin both see an empty page; malformed ids are
+/// rejected.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_listing_filters_by_origin_chat(pool: Pool<Postgres>) {
+    let app_state = test_app_state(delegation_enabled_config(), pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let me_user_id = me.id.to_string();
+    let server = app_server(app_state.clone());
+
+    let assistant = create_assistant(&server, "Origin Filter Assistant", "prompt").await;
+    let assistant_id = Uuid::parse_str(&assistant).unwrap();
+
+    let origin_a = create_chat(&server, Some(&assistant)).await;
+    let origin_a_id = Uuid::parse_str(&origin_a).unwrap();
+    let origin_b = create_chat(&server, Some(&assistant)).await;
+    let origin_b_id = Uuid::parse_str(&origin_b).unwrap();
+    let childless = create_chat(&server, Some(&assistant)).await;
+
+    let child_a1 = spawn_listed_delegated_run(
+        &app_state,
+        &me_user_id,
+        assistant_id,
+        origin_a_id,
+        "Alpha one",
+    )
+    .await;
+    let child_a2 = spawn_listed_delegated_run(
+        &app_state,
+        &me_user_id,
+        assistant_id,
+        origin_a_id,
+        "Alpha two",
+    )
+    .await;
+    let child_b = spawn_listed_delegated_run(
+        &app_state,
+        &me_user_id,
+        assistant_id,
+        origin_b_id,
+        "Bravo run",
+    )
+    .await;
+    app_state.global_policy_engine.invalidate_data().await;
+
+    let mut a_children = vec![child_a1.clone(), child_a2.clone()];
+    a_children.sort();
+
+    // Exactly origin A's children; B's child is excluded.
+    let listing = recent_chats(
+        &server,
+        &format!("?origin_chat_id={origin_a}&include_delegated=true"),
+    )
+    .await;
+    let mut ids = listed_chat_ids(&listing);
+    ids.sort();
+    assert_eq!(ids, a_children);
+    assert_eq!(listing["stats"]["total_count"], 2);
+    let listing = recent_chats(
+        &server,
+        &format!("?origin_chat_id={origin_b}&include_delegated=true"),
+    )
+    .await;
+    assert_eq!(listed_chat_ids(&listing), vec![child_b]);
+
+    // Without include_delegated the delegated-run condition still applies,
+    // so the origin filter alone matches nothing.
+    let listing = recent_chats(&server, &format!("?origin_chat_id={origin_a}")).await;
+    assert!(listed_chat_ids(&listing).is_empty());
+    assert_eq!(listing["stats"]["total_count"], 0);
+
+    // Composes with the type filter.
+    let listing = recent_chats(
+        &server,
+        &format!("?origin_chat_id={origin_a}&include_delegated=true&type=assistant"),
+    )
+    .await;
+    assert_eq!(listed_chat_ids(&listing).len(), 2);
+    let listing = recent_chats(
+        &server,
+        &format!("?origin_chat_id={origin_a}&include_delegated=true&type=chat"),
+    )
+    .await;
+    assert!(listed_chat_ids(&listing).is_empty());
+
+    // Composes with search; the full page forces the count query with both
+    // the search and origin parameters bound.
+    let listing = recent_chats(
+        &server,
+        &format!("?origin_chat_id={origin_a}&include_delegated=true&q=Alpha"),
+    )
+    .await;
+    assert_eq!(listed_chat_ids(&listing).len(), 2);
+    let listing = recent_chats(
+        &server,
+        &format!("?origin_chat_id={origin_a}&include_delegated=true&q=Alpha&limit=1"),
+    )
+    .await;
+    assert_eq!(listed_chat_ids(&listing).len(), 1);
+    assert_eq!(listing["stats"]["total_count"], 2);
+    assert_eq!(listing["stats"]["has_more"], true);
+
+    // Pagination: pages are disjoint and total_count reflects the filtered
+    // set, not the whole history.
+    let first = recent_chats(
+        &server,
+        &format!("?origin_chat_id={origin_a}&include_delegated=true&limit=1&offset=0"),
+    )
+    .await;
+    let second = recent_chats(
+        &server,
+        &format!("?origin_chat_id={origin_a}&include_delegated=true&limit=1&offset=1"),
+    )
+    .await;
+    assert_eq!(first["stats"]["total_count"], 2);
+    assert_eq!(first["stats"]["has_more"], true);
+    assert_eq!(second["stats"]["total_count"], 2);
+    assert_eq!(second["stats"]["has_more"], false);
+    let mut paged: Vec<String> = [&first, &second]
+        .into_iter()
+        .flat_map(listed_chat_ids)
+        .collect();
+    paged.sort();
+    assert_eq!(paged, a_children);
+
+    // An origin without children yields an empty page with clean stats.
+    let listing = recent_chats(
+        &server,
+        &format!("?origin_chat_id={childless}&include_delegated=true"),
+    )
+    .await;
+    assert!(listed_chat_ids(&listing).is_empty());
+    assert_eq!(listing["stats"]["total_count"], 0);
+    assert_eq!(listing["stats"]["has_more"], false);
+
+    // Listings are owner-scoped: another user asking for this origin id
+    // sees nothing.
+    let other_subject = "origin-filter-other-user";
+    let other_token = JwtTokenBuilder::new()
+        .subject(other_subject)
+        .email("origin-filter-other@example.com")
+        .build();
+    erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        other_subject,
+        Some("origin-filter-other@example.com"),
+    )
+    .await
+    .unwrap();
+    let response = server
+        .get(&format!(
+            "/api/v1beta/me/recent_chats?origin_chat_id={origin_a}&include_delegated=true"
+        ))
+        .with_bearer_token(&other_token)
+        .await;
+    response.assert_status_ok();
+    let listing = response.json::<Value>();
+    assert!(listed_chat_ids(&listing).is_empty());
+    assert_eq!(listing["stats"]["total_count"], 0);
+
+    // Malformed ids are rejected up front.
+    let response = server
+        .get("/api/v1beta/me/recent_chats?origin_chat_id=not-a-uuid")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status(axum::http::StatusCode::BAD_REQUEST);
 }
 
 /// A delegated chat parked in `awaiting_approval` still surfaces through

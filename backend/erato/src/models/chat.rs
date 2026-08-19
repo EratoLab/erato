@@ -513,6 +513,10 @@ pub struct RecentChatsFilter<'a> {
     /// Whether delegated runs (provenance kind `delegation`) are included.
     /// They are hidden from listings by default.
     pub include_delegated: bool,
+    /// If set, only chats spawned from this origin chat are returned. This
+    /// composes with `include_delegated` rather than overriding it, so
+    /// listing a chat's delegated runs requires both.
+    pub origin_chat_id: Option<Uuid>,
 }
 
 /// Get the most recent chats for a user.
@@ -575,6 +579,17 @@ pub async fn get_recent_chats(
             String::new()
         }
     };
+    let origin_condition = |param_index: u8| {
+        if filter.origin_chat_id.is_some() {
+            format!("AND \"chats\".\"origin_chat_id\" = ${param_index}")
+        } else {
+            String::new()
+        }
+    };
+    // Optional parameters are bound after each query's fixed ones in the
+    // order search → origin, so origin's index shifts up by one whenever a
+    // search parameter is bound before it.
+    let search_param_count = u8::from(search_query.is_some());
 
     // Query using INNER JOIN LATERAL for better performance
     // This ensures the database does all filtering, sorting, and pagination
@@ -615,12 +630,14 @@ pub async fn get_recent_chats(
             {}
             {}
             {}
+            {}
         ORDER BY latest_msg.created_at DESC
         LIMIT $2
         OFFSET $3
         "#,
         archived_condition,
         search_condition(4),
+        origin_condition(4 + search_param_count),
         pinned_condition,
         chat_type_condition,
         delegated_condition
@@ -633,6 +650,9 @@ pub async fn get_recent_chats(
     ];
     if let Some(search_query) = search_query {
         query_values.push(search_query.into());
+    }
+    if let Some(origin_chat_id) = filter.origin_chat_id {
+        query_values.push(origin_chat_id.into());
     }
 
     let chats_with_messages: Vec<ChatWithLatestMessage> =
@@ -670,10 +690,12 @@ pub async fn get_recent_chats(
                         {}
                         {}
                         {}
+                        {}
                 ) AS sub_query
                 "#,
                 archived_condition,
                 search_condition(2),
+                origin_condition(2 + search_param_count),
                 pinned_condition,
                 chat_type_condition,
                 delegated_condition
@@ -687,6 +709,9 @@ pub async fn get_recent_chats(
             let mut count_values = vec![owner_user_id.into()];
             if let Some(search_query) = search_query {
                 count_values.push(search_query.into());
+            }
+            if let Some(origin_chat_id) = filter.origin_chat_id {
+                count_values.push(origin_chat_id.into());
             }
 
             let count_result: CountResult =
