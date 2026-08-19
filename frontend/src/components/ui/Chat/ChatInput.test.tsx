@@ -1035,7 +1035,7 @@ describe("ChatInput", () => {
     const textarea = container.querySelector("textarea");
 
     expect(shell?.firstElementChild).toBe(inlinePreview);
-    expect(inlinePreview?.nextElementSibling).toBe(textarea);
+    expect(inlinePreview?.nextElementSibling).toContainElement(textarea);
   });
 
   // Guard against the prop chain silently breaking. The Outlook add-in
@@ -4122,6 +4122,9 @@ describe("ChatInput", () => {
       expect(
         screen.queryByTestId("chat-input-mention-option-assistant-research"),
       ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("chat-input-mention-backdrop"),
+      ).not.toBeInTheDocument();
       expect(mockFacetSelector).not.toHaveBeenCalled();
     });
 
@@ -4310,6 +4313,45 @@ describe("ChatInput", () => {
       );
     });
 
+    // The highlight exists to show which tokens actually delegate, so it has to
+    // mark exactly what the send resolves — never a hand-typed look-alike.
+    it("highlights the picked mention only, matching what it sends", async () => {
+      enableDelegation();
+      const onSendMessage = vi.fn();
+      const textarea = await renderComposer(onSendMessage);
+
+      typeWithCaretAtEnd(textarea, "@Editor please");
+
+      expect(
+        screen.queryAllByTestId("chat-input-mention-highlight"),
+      ).toHaveLength(0);
+
+      typeWithCaretAtEnd(textarea, "@Editor please @Res");
+      fireEvent.click(
+        screen.getByTestId("chat-input-mention-option-assistant-research"),
+      );
+
+      expect(textarea).toHaveValue("@Editor please @Researcher ");
+      expect(
+        screen
+          .getAllByTestId("chat-input-mention-highlight")
+          .map((span) => span.textContent),
+      ).toEqual(["@Researcher"]);
+      expect(
+        screen.getByTestId("chat-input-mention-backdrop").textContent,
+      ).toBe("@Editor please @Researcher ");
+
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "@Editor please @Researcher",
+        undefined,
+        undefined,
+        [],
+        ["assistant-research"],
+      );
+    });
+
     it("drops the mention when its token is deleted from the text", async () => {
       enableDelegation();
       const onSendMessage = vi.fn();
@@ -4426,6 +4468,103 @@ describe("ChatInput", () => {
         undefined,
         [],
         ["assistant-research"],
+      );
+    });
+
+    // The tracked list is restored from the draft and outlives the assistant
+    // query, so a highlight gated on that query would leave a token that still
+    // delegates reading as plain text.
+    it("keeps highlighting a restored mention while the assistant list is unavailable", async () => {
+      enableDelegation();
+      const onSendMessage = vi.fn();
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const { i18n } = await import("@lingui/core");
+      const ui = (mountKey: number) => (
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput
+              key={mountKey}
+              onSendMessage={onSendMessage}
+              chatId="chat-1"
+            />
+          </I18nProvider>
+        </QueryClientProvider>
+      );
+      const { rerender } = render(ui(1));
+
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      typeWithCaretAtEnd(textarea, "@Res");
+      fireEvent.click(
+        screen.getByTestId("chat-input-mention-option-assistant-research"),
+      );
+      typeWithCaretAtEnd(textarea, "@Researcher please review");
+
+      // The cached list is gone by the time the composer comes back, so the
+      // mention affordances have nothing to offer.
+      mockUseListAssistants.mockReturnValue({ data: undefined });
+      mockUseFrequentAssistants.mockReturnValue({ data: undefined });
+      rerender(ui(2));
+
+      const remounted = screen.getByPlaceholderText("Type a message...");
+      expect(remounted).toHaveValue("@Researcher please review");
+      expect(
+        screen
+          .getAllByTestId("chat-input-mention-highlight")
+          .map((span) => span.textContent),
+      ).toEqual(["@Researcher"]);
+
+      fireEvent.keyDown(remounted, { key: "Enter", shiftKey: false });
+
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "@Researcher please review",
+        undefined,
+        undefined,
+        [],
+        ["assistant-research"],
+      );
+    });
+
+    it("fades the highlight with the composer text while the draft is locked", async () => {
+      enableDelegation();
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const { i18n } = await import("@lingui/core");
+      const ui = (disabled: boolean) => (
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput
+              onSendMessage={vi.fn()}
+              chatId="chat-1"
+              disabled={disabled}
+            />
+          </I18nProvider>
+        </QueryClientProvider>
+      );
+      const { rerender } = render(ui(false));
+
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      typeWithCaretAtEnd(textarea, "@Res");
+      fireEvent.click(
+        screen.getByTestId("chat-input-mention-option-assistant-research"),
+      );
+      expect(screen.getByTestId("chat-input-mention-backdrop")).not.toHaveClass(
+        "opacity-50",
+      );
+
+      rerender(ui(true));
+
+      expect(textarea).toBeDisabled();
+      expect(screen.getByTestId("chat-input-mention-backdrop")).toHaveClass(
+        "opacity-50",
       );
     });
 

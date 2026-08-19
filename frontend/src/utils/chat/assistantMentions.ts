@@ -9,6 +9,14 @@ export interface MentionTrigger {
   startIndex: number;
 }
 
+export interface MentionRange {
+  start: number;
+  /** Exclusive, so `text.slice(start, end)` is the whole `@Name` token. */
+  end: number;
+  id: string;
+  name: string;
+}
+
 /**
  * Requiring start-or-whitespace before the `@` is what keeps `a@b.com` from
  * opening the picker; excluding `@` from the query keeps a second `@` from
@@ -63,43 +71,49 @@ function isAtWordEnd(text: string, index: number): boolean {
   return index >= text.length || !/[\p{L}\p{N}_]/u.test(text[index]);
 }
 
-/**
- * A token only counts where it is not the leading fragment of a longer tracked
- * name at the same position: with both "Data" and "Data Analyst" tracked, the
- * text `@Data Analyst` must resolve to the latter alone.
- */
-function isMentionPresent(
-  text: string,
-  mention: AssistantMention,
-  tracked: AssistantMention[],
-): boolean {
-  const token = mentionToken(mention.name);
-  const shadowingTokens = tracked
-    .filter(
-      (other) =>
-        other.name.length > mention.name.length &&
-        other.name.startsWith(mention.name),
-    )
-    .map((other) => mentionToken(other.name));
+function trackedKey(mention: AssistantMention): string {
+  return JSON.stringify([mention.id, mention.name]);
+}
 
-  let searchFrom = 0;
-  for (;;) {
-    const index = text.indexOf(token, searchFrom);
-    if (index < 0) {
-      return false;
+/**
+ * Where each tracked mention stands in the text, in text order and without
+ * overlaps. Matching the longest names first is what makes `@Data Analyst`
+ * claim the span before "Data" can, so the composer highlight and the submitted
+ * ids are two readings of one result rather than two rules that can drift.
+ */
+export function findMentionRanges(
+  text: string,
+  tracked: AssistantMention[],
+): MentionRange[] {
+  const ranges: MentionRange[] = [];
+  const byNameLength = [...tracked].sort(
+    (a, b) => b.name.length - a.name.length,
+  );
+
+  for (const mention of byNameLength) {
+    const token = mentionToken(mention.name);
+    let searchFrom = 0;
+    for (;;) {
+      const start = text.indexOf(token, searchFrom);
+      if (start < 0) {
+        break;
+      }
+      searchFrom = start + 1;
+      const end = start + token.length;
+      const overlapsClaimed = ranges.some(
+        (range) => start < range.end && end > range.start,
+      );
+      if (
+        !overlapsClaimed &&
+        isAtWordStart(text, start) &&
+        isAtWordEnd(text, end)
+      ) {
+        ranges.push({ start, end, id: mention.id, name: mention.name });
+      }
     }
-    const shadowed = shadowingTokens.some((shadowing) =>
-      text.startsWith(shadowing, index),
-    );
-    if (
-      !shadowed &&
-      isAtWordStart(text, index) &&
-      isAtWordEnd(text, index + token.length)
-    ) {
-      return true;
-    }
-    searchFrom = index + 1;
   }
+
+  return ranges.sort((a, b) => a.start - b.start);
 }
 
 /** The ids the composer should submit: tracked order, deduped, text wins. */
@@ -107,10 +121,13 @@ export function resolveMentionedAssistantIds(
   text: string,
   tracked: AssistantMention[],
 ): string[] {
+  const present = new Set(
+    findMentionRanges(text, tracked).map((range) => range.id),
+  );
   const ids: string[] = [];
   const seen = new Set<string>();
   for (const mention of tracked) {
-    if (seen.has(mention.id) || !isMentionPresent(text, mention, tracked)) {
+    if (seen.has(mention.id) || !present.has(mention.id)) {
       continue;
     }
     seen.add(mention.id);
@@ -127,14 +144,15 @@ export function pruneTrackedMentions(
   text: string,
   tracked: AssistantMention[],
 ): AssistantMention[] {
+  const present = new Set(findMentionRanges(text, tracked).map(trackedKey));
   const seen = new Set<string>();
   const next = tracked.filter((mention) => {
-    const key = JSON.stringify([mention.id, mention.name]);
+    const key = trackedKey(mention);
     if (seen.has(key)) {
       return false;
     }
     seen.add(key);
-    return isMentionPresent(text, mention, tracked);
+    return present.has(key);
   });
   return next.length === tracked.length ? tracked : next;
 }
