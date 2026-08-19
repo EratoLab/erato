@@ -17,8 +17,10 @@ tmp/
 # Dependencies (will be installed inside the Docker build)
 ./desktop-sidecar-protocol/node_modules
 ./desktop-sidecar-protocol/dist
+./frontend-utils/node_modules
 ./frontend/node_modules
 ./office-addin/node_modules
+./component-kit-example/node_modules
 
 # Irellevant projects for build
 ./backend

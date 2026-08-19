@@ -4,19 +4,32 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN npm install --global corepack@latest
 RUN corepack enable
-COPY . /app
 
 FROM base AS build
+
+# Install dependencies from package metadata before copying source files so
+# application changes do not invalidate these layers.
+COPY desktop-sidecar-protocol/package.json desktop-sidecar-protocol/pnpm-lock.yaml desktop-sidecar-protocol/pnpm-workspace.yaml desktop-sidecar-protocol/.npmrc /app/desktop-sidecar-protocol/
 WORKDIR /app/desktop-sidecar-protocol
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --config.confirmModulesPurge=false
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --ignore-scripts --config.confirmModulesPurge=false
+
+COPY desktop-sidecar-protocol /app/desktop-sidecar-protocol
 RUN pnpm run build
 
+COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml /app/frontend/
+COPY frontend-utils /app/frontend-utils
 WORKDIR /app/frontend
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --config.confirmModulesPurge=false
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --ignore-scripts --config.confirmModulesPurge=false
+
+COPY frontend /app/frontend
+RUN pnpm rebuild @swc/core esbuild msw protobufjs unrs-resolver
 RUN NODE_OPTIONS=--max-old-space-size=8192 pnpm run build:lib
 
+COPY component-kit-example/package.json component-kit-example/pnpm-workspace.yaml /app/component-kit-example/
 WORKDIR /app/component-kit-example
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --no-frozen-lockfile --lockfile=false --config.confirmModulesPurge=false
+
+COPY component-kit-example /app/component-kit-example
 RUN pnpm run build
 
 # Default to BusyBox so this image can also run as a Kubernetes init container
