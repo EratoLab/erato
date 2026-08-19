@@ -1,6 +1,15 @@
 import clsx from "clsx";
 import { memo, useId } from "react";
 
+export interface SegmentedControlAttention {
+  /** Read out after the label; the dot carries no meaning on its own. */
+  label: string;
+  /** Text colour class the dot picks up through `bg-current`. */
+  toneClassName?: string;
+  /** Whether the dot pulses, for a state that is still moving. */
+  pulse?: boolean;
+}
+
 export interface SegmentedControlOption<T extends string> {
   /** The value for this option */
   value: T;
@@ -8,6 +17,11 @@ export interface SegmentedControlOption<T extends string> {
   label: string;
   /** Optional icon to show before the label */
   icon?: React.ReactNode;
+  /**
+   * Status dot after the label. Kept apart from `icon`, which is aria-hidden
+   * and therefore cannot carry a state a user needs to know about.
+   */
+  attention?: SegmentedControlAttention;
   /** Whether this option is disabled */
   disabled?: boolean;
 }
@@ -101,6 +115,26 @@ function SegmentedControlInner<T extends string>({
               </span>
             )}
             {option.label}
+            {option.attention && (
+              <span
+                className={clsx(
+                  "flex shrink-0 items-center",
+                  option.attention.toneClassName,
+                )}
+                data-ui="segmented-control-attention"
+                data-testid="segmented-control-attention"
+              >
+                <span
+                  aria-hidden="true"
+                  className={clsx(
+                    "size-2 rounded-full bg-current",
+                    option.attention.pulse &&
+                      "animate-pulse motion-reduce:animate-none",
+                  )}
+                />
+                <span className="sr-only">{option.attention.label}</span>
+              </span>
+            )}
           </button>
         );
       })}

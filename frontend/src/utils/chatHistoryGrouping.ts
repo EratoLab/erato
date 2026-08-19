@@ -28,6 +28,48 @@ export function resolveChatAttentionStatus(
   return status.kind;
 }
 
+export function chatAttentionStatusLabel(status: ChatAttentionStatus): string {
+  switch (status) {
+    case "running":
+      return t({ id: "chat.history.generation.running", message: "Running" });
+    case "finished":
+      return t({ id: "chat.history.generation.finished", message: "Finished" });
+    case "error":
+      return t({ id: "chat.history.generation.error", message: "Error" });
+    case "action_required":
+      return t({
+        id: "chat.history.generation.actionRequired",
+        message: "Action required",
+      });
+  }
+}
+
+export const chatAttentionStatusToneClass: Record<ChatAttentionStatus, string> =
+  {
+    running: "text-theme-fg-muted",
+    finished: "text-theme-success-fg",
+    error: "text-theme-error-fg",
+    action_required: "text-theme-warning-fg",
+  };
+
+/**
+ * Rank used when one indicator has to stand in for a set of chats: the most
+ * demanding status wins, and a still-running one is the least demanding.
+ */
+const ATTENTION_PRIORITY: ChatAttentionStatus[] = [
+  "action_required",
+  "error",
+  "finished",
+  "running",
+];
+
+export function mostUrgentAttentionStatus(
+  statuses: Iterable<ChatAttentionStatus>,
+): ChatAttentionStatus | null {
+  const present = new Set(statuses);
+  return ATTENTION_PRIORITY.find((status) => present.has(status)) ?? null;
+}
+
 export interface ChatSessionGroup {
   key: string;
   /** `null` renders the bucket without a header. */

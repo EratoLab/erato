@@ -16,6 +16,12 @@ const spies = vi.hoisted(() => ({
     setNavigationTransition: vi.fn(),
   },
   clearNewlyCreatedChatId: vi.fn(),
+  useRecentChats: vi.fn(() => ({
+    data: { chats: [] },
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(async () => undefined),
+  })),
   useChatMessaging: vi.fn(() => ({
     messages: {},
     isLoading: false,
@@ -80,12 +86,7 @@ vi.mock("@erato/frontend/library", async () => {
     useModelHistory: () => ({ currentChatLastModel: null }),
     usePersistedState: <T,>(_key: string, initialValue: T) =>
       useState(initialValue),
-    useRecentChats: () => ({
-      data: { chats: [] },
-      isLoading: false,
-      error: null,
-      refetch: vi.fn(async () => undefined),
-    }),
+    useRecentChats: spies.useRecentChats,
 
     ChatErrorBoundary: ({ children }: { children?: ReactNode }) => children,
     ChatInputControlsProvider: ({ children }: { children?: ReactNode }) =>
@@ -234,6 +235,15 @@ describe("NeutralAddinChatPage host boundary", () => {
       ),
     ).toThrow(/within a ChatProvider/);
     consoleError.mockRestore();
+  });
+
+  it("lists chats without opting into delegated runs", () => {
+    renderPage();
+
+    expect(spies.useRecentChats).toHaveBeenCalled();
+    for (const call of spies.useRecentChats.mock.calls) {
+      expect(call).toEqual([{}]);
+    }
   });
 
   it("wires New Chat through the provider's context value", () => {

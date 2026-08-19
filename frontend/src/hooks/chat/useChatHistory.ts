@@ -68,6 +68,31 @@ type Complete<T> = { [K in keyof Required<T>]: T[K] };
 // Shape of the infinite recent-chats cache entry.
 type RecentChatsPage = Awaited<ReturnType<typeof fetchRecentChats>>;
 type InfiniteRecentChats = InfiniteData<RecentChatsPage>;
+/**
+ * The recent-chats key prefix also covers surfaces that read a single page
+ * through a plain query, so a cache edit has to expect either shape.
+ */
+type RecentChatsCacheEntry = InfiniteRecentChats | RecentChatsPage;
+
+const isPaginated = (
+  entry: RecentChatsCacheEntry,
+): entry is InfiniteRecentChats =>
+  Array.isArray((entry as InfiniteRecentChats).pages);
+
+function withoutChat(page: RecentChatsPage, chatId: string): RecentChatsPage {
+  const chats = page.chats.filter((chat) => chat.id !== chatId);
+  if (chats.length === page.chats.length) return page;
+  const removed = page.chats.length - chats.length;
+  return {
+    ...page,
+    chats,
+    stats: {
+      ...page.stats,
+      returned_count: Math.max(0, page.stats.returned_count - removed),
+      total_count: Math.max(0, page.stats.total_count - removed),
+    },
+  };
+}
 
 interface ChatHistoryState {
   isNewChatPending: boolean; // Flag to indicate a new chat navigation is in progress
@@ -584,9 +609,9 @@ export function useChatHistory({
 
       // Snapshot every recent-chats cache entry and the pending placeholder so
       // a failed mutation can roll them all back.
-      const previousEntries = queryClient.getQueriesData<InfiniteRecentChats>({
-        queryKey: recentChatsQuery({}).queryKey,
-      });
+      const previousEntries = queryClient.getQueriesData<RecentChatsCacheEntry>(
+        { queryKey: recentChatsQuery({}).queryKey },
+      );
       const previousPendingChat = useChatHistoryStore.getState().pendingChat;
 
       // The archived row may be the pending-chat placeholder, which lives
@@ -609,34 +634,17 @@ export function useChatHistory({
       // chat that straddled the boundary (ERMAIN-474). Editing the cache keeps
       // the list stable and makes the row disappear immediately, without
       // waiting for a round trip.
-      queryClient.setQueriesData<InfiniteRecentChats>(
+      queryClient.setQueriesData<RecentChatsCacheEntry>(
         {
           queryKey: recentChatsQuery({}).queryKey,
           predicate: (query) => !queryKeyIncludesArchived(query.queryKey),
         },
         (current) => {
-          // The prefix also matches non-paginated recent-chats caches, which
-          // have no `pages` to edit.
-          if (!current || !Array.isArray(current.pages)) return current;
+          if (!current) return current;
+          if (!isPaginated(current)) return withoutChat(current, chatId);
           return {
             ...current,
-            pages: current.pages.map((page) => {
-              const chats = page.chats.filter((chat) => chat.id !== chatId);
-              if (chats.length === page.chats.length) return page;
-              const removed = page.chats.length - chats.length;
-              return {
-                ...page,
-                chats,
-                stats: {
-                  ...page.stats,
-                  returned_count: Math.max(
-                    0,
-                    page.stats.returned_count - removed,
-                  ),
-                  total_count: Math.max(0, page.stats.total_count - removed),
-                },
-              };
-            }),
+            pages: current.pages.map((page) => withoutChat(page, chatId)),
           };
         },
       );

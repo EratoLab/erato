@@ -6,14 +6,22 @@ import { useParams } from "react-router-dom";
 import { Chat } from "@/components/ui/Chat/Chat";
 import { ChatEmptyState } from "@/components/ui/Chat/ChatEmptyState";
 import { Alert } from "@/components/ui/Feedback/Alert";
+import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import {
   useAvailableModels,
   useGetAssistant,
+  useRecentChats,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useChatContext } from "@/providers/ChatProvider";
-import { usePinnedChatsFeature } from "@/providers/FeatureConfigProvider";
+import {
+  useAssistantsFeature,
+  usePinnedChatsFeature,
+} from "@/providers/FeatureConfigProvider";
 import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
-import { mapRecentChatToSession } from "@/utils/chat/recentChatSession";
+import {
+  isDelegatedRun,
+  mapRecentChatToSession,
+} from "@/utils/chat/recentChatSession";
 import { createLogger } from "@/utils/debugLogger";
 import { transformEmailFencesForCopy } from "@/utils/emailClipboard";
 
@@ -21,9 +29,20 @@ import type {
   AssistantFile,
   FileUploadItem,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { ChatSession } from "@/types/chat";
 import type { MessageAction } from "@/types/message-controls";
 
 const logger = createLogger("UI", "AssistantChatSpacePage");
+
+/**
+ * The window this page narrows to one assistant client-side; `recent_chats`
+ * cannot filter by assistant, so an assistant whose chats fall outside it
+ * shows fewer rows.
+ */
+const ASSISTANT_CHATS_PAGE_SIZE = 50;
+
+const byMostRecent = (a: ChatSession, b: ChatSession) =>
+  new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
 
 const getPreviewUrl = (
   file: Pick<AssistantFile, "preview_url">,
@@ -71,11 +90,27 @@ export default function AssistantChatSpacePage() {
   // Fetch available models to find the assistant's default model
   const { data: availableModels = [] } = useAvailableModels({});
 
+  const { delegationEnabled } = useAssistantsFeature();
+
+  // Own list request rather than the sidebar's: this space also shows the
+  // delegated runs every listing hides, and the sidebar's own filters must not
+  // reach in here.
+  const { data: recentChats, isLoading: isLoadingChats } = useRecentChats(
+    assistantId
+      ? {
+          queryParams: {
+            limit: ASSISTANT_CHATS_PAGE_SIZE,
+            type: "assistant",
+            include_delegated: true,
+          },
+        }
+      : reactQuery.skipToken,
+  );
+
   // Get chat context
   const {
     messages: contextMessages,
     messageOrder: contextMessageOrder,
-    chats: chatHistory,
     currentChatId,
     mountKey,
     pinChat,
@@ -107,27 +142,39 @@ export default function AssistantChatSpacePage() {
     );
   }, [assistant?.default_chat_provider, availableModels]);
 
-  // Filter chats to show only those with this assistant
-  const assistantChats = useMemo(() => {
-    if (!Array.isArray(chatHistory) || !assistantId) return [];
+  const chatsOfAssistant = useMemo(
+    () =>
+      recentChats?.chats.filter((chat) => chat.assistant_id === assistantId) ??
+      [],
+    [recentChats?.chats, assistantId],
+  );
 
-    // chatHistory here comes from useChatContext, which returns RecentChat[] from the API
-    // However, the type in ChatProvider seems to be inferred as RecentChat[] but mapped to ChatSession[] in some places?
-    // Let's look at ChatProvider.tsx again.
-    // useChatHistory returns 'chats' which is RecentChat[].
-    // So we can access assistant_id directly on the raw chat objects if we use them directly.
-    // But wait, useChatContext returns 'chats' which is ReturnType<typeof useChatHistory>["chats"].
-
-    return chatHistory
-      .filter(
-        (chat) => (chat.assistant_id as unknown as string) === assistantId,
-      )
-      .map(mapRecentChatToSession)
-      .sort(
-        (a, b) =>
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  const [assistantChats, delegatedRuns] = useMemo(() => {
+    const own: ChatSession[] = [];
+    const delegated: ChatSession[] = [];
+    for (const chat of chatsOfAssistant) {
+      (isDelegatedRun(chat) ? delegated : own).push(
+        mapRecentChatToSession(chat),
       );
-  }, [chatHistory, assistantId]);
+    }
+    return [own.sort(byMostRecent), delegated.sort(byMostRecent)];
+  }, [chatsOfAssistant]);
+
+  // Delegated runs are hidden from every listing, so nothing else seeds their
+  // running or parked markers into the status store.
+  useEffect(() => {
+    const { seedRunning, seedActionRequired } =
+      useGenerationStatusStore.getState();
+    for (const chat of chatsOfAssistant) {
+      if (!isDelegatedRun(chat)) continue;
+      if (chat.active_generation_started_at) {
+        seedRunning(chat.id, chat.active_generation_started_at);
+      }
+      if (chat.pending_tool_approval_at) {
+        seedActionRequired(chat.id, chat.pending_tool_approval_at);
+      }
+    }
+  }, [chatsOfAssistant]);
 
   // Handle message actions
   const handleMessageAction = async (action: MessageAction) => {
@@ -216,7 +263,9 @@ export default function AssistantChatSpacePage() {
               variant="assistant"
               assistant={assistant}
               pastChats={assistantChats}
-              isLoadingChats={false}
+              delegatedRuns={delegatedRuns}
+              delegationEnabled={delegationEnabled}
+              isLoadingChats={isLoadingChats}
               onChatPin={
                 pinnedChatsEnabled
                   ? (chatId, isPinned) => {

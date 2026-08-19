@@ -207,8 +207,33 @@ msgstr "Ładowanie asystenta..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "assistant.welcome.chats.empty"
+msgstr "Brak bezpośrednich rozmów."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "assistant.welcome.configuration.open"
 msgstr "Wyświetl konfigurację asystenta"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "assistant.welcome.delegated.empty"
+msgstr "Brak delegowanych uruchomień."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "assistant.welcome.delegated.origin"
+msgstr "Z rozmowy {originChatTitle}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "assistant.welcome.delegated.origin.deleted"
+msgstr "Z rozmowy, która już nie istnieje"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "assistant.welcome.delegated.origin.untitled"
+msgstr "Z rozmowy bez tytułu"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
@@ -219,6 +244,21 @@ msgstr "Niektóre pliki domyślne są niedostępne z powodu braku uprawnień."
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "assistant.welcome.files.inaccessible.contact"
 msgstr "Skontaktuj się z tym twórcą i poproś go o udostępnienie plików:"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "assistant.welcome.segment.aria"
+msgstr "Filtruj rozmowy"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "assistant.welcome.segment.chats"
+msgstr "Czaty"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "assistant.welcome.segment.delegated"
+msgstr "Delegowane uruchomienia"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubDetailPage.tsx
@@ -1373,17 +1413,17 @@ msgid "chat.history.filterMenu.type.chat"
 msgstr "Czat"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/utils/chatHistoryGrouping.ts
 msgid "chat.history.generation.actionRequired"
 msgstr "Wymagane działanie"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/utils/chatHistoryGrouping.ts
 msgid "chat.history.generation.error"
 msgstr "Błąd"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/utils/chatHistoryGrouping.ts
 msgid "chat.history.generation.finished"
 msgstr "Zakończono"
 
@@ -1403,7 +1443,7 @@ msgid "chat.history.generation.liveRunning"
 msgstr "{running, plural, one {# czat generuje odpowiedź} few {# czaty generują odpowiedź} other {# czatów generuje odpowiedź}}"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/utils/chatHistoryGrouping.ts
 msgid "chat.history.generation.running"
 msgstr "Trwa"
 
@@ -1744,6 +1784,7 @@ msgid "chat.messageEditor.submit"
 msgstr "Wyślij"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #: src/utils/chat/recentChatSession.ts
 msgid "chat.newChat.title"
 msgstr "Nowy Czat"
@@ -5336,10 +5377,6 @@ msgstr "Nieznana data"
 
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "Unknown sender"
-msgstr ""
-
-#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
-msgid "Untitled Chat"
 msgstr ""
 
 #: src/pages/AssistantEditPage.tsx

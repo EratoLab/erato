@@ -53,6 +53,11 @@ const archivedInclusiveQueryKey = [
   "infinite",
   { limit: CHAT_HISTORY_PAGE_SIZE },
 ];
+// The assistant space lists one page, so its cache entry has no `pages`.
+const assistantSpaceQueryKey = [
+  "recentChats",
+  { limit: 50, type: "assistant", include_delegated: true },
+];
 
 function makePage(offset: number, ids: string[], hasMore: boolean) {
   return {
@@ -194,8 +199,35 @@ describe("useChatHistory archiveChat optimistic removal", () => {
     ).toBe(true);
   });
 
+  it("removes the row from non-paginated list variants", async () => {
+    queryClient.setQueryData(
+      assistantSpaceQueryKey,
+      makePage(0, ["chat5", "chat6"], false),
+    );
+    const { result } = renderHook(() => useChatHistory(), { wrapper });
+
+    await act(async () => {
+      await result.current.archiveChat("chat5");
+    });
+
+    type CachedPage = {
+      chats: { id: string }[];
+      stats: { returned_count: number; total_count: number };
+    };
+    const assistantSpaceData = queryClient.getQueryData<CachedPage>(
+      assistantSpaceQueryKey,
+    );
+    expect(assistantSpaceData?.chats.map((c) => c.id)).toEqual(["chat6"]);
+    expect(assistantSpaceData?.stats.returned_count).toBe(1);
+    expect(assistantSpaceData?.stats.total_count).toBe(44);
+  });
+
   it("rolls back the removal if the mutation fails", async () => {
     mockArchiveMutation.mockRejectedValueOnce(new Error("boom"));
+    queryClient.setQueryData(
+      assistantSpaceQueryKey,
+      makePage(0, ["chat5", "chat6"], false),
+    );
     const { result } = renderHook(() => useChatHistory(), { wrapper });
 
     await act(async () => {
@@ -204,5 +236,12 @@ describe("useChatHistory archiveChat optimistic removal", () => {
 
     await waitFor(() => expect(result.current.chats).toHaveLength(45));
     expect(result.current.chats.map((c) => c.id)).toContain("chat5");
+    const assistantSpaceData = queryClient.getQueryData<{
+      chats: { id: string }[];
+    }>(assistantSpaceQueryKey);
+    expect(assistantSpaceData?.chats.map((c) => c.id)).toEqual([
+      "chat5",
+      "chat6",
+    ]);
   });
 });

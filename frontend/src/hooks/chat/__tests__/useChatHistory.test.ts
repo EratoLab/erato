@@ -20,6 +20,10 @@ import {
   isPendingChat,
 } from "../useChatHistory";
 
+import type {
+  ChatHistoryStatusFilter,
+  ChatHistoryTypeFilter,
+} from "@/hooks/chat/store/chatHistoryFilterStore";
 import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 const mockUseInfiniteQuery = vi.hoisted(() => vi.fn());
@@ -307,6 +311,40 @@ describe("recent-chats filter wiring", () => {
       }),
       undefined,
     );
+  });
+
+  it("never opts the sidebar into delegated runs", () => {
+    const typeFilters: ChatHistoryTypeFilter[] = ["all", "chat", "assistant"];
+    const statusFilters: ChatHistoryStatusFilter[] = ["active", "all"];
+
+    for (const typeFilter of typeFilters) {
+      for (const statusFilter of statusFilters) {
+        expect(
+          buildRecentChatsFilterParams({ typeFilter, statusFilter }),
+        ).not.toHaveProperty("include_delegated");
+      }
+    }
+  });
+
+  it.each([
+    ["default filters", CHAT_HISTORY_FILTER_DEFAULTS.typeFilter],
+    ["the assistant type filter", "assistant" as const],
+  ])("requests no delegated runs for the list under %s", (_label, type) => {
+    useChatHistoryFilterStore.setState({ typeFilter: type });
+
+    renderHook(() => useChatHistory({ pinnedChatsEnabled: true }));
+
+    const [listQueryOptions, pinnedQueryOptions] =
+      mockUseInfiniteQuery.mock.calls.map(
+        ([options]) =>
+          options as { queryFn: (context: { pageParam: number }) => unknown },
+      );
+    listQueryOptions.queryFn({ pageParam: 0 });
+    pinnedQueryOptions.queryFn({ pageParam: 0 });
+
+    for (const [variables] of vi.mocked(fetchRecentChats).mock.calls) {
+      expect(variables.queryParams).not.toHaveProperty("include_delegated");
+    }
   });
 
   it("hides the pending placeholder when the type filter excludes it", () => {
