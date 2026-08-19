@@ -134,6 +134,11 @@ pub async fn chat_completions(
         crate::matcher::ResponseConfig::RandomOneLiner(_) => {
             unreachable!("RandomOneLiner responses should be resolved into Static in matcher")
         }
+        crate::matcher::ResponseConfig::DelegateToAssistant(_) => {
+            unreachable!(
+                "DelegateToAssistant responses should be resolved into ToolCall in matcher"
+            )
+        }
     };
 
     // Log that we're starting the stream
@@ -251,6 +256,11 @@ async fn non_streaming_chat_completion(
         }
         ResponseConfig::RandomOneLiner(_) => {
             unreachable!("RandomOneLiner responses should be resolved into Static in matcher")
+        }
+        ResponseConfig::DelegateToAssistant(_) => {
+            unreachable!(
+                "DelegateToAssistant responses should be resolved into ToolCall in matcher"
+            )
         }
     }
 }

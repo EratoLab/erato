@@ -18,6 +18,12 @@ interface TraceStepProps {
   /** Optional inline node next to the title (e.g. a tool status pill). */
   titleSlot?: ReactNode;
   /**
+   * Optional node trailing the header, outside the toggle. Interactive
+   * content belongs here: nested inside the toggle it would be invalid
+   * markup, and its clicks would fold the step.
+   */
+  headerSlot?: ReactNode;
+  /**
    * Body content — collapsed by default after streaming finishes. A step
    * without body content renders as a plain row: no chevron, no toggle.
    */
@@ -56,6 +62,7 @@ export const TraceStep = ({
   hasTrailingRailLine,
   title,
   titleSlot,
+  headerSlot,
   children,
   defaultOpen = false,
   autoExpand = false,
@@ -87,33 +94,36 @@ export const TraceStep = ({
         isActive={isActive}
       />
       <div className="min-w-0 flex-1">
-        {children == null ? (
-          <div className="flex w-full min-w-0 items-center gap-2 py-1 pl-2.5 text-left text-sm text-theme-fg-secondary">
-            <span className="truncate font-medium">{title}</span>
-            {titleSlot}
-          </div>
-        ) : (
-          <button
-            type="button"
-            aria-expanded={isOpen}
-            onClick={() => setIsOpen((prev) => !prev)}
-            className={clsx(
-              "flex w-full items-center gap-2 py-1 pl-2.5 text-left text-sm text-theme-fg-secondary",
-              "cursor-pointer transition-colors hover:text-theme-fg-primary",
-              "min-w-0",
-            )}
-          >
-            <span className="truncate font-medium">{title}</span>
-            {titleSlot}
-            <ChevronRightIcon
-              aria-hidden="true"
+        <div className="flex min-w-0 items-center gap-1">
+          {children == null ? (
+            <div className="flex min-w-0 flex-1 items-center gap-2 py-1 pl-2.5 text-left text-sm text-theme-fg-secondary">
+              <span className="truncate font-medium">{title}</span>
+              {titleSlot}
+            </div>
+          ) : (
+            <button
+              type="button"
+              aria-expanded={isOpen}
+              onClick={() => setIsOpen((prev) => !prev)}
               className={clsx(
-                "ml-auto size-3 shrink-0 text-theme-fg-muted transition-transform",
-                isOpen ? "rotate-90" : "rotate-0",
+                "flex flex-1 items-center gap-2 py-1 pl-2.5 text-left text-sm text-theme-fg-secondary",
+                "cursor-pointer transition-colors hover:text-theme-fg-primary",
+                "min-w-0",
               )}
-            />
-          </button>
-        )}
+            >
+              <span className="truncate font-medium">{title}</span>
+              {titleSlot}
+              <ChevronRightIcon
+                aria-hidden="true"
+                className={clsx(
+                  "ml-auto size-3 shrink-0 text-theme-fg-muted transition-transform",
+                  isOpen ? "rotate-90" : "rotate-0",
+                )}
+              />
+            </button>
+          )}
+          {headerSlot}
+        </div>
         {children != null && (
           <TraceCollapse isOpen={isOpen}>
             <div className="pl-2.5 pt-0.5 text-sm text-theme-fg-primary">

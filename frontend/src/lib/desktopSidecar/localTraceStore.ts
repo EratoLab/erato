@@ -24,6 +24,8 @@ import { useMemo } from "react";
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 
+import { DELEGATION_TOOL_NAME } from "@/lib/delegation/delegationEnvelope";
+
 import { isSidecarStepRunning, mergeSidecarTraces } from "./traceEvents";
 
 import type {
@@ -38,13 +40,16 @@ const MAX_COUNT_ENTRIES = 16;
 const MAX_COUNT_KEY_CHARS = 64;
 
 /**
- * Tools whose persisted results may carry a trustworthy `localTrace`. The
- * session store is written only by our own executors, but a persisted output
- * is whatever the tool returned — without this gate, any server-side tool
- * could dress its output up as an authoritative on-device trace.
+ * Tools whose results may carry a trustworthy `localTrace`. The session store
+ * is written only by our own executors, but an output is whatever the tool
+ * returned — without this gate, any tool could dress its output up as an
+ * authoritative nested trace.
  */
-// eslint-disable-next-line lingui/no-unlocalized-strings -- tool identifier
-const SIDECAR_TRACE_RESULT_TOOLS = new Set(["search_sidecar_mailbox"]);
+const SIDECAR_TRACE_RESULT_TOOLS = new Set([
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- tool identifier
+  "search_sidecar_mailbox",
+  DELEGATION_TOOL_NAME,
+]);
 
 export function isSidecarTraceResultTool(
   toolName: string | undefined,
@@ -286,10 +291,11 @@ export function getSidecarLocalTrace(
 }
 
 /**
- * The trace carried by a persisted tool result, if any. `output` is the
- * backend's `{status, result}` envelope for a client-tool call; an executor
- * that shares its trace puts it at `result.localTrace`. The payload is
- * whatever reached the backend, so it is sanitized before anything renders.
+ * The trace carried by a tool output, if any. A client tool's output is the
+ * backend's `{status, result}` envelope and an executor that shares its trace
+ * puts it at `result.localTrace`; a tool whose result is not an object
+ * carries the trace next to it instead. The payload is whatever reached the
+ * client, so it is sanitized before anything renders.
  */
 export function persistedSidecarLocalTrace(
   output: unknown,
@@ -297,13 +303,13 @@ export function persistedSidecarLocalTrace(
   if (typeof output !== "object" || output === null) {
     return undefined;
   }
-  const result = (output as Record<string, unknown>).result;
-  if (typeof result !== "object" || result === null) {
-    return undefined;
-  }
-  return sanitizeSidecarLocalTrace(
-    (result as Record<string, unknown>).localTrace,
-  );
+  const record = output as Record<string, unknown>;
+  const result = record.result;
+  const nested =
+    typeof result === "object" && result !== null
+      ? (result as Record<string, unknown>).localTrace
+      : undefined;
+  return sanitizeSidecarLocalTrace(nested ?? record.localTrace);
 }
 
 /**

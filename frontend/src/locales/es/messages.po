@@ -3589,6 +3589,56 @@ msgid "toolcall.output.title"
 msgstr "Salida"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.done"
+msgstr "Delegado a {name}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.done.unnamed"
+msgstr "Delegado a un asistente"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.openRun"
+msgstr "Abrir la ejecución delegada"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.result.truncated"
+msgstr "Resultado truncado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.running"
+msgstr "Delegando a {name}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.running.unnamed"
+msgstr "Delegando a un asistente"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.status.cancelled"
+msgstr "Cancelado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.status.timeout"
+msgstr "Tiempo agotado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.step.answer"
+msgstr "Respuesta final"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.traceHeadline"
+msgstr "Ejecución delegada: {summary}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Trace/TraceDoneMarker.tsx
 msgid "trace.done"
 msgstr "Hecho"
@@ -3639,24 +3689,25 @@ msgid "trace.thinking.placeholder"
 msgstr "Pensando…"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/ToolUseStep.tsx
+#: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.approved"
 msgstr ""
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/ToolUseStep.tsx
+#: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.denied"
 msgstr ""
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/SidecarLocalTraceView.tsx
-#: src/components/ui/Trace/steps/ToolUseStep.tsx
+#: src/components/ui/Trace/NestedTraceView.tsx
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.failed"
 msgstr "Falló"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/SidecarLocalTraceView.tsx
-#: src/components/ui/Trace/steps/ToolUseStep.tsx
+#: src/components/ui/Trace/NestedTraceView.tsx
+#: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.running"
 msgstr "En ejecución"
 
@@ -3758,7 +3809,7 @@ msgstr "{itemCount} elementos"
 msgid "{skipped} messages could not be loaded."
 msgstr ""
 
-#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+#: src/components/ui/Trace/NestedTraceView.tsx
 msgid "{stepCount, plural, one {# step} other {# steps}}"
 msgstr "{stepCount, plural, one {# paso} other {# pasos}}"
 
@@ -4308,7 +4359,7 @@ msgstr "Herramientas predeterminadas"
 msgid "Define how the assistant should behave and respond"
 msgstr ""
 
-#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+#: src/components/ui/Trace/NestedTraceView.tsx
 msgid "Degraded"
 msgstr "Degradado"
 
@@ -4510,7 +4561,7 @@ msgstr ""
 msgid "From"
 msgstr ""
 
-#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+#: src/components/ui/Trace/NestedTraceView.tsx
 msgid "from cache"
 msgstr "desde la caché"
 
@@ -5021,7 +5072,7 @@ msgstr "Mostrando {resultsCount} chats recientes"
 msgid "Sign out"
 msgstr "Cerrar sesión"
 
-#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+#: src/components/ui/Trace/NestedTraceView.tsx
 msgid "Skipped"
 msgstr "Omitido"
 

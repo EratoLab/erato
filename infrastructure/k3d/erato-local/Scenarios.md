@@ -22,6 +22,8 @@ Configures budget tracking with an extremely low budget limit and artificially h
 
 Enables the assistants feature. This allows testing assistant creation, management, and usage workflows including file attachments and assistant-specific chat contexts.
 
+Also enables in-chat delegation, which needs a scripted delegate: the mock LLM is the sole chat provider here, because a delegated child inherits the first entry of `priority_order` rather than the parent's provider. A mock MCP server gives the delegate a real tool to call.
+
 ### `many-models` - Model Selector Testing
 
 **Configuration File:** `config/erato.scenario-many-models.toml`

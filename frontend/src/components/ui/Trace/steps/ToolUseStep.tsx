@@ -1,15 +1,18 @@
-import { t } from "@lingui/core/macro";
-import clsx from "clsx";
-
 import { ToolCallInput, ToolCallOutput } from "@/components/ui/ToolCall";
+import {
+  DELEGATION_TOOL_NAME,
+  parseDelegationEnvelope,
+} from "@/lib/delegation/delegationEnvelope";
 import { useSidecarLocalTrace } from "@/lib/desktopSidecar/localTraceStore";
 
 import { SidecarLocalTraceSubtree } from "../SidecarLocalTraceSubtree";
 import { TraceStep } from "../TraceStep";
 import { railIconFor } from "../icons";
+import { DelegationStep } from "./DelegationStep";
+import { ToolStatusPill } from "./ToolStatusPill";
 
 import type { ToolApprovalStatus } from "../Trace";
-import type { BaseStepProps, TraceStepStatus } from "../types";
+import type { BaseStepProps } from "../types";
 import type { ToolUse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 interface ToolUseStepProps extends BaseStepProps {
@@ -17,35 +20,7 @@ interface ToolUseStepProps extends BaseStepProps {
   approvalStatus?: ToolApprovalStatus;
 }
 
-// Pills are only shown for states that need extra emphasis beyond the rail
-// icon: in-flight (animated) and failed (red attention). The success state is
-// already conveyed by the rail's checkmark — no pill needed.
-const STATUS_PILL_CLASS = {
-  running: "bg-theme-info-bg text-theme-info-fg animate-pulse",
-  error: "bg-theme-error-bg text-theme-error-fg",
-} as const;
-
-const STATUS_LABEL = {
-  running: () => t({ id: "trace.tool.running", message: "Running" }),
-  error: () => t({ id: "trace.tool.failed", message: "Failed" }),
-} as const;
-
-const APPROVAL_PILL = {
-  approved: {
-    className: "bg-theme-success-bg text-theme-success-fg",
-    label: () => t({ id: "trace.tool.approved", message: "Approved" }),
-  },
-  denied: {
-    className: "bg-theme-error-bg text-theme-error-fg",
-    label: () => t({ id: "trace.tool.denied", message: "Denied" }),
-  },
-} as const;
-
-type StatusWithPill = keyof typeof STATUS_PILL_CLASS;
-const hasPill = (status: TraceStepStatus): status is StatusWithPill =>
-  status === "running" || status === "error";
-
-export const ToolUseStep = ({
+const PlainToolUseStep = ({
   part,
   status,
   isStreaming,
@@ -65,25 +40,6 @@ export const ToolUseStep = ({
   // and output only ever belong to an individual step.
   const hasTrace =
     useSidecarLocalTrace(toolCallId, toolName, part.output) !== undefined;
-  const titleSlot = approvalStatus ? (
-    <span
-      className={clsx(
-        "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium",
-        APPROVAL_PILL[approvalStatus].className,
-      )}
-    >
-      {APPROVAL_PILL[approvalStatus].label()}
-    </span>
-  ) : hasPill(status) ? (
-    <span
-      className={clsx(
-        "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium",
-        STATUS_PILL_CLASS[status],
-      )}
-    >
-      {STATUS_LABEL[status]()}
-    </span>
-  ) : null;
 
   const body =
     toolCallId && hasTrace ? (
@@ -116,7 +72,9 @@ export const ToolUseStep = ({
         railIcon={railIconFor(part.content_type, status)}
         hasTrailingRailLine={!isLastStep}
         title={toolName}
-        titleSlot={titleSlot}
+        titleSlot={
+          <ToolStatusPill status={status} approvalStatus={approvalStatus} />
+        }
         defaultOpen={hasTrace}
         autoExpand={hasTrace}
         autoCollapse={isCollapsed}
@@ -125,5 +83,20 @@ export const ToolUseStep = ({
         {body}
       </TraceStep>
     </div>
+  );
+};
+
+// A refusal, and every frame before the first progress update, has no run to
+// show — those render as the plain tool call. Branching at this level rather
+// than inside keeps each rendering free to hold its own hooks.
+export const ToolUseStep = (props: ToolUseStepProps) => {
+  const envelope =
+    props.part.tool_name === DELEGATION_TOOL_NAME
+      ? parseDelegationEnvelope(props.part.output)
+      : undefined;
+  return envelope ? (
+    <DelegationStep {...props} envelope={envelope} />
+  ) : (
+    <PlainToolUseStep {...props} />
   );
 };

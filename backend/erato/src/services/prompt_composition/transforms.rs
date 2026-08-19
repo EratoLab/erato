@@ -604,7 +604,7 @@ pub async fn resolve_sequence(
                             });
                             input_messages.push(InputMessage {
                                 role: MessageRole::Tool,
-                                content: ContentPart::ToolUse(tool_use),
+                                content: ContentPart::ToolUse(strip_ui_only_tool_output(tool_use)),
                             });
                         }
                         content_part => {
@@ -687,6 +687,23 @@ fn is_prior_turn_action_facet_message(input_msg: &InputMessage) -> bool {
         }
         _ => false,
     }
+}
+
+/// A replayed tool output must carry only what the tool returned. The
+/// delegation trace rides on the same part for the UI's benefit; replaying it
+/// would hand the origin model the delegate's tool inventory and whatever
+/// steered it.
+fn strip_ui_only_tool_output(
+    mut tool_use: crate::models::message::ToolUse,
+) -> crate::models::message::ToolUse {
+    if let Some(output) = tool_use
+        .output
+        .as_mut()
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        output.remove(crate::services::delegation::DELEGATION_LOCAL_TRACE_KEY);
+    }
+    tool_use
 }
 
 /// True when an `InputMessage` carries a ToolUse produced by the synthetic

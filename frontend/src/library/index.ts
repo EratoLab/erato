@@ -174,6 +174,10 @@ export {
   type SidecarTraceRow,
 } from "@/lib/desktopSidecar/traceEvents";
 export {
+  NestedTraceView,
+  type NestedTraceViewProps,
+} from "@/components/ui/Trace/NestedTraceView";
+export {
   SidecarLocalTraceView,
   type SidecarLocalTraceViewProps,
 } from "@/components/ui/Trace/SidecarLocalTraceView";

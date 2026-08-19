@@ -3589,6 +3589,56 @@ msgid "toolcall.output.title"
 msgstr "Wyjście"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.done"
+msgstr "Przekazano do {name}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.done.unnamed"
+msgstr "Przekazano do asystenta"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.openRun"
+msgstr "Otwórz delegowane uruchomienie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.result.truncated"
+msgstr "Wynik skrócony"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.running"
+msgstr "Przekazywanie do {name}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.running.unnamed"
+msgstr "Przekazywanie do asystenta"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.status.cancelled"
+msgstr "Anulowano"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.status.timeout"
+msgstr "Przekroczono limit czasu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.step.answer"
+msgstr "Ostateczna odpowiedź"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.traceHeadline"
+msgstr "Delegowane uruchomienie: {summary}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Trace/TraceDoneMarker.tsx
 msgid "trace.done"
 msgstr "Gotowe"
@@ -3639,24 +3689,25 @@ msgid "trace.thinking.placeholder"
 msgstr "Myślę…"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/ToolUseStep.tsx
+#: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.approved"
 msgstr ""
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/ToolUseStep.tsx
+#: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.denied"
 msgstr ""
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/SidecarLocalTraceView.tsx
-#: src/components/ui/Trace/steps/ToolUseStep.tsx
+#: src/components/ui/Trace/NestedTraceView.tsx
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.failed"
 msgstr "Niepowodzenie"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/SidecarLocalTraceView.tsx
-#: src/components/ui/Trace/steps/ToolUseStep.tsx
+#: src/components/ui/Trace/NestedTraceView.tsx
+#: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.running"
 msgstr "W toku"
 
@@ -3758,7 +3809,7 @@ msgstr "{itemCount} elementów"
 msgid "{skipped} messages could not be loaded."
 msgstr ""
 
-#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+#: src/components/ui/Trace/NestedTraceView.tsx
 msgid "{stepCount, plural, one {# step} other {# steps}}"
 msgstr "{stepCount, plural, one {# krok} few {# kroki} many {# kroków} other {# kroku}}"
 
@@ -4308,7 +4359,7 @@ msgstr "Domyslne narzedzia"
 msgid "Define how the assistant should behave and respond"
 msgstr ""
 
-#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+#: src/components/ui/Trace/NestedTraceView.tsx
 msgid "Degraded"
 msgstr "Ograniczony"
 
@@ -4510,7 +4561,7 @@ msgstr ""
 msgid "From"
 msgstr ""
 
-#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+#: src/components/ui/Trace/NestedTraceView.tsx
 msgid "from cache"
 msgstr "z pamięci podręcznej"
 
@@ -5021,7 +5072,7 @@ msgstr "Wyświetlanie {resultsCount} ostatnich czatów"
 msgid "Sign out"
 msgstr "Wyloguj"
 
-#: src/components/ui/Trace/SidecarLocalTraceView.tsx
+#: src/components/ui/Trace/NestedTraceView.tsx
 msgid "Skipped"
 msgstr "Pominięto"
 

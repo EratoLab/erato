@@ -108,6 +108,16 @@ fn default_random_one_liner_variant_count() -> usize {
     100
 }
 
+/// Assistant-delegation tool call response configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DelegateToAssistantResponseConfig {
+    /// The task brief handed to the delegate
+    pub task: String,
+    /// Delay before sending the tool call (in milliseconds)
+    #[serde(default)]
+    pub delay_ms: u64,
+}
+
 /// Configuration for a response to return when a pattern matches
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ResponseConfig {
@@ -125,7 +135,12 @@ pub enum ResponseConfig {
     LongRunning(LongRunningResponseConfig),
     /// Dynamic random one-liner chosen from a fixed pool of variants
     RandomOneLiner(RandomOneLinerResponseConfig),
+    /// Dynamic `delegate_to_assistant` call aimed at an assistant the request offers
+    DelegateToAssistant(DelegateToAssistantResponseConfig),
 }
+
+/// Name of the backend's synthetic assistant-delegation tool.
+const DELEGATE_TO_ASSISTANT_TOOL_NAME: &str = "delegate_to_assistant";
 
 /// Match rule that checks user message pattern using substring matching
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -352,6 +367,14 @@ impl Mock {
                     config.delay_ms
                 );
             }
+            ResponseConfig::DelegateToAssistant(config) => {
+                println!(
+                    "    {}: delegation tool call with {}ms delay, task \"{}\"",
+                    "Response".bold(),
+                    config.delay_ms,
+                    config.task
+                );
+            }
         }
         println!();
     }
@@ -456,7 +479,53 @@ impl Matcher {
                     ..Default::default()
                 })
             }
+            ResponseConfig::DelegateToAssistant(config) => {
+                match Self::extract_offered_delegation_target(request) {
+                    Some(assistant_id) => ResponseConfig::ToolCall(ToolCallResponseConfig {
+                        tool_name: DELEGATE_TO_ASSISTANT_TOOL_NAME.to_string(),
+                        arguments: serde_json::json!({
+                            "assistant_id": assistant_id,
+                            "task": config.task,
+                        })
+                        .to_string(),
+                        delay_ms: config.delay_ms,
+                    }),
+                    None => ResponseConfig::Static(StaticResponseConfig {
+                        chunks: vec![format!(
+                            "No `{DELEGATE_TO_ASSISTANT_TOOL_NAME}` target was offered in this request."
+                        )],
+                        delay_ms: config.delay_ms,
+                        ..Default::default()
+                    }),
+                }
+            }
             _ => response.clone(),
+        }
+    }
+
+    /// The delegation tool enumerates the assistants it may target in the
+    /// `assistant_id` property of its own schema; that enum is the only place
+    /// a runtime assistant id reaches the mock server.
+    fn extract_offered_delegation_target(request: &ChatCompletionRequest) -> Option<String> {
+        Self::find_assistant_id_enum(request.tools.as_ref()?)
+    }
+
+    fn find_assistant_id_enum(value: &Value) -> Option<String> {
+        match value {
+            Value::Array(items) => items.iter().find_map(Self::find_assistant_id_enum),
+            Value::Object(map) => {
+                let offered = map
+                    .get("assistant_id")
+                    .and_then(|schema| schema.get("enum"))
+                    .and_then(Value::as_array)
+                    .and_then(|targets| targets.first())
+                    .and_then(Value::as_str);
+                match offered {
+                    Some(assistant_id) => Some(assistant_id.to_string()),
+                    None => map.values().find_map(Self::find_assistant_id_enum),
+                }
+            }
+            _ => None,
         }
     }
 
@@ -903,6 +972,8 @@ pub struct ChatCompletionRequest {
     pub stream: bool,
     #[serde(default)]
     pub model: Option<String>,
+    #[serde(default)]
+    pub tools: Option<Value>,
 }
 
 /// A message in the chat completion request

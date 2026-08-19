@@ -1,12 +1,15 @@
 //! In-chat delegation to @-mentioned assistants.
 
 use crate::policy::prelude::*;
+use crate::services::background_tasks::StreamingEvent;
+use crate::services::delegation_trace::{DelegationTrace, DelegationTraceCollector, TraceChange};
 use crate::state::AppState;
 use axum::http::StatusCode;
 use genai::chat::Tool as GenaiTool;
 use genai::chat::ToolName as GenaiToolName;
 use sea_orm::prelude::Uuid;
 use serde_json::json;
+use tokio::sync::broadcast::error::{RecvError, TryRecvError};
 
 /// Name of the synthetic tool offered to the model when the current turn
 /// carries validated assistant mentions.
@@ -256,6 +259,11 @@ pub enum DelegationRunStatus {
     Cancelled,
 }
 
+/// Key under which the child run's trace rides on the tool output. UI-only:
+/// `prompt_composition` strips it before a stored tool output is replayed to
+/// a provider.
+pub const DELEGATION_LOCAL_TRACE_KEY: &str = "localTrace";
+
 /// Compact result envelope pushed as the `delegate_to_assistant` tool result.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct DelegationResultEnvelope {
@@ -277,6 +285,106 @@ impl DelegationResultEnvelope {
                 self.delegate_chat_id
             )
         })
+    }
+
+    /// The UI-facing `output` of the tool part. Composed apart from
+    /// `model_response_text` on purpose: the trace is a user-facing render of
+    /// what the delegate did, and feeding it back to the origin model would
+    /// put the child's tool inventory — and anything that steered it — into
+    /// the parent's context.
+    pub fn output_value(&self, trace: &DelegationTrace) -> serde_json::Value {
+        let mut value =
+            serde_json::to_value(self).unwrap_or_else(|_| json!({ "status": "failed" }));
+        if let Some(object) = value.as_object_mut()
+            && let Ok(trace) = serde_json::to_value(trace)
+        {
+            object.insert(DELEGATION_LOCAL_TRACE_KEY.to_string(), trace);
+        }
+        value
+    }
+}
+
+/// What a dispatched call produced: the model-facing envelope, and the
+/// UI-facing trace of the child run that ran alongside it.
+pub(crate) struct DelegationDispatchOutcome {
+    pub envelope: DelegationResultEnvelope,
+    pub trace: DelegationTrace,
+}
+
+/// The parent generation's stream, and where on it the delegation tool part
+/// lives. Progress frames must address the same message and content index as
+/// the `tool_call_proposed` that created the part, or they land on nothing.
+#[derive(Clone, Copy)]
+pub(crate) struct DelegationParentStream<'a> {
+    pub task: &'a std::sync::Arc<crate::services::background_tasks::StreamingTask>,
+    pub message_id: Uuid,
+    pub content_index: usize,
+}
+
+/// Floor between two frames that only advance an open step. Every frame is
+/// broadcast AND persisted into `temp_chat_generation_events`, so a child that
+/// reports progress in a tight loop must not turn into a write storm.
+const PROGRESS_FRAME_MIN_INTERVAL: std::time::Duration = std::time::Duration::from_millis(300);
+
+/// Publishes the running trace onto the parent's delegation tool part.
+struct DelegationProgressEmitter<'a> {
+    parent: Option<DelegationParentStream<'a>>,
+    tool_call_id: String,
+    tool_name: String,
+    input: serde_json::Value,
+    assistant_id: Uuid,
+    assistant_name: String,
+    delegate_chat_id: Uuid,
+    sent_version: u64,
+    last_frame_at: Option<std::time::Instant>,
+}
+
+impl DelegationProgressEmitter<'_> {
+    /// Records a change, sending a frame unless a purely incremental one is
+    /// still inside the coalescing window.
+    async fn record(&mut self, trace: &DelegationTraceCollector, change: TraceChange) {
+        let due = change == TraceChange::Structural
+            || self
+                .last_frame_at
+                .is_none_or(|at| at.elapsed() >= PROGRESS_FRAME_MIN_INTERVAL);
+        if due {
+            self.flush(trace).await;
+        }
+    }
+
+    /// Sends the CUMULATIVE trace: the frontend is last-write-wins on the
+    /// tool part's `output`, so a frame is never a delta. The running shape
+    /// carries no `status` — the tool part's own `in_progress` is what says
+    /// the delegate is still working.
+    async fn flush(&mut self, trace: &DelegationTraceCollector) {
+        let Some(parent) = self.parent else {
+            return;
+        };
+        if self.sent_version == trace.version() {
+            return;
+        }
+        self.sent_version = trace.version();
+        self.last_frame_at = Some(std::time::Instant::now());
+        crate::server::api::v1beta::message_streaming::send_background_event(
+            parent.task,
+            StreamingEvent::ToolCallUpdate {
+                message_id: parent.message_id,
+                content_index: parent.content_index,
+                tool_call_id: self.tool_call_id.clone(),
+                tool_name: self.tool_name.clone(),
+                input: Some(self.input.clone()),
+                status: crate::services::background_tasks::ToolCallStatus::InProgress,
+                progress_message: None,
+                output: Some(json!({
+                    "assistant_id": self.assistant_id,
+                    "assistant_name": self.assistant_name,
+                    "delegate_chat_id": self.delegate_chat_id,
+                    DELEGATION_LOCAL_TRACE_KEY: trace.snapshot(),
+                })),
+            },
+            "broadcast delegation progress",
+        )
+        .await;
     }
 }
 
@@ -500,17 +608,20 @@ async fn build_result_envelope(
 /// Dispatches a `delegate_to_assistant` call: validates the arguments against
 /// what this turn offered, creates the delegated child chat (owned by the
 /// origin user, full provenance envelope), runs the delegate as an awaited
-/// child run, and returns the result envelope. `Err` is a refusal message for
-/// the model — the caller refuses the call, never the turn.
+/// child run streaming its progress onto the parent's tool part, and returns
+/// the result. `Err` is a refusal message for the model — the caller refuses
+/// the call, never the turn.
 pub(crate) async fn dispatch_delegate_tool_call(
     app_state: &AppState,
     policy: &PolicyEngine,
     context: &crate::server::api::v1beta::message_streaming::DelegationDispatchContext<'_>,
     tool_call: &genai::chat::ToolCall,
-    parent_task: Option<&std::sync::Arc<crate::services::background_tasks::StreamingTask>>,
-) -> Result<DelegationResultEnvelope, String> {
+    parent: Option<DelegationParentStream<'_>>,
+) -> Result<DelegationDispatchOutcome, String> {
     use sea_orm::{ActiveValue, EntityTrait, QueryOrder};
 
+    let dispatch_started = std::time::Instant::now();
+    let parent_task = parent.map(|parent| parent.task);
     let config = app_state.config.assistants.delegation.clone();
     if !config.enabled {
         return Err("Assistant delegation is not enabled.".to_string());
@@ -667,7 +778,7 @@ pub(crate) async fn dispatch_delegate_tool_call(
         preamble.trim()
     );
 
-    let (_child_rx, child_task) = app_state
+    let (mut child_rx, child_task) = app_state
         .background_tasks
         .start_task(child_chat.id, Uuid::new_v4())
         .await;
@@ -687,51 +798,105 @@ pub(crate) async fn dispatch_delegate_tool_call(
         child_chat.id,
     ));
 
-    let status = tokio::select! {
-        joined = &mut handle => match joined {
-            Ok(Ok(())) => DelegationRunStatus::Completed,
-            Ok(Err(_)) => DelegationRunStatus::Failed,
-            Err(join_error) => {
-                tracing::warn!(?join_error, "Delegated child run panicked");
-                DelegationRunStatus::Failed
-            }
-        },
-        _ = parent_abort_signal(parent_task) => {
-            child_task.request_abort();
-            if tokio::time::timeout(CHILD_ABORT_GRACE, &mut handle).await.is_err() {
-                // Never hard-cancel: the child's cleanup tail (stream end,
-                // outcome persistence, task removal) must run, or its command
-                // listener and lease leak. The cooperative abort stops the run
-                // at the next stream chunk or turn boundary; until then it
-                // winds down detached.
-                tracing::warn!(
+    let mut trace = DelegationTraceCollector::new(dispatch_started);
+    let mut progress = DelegationProgressEmitter {
+        parent,
+        tool_call_id: tool_call.call_id.clone(),
+        tool_name: tool_call.fn_name.clone(),
+        input: tool_call.fn_arguments.clone(),
+        assistant_id,
+        assistant_name: assistant.name.clone(),
+        delegate_chat_id: child_chat.id,
+        sent_version: 0,
+        last_frame_at: None,
+    };
+    let run_timeout =
+        tokio::time::sleep(std::time::Duration::from_secs(config.run_timeout_seconds));
+    tokio::pin!(run_timeout);
+    let mut tap_open = true;
+
+    let status = loop {
+        tokio::select! {
+            joined = &mut handle => break match joined {
+                Ok(Ok(())) => DelegationRunStatus::Completed,
+                Ok(Err(_)) => DelegationRunStatus::Failed,
+                Err(join_error) => {
+                    tracing::warn!(?join_error, "Delegated child run panicked");
+                    DelegationRunStatus::Failed
+                }
+            },
+            _ = parent_abort_signal(parent_task) => {
+                child_task.request_abort();
+                if tokio::time::timeout(CHILD_ABORT_GRACE, &mut handle).await.is_err() {
+                    // Never hard-cancel: the child's cleanup tail (stream end,
+                    // outcome persistence, task removal) must run, or its command
+                    // listener and lease leak. The cooperative abort stops the run
+                    // at the next stream chunk or turn boundary; until then it
+                    // winds down detached.
+                    tracing::warn!(
+                        child_chat_id = %child_chat.id,
+                        "Delegated child did not stop within the abort grace; detaching"
+                    );
+                }
+                break DelegationRunStatus::Cancelled;
+            },
+            _ = &mut run_timeout => {
+                child_task.request_abort();
+                if tokio::time::timeout(CHILD_ABORT_GRACE, &mut handle).await.is_err() {
+                    tracing::warn!(
+                        child_chat_id = %child_chat.id,
+                        "Delegated child did not stop within the timeout grace; detaching"
+                    );
+                }
+                break DelegationRunStatus::Timeout;
+            },
+            received = child_rx.recv(), if tap_open => match received {
+                Ok(event) => {
+                    if matches!(event, StreamingEvent::StreamEnd) {
+                        tap_open = false;
+                    }
+                    if let Some(change) = trace.apply(&event) {
+                        progress.record(&trace, change).await;
+                    }
+                }
+                Err(RecvError::Lagged(skipped)) => tracing::debug!(
                     child_chat_id = %child_chat.id,
-                    "Delegated child did not stop within the abort grace; detaching"
-                );
-            }
-            DelegationRunStatus::Cancelled
-        },
-        _ = tokio::time::sleep(std::time::Duration::from_secs(config.run_timeout_seconds)) => {
-            child_task.request_abort();
-            if tokio::time::timeout(CHILD_ABORT_GRACE, &mut handle).await.is_err() {
-                tracing::warn!(
-                    child_chat_id = %child_chat.id,
-                    "Delegated child did not stop within the timeout grace; detaching"
-                );
-            }
-            DelegationRunStatus::Timeout
+                    skipped,
+                    "Delegation progress tap fell behind the child"
+                ),
+                Err(RecvError::Closed) => tap_open = false,
+            },
         }
     };
 
-    Ok(build_result_envelope(
-        app_state,
-        child_chat.id,
-        child_task.message_id(),
-        spawned_at,
-        assistant_id,
-        assistant.name,
-        status,
-        config.result_max_chars,
-    )
-    .await)
+    // The child's tail events can still be buffered when another arm of the
+    // select wins the race, so fold what is left in before closing the trace.
+    loop {
+        match child_rx.try_recv() {
+            Ok(event) => {
+                trace.apply(&event);
+            }
+            Err(TryRecvError::Lagged(_)) => continue,
+            Err(TryRecvError::Empty | TryRecvError::Closed) => break,
+        }
+    }
+    // A detached child keeps broadcasting; stop holding its events.
+    drop(child_rx);
+    trace.finish();
+    progress.flush(&trace).await;
+
+    Ok(DelegationDispatchOutcome {
+        envelope: build_result_envelope(
+            app_state,
+            child_chat.id,
+            child_task.message_id(),
+            spawned_at,
+            assistant_id,
+            assistant.name,
+            status,
+            config.result_max_chars,
+        )
+        .await,
+        trace: trace.snapshot(),
+    })
 }
