@@ -165,8 +165,15 @@ async fn test_app_state_internal(
     )
     .unwrap();
 
-    let background_tasks =
-        BackgroundTaskManager::new(Some(db.clone()), app_config.generation_status.clone());
+    let background_tasks = BackgroundTaskManager::new(
+        Some(db.clone()),
+        app_config.generation_status.clone(),
+        app_config
+            .assistants
+            .delegation
+            .enabled
+            .then_some(app_config.assistants.delegation.run_timeout_seconds),
+    );
     let distribution = Arc::new(erato::distribution::Distribution::load(&app_config));
 
     let app_state = AppState {

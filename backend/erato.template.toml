@@ -349,8 +349,12 @@ chat_provider_ids = ["test-token-limit"]
 # # back into the origin turn. When off, a background request is downgraded
 # # to a normally awaited run rather than rejected (default: false)
 # allow_background = false
+# # Maximum number of one user's delegated background runs that may be in
+# # flight at once; further background launches are refused until a run
+# # finishes. 0 disables the cap (default: 5)
+# max_concurrent_background_runs = 5
 # # Maximum wall-clock seconds a delegated child run may take before it is
-# # aborted and reported to the origin chat as timed out (default: 600)
+# # aborted; awaited runs report a timeout to the origin chat (default: 600)
 # run_timeout_seconds = 600
 # # Maximum number of assistants that can be mentioned in a single message (default: 3)
 # max_mentions_per_message = 3

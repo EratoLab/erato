@@ -3,9 +3,9 @@ use crate::db::entity_ext::chats;
 use crate::db::entity_ext::prelude::*;
 use crate::metrics_constants::{
     POSTGRES_QUERY_ARCHIVE_DELEGATED_DESCENDANTS, POSTGRES_QUERY_ARCHIVE_STALE_DELEGATED_RUNS,
-    POSTGRES_QUERY_CHAT_GENERATION_IS_RUNNING, POSTGRES_QUERY_COUNT_RECENT_CHATS,
-    POSTGRES_QUERY_FREQUENT_ASSISTANTS, POSTGRES_QUERY_LIST_GENERATING_CHATS,
-    POSTGRES_QUERY_LIST_RECENT_CHATS,
+    POSTGRES_QUERY_CHAT_GENERATION_IS_RUNNING, POSTGRES_QUERY_COUNT_BACKGROUND_DELEGATED_RUNS,
+    POSTGRES_QUERY_COUNT_RECENT_CHATS, POSTGRES_QUERY_FREQUENT_ASSISTANTS,
+    POSTGRES_QUERY_LIST_GENERATING_CHATS, POSTGRES_QUERY_LIST_RECENT_CHATS,
 };
 use crate::models::message::{DelegationRunMode, GenerationParameters};
 use crate::models::pagination;
@@ -1303,6 +1303,43 @@ pub async fn chat_generation_is_running(
     .await?;
 
     Ok(row.is_some_and(|row| row.running))
+}
+
+/// Number of the owner's delegated background runs whose generation is live:
+/// running with a fresh heartbeat. Read without locking, so two dispatches
+/// racing the count can both pass a cap built on it — accepted, because such
+/// a cap exists to stop runaway fan-out, not to be exact.
+pub async fn count_running_background_delegated_runs(
+    conn: &DatabaseConnection,
+    owner_user_id: &str,
+    generation_stale_after_secs: u64,
+) -> Result<u64, Report> {
+    #[derive(Debug, FromQueryResult)]
+    struct CountRow {
+        count: i64,
+    }
+
+    let row = CountRow::find_by_statement(named_statement_from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        POSTGRES_QUERY_COUNT_BACKGROUND_DELEGATED_RUNS,
+        r#"
+        SELECT COUNT(*) AS "count"
+        FROM "chats"
+        WHERE "chats"."owner_user_id" = $1
+            AND ("chats"."assistant_configuration" #>> '{provenance,kind}') = 'delegation'
+            AND ("chats"."assistant_configuration" #>> '{provenance,run_mode}') = 'background'
+            AND "chats"."generation_state" = 'running'
+            AND "chats"."generation_heartbeat_at" > now() - make_interval(secs => $2::double precision)
+        "#,
+        [
+            owner_user_id.into(),
+            (generation_stale_after_secs as f64).into(),
+        ],
+    ))
+    .one(conn)
+    .await?;
+
+    Ok(row.map_or(0, |row| row.count.max(0) as u64))
 }
 
 /// SQL predicate for a chat whose generation has not finished: running with a

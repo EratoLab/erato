@@ -6,12 +6,13 @@
 
 use crate::config::GenerationStatusConfig;
 use crate::metrics_constants::{
-    POSTGRES_QUERY_GENERATION_CLEANUP, POSTGRES_QUERY_GENERATION_FINISH,
-    POSTGRES_QUERY_GENERATION_HEARTBEAT, POSTGRES_QUERY_GENERATION_REAP,
-    POSTGRES_QUERY_GENERATION_SHARED_CLEANUP, POSTGRES_QUERY_GENERATION_SHARED_COMMAND,
-    POSTGRES_QUERY_GENERATION_SHARED_COMMAND_CONSUME, POSTGRES_QUERY_GENERATION_SHARED_COMMANDS,
-    POSTGRES_QUERY_GENERATION_SHARED_EVENTS, POSTGRES_QUERY_GENERATION_SHARED_FINISH,
-    POSTGRES_QUERY_GENERATION_SHARED_START, POSTGRES_QUERY_GENERATION_START,
+    POSTGRES_QUERY_DELEGATION_TIMEOUT_BACKSTOP, POSTGRES_QUERY_GENERATION_CLEANUP,
+    POSTGRES_QUERY_GENERATION_FINISH, POSTGRES_QUERY_GENERATION_HEARTBEAT,
+    POSTGRES_QUERY_GENERATION_REAP, POSTGRES_QUERY_GENERATION_SHARED_CLEANUP,
+    POSTGRES_QUERY_GENERATION_SHARED_COMMAND, POSTGRES_QUERY_GENERATION_SHARED_COMMAND_CONSUME,
+    POSTGRES_QUERY_GENERATION_SHARED_COMMANDS, POSTGRES_QUERY_GENERATION_SHARED_EVENTS,
+    POSTGRES_QUERY_GENERATION_SHARED_FINISH, POSTGRES_QUERY_GENERATION_SHARED_START,
+    POSTGRES_QUERY_GENERATION_START,
 };
 use crate::models::message::ContentPart;
 use crate::query_metrics::named_statement_from_sql_and_values;
@@ -86,15 +87,23 @@ pub struct BackgroundTaskManager {
 }
 
 impl BackgroundTaskManager {
-    /// Create a new background task manager
-    pub fn new(db: Option<DatabaseConnection>, config: GenerationStatusConfig) -> Self {
+    /// Create a new background task manager.
+    ///
+    /// `delegation_run_timeout_secs` arms the maintenance loop's timeout
+    /// backstop for delegated runs; `None` (delegation not configured) leaves
+    /// it off.
+    pub fn new(
+        db: Option<DatabaseConnection>,
+        config: GenerationStatusConfig,
+        delegation_run_timeout_secs: Option<u64>,
+    ) -> Self {
         let tasks: Arc<RwLock<HashMap<Uuid, Arc<StreamingTask>>>> =
             Arc::new(RwLock::new(HashMap::new()));
 
         let maintenance_task = db.clone().map(|db| {
             let tasks = Arc::clone(&tasks);
             Arc::new(tokio::spawn(async move {
-                Self::run_maintenance_task(db, tasks, config).await;
+                Self::run_maintenance_task(db, tasks, config, delegation_run_timeout_secs).await;
             }))
         });
 
@@ -449,6 +458,7 @@ impl BackgroundTaskManager {
         db: DatabaseConnection,
         tasks: Arc<RwLock<HashMap<Uuid, Arc<StreamingTask>>>>,
         config: GenerationStatusConfig,
+        delegation_run_timeout_secs: Option<u64>,
     ) {
         let mut interval =
             tokio::time::interval(Duration::from_secs(config.heartbeat_interval_secs.max(1)));
@@ -569,13 +579,72 @@ impl BackgroundTaskManager {
             if let Err(err) = db.execute_raw(shared_cleanup_statement).await {
                 tracing::warn!(error = %err, "Failed to clean up shared generation rows");
             }
+
+            if let Some(run_timeout_secs) = delegation_run_timeout_secs {
+                // Two heartbeat intervals of grace keep the in-task timer
+                // winning normally; the backstop only fires when it
+                // demonstrably did not.
+                let overdue_after_secs =
+                    (run_timeout_secs + 2 * config.heartbeat_interval_secs) as f64;
+                match Self::enqueue_overdue_delegated_run_aborts(&db, overdue_after_secs).await {
+                    Ok(0) => {}
+                    Ok(enqueued) => {
+                        tracing::warn!(enqueued, "Aborted delegated runs past their deadline")
+                    }
+                    Err(err) => {
+                        tracing::warn!(error = %err, "Failed to abort overdue delegated runs")
+                    }
+                }
+            }
         }
+    }
+
+    /// Enqueue an abort for every delegated run whose generation is still live
+    /// past its deadline — the backstop for a replica that is wedged rather
+    /// than dead (a dead one stops heartbeating and is reaped above). The abort
+    /// command is cooperative and idempotent, so runs owned by this process are
+    /// not filtered out, and a pending unconsumed abort is simply not stacked
+    /// onto. Returns the number of aborts enqueued.
+    pub async fn enqueue_overdue_delegated_run_aborts(
+        db: &DatabaseConnection,
+        overdue_after_secs: f64,
+    ) -> Result<u64, String> {
+        let statement = named_statement_from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            POSTGRES_QUERY_DELEGATION_TIMEOUT_BACKSTOP,
+            r#"
+            -- An adopted run is no longer the dispatch's artifact: the
+            -- owner's own turns in it get no deadline, same as any
+            -- interactive chat.
+            INSERT INTO temp_chat_generation_commands (generation_id, command_type)
+            SELECT g.generation_id, 'abort'
+            FROM temp_chat_generations g
+            JOIN chats c ON c.id = g.chat_id
+            WHERE g.state = 'running'
+              AND (c.assistant_configuration #>> '{provenance,kind}') = 'delegation'
+              AND (c.assistant_configuration #>> '{provenance,adopted_at}') IS NULL
+              AND g.started_at < now() - make_interval(secs => $1::double precision)
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM temp_chat_generation_commands pending
+                  WHERE pending.generation_id = g.generation_id
+                    AND pending.command_type = 'abort'
+                    AND pending.consumed_at IS NULL
+              )
+            "#,
+            [overdue_after_secs.into()],
+        );
+        let result = db
+            .execute_raw(statement)
+            .await
+            .map_err(|err| err.to_string())?;
+        Ok(result.rows_affected())
     }
 }
 
 impl Default for BackgroundTaskManager {
     fn default() -> Self {
-        Self::new(None, GenerationStatusConfig::default())
+        Self::new(None, GenerationStatusConfig::default(), None)
     }
 }
 
@@ -1002,7 +1071,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_task_creation_and_subscription() {
-        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default());
+        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default(), None);
         let chat_id = Uuid::new_v4();
         let message_id = Uuid::new_v4();
 
@@ -1016,7 +1085,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_event_storage_and_replay() {
-        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default());
+        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default(), None);
         let chat_id = Uuid::new_v4();
         let message_id = Uuid::new_v4();
 
@@ -1041,7 +1110,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_task_completion() {
-        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default());
+        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default(), None);
         let chat_id = Uuid::new_v4();
         let message_id = Uuid::new_v4();
 
@@ -1054,7 +1123,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_task_replacement() {
-        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default());
+        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default(), None);
         let chat_id = Uuid::new_v4();
         let message_id_1 = Uuid::new_v4();
         let message_id_2 = Uuid::new_v4();
@@ -1072,7 +1141,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_automatic_cleanup() {
-        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default());
+        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default(), None);
         let chat_id = Uuid::new_v4();
         let message_id = Uuid::new_v4();
 
@@ -1095,7 +1164,7 @@ mod tests {
 
     #[tokio::test]
     async fn remove_task_is_gated_on_generation_identity() {
-        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default());
+        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default(), None);
         let chat_id = Uuid::new_v4();
 
         let (_receiver1, task1) = manager.start_task(chat_id, Uuid::new_v4()).await;
@@ -1156,7 +1225,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_task_abort_request() {
-        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default());
+        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default(), None);
         let chat_id = Uuid::new_v4();
         let message_id = Uuid::new_v4();
 

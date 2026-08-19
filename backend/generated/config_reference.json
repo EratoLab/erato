@@ -28,6 +28,7 @@
   "assistants.delegation.allow_background": {},
   "assistants.delegation.auto_archive_after_days": {},
   "assistants.delegation.enabled": {},
+  "assistants.delegation.max_concurrent_background_runs": {},
   "assistants.delegation.max_mentions_per_message": {},
   "assistants.delegation.preamble": {},
   "assistants.delegation.result_max_chars": {},
