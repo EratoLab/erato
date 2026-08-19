@@ -84,6 +84,19 @@ pub struct ChatProvenance {
     pub constraints: Option<String>,
 }
 
+impl ChatProvenanceKind {
+    /// The wire spelling of the kind, matching what the listing query reads
+    /// straight out of the stored JSON. Kept honest by
+    /// `provenance_kind_wire_spelling_matches_the_stored_json`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ChatProvenanceKind::HandoffBranch => "handoff_branch",
+            ChatProvenanceKind::HandoffMove => "handoff_move",
+            ChatProvenanceKind::Delegation => "delegation",
+        }
+    }
+}
+
 impl AssistantConfiguration {
     /// Create a new assistant configuration
     pub fn new(assistant_id: Uuid) -> Self {
@@ -854,6 +867,116 @@ pub async fn get_recent_chats(
     Ok((recent_chats, stats))
 }
 
+/// A single chat, for surfaces that open one directly instead of picking it
+/// out of a listing. A delegated run is the case that needs this: listings
+/// hide it by default, so opening one by link has no row to read from.
+#[derive(Debug, Clone)]
+pub struct ChatDetail {
+    pub id: Uuid,
+    pub title_by_summary: Option<String>,
+    pub title_by_user_provided: Option<String>,
+    pub title_resolved: String,
+    pub archived_at: Option<DateTimeWithTimeZone>,
+    pub is_pinned: bool,
+    pub owner_user_id: String,
+    pub assistant_id: Option<Uuid>,
+    pub assistant_name: Option<String>,
+    /// How this chat was spawned from another one, when it was.
+    pub provenance_kind: Option<String>,
+    /// The origin chat, which may since have been deleted.
+    pub origin_chat_id: Option<Uuid>,
+    /// Resolved display title of the origin chat; None once it is gone.
+    pub origin_chat_title: Option<String>,
+    pub origin_assistant_id: Option<Uuid>,
+    /// Delegation only: when the owner first wrote into the run themselves.
+    pub adopted_at: Option<DateTimeWithTimeZone>,
+    /// Delegation only: the result shape the origin model asked for.
+    pub expected_output: Option<String>,
+    /// Delegation only: the limits the delegate must work within.
+    pub constraints: Option<String>,
+}
+
+/// Load one chat, authorized the same way its message history is.
+///
+/// The origin title is resolved under the same owner filter the listing uses:
+/// delegation guarantees child owner == origin owner, but a future cross-user
+/// provenance kind must not turn this lookup into a title leak.
+#[instrument(skip_all)]
+pub async fn get_chat_detail(
+    conn: &DatabaseConnection,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    chat_id: &Uuid,
+) -> Result<ChatDetail, Report> {
+    authorize!(
+        policy,
+        subject,
+        &Resource::Chat(chat_id.as_hyphenated().to_string()),
+        Action::Read
+    )?;
+
+    let chat = Chats::find_by_id(*chat_id)
+        .one(conn)
+        .await?
+        .ok_or_else(|| eyre!("Chat with ID {} not found", chat_id))?;
+
+    let assistant_name = match chat.assistant_id {
+        Some(assistant_id) => Assistants::find_by_id(assistant_id)
+            .one(conn)
+            .await?
+            .map(|assistant| assistant.name),
+        None => None,
+    };
+
+    let provenance = parse_assistant_configuration(&chat)?.and_then(|config| config.provenance);
+    let origin_chat_id = provenance
+        .as_ref()
+        .and_then(|provenance| provenance.origin_chat_id);
+    let origin_chat_title = match origin_chat_id {
+        Some(origin_chat_id) => Chats::find_by_id(origin_chat_id)
+            .filter(chats::Column::OwnerUserId.eq(&chat.owner_user_id))
+            .one(conn)
+            .await?
+            .map(|origin| {
+                resolve_chat_display_name(
+                    origin.title_by_user_provided.as_deref(),
+                    origin.title_by_summary.as_deref(),
+                )
+            }),
+        None => None,
+    };
+
+    Ok(ChatDetail {
+        id: chat.id,
+        title_resolved: resolve_chat_display_name(
+            chat.title_by_user_provided.as_deref(),
+            chat.title_by_summary.as_deref(),
+        ),
+        title_by_summary: chat.title_by_summary,
+        title_by_user_provided: chat.title_by_user_provided,
+        archived_at: chat.archived_at,
+        is_pinned: chat.is_pinned,
+        owner_user_id: chat.owner_user_id,
+        assistant_id: chat.assistant_id,
+        assistant_name,
+        provenance_kind: provenance
+            .as_ref()
+            .map(|provenance| provenance.kind.as_str().to_string()),
+        origin_chat_id,
+        origin_chat_title,
+        origin_assistant_id: provenance
+            .as_ref()
+            .and_then(|provenance| provenance.origin_assistant_id),
+        adopted_at: provenance
+            .as_ref()
+            .and_then(|provenance| provenance.adopted_at),
+        expected_output: provenance
+            .as_ref()
+            .and_then(|provenance| provenance.expected_output.clone()),
+        constraints: provenance.and_then(|provenance| provenance.constraints),
+    })
+}
+
 /// A chat with a running or recently ended generation, or one stopped on a
 /// pending tool approval.
 ///
@@ -1529,4 +1652,27 @@ pub async fn get_chat_assistant_configuration(
     }
 
     Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The listing reads `provenance_kind` straight out of the stored JSON
+    /// while the detail route maps it in Rust. Both spellings have to be the
+    /// same one, or a client's "is this a delegated run" check would answer
+    /// differently depending on which route it came from.
+    #[test]
+    fn provenance_kind_wire_spelling_matches_the_stored_json() {
+        for kind in [
+            ChatProvenanceKind::HandoffBranch,
+            ChatProvenanceKind::HandoffMove,
+            ChatProvenanceKind::Delegation,
+        ] {
+            assert_eq!(
+                serde_json::to_value(kind).unwrap().as_str(),
+                Some(kind.as_str()),
+            );
+        }
+    }
 }

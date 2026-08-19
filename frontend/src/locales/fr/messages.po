@@ -221,17 +221,17 @@ msgid "assistant.welcome.delegated.empty"
 msgstr "Aucune exécution déléguée pour le moment."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+#: src/utils/chat/delegatedRunOrigin.ts
 msgid "assistant.welcome.delegated.origin"
 msgstr "Depuis {originChatTitle}"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+#: src/utils/chat/delegatedRunOrigin.ts
 msgid "assistant.welcome.delegated.origin.deleted"
 msgstr "Depuis une conversation qui n'existe plus"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+#: src/utils/chat/delegatedRunOrigin.ts
 msgid "assistant.welcome.delegated.origin.untitled"
 msgstr "Depuis une conversation sans titre"
 
@@ -1306,6 +1306,31 @@ msgstr "Conversation de chat"
 #: src/components/ui/Chat/Chat.tsx
 msgid "chat.conversation.dropzone.ariaLabel"
 msgstr "Déposez des fichiers n'importe où dans la conversation pour les téléverser"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegatedRunHeader.tsx
+msgid "chat.delegatedRun.constraints"
+msgstr "Contraintes"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegatedRunHeader.tsx
+msgid "chat.delegatedRun.expectedOutput"
+msgstr "Résultat attendu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegatedRunHeader.tsx
+msgid "chat.delegatedRun.state.archived"
+msgstr "Cette exécution est archivée et n'accepte plus de messages."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegatedRunHeader.tsx
+msgid "chat.delegatedRun.state.running"
+msgstr "Le délégué travaille encore sur cette exécution."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegatedRunHeader.tsx
+msgid "chat.delegatedRun.title"
+msgstr "Exécution déléguée"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx

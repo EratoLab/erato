@@ -34,6 +34,8 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   useGetAssistant: vi.fn(),
   useAvailableModels: vi.fn(() => ({ data: [] })),
   useRecentChats: vi.fn(() => ({ data: undefined, isLoading: false })),
+  // The run header reads the chat it opened, whether or not it is a run.
+  useChatDetail: vi.fn(() => ({ data: undefined })),
 }));
 
 vi.mock("@/components/ui/Chat/Chat", () => ({
