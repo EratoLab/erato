@@ -1104,6 +1104,14 @@ export type CreateUserToolApprovalSettingRequest = {
   tool_name: string;
 };
 
+/**
+ * How a delegated child run relates to the turn that spawned it: `wait`
+ * blocks the turn on the child and feeds the result back into it,
+ * `background` returns at launch and the child result never re-enters the
+ * turn.
+ */
+export type DelegationRunMode = "wait" | "background";
+
 export type DesktopSidecarDistributionFileResponse = {
   download_filename: string;
   id: string;
@@ -1250,6 +1258,7 @@ export type EditMessageRequest = {
    * @example primary
    */
   chat_provider_id?: string;
+  delegation_run_mode?: DelegationRunMode;
   /**
    * Assistants the user @-mentioned in this message as delegation targets.
    * Validated server-side; requires `assistants.delegation.enabled`.
@@ -1656,6 +1665,7 @@ export type MessageSubmitRequest = {
    * @example primary
    */
   chat_provider_id?: string;
+  delegation_run_mode?: DelegationRunMode;
   /**
    * The ID of an existing chat to use. If provided, the chat with this ID will be used instead of creating a new one.
    * This is useful for scenarios where you have created a chat first (e.g. for file uploads) before sending the first message.
@@ -2096,6 +2106,7 @@ export type RegenerateMessageRequest = {
    * @example 00000000-0000-0000-0000-000000000000
    */
   current_message_id: string;
+  delegation_run_mode?: DelegationRunMode;
   /**
    * Assistants the user @-mentioned in this message as delegation targets.
    * Validated server-side; requires `assistants.delegation.enabled`.

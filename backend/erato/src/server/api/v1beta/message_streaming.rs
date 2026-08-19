@@ -13,10 +13,11 @@ use crate::models::chat::{
 };
 use crate::models::message::{
     ContentPart, ContentPartImage, ContentPartReasoning, ContentPartText, ContentPartToolApproval,
-    ContentPartToolApprovalRequest, ContentPartToolRejection, GenerationErrorType,
-    GenerationInputMessages, GenerationMetadata, GenerationParameters, GenerationRequestContext,
-    MessageRole, MessageSchema, ToolApprovalAnnotations, ToolCallStatus as MessageToolCallStatus,
-    ToolUse, get_generation_chat_provider_id_for_replaced_user_message,
+    ContentPartToolApprovalRequest, ContentPartToolRejection, DelegationRunMode,
+    GenerationErrorType, GenerationInputMessages, GenerationMetadata, GenerationParameters,
+    GenerationRequestContext, MessageRole, MessageSchema, ToolApprovalAnnotations,
+    ToolCallStatus as MessageToolCallStatus, ToolUse,
+    get_generation_chat_provider_id_for_replaced_user_message,
     get_generation_chat_provider_id_from_message, get_message_by_id, submit_message,
     update_message_content, update_message_generation_metadata,
 };
@@ -661,6 +662,12 @@ pub struct MessageSubmitRequest {
     #[serde(default)]
     #[schema(nullable = false)]
     mentioned_assistant_ids: Option<Vec<Uuid>>,
+    /// How delegated runs spawned by this message are awaited. Defaults to
+    /// `wait`; `background` requires `assistants.delegation.allow_background`
+    /// and is downgraded to `wait` server-side when the gate is off.
+    #[serde(default)]
+    #[schema(nullable = false)]
+    delegation_run_mode: Option<DelegationRunMode>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -1202,6 +1209,13 @@ pub struct RegenerateMessageRequest {
     #[serde(default)]
     #[schema(nullable = false)]
     mentioned_assistant_ids: Option<Vec<Uuid>>,
+    /// How delegated runs spawned by this message are awaited. Defaults to
+    /// `wait`; `background` requires `assistants.delegation.allow_background`
+    /// and is downgraded to `wait` server-side when the gate is off.
+    #[serde(default)]
+    #[schema(nullable = false)]
+    #[allow(dead_code)]
+    delegation_run_mode: Option<DelegationRunMode>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -1343,6 +1357,12 @@ pub struct EditMessageRequest {
     #[serde(default)]
     #[schema(nullable = false)]
     mentioned_assistant_ids: Option<Vec<Uuid>>,
+    /// How delegated runs spawned by this message are awaited. Defaults to
+    /// `wait`; `background` requires `assistants.delegation.allow_background`
+    /// and is downgraded to `wait` server-side when the gate is off.
+    #[serde(default)]
+    #[schema(nullable = false)]
+    delegation_run_mode: Option<DelegationRunMode>,
 }
 
 #[derive(serde::Deserialize, ToSchema)]
@@ -1771,6 +1791,7 @@ impl MessageSubmitRequest {
             selected_facet_ids: Vec::new(),
             action_facet: None,
             mentioned_assistant_ids: None,
+            delegation_run_mode: None,
         }
     }
 }
@@ -8012,16 +8033,25 @@ pub(crate) async fn run_message_submit_task(
                 .map(|id| id.to_string())
                 .collect::<Vec<_>>()
         });
-    let user_input_parameters =
-        if request.action_facet.is_some() || mentioned_assistant_ids_for_persistence.is_some() {
-            Some(crate::models::message::InputParameters {
-                action_facet_id: request.action_facet.as_ref().map(|af| af.id.clone()),
-                action_facet_args: request.action_facet.as_ref().map(|af| af.args.clone()),
-                mentioned_assistant_ids: mentioned_assistant_ids_for_persistence,
-            })
-        } else {
-            None
-        };
+    // Only `background` is persisted (absence means wait), and as requested,
+    // not gate-downgraded: the gate applies at dispatch time, so a replay
+    // under a later-enabled gate honours the user's original choice.
+    let delegation_run_mode_for_persistence = request
+        .delegation_run_mode
+        .filter(|mode| *mode == DelegationRunMode::Background);
+    let user_input_parameters = if request.action_facet.is_some()
+        || mentioned_assistant_ids_for_persistence.is_some()
+        || delegation_run_mode_for_persistence.is_some()
+    {
+        Some(crate::models::message::InputParameters {
+            action_facet_id: request.action_facet.as_ref().map(|af| af.id.clone()),
+            action_facet_args: request.action_facet.as_ref().map(|af| af.args.clone()),
+            mentioned_assistant_ids: mentioned_assistant_ids_for_persistence,
+            delegation_run_mode: delegation_run_mode_for_persistence,
+        })
+    } else {
+        None
+    };
     let saved_user_message = bg_stream_save_user_message(
         task,
         app_state,
@@ -8874,19 +8904,40 @@ pub async fn edit_message_sse(
             },
         ),
     };
-    let edit_input_parameters =
-        if resolved_action_facet.is_some() || resolved_mentioned_assistant_ids.is_some() {
-            Some(crate::models::message::InputParameters {
-                action_facet_id: resolved_action_facet.as_ref().map(|af| af.id.clone()),
-                action_facet_args: resolved_action_facet.as_ref().map(|af| af.args.clone()),
-                mentioned_assistant_ids: resolved_mentioned_assistant_ids
-                    .as_ref()
-                    .filter(|ids| !ids.is_empty())
-                    .map(|ids| ids.iter().map(|id| id.to_string()).collect()),
-            })
-        } else {
-            None
-        };
+    // The run mode follows the same edit contract as the mentions: an explicit
+    // request value wins (including an explicit `wait`, which clears an
+    // inherited `background`), an absent one inherits the mode the original
+    // user message stored. Only `background` is persisted (absence means
+    // wait), and as requested, not gate-downgraded: the gate applies at
+    // dispatch time, so a replay under a later-enabled gate honours the
+    // user's original choice.
+    let resolved_delegation_run_mode = match request.delegation_run_mode {
+        Some(mode) => Some(mode),
+        None => {
+            crate::models::message::get_input_delegation_run_mode_from_message(&message_to_edit)
+                .unwrap_or_else(|error| {
+                    warn_and_capture_error("read edit fallback delegation run mode", &error);
+                    None
+                })
+        }
+    }
+    .filter(|mode| *mode == DelegationRunMode::Background);
+    let edit_input_parameters = if resolved_action_facet.is_some()
+        || resolved_mentioned_assistant_ids.is_some()
+        || resolved_delegation_run_mode.is_some()
+    {
+        Some(crate::models::message::InputParameters {
+            action_facet_id: resolved_action_facet.as_ref().map(|af| af.id.clone()),
+            action_facet_args: resolved_action_facet.as_ref().map(|af| af.args.clone()),
+            mentioned_assistant_ids: resolved_mentioned_assistant_ids
+                .as_ref()
+                .filter(|ids| !ids.is_empty())
+                .map(|ids| ids.iter().map(|id| id.to_string()).collect()),
+            delegation_run_mode: resolved_delegation_run_mode,
+        })
+    } else {
+        None
+    };
     let task_for_stream = task.clone();
     let app_state_for_cleanup = app_state.clone();
     let chat_id_for_cleanup = chat.id;

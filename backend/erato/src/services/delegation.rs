@@ -1,10 +1,12 @@
 //! In-chat delegation to @-mentioned assistants.
 
+use crate::models::message::DelegationRunMode;
 use crate::policy::prelude::*;
 use crate::services::background_tasks::StreamingEvent;
 use crate::services::delegation_trace::{DelegationTrace, DelegationTraceCollector, TraceChange};
 use crate::state::AppState;
 use axum::http::StatusCode;
+use erato_config::config::AssistantsDelegationConfig;
 use genai::chat::Tool as GenaiTool;
 use genai::chat::ToolName as GenaiToolName;
 use sea_orm::prelude::Uuid;
@@ -322,6 +324,25 @@ pub async fn resolve_persisted_mentions(
             Vec::new()
         }
     }
+}
+
+/// Effective run mode for the delegated runs of a turn: an explicit request
+/// value wins over the mode persisted on the replayed user message, and absent
+/// both, the run is awaited. `Background` needs the deployment to opt in via
+/// `assistants.delegation.allow_background`; without it the request is
+/// downgraded to `Wait` rather than rejected — the client-side gate is UX,
+/// the server decides.
+pub fn resolve_delegation_run_mode(
+    requested: Option<DelegationRunMode>,
+    persisted: Option<DelegationRunMode>,
+    config: &AssistantsDelegationConfig,
+) -> DelegationRunMode {
+    let mode = requested.or(persisted).unwrap_or_default();
+    if mode == DelegationRunMode::Background && !(config.enabled && config.allow_background) {
+        tracing::debug!("Downgrading a background delegation request to wait: gate is off");
+        return DelegationRunMode::Wait;
+    }
+    mode
 }
 
 /// Terminal status of a delegated child run, as reported to the origin model.
@@ -1333,5 +1354,78 @@ mod tests {
         let full = render_delegation_preamble(template, Some("A list."), Some("Attachments only."));
         assert!(full.contains("Expected output:\nA list."));
         assert!(full.contains("Constraints:\nAttachments only."));
+    }
+
+    fn delegation_config(enabled: bool, allow_background: bool) -> AssistantsDelegationConfig {
+        AssistantsDelegationConfig {
+            enabled,
+            allow_background,
+            ..AssistantsDelegationConfig::default()
+        }
+    }
+
+    #[test]
+    fn the_run_mode_defaults_to_wait_when_nothing_requested_or_persisted() {
+        assert_eq!(
+            resolve_delegation_run_mode(None, None, &delegation_config(true, true)),
+            DelegationRunMode::Wait
+        );
+    }
+
+    #[test]
+    fn a_requested_run_mode_beats_the_persisted_one() {
+        let config = delegation_config(true, true);
+        assert_eq!(
+            resolve_delegation_run_mode(
+                Some(DelegationRunMode::Wait),
+                Some(DelegationRunMode::Background),
+                &config
+            ),
+            DelegationRunMode::Wait
+        );
+        assert_eq!(
+            resolve_delegation_run_mode(
+                Some(DelegationRunMode::Background),
+                Some(DelegationRunMode::Wait),
+                &config
+            ),
+            DelegationRunMode::Background
+        );
+        assert_eq!(
+            resolve_delegation_run_mode(None, Some(DelegationRunMode::Background), &config),
+            DelegationRunMode::Background
+        );
+    }
+
+    #[test]
+    fn a_background_request_is_downgraded_when_the_gate_is_off() {
+        assert_eq!(
+            resolve_delegation_run_mode(
+                Some(DelegationRunMode::Background),
+                None,
+                &delegation_config(true, false)
+            ),
+            DelegationRunMode::Wait
+        );
+        assert_eq!(
+            resolve_delegation_run_mode(
+                None,
+                Some(DelegationRunMode::Background),
+                &delegation_config(false, true)
+            ),
+            DelegationRunMode::Wait
+        );
+    }
+
+    #[test]
+    fn a_background_request_passes_through_when_the_gate_is_on() {
+        assert_eq!(
+            resolve_delegation_run_mode(
+                Some(DelegationRunMode::Background),
+                None,
+                &delegation_config(true, true)
+            ),
+            DelegationRunMode::Background
+        );
     }
 }

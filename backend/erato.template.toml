@@ -344,6 +344,11 @@ chat_provider_ids = ["test-token-limit"]
 # [assistants.delegation]
 # # Whether in-chat delegation is enabled. Requires assistants.enabled (default: false)
 # enabled = false
+# # Whether users may launch delegated runs in background mode, where the
+# # delegation tool returns at launch and the child run's result never flows
+# # back into the origin turn. When off, a background request is downgraded
+# # to a normally awaited run rather than rejected (default: false)
+# allow_background = false
 # # Maximum wall-clock seconds a delegated child run may take before it is
 # # aborted and reported to the origin chat as timed out (default: 600)
 # run_timeout_seconds = 600

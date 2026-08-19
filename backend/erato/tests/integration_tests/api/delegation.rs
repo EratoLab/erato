@@ -952,6 +952,215 @@ async fn test_regenerate_and_edit_replay_persisted_mentions(pool: Pool<Postgres>
     bad_edit.assert_status(axum::http::StatusCode::BAD_REQUEST);
 }
 
+/// The requested run mode round-trips into the user message's
+/// `input_parameters`: `background` is persisted verbatim even though
+/// `allow_background` is off — the gate applies at dispatch, not at
+/// persistence — while an absent or explicit `wait` leaves no key behind.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_submit_persists_requested_background_run_mode(pool: Pool<Postgres>) {
+    async fn user_row_of(
+        server: &TestServer,
+        db: &sea_orm::DatabaseConnection,
+        body: Value,
+    ) -> erato::db::entity::messages::Model {
+        let response = server
+            .post("/api/v1beta/me/messages/submitstream")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&body)
+            .await;
+        response.assert_status_ok();
+        let events = parse_sse_events(&response);
+        let chat_id = crate::test_utils::extract_chat_id(&events).unwrap();
+        chat_messages_by_created_at(db, Uuid::parse_str(&chat_id).unwrap())
+            .await
+            .into_iter()
+            .find(|row| row.raw_message["role"] == "user")
+            .expect("user message row")
+    }
+
+    let (app_state, _llm) = delegation_enabled_state_with_llm(pool).await;
+    let server = app_server(app_state.clone());
+    let target = create_assistant(&server, "Run Mode Target", "prompt").await;
+
+    // Background with a mention: both persist.
+    let row = user_row_of(
+        &server,
+        &app_state.db,
+        json!({
+            "user_message": "background with mention",
+            "mentioned_assistant_ids": [target],
+            "delegation_run_mode": "background",
+        }),
+    )
+    .await;
+    let input_params = row.input_parameters.as_ref().expect("input parameters");
+    assert_eq!(input_params["delegation_run_mode"], "background");
+    assert_eq!(
+        erato::models::message::get_input_delegation_run_mode_from_message(&row).unwrap(),
+        Some(erato::models::message::DelegationRunMode::Background)
+    );
+
+    // Background without a mention: the mode persists on its own.
+    let row = user_row_of(
+        &server,
+        &app_state.db,
+        json!({
+            "user_message": "background without mention",
+            "delegation_run_mode": "background",
+        }),
+    )
+    .await;
+    let input_params = row.input_parameters.as_ref().expect("input parameters");
+    assert_eq!(input_params["delegation_run_mode"], "background");
+    assert!(input_params.get("mentioned_assistant_ids").is_none());
+
+    // Field absent: no run mode key next to the persisted mentions.
+    let row = user_row_of(
+        &server,
+        &app_state.db,
+        json!({
+            "user_message": "absent field",
+            "mentioned_assistant_ids": [target],
+        }),
+    )
+    .await;
+    let input_params = row.input_parameters.as_ref().expect("input parameters");
+    assert!(input_params.get("delegation_run_mode").is_none());
+
+    // Explicit wait: persisted as absent, same as the default.
+    let row = user_row_of(
+        &server,
+        &app_state.db,
+        json!({
+            "user_message": "explicit wait",
+            "mentioned_assistant_ids": [target],
+            "delegation_run_mode": "wait",
+        }),
+    )
+    .await;
+    let input_params = row.input_parameters.as_ref().expect("input parameters");
+    assert!(input_params.get("delegation_run_mode").is_none());
+}
+
+/// Edit replays the persisted run mode onto the new sibling row when the
+/// request doesn't re-send it, and an explicit `wait` on the edit clears the
+/// inherited `background` instead of falling back to it.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_edit_inherits_and_explicit_wait_clears_run_mode(pool: Pool<Postgres>) {
+    let (app_state, _llm) = delegation_enabled_state_with_llm(pool).await;
+    let server = app_server(app_state.clone());
+    let target = create_assistant(&server, "Run Mode Edit Target", "prompt").await;
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "user_message": "background origin",
+            "mentioned_assistant_ids": [target],
+            "delegation_run_mode": "background",
+        }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let chat_id = Uuid::parse_str(&crate::test_utils::extract_chat_id(&events).unwrap()).unwrap();
+    let rows = chat_messages_by_created_at(&app_state.db, chat_id).await;
+    let original_user_row = rows
+        .iter()
+        .find(|row| row.raw_message["role"] == "user")
+        .expect("user message row");
+
+    // Edit without the field: background carries onto the new sibling row.
+    let edit_response = server
+        .post("/api/v1beta/me/messages/editstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": original_user_row.id,
+            "replace_user_message": "edited, mode inherited",
+        }))
+        .await;
+    edit_response.assert_status_ok();
+    let rows = chat_messages_by_created_at(&app_state.db, chat_id).await;
+    let edited_row = rows
+        .iter()
+        .find(|row| row.raw_message["content"][0]["text"] == "edited, mode inherited")
+        .expect("edited sibling row");
+    assert_eq!(
+        erato::models::message::get_input_delegation_run_mode_from_message(edited_row).unwrap(),
+        Some(erato::models::message::DelegationRunMode::Background)
+    );
+
+    // Edit with an explicit wait: the inherited background is cleared while
+    // the mentions still replay.
+    let edit_response = server
+        .post("/api/v1beta/me/messages/editstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": original_user_row.id,
+            "replace_user_message": "edited, mode cleared",
+            "delegation_run_mode": "wait",
+        }))
+        .await;
+    edit_response.assert_status_ok();
+    let rows = chat_messages_by_created_at(&app_state.db, chat_id).await;
+    let cleared_row = rows
+        .iter()
+        .find(|row| row.raw_message["content"][0]["text"] == "edited, mode cleared")
+        .expect("cleared sibling row");
+    let input_params = cleared_row
+        .input_parameters
+        .as_ref()
+        .expect("input parameters");
+    assert!(input_params.get("delegation_run_mode").is_none());
+    assert_eq!(
+        erato::models::message::get_input_mentioned_assistant_ids_from_message(cleared_row)
+            .unwrap()
+            .expect("mentions carried onto the cleared row"),
+        vec![Uuid::parse_str(&target).unwrap()]
+    );
+}
+
+/// Regenerate accepts the run mode field on the wire: a request carrying
+/// `delegation_run_mode` round-trips with a 200.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_regenerate_accepts_run_mode_field(pool: Pool<Postgres>) {
+    let (app_state, _llm) = delegation_enabled_state_with_llm(pool).await;
+    let server = app_server(app_state.clone());
+
+    let target = create_assistant(&server, "Run Mode Regen Target", "prompt").await;
+    let response = submit_with_mentions(&server, None, "regen origin", &[&target]).await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let assistant_message_id = assistant_message_id_from_events(&events);
+
+    let regenerate_response = server
+        .post("/api/v1beta/me/messages/regeneratestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "current_message_id": assistant_message_id,
+            "delegation_run_mode": "background",
+        }))
+        .await;
+    regenerate_response.assert_status_ok();
+}
+
 const DELEGATE_ASSISTANT_FIXED_ID: &str = "00000000-0000-4000-8000-00000000d001";
 
 async fn insert_fixed_delegate_assistant(
