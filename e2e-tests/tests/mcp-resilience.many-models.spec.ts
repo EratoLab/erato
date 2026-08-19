@@ -77,3 +77,44 @@ test(
     }
   },
 );
+
+test(
+  "Mock-LLM continues after an MCP tool returns malformed output",
+  { tag: TAG_CI },
+  async ({ browser }) => {
+    const { context, page } = await createDexAuthenticatedContext(
+      browser,
+      "mcp-malformed-output-resilience@example.com",
+    );
+
+    try {
+      await page.goto("/");
+      await chatIsReadyToChat(page);
+      await selectModel(page, "Mock-LLM");
+
+      const textbox = page.getByRole("textbox", { name: "Type a message..." });
+      await textbox.fill("mcp malformed output");
+      await textbox.press("Enter");
+
+      const latestAssistantMessage = page
+        .getByTestId("message-assistant")
+        .last();
+      await expect(latestAssistantMessage).toBeVisible();
+      await expect(
+        latestAssistantMessage.locator(
+          '[data-testid="tool-call-item"][data-tool-name="generate_image"]',
+        ),
+      ).toHaveAttribute("data-tool-status", "error", { timeout: 30000 });
+
+      await chatIsReadyToChat(page, {
+        expectAssistantResponse: true,
+        loadingTimeoutMs: 30000,
+      });
+      await expect(
+        latestAssistantMessage.getByTestId("chat-message-error"),
+      ).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  },
+);

@@ -12,8 +12,8 @@ use colored::Colorize;
 use rmcp::{
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{
-        CallToolRequestParams, CallToolResult, ListToolsResult, Meta, PaginatedRequestParams,
-        ProgressNotificationParam, ServerCapabilities, ServerInfo,
+        CallToolRequestParams, CallToolResult, Content, ListToolsResult, Meta,
+        PaginatedRequestParams, ProgressNotificationParam, ServerCapabilities, ServerInfo,
     },
     schemars,
     service::RequestContext,
@@ -477,6 +477,12 @@ impl ImageGenerationServer {
         &self,
         Parameters(params): Parameters<ImageGenerationParams>,
     ) -> Result<CallToolResult, McpError> {
+        if params.prompt == "malformed" {
+            return Ok(CallToolResult::success(vec![Content::text(
+                "this is not valid JSON",
+            )]));
+        }
+
         let _ = (params.width, params.height, params.num_images);
         let data_base64 = CAT_IMAGE_BASE64.trim().to_string();
         let response = ImageGenerationResponse {

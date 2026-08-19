@@ -71,6 +71,10 @@ url = "http://erato-local-mock-mcp-server:44321/mcp/approval-policy"
 transport_type = "streamable_http"
 url = "http://erato-local-mock-mcp-server:44321/mcp/progress"
 
+[mcp_servers.mock_mcp_image_generation]
+transport_type = "streamable_http"
+url = "http://erato-local-mock-mcp-server:44321/mcp/image-generation"
+
 [mcp_servers.mock_mcp_auth_none]
 transport_type = "streamable_http"
 url = "http://erato-local-mock-mcp-server:44321/mcp/auth-none"
@@ -115,6 +119,10 @@ url = "http://erato-local-mock-mcp-server:44321/mcp/list-tools-500"
 [mcp_server_permissions.rules.allow_mock_mcp_progress_for_all]
 rule_type = "allow-all"
 mcp_server_ids = ["mock_mcp_progress"]
+
+[mcp_server_permissions.rules.allow_mock_mcp_image_generation_for_all]
+rule_type = "allow-all"
+mcp_server_ids = ["mock_mcp_image_generation"]
 
 [mcp_server_permissions.rules.allow_mock_mcp_approval_for_all]
 rule_type = "allow-all"
