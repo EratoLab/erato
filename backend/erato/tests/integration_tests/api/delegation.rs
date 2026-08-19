@@ -160,6 +160,7 @@ async fn write_delegation_provenance(
             adopted_at: None,
             expected_output: None,
             constraints: None,
+            run_mode: None,
         }),
     };
     let chat = erato::db::entity::chats::Entity::find_by_id(chat_id)
@@ -2684,6 +2685,758 @@ async fn test_delegation_abort_forwarding_cancels_child(pool: Pool<Postgres>) {
     );
 }
 
+async fn submit_with_mentions_and_run_mode(
+    server: &TestServer,
+    chat_id: Option<&str>,
+    text: &str,
+    mentioned_assistant_ids: &[&str],
+    run_mode: &str,
+) -> axum_test::TestResponse {
+    let mut body = json!({
+        "user_message": text,
+        "mentioned_assistant_ids": mentioned_assistant_ids,
+        "delegation_run_mode": run_mode,
+    });
+    if let Some(chat_id) = chat_id {
+        body["existing_chat_id"] = json!(chat_id);
+    }
+    server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&body)
+        .await
+}
+
+/// Waits until the delegated child persisted an assistant answer containing
+/// `needle` and its generation reached a terminal `completed` state.
+async fn wait_for_child_completion(
+    db: &sea_orm::DatabaseConnection,
+    child_chat_id: Uuid,
+    needle: &str,
+) {
+    for _ in 0..100 {
+        let answered = chat_messages_by_created_at(db, child_chat_id)
+            .await
+            .iter()
+            .any(|row| {
+                row.raw_message["role"] == "assistant"
+                    && row.raw_message["content"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .any(|part| {
+                            part["text"]
+                                .as_str()
+                                .is_some_and(|text| text.contains(needle))
+                        })
+            });
+        let state = erato::db::entity::chats::Entity::find_by_id(child_chat_id)
+            .one(db)
+            .await
+            .unwrap()
+            .unwrap()
+            .generation_state;
+        if answered && state.as_deref() == Some("completed") {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+    panic!("delegated child chat {child_chat_id} never completed with its answer");
+}
+
+fn provenance_of(chat: &erato::db::entity::chats::Model) -> ChatProvenance {
+    erato::models::chat::AssistantConfiguration::from_json(
+        chat.assistant_configuration.as_ref().unwrap(),
+    )
+    .unwrap()
+    .provenance
+    .unwrap()
+}
+
+/// Background dispatch settles the tool at launch: the parent turn completes
+/// while the child still runs, the model hears `dispatched` plus the
+/// no-result note, and the UI part is a status-less Success carrying the
+/// `background` marker instead of a result or trace. The child gets the
+/// background preamble and lands its answer in its own chat afterwards.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_background_dispatch_returns_at_launch(pool: Pool<Postgres>) {
+    let parent_first_recorder = RequestBodyRecorder::new();
+    let parent_final_recorder = RequestBodyRecorder::new();
+    let child_recorder = RequestBodyRecorder::new();
+
+    let mut mocks = MockSet::new();
+    // Child: slow enough that the parent demonstrably finishes first.
+    {
+        let recorder = child_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &["CHILD-BG-TASK"],
+                    &["dispatched"],
+                ))
+                .matcher(recorder);
+            let mut actions =
+                crate::test_utils::build_openai_text_streaming_response(&["CHILD-BG-ANSWER done"]);
+            actions.insert(0, BodyAction::Delay(std::time::Duration::from_secs(3)));
+            mock_llm_sse_response(then, actions);
+        });
+    }
+    // Parent turn 2: the dispatched tool response arrived.
+    {
+        let recorder = parent_final_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&["dispatched"], &[]))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&[
+                    "PARENT-BG-FINAL the delegate was started",
+                ]),
+            );
+        });
+    }
+    // Parent turn 1: delegate.
+    {
+        let recorder = parent_first_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &["bg parent question"],
+                    &["CHILD-BG-TASK", "dispatched"],
+                ))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                    "call_delegate_bg",
+                    "delegate_to_assistant",
+                    json!({
+                        "assistant_id": DELEGATE_ASSISTANT_FIXED_ID,
+                        "task": "CHILD-BG-TASK take your time",
+                    }),
+                )]),
+            );
+        });
+    }
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.assistants.delegation.enabled = true;
+    app_config.assistants.delegation.allow_background = true;
+    let app_state = test_app_state(app_config, pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    insert_fixed_delegate_assistant(&app_state.db, me.id, &delegate_prompt(), None).await;
+    let server = app_server(app_state.clone());
+
+    let response = submit_with_mentions_and_run_mode(
+        &server,
+        None,
+        "bg parent question",
+        &[DELEGATE_ASSISTANT_FIXED_ID],
+        "background",
+    )
+    .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+
+    // The two output shapes diverge: the UI part is a status-less Success
+    // with the background marker and no result or trace.
+    let output = find_tool_call_update_output(&events, "delegate_to_assistant");
+    assert!(output.get("status").is_none(), "no status on the UI output");
+    assert_eq!(output["background"], true);
+    assert_eq!(output["assistant_name"], "Fixed Delegate");
+    assert!(output.get("result").is_none());
+    assert!(output.get("localTrace").is_none());
+    let delegate_chat_id = Uuid::parse_str(output["delegate_chat_id"].as_str().unwrap()).unwrap();
+    assert!(
+        delegation_progress_frames(&events).is_empty(),
+        "a background run streams no progress onto the parent"
+    );
+    assert!(extract_full_text_answer(&events).contains("PARENT-BG-FINAL"));
+
+    // The parent completed while the child is still running.
+    let child_chat = erato::db::entity::chats::Entity::find_by_id(delegate_chat_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("delegated child chat");
+    assert_eq!(child_chat.generation_state.as_deref(), Some("running"));
+    assert_eq!(
+        provenance_of(&child_chat).run_mode,
+        Some(erato::models::message::DelegationRunMode::Background)
+    );
+
+    // The model heard a launch, never the answer.
+    let parent_final_bodies = parent_final_recorder.bodies();
+    let dispatch_body = parent_final_bodies
+        .iter()
+        .find(|body| body.contains("dispatched"))
+        .expect("parent turn with the dispatched tool response");
+    assert!(dispatch_body.contains("the result will not be returned to this conversation"));
+    assert!(!dispatch_body.contains("CHILD-BG-ANSWER"));
+
+    // The offer promised no returning answer…
+    let parent_first_bodies = parent_first_recorder.bodies();
+    let offer_body = parent_first_bodies
+        .iter()
+        .find(|body| body.contains("delegate_to_assistant"))
+        .expect("parent completion request with the delegation tool offer");
+    assert!(offer_body.contains("will NOT come back to this conversation"));
+
+    // …and the child's preamble matches: it works in the background.
+    let mut child_bodies = child_recorder.bodies();
+    for _ in 0..100 {
+        if !child_bodies.is_empty() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        child_bodies = child_recorder.bodies();
+    }
+    let child_body = child_bodies.first().expect("child completion request");
+    assert!(child_body.contains("working in the background"));
+    assert!(!child_body.contains("returned to the delegating conversation"));
+
+    // The persisted parent tool part froze at the launch shape.
+    let assistant_message_id = assistant_message_id_from_events(&events);
+    let chat_id = crate::test_utils::extract_chat_id(&events).unwrap();
+    let messages_response = server
+        .get(&format!("/api/v1beta/chats/{chat_id}/messages"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    messages_response.assert_status_ok();
+    let tool_use = messages_response.json::<Value>()["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["id"] == assistant_message_id.as_str())
+        .expect("parent assistant message")["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|part| part["content_type"] == "tool_use")
+        .expect("tool_use part")
+        .clone();
+    assert_eq!(tool_use["status"], "success");
+    assert!(tool_use["output"].get("status").is_none());
+    assert_eq!(tool_use["output"]["background"], true);
+    assert_eq!(
+        tool_use["output"]["delegate_chat_id"],
+        delegate_chat_id.to_string()
+    );
+    assert!(tool_use["output"].get("localTrace").is_none());
+
+    // The child still finishes on its own and its answer lives in its chat.
+    wait_for_child_completion(&app_state.db, delegate_chat_id, "CHILD-BG-ANSWER").await;
+}
+
+/// Stopping the parent generation does not stop a background child: the abort
+/// is not forwarded, and the child runs to completion on its own.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_parent_abort_leaves_background_child_running(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    // Child: slow, but well within what the test waits for.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["CHILD-BG-ABORT-TASK"],
+                &["dispatched"],
+            ));
+        let mut actions = crate::test_utils::build_openai_text_streaming_response(&[
+            "CHILD-BG-ABORT-ANSWER intact",
+        ]);
+        actions.insert(0, BodyAction::Delay(std::time::Duration::from_secs(4)));
+        mock_llm_sse_response(then, actions);
+    });
+    // Parent turn 2: stall long enough for the abort to land mid-turn.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&["dispatched"], &[]));
+        mock_llm_sse_response(
+            then,
+            vec![
+                BodyAction::Delay(std::time::Duration::from_secs(30)),
+                BodyAction::Bytes("data: [DONE]\n\n".into()),
+            ],
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["bg abort question"],
+                &["CHILD-BG-ABORT-TASK", "dispatched"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_delegate_bg_abort",
+                "delegate_to_assistant",
+                json!({
+                    "assistant_id": DELEGATE_ASSISTANT_FIXED_ID,
+                    "task": "CHILD-BG-ABORT-TASK keep going",
+                }),
+            )]),
+        );
+    });
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.assistants.delegation.enabled = true;
+    app_config.assistants.delegation.allow_background = true;
+    let app_state = test_app_state(app_config, pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    insert_fixed_delegate_assistant(&app_state.db, me.id, "background delegate", None).await;
+
+    // Real TCP server so the abort can run concurrently with the stream.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server_addr = listener.local_addr().unwrap();
+    let app: Router = erato::server::router::router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    let client = reqwest::Client::new();
+    let base_url = format!("http://{server_addr}");
+
+    let create_response = client
+        .post(format!("{base_url}/api/v1beta/me/chats"))
+        .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert!(create_response.status().is_success());
+    let parent_chat = create_response.json::<Value>().await.unwrap()["chat_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let parent_chat_id = Uuid::parse_str(&parent_chat).unwrap();
+
+    let submit_client = client.clone();
+    let submit_base = base_url.clone();
+    let submit_chat = parent_chat.clone();
+    let submit_handle = tokio::spawn(async move {
+        let response = submit_client
+            .post(format!("{submit_base}/api/v1beta/me/messages/submitstream"))
+            .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+            .json(&json!({
+                "existing_chat_id": submit_chat,
+                "user_message": "bg abort question",
+                "mentioned_assistant_ids": [DELEGATE_ASSISTANT_FIXED_ID],
+                "delegation_run_mode": "background",
+            }))
+            .send()
+            .await
+            .expect("submit request");
+        assert!(response.status().is_success());
+        response.text().await.expect("submit body")
+    });
+
+    // Wait until the delegated child chat exists (the child run is in flight).
+    let mut child_chat_id = None;
+    for _ in 0..100 {
+        let children = erato::db::entity::chats::Entity::find()
+            .filter(erato::db::entity::chats::Column::OriginChatId.eq(parent_chat_id))
+            .all(&app_state.db)
+            .await
+            .unwrap();
+        if let Some(child) = children.first() {
+            child_chat_id = Some(child.id);
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    let child_chat_id = child_chat_id.expect("delegated child chat never appeared");
+
+    let abort_response = client
+        .post(format!("{base_url}/api/v1beta/me/messages/abortstream"))
+        .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+        .json(&json!({ "chat_id": parent_chat }))
+        .send()
+        .await
+        .unwrap();
+    assert!(abort_response.status().is_success());
+
+    tokio::time::timeout(std::time::Duration::from_secs(20), submit_handle)
+        .await
+        .expect("parent stream should close after abort")
+        .unwrap();
+
+    // The child was not aborted with the parent: its full answer arrives.
+    wait_for_child_completion(&app_state.db, child_chat_id, "CHILD-BG-ABORT-ANSWER").await;
+}
+
+/// With `allow_background` off, a background request downgrades to the awaited
+/// path: full result envelope, `completed` status, result text present.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_background_request_downgrades_to_awaited_when_gate_off(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["CHILD-GATE-TASK"],
+                &["delegate_chat_id"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["CHILD-GATE-ANSWER now"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&["delegate_chat_id"], &[]));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["PARENT-GATE-FINAL"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["gate off question"],
+                &["CHILD-GATE-TASK", "delegate_chat_id"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_delegate_gate",
+                "delegate_to_assistant",
+                json!({
+                    "assistant_id": DELEGATE_ASSISTANT_FIXED_ID,
+                    "task": "CHILD-GATE-TASK answer now",
+                }),
+            )]),
+        );
+    });
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.assistants.delegation.enabled = true;
+    let app_state = test_app_state(app_config, pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    insert_fixed_delegate_assistant(&app_state.db, me.id, "gated delegate", None).await;
+    let server = app_server(app_state.clone());
+
+    let response = submit_with_mentions_and_run_mode(
+        &server,
+        None,
+        "gate off question",
+        &[DELEGATE_ASSISTANT_FIXED_ID],
+        "background",
+    )
+    .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+
+    let output = find_tool_call_update_output(&events, "delegate_to_assistant");
+    assert_eq!(output["status"], "completed");
+    assert!(output.get("background").is_none());
+    assert!(
+        output["result"]
+            .as_str()
+            .unwrap()
+            .contains("CHILD-GATE-ANSWER")
+    );
+    assert!(extract_full_text_answer(&events).contains("PARENT-GATE-FINAL"));
+
+    let chat_id = crate::test_utils::extract_chat_id(&events).unwrap();
+    let child_chat = delegated_child_chat(&app_state.db, Uuid::parse_str(&chat_id).unwrap()).await;
+    assert!(provenance_of(&child_chat).run_mode.is_none());
+}
+
+/// Regenerating the backgrounded turn without re-sending the field replays the
+/// persisted mode end-to-end: the new dispatch is background again.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_regenerate_replays_background_dispatch(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["CHILD-BG-REGEN-TASK"],
+                &["dispatched"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["CHILD-BG-REGEN-ANSWER"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&["dispatched"], &[]));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["PARENT-BG-REGEN-FINAL"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["bg regen question"],
+                &["CHILD-BG-REGEN-TASK", "dispatched"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_delegate_bg_regen",
+                "delegate_to_assistant",
+                json!({
+                    "assistant_id": DELEGATE_ASSISTANT_FIXED_ID,
+                    "task": "CHILD-BG-REGEN-TASK run again",
+                }),
+            )]),
+        );
+    });
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.assistants.delegation.enabled = true;
+    app_config.assistants.delegation.allow_background = true;
+    let app_state = test_app_state(app_config, pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    insert_fixed_delegate_assistant(&app_state.db, me.id, "regen delegate", None).await;
+    let server = app_server(app_state.clone());
+
+    let response = submit_with_mentions_and_run_mode(
+        &server,
+        None,
+        "bg regen question",
+        &[DELEGATE_ASSISTANT_FIXED_ID],
+        "background",
+    )
+    .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let first_output = find_tool_call_update_output(&events, "delegate_to_assistant");
+    assert_eq!(first_output["background"], true);
+    let first_child_id =
+        Uuid::parse_str(first_output["delegate_chat_id"].as_str().unwrap()).unwrap();
+    wait_for_child_completion(&app_state.db, first_child_id, "CHILD-BG-REGEN-ANSWER").await;
+
+    let assistant_message_id = assistant_message_id_from_events(&events);
+    let regenerate_response = server
+        .post("/api/v1beta/me/messages/regeneratestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "current_message_id": assistant_message_id }))
+        .await;
+    regenerate_response.assert_status_ok();
+    let regen_events = parse_sse_events(&regenerate_response);
+
+    let regen_output = find_tool_call_update_output(&regen_events, "delegate_to_assistant");
+    assert!(regen_output.get("status").is_none());
+    assert_eq!(regen_output["background"], true);
+    let second_child_id =
+        Uuid::parse_str(regen_output["delegate_chat_id"].as_str().unwrap()).unwrap();
+    assert_ne!(second_child_id, first_child_id);
+
+    let second_child = erato::db::entity::chats::Entity::find_by_id(second_child_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("second delegated child chat");
+    assert_eq!(
+        provenance_of(&second_child).run_mode,
+        Some(erato::models::message::DelegationRunMode::Background)
+    );
+    wait_for_child_completion(&app_state.db, second_child_id, "CHILD-BG-REGEN-ANSWER").await;
+}
+
+/// Regenerating a backgrounded turn with an explicit `wait` in the request
+/// overrides the persisted mode end-to-end: the new dispatch is awaited, so
+/// the full result envelope lands on the tool part instead of a frozen
+/// background offer.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_regenerate_request_wait_overrides_persisted_background(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["CHILD-WAIT-REGEN-TASK"],
+                &["delegate_chat_id"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["CHILD-WAIT-REGEN-ANSWER"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&["dispatched"], &[]));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&[
+                "PARENT-WAIT-REGEN-BG-FINAL",
+            ]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["CHILD-WAIT-REGEN-ANSWER"],
+                &["dispatched"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["PARENT-WAIT-REGEN-FINAL"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["wait regen question"],
+                &["CHILD-WAIT-REGEN-TASK", "dispatched"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_delegate_wait_regen",
+                "delegate_to_assistant",
+                json!({
+                    "assistant_id": DELEGATE_ASSISTANT_FIXED_ID,
+                    "task": "CHILD-WAIT-REGEN-TASK answer now",
+                }),
+            )]),
+        );
+    });
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.assistants.delegation.enabled = true;
+    app_config.assistants.delegation.allow_background = true;
+    let app_state = test_app_state(app_config, pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    insert_fixed_delegate_assistant(&app_state.db, me.id, "wait regen delegate", None).await;
+    let server = app_server(app_state.clone());
+
+    let response = submit_with_mentions_and_run_mode(
+        &server,
+        None,
+        "wait regen question",
+        &[DELEGATE_ASSISTANT_FIXED_ID],
+        "background",
+    )
+    .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let first_output = find_tool_call_update_output(&events, "delegate_to_assistant");
+    assert_eq!(first_output["background"], true);
+    let first_child_id =
+        Uuid::parse_str(first_output["delegate_chat_id"].as_str().unwrap()).unwrap();
+    wait_for_child_completion(&app_state.db, first_child_id, "CHILD-WAIT-REGEN-ANSWER").await;
+
+    let assistant_message_id = assistant_message_id_from_events(&events);
+    let regenerate_response = server
+        .post("/api/v1beta/me/messages/regeneratestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "current_message_id": assistant_message_id,
+            "delegation_run_mode": "wait",
+        }))
+        .await;
+    regenerate_response.assert_status_ok();
+    let regen_events = parse_sse_events(&regenerate_response);
+
+    let regen_output = find_tool_call_update_output(&regen_events, "delegate_to_assistant");
+    assert_eq!(regen_output["status"], "completed");
+    assert!(regen_output.get("background").is_none());
+    assert!(
+        regen_output["result"]
+            .as_str()
+            .unwrap()
+            .contains("CHILD-WAIT-REGEN-ANSWER")
+    );
+    assert!(extract_full_text_answer(&regen_events).contains("PARENT-WAIT-REGEN-FINAL"));
+
+    let second_child_id =
+        Uuid::parse_str(regen_output["delegate_chat_id"].as_str().unwrap()).unwrap();
+    assert_ne!(second_child_id, first_child_id);
+    let second_child = erato::db::entity::chats::Entity::find_by_id(second_child_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("second delegated child chat");
+    assert!(provenance_of(&second_child).run_mode.is_none());
+}
+
 async fn rebuilt_policy(app_state: &erato::state::AppState) -> erato::policy::engine::PolicyEngine {
     let policy = erato::policy::engine::PolicyEngine::new();
     policy
@@ -2760,6 +3513,7 @@ async fn test_listing_hides_delegated_runs_and_exposes_provenance(pool: Pool<Pos
                 adopted_at: None,
                 expected_output: None,
                 constraints: None,
+                run_mode: None,
             },
             format!("Delegated run {index}"),
         )
@@ -2935,6 +3689,7 @@ async fn test_parked_delegated_chat_stays_reachable(pool: Pool<Postgres>) {
             adopted_at: None,
             expected_output: None,
             constraints: None,
+            run_mode: None,
         },
         "Parked delegated run".to_string(),
     )
@@ -3506,6 +4261,7 @@ async fn spawn_delegated_run(
             adopted_at: None,
             expected_output: None,
             constraints: None,
+            run_mode: None,
         },
         title.to_string(),
     )
@@ -3538,6 +4294,7 @@ async fn spawn_handoff_branch(
             adopted_at: None,
             expected_output: None,
             constraints: None,
+            run_mode: None,
         },
         "Handoff branch".to_string(),
     )
@@ -3927,6 +4684,7 @@ async fn test_submit_into_live_delegated_run_conflicts(pool: Pool<Postgres>) {
             adopted_at: None,
             expected_output: None,
             constraints: None,
+            run_mode: None,
         },
         "Continuable run".to_string(),
     )
@@ -4273,6 +5031,7 @@ async fn test_chat_detail_carries_provenance_and_run_parameters(pool: Pool<Postg
             adopted_at: None,
             expected_output: Some("One number per line.".to_string()),
             constraints: Some("Only the attached figures.".to_string()),
+            run_mode: None,
         },
         "Summarize the numbers".to_string(),
     )
@@ -4356,6 +5115,7 @@ async fn test_chat_detail_reports_adopted_and_archived_runs(pool: Pool<Postgres>
             adopted_at: None,
             expected_output: None,
             constraints: None,
+            run_mode: None,
         },
         "Adoptable run".to_string(),
     )

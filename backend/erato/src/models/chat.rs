@@ -7,7 +7,7 @@ use crate::metrics_constants::{
     POSTGRES_QUERY_FREQUENT_ASSISTANTS, POSTGRES_QUERY_LIST_GENERATING_CHATS,
     POSTGRES_QUERY_LIST_RECENT_CHATS,
 };
-use crate::models::message::GenerationParameters;
+use crate::models::message::{DelegationRunMode, GenerationParameters};
 use crate::models::pagination;
 use crate::policy::prelude::*;
 use crate::query_metrics::named_statement_from_sql_and_values;
@@ -82,6 +82,13 @@ pub struct ChatProvenance {
     /// reasoning as `expected_output`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub constraints: Option<String>,
+    /// Delegation only: `Some(Background)` for a run the origin turn did not
+    /// await — its result never flowed back. Feeds the run's preamble wording
+    /// and, later, the accounting of concurrently running background runs.
+    /// Awaited runs store nothing, so their envelopes stay byte-identical to
+    /// those written before the field existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_mode: Option<DelegationRunMode>,
 }
 
 impl ChatProvenanceKind {

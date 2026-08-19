@@ -315,6 +315,7 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
         sequence.push(AbstractChatSequencePart::DelegationPreamble {
             expected_output: provenance.expected_output.clone(),
             constraints: provenance.constraints.clone(),
+            run_mode: provenance.run_mode,
         });
     }
 
@@ -559,6 +560,7 @@ pub async fn resolve_sequence(
             AbstractChatSequencePart::DelegationPreamble {
                 expected_output,
                 constraints,
+                run_mode,
             } => {
                 // Same shape as the action-facet directive: a marker in the
                 // user turn, never setting `has_system_message` — the preamble
@@ -570,6 +572,7 @@ pub async fn resolve_sequence(
                         ContentPartDelegationPreambleMarker {
                             expected_output,
                             constraints,
+                            run_mode,
                         },
                     ),
                 });

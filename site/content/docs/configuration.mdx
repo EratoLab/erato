@@ -3504,7 +3504,7 @@ auto_archive_after_days = 14
 
 {/* erato_toml_config_key: assistants.delegation.preamble */}
 
-Directive rendered into the delegated chat's first turn, telling the delegate it runs as a delegated worker and that its final message is returned to the origin chat as the task result. The delegate's own system prompt is untouched; the directive is additive. The placeholders `{{expected_output_section}}` and `{{constraints_section}}` are replaced with formatted blocks when the origin model supplies the corresponding tool arguments, and with empty strings otherwise.
+Directive rendered into the delegated chat's first turn, telling the delegate it runs as a delegated worker and where its final message ends up. The delegate's own system prompt is untouched; the directive is additive. The placeholder `{{result_disposition}}` is replaced with a sentence matching the run's mode — for an awaited run, that the final message is returned to the origin chat as the task result; for a background run, that the origin chat does not receive it and the user reads it in the run itself. The placeholders `{{expected_output_section}}` and `{{constraints_section}}` are replaced with formatted blocks when the origin model supplies the corresponding tool arguments, and with empty strings otherwise. A template that omits a placeholder simply renders without that part.
 
 **Default value:** the built-in directive shown in the `erato.template.toml` reference block
 

@@ -34,6 +34,12 @@ pub struct PromptCompositionUserInput {
     /// Non-empty only on mention-carrying turns; drives the request-scoped
     /// `delegate_to_assistant` tool offer.
     pub delegation_targets: Vec<crate::services::delegation::DelegationTarget>,
+
+    /// Effective run mode of any delegated runs this turn dispatches — the
+    /// gate-downgraded value, i.e. what dispatch will actually do. Varies the
+    /// tool offer's wording so the model briefs a background delegate whose
+    /// answer never comes back accordingly.
+    pub delegation_run_mode: crate::models::message::DelegationRunMode,
 }
 
 /// Action facet input for prompt composition.
@@ -88,11 +94,13 @@ pub enum AbstractChatSequencePart {
     },
 
     /// Run directive of a delegated chat, carrying the structured-brief fields
-    /// off the chat's provenance envelope. Rendered in the resolver step from
-    /// the configured template, for the same reason as `ActionFacetPrompt`.
+    /// and the run mode off the chat's provenance envelope. Rendered in the
+    /// resolver step from the configured template, for the same reason as
+    /// `ActionFacetPrompt`.
     DelegationPreamble {
         expected_output: Option<String>,
         constraints: Option<String>,
+        run_mode: Option<crate::models::message::DelegationRunMode>,
     },
 
     /// File attached to the current user input

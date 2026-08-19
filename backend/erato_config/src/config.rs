@@ -2799,13 +2799,15 @@ pub struct AssistantsDelegationConfig {
     pub auto_archive_after_days: u32,
 
     // Directive composed into every turn of a delegated chat, telling the
-    // delegate it runs as a delegated worker and that its final message is
-    // returned to the origin chat as the task result. It is never stored in the
-    // chat's messages, and it stops once the user writes into the run
-    // themselves — from then on the delegate is talking to them.
-    // `{{expected_output_section}}` and `{{constraints_section}}` are replaced
-    // with formatted blocks when the origin model supplies the corresponding
-    // tool arguments, and with empty strings otherwise.
+    // delegate it runs as a delegated worker and where its final message ends
+    // up. It is never stored in the chat's messages, and it stops once the user
+    // writes into the run themselves — from then on the delegate is talking to
+    // them. `{{result_disposition}}` is replaced with a sentence matching the
+    // run's mode (awaited: the answer returns to the origin chat; background:
+    // the user reads it in this chat); `{{expected_output_section}}` and
+    // `{{constraints_section}}` are replaced with formatted blocks when the
+    // origin model supplies the corresponding tool arguments, and with empty
+    // strings otherwise.
     #[serde(default = "default_delegation_preamble")]
     pub preamble: String,
 }
@@ -2841,7 +2843,7 @@ fn default_delegation_auto_archive_after_days() -> u32 {
 }
 
 fn default_delegation_preamble() -> String {
-    r#"You are working on a task that another conversation delegated to you. Your final message is returned to the delegating conversation as the result of this task; it is not shown to a person directly.
+    r#"You are working on a task that another conversation delegated to you. {{result_disposition}}
 
 Complete the task within this conversation: do not ask clarifying questions, do not defer work to a later turn, and do not address the end user. Finish with a final message that stands alone as the task result.
 {{expected_output_section}}{{constraints_section}}"#

@@ -365,12 +365,14 @@ chat_provider_ids = ["test-token-limit"]
 # # Directive composed into every turn of a delegated chat, never stored in its
 # # messages, and dropped once the user writes into the run themselves. The
 # # delegate's own system prompt is untouched; this is additive.
-# # {{expected_output_section}} and {{constraints_section}} are replaced with
-# # formatted blocks when the origin model supplies the corresponding arguments,
-# # and with empty strings otherwise.
+# # {{result_disposition}} is replaced with a sentence matching the run's mode
+# # (awaited: the answer returns to the origin chat; background: the user reads
+# # it in this chat). {{expected_output_section}} and {{constraints_section}}
+# # are replaced with formatted blocks when the origin model supplies the
+# # corresponding arguments, and with empty strings otherwise.
 # # The text below is the built-in default.
 # preamble = """
-# You are working on a task that another conversation delegated to you. Your final message is returned to the delegating conversation as the result of this task; it is not shown to a person directly.
+# You are working on a task that another conversation delegated to you. {{result_disposition}}
 #
 # Complete the task within this conversation: do not ask clarifying questions, do not defer work to a later turn, and do not address the end user. Finish with a final message that stands alone as the task result.
 # {{expected_output_section}}{{constraints_section}}"""

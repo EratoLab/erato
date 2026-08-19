@@ -5279,6 +5279,17 @@
               "string",
               "null"
             ]
+          },
+          "run_mode": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DelegationRunMode",
+                "description": "How the run relates to its origin turn; the preamble tells a background\ndelegate its answer is read in place rather than returned. Absent means\nawaited, so markers persisted before the field existed keep rendering\nthe same text."
+              }
+            ]
           }
         }
       },

@@ -898,6 +898,7 @@ export type ContentPartActionFacetMarker = {
 export type ContentPartDelegationPreambleMarker = {
   constraints?: null | undefined;
   expected_output?: null | undefined;
+  run_mode?: null | DelegationRunMode;
 };
 
 export type ContentPartImage = {

@@ -177,6 +177,7 @@ pub fn convert_content_parts_to_json(content_parts: &[ContentPart]) -> Result<Js
                     "type": "delegation_preamble_marker",
                     "expected_output": marker.expected_output,
                     "constraints": marker.constraints,
+                    "run_mode": marker.run_mode,
                 }));
             }
             ContentPart::ToolApprovalRequest(request) => {

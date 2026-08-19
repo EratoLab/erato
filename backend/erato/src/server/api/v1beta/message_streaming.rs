@@ -1214,7 +1214,6 @@ pub struct RegenerateMessageRequest {
     /// and is downgraded to `wait` server-side when the gate is off.
     #[serde(default)]
     #[schema(nullable = false)]
-    #[allow(dead_code)]
     delegation_run_mode: Option<DelegationRunMode>,
 }
 
@@ -1809,6 +1808,9 @@ pub(crate) struct DelegationDispatchContext<'a> {
     pub origin_chat: &'a chats::Model,
     /// The turn's user message; seeding source and provenance anchor.
     pub origin_user_message_id: Uuid,
+    /// Effective run mode for this turn's delegated runs — resolved and
+    /// gate-downgraded at request time, so dispatch executes it as-is.
+    pub run_mode: crate::models::message::DelegationRunMode,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -2566,6 +2568,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
                 crate::services::delegation::build_delegate_to_assistant_tool(
                     &user_input.delegation_targets,
                     &offered_files,
+                    user_input.delegation_run_mode,
                     effective_model_settings.compat_omit_strict,
                 ),
             );
@@ -3313,12 +3316,14 @@ async fn stream_generate_chat_completion<
             }
 
             // Delegated assistant run: `delegate_to_assistant` executes
-            // server-side as an awaited child chat run and returns a result
-            // envelope. Must stay BEFORE the by-construction client-tool
-            // branch below, which treats every offered non-MCP name as a
-            // client tool. An MCP tool with the same name takes precedence
-            // (the synthetic tool is never offered in that case — see
-            // prepare). Every failure refuses the CALL, never the TURN.
+            // server-side as a child chat run — awaited (result envelope
+            // returns into this turn) or background (the call settles at
+            // launch and the child finishes on its own). Must stay BEFORE
+            // the by-construction client-tool branch below, which treats
+            // every offered non-MCP name as a client tool. An MCP tool with
+            // the same name takes precedence (the synthetic tool is never
+            // offered in that case — see prepare). Every failure refuses the
+            // CALL, never the TURN.
             if unfinished_tool_call.fn_name
                 == crate::services::delegation::DELEGATE_TO_ASSISTANT_TOOL_NAME
                 && !available_mcp_tools_by_name
@@ -3350,10 +3355,12 @@ async fn stream_generate_chat_completion<
                 };
                 let (status, bg_status, message_status, output_value, response_text) = match outcome
                 {
-                    Ok(outcome) => {
-                        let envelope = outcome.envelope;
+                    Ok(crate::services::delegation::DelegationDispatchOutcome::Completed {
+                        envelope,
+                        trace,
+                    }) => {
                         let response_text = envelope.model_response_text();
-                        let output_value = envelope.output_value(&outcome.trace);
+                        let output_value = envelope.output_value(&trace);
                         if envelope.status
                             == crate::services::delegation::DelegationRunStatus::Completed
                         {
@@ -3374,6 +3381,38 @@ async fn stream_generate_chat_completion<
                             )
                         }
                     }
+                    // A background launch settles the part as a Success — a
+                    // dispatch is not an error — with two deliberately
+                    // different shapes. The UI output carries NO "status":
+                    // the frontend renders any status other than "completed"
+                    // as a failure, and the "background" marker is what its
+                    // background presentation keys off. The model gets an
+                    // explicit "dispatched" status plus the note so its
+                    // final prose reports work that was started, not an
+                    // answer it never received.
+                    Ok(crate::services::delegation::DelegationDispatchOutcome::Dispatched {
+                        assistant_id,
+                        assistant_name,
+                        delegate_chat_id,
+                    }) => (
+                        ToolCallStatus::Success,
+                        BgToolCallStatus::Success,
+                        MessageToolCallStatus::Success,
+                        json!({
+                            "assistant_id": assistant_id,
+                            "assistant_name": assistant_name,
+                            "delegate_chat_id": delegate_chat_id,
+                            "background": true,
+                        }),
+                        json!({
+                            "status": "dispatched",
+                            "delegate_chat_id": delegate_chat_id,
+                            "assistant_id": assistant_id,
+                            "assistant_name": assistant_name,
+                            "note": "the result will not be returned to this conversation",
+                        })
+                        .to_string(),
+                    ),
                     Err(error) => (
                         ToolCallStatus::Error,
                         BgToolCallStatus::Error,
@@ -8070,6 +8109,13 @@ pub(crate) async fn run_message_submit_task(
 
     // Prepare chat request
     let me_profile_input = MeProfileChatRequestInput::from_me_profile(me_user);
+    // No persisted fallback: this request just persisted its own value, so
+    // the request field is the whole story here.
+    let effective_delegation_run_mode = crate::services::delegation::resolve_delegation_run_mode(
+        request.delegation_run_mode,
+        None,
+        &app_state.config.assistants.delegation,
+    );
     let user_input = PromptCompositionUserInput {
         just_submitted_user_message_id: saved_user_message.id,
         requested_chat_provider_id: request.chat_provider_id.clone(),
@@ -8082,6 +8128,7 @@ pub(crate) async fn run_message_submit_task(
             }
         }),
         delegation_targets,
+        delegation_run_mode: effective_delegation_run_mode,
     };
     let PreparedChatRequest {
         chat_request,
@@ -8251,6 +8298,7 @@ pub(crate) async fn run_message_submit_task(
             offered_file_ids: &delegation_offered_file_ids,
             origin_chat: &chat,
             origin_user_message_id: saved_user_message.id,
+            run_mode: effective_delegation_run_mode,
         }),
     );
 
@@ -8436,6 +8484,20 @@ pub async fn regenerate_message_sse(
             .await
         }
     };
+    // Same replay contract as the mentions: an explicit request value wins,
+    // else the mode the turn's user message persisted; the gate downgrade
+    // applies here, at execution time.
+    let effective_delegation_run_mode = crate::services::delegation::resolve_delegation_run_mode(
+        request.delegation_run_mode,
+        crate::models::message::get_input_delegation_run_mode_from_message(
+            &validation_result.previous_message,
+        )
+        .unwrap_or_else(|error| {
+            warn_and_capture_error("read regenerate fallback delegation run mode", &error);
+            None
+        }),
+        &app_state.config.assistants.delegation,
+    );
 
     // Create a channel for sending events
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
@@ -8534,6 +8596,7 @@ pub async fn regenerate_message_sse(
                         },
                     ),
                 delegation_targets: delegation_targets_for_offer,
+                delegation_run_mode: effective_delegation_run_mode,
             };
             let PreparedChatRequest {
                 chat_request,
@@ -8655,6 +8718,7 @@ pub async fn regenerate_message_sse(
                         offered_file_ids: &delegation_offered_file_ids,
                         origin_chat: &chat,
                         origin_user_message_id: previous_message.id,
+                        run_mode: effective_delegation_run_mode,
                     }),
                 )
                 .await;
@@ -8922,6 +8986,13 @@ pub async fn edit_message_sse(
         }
     }
     .filter(|mode| *mode == DelegationRunMode::Background);
+    // What dispatch executes this turn: the resolved (requested-or-inherited)
+    // value above, gate-downgraded.
+    let effective_delegation_run_mode = crate::services::delegation::resolve_delegation_run_mode(
+        resolved_delegation_run_mode,
+        None,
+        &app_state.config.assistants.delegation,
+    );
     let edit_input_parameters = if resolved_action_facet.is_some()
         || resolved_mentioned_assistant_ids.is_some()
         || resolved_delegation_run_mode.is_some()
@@ -9021,6 +9092,7 @@ pub async fn edit_message_sse(
                     }
                 }),
                 delegation_targets: delegation_targets_for_offer,
+                delegation_run_mode: effective_delegation_run_mode,
             };
             let PreparedChatRequest {
                 chat_request,
@@ -9142,6 +9214,7 @@ pub async fn edit_message_sse(
                         offered_file_ids: &delegation_offered_file_ids,
                         origin_chat: &chat,
                         origin_user_message_id: saved_user_message.id,
+                        run_mode: effective_delegation_run_mode,
                     }),
                 )
                 .await;
