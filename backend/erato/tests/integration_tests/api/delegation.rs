@@ -274,6 +274,11 @@ async fn test_seed_chat_lineage_copies_deep_lineage_and_files(pool: Pool<Postgre
     let target_rows = chat_messages_by_created_at(&app_state.db, target_chat_id).await;
     assert_eq!(source_rows.len(), 12);
     assert_eq!(target_rows.len(), 12);
+    assert_eq!(
+        stats.lineage_tip_id,
+        target_rows.last().map(|row| row.id),
+        "the reported tip is the head the target chat continues from"
+    );
 
     let mut expected_previous: Option<Uuid> = None;
     for (source_row, target_row) in source_rows.iter().zip(target_rows.iter()) {
@@ -1042,6 +1047,29 @@ async fn delegated_child_chat(
         .expect("expected a delegated child chat")
 }
 
+/// The event types a chat's generation left in the shared stream, in order —
+/// what a resume landing on another replica replays.
+async fn shared_generation_event_types(
+    db: &sea_orm::DatabaseConnection,
+    chat_id: Uuid,
+) -> Vec<String> {
+    use sea_orm::{ConnectionTrait, Statement};
+    db.query_all_raw(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        r#"SELECT event ->> 'message_type' AS message_type
+           FROM temp_chat_generation_events
+           JOIN temp_chat_generations USING (generation_id)
+           WHERE chat_id = $1
+           ORDER BY event_id"#,
+        [chat_id.into()],
+    ))
+    .await
+    .unwrap()
+    .iter()
+    .map(|row| row.try_get::<String>("", "message_type").unwrap())
+    .collect()
+}
+
 /// Happy path: the parent turn calls `delegate_to_assistant`, the child run
 /// completes, the parent receives the envelope and finishes. Also proves the
 /// child's request head carries the delegate prompt + preamble (not the
@@ -1280,6 +1308,14 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
     assert_eq!(provenance.depth, 1);
     assert!(provenance.rebase_cutoff.is_some());
     assert_eq!(child_chat.generation_state.as_deref(), Some("completed"));
+    assert_eq!(
+        shared_generation_event_types(&app_state.db, child_chat.id)
+            .await
+            .last()
+            .map(String::as_str),
+        Some("stream_end"),
+        "a resume tailing the child's shared stream has to see it close"
+    );
 
     // The child's request head: delegate prompt + preamble, no origin head.
     let child_bodies = child_recorder.bodies();
@@ -3674,5 +3710,200 @@ async fn test_submit_into_live_delegated_run_conflicts(pool: Pool<Postgres>) {
     assert!(
         adopted_at.is_string(),
         "a run the user wrote into is recorded as adopted"
+    );
+}
+
+/// A mention-carrying turn that parks on an MCP approval loses the delegation
+/// offer when it is continued: `continuestream` rebuilds the tool set from MCP
+/// discovery alone. A delegate call the model makes anyway is refused per-CALL
+/// by the unoffered-tool guard — which runs before the dispatch branch and its
+/// own "not available" fallback — so nothing is delegated and the turn recovers
+/// in prose.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_continued_turn_does_not_reoffer_the_delegation_tool(pool: Pool<Postgres>) {
+    const TOOL_RESULT: &str = "approval probe published";
+    const REFUSAL: &str = "not allowed for this request";
+    let parked_turn_recorder = RequestBodyRecorder::new();
+    let continuation_recorder = RequestBodyRecorder::new();
+
+    let mut mocks = MockSet::new();
+    // Continuation turn 2: the refusal arrived, answer in prose.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[REFUSAL], &[]));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&[
+                "CONTINUED-RECOVERED-ANSWER",
+            ]),
+        );
+    });
+    // Continuation turn 1: delegate anyway, without the offer.
+    {
+        let recorder = continuation_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[TOOL_RESULT], &[REFUSAL]))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                    "call_delegate_after_approval",
+                    "delegate_to_assistant",
+                    json!({
+                        "assistant_id": DELEGATE_ASSISTANT_FIXED_ID,
+                        "task": "CONTINUED-TASK-BRIEF",
+                    }),
+                )]),
+            );
+        });
+    }
+    // The parked turn: call the approval-gated tool.
+    {
+        let recorder = parked_turn_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[], &[TOOL_RESULT, REFUSAL]))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                    "call_probe",
+                    "publish_approval_probe",
+                    json!({}),
+                )]),
+            );
+        });
+    }
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.assistants.delegation.enabled = true;
+    app_config.mcp_servers.insert(
+        "mock_mcp_approval".to_string(),
+        erato::config::McpServerConfig {
+            transport_type: "streamable_http".to_string(),
+            url: format!("{}/mcp/approval-policy", mock_mcp_base_url()),
+            http_headers: None,
+            allow_tools: None,
+            exclude_tools: vec![],
+            authentication: erato::config::McpServerAuthenticationConfig::None,
+            max_session_idle_seconds: None,
+        },
+    );
+    app_config.mcp_server_permissions.rules.insert(
+        "allow-mock-mcp".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["mock_mcp_approval".to_string()],
+        },
+    );
+    app_config.mcp_servers_global.approval = erato::config::McpToolApprovalConfig {
+        enabled: true,
+        preset: erato::config::McpToolApprovalPreset::Restrictive,
+        allow_always: false,
+    };
+    let app_state = test_app_state(app_config, pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    insert_fixed_delegate_assistant(&app_state.db, me.id, "delegate prompt", None).await;
+    let server = app_server(app_state.clone());
+
+    let response = submit_with_mentions(
+        &server,
+        None,
+        "mention approval question",
+        &[DELEGATE_ASSISTANT_FIXED_ID],
+    )
+    .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+
+    let chat_id =
+        Uuid::parse_str(&crate::test_utils::extract_chat_id(&events).expect("chat id")).unwrap();
+    let assistant_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    assert_eq!(
+        erato::db::entity::chats::Entity::find_by_id(chat_id)
+            .one(&app_state.db)
+            .await
+            .unwrap()
+            .unwrap()
+            .generation_state
+            .as_deref(),
+        Some("awaiting_approval")
+    );
+
+    // The parked turn was offered the delegation tool.
+    let parked_bodies = parked_turn_recorder.bodies();
+    assert!(
+        parked_bodies
+            .iter()
+            .any(|body| body.contains("delegate_to_assistant")),
+        "the mention-carrying turn offers the delegation tool"
+    );
+
+    let continued = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": assistant_message_id,
+            "decision": "approve",
+        }))
+        .await;
+    continued.assert_status_ok();
+    let continued_events = parse_sse_events(&continued);
+    assert!(extract_full_text_answer(&continued_events).contains("CONTINUED-RECOVERED-ANSWER"));
+
+    let continuation_bodies = continuation_recorder.bodies();
+    assert_eq!(continuation_bodies.len(), 1);
+    assert!(continuation_bodies[0].contains("publish_approval_probe"));
+    assert!(
+        !continuation_bodies[0].contains("delegate_to_assistant"),
+        "the continuation must not re-offer the delegation tool"
+    );
+
+    let refused = erato::db::entity::messages::Entity::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("the continued assistant message")
+        .raw_message["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|part| part["tool_name"] == "delegate_to_assistant")
+        .expect("the refused delegate call")
+        .clone();
+    assert_eq!(refused["status"], "error");
+    assert!(
+        refused["output"]["error"]
+            .as_str()
+            .is_some_and(|error| error.contains(REFUSAL)),
+        "Got: {}",
+        refused["output"]
+    );
+
+    assert!(
+        erato::db::entity::chats::Entity::find()
+            .filter(erato::db::entity::chats::Column::OriginChatId.eq(chat_id))
+            .one(&app_state.db)
+            .await
+            .unwrap()
+            .is_none(),
+        "a continued turn must not be able to spawn a delegated run"
     );
 }

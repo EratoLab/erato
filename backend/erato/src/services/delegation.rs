@@ -10,6 +10,7 @@ use genai::chat::ToolName as GenaiToolName;
 use sea_orm::prelude::Uuid;
 use serde_json::json;
 use tokio::sync::broadcast::error::{RecvError, TryRecvError};
+use tracing::Instrument;
 
 /// Name of the synthetic tool offered to the model when the current turn
 /// carries validated assistant mentions.
@@ -505,7 +506,7 @@ fn render_delegation_preamble(
             .map(|value| format!("\nConstraints:\n{value}\n"))
             .unwrap_or_default(),
     );
-    crate::services::prompt_composition::transforms::render_action_facet_template(
+    crate::services::prompt_composition::transforms::render_placeholder_template(
         preamble_template,
         &args,
     )
@@ -520,8 +521,7 @@ fn delegated_chat_title(task: &str) -> String {
     title
 }
 
-/// Wrapper mirroring the submit path's spawned task: cleanup guard, the run,
-/// stream end, outcome persistence.
+/// Runs a delegated child through the shared generation-task lifecycle.
 ///
 /// Returns an explicitly boxed future: the child generation nests the whole
 /// streaming machinery inside the parent's dispatch loop, which would
@@ -535,45 +535,30 @@ fn run_delegated_child(
     request: crate::server::api::v1beta::message_streaming::MessageSubmitRequest,
     chat_id: Uuid,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), eyre::Report>> + Send>> {
-    Box::pin(async move {
-        let mut cleanup_guard = crate::services::background_tasks::TaskCleanupGuard::new(
-            app_state.background_tasks.clone(),
-            chat_id,
-            child_task.generation_id,
-        );
-        let result = crate::server::api::v1beta::message_streaming::run_message_submit_task(
-            &child_task,
-            &app_state,
-            &policy,
-            &me_user,
-            &request,
-            crate::models::message::GenerationRequestContext { platform: None },
-            chat_id,
-            true,
-            Vec::new(),
-        )
-        .await;
-        let generation_failed = result.is_err();
-        if let Err(error) = &result {
-            tracing::warn!(child_chat_id = %chat_id, error = ?error, "Delegated child run failed");
-            let _ = child_task
-                .send_event(crate::services::background_tasks::StreamingEvent::Error {
-                    error: crate::server::api::v1beta::message_streaming::delegated_run_failure_error_value(),
-                })
-                .await;
+    Box::pin(
+        async move {
+            crate::server::api::v1beta::message_streaming::with_generation_task_lifecycle(
+                &app_state.background_tasks,
+                &child_task,
+                chat_id,
+                crate::server::api::v1beta::message_streaming::run_message_submit_task(
+                    &child_task,
+                    &app_state,
+                    &policy,
+                    &me_user,
+                    &request,
+                    crate::models::message::GenerationRequestContext { platform: None },
+                    chat_id,
+                    true,
+                    Vec::new(),
+                ),
+            )
+            .await
         }
-        let _ = child_task
-            .send_event(crate::services::background_tasks::StreamingEvent::StreamEnd)
-            .await;
-        let outcome = child_task.derive_outcome(generation_failed);
-        child_task.mark_completed();
-        cleanup_guard.disarm();
-        app_state
-            .background_tasks
-            .remove_task(&chat_id, child_task.generation_id, outcome)
-            .await;
-        result
-    })
+        // The shared lifecycle logs a bare chat id, which reads the same for a
+        // parent turn; the span is what tells a child's failure apart.
+        .instrument(tracing::info_span!("delegated_child", child_chat_id = %chat_id)),
+    )
 }
 
 /// Reads the delegate's final answer and builds the result envelope. The
@@ -601,11 +586,25 @@ async fn build_result_envelope(
     // newest-row scanning, so neither seeded parent copies nor a concurrent
     // interloping run on the child chat can masquerade as the delegate's
     // result. Rows predating the spawn are seeded copies by construction.
-    let assistant_row = crate::db::entity::messages::Entity::find_by_id(child_assistant_message_id)
-        .one(&app_state.db)
-        .await
-        .ok()
-        .flatten()
+    let assistant_row =
+        match crate::db::entity::messages::Entity::find_by_id(child_assistant_message_id)
+            .one(&app_state.db)
+            .await
+        {
+            Ok(row) => row,
+            Err(error) => {
+                // A read failure is indistinguishable from an unanswered run
+                // below, so a delegate that did answer is reported as failed.
+                tracing::error!(
+                    %error,
+                    %child_chat_id,
+                    %child_assistant_message_id,
+                    "Failed to read the delegate's answer"
+                );
+                None
+            }
+        };
+    let assistant_row = assistant_row
         .filter(|row| row.chat_id == child_chat_id && row.created_at > spawned_at)
         .filter(|row| {
             row.raw_message
@@ -687,7 +686,7 @@ async fn prepare_delegated_chat(
     file_ids: &[Uuid],
     include_conversation_context: bool,
 ) -> Result<Option<Uuid>, String> {
-    use sea_orm::{ActiveValue, ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
+    use sea_orm::{ActiveValue, EntityTrait};
 
     for file_id in file_ids {
         let join_row = crate::db::entity::chat_file_uploads::ActiveModel {
@@ -708,31 +707,29 @@ async fn prepare_delegated_chat(
         return Ok(None);
     }
 
-    let anchor_id = crate::db::entity::messages::Entity::find_by_id(context.origin_user_message_id)
-        .one(&app_state.db)
-        .await
-        .ok()
-        .flatten()
-        .and_then(|row| row.previous_message_id);
-    let Some(anchor_id) = anchor_id else {
+    // A read failure is indistinguishable from a mention turn that opens the
+    // chat, so it has to refuse rather than fall through to seeding nothing and
+    // letting the delegate answer without the context it was promised.
+    let origin_row =
+        crate::db::entity::messages::Entity::find_by_id(context.origin_user_message_id)
+            .one(&app_state.db)
+            .await
+            .map_err(|error| {
+                tracing::warn!(%error, "Failed to resolve the delegated chat's seeding anchor");
+                "Failed to pass the conversation context to the delegate.".to_string()
+            })?;
+    let Some(anchor_id) = origin_row.and_then(|row| row.previous_message_id) else {
         return Ok(None);
     };
 
-    crate::models::chat::seed_chat_lineage(&app_state.db, &child_chat_id, &anchor_id)
+    let seeded = crate::models::chat::seed_chat_lineage(&app_state.db, &child_chat_id, &anchor_id)
         .await
         .map_err(|error| {
             tracing::warn!(%error, "Failed to seed delegated chat lineage");
             "Failed to pass the conversation context to the delegate.".to_string()
         })?;
 
-    Ok(crate::db::entity::messages::Entity::find()
-        .filter(crate::db::entity::messages::Column::ChatId.eq(child_chat_id))
-        .order_by_desc(crate::db::entity::messages::Column::CreatedAt)
-        .one(&app_state.db)
-        .await
-        .ok()
-        .flatten()
-        .map(|row| row.id))
+    Ok(seeded.lineage_tip_id)
 }
 
 /// Removes a delegated chat whose run never started. Dispatch creates the chat

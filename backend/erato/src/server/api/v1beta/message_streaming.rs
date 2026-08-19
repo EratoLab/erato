@@ -31,7 +31,8 @@ use crate::server::api::v1beta::message_streaming_file_extraction::{
     parse_content_filter_error_from_mcp_tool_result, post_process_mcp_tool_result,
 };
 use crate::services::background_tasks::{
-    StreamingEvent, StreamingTask, TaskCleanupGuard, ToolCallStatus as BgToolCallStatus,
+    BackgroundTaskManager, StreamingEvent, StreamingTask, TaskCleanupGuard,
+    ToolCallStatus as BgToolCallStatus,
 };
 use crate::services::client_tools::{ClientToolDelivery, ClientToolOutcome};
 use crate::services::genai::{build_chat_options_for_completion, build_chat_options_for_summary};
@@ -1126,7 +1127,7 @@ where
 }
 
 struct SharedResumeState {
-    manager: crate::services::background_tasks::BackgroundTaskManager,
+    manager: BackgroundTaskManager,
     generation_id: Uuid,
     last_event_id: i64,
     pending: VecDeque<StreamingEvent>,
@@ -1134,7 +1135,7 @@ struct SharedResumeState {
 }
 
 fn shared_generation_event_stream(
-    manager: crate::services::background_tasks::BackgroundTaskManager,
+    manager: BackgroundTaskManager,
     generation_id: Uuid,
 ) -> impl Stream<Item = Result<StreamingEvent, Report>> + Send {
     futures::stream::unfold(
@@ -1636,10 +1637,11 @@ impl PreparedChatRequest {
     }
 }
 
-/// The generic error frame a delegated child run broadcasts on failure, so a
-/// user watching the child chat resolves instead of seeing a silent end —
-/// same shape as the submit wrapper's failure broadcast.
-pub(crate) fn delegated_run_failure_error_value() -> Option<JsonValue> {
+/// The frame a failed generation broadcasts to every listener — the original
+/// stream AND any resume — so the client resolves instead of waiting for a
+/// completion that will never arrive. The detailed error is captured
+/// server-side; the client gets only a generic message.
+fn generation_failure_error_value() -> Option<JsonValue> {
     let error_event = MessageSubmitStreamingResponseError {
         message_id: None,
         error: GenerationErrorType::InternalError {
@@ -1647,6 +1649,106 @@ pub(crate) fn delegated_run_failure_error_value() -> Option<JsonValue> {
         },
     };
     serde_json::to_value(MessageSubmitStreamingResponseMessage::Error(error_event)).ok()
+}
+
+/// Runs a generation inside the lifecycle a user submit and a delegated child
+/// share: a cleanup guard around the run, the failure frame, the closing stream
+/// end, and the terminal outcome on the chat's generation lease. The edit,
+/// regenerate and continue paths run their own tail instead — each owns its
+/// request's response channel and forwards a failure over that, so neither the
+/// broadcast failure frame nor a stream end applies to them.
+///
+/// A failure is captured even where the caller absorbs it: delegation turns a
+/// failed child into a `failed` envelope the parent recovers from in prose, and
+/// that recovery does not make the run any less broken.
+pub(crate) async fn with_generation_task_lifecycle<F>(
+    background_tasks: &BackgroundTaskManager,
+    task: &Arc<StreamingTask>,
+    chat_id: Uuid,
+    run: F,
+) -> Result<(), Report>
+where
+    F: std::future::Future<Output = Result<(), Report>>,
+{
+    let mut cleanup_guard =
+        TaskCleanupGuard::new(background_tasks.clone(), chat_id, task.generation_id);
+
+    let result = run.await;
+
+    match &result {
+        Ok(()) => tracing::info!(%chat_id, "Generation task completed"),
+        Err(error) => {
+            tracing::error!(%chat_id, error = ?error, "Generation task failed");
+            capture_report(error);
+            send_background_event(
+                task,
+                StreamingEvent::Error {
+                    error: generation_failure_error_value(),
+                },
+                "broadcast generation failure",
+            )
+            .await;
+        }
+    }
+
+    send_background_event(task, StreamingEvent::StreamEnd, "broadcast stream end").await;
+    let outcome = task.derive_outcome(result.is_err());
+    task.mark_completed();
+    cleanup_guard.disarm();
+    background_tasks
+        .remove_task(&chat_id, task.generation_id, outcome)
+        .await;
+
+    result
+}
+
+#[cfg(test)]
+mod generation_task_lifecycle_tests {
+    use super::*;
+    use crate::config::GenerationStatusConfig;
+
+    async fn events_of_run(
+        run: Result<(), Report>,
+    ) -> (Vec<StreamingEvent>, BackgroundTaskManager, Uuid) {
+        let background_tasks = BackgroundTaskManager::new(None, GenerationStatusConfig::default());
+        let chat_id = Uuid::new_v4();
+        let (_receiver, task) = background_tasks.start_task(chat_id, Uuid::new_v4()).await;
+
+        let _ =
+            with_generation_task_lifecycle(&background_tasks, &task, chat_id, async move { run })
+                .await;
+
+        (task.get_event_history().await, background_tasks, chat_id)
+    }
+
+    #[tokio::test]
+    async fn a_failed_run_broadcasts_the_generic_frame_and_then_the_stream_end() {
+        let (events, background_tasks, chat_id) =
+            events_of_run(Err(eyre!("the generation blew up"))).await;
+
+        let [StreamingEvent::Error { error }, StreamingEvent::StreamEnd] = events.as_slice() else {
+            panic!("Expected a failure frame closed by a single stream end, got: {events:?}");
+        };
+        let error = error.as_ref().expect("Expected an error payload");
+        assert_eq!(error["message_type"], "error");
+        assert_eq!(error["error_type"], "internal_error");
+        assert_eq!(
+            error["error_description"],
+            "The message could not be generated."
+        );
+        assert!(background_tasks.get_task(&chat_id).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn a_successful_run_closes_with_the_stream_end_alone() {
+        let (events, background_tasks, chat_id) = events_of_run(Ok(())).await;
+
+        assert!(
+            matches!(events.as_slice(), [StreamingEvent::StreamEnd]),
+            "Got: {events:?}"
+        );
+        assert!(background_tasks.get_task(&chat_id).await.is_none());
+    }
 }
 
 impl MessageSubmitRequest {
@@ -6993,80 +7095,24 @@ pub async fn message_submit_sse(
     // Spawn the background generation task
     tokio::spawn(
         async move {
-            let mut cleanup_guard = TaskCleanupGuard::new(
-                app_state_bg.background_tasks.clone(),
-                chat_id,
-                task_clone.generation_id,
-            );
             tracing::info!("Starting background task for chat_id: {}", chat_id);
-            let result = run_message_submit_task(
+            let _ = with_generation_task_lifecycle(
+                &app_state_bg.background_tasks,
                 &task_clone,
-                &app_state_bg,
-                &policy_bg,
-                &me_user_bg,
-                &request_clone,
-                generation_request_context,
                 chat_id,
-                chat_was_created,
-                delegation_targets,
+                run_message_submit_task(
+                    &task_clone,
+                    &app_state_bg,
+                    &policy_bg,
+                    &me_user_bg,
+                    &request_clone,
+                    generation_request_context,
+                    chat_id,
+                    chat_was_created,
+                    delegation_targets,
+                ),
             )
             .await;
-
-            let generation_failed = result.is_err();
-            match result {
-                Ok(()) => {
-                    tracing::info!(
-                        "Background task completed successfully for chat_id: {}",
-                        chat_id
-                    );
-                }
-                Err(e) => {
-                    tracing::error!(
-                        chat_id = %chat_id,
-                        error = ?e,
-                        "Background task failed"
-                    );
-                    capture_report(&e);
-
-                    // Tell every listener — the original stream AND any resume —
-                    // that this turn is dead, so the client resolves instead of
-                    // waiting for a completion that will never arrive. The
-                    // detailed error is captured server-side above; the client
-                    // gets only a generic message.
-                    let error_event = MessageSubmitStreamingResponseError {
-                        message_id: None,
-                        error: GenerationErrorType::InternalError {
-                            error_description: "The message could not be generated.".to_string(),
-                        },
-                    };
-                    let error = serde_json::to_value(MessageSubmitStreamingResponseMessage::Error(
-                        error_event,
-                    ))
-                    .ok();
-                    send_background_event(
-                        &task_clone,
-                        StreamingEvent::Error { error },
-                        "broadcast submit task failure",
-                    )
-                    .await;
-                }
-            }
-
-            // Send final stream_end event
-            send_background_event(
-                &task_clone,
-                StreamingEvent::StreamEnd,
-                "broadcast submit stream end",
-            )
-            .await;
-            // Mark task as completed
-            let outcome = task_clone.derive_outcome(generation_failed);
-            task_clone.mark_completed();
-            cleanup_guard.disarm();
-            app_state_bg
-                .background_tasks
-                .remove_task(&chat_id, task_clone.generation_id, outcome)
-                .await;
         }
         .in_current_span(),
     );
@@ -8257,7 +8303,7 @@ pub(crate) async fn run_message_submit_task(
     )
     .await?;
 
-    // Note: stream_end event is sent in the spawning wrapper in message_submit_sse
+    // Note: the stream_end event is sent by the spawning task lifecycle wrapper
 
     Ok(())
 }
@@ -9612,6 +9658,10 @@ async fn run_continue_message_task(
         .map(|tools| tools.iter().map(|tool| tool.name.to_string()).collect())
         .unwrap_or_default();
     let headers_context = ChatProviderHeadersContext::new(&me_user.id, &me_user.id_token_claims);
+    // The tool set above is MCP discovery only, so a continued turn carries no
+    // delegation offer and no dispatch context to honour one with: the
+    // arguments a delegate call needs are request-scoped and are not persisted
+    // with the parked message.
     let (end_content, generation_metadata) =
         stream_generate_chat_completion::<MessageSubmitStreamingResponseMessage>(
             tx.clone(),

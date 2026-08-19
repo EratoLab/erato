@@ -2861,18 +2861,18 @@ mod test_cases {
     }
 
     // ============================================================================
-    // render_action_facet_template tests
+    // render_placeholder_template tests
     // ============================================================================
 
-    mod render_action_facet_template_tests {
-        use super::super::super::transforms::render_action_facet_template;
+    mod render_placeholder_template_tests {
+        use super::super::super::transforms::render_placeholder_template;
         use std::collections::HashMap;
 
         #[test]
         fn basic_substitution() {
             let args = HashMap::from([("name".to_string(), "Alice".to_string())]);
             assert_eq!(
-                render_action_facet_template("Hello {{name}}!", &args),
+                render_placeholder_template("Hello {{name}}!", &args),
                 "Hello Alice!"
             );
         }
@@ -2884,7 +2884,7 @@ mod test_cases {
                 ("name".to_string(), "Bob".to_string()),
             ]);
             assert_eq!(
-                render_action_facet_template("{{greeting}}, {{name}}!", &args),
+                render_placeholder_template("{{greeting}}, {{name}}!", &args),
                 "Hi, Bob!"
             );
         }
@@ -2893,7 +2893,7 @@ mod test_cases {
         fn empty_args_leaves_template_unchanged() {
             let args = HashMap::new();
             assert_eq!(
-                render_action_facet_template("Hello {{name}}!", &args),
+                render_placeholder_template("Hello {{name}}!", &args),
                 "Hello {{name}}!"
             );
         }
@@ -2902,7 +2902,7 @@ mod test_cases {
         fn missing_key_leaves_placeholder() {
             let args = HashMap::from([("other".to_string(), "val".to_string())]);
             assert_eq!(
-                render_action_facet_template("Hello {{name}}!", &args),
+                render_placeholder_template("Hello {{name}}!", &args),
                 "Hello {{name}}!"
             );
         }
@@ -2914,7 +2914,7 @@ mod test_cases {
                 ("first".to_string(), "{{second}}".to_string()),
                 ("second".to_string(), "LEAKED".to_string()),
             ]);
-            let result = render_action_facet_template("Result: {{first}}", &args);
+            let result = render_placeholder_template("Result: {{first}}", &args);
             assert!(
                 !result.contains("LEAKED"),
                 "Value containing {{{{second}}}} was re-expanded: {result}"
@@ -2925,14 +2925,14 @@ mod test_cases {
         #[test]
         fn empty_template_returns_empty() {
             let args = HashMap::from([("k".to_string(), "v".to_string())]);
-            assert_eq!(render_action_facet_template("", &args), "");
+            assert_eq!(render_placeholder_template("", &args), "");
         }
 
         #[test]
         fn value_with_special_chars() {
             let args = HashMap::from([("code".to_string(), "a < b && c > d".to_string())]);
             assert_eq!(
-                render_action_facet_template("Check: {{code}}", &args),
+                render_placeholder_template("Check: {{code}}", &args),
                 "Check: a < b && c > d"
             );
         }
