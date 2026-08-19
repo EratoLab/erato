@@ -3464,6 +3464,25 @@ Maximum number of characters of a delegate's final message that are returned to 
 result_max_chars = 8000
 ```
 
+#### `assistants.delegation.auto_archive_after_days`
+
+{/* erato_toml_config_key: assistants.delegation.auto_archive_after_days */}
+
+Number of days without activity after which a finished delegated run is archived, whether or not the chat that spawned it was ever archived. Delegated runs are hidden from the chat listing, so without this they would accumulate indefinitely. Archiving the chat that spawned a run also archives the run right away, unless the run has not finished yet.
+
+Archived chats are deleted after `cleanup_archived_max_age_days`, so this option requires `cleanup_enabled`. Set it to `0` to never archive a delegated run automatically. A run is also left alone once it is pinned, shared through a share link, or written into by the user.
+
+**Default value:** `7`
+
+**Type:** `integer`
+
+**Example:**
+
+```toml
+[assistants.delegation]
+auto_archive_after_days = 14
+```
+
 #### `assistants.delegation.preamble`
 
 {/* erato_toml_config_key: assistants.delegation.preamble */}

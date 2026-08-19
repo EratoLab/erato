@@ -3494,6 +3494,8 @@ pub struct ArchiveAllChatsResponse {
 ///
 /// This endpoint marks a chat as archived by setting its archived_at timestamp.
 /// Archived chats can be filtered out from the recent chats listing by default.
+/// Delegated runs spawned from the chat are archived along with it, except
+/// those whose run has not finished yet.
 #[utoipa::path(
     post,
     path = "/chats/{chat_id}/archive",
@@ -3531,15 +3533,21 @@ pub async fn archive_chat_endpoint(
         })?;
 
     // Archive the chat
-    let updated_chat = archive_chat(&app_state.db, &policy, &me_user.to_subject(), &chat_id)
-        .await
-        .map_err(|e| {
-            if e.to_string().contains("not found") {
-                StatusCode::NOT_FOUND
-            } else {
-                log_internal_server_error(e)
-            }
-        })?;
+    let updated_chat = archive_chat(
+        &app_state.db,
+        &policy,
+        &me_user.to_subject(),
+        &chat_id,
+        app_state.config.generation_status.stale_after_secs,
+    )
+    .await
+    .map_err(|e| {
+        if e.to_string().contains("not found") {
+            StatusCode::NOT_FOUND
+        } else {
+            log_internal_server_error(e)
+        }
+    })?;
 
     app_state.global_policy_engine.invalidate_data().await;
 

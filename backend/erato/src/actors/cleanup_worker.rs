@@ -15,6 +15,8 @@ pub enum CleanupWorkerMessage {
 pub struct CleanupWorkerArgs {
     pub db: DatabaseConnection,
     pub cleanup_archived_max_age_days: u32,
+    pub delegated_run_auto_archive_after_days: u32,
+    pub generation_stale_after_secs: u64,
 }
 
 pub struct CleanupWorker;
@@ -129,6 +131,20 @@ impl Actor for CleanupWorker {
     ) -> Result<(), ActorProcessingErr> {
         match message {
             CleanupWorkerMessage::Tick => {
+                let archived = crate::models::chat::auto_archive_stale_delegated_runs(
+                    &state.db,
+                    state.delegated_run_auto_archive_after_days,
+                    state.generation_stale_after_secs,
+                )
+                .await
+                .map_err(|e| {
+                    tracing::error!("Failed to auto-archive stale delegated runs: {}", e);
+                    ActorProcessingErr::from(e.to_string())
+                })?;
+                if archived > 0 {
+                    tracing::info!("Auto-archived {} stale delegated runs.", archived);
+                }
+
                 cleanup_archived_chats(&state.db, state.cleanup_archived_max_age_days).await?;
             }
         }

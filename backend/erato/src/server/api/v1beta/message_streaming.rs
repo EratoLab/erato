@@ -6783,6 +6783,59 @@ fn reject_if_archived(chat: &chats::Model) -> Result<(), (axum::http::StatusCode
     Ok(())
 }
 
+/// Let a user's write land on a delegated chat, or reject it with 409 CONFLICT
+/// while the run is still going.
+///
+/// A user can reach a delegated run mid-flight through the origin chat's
+/// delegation trace, and `start_task` replaces a chat's task entry rather than
+/// refusing, so an unguarded submit would leave two generations writing the
+/// same chat. Submit, edit and regenerate are gated; the approval continuation
+/// is not, because it resumes the parked generation instead of starting a
+/// second one. Once the run finishes the chat is a normal chat the user can
+/// continue — and continuing it is recorded, because a run the user works in
+/// is no longer the throwaway artifact the retention pass may archive.
+///
+/// The in-memory task only knows about this replica, so the chat's own
+/// generation lease is checked as well.
+async fn accept_user_write_into_delegated_run(
+    app_state: &AppState,
+    chat: &chats::Model,
+) -> Result<(), (axum::http::StatusCode, String)> {
+    if !crate::models::chat::chat_is_delegated_run(chat) {
+        return Ok(());
+    }
+
+    let local_task_running = app_state
+        .background_tasks
+        .get_task(&chat.id)
+        .await
+        .is_some_and(|task| !task.is_completed());
+    let lease_running = crate::models::chat::chat_generation_is_running(
+        &app_state.db,
+        &chat.id,
+        app_state.config.generation_status.stale_after_secs,
+    )
+    .await
+    .map_err(|error| {
+        tracing::warn!(%error, chat_id = %chat.id, "Failed to read the delegated run's generation lease");
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to load chat".to_string(),
+        )
+    })?;
+    if local_task_running || lease_running {
+        return Err((
+            axum::http::StatusCode::CONFLICT,
+            "Delegated run is still in progress and cannot receive new messages".to_string(),
+        ));
+    }
+
+    if let Err(error) = crate::models::chat::mark_delegated_run_adopted(&app_state.db, chat).await {
+        tracing::warn!(%error, chat_id = %chat.id, "Failed to mark the delegated run as adopted");
+    }
+    Ok(())
+}
+
 #[utoipa::path(
     post,
     path = "/me/messages/submitstream",
@@ -6791,7 +6844,7 @@ fn reject_if_archived(chat: &chats::Model) -> Result<(), (axum::http::StatusCode
         (status = OK, content_type="text/event-stream", body = MessageSubmitStreamingResponseMessage),
         (status = BAD_REQUEST, description = "When validation fails (e.g., invalid previous_message_id)"),
         (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
-        (status = CONFLICT, description = "When the chat is archived"),
+        (status = CONFLICT, description = "When the chat is archived, or is a delegated run that is still in progress"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -6856,6 +6909,7 @@ pub async fn message_submit_sse(
                 }
             })?;
             reject_if_archived(&chat)?;
+            accept_user_write_into_delegated_run(&app_state, &chat).await?;
             (
                 existing_chat_id,
                 false,
@@ -6895,13 +6949,20 @@ pub async fn message_submit_sse(
             // A brand-new chat has archived_at = None, so new-chat creation is
             // unaffected; only writes resolved onto an existing archived chat 409.
             reject_if_archived(&chat)?;
+            // A previous_message_id can resolve onto a live delegated run.
+            accept_user_write_into_delegated_run(&app_state, &chat).await?;
 
             let was_created = chat_status == ChatCreationStatus::Created;
             if was_created {
                 app_state.global_policy_engine.invalidate_data().await;
             }
 
-            (chat.id, was_created, chat.assistant_id, false)
+            (
+                chat.id,
+                was_created,
+                chat.assistant_id,
+                crate::models::chat::chat_is_delegated_run(&chat),
+            )
         };
 
     // Validate assistant mentions before spawning (returns HTTP 400 on failure).
@@ -8209,7 +8270,7 @@ pub(crate) async fn run_message_submit_task(
         (status = OK, content_type="text/event-stream", body = RegenerateMessageStreamingResponseMessage),
         (status = BAD_REQUEST, description = "When validation fails (e.g., invalid message role)"),
         (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
-        (status = CONFLICT, description = "When the chat is archived"),
+        (status = CONFLICT, description = "When the chat is archived, or is a delegated run that is still in progress"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -8260,6 +8321,7 @@ pub async fn regenerate_message_sse(
         }
     })?;
     reject_if_archived(&chat)?;
+    accept_user_write_into_delegated_run(&app_state, &chat).await?;
 
     // Assistant mentions: an explicit request value is validated hard (400);
     // absent, fall back to the mentions persisted on the turn's user message,
@@ -8608,7 +8670,7 @@ pub async fn regenerate_message_sse(
         (status = OK, content_type="text/event-stream", body = EditMessageStreamingResponseMessage),
         (status = BAD_REQUEST, description = "When validation fails (e.g., invalid message role)"),
         (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
-        (status = CONFLICT, description = "When the chat is archived"),
+        (status = CONFLICT, description = "When the chat is archived, or is a delegated run that is still in progress"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -8665,6 +8727,7 @@ pub async fn edit_message_sse(
         }
     })?;
     reject_if_archived(&chat)?;
+    accept_user_write_into_delegated_run(&app_state, &chat).await?;
 
     // Assistant mentions follow the same edit contract as the action facet:
     // an explicit request value is validated hard (400), an absent one falls
