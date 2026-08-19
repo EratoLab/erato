@@ -87,6 +87,14 @@ pub enum AbstractChatSequencePart {
         args: HashMap<String, String>,
     },
 
+    /// Run directive of a delegated chat, carrying the structured-brief fields
+    /// off the chat's provenance envelope. Rendered in the resolver step from
+    /// the configured template, for the same reason as `ActionFacetPrompt`.
+    DelegationPreamble {
+        expected_output: Option<String>,
+        constraints: Option<String>,
+    },
+
     /// File attached to the current user input
     UserFile { file_id: Uuid },
 

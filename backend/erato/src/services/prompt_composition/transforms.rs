@@ -14,9 +14,9 @@ use crate::config::ExperimentalFacetsConfig;
 use crate::db::entity::chats;
 use crate::db::entity::messages;
 use crate::models::message::{
-    ContentPart, ContentPartActionFacetMarker, ContentPartImageFilePointer, ContentPartText,
-    ContentPartTextFilePointer, GenerationInputMessages, GenerationParameters, InputMessage,
-    MessageRole, MessageSchema,
+    ContentPart, ContentPartActionFacetMarker, ContentPartDelegationPreambleMarker,
+    ContentPartImageFilePointer, ContentPartText, ContentPartTextFilePointer,
+    GenerationInputMessages, GenerationParameters, InputMessage, MessageRole, MessageSchema,
 };
 use eyre::Report;
 use sea_orm::prelude::Uuid;
@@ -132,8 +132,10 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
     // system messages once a new head exists). Self-retiring: the first
     // generation after the cutoff persists its own snapshot, which post-dates
     // the cutoff and replays normally.
-    let rebase_cutoff = crate::models::chat::parse_assistant_configuration(chat)?
-        .and_then(|config| config.provenance)
+    let provenance = crate::models::chat::parse_assistant_configuration(chat)?
+        .and_then(|config| config.provenance);
+    let rebase_cutoff = provenance
+        .as_ref()
         .and_then(|provenance| provenance.rebase_cutoff);
     let anchor_predates_rebase_cutoff = matches!(
         (most_recent_history_message, rebase_cutoff),
@@ -293,6 +295,26 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
         sequence.push(AbstractChatSequencePart::ActionFacetPrompt {
             facet_id: af.id.clone(),
             args: af.args.clone(),
+        });
+    }
+
+    // 9.7 Inject the delegated run's directive, derived from the chat row on
+    // every turn rather than persisted into the child's first user message —
+    // which is a brief written for a model that a person ends up reading.
+    //
+    // Re-derivation makes this an every-turn directive, where riding the
+    // message made it first-turn-only. The two only differ once a run has more
+    // than one turn, and a run reaches a second turn only by the owner writing
+    // into it — which adopts it, and adoption switches the directive off: the
+    // run is theirs now, and telling a delegate not to address the end user is
+    // wrong once the end user is who it is talking to.
+    if let Some(provenance) = provenance.as_ref()
+        && provenance.kind == crate::models::chat::ChatProvenanceKind::Delegation
+        && provenance.adopted_at.is_none()
+    {
+        sequence.push(AbstractChatSequencePart::DelegationPreamble {
+            expected_output: provenance.expected_output.clone(),
+            constraints: provenance.constraints.clone(),
         });
     }
 
@@ -534,6 +556,25 @@ pub async fn resolve_sequence(
                 });
             }
 
+            AbstractChatSequencePart::DelegationPreamble {
+                expected_output,
+                constraints,
+            } => {
+                // Same shape as the action-facet directive: a marker in the
+                // user turn, never setting `has_system_message` — the preamble
+                // is additive to the delegate's own head, not a replacement
+                // for it.
+                input_messages.push(InputMessage {
+                    role: MessageRole::User,
+                    content: ContentPart::DelegationPreambleMarker(
+                        ContentPartDelegationPreambleMarker {
+                            expected_output,
+                            constraints,
+                        },
+                    ),
+                });
+            }
+
             AbstractChatSequencePart::HistoricMessagesFromGenerationInputMessages {
                 message_id,
             } => {
@@ -545,14 +586,11 @@ pub async fn resolve_sequence(
                         Ok(gen_input) => {
                             let include_system = !has_system_message;
                             for input_msg in gen_input.messages {
-                                // Strip prior-turn action-facet directives so
-                                // they don't replay alongside the current
-                                // turn's directive. Two filters:
-                                //   • new format → ContentPart::ActionFacetMarker
-                                //   • legacy rendered text (pre-marker rows
-                                //     in the DB) → System message whose text
-                                //     starts with "FOR THIS MESSAGE ONLY:"
-                                if is_prior_turn_action_facet_message(&input_msg)
+                                // Strip prior-turn per-turn directives so they
+                                // don't replay alongside (or against) the ones
+                                // this turn derives — see
+                                // `is_prior_turn_directive_message`.
+                                if is_prior_turn_directive_message(&input_msg)
                                     || is_client_action_tool_use_message(&input_msg)
                                 {
                                     continue;
@@ -666,21 +704,30 @@ fn normalize_historical_input_message(input_msg: InputMessage) -> InputMessage {
     input_msg
 }
 
-/// True when an `InputMessage` represents an action-facet directive emitted
-/// by a prior turn. Action facets are request-scoped ("FOR THIS MESSAGE
-/// ONLY") — replaying them turns conflicting format directives into a noisy
-/// chat history and the model drifts.
+/// True when an `InputMessage` carries a per-turn directive emitted by a
+/// prior turn. Both directive kinds are request-scoped and both are re-derived
+/// for the current turn, so a replayed copy is at best duplication and at
+/// worst a contradiction: action facets ("FOR THIS MESSAGE ONLY") turn into
+/// conflicting format instructions the model drifts between, and a delegation
+/// preamble outlives the condition it describes — the current turn stops
+/// emitting it once the run is adopted, and a replayed one would keep telling
+/// a delegate not to address the user who is now writing to it.
 ///
-/// Two shapes need stripping:
-///   * New format: `ContentPart::ActionFacetMarker` (any role).
-///   * Legacy format: `System` messages whose text starts with the literal
-///     `"FOR THIS MESSAGE ONLY:"` prefix from the rendered template — for
-///     `generation_input_messages` rows persisted before the marker
-///     migration. The prefix is stable across all current action-facet
+/// Three shapes need stripping:
+///   * `ContentPart::ActionFacetMarker` (any role).
+///   * `ContentPart::DelegationPreambleMarker` (any role).
+///   * Legacy action-facet format: `System` messages whose text starts with
+///     the literal `"FOR THIS MESSAGE ONLY:"` prefix from the rendered
+///     template — for `generation_input_messages` rows persisted before the
+///     marker migration. The prefix is stable across all current action-facet
 ///     templates (`config.rs`).
-fn is_prior_turn_action_facet_message(input_msg: &InputMessage) -> bool {
+///
+/// Delegated runs persisted before the preamble moved out of the child's user
+/// message keep it in the message row itself, which no filter here can reach;
+/// they are left as they are rather than pattern-matched on prompt text.
+fn is_prior_turn_directive_message(input_msg: &InputMessage) -> bool {
     match &input_msg.content {
-        ContentPart::ActionFacetMarker(_) => true,
+        ContentPart::ActionFacetMarker(_) | ContentPart::DelegationPreambleMarker(_) => true,
         ContentPart::Text(ContentPartText { text }) => {
             matches!(input_msg.role, MessageRole::System)
                 && text.trim_start().starts_with("FOR THIS MESSAGE ONLY:")

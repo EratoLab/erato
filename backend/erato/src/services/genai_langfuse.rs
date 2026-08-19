@@ -172,6 +172,13 @@ pub fn convert_content_parts_to_json(content_parts: &[ContentPart]) -> Result<Js
                     "args": marker.args,
                 }));
             }
+            ContentPart::DelegationPreambleMarker(marker) => {
+                output_parts.push(json!({
+                    "type": "delegation_preamble_marker",
+                    "expected_output": marker.expected_output,
+                    "constraints": marker.constraints,
+                }));
+            }
             ContentPart::ToolApprovalRequest(request) => {
                 output_parts.push(json!({
                     "type": "tool_approval_request",

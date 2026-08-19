@@ -24,7 +24,7 @@ use crate::policy::engine::PolicyEngine;
 use crate::policy::types::Subject;
 use crate::server::api::v1beta::ChatMessage;
 use crate::server::api::v1beta::file_resolution::{
-    resolve_action_facet_markers_in_generation_input, resolve_file_pointers_in_generation_input,
+    resolve_directive_markers_in_generation_input, resolve_file_pointers_in_generation_input,
 };
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::server::api::v1beta::message_streaming_file_extraction::{
@@ -2344,12 +2344,12 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     )
     .await?;
 
-    // Render any ActionFacetMarker entries against the current config.
+    // Render any per-turn directive markers against the current config.
     // Saved snapshot keeps the markers; only the about-to-be-sent
     // chat_request gets rendered text. Past-turn markers were already
     // stripped during historical replay in `compose_prompt_messages`, so
     // anything that reaches here is the current turn's directive.
-    let resolved_generation_input_messages = resolve_action_facet_markers_in_generation_input(
+    let resolved_generation_input_messages = resolve_directive_markers_in_generation_input(
         app_state,
         resolved_generation_input_messages,
     );
@@ -5576,7 +5576,8 @@ fn summary_user_message_text_from_generation_input(
                 | ContentPart::TextFilePointer(_)
                 | ContentPart::ImageFilePointer(_)
                 | ContentPart::Image(_)
-                | ContentPart::ActionFacetMarker(_) => None,
+                | ContentPart::ActionFacetMarker(_)
+                | ContentPart::DelegationPreambleMarker(_) => None,
             }
         })
 }
@@ -9624,7 +9625,7 @@ async fn run_continue_message_task(
     )
     .await?;
     let generation_input_messages =
-        resolve_action_facet_markers_in_generation_input(app_state, generation_input_messages);
+        resolve_directive_markers_in_generation_input(app_state, generation_input_messages);
     let mut chat_request = generation_input_messages.into_chat_request();
     chat_request.tools = (!available_mcp_tools.is_empty())
         .then(|| convert_mcp_tools_to_genai_tools(available_mcp_tools.clone(), false));

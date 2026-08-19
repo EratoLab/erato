@@ -1671,6 +1671,8 @@ export type ArchiveChatEndpointVariables = {
 /**
  * This endpoint marks a chat as archived by setting its archived_at timestamp.
  * Archived chats can be filtered out from the recent chats listing by default.
+ * Delegated runs spawned from the chat are archived along with it, except
+ * those whose run has not finished yet.
  */
 export const fetchArchiveChatEndpoint = (
   variables: ArchiveChatEndpointVariables,
@@ -1693,6 +1695,8 @@ export const fetchArchiveChatEndpoint = (
 /**
  * This endpoint marks a chat as archived by setting its archived_at timestamp.
  * Archived chats can be filtered out from the recent chats listing by default.
+ * Delegated runs spawned from the chat are archived along with it, except
+ * those whose run has not finished yet.
  */
 export const useArchiveChatEndpoint = (
   options?: Omit<
