@@ -214,11 +214,33 @@ The chart includes an optional OAuth2 Proxy for authentication. To enable it:
 ```yaml
 oauth2Proxy:
   enabled: true
+  # Scale this deployment as needed. All replicas use the same Redis session store.
+  replicaCount: 2
   config: |
     http_address = "0.0.0.0:4180"
     upstreams = ["http://localhost:8080"]
     email_domains = ["example.com"]
     cookie_secret = "your-secret-here"
+```
+
+Set `oauth2Proxy.replicaCount` to scale the authentication proxy. The default is
+`1` for backwards compatibility. When the chart-managed Redis is enabled, all
+OAuth2 Proxy replicas use the same Redis Service for session storage.
+
+The chart-managed Redis deployment is a single-instance session store, not an HA
+Redis deployment. If HA Redis is required, provide it as a separate deployment,
+set `oauth2Proxy.redis.enabled` to `false`, and configure the external connection
+through `oauth2Proxy.config` (or the existing OAuth2 Proxy environment-variable
+Secret support):
+
+```yaml
+oauth2Proxy:
+  replicaCount: 2
+  redis:
+    enabled: false
+  config: |
+    session_store_type = "redis"
+    redis_connection_url = "redis://external-redis.example.com:6379"
 ```
 
 ### Intermediate sticky load balancer
@@ -469,6 +491,7 @@ chart.
 | oauth2Proxy.redis.resources.limits.memory | string | `"128Mi"` | The memory limit for Redis |
 | oauth2Proxy.redis.resources.requests.cpu | string | `"10m"` | The requested CPU for Redis |
 | oauth2Proxy.redis.resources.requests.memory | string | `"32Mi"` | The requested memory for Redis |
+| oauth2Proxy.replicaCount | int | `1` | Number of OAuth2 Proxy replicas to deploy |
 | oauth2Proxy.resources.limits.cpu | string | `"500m"` | The CPU limit for oauth2-proxy |
 | oauth2Proxy.resources.limits.memory | string | `"256Mi"` | The memory limit for oauth2-proxy |
 | oauth2Proxy.resources.requests.cpu | string | `"100m"` | The requested CPU for oauth2-proxy |

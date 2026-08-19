@@ -65,6 +65,8 @@ gatewayApi:
 oauth2Proxy:
   # -- Enable OAuth2 Proxy for authentication
   enabled: true
+  # -- Number of OAuth2 Proxy replicas to deploy
+  replicaCount: 1
   image:
     # -- OAuth2 Proxy image repository
     repository: registry.eratolabs.com/erato/oauth2-proxy

@@ -24,6 +24,15 @@ tests:
       - hasDocuments:
           count: 0
 
+  - it: should configure the chart-managed Redis service for session storage
+    asserts:
+      - matchRegex:
+          path: data["oauth2-proxy.cfg"]
+          pattern: 'session_store_type = "redis"'
+      - matchRegex:
+          path: data["oauth2-proxy.cfg"]
+          pattern: 'redis_connection_url = "redis://RELEASE-NAME-oauth2-proxy-redis:6379"'
+
   - it: should include proper labels
     asserts:
       - isNotEmpty:
@@ -51,6 +60,20 @@ tests:
       - matchRegex:
           path: data["oauth2-proxy.cfg"]
           pattern: 'email_domains = \["example.com"\]'
+
+  - it: should preserve external Redis configuration when embedded Redis is disabled
+    set:
+      oauth2Proxy.redis.enabled: false
+      oauth2Proxy.config: |
+        session_store_type = "redis"
+        redis_connection_url = "redis://external-redis:6379"
+    asserts:
+      - matchRegex:
+          path: data["oauth2-proxy.cfg"]
+          pattern: 'redis_connection_url = "redis://external-redis:6379"'
+      - notMatchRegex:
+          path: data["oauth2-proxy.cfg"]
+          pattern: 'redis_connection_url = "redis://RELEASE-NAME-oauth2-proxy-redis:6379"'
 
   - it: should include custom labels when specified
     set:
