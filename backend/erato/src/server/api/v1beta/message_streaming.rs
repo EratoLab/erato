@@ -3829,7 +3829,11 @@ async fn stream_generate_chat_completion<
                     {
                         Ok(result) => result,
                         Err(err) => {
-                            let tool_error = err.to_string();
+                            let tool_error = format!("Failed to process MCP tool output: {err}");
+                            let output_value = json!({
+                                "status": "error",
+                                "error": tool_error,
+                            });
                             persist_otel_tool_call(
                                 tracing_client.as_ref(),
                                 &unfinished_tool_call,
@@ -3845,8 +3849,53 @@ async fn stream_generate_chat_completion<
                                 Some(&tool_error),
                             )
                             .await;
-                            let error = err.wrap_err("Failed to process MCP tool output");
-                            return Err(error);
+                            let update_event = MessageSubmitStreamingResponseToolCallUpdate {
+                                message_id: assistant_message_id,
+                                content_index: current_message_content.len(),
+                                tool_call_id: unfinished_tool_call.call_id.clone(),
+                                tool_name: unfinished_tool_call.fn_name.clone(),
+                                input: Some(unfinished_tool_call.fn_arguments.clone()),
+                                status: ToolCallStatus::Error,
+                                progress_message: None,
+                                output: Some(output_value.clone()),
+                            };
+                            if let Some(task) = streaming_task {
+                                send_background_event(
+                                    task,
+                                    StreamingEvent::ToolCallUpdate {
+                                        message_id: assistant_message_id,
+                                        content_index: current_message_content.len(),
+                                        tool_call_id: unfinished_tool_call.call_id.clone(),
+                                        tool_name: unfinished_tool_call.fn_name.clone(),
+                                        input: Some(unfinished_tool_call.fn_arguments.clone()),
+                                        status: BgToolCallStatus::Error,
+                                        progress_message: None,
+                                        output: Some(output_value.clone()),
+                                    },
+                                    "broadcast failed MCP tool output processing",
+                                )
+                                .await;
+                            }
+                            let message: MSG = update_event.into();
+                            send_generation_event(&message, tx.clone()).await?;
+                            let tool_call_started = tool_call_started_at
+                                .remove(&unfinished_tool_call.call_id)
+                                .unwrap_or_else(now_timestamp);
+                            current_message_content.push(ContentPart::ToolUse(ToolUse {
+                                tool_call_id: unfinished_tool_call.call_id.clone(),
+                                status: MessageToolCallStatus::Error,
+                                tool_name: unfinished_tool_call.fn_name.clone(),
+                                input: Some(unfinished_tool_call.fn_arguments.clone()),
+                                progress_message: None,
+                                output: Some(output_value),
+                                started_at: Some(tool_call_started),
+                                ended_at: Some(now_timestamp()),
+                            }));
+                            current_turn_tool_responses.push(genai::chat::ToolResponse {
+                                call_id: unfinished_tool_call.call_id.clone(),
+                                content: tool_error,
+                            });
+                            continue;
                         }
                     };
                     let tool_response = post_processed.tool_response;
@@ -3922,13 +3971,15 @@ async fn stream_generate_chat_completion<
                     current_turn_tool_responses.push(tool_response)
                 }
                 Err(err) => {
-                    // TODO: Send event and message_content
-                    tool_call_started_at.remove(&unfinished_tool_call.call_id);
-                    let tool_error = err.to_string();
+                    let tool_error = format!("Failed to call MCP tool: {err}");
+                    let output_value = json!({
+                        "status": "error",
+                        "error": tool_error,
+                    });
                     persist_otel_tool_call(
                         tracing_client.as_ref(),
                         &unfinished_tool_call,
-                        Some(json!({ "error": tool_error })),
+                        Some(output_value.clone()),
                         tool_call_span_start_time,
                         tool_call_end_time,
                         tool_call_parent_observation_id.clone(),
@@ -3937,8 +3988,53 @@ async fn stream_generate_chat_completion<
                         Some(&tool_error),
                     )
                     .await;
-                    let error = err.wrap_err("Failed to call tool");
-                    return Err(error);
+                    let update_event = MessageSubmitStreamingResponseToolCallUpdate {
+                        message_id: assistant_message_id,
+                        content_index: current_message_content.len(),
+                        tool_call_id: unfinished_tool_call.call_id.clone(),
+                        tool_name: unfinished_tool_call.fn_name.clone(),
+                        input: Some(unfinished_tool_call.fn_arguments.clone()),
+                        status: ToolCallStatus::Error,
+                        progress_message: None,
+                        output: Some(output_value.clone()),
+                    };
+                    if let Some(task) = streaming_task {
+                        send_background_event(
+                            task,
+                            StreamingEvent::ToolCallUpdate {
+                                message_id: assistant_message_id,
+                                content_index: current_message_content.len(),
+                                tool_call_id: unfinished_tool_call.call_id.clone(),
+                                tool_name: unfinished_tool_call.fn_name.clone(),
+                                input: Some(unfinished_tool_call.fn_arguments.clone()),
+                                status: BgToolCallStatus::Error,
+                                progress_message: None,
+                                output: Some(output_value.clone()),
+                            },
+                            "broadcast failed MCP tool call",
+                        )
+                        .await;
+                    }
+                    let message: MSG = update_event.into();
+                    send_generation_event(&message, tx.clone()).await?;
+                    let tool_call_started = tool_call_started_at
+                        .remove(&unfinished_tool_call.call_id)
+                        .unwrap_or_else(now_timestamp);
+                    current_message_content.push(ContentPart::ToolUse(ToolUse {
+                        tool_call_id: unfinished_tool_call.call_id.clone(),
+                        status: MessageToolCallStatus::Error,
+                        tool_name: unfinished_tool_call.fn_name.clone(),
+                        input: Some(unfinished_tool_call.fn_arguments.clone()),
+                        progress_message: None,
+                        output: Some(output_value),
+                        started_at: Some(tool_call_started),
+                        ended_at: Some(now_timestamp()),
+                    }));
+                    current_turn_tool_responses.push(genai::chat::ToolResponse {
+                        call_id: unfinished_tool_call.call_id.clone(),
+                        content: tool_error,
+                    });
+                    continue;
                 }
             };
         }

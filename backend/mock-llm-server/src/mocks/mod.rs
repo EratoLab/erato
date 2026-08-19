@@ -974,6 +974,23 @@ pub fn get_default_mocks() -> Vec<Mock> {
             }),
         },
         Mock {
+            name: "TriggerMcpMalformedOutputToolCall".to_string(),
+            description:
+                "Returns a tool call to generate_image with intentionally malformed output from MCP"
+                    .to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: "mcp malformed output".to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
+                tool_name: "generate_image".to_string(),
+                arguments: r#"{"prompt":"malformed","num_images":1,"width":1024,"height":1024}"#
+                    .to_string(),
+                delay_ms: 100,
+            }),
+        },
+        Mock {
             name: "McpAuthNoneToolCall".to_string(),
             description: "Returns a tool call to auth_none_probe for MCP none-auth coverage"
                 .to_string(),
