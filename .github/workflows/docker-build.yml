@@ -23,7 +23,6 @@ on:
       - '**/Dockerfile'
       - '**/Dockerfile.*'
   pull_request:
-    branches: [ main ]
     paths:
       - '.github/workflows/docker-build.yml' 
       - 'backend/**'
@@ -53,6 +52,54 @@ env:
   RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
 
 jobs:
+  resolve-registry-cache-refs:
+    name: Resolve registry build-cache refs
+    runs-on: ubuntu-24.04
+    permissions: {}
+    outputs:
+      target: ${{ steps.cache-refs.outputs.target }}
+      source: ${{ steps.cache-refs.outputs.source }}
+      destination: ${{ steps.cache-refs.outputs.destination }}
+    steps:
+      - name: Resolve branch-aware cache scopes
+        id: cache-refs
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REPOSITORY: ${{ github.repository }}
+          BASE_REPOSITORY: ${{ github.event.pull_request.base.repo.full_name }}
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+
+          cache_scope() {
+            local repository="$1"
+            local branch="$2"
+
+            if [[ "$repository" == "$REPOSITORY" && "$branch" == "main" ]]; then
+              printf 'main'
+            else
+              printf 'branch-%s' "$(printf '%s' "${repository}:${branch}" | sha256sum | cut -c1-32)"
+            fi
+          }
+
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            target_scope="$(cache_scope "$BASE_REPOSITORY" "$BASE_BRANCH")"
+            source_scope="$(cache_scope "$HEAD_REPOSITORY" "$HEAD_BRANCH")"
+            destination_scope="$source_scope"
+          else
+            target_scope="main"
+            source_scope=""
+            destination_scope="main"
+          fi
+
+          {
+            echo "target=$target_scope"
+            echo "source=$source_scope"
+            echo "destination=$destination_scope"
+          } >> "$GITHUB_OUTPUT"
+
   lint-frontend:
     timeout-minutes: 10
     name: "lint (frontend)"
@@ -763,7 +810,12 @@ jobs:
         run: ./infrastructure/scripts/release_erato_chart_dev.sh --release
 
   build-and-push-amd64:
+    needs: [resolve-registry-cache-refs]
     runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    env:
+      CACHE_TARGET: ${{ needs.resolve-registry-cache-refs.outputs.target }}
+      CACHE_SOURCE: ${{ needs.resolve-registry-cache-refs.outputs.source }}
+      CACHE_DESTINATION: ${{ needs.resolve-registry-cache-refs.outputs.destination }}
     permissions:
       contents: read
 
@@ -791,8 +843,11 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-amd64
             ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
             ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-amd64', env.REGISTRY, env.BACKEND_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
-          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-amd64-buildcache
-          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-amd64-buildcache
+          cache-from: |
+            type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.CACHE_TARGET }}-amd64-buildcache
+            ${{ env.CACHE_SOURCE != '' && format('type=registry,image-manifest=true,ref={0}/{1}:{2}-amd64-buildcache', env.REGISTRY, env.BACKEND_IMAGE_NAME, env.CACHE_SOURCE) || '' }}
+            ${{ env.CACHE_TARGET != 'main' && format('type=registry,image-manifest=true,ref={0}/{1}:main-amd64-buildcache', env.REGISTRY, env.BACKEND_IMAGE_NAME) || '' }}
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.CACHE_DESTINATION }}-amd64-buildcache
 
       - name: Build and push Frontend image
         uses: docker/build-push-action@v6.15.0
@@ -805,8 +860,11 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-amd64
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
             ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-amd64', env.REGISTRY, env.FRONTEND_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
-          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-amd64-buildcache
-          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-amd64-buildcache
+          cache-from: |
+            type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.CACHE_TARGET }}-amd64-buildcache
+            ${{ env.CACHE_SOURCE != '' && format('type=registry,image-manifest=true,ref={0}/{1}:{2}-amd64-buildcache', env.REGISTRY, env.FRONTEND_IMAGE_NAME, env.CACHE_SOURCE) || '' }}
+            ${{ env.CACHE_TARGET != 'main' && format('type=registry,image-manifest=true,ref={0}/{1}:main-amd64-buildcache', env.REGISTRY, env.FRONTEND_IMAGE_NAME) || '' }}
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.CACHE_DESTINATION }}-amd64-buildcache
 
       - name: Build and push Combined image
         uses: docker/build-push-action@v6.15.0
@@ -823,8 +881,11 @@ jobs:
             REGISTRY=${{ env.REGISTRY }}
             BACKEND_IMAGE=${{ env.BACKEND_IMAGE_NAME }}:${{ env.RELEASE_VERSION != '' && format('{0}-amd64', env.RELEASE_VERSION) || format('{0}-amd64', env.SHA_TAG) }}
             FRONTEND_IMAGE=${{ env.FRONTEND_IMAGE_NAME }}:${{ env.RELEASE_VERSION != '' && format('{0}-amd64', env.RELEASE_VERSION) || format('{0}-amd64', env.SHA_TAG) }}
-          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:latest-amd64-buildcache
-          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:latest-amd64-buildcache
+          cache-from: |
+            type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.CACHE_TARGET }}-amd64-buildcache
+            ${{ env.CACHE_SOURCE != '' && format('type=registry,image-manifest=true,ref={0}/{1}:{2}-amd64-buildcache', env.REGISTRY, env.COMBINED_IMAGE_NAME, env.CACHE_SOURCE) || '' }}
+            ${{ env.CACHE_TARGET != 'main' && format('type=registry,image-manifest=true,ref={0}/{1}:main-amd64-buildcache', env.REGISTRY, env.COMBINED_IMAGE_NAME) || '' }}
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.CACHE_DESTINATION }}-amd64-buildcache
 
       - name: Build and push Sqitch migrator image
         uses: docker/build-push-action@v6.15.0
@@ -837,11 +898,19 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:latest-amd64
             ${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
             ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-amd64', env.REGISTRY, env.SQITCH_MIGRATOR_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
-          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:latest-amd64-buildcache
-          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:latest-amd64-buildcache
+          cache-from: |
+            type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:${{ env.CACHE_TARGET }}-amd64-buildcache
+            ${{ env.CACHE_SOURCE != '' && format('type=registry,image-manifest=true,ref={0}/{1}:{2}-amd64-buildcache', env.REGISTRY, env.SQITCH_MIGRATOR_IMAGE_NAME, env.CACHE_SOURCE) || '' }}
+            ${{ env.CACHE_TARGET != 'main' && format('type=registry,image-manifest=true,ref={0}/{1}:main-amd64-buildcache', env.REGISTRY, env.SQITCH_MIGRATOR_IMAGE_NAME) || '' }}
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:${{ env.CACHE_DESTINATION }}-amd64-buildcache
 
   build-and-push-arm64:
+    needs: [resolve-registry-cache-refs]
     runs-on: ubuntu-24.04-arm64-custom-large # blacksmith-8vcpu-ubuntu-2404-arm
+    env:
+      CACHE_TARGET: ${{ needs.resolve-registry-cache-refs.outputs.target }}
+      CACHE_SOURCE: ${{ needs.resolve-registry-cache-refs.outputs.source }}
+      CACHE_DESTINATION: ${{ needs.resolve-registry-cache-refs.outputs.destination }}
     permissions:
       contents: read
 
@@ -869,8 +938,11 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-arm64
             ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
             ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-arm64', env.REGISTRY, env.BACKEND_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
-          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-arm64-buildcache
-          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-arm64-buildcache
+          cache-from: |
+            type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.CACHE_TARGET }}-arm64-buildcache
+            ${{ env.CACHE_SOURCE != '' && format('type=registry,image-manifest=true,ref={0}/{1}:{2}-arm64-buildcache', env.REGISTRY, env.BACKEND_IMAGE_NAME, env.CACHE_SOURCE) || '' }}
+            ${{ env.CACHE_TARGET != 'main' && format('type=registry,image-manifest=true,ref={0}/{1}:main-arm64-buildcache', env.REGISTRY, env.BACKEND_IMAGE_NAME) || '' }}
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.CACHE_DESTINATION }}-arm64-buildcache
 
       - name: Build and push Frontend image
         uses: docker/build-push-action@v6.15.0
@@ -883,8 +955,11 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-arm64
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
             ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-arm64', env.REGISTRY, env.FRONTEND_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
-          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-arm64-buildcache
-          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-arm64-buildcache
+          cache-from: |
+            type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.CACHE_TARGET }}-arm64-buildcache
+            ${{ env.CACHE_SOURCE != '' && format('type=registry,image-manifest=true,ref={0}/{1}:{2}-arm64-buildcache', env.REGISTRY, env.FRONTEND_IMAGE_NAME, env.CACHE_SOURCE) || '' }}
+            ${{ env.CACHE_TARGET != 'main' && format('type=registry,image-manifest=true,ref={0}/{1}:main-arm64-buildcache', env.REGISTRY, env.FRONTEND_IMAGE_NAME) || '' }}
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.CACHE_DESTINATION }}-arm64-buildcache
 
       - name: Build and push Combined image
         uses: docker/build-push-action@v6.15.0
@@ -901,8 +976,11 @@ jobs:
             REGISTRY=${{ env.REGISTRY }}
             BACKEND_IMAGE=${{ env.BACKEND_IMAGE_NAME }}:${{ env.RELEASE_VERSION != '' && format('{0}-arm64', env.RELEASE_VERSION) || format('{0}-arm64', env.SHA_TAG) }}
             FRONTEND_IMAGE=${{ env.FRONTEND_IMAGE_NAME }}:${{ env.RELEASE_VERSION != '' && format('{0}-arm64', env.RELEASE_VERSION) || format('{0}-arm64', env.SHA_TAG) }}
-          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:latest-arm64-buildcache
-          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:latest-arm64-buildcache
+          cache-from: |
+            type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.CACHE_TARGET }}-arm64-buildcache
+            ${{ env.CACHE_SOURCE != '' && format('type=registry,image-manifest=true,ref={0}/{1}:{2}-arm64-buildcache', env.REGISTRY, env.COMBINED_IMAGE_NAME, env.CACHE_SOURCE) || '' }}
+            ${{ env.CACHE_TARGET != 'main' && format('type=registry,image-manifest=true,ref={0}/{1}:main-arm64-buildcache', env.REGISTRY, env.COMBINED_IMAGE_NAME) || '' }}
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.CACHE_DESTINATION }}-arm64-buildcache
 
       - name: Build and push Sqitch migrator image
         uses: docker/build-push-action@v6.15.0
@@ -915,11 +993,19 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:latest-arm64
             ${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
             ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-arm64', env.REGISTRY, env.SQITCH_MIGRATOR_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
-          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:latest-arm64-buildcache
-          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:latest-arm64-buildcache
+          cache-from: |
+            type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:${{ env.CACHE_TARGET }}-arm64-buildcache
+            ${{ env.CACHE_SOURCE != '' && format('type=registry,image-manifest=true,ref={0}/{1}:{2}-arm64-buildcache', env.REGISTRY, env.SQITCH_MIGRATOR_IMAGE_NAME, env.CACHE_SOURCE) || '' }}
+            ${{ env.CACHE_TARGET != 'main' && format('type=registry,image-manifest=true,ref={0}/{1}:main-arm64-buildcache', env.REGISTRY, env.SQITCH_MIGRATOR_IMAGE_NAME) || '' }}
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.SQITCH_MIGRATOR_IMAGE_NAME }}:${{ env.CACHE_DESTINATION }}-arm64-buildcache
 
   build-and-push-component-kit-example:
+    needs: [resolve-registry-cache-refs]
     runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    env:
+      CACHE_TARGET: ${{ needs.resolve-registry-cache-refs.outputs.target }}
+      CACHE_SOURCE: ${{ needs.resolve-registry-cache-refs.outputs.source }}
+      CACHE_DESTINATION: ${{ needs.resolve-registry-cache-refs.outputs.destination }}
     permissions:
       contents: read
 
@@ -947,8 +1033,11 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME }}:latest
             ${{ env.REGISTRY }}/${{ env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME }}:${{ env.SHA_TAG }}
             ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}', env.REGISTRY, env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
-          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME }}:latest-buildcache
-          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME }}:latest-buildcache
+          cache-from: |
+            type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME }}:${{ env.CACHE_TARGET }}-buildcache
+            ${{ env.CACHE_SOURCE != '' && format('type=registry,image-manifest=true,ref={0}/{1}:{2}-buildcache', env.REGISTRY, env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME, env.CACHE_SOURCE) || '' }}
+            ${{ env.CACHE_TARGET != 'main' && format('type=registry,image-manifest=true,ref={0}/{1}:main-buildcache', env.REGISTRY, env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME) || '' }}
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.COMPONENT_KIT_EXAMPLE_IMAGE_NAME }}:${{ env.CACHE_DESTINATION }}-buildcache
 
   create-manifests:
     needs: [build-and-push-amd64, build-and-push-arm64]
@@ -1019,7 +1108,12 @@ jobs:
           fi
 
   build-and-push-mock-llm-server-amd64:
+    needs: [resolve-registry-cache-refs]
     runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    env:
+      CACHE_TARGET: ${{ needs.resolve-registry-cache-refs.outputs.target }}
+      CACHE_SOURCE: ${{ needs.resolve-registry-cache-refs.outputs.source }}
+      CACHE_DESTINATION: ${{ needs.resolve-registry-cache-refs.outputs.destination }}
     permissions:
       contents: read
 
@@ -1048,11 +1142,19 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:latest-amd64
             ${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
             ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-amd64', env.REGISTRY, env.MOCK_LLM_SERVER_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
-          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:latest-amd64-buildcache
-          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:latest-amd64-buildcache
+          cache-from: |
+            type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:${{ env.CACHE_TARGET }}-amd64-buildcache
+            ${{ env.CACHE_SOURCE != '' && format('type=registry,image-manifest=true,ref={0}/{1}:{2}-amd64-buildcache', env.REGISTRY, env.MOCK_LLM_SERVER_IMAGE_NAME, env.CACHE_SOURCE) || '' }}
+            ${{ env.CACHE_TARGET != 'main' && format('type=registry,image-manifest=true,ref={0}/{1}:main-amd64-buildcache', env.REGISTRY, env.MOCK_LLM_SERVER_IMAGE_NAME) || '' }}
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:${{ env.CACHE_DESTINATION }}-amd64-buildcache
 
   build-and-push-mock-llm-server-arm64:
+    needs: [resolve-registry-cache-refs]
     runs-on: ubuntu-24.04-arm64-custom-large # blacksmith-8vcpu-ubuntu-2404-arm
+    env:
+      CACHE_TARGET: ${{ needs.resolve-registry-cache-refs.outputs.target }}
+      CACHE_SOURCE: ${{ needs.resolve-registry-cache-refs.outputs.source }}
+      CACHE_DESTINATION: ${{ needs.resolve-registry-cache-refs.outputs.destination }}
     permissions:
       contents: read
 
@@ -1081,8 +1183,11 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:latest-arm64
             ${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
             ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-arm64', env.REGISTRY, env.MOCK_LLM_SERVER_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
-          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:latest-arm64-buildcache
-          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:latest-arm64-buildcache
+          cache-from: |
+            type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:${{ env.CACHE_TARGET }}-arm64-buildcache
+            ${{ env.CACHE_SOURCE != '' && format('type=registry,image-manifest=true,ref={0}/{1}:{2}-arm64-buildcache', env.REGISTRY, env.MOCK_LLM_SERVER_IMAGE_NAME, env.CACHE_SOURCE) || '' }}
+            ${{ env.CACHE_TARGET != 'main' && format('type=registry,image-manifest=true,ref={0}/{1}:main-arm64-buildcache', env.REGISTRY, env.MOCK_LLM_SERVER_IMAGE_NAME) || '' }}
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:${{ env.CACHE_DESTINATION }}-arm64-buildcache
 
   create-manifests-mock-llm-server:
     needs: [build-and-push-mock-llm-server-amd64, build-and-push-mock-llm-server-arm64]
@@ -1113,7 +1218,12 @@ jobs:
           fi
 
   build-and-push-mock-mcp-server-amd64:
+    needs: [resolve-registry-cache-refs]
     runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    env:
+      CACHE_TARGET: ${{ needs.resolve-registry-cache-refs.outputs.target }}
+      CACHE_SOURCE: ${{ needs.resolve-registry-cache-refs.outputs.source }}
+      CACHE_DESTINATION: ${{ needs.resolve-registry-cache-refs.outputs.destination }}
     permissions:
       contents: read
 
@@ -1142,11 +1252,19 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.MOCK_MCP_SERVER_IMAGE_NAME }}:latest-amd64
             ${{ env.REGISTRY }}/${{ env.MOCK_MCP_SERVER_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
             ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-amd64', env.REGISTRY, env.MOCK_MCP_SERVER_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
-          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.MOCK_MCP_SERVER_IMAGE_NAME }}:latest-amd64-buildcache
-          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.MOCK_MCP_SERVER_IMAGE_NAME }}:latest-amd64-buildcache
+          cache-from: |
+            type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.MOCK_MCP_SERVER_IMAGE_NAME }}:${{ env.CACHE_TARGET }}-amd64-buildcache
+            ${{ env.CACHE_SOURCE != '' && format('type=registry,image-manifest=true,ref={0}/{1}:{2}-amd64-buildcache', env.REGISTRY, env.MOCK_MCP_SERVER_IMAGE_NAME, env.CACHE_SOURCE) || '' }}
+            ${{ env.CACHE_TARGET != 'main' && format('type=registry,image-manifest=true,ref={0}/{1}:main-amd64-buildcache', env.REGISTRY, env.MOCK_MCP_SERVER_IMAGE_NAME) || '' }}
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.MOCK_MCP_SERVER_IMAGE_NAME }}:${{ env.CACHE_DESTINATION }}-amd64-buildcache
 
   build-and-push-mock-mcp-server-arm64:
+    needs: [resolve-registry-cache-refs]
     runs-on: ubuntu-24.04-arm64-custom-large # blacksmith-8vcpu-ubuntu-2404-arm
+    env:
+      CACHE_TARGET: ${{ needs.resolve-registry-cache-refs.outputs.target }}
+      CACHE_SOURCE: ${{ needs.resolve-registry-cache-refs.outputs.source }}
+      CACHE_DESTINATION: ${{ needs.resolve-registry-cache-refs.outputs.destination }}
     permissions:
       contents: read
 
@@ -1175,8 +1293,11 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.MOCK_MCP_SERVER_IMAGE_NAME }}:latest-arm64
             ${{ env.REGISTRY }}/${{ env.MOCK_MCP_SERVER_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
             ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-arm64', env.REGISTRY, env.MOCK_MCP_SERVER_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
-          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.MOCK_MCP_SERVER_IMAGE_NAME }}:latest-arm64-buildcache
-          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.MOCK_MCP_SERVER_IMAGE_NAME }}:latest-arm64-buildcache
+          cache-from: |
+            type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.MOCK_MCP_SERVER_IMAGE_NAME }}:${{ env.CACHE_TARGET }}-arm64-buildcache
+            ${{ env.CACHE_SOURCE != '' && format('type=registry,image-manifest=true,ref={0}/{1}:{2}-arm64-buildcache', env.REGISTRY, env.MOCK_MCP_SERVER_IMAGE_NAME, env.CACHE_SOURCE) || '' }}
+            ${{ env.CACHE_TARGET != 'main' && format('type=registry,image-manifest=true,ref={0}/{1}:main-arm64-buildcache', env.REGISTRY, env.MOCK_MCP_SERVER_IMAGE_NAME) || '' }}
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.MOCK_MCP_SERVER_IMAGE_NAME }}:${{ env.CACHE_DESTINATION }}-arm64-buildcache
 
   create-manifests-mock-mcp-server:
     needs: [build-and-push-mock-mcp-server-amd64, build-and-push-mock-mcp-server-arm64]
