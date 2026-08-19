@@ -32,6 +32,7 @@ use crate::services::client_tools::{ClientToolDelivery, ClientToolOutcome};
 /// Maximum number of events to store in history per task
 const MAX_EVENT_HISTORY: usize = 10_000;
 const SHARED_COMMAND_POLL_INTERVAL: Duration = Duration::from_millis(100);
+const DRAIN_POLL_INTERVAL: Duration = Duration::from_millis(200);
 
 fn owner_pod() -> String {
     std::env::var("POD_NAME")
@@ -261,6 +262,50 @@ impl BackgroundTaskManager {
                     "Failed to persist generation outcome"
                 );
             }
+        }
+    }
+
+    /// Request a cooperative abort on every in-flight generation. Each task's
+    /// run observes the request at its next abort checkpoint (stream chunk or
+    /// tool boundary) and winds down through its normal cleanup tail, which
+    /// persists the outcome and removes the map entry.
+    pub async fn request_abort_all(&self) {
+        let tasks: Vec<Arc<StreamingTask>> = {
+            let tasks = self.tasks.read().await;
+            tasks.values().map(Arc::clone).collect()
+        };
+        for task in tasks {
+            task.request_abort();
+        }
+    }
+
+    /// Wait until every in-flight generation has cleaned itself up (the task
+    /// map is empty) or the window elapses, whichever comes first. Every poll
+    /// re-issues the abort sweep: an already-aborted parent can still finish
+    /// an in-flight tool call and register a background child after the
+    /// entry sweeps ran, and without a fresh abort that late arrival would
+    /// burn the whole window and die unrecorded. Returns whether the map
+    /// fully drained; on giving up, the chats still in flight are logged.
+    pub async fn drain(&self, window: Duration) -> bool {
+        let deadline = tokio::time::Instant::now() + window;
+        loop {
+            self.request_abort_all().await;
+            let remaining: Vec<Uuid> = {
+                let tasks = self.tasks.read().await;
+                tasks.keys().copied().collect()
+            };
+            if remaining.is_empty() {
+                return true;
+            }
+            let now = tokio::time::Instant::now();
+            if now >= deadline {
+                tracing::warn!(
+                    chat_ids = ?remaining,
+                    "Drain window elapsed with generations still in flight"
+                );
+                return false;
+            }
+            tokio::time::sleep(DRAIN_POLL_INTERVAL.min(deadline - now)).await;
         }
     }
 
@@ -1235,6 +1280,95 @@ mod tests {
         task.request_abort();
 
         assert!(task.is_abort_requested());
+    }
+
+    #[tokio::test]
+    async fn request_abort_all_reaches_every_registered_task() {
+        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default(), None);
+        let (_receiver1, task1) = manager.start_task(Uuid::new_v4(), Uuid::new_v4()).await;
+        let (_receiver2, task2) = manager.start_task(Uuid::new_v4(), Uuid::new_v4()).await;
+
+        let waiter1 = tokio::spawn({
+            let task = Arc::clone(&task1);
+            async move { task.wait_for_abort().await }
+        });
+        let waiter2 = tokio::spawn({
+            let task = Arc::clone(&task2);
+            async move { task.wait_for_abort().await }
+        });
+
+        manager.request_abort_all().await;
+
+        tokio::time::timeout(Duration::from_secs(1), waiter1)
+            .await
+            .expect("first waiter should observe the abort")
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(1), waiter2)
+            .await
+            .expect("second waiter should observe the abort")
+            .unwrap();
+        assert!(task1.is_abort_requested());
+        assert!(task2.is_abort_requested());
+    }
+
+    #[tokio::test]
+    async fn drain_completes_once_tasks_clean_up_on_abort() {
+        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default(), None);
+        assert!(manager.drain(Duration::ZERO).await);
+
+        let chat_id = Uuid::new_v4();
+        let (_receiver, task) = manager.start_task(chat_id, Uuid::new_v4()).await;
+        let worker = tokio::spawn({
+            let manager = manager.clone();
+            let task = Arc::clone(&task);
+            async move {
+                task.wait_for_abort().await;
+                manager
+                    .remove_task(&chat_id, task.generation_id, TaskOutcome::Completed)
+                    .await;
+            }
+        });
+
+        manager.request_abort_all().await;
+        assert!(manager.drain(Duration::from_secs(5)).await);
+        worker.await.unwrap();
+        assert!(manager.get_task(&chat_id).await.is_none());
+    }
+
+    /// A task that shows up after the entry sweeps — a background child
+    /// dispatched by a parent finishing its tool call mid-shutdown — must be
+    /// aborted by the drain itself rather than burn the whole window.
+    #[tokio::test]
+    async fn drain_aborts_tasks_registered_after_the_sweep() {
+        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default(), None);
+        manager.request_abort_all().await;
+        let chat_id = Uuid::new_v4();
+        let (_receiver, task) = manager.start_task(chat_id, Uuid::new_v4()).await;
+        let worker = tokio::spawn({
+            let manager = manager.clone();
+            let task = Arc::clone(&task);
+            async move {
+                task.wait_for_abort().await;
+                manager
+                    .remove_task(&chat_id, task.generation_id, TaskOutcome::Completed)
+                    .await;
+            }
+        });
+
+        assert!(manager.drain(Duration::from_secs(5)).await);
+        worker.await.unwrap();
+        assert!(manager.get_task(&chat_id).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn drain_gives_up_when_a_task_never_finishes() {
+        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default(), None);
+        let chat_id = Uuid::new_v4();
+        let (_receiver, _task) = manager.start_task(chat_id, Uuid::new_v4()).await;
+
+        manager.request_abort_all().await;
+        assert!(!manager.drain(Duration::from_millis(50)).await);
+        assert!(manager.get_task(&chat_id).await.is_some());
     }
 
     #[tokio::test]
