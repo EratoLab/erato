@@ -1983,6 +1983,17 @@ export type RecentChat = {
    */
   can_edit: boolean;
   /**
+   * Terminal outcome of a delegated run: `completed` when the run landed a
+   * clean assistant answer, `failed` when it did not (unanswered, errored,
+   * or killed). Absent while the run is live and for chats that are not
+   * delegated runs. Derived from the chat's own content, so it stays
+   * accurate long after the live generation status expires — a fresh
+   * client sees the terminal state without ever having observed the run.
+   *
+   * @example completed
+   */
+  delegated_run_outcome?: string;
+  /**
    * Files uploaded to this chat
    */
   file_uploads: FileReference[];

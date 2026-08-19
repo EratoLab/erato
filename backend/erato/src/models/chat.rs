@@ -441,6 +441,13 @@ pub struct RecentChat {
     pub origin_chat_title: Option<String>,
     /// The assistant bound to the origin chat at spawn time, if any.
     pub origin_assistant_id: Option<Uuid>,
+    /// Terminal outcome of a delegated run: `completed` or `failed`. None
+    /// while the run is live (running with a fresh heartbeat, or parked on a
+    /// tool approval) and always None for chats that are not delegated runs.
+    /// Derived from the chat's own messages rather than the generation
+    /// columns, which retention clears shortly after a run ends — a
+    /// background run's completion must stay reportable indefinitely.
+    pub delegated_run_outcome: Option<String>,
 }
 
 /// Statistics for a list of chats
@@ -481,6 +488,7 @@ struct ChatWithLatestMessage {
     provenance_kind: Option<String>,
     origin_chat_id: Option<Uuid>,
     origin_assistant_id: Option<Uuid>,
+    delegated_run_outcome: Option<String>,
     // Latest message fields
     latest_message_at: DateTimeWithTimeZone,
 }
@@ -593,6 +601,23 @@ pub async fn get_recent_chats(
 
     // Query using INNER JOIN LATERAL for better performance
     // This ensures the database does all filtering, sorting, and pagination
+    //
+    // A delegated run's outcome is derived from the chat's own messages, not
+    // from the generation columns: retention clears those shortly after a
+    // run ends, while a background run's completion must stay reportable
+    // indefinitely. A run completed when its latest message is an assistant
+    // answer with actual text, no generation error, and a timestamp no older
+    // than the chat itself; anything else failed. The text requirement
+    // mirrors the result envelope's empty-answer downgrade: submit creates
+    // the assistant row before generation starts, so a hard-killed run
+    // settles into an empty assistant row once retention clears its
+    // 'errored' state. The timestamp floor exists because seeded lineage
+    // keeps the copied conversation's timestamps, so a parent answer copied
+    // in at spawn predates the chat and can never count as the run's own.
+    // The error flag mirrors how the delegation result envelope reads
+    // `generation_metadata.error` (present and not JSON null). A
+    // user-stopped run keeps its partial answer and reads `completed`,
+    // consistent with `derive_outcome` counting an abort as completion.
     let sql = format!(
         r#"
         SELECT
@@ -615,10 +640,37 @@ pub async fn get_recent_chats(
             ("chats"."assistant_configuration" #>> '{{provenance,kind}}') AS "provenance_kind",
             "chats"."origin_chat_id",
             (("chats"."assistant_configuration" #>> '{{provenance,origin_assistant_id}}'))::uuid AS "origin_assistant_id",
+            CASE
+                WHEN ("chats"."assistant_configuration" #>> '{{provenance,kind}}') IS DISTINCT FROM 'delegation'
+                    OR ("chats"."generation_state" = 'running'
+                        AND "chats"."generation_heartbeat_at" > now() - make_interval(secs => {generation_stale_after_secs}))
+                    OR "chats"."generation_state" = 'awaiting_approval'
+                THEN NULL
+                WHEN "chats"."generation_state" IS DISTINCT FROM 'errored'
+                    AND "latest_msg"."role" = 'assistant'
+                    AND NOT "latest_msg"."has_generation_error"
+                    AND "latest_msg"."has_text_answer"
+                    AND "latest_msg"."created_at" >= "chats"."created_at"
+                THEN 'completed'
+                ELSE 'failed'
+            END AS "delegated_run_outcome",
             "latest_msg"."created_at" AS "latest_message_at"
         FROM "chats"
         INNER JOIN LATERAL (
-            SELECT m.chat_id, m.id, m.created_at
+            SELECT m.chat_id, m.id, m.created_at,
+                m.raw_message ->> 'role' AS "role",
+                ((m.generation_metadata -> 'error') IS NOT NULL
+                    AND m.generation_metadata -> 'error' <> 'null'::jsonb) AS "has_generation_error",
+                EXISTS (
+                    SELECT 1
+                    FROM jsonb_array_elements(
+                        CASE WHEN jsonb_typeof(m.raw_message -> 'content') = 'array'
+                            THEN m.raw_message -> 'content'
+                        END
+                    ) AS part
+                    WHERE part ->> 'content_type' = 'text'
+                        AND btrim(coalesce(part ->> 'text', '')) <> ''
+                ) AS "has_text_answer"
             FROM messages m
             WHERE m.chat_id = chats.id
             ORDER BY m.created_at DESC
@@ -884,6 +936,7 @@ pub async fn get_recent_chats(
                     .origin_chat_id
                     .and_then(|origin_id| origin_titles_map.get(&origin_id).cloned()),
                 origin_assistant_id: chat_with_msg.origin_assistant_id,
+                delegated_run_outcome: chat_with_msg.delegated_run_outcome.clone(),
             }
         })
         .collect();
