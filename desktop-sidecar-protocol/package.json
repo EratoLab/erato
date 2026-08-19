@@ -26,6 +26,7 @@
     }
   },
   "scripts": {
+    "prepare": "pnpm run build",
     "build": "node scripts/build.mjs",
     "check": "pnpm run format:check && pnpm run validate && pnpm run check:generated && pnpm run typecheck && pnpm run test",
     "check:generated": "node scripts/check-generated.mjs",
