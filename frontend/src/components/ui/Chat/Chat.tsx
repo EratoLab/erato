@@ -121,6 +121,13 @@ export interface ChatProps {
   forceCenteredEmptyState?: boolean;
   /** Optional content rendered at the top of the conversation area */
   topContent?: React.ReactNode;
+  /**
+   * Closes the composer while the chat cannot accept a message — a delegated
+   * run its delegate is still writing, or an archived one. The backend
+   * refuses both with a 409; the surface explaining why belongs in
+   * `topContent`, not in a toast the user triggers by trying.
+   */
+  composerDisabled?: boolean;
   /** Optional override for the display name of user-authored messages */
   userMessageDisplayName?: string;
   /** Optional override for the profile of user-authored messages */
@@ -164,6 +171,7 @@ export const Chat = ({
   emptyStateComponent,
   forceCenteredEmptyState = false,
   topContent,
+  composerDisabled = false,
   userMessageDisplayName,
   userMessageProfile,
   assistantId,
@@ -665,6 +673,7 @@ export const Chat = ({
       assistantId={assistantId}
       className="p-2 sm:p-4"
       isLoading={chatLoading}
+      disabled={composerDisabled}
       showControls
       maxFiles={maxFiles}
       onRegenerate={onRegenerate}
@@ -795,7 +804,13 @@ export const Chat = ({
             ) : (
               <>
                 {topContent ? (
-                  <div className="relative z-10 shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3 sm:px-4">
+                  <div
+                    className={clsx(
+                      "relative z-10 shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3 sm:px-4",
+                      // The share button floats over this strip's corner.
+                      canShareCurrentChat && "pr-28 sm:pr-32",
+                    )}
+                  >
                     {topContent}
                   </div>
                 ) : null}

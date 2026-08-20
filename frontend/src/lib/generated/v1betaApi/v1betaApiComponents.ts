@@ -3042,6 +3042,129 @@ export const useArchiveAllChatsEndpoint = (
   });
 };
 
+export type ChatDetailPathParams = {
+  /**
+   * The ID of the chat to retrieve
+   */
+  chatId: string;
+};
+
+export type ChatDetailError = Fetcher.ErrorWrapper<undefined>;
+
+export type ChatDetailVariables = {
+  pathParams: ChatDetailPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+/**
+ * Authorized exactly like the chat's message history, and carrying the
+ * fields a surface needs to describe the chat it just opened — which for a
+ * delegated run means its provenance and the parameters it was dispatched
+ * with, neither of which is reachable through the listing that hides it.
+ */
+export const fetchChatDetail = (
+  variables: ChatDetailVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ChatDetail,
+    ChatDetailError,
+    undefined,
+    {},
+    {},
+    ChatDetailPathParams
+  >({
+    url: "/api/v1beta/me/chats/{chatId}",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+/**
+ * Authorized exactly like the chat's message history, and carrying the
+ * fields a surface needs to describe the chat it just opened — which for a
+ * delegated run means its provenance and the parameters it was dispatched
+ * with, neither of which is reachable through the listing that hides it.
+ */
+export function chatDetailQuery(variables: ChatDetailVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.ChatDetail>;
+};
+
+export function chatDetailQuery(
+  variables: ChatDetailVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.ChatDetail>)
+    | reactQuery.SkipToken;
+};
+
+export function chatDetailQuery(
+  variables: ChatDetailVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/chats/{chatId}",
+      operationId: "chatDetail",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) => fetchChatDetail(variables, signal),
+  };
+}
+
+/**
+ * Authorized exactly like the chat's message history, and carrying the
+ * fields a surface needs to describe the chat it just opened — which for a
+ * delegated run means its provenance and the parameters it was dispatched
+ * with, neither of which is reachable through the listing that hides it.
+ */
+export const useSuspenseChatDetail = <TData = Schemas.ChatDetail,>(
+  variables: ChatDetailVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<Schemas.ChatDetail, ChatDetailError, TData>,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.ChatDetail,
+    ChatDetailError,
+    TData
+  >({
+    ...chatDetailQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+/**
+ * Authorized exactly like the chat's message history, and carrying the
+ * fields a surface needs to describe the chat it just opened — which for a
+ * delegated run means its provenance and the parameters it was dispatched
+ * with, neither of which is reachable through the listing that hides it.
+ */
+export const useChatDetail = <TData = Schemas.ChatDetail,>(
+  variables: ChatDetailVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<Schemas.ChatDetail, ChatDetailError, TData>,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<Schemas.ChatDetail, ChatDetailError, TData>({
+    ...chatDetailQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type UpdateChatPathParams = {
   /**
    * The ID of the chat to update
@@ -6762,6 +6885,11 @@ export type QueryOperation =
       path: "/api/v1beta/me/budget";
       operationId: "budgetStatus";
       variables: BudgetStatusVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/chats/{chatId}";
+      operationId: "chatDetail";
+      variables: ChatDetailVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/desktop-sidecar/organization-configuration";

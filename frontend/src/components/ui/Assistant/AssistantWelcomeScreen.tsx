@@ -13,10 +13,8 @@ import { EditIcon, PinIcon, PinSlashIcon } from "@/components/ui/icons";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { usePageAlignment } from "@/hooks/ui/usePageAlignment";
-import {
-  DELEGATION_PROVENANCE_KIND,
-  UNTITLED_BACKEND_SENTINEL,
-} from "@/utils/chat/recentChatSession";
+import { delegatedRunOrigin } from "@/utils/chat/delegatedRunOrigin";
+import { UNTITLED_BACKEND_SENTINEL } from "@/utils/chat/recentChatSession";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 import {
   chatAttentionStatusLabel,
@@ -89,34 +87,8 @@ const useSessionsAttentionStatus = (
   );
 };
 
-const originLabel = ({
-  provenanceKind,
-  originChatId,
-  originChatTitle,
-}: ChatSession): string | null => {
-  if (provenanceKind !== DELEGATION_PROVENANCE_KIND) {
-    return null;
-  }
-  if (originChatTitle === UNTITLED_BACKEND_SENTINEL) {
-    return t({
-      id: "assistant.welcome.delegated.origin.untitled",
-      message: "From an untitled conversation",
-    });
-  }
-  if (originChatTitle) {
-    return t({
-      id: "assistant.welcome.delegated.origin",
-      message: `From ${originChatTitle}`,
-    });
-  }
-  if (originChatId) {
-    return t({
-      id: "assistant.welcome.delegated.origin.deleted",
-      message: "From a conversation that no longer exists",
-    });
-  }
-  return null;
-};
+const originLabel = (chat: ChatSession): string | null =>
+  delegatedRunOrigin(chat)?.label ?? null;
 
 /** The mappers' localized fallback still lets the backend sentinel through. */
 const rowTitle = ({ title, titleResolved }: ChatSession): string => {

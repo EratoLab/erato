@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 
 import { Chat } from "@/components/ui/Chat/Chat";
 import { ChatEmptyState } from "@/components/ui/Chat/ChatEmptyState";
+import { useDelegatedRunHeader } from "@/hooks/chat/useDelegatedRunHeader";
 import { useChatContext } from "@/providers/ChatProvider";
 import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { createLogger } from "@/utils/debugLogger";
@@ -39,6 +40,8 @@ export default function ChatPageStructure({
 
   const displayMessages = contextMessages;
   const displayMessageOrder = contextMessageOrder;
+  const { header: delegatedRunHeader, composerLocked } =
+    useDelegatedRunHeader(currentChatId);
 
   logger.log(
     `ChatPageStructure render. Path: ${pathname}, currentChatId: ${currentChatId ?? "null"}`,
@@ -59,6 +62,8 @@ export default function ChatPageStructure({
         showAvatars={true}
         showTimestamps={true}
         layout="default"
+        topContent={delegatedRunHeader}
+        composerDisabled={composerLocked}
         emptyStateComponent={<ChatEmptyState variant="chat" />}
         onMessageAction={async (action: MessageAction) => {
           logger.log("Handling message action in ChatPageStructure:", action);

@@ -4018,3 +4018,167 @@ async fn test_continued_turn_does_not_reoffer_the_delegation_tool(pool: Pool<Pos
         "a continued turn must not be able to spawn a delegated run"
     );
 }
+
+/// A delegated run is hidden from the listing, so opening one by link has no
+/// row to read from: the chat-detail route is where a surface learns what the
+/// run is and what it was dispatched with.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_chat_detail_carries_provenance_and_run_parameters(pool: Pool<Postgres>) {
+    let (app_state, _llm) = delegation_enabled_state_with_llm(pool).await;
+    let server = app_server(app_state.clone());
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+
+    let assistant = create_assistant(&server, "Detail Delegate", "prompt").await;
+    let origin = create_chat(&server, Some(&assistant)).await;
+    server
+        .put(&format!("/api/v1beta/me/chats/{origin}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "title_by_user_provided": "Quarterly planning" }))
+        .await
+        .assert_status_ok();
+
+    let child = erato::models::chat::create_delegated_chat(
+        &app_state.db,
+        &rebuilt_policy(&app_state).await,
+        &erato::policy::types::Subject::User(me.id.to_string()),
+        &me.id.to_string(),
+        Uuid::parse_str(&assistant).unwrap(),
+        ChatProvenance {
+            kind: ChatProvenanceKind::Delegation,
+            origin_chat_id: Some(Uuid::parse_str(&origin).unwrap()),
+            origin_message_id: None,
+            origin_assistant_id: Some(Uuid::parse_str(&assistant).unwrap()),
+            rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
+            depth: 1,
+            adopted_at: None,
+            expected_output: Some("One number per line.".to_string()),
+            constraints: Some("Only the attached figures.".to_string()),
+        },
+        "Summarize the numbers".to_string(),
+    )
+    .await
+    .unwrap();
+    app_state.global_policy_engine.invalidate_data().await;
+
+    let response = server
+        .get(&format!("/api/v1beta/me/chats/{}", child.id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status_ok();
+    let detail = response.json::<Value>();
+    assert_eq!(detail["id"], child.id.to_string());
+    assert_eq!(detail["title_resolved"], "Summarize the numbers");
+    assert_eq!(detail["provenance_kind"], "delegation");
+    assert_eq!(detail["origin_chat_id"], origin);
+    assert_eq!(detail["origin_chat_title"], "Quarterly planning");
+    assert_eq!(detail["origin_assistant_id"], assistant);
+    assert_eq!(detail["assistant_id"], assistant);
+    assert_eq!(detail["assistant_name"], "Detail Delegate");
+    assert_eq!(detail["expected_output"], "One number per line.");
+    assert_eq!(detail["constraints"], "Only the attached figures.");
+    assert!(detail.get("adopted_at").is_none());
+    assert!(detail.get("archived_at").is_none());
+    assert_eq!(detail["can_edit"], true);
+
+    // The origin chat itself says nothing about provenance, so a header keyed
+    // off these fields renders on the run and nowhere else.
+    let origin_detail = server
+        .get(&format!("/api/v1beta/me/chats/{origin}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    origin_detail.assert_status_ok();
+    let origin_detail = origin_detail.json::<Value>();
+    assert!(origin_detail.get("provenance_kind").is_none());
+    assert!(origin_detail.get("expected_output").is_none());
+
+    // A chat the user cannot reach is a 404, not an empty shell to render.
+    server
+        .get(&format!("/api/v1beta/me/chats/{}", Uuid::new_v4()))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .assert_status(axum::http::StatusCode::NOT_FOUND);
+}
+
+/// The archive cascade can archive a run its owner never touched, and taking
+/// a run over is durable — both are states the header has to be able to read.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_chat_detail_reports_adopted_and_archived_runs(pool: Pool<Postgres>) {
+    let (app_state, _llm) = delegation_enabled_state_with_llm(pool).await;
+    let server = app_server(app_state.clone());
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+
+    let assistant = create_assistant(&server, "Adopted Delegate", "prompt").await;
+    let origin = create_chat(&server, Some(&assistant)).await;
+    let child = erato::models::chat::create_delegated_chat(
+        &app_state.db,
+        &rebuilt_policy(&app_state).await,
+        &erato::policy::types::Subject::User(me.id.to_string()),
+        &me.id.to_string(),
+        Uuid::parse_str(&assistant).unwrap(),
+        ChatProvenance {
+            kind: ChatProvenanceKind::Delegation,
+            origin_chat_id: Some(Uuid::parse_str(&origin).unwrap()),
+            origin_message_id: None,
+            origin_assistant_id: None,
+            rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
+            depth: 1,
+            adopted_at: None,
+            expected_output: None,
+            constraints: None,
+        },
+        "Adoptable run".to_string(),
+    )
+    .await
+    .unwrap();
+    app_state.global_policy_engine.invalidate_data().await;
+
+    // Writing into the finished run adopts it.
+    submit_message(
+        &server,
+        &child.id.to_string(),
+        None,
+        "the owner takes it over",
+        vec![],
+    )
+    .await;
+
+    // Archiving the origin cascades onto the run.
+    server
+        .post(&format!("/api/v1beta/chats/{origin}/archive"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({}))
+        .await
+        .assert_status_ok();
+
+    let detail = server
+        .get(&format!("/api/v1beta/me/chats/{}", child.id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    detail.assert_status_ok();
+    let detail = detail.json::<Value>();
+    assert_eq!(detail["provenance_kind"], "delegation");
+    assert!(detail["adopted_at"].is_string());
+    assert!(detail["archived_at"].is_string());
+}

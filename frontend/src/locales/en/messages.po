@@ -221,17 +221,17 @@ msgid "assistant.welcome.delegated.empty"
 msgstr "No delegated runs yet."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+#: src/utils/chat/delegatedRunOrigin.ts
 msgid "assistant.welcome.delegated.origin"
 msgstr "From {originChatTitle}"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+#: src/utils/chat/delegatedRunOrigin.ts
 msgid "assistant.welcome.delegated.origin.deleted"
 msgstr "From a conversation that no longer exists"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+#: src/utils/chat/delegatedRunOrigin.ts
 msgid "assistant.welcome.delegated.origin.untitled"
 msgstr "From an untitled conversation"
 
@@ -1306,6 +1306,31 @@ msgstr "Chat conversation"
 #: src/components/ui/Chat/Chat.tsx
 msgid "chat.conversation.dropzone.ariaLabel"
 msgstr "Drop files anywhere in the conversation to upload"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegatedRunHeader.tsx
+msgid "chat.delegatedRun.constraints"
+msgstr "Constraints"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegatedRunHeader.tsx
+msgid "chat.delegatedRun.expectedOutput"
+msgstr "Expected output"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegatedRunHeader.tsx
+msgid "chat.delegatedRun.state.archived"
+msgstr "This run is archived and no longer takes messages."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegatedRunHeader.tsx
+msgid "chat.delegatedRun.state.running"
+msgstr "The delegate is still working on this run."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegatedRunHeader.tsx
+msgid "chat.delegatedRun.title"
+msgstr "Delegated run"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
