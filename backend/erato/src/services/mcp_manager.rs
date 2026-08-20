@@ -38,7 +38,14 @@ pub struct ManagedToolCall {
 #[derive(Debug, Clone, Default)]
 pub struct ToolDiscoveryResult {
     pub tools: Vec<ManagedTool>,
+    /// Servers that could not be reached or errored: broken from the user's
+    /// point of view, nothing they can do about it.
     pub unavailable_server_ids: Vec<String>,
+    /// Servers skipped because the requesting user has not completed the
+    /// server's OAuth authorization: the user can fix these by connecting.
+    /// Kept apart from `unavailable_server_ids` so surfaces can offer the
+    /// connect action instead of reporting an outage.
+    pub needing_auth_server_ids: Vec<String>,
 }
 
 impl Default for McpServers {

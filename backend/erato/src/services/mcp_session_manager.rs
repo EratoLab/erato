@@ -457,6 +457,7 @@ impl McpSessionManager {
     ) -> ToolDiscoveryResult {
         let mut all_tools = Vec::new();
         let mut unavailable_server_ids = Vec::new();
+        let mut needing_auth_server_ids = Vec::new();
         let server_ids: Vec<String> = self
             .server_configs
             .keys()
@@ -498,6 +499,12 @@ impl McpSessionManager {
                             error = %e,
                             "Skipping MCP server during tool discovery because OAuth authorization is required"
                         );
+                        // Deliberately non-fatal and NOT `unavailable`: the
+                        // server is fine, this user just has not connected it
+                        // yet. Recording the id (instead of swallowing the
+                        // skip) is what lets a shared assistant tell the user
+                        // why its tools differ for them.
+                        needing_auth_server_ids.push(server_id);
                         continue;
                     }
                     if Self::is_auth_denied_error(&e) {
@@ -536,10 +543,12 @@ impl McpSessionManager {
         );
 
         unavailable_server_ids.sort();
+        needing_auth_server_ids.sort();
 
         ToolDiscoveryResult {
             tools: all_tools,
             unavailable_server_ids,
+            needing_auth_server_ids,
         }
     }
 

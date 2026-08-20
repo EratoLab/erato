@@ -6,7 +6,8 @@ use axum_test::TestServer;
 use chrono::Utc;
 use erato::config::{
     ActionFacetConfig, ExperimentalFacetsConfig, FacetConfig, McpServerAuthenticationConfig,
-    McpServerConfig, ModelSettings, PromptSourceSpecification, SecretConfigString,
+    McpServerConfig, McpServerOauth2AuthenticationConfig, ModelSettings, PromptSourceSpecification,
+    SecretConfigString,
 };
 use erato::db::entity::{chat_file_uploads, chats, file_uploads};
 use erato::models::message::{GenerationInputMessages, GenerationParameters};
@@ -19,10 +20,12 @@ use sqlx::Pool;
 use sqlx::postgres::Postgres;
 use std::collections::HashMap;
 use std::env;
+use std::net::{IpAddr, Ipv4Addr};
 
 use mocktail::MockSet;
 use mocktail::body::BodyAction;
 use mocktail::mock_builder::Then;
+use mocktail::server::{MockServer, MockServerConfig};
 
 use crate::test_app_state;
 use crate::test_utils::{
@@ -3340,6 +3343,189 @@ async fn test_message_submit_tolerates_unavailable_mcp_server_and_records_metada
                 .find(|message| message["id"] == assistant_message_id.to_string())
         })
         .expect("Expected assistant message in chat messages response");
+    assert_eq!(
+        fetched_assistant_message["mcp_servers_unavailable"],
+        json!(["failing-500"])
+    );
+}
+
+/// An OAuth2 MCP server the requesting user has not connected yet is skipped
+/// without failing generation, and the skip is recorded under
+/// `mcp_servers_needing_auth` — never under `mcp_servers_unavailable`, which
+/// stays reserved for genuinely broken servers. A healthy server appears in
+/// neither list.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_message_submit_records_mcp_server_needing_oauth_authorization(pool: Pool<Postgres>) {
+    let mock_mcp_base_url = mock_mcp_base_url();
+    let (mut app_config, _llm_server) = setup_mock_llm_server(None).await;
+
+    // The OAuth mock only serves authorization-server metadata. That is all
+    // the "configured but not connected" state needs: token resolution finds
+    // the metadata, then fails with AuthorizationRequired because no
+    // credentials are stored for the user — before any MCP request is made.
+    let mut oauth_mocks = MockSet::new();
+    oauth_mocks.mock(|when, then| {
+        when.get()
+            .path("/.well-known/oauth-authorization-server/oauth");
+        then.status(http::StatusCode::OK)
+            .headers([("Content-Type", "application/json")])
+            .json(json!({
+                "authorization_endpoint": "http://127.0.0.1:1/authorize",
+                "token_endpoint": "http://127.0.0.1:1/token",
+            }));
+    });
+    let mockserver_config = MockServerConfig {
+        listen_addr: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+        ..Default::default()
+    };
+    let oauth_server = MockServer::new_http("mcp-oauth-mock")
+        .with_config(mockserver_config)
+        .with_mocks(oauth_mocks);
+    oauth_server
+        .start()
+        .await
+        .expect("Failed to start OAuth metadata mock server");
+    let oauth_server_base_url = oauth_server.url("").to_string();
+    let oauth_server_base_url = oauth_server_base_url.trim_end_matches('/');
+
+    app_config.mcp_servers.insert(
+        "healthy-file".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url,
+            "/mcp/file",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_servers.insert(
+        "failing-500".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url,
+            "/mcp/list-tools-500",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_servers.insert(
+        "oauth-pending".to_string(),
+        mcp_server_config(
+            oauth_server_base_url,
+            "/oauth",
+            McpServerAuthenticationConfig::Oauth2 {
+                oauth2: McpServerOauth2AuthenticationConfig {
+                    client_id: Some("test-oauth-client".to_string()),
+                    client_secret: None,
+                    scopes: vec![],
+                    client_name: None,
+                },
+            },
+        ),
+    );
+    app_config.mcp_server_permissions.rules.insert(
+        "allow-mcp-servers".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec![
+                "healthy-file".to_string(),
+                "failing-500".to_string(),
+                "oauth-pending".to_string(),
+            ],
+        },
+    );
+
+    let test_token = JwtTokenBuilder::new()
+        .subject("oauth-pending-user")
+        .email("oauth-pending@example.com")
+        .name("oauth-pending-user")
+        .build();
+
+    let app_state = test_app_state(app_config, pool).await;
+    let _user = get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        "oauth-pending-user",
+        Some("oauth-pending@example.com"),
+    )
+    .await
+    .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(&test_token)
+        .json(&json!({
+            "user_message": "Hello, some of my servers are not connected yet"
+        }))
+        .await;
+    response.assert_status_ok();
+
+    let events = parse_sse_events(&response);
+    let assistant_completed = events
+        .iter()
+        .find_map(|event| {
+            let json: Value = serde_json::from_str(&event.data).ok()?;
+            (json["message_type"] == "assistant_message_completed").then_some(json)
+        })
+        .expect("Expected assistant_message_completed event");
+
+    assert_eq!(
+        assistant_completed["message"]["mcp_servers_needing_auth"],
+        json!(["oauth-pending"])
+    );
+    assert_eq!(
+        assistant_completed["message"]["mcp_servers_unavailable"],
+        json!(["failing-500"])
+    );
+
+    let assistant_message_id = Uuid::parse_str(
+        assistant_completed["message_id"]
+            .as_str()
+            .expect("assistant_message_completed should contain message_id"),
+    )
+    .expect("assistant message id should be a uuid");
+
+    let saved_message = erato::db::entity::messages::Entity::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .expect("Failed to load saved message")
+        .expect("Expected saved assistant message");
+
+    let generation_metadata = saved_message
+        .generation_metadata
+        .expect("Expected generation metadata on assistant message");
+    assert_eq!(
+        generation_metadata["mcp_servers_needing_auth"],
+        json!(["oauth-pending"])
+    );
+    assert_eq!(
+        generation_metadata["mcp_servers_unavailable"],
+        json!(["failing-500"])
+    );
+
+    let chat_messages_response = server
+        .get(&format!(
+            "/api/v1beta/chats/{}/messages",
+            saved_message.chat_id
+        ))
+        .with_bearer_token(&test_token)
+        .await;
+    chat_messages_response.assert_status_ok();
+
+    let body: Value = chat_messages_response.json();
+    let fetched_assistant_message = body["messages"]
+        .as_array()
+        .and_then(|messages| {
+            messages
+                .iter()
+                .find(|message| message["id"] == assistant_message_id.to_string())
+        })
+        .expect("Expected assistant message in chat messages response");
+    assert_eq!(
+        fetched_assistant_message["mcp_servers_needing_auth"],
+        json!(["oauth-pending"])
+    );
     assert_eq!(
         fetched_assistant_message["mcp_servers_unavailable"],
         json!(["failing-500"])

@@ -1631,6 +1631,9 @@ pub struct PreparedChatRequest {
     generation_request_context: GenerationRequestContext,
     // MCP servers that were unavailable while listing tools for this request.
     mcp_servers_unavailable: Vec<String>,
+    // MCP servers skipped while listing tools because the requesting user has
+    // not completed their OAuth authorization (user-fixable, unlike the above).
+    mcp_servers_needing_auth: Vec<String>,
     // Filtered MCP tools available to this request, including server routing info.
     available_mcp_tools: Vec<crate::services::mcp_session_manager::ManagedTool>,
     // Park budgets of the client tools OFFERED to this request, keyed by the
@@ -1843,6 +1846,7 @@ impl LangfuseTraceEnrichment {
         assistant_id: Option<Uuid>,
         tool_names: &HashSet<String>,
         mcp_servers_unavailable: &[String],
+        mcp_servers_needing_auth: &[String],
         was_aborted: bool,
     ) -> Option<JsonValue> {
         let mut tool_names: Vec<String> = tool_names.iter().cloned().collect();
@@ -1852,6 +1856,7 @@ impl LangfuseTraceEnrichment {
             &tool_names,
             &self.filenames,
             mcp_servers_unavailable,
+            mcp_servers_needing_auth,
             was_aborted,
             Some(&self.platform),
         )
@@ -2629,6 +2634,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         generation_parameters,
         generation_request_context,
         mcp_servers_unavailable: tool_discovery.unavailable_server_ids,
+        mcp_servers_needing_auth: tool_discovery.needing_auth_server_ids,
         available_mcp_tools: generation_mcp_tools.clone(),
         offered_client_tool_timeouts,
         chat_request,
@@ -2880,6 +2886,7 @@ async fn stream_generate_chat_completion<
     _user_groups: &[String],
     mcp_auth_context: McpRequestAuthContext<'_>,
     mcp_servers_unavailable: Vec<String>,
+    mcp_servers_needing_auth: Vec<String>,
     allowed_tool_names: HashSet<String>,
     available_mcp_tools: Vec<crate::services::mcp_session_manager::ManagedTool>,
     offered_client_tool_timeouts: HashMap<String, Option<u64>>,
@@ -2937,6 +2944,7 @@ async fn stream_generate_chat_completion<
             assistant_id,
             &initial_tool_names,
             &mcp_servers_unavailable,
+            &mcp_servers_needing_auth,
             false,
         );
         let tags = langfuse_trace_enrichment.all_tags(&model_tags, &initial_tool_names);
@@ -3034,6 +3042,7 @@ async fn stream_generate_chat_completion<
                 || was_aborted
                 || error.is_some()
                 || !mcp_servers_unavailable.is_empty()
+                || !mcp_servers_needing_auth.is_empty()
             {
                 Some(GenerationMetadata {
                     used_prompt_tokens: if total_prompt_tokens > 0 {
@@ -3064,6 +3073,8 @@ async fn stream_generate_chat_completion<
                     error,
                     mcp_servers_unavailable: (!mcp_servers_unavailable.is_empty())
                         .then(|| mcp_servers_unavailable.clone()),
+                    mcp_servers_needing_auth: (!mcp_servers_needing_auth.is_empty())
+                        .then(|| mcp_servers_needing_auth.clone()),
                 })
             } else {
                 None
@@ -4402,6 +4413,8 @@ async fn stream_generate_chat_completion<
                             let trace_model_tags = all_model_tags.clone();
                             let trace_mcp_servers_unavailable =
                                 mcp_servers_unavailable.clone();
+                            let trace_mcp_servers_needing_auth =
+                                mcp_servers_needing_auth.clone();
                             let trace_tags =
                                 trace_enrichment.all_tags(&trace_model_tags, &trace_tool_names);
                             let uses_otel = client.uses_otel();
@@ -4454,6 +4467,7 @@ async fn stream_generate_chat_completion<
                                         assistant_id_for_langfuse,
                                         &trace_tool_names,
                                         &trace_mcp_servers_unavailable,
+                                        &trace_mcp_servers_needing_auth,
                                         true,
                                     ) && let Err(err) =
                                         client.update_trace_metadata(metadata).await
@@ -5011,6 +5025,7 @@ async fn stream_generate_chat_completion<
                         let trace_tool_names = all_tool_names.clone();
                         let trace_model_tags = all_model_tags.clone();
                         let trace_mcp_servers_unavailable = mcp_servers_unavailable.clone();
+                        let trace_mcp_servers_needing_auth = mcp_servers_needing_auth.clone();
                         tokio::spawn(async move {
                             // Update trace output
                             if let Err(e) = client.update_trace_output(output_json).await {
@@ -5031,6 +5046,7 @@ async fn stream_generate_chat_completion<
                                 assistant_id_for_trace,
                                 &trace_tool_names,
                                 &trace_mcp_servers_unavailable,
+                                &trace_mcp_servers_needing_auth,
                                 false,
                             ) {
                                 if let Err(e) = client.update_trace_metadata(metadata).await {
@@ -5094,6 +5110,7 @@ async fn stream_generate_chat_completion<
                         assistant_id,
                         &all_tool_names,
                         &mcp_servers_unavailable,
+                        &mcp_servers_needing_auth,
                         false,
                     );
                     tokio::spawn(async move {
@@ -5524,7 +5541,7 @@ pub async fn generate_chat_summary(
             model_tags.insert(langfuse_model_tag(&model_name));
 
             let trace_metadata =
-                enrichment.trace_metadata(chat.assistant_id, &tool_names, &[], false);
+                enrichment.trace_metadata(chat.assistant_id, &tool_names, &[], &[], false);
             let trace_tags = enrichment.all_tags(&model_tags, &tool_names);
             let assistant_id_for_langfuse = chat.assistant_id;
             let platform = enrichment.platform.clone();
@@ -7282,6 +7299,7 @@ mod reasoning_replay_tests {
             was_aborted: None,
             error: None,
             mcp_servers_unavailable: None,
+            mcp_servers_needing_auth: None,
         }
     }
 
@@ -7933,6 +7951,7 @@ fn generation_metadata_for_error(error: GenerationErrorType) -> GenerationMetada
         was_aborted: None,
         error: Some(error),
         mcp_servers_unavailable: None,
+        mcp_servers_needing_auth: None,
     }
 }
 
@@ -8143,6 +8162,7 @@ pub(crate) async fn run_message_submit_task(
         generation_parameters,
         generation_request_context,
         mcp_servers_unavailable,
+        mcp_servers_needing_auth,
         available_mcp_tools,
         offered_client_tool_timeouts,
         delegation_targets,
@@ -8290,6 +8310,7 @@ pub(crate) async fn run_message_submit_task(
         &me_user.groups,
         mcp_auth_context,
         mcp_servers_unavailable,
+        mcp_servers_needing_auth,
         allowed_tool_names,
         available_mcp_tools,
         offered_client_tool_timeouts,
@@ -8612,6 +8633,7 @@ pub async fn regenerate_message_sse(
                 generation_parameters,
                 generation_request_context,
                 mcp_servers_unavailable,
+                mcp_servers_needing_auth,
                 available_mcp_tools,
                 offered_client_tool_timeouts,
                 delegation_targets,
@@ -8711,6 +8733,7 @@ pub async fn regenerate_message_sse(
                     &me_user.groups,
                     mcp_auth_context,
                     mcp_servers_unavailable,
+                    mcp_servers_needing_auth,
                     allowed_tool_names,
                     available_mcp_tools,
                     offered_client_tool_timeouts,
@@ -9109,6 +9132,7 @@ pub async fn edit_message_sse(
                 generation_parameters,
                 generation_request_context,
                 mcp_servers_unavailable,
+                mcp_servers_needing_auth,
                 available_mcp_tools,
                 offered_client_tool_timeouts,
                 delegation_targets,
@@ -9208,6 +9232,7 @@ pub async fn edit_message_sse(
                     &me_user.groups,
                     mcp_auth_context,
                     mcp_servers_unavailable,
+                    mcp_servers_needing_auth,
                     allowed_tool_names,
                     available_mcp_tools,
                     offered_client_tool_timeouts,
@@ -9673,6 +9698,7 @@ async fn run_continue_message_task(
         .await;
     let available_mcp_tools = mcp_tool_discovery.tools;
     let mcp_servers_unavailable = mcp_tool_discovery.unavailable_server_ids;
+    let mcp_servers_needing_auth = mcp_tool_discovery.needing_auth_server_ids;
     let tool_use = if is_approved {
         let managed_tool = available_mcp_tools
             .iter()
@@ -9812,6 +9838,7 @@ async fn run_continue_message_task(
             &me_user.groups,
             mcp_auth_context,
             mcp_servers_unavailable,
+            mcp_servers_needing_auth,
             allowed_tool_names,
             available_mcp_tools,
             HashMap::new(),
