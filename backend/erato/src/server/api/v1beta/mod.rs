@@ -1270,6 +1270,15 @@ pub struct RecentChat {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     origin_assistant_id: Option<String>,
+    /// Terminal outcome of a delegated run: `completed` when the run landed a
+    /// clean assistant answer, `failed` when it did not (unanswered, errored,
+    /// or killed). Absent while the run is live and for chats that are not
+    /// delegated runs. Derived from the chat's own content, so it stays
+    /// accurate long after the live generation status expires — a fresh
+    /// client sees the terminal state without ever having observed the run.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false, example = "completed")]
+    delegated_run_outcome: Option<String>,
 }
 
 /// A single chat, for surfaces that open one directly rather than picking it
@@ -2946,6 +2955,7 @@ async fn extend_recent_chats_to_api_model(
             origin_chat_id: chat.origin_chat_id.map(|id| id.to_string()),
             origin_chat_title: chat.origin_chat_title,
             origin_assistant_id: chat.origin_assistant_id.map(|id| id.to_string()),
+            delegated_run_outcome: chat.delegated_run_outcome,
         });
     }
 

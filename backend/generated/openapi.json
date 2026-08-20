@@ -7536,6 +7536,11 @@
             "type": "boolean",
             "description": "Whether the current user can edit this chat (e.g., edit messages)\n\nNOTE: Currently this is true only for the chat owner. In the future,\nthis may include collaborators/roles/policy-based permissions."
           },
+          "delegated_run_outcome": {
+            "type": "string",
+            "description": "Terminal outcome of a delegated run: `completed` when the run landed a\nclean assistant answer, `failed` when it did not (unanswered, errored,\nor killed). Absent while the run is live and for chats that are not\ndelegated runs. Derived from the chat's own content, so it stays\naccurate long after the live generation status expires — a fresh\nclient sees the terminal state without ever having observed the run.",
+            "example": "completed"
+          },
           "file_uploads": {
             "type": "array",
             "items": {

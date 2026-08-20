@@ -4535,6 +4535,449 @@ async fn test_listing_filters_by_origin_chat(pool: Pool<Postgres>) {
     response.assert_status(axum::http::StatusCode::BAD_REQUEST);
 }
 
+fn listed_chat<'a>(listing: &'a Value, chat_id: &str) -> &'a Value {
+    listing["chats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|chat| chat["id"] == chat_id)
+        .unwrap_or_else(|| panic!("chat {chat_id} missing from listing"))
+}
+
+/// Appends an assistant answer to a delegated child the way a generation's
+/// wind-down persists one, with the given metadata.
+async fn append_assistant_answer(
+    app_state: &erato::state::AppState,
+    me_user_id: &str,
+    chat_id: Uuid,
+    text: &str,
+    generation_metadata: Option<erato::models::message::GenerationMetadata>,
+) {
+    erato::models::message::submit_message(
+        &app_state.db,
+        &rebuilt_policy(app_state).await,
+        &erato::policy::types::Subject::User(me_user_id.to_string()),
+        &chat_id,
+        json!({
+            "role": "assistant",
+            "content": [{"content_type": "text", "text": text}],
+        }),
+        None,
+        None,
+        None,
+        &[],
+        None,
+        generation_metadata,
+        None,
+    )
+    .await
+    .unwrap();
+}
+
+fn answer_metadata(
+    error: Option<erato::models::message::GenerationErrorType>,
+    was_aborted: bool,
+) -> erato::models::message::GenerationMetadata {
+    erato::models::message::GenerationMetadata {
+        used_prompt_tokens: None,
+        used_completion_tokens: None,
+        used_total_tokens: None,
+        used_reasoning_tokens: None,
+        reasoning_summary: None,
+        reasoning_items: None,
+        reasoning_item_encrypted_content: None,
+        langfuse_trace_id: None,
+        was_aborted: was_aborted.then_some(true),
+        error,
+        mcp_servers_unavailable: None,
+    }
+}
+
+/// A background run's completion is derived from the child chat itself, so
+/// it survives the retention window that clears the generation columns: a
+/// client fetching the listing fresh — never having observed the run as
+/// running — still reads `completed` well after the fact. While the run is
+/// live the field stays absent alongside the running signal — asserted
+/// opportunistically, since the child may finish before the listing first
+/// shows it — and chats that are not delegated runs never carry it.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_delegated_run_outcome_survives_retention(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    // Child: slow enough that the listing observes it live first.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["CHILD-OUTCOME-TASK"],
+                &["dispatched"],
+            ));
+        let mut actions =
+            crate::test_utils::build_openai_text_streaming_response(&["CHILD-OUTCOME-ANSWER done"]);
+        actions.insert(0, BodyAction::Delay(std::time::Duration::from_secs(3)));
+        mock_llm_sse_response(then, actions);
+    });
+    // Parent turn 2: the dispatched tool response arrived.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&["dispatched"], &[]));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&[
+                "PARENT-OUTCOME-FINAL launched",
+            ]),
+        );
+    });
+    // Parent turn 1: delegate in the background.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["outcome parent question"],
+                &["CHILD-OUTCOME-TASK", "dispatched"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_delegate_outcome",
+                "delegate_to_assistant",
+                json!({
+                    "assistant_id": DELEGATE_ASSISTANT_FIXED_ID,
+                    "task": "CHILD-OUTCOME-TASK take your time",
+                }),
+            )]),
+        );
+    });
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.assistants.delegation.enabled = true;
+    app_config.assistants.delegation.allow_background = true;
+    let app_state = test_app_state(app_config, pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    insert_fixed_delegate_assistant(&app_state.db, me.id, &delegate_prompt(), None).await;
+    let server = app_server(app_state.clone());
+
+    let response = submit_with_mentions_and_run_mode(
+        &server,
+        None,
+        "outcome parent question",
+        &[DELEGATE_ASSISTANT_FIXED_ID],
+        "background",
+    )
+    .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let output = find_tool_call_update_output(&events, "delegate_to_assistant");
+    let delegate_chat_id = output["delegate_chat_id"].as_str().unwrap().to_string();
+    let origin_chat_id = crate::test_utils::extract_chat_id(&events).unwrap();
+    let origin_query = format!("?origin_chat_id={origin_chat_id}&include_delegated=true");
+
+    // The child appears in the listing only once its brief is saved, and the
+    // brief is written inside the detached child task with nothing ordering
+    // it before the parent stream's end — poll for the row. Should the child
+    // have finished by the time it surfaces, the live-phase claims are
+    // unobservable and only the terminal shape can be checked; the retention
+    // assertions below are this test's actual point.
+    let mut live_row = None;
+    for _ in 0..66 {
+        let listing = recent_chats(&server, &origin_query).await;
+        if let Some(row) = listing["chats"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|chat| chat["id"] == delegate_chat_id.as_str())
+        {
+            live_row = Some(row.clone());
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    }
+    let live_row = live_row.expect("child chat missing from listing");
+    if live_row["delegated_run_outcome"].is_null() {
+        assert!(live_row["active_generation_started_at"].is_string());
+    } else {
+        assert_eq!(live_row["delegated_run_outcome"], "completed");
+    }
+
+    // A chat that is not a delegated run never carries an outcome.
+    let listing = recent_chats(&server, "").await;
+    assert!(listed_chat(&listing, &origin_chat_id)["delegated_run_outcome"].is_null());
+
+    wait_for_child_completion(
+        &app_state.db,
+        Uuid::parse_str(&delegate_chat_id).unwrap(),
+        "CHILD-OUTCOME-ANSWER",
+    )
+    .await;
+
+    // Within the retention window the chat still holds its terminal state.
+    let listing = recent_chats(&server, &origin_query).await;
+    let row = listed_chat(&listing, &delegate_chat_id);
+    assert_eq!(row["delegated_run_outcome"], "completed");
+    assert!(row["active_generation_started_at"].is_null());
+
+    // Run the maintenance cleanup by hand as if the window had passed: the
+    // generation columns are cleared and the shared rows deleted.
+    use sea_orm::{ConnectionTrait, Statement};
+    app_state
+        .db
+        .execute_raw(Statement::from_string(
+            sea_orm::DatabaseBackend::Postgres,
+            r#"UPDATE chats
+               SET active_generation_id = NULL,
+                   generation_state = NULL,
+                   generation_started_at = NULL,
+                   generation_heartbeat_at = NULL,
+                   generation_ended_at = NULL
+               WHERE generation_state IN ('completed', 'errored')"#,
+        ))
+        .await
+        .unwrap();
+    app_state
+        .db
+        .execute_raw(Statement::from_string(
+            sea_orm::DatabaseBackend::Postgres,
+            "DELETE FROM temp_chat_generations WHERE state IN ('completed', 'errored')",
+        ))
+        .await
+        .unwrap();
+
+    // A fresh fetch still reports the completion.
+    let listing = recent_chats(&server, &origin_query).await;
+    let row = listed_chat(&listing, &delegate_chat_id);
+    assert_eq!(row["delegated_run_outcome"], "completed");
+    assert!(row["active_generation_started_at"].is_null());
+}
+
+/// The derived outcome classifies dead runs as `failed`: a brief that was
+/// never answered, the empty assistant row a hard-killed run settles into
+/// once retention clears its generation columns, a seeded parent answer
+/// whose timestamps predate the chat (killed between seeding and the brief
+/// save), an answer carrying a generation error, and a clean answer on a
+/// chat still marked `errored`. A user-stopped run keeps its partial answer
+/// and reads `completed`, consistent with an abort counting as completion
+/// for the task outcome.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_delegated_run_outcome_reports_failures(pool: Pool<Postgres>) {
+    let app_state = test_app_state(delegation_enabled_config(), pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let me_user_id = me.id.to_string();
+    let server = app_server(app_state.clone());
+
+    let assistant = create_assistant(&server, "Outcome Assistant", "prompt").await;
+    let assistant_id = Uuid::parse_str(&assistant).unwrap();
+    let origin = create_chat(&server, Some(&assistant)).await;
+    let origin_id = Uuid::parse_str(&origin).unwrap();
+
+    // Never answered, all generation columns clear: the post-reap shape.
+    let unanswered = spawn_listed_delegated_run(
+        &app_state,
+        &me_user_id,
+        assistant_id,
+        origin_id,
+        "Unanswered",
+    )
+    .await;
+
+    // Answered, but the generation recorded an error.
+    let errored_answer = spawn_listed_delegated_run(
+        &app_state,
+        &me_user_id,
+        assistant_id,
+        origin_id,
+        "Errored answer",
+    )
+    .await;
+    append_assistant_answer(
+        &app_state,
+        &me_user_id,
+        Uuid::parse_str(&errored_answer).unwrap(),
+        "half an answer",
+        Some(answer_metadata(
+            Some(erato::models::message::GenerationErrorType::ProviderError {
+                error_description: "upstream fell over".to_string(),
+                status_code: Some(502),
+            }),
+            false,
+        )),
+    )
+    .await;
+
+    // Stopped by the user mid-answer: partial text, no error.
+    let aborted =
+        spawn_listed_delegated_run(&app_state, &me_user_id, assistant_id, origin_id, "Aborted")
+            .await;
+    append_assistant_answer(
+        &app_state,
+        &me_user_id,
+        Uuid::parse_str(&aborted).unwrap(),
+        "partial answer",
+        Some(answer_metadata(None, true)),
+    )
+    .await;
+
+    // Clean answer, but the chat is still marked `errored`: while the state
+    // exists it wins over the answer shape.
+    let errored_state = spawn_listed_delegated_run(
+        &app_state,
+        &me_user_id,
+        assistant_id,
+        origin_id,
+        "Errored state",
+    )
+    .await;
+    append_assistant_answer(
+        &app_state,
+        &me_user_id,
+        Uuid::parse_str(&errored_state).unwrap(),
+        "an answer",
+        None,
+    )
+    .await;
+    use sea_orm::{ConnectionTrait, Statement};
+    app_state
+        .db
+        .execute_raw(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            r#"UPDATE chats
+               SET generation_state = 'errored', generation_ended_at = now()
+               WHERE id = $1"#,
+            [Uuid::parse_str(&errored_state).unwrap().into()],
+        ))
+        .await
+        .unwrap();
+
+    // The husk a hard-killed run leaves: submit created the assistant row
+    // before generation started, nothing ever filled it, and retention
+    // cleared the 'errored' state the reaper had set.
+    let killed =
+        spawn_listed_delegated_run(&app_state, &me_user_id, assistant_id, origin_id, "Killed")
+            .await;
+    erato::models::message::submit_message(
+        &app_state.db,
+        &rebuilt_policy(&app_state).await,
+        &erato::policy::types::Subject::User(me_user_id.to_string()),
+        &Uuid::parse_str(&killed).unwrap(),
+        json!({
+            "role": "assistant",
+            "content": [],
+        }),
+        None,
+        None,
+        None,
+        &[],
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+
+    // Killed between seeding and the brief save: the only message is a
+    // seeded copy of a parent answer, which keeps the copied conversation's
+    // timestamps and so predates the chat itself.
+    let seeded_only = erato::models::chat::create_delegated_chat(
+        &app_state.db,
+        &rebuilt_policy(&app_state).await,
+        &erato::policy::types::Subject::User(me_user_id.to_string()),
+        &me_user_id,
+        assistant_id,
+        ChatProvenance {
+            kind: ChatProvenanceKind::Delegation,
+            origin_chat_id: Some(origin_id),
+            origin_message_id: None,
+            origin_assistant_id: Some(assistant_id),
+            rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
+            depth: 1,
+            adopted_at: None,
+            expected_output: None,
+            constraints: None,
+            run_mode: None,
+        },
+        "Seeded only".to_string(),
+    )
+    .await
+    .unwrap()
+    .id
+    .to_string();
+    let seeded_only_id = Uuid::parse_str(&seeded_only).unwrap();
+    append_assistant_answer(
+        &app_state,
+        &me_user_id,
+        seeded_only_id,
+        "an answer the parent already had",
+        None,
+    )
+    .await;
+    app_state
+        .db
+        .execute_raw(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            r#"UPDATE messages
+               SET created_at = (SELECT created_at - interval '1 hour' FROM chats WHERE id = $1)
+               WHERE chat_id = $1"#,
+            [seeded_only_id.into()],
+        ))
+        .await
+        .unwrap();
+
+    app_state.global_policy_engine.invalidate_data().await;
+
+    let listing = recent_chats(
+        &server,
+        &format!("?origin_chat_id={origin}&include_delegated=true"),
+    )
+    .await;
+    assert_eq!(
+        listed_chat(&listing, &unanswered)["delegated_run_outcome"],
+        "failed"
+    );
+    assert_eq!(
+        listed_chat(&listing, &killed)["delegated_run_outcome"],
+        "failed"
+    );
+    assert_eq!(
+        listed_chat(&listing, &seeded_only)["delegated_run_outcome"],
+        "failed"
+    );
+    assert_eq!(
+        listed_chat(&listing, &errored_answer)["delegated_run_outcome"],
+        "failed"
+    );
+    assert_eq!(
+        listed_chat(&listing, &aborted)["delegated_run_outcome"],
+        "completed"
+    );
+    assert_eq!(
+        listed_chat(&listing, &errored_state)["delegated_run_outcome"],
+        "failed"
+    );
+}
+
 /// A delegated chat parked in `awaiting_approval` still surfaces through
 /// `/me/generating` and carries `pending_tool_approval_at` when listed —
 /// hiding delegated runs must never make a stranded child unreachable.

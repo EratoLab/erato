@@ -464,6 +464,7 @@ export function useChatHistory({
       origin_chat_id: undefined,
       origin_chat_title: undefined,
       origin_assistant_id: undefined,
+      delegated_run_outcome: undefined,
     };
     return [placeholder, ...listedChats];
   }, [listedChats, pendingChat, isPendingChatListed, typeFilter]);
