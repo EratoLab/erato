@@ -1,4 +1,5 @@
 import { t } from "@lingui/core/macro";
+import { skipToken } from "@tanstack/react-query";
 import { MagicWand } from "iconoir-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDebounce } from "use-debounce";
@@ -25,10 +26,16 @@ import { useTokenUsageEstimation } from "@/hooks/chat/useTokenUsageEstimation";
 import { useFilePreviewModal } from "@/hooks/ui";
 import {
   useFacets,
+  useListMcpServers,
   usePromptOptimizer,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
-import { useAssistantsFeature } from "@/providers/FeatureConfigProvider";
+import {
+  useAssistantsFeature,
+  useUserPreferencesFeature,
+} from "@/providers/FeatureConfigProvider";
 import { mergeUniqueFilesById } from "@/utils/file/mergeUniqueFilesById";
+
+import { McpServerSelector } from "./McpServerSelector";
 
 import type { TokenUsageEstimationResult } from "@/hooks/chat/useTokenUsageEstimation";
 import type {
@@ -39,6 +46,8 @@ import type React from "react";
 
 // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal form field key
 const FACET_IDS_FIELD: keyof AssistantFormData = "facetIds";
+// eslint-disable-next-line lingui/no-unlocalized-strings -- Internal form field key
+const MCP_SERVER_IDS_FIELD: keyof AssistantFormData = "mcpServerIds";
 
 function buildFormData(
   initialData?: Partial<AssistantFormData>,
@@ -172,6 +181,16 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
   } = useFilePreviewModal();
   const promptOptimizer = usePromptOptimizer();
   const { data: facetsData } = useFacets({});
+  const { mcpServersTabEnabled } = useUserPreferencesFeature();
+  // Deployments without the MCP settings surface have no per-user connect
+  // flow, so the attachment control would dead-end; skip the probe entirely.
+  const { data: mcpServersData } = useListMcpServers(
+    mcpServersTabEnabled ? {} : skipToken,
+    {
+      retry: false,
+      refetchOnWindowFocus: false,
+    },
+  );
   const {
     contextWarningThreshold,
     contextFileContributorThreshold,
@@ -195,6 +214,10 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
   );
   const availableFacets = useMemo(() => facetsData?.facets ?? [], [facetsData]);
   const globalFacetSettings = facetsData?.global_facet_settings;
+  const availableMcpServers = useMemo(
+    () => mcpServersData?.servers ?? [],
+    [mcpServersData],
+  );
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const lastTokenEstimateRequestKeyRef = useRef<string | null>(null);
   const lastAppliedInitialFormDataRef = useRef(initialFormData);
@@ -233,6 +256,33 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
       (facetId) => !availableFacetIdSet.has(facetId),
     );
   }, [availableFacets, facetsData, initialData?.facetIds]);
+
+  // Ids the listing no longer knows would fail backend validation on save, so
+  // they are dropped like unavailable facets — but only once the listing has
+  // actually answered, never on a failed or skipped probe.
+  const sanitizeMcpServerIds = useCallback(
+    (serverIds: string[]) => {
+      const availableServerIdSet = new Set(
+        availableMcpServers.map((server) => server.id),
+      );
+      return serverIds.filter((serverId) => availableServerIdSet.has(serverId));
+    },
+    [availableMcpServers],
+  );
+
+  const unavailableConfiguredMcpServers = useMemo(() => {
+    const initialServerIds = initialData?.mcpServerIds ?? [];
+    if (initialServerIds.length === 0 || !mcpServersData) {
+      return [];
+    }
+
+    const availableServerIdSet = new Set(
+      availableMcpServers.map((server) => server.id),
+    );
+    return initialServerIds.filter(
+      (serverId) => !availableServerIdSet.has(serverId),
+    );
+  }, [availableMcpServers, mcpServersData, initialData?.mcpServerIds]);
 
   // Validation
   const validateField = useCallback(
@@ -602,6 +652,28 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
     });
   }, [facetsData, sanitizeFacetIds]);
 
+  useEffect(() => {
+    if (!mcpServersData) {
+      return;
+    }
+
+    setFormData((previousFormData) => {
+      const sanitizedServerIds = sanitizeMcpServerIds(
+        previousFormData.mcpServerIds,
+      );
+      // Sanitizing only ever removes entries, so a matching length means no
+      // change.
+      if (sanitizedServerIds.length === previousFormData.mcpServerIds.length) {
+        return previousFormData;
+      }
+
+      return {
+        ...previousFormData,
+        mcpServerIds: sanitizedServerIds,
+      };
+    });
+  }, [mcpServersData, sanitizeMcpServerIds]);
+
   return (
     <form onSubmit={handleSubmit} className={className}>
       <div className="space-y-6">
@@ -617,6 +689,16 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
               id: "assistant.form.facets.unavailable",
               message:
                 "Some previously configured tools are no longer available and were removed from this assistant.",
+            })}
+          </Alert>
+        )}
+
+        {unavailableConfiguredMcpServers.length > 0 && (
+          <Alert type="warning">
+            {t({
+              id: "assistant.form.mcpServers.unavailable",
+              message:
+                "Some previously configured MCP servers are no longer available and were removed from this assistant.",
             })}
           </Alert>
         )}
@@ -827,6 +909,34 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
                 </p>
               </div>
             </div>
+          </FormField>
+        )}
+
+        {/* MCP server attachment — servers are capabilities the assistant may
+            use, distinct from the curated tool bundles above */}
+        {availableMcpServers.length > 0 && (
+          <FormField
+            label={t({
+              id: "assistant.form.mcpServers.label",
+              message: "MCP Servers",
+            })}
+            helpText={t({
+              id: "assistant.form.mcpServers.helpText",
+              message:
+                "Optional: Restrict which MCP servers may provide capabilities to this assistant. With no selection, the assistant can use every server available to the person chatting with it.",
+            })}
+            labelInlineAction={
+              <InfoTooltip translationId="assistant.form.mcpServers.tooltip" />
+            }
+          >
+            <McpServerSelector
+              servers={availableMcpServers}
+              selectedServerIds={formData.mcpServerIds}
+              onSelectionChange={(serverIds) =>
+                handleFieldChange(MCP_SERVER_IDS_FIELD, serverIds)
+              }
+              disabled={isSubmitting}
+            />
           </FormField>
         )}
 

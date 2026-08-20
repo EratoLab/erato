@@ -35,7 +35,8 @@
     "deploy/0033_add_shared_generation_streaming_state.sql",
     "deploy/0034_add_user_tool_approval_settings.sql",
     "deploy/0035_add_pinned_chats.sql",
-    "deploy/0036_add_chat_provenance.sql"
+    "deploy/0036_add_chat_provenance.sql",
+    "deploy/0037_normalize_empty_assistant_id_lists.sql"
   ],
-  "latest_change": "8eccba6908a03b1661e7a46e7544044096b29ab9"
+  "latest_change": "f396e86152c3672bbd2840208abeac92b86cd462"
 }

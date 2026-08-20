@@ -37,3 +37,4 @@
 0034_add_user_tool_approval_settings 2026-08-06T00:00:00Z Codex <codex@openai.com> # Add persistent user MCP tool approval settings
 0035_add_pinned_chats 2026-08-12T00:00:00Z Codex <codex@openai.com> # Add pinned chats
 0036_add_chat_provenance 2026-08-17T00:00:00Z Codex <codex@openai.com> # Add chat provenance generated column and delegation indexes
+0037_normalize_empty_assistant_id_lists 2026-08-20T00:00:00Z Codex <codex@openai.com> # Normalize empty assistant id lists to NULL
