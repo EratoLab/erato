@@ -2763,6 +2763,14 @@ pub struct AssistantsDelegationConfig {
     #[serde(default)]
     pub enabled: bool,
 
+    // Whether users may launch delegated runs in background mode, where the
+    // delegation tool returns at launch and the child result never flows back
+    // into the origin turn. A `background` request under a deployment with
+    // this off is downgraded to `wait`, not rejected — the client-side gate is
+    // UX, the server decides. Defaults to `false`.
+    #[serde(default)]
+    pub allow_background: bool,
+
     // Maximum wall-clock duration in seconds a delegated child run may take
     // before it is aborted and reported to the origin chat as timed out.
     // Defaults to `600`.
@@ -2806,6 +2814,7 @@ impl Default for AssistantsDelegationConfig {
     fn default() -> Self {
         Self {
             enabled: false,
+            allow_background: false,
             run_timeout_seconds: default_delegation_run_timeout_seconds(),
             max_mentions_per_message: default_delegation_max_mentions_per_message(),
             result_max_chars: default_delegation_result_max_chars(),

@@ -36,6 +36,21 @@ pub struct GenerationParameters {
     pub action_facet_args: Option<HashMap<String, String>>,
 }
 
+// Homed here rather than in `services::delegation` because it is a
+// wire+persistence type: requests deserialize it and `InputParameters`
+// stores it.
+/// How a delegated child run relates to the turn that spawned it: `wait`
+/// blocks the turn on the child and feeds the result back into it,
+/// `background` returns at launch and the child result never re-enters the
+/// turn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum DelegationRunMode {
+    #[default]
+    Wait,
+    Background,
+}
+
 /// User-provided input context stored on user messages.
 ///
 /// Captures contextual information the user supplied alongside their message,
@@ -54,6 +69,13 @@ pub struct InputParameters {
     /// if any. Persisted so edit and regenerate replay the mentions.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mentioned_assistant_ids: Option<Vec<String>>,
+    /// Run mode requested for the delegated runs of this message. Only
+    /// `background` is ever written — absence means wait — and it is the
+    /// requested mode, not the gate-downgraded one: `allow_background` is
+    /// applied at dispatch time, so a replay under a later-enabled gate
+    /// honours the user's original choice.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delegation_run_mode: Option<DelegationRunMode>,
 }
 
 /// Request-scoped context captured for a generation request.
@@ -878,6 +900,26 @@ pub fn get_input_mentioned_assistant_ids_from_message(
             })
             .collect()
     }))
+}
+
+/// The delegation run mode stored in a user message's input parameters, if
+/// any. Used by regenerate (and edit fallback) to replay the mode the original
+/// message carried when the request doesn't re-send it.
+pub fn get_input_delegation_run_mode_from_message(
+    message: &messages::Model,
+) -> Result<Option<DelegationRunMode>, Report> {
+    let Some(input_params_json) = &message.input_parameters else {
+        return Ok(None);
+    };
+    let input_params: InputParameters =
+        serde_json::from_value(input_params_json.clone()).map_err(|e| {
+            eyre!(
+                "Failed to parse input parameters for message {}: {}",
+                message.id,
+                e
+            )
+        })?;
+    Ok(input_params.delegation_run_mode)
 }
 
 /// Resolve a provider for a user message branch by checking the assistant response that follows

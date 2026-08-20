@@ -3413,6 +3413,23 @@ Whether in-chat delegation to @-mentioned assistants is enabled. When enabled, u
 enabled = true
 ```
 
+#### `assistants.delegation.allow_background`
+
+{/* erato_toml_config_key: assistants.delegation.allow_background */}
+
+Whether users may launch delegated runs in background mode, where the delegation tool returns at launch and the child run's result never flows back into the origin turn. When disabled, a request asking for background mode is downgraded to a normally awaited run rather than rejected. Requires `assistants.delegation.enabled`.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+**Example:**
+
+```toml
+[assistants.delegation]
+allow_background = true
+```
+
 #### `assistants.delegation.run_timeout_seconds`
 
 {/* erato_toml_config_key: assistants.delegation.run_timeout_seconds */}
