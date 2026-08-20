@@ -30,6 +30,8 @@ export interface UiChatMessage extends Message {
   action_facet_args?: Record<string, string>;
   /** MCP server IDs that were unavailable while preparing this generation */
   mcp_servers_unavailable?: string[];
+  /** MCP server IDs skipped because this user has not connected them yet */
+  mcp_servers_needing_auth?: string[];
   /** Backend-rendered assistant error report for support/debugging */
   error_report?: string;
 }
@@ -70,6 +72,7 @@ export function mapApiMessageToUiMessage(
     error: isMessageError(error) ? error : undefined,
     error_report: apiMessage.error_report ?? undefined,
     mcp_servers_unavailable: apiMessage.mcp_servers_unavailable ?? undefined,
+    mcp_servers_needing_auth: apiMessage.mcp_servers_needing_auth ?? undefined,
     action_facet_id: apiMessage.action_facet_id ?? undefined,
     action_facet_args: apiMessage.action_facet_args ?? undefined,
   };

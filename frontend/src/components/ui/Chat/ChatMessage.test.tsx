@@ -1,5 +1,6 @@
 import { I18nProvider } from "@lingui/react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { messages as enMessages } from "@/locales/en/messages.json";
@@ -292,6 +293,132 @@ describe("ChatMessage", () => {
       expect(
         screen.getByRole("button", { name: "Copy error report" }),
       ).toHaveTextContent("Copied");
+    });
+  });
+
+  describe("MCP needing-auth notice", () => {
+    const LocationProbe = () => {
+      const location = useLocation();
+      return <div data-testid="location-search">{location.search}</div>;
+    };
+
+    const renderAssistantMessage = async (
+      overrides: Partial<UiChatMessage>,
+      {
+        isSharedDialog = false,
+        withRouter = true,
+      }: { isSharedDialog?: boolean; withRouter?: boolean } = {},
+    ) => {
+      const message: UiChatMessage = {
+        id: "msg_mcp_auth",
+        content: [{ content_type: "text", text: "Answered without tools" }],
+        role: "assistant",
+        sender: "assistant",
+        authorId: "assistant_1",
+        createdAt: new Date("2025-01-01T12:00:00Z").toISOString(),
+        status: "complete",
+        ...overrides,
+      };
+
+      const Controls = () => <div data-testid="message-controls-probe" />;
+
+      const { i18n } = await import("@lingui/core");
+      i18n.load("en", enMessages as unknown as Messages);
+      i18n.activate("en");
+
+      const tree = (
+        <I18nProvider i18n={i18n}>
+          <ChatMessage
+            message={message}
+            controls={Controls}
+            controlsContext={{
+              currentUserId: "user_1",
+              dialogOwnerId: "user_1",
+              isSharedDialog,
+            }}
+            onMessageAction={async () => true}
+          />
+          {withRouter && <LocationProbe />}
+        </I18nProvider>
+      );
+
+      render(withRouter ? <MemoryRouter>{tree}</MemoryRouter> : tree);
+    };
+
+    it("renders the notice with the server name and a working settings link", async () => {
+      await renderAssistantMessage({
+        mcp_servers_needing_auth: ["github-server"],
+      });
+
+      expect(screen.getByTestId("mcp-needs-auth-notice")).toHaveTextContent(
+        "github-server is available in this chat but not connected, so its tools were not used.",
+      );
+
+      fireEvent.click(screen.getByTestId("mcp-needs-auth-connect"));
+
+      expect(screen.getByTestId("location-search")).toHaveTextContent(
+        "?preferencesDialog=open&preferencesTab=serversTools",
+      );
+    });
+
+    it("enumerates multiple servers in a single notice", async () => {
+      await renderAssistantMessage({
+        mcp_servers_needing_auth: ["github-server", "jira-server"],
+      });
+
+      const notices = screen.getAllByTestId("mcp-needs-auth-notice");
+      expect(notices).toHaveLength(1);
+      expect(notices[0]).toHaveTextContent(
+        "github-server, jira-server are available in this chat but not connected, so their tools were not used.",
+      );
+    });
+
+    it("renders nothing without the metadata", async () => {
+      await renderAssistantMessage({});
+
+      expect(
+        screen.queryByTestId("mcp-needs-auth-notice"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("does not treat genuinely unavailable servers as needing auth", async () => {
+      await renderAssistantMessage({
+        mcp_servers_unavailable: ["broken-server"],
+      });
+
+      expect(
+        screen.queryByTestId("mcp-needs-auth-notice"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("keeps the notice but suppresses Connect on the shared-dialog surface", async () => {
+      await renderAssistantMessage(
+        { mcp_servers_needing_auth: ["github-server"] },
+        { isSharedDialog: true },
+      );
+
+      expect(screen.getByTestId("mcp-needs-auth-notice")).toHaveTextContent(
+        "github-server is available in this chat but not connected, so its tools were not used.",
+      );
+      // Share-link viewers have no settings dialog to land in.
+      expect(
+        screen.queryByTestId("mcp-needs-auth-connect"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("keeps the notice but suppresses Connect where no Router is mounted", async () => {
+      await renderAssistantMessage(
+        { mcp_servers_needing_auth: ["github-server"] },
+        { withRouter: false },
+      );
+
+      expect(screen.getByTestId("mcp-needs-auth-notice")).toHaveTextContent(
+        "github-server is available in this chat but not connected, so its tools were not used.",
+      );
+      // Kit/add-in hosts mount no settings-dialog chrome to answer the click.
+      expect(
+        screen.queryByTestId("mcp-needs-auth-connect"),
+      ).not.toBeInTheDocument();
     });
   });
 });

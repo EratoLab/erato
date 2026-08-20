@@ -143,6 +143,13 @@ export interface Message {
   error?: MessageError;
   error_report?: string;
   mcp_servers_unavailable?: string[];
+  /**
+   * MCP servers skipped for this generation only because the user has not
+   * completed their OAuth connection — unlike `mcp_servers_unavailable`
+   * (broken/unreachable), these work the moment the user connects them in
+   * settings, so the UI offers a connect affordance instead of an error.
+   */
+  mcp_servers_needing_auth?: string[];
   previous_message_id?: string;
   // Whether this message is in the active thread per backend lineage logic
   is_message_in_active_thread?: boolean;

@@ -243,6 +243,12 @@ With this setup:
 
 This affects which MCP servers can be attached to assistants and which servers are available during generation for a given user.
 
+## Server selection in chats
+
+Within a chat, there is deliberately no per-server toggle: facets are the chat-side tool-selection primitive. A facet contributes tool allowlist patterns (qualified by server ID), so selecting facets narrows the offered tools to those patterns. Independently, an assistant can be restricted to a subset of servers in the assistant editor.
+
+In a chat with no selected facets (and no assistant restriction), the tools of every server the user is authorized for — and, for `oauth2` servers, has connected — are offered. A server the user has not connected yet is skipped without failing the response; the affected reply shows a short notice with a shortcut to the connection settings.
+
 ## Deployment Considerations
 
 When deploying Erato with MCP servers:

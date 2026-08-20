@@ -19,6 +19,7 @@ import { hasToolCalls as messageHasToolCalls } from "@/utils/adapters/toolCallAd
 import { isImageFile } from "@/utils/file/fileTypeUtils";
 import { teamsUploadDisplayName } from "@/utils/teams/teamsUploadName";
 
+import { McpNeedsAuthNotice } from "./McpNeedsAuthNotice";
 import { Alert } from "../Feedback/Alert";
 import { Avatar } from "../Feedback/Avatar";
 import { CopyErrorButton } from "../Feedback/CopyErrorButton";
@@ -247,6 +248,26 @@ export const ChatMessage = memo(function ChatMessage({
             hasError={!!message.error}
             outlookArtifact={message.outlookArtifact}
           />
+
+          {/* Only the assistant message of the affected generation carries
+              this metadata, so absence costs nothing here. Deliberately keyed
+              off needing-auth alone: unavailable servers have no user-side
+              remedy, so they must not raise a connect affordance.
+
+              The text renders on every surface — like the error alert above,
+              it is part of the record of the response — but the Connect button
+              needs the settings-dialog chrome that watches the preferences
+              query params, which share-link pages do not mount, hence this
+              flag. Routerless hosts (component-kit / add-in) are handled by
+              the notice itself, which drops the button when its settings
+              hook reports no Router. */}
+          {message.mcp_servers_needing_auth &&
+            message.mcp_servers_needing_auth.length > 0 && (
+              <McpNeedsAuthNotice
+                serverIds={message.mcp_servers_needing_auth}
+                showConnect={!controlsContext.isSharedDialog}
+              />
+            )}
 
           {/* Display attached files if any */}
           {message.input_files_ids && message.input_files_ids.length > 0 && (
