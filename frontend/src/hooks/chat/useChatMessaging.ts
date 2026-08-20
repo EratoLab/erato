@@ -63,6 +63,7 @@ import { useExplicitNavigation } from "./useExplicitNavigation";
 import type {
   ActionFacetRequest,
   ContentPart,
+  DelegationRunMode,
   MessageSubmitStreamingResponseMessage,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
@@ -1374,6 +1375,7 @@ export function useChatMessaging(
       selectedFacetIds?: string[],
       actionFacet?: ActionFacetRequest,
       mentionedAssistantIds?: string[],
+      delegationRunMode?: DelegationRunMode,
     ): Promise<string | undefined> => {
       // Prevent duplicate submissions
       if (isSubmittingForKey(streamKey)) {
@@ -1489,6 +1491,7 @@ export function useChatMessaging(
           selectedFacetIds,
           actionFacet,
           mentionedAssistantIds,
+          delegationRunMode,
         );
 
         logger.log("[DEBUG_STREAMING] sendMessage: Sending requestBody:", {

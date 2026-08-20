@@ -54,6 +54,7 @@ import {
   useAudioTranscriptionFeature,
   useAudioDictationFeature,
   useAudioConversationalFeature,
+  useAssistantsFeature,
 } from "@/providers/FeatureConfigProvider";
 import {
   applyMentionSelection,
@@ -81,6 +82,7 @@ import { AssistantMentionPopover } from "./AssistantMentionPopover";
 import { ChatInputAddControls } from "./ChatInputAddControls";
 import { ChatInputAudioModeButton } from "./ChatInputAudioModeButton";
 import { ChatInputTokenUsage } from "./ChatInputTokenUsage";
+import { DelegationRunModePopover } from "./DelegationRunModePopover";
 import { FacetSelector } from "./FacetSelector";
 import { ModelSelector } from "./ModelSelector";
 import { WaveformButton } from "./WaveformButton";
@@ -99,13 +101,18 @@ import type { MentionableAssistant } from "@/hooks/chat/useMentionableAssistants
 import type {
   FileUploadItem,
   ChatModel,
+  DelegationRunMode,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type {
   AssistantMention,
   MentionTrigger,
 } from "@/utils/chat/assistantMentions";
 import type { FileType } from "@/utils/fileTypes";
-import type { ClipboardEvent as ReactClipboardEvent, Ref } from "react";
+import type {
+  ClipboardEvent as ReactClipboardEvent,
+  FormEvent,
+  Ref,
+} from "react";
 
 const logger = createLogger("UI", "ChatInput");
 const AUDIO_TRANSCRIPTION_STATUS_POLL_INTERVAL_MS = 1000;
@@ -225,6 +232,7 @@ interface ChatInputProps {
     modelId?: string,
     selectedFacetIds?: string[],
     mentionedAssistantIds?: string[],
+    delegationRunMode?: DelegationRunMode,
   ) => void;
   onRegenerate?: () => void;
   handleFileAttachments?: (files: FileUploadItem[]) => void;
@@ -662,6 +670,38 @@ export const ChatInput = ({
     all: mentionableAssistants,
   } = useMentionableAssistants(assistantId);
 
+  // --- Wait-or-background for mentioned sends ------------------------------
+  // Gated on the feature flags rather than `canMentionAssistants`: a restored
+  // draft's tracked mentions outlive the assistant query, and whatever the
+  // draft holds is what submit delegates to. Without the server-side
+  // `allow_background` gate there is no popover at all — offering a choice the
+  // server would downgrade to "wait" is worse than not asking.
+  const {
+    enabled: assistantsFeatureEnabled,
+    delegationEnabled,
+    delegationAllowBackground,
+  } = useAssistantsFeature();
+  const canChooseDelegationRunMode = Boolean(
+    assistantsFeatureEnabled && delegationEnabled && delegationAllowBackground,
+  );
+  // Which pending action the open popover decides for: a direct send or a
+  // queue snapshot. Null = closed.
+  const [delegationRunModeIntent, setDelegationRunModeIntent] = useState<
+    "send" | "queue" | null
+  >(null);
+  // A made choice for the submit that follows it: null = nothing decided,
+  // `{ runMode: undefined }` = the user chose "wait".
+  const pendingRunModeChoiceRef = useRef<{
+    runMode?: DelegationRunMode;
+  } | null>(null);
+
+  const shouldAskDelegationRunMode = useCallback(
+    (candidateMessage: string, tracked: AssistantMention[]) =>
+      canChooseDelegationRunMode &&
+      resolveMentionedAssistantIds(candidateMessage, tracked).length > 0,
+    [canChooseDelegationRunMode],
+  );
+
   // --- Queue-the-next-message (ERMAIN-470) ---------------------------------
   // The queued payload lives in the messageQueueStore keyed by the stable
   // compose session (so it survives the new-chat null->real-id rename and stays
@@ -679,70 +719,55 @@ export const ChatInput = ({
   const [isDrainArmed, setIsDrainArmed] = useState(false);
   // Depth-1 overwrite guard: a message is already queued and the user is trying
   // to queue another. We ask for confirmation (data-loss safety) before
-  // replacing, rather than silently clobbering the earlier draft.
-  const [queueReplacePending, setQueueReplacePending] = useState(false);
+  // replacing, rather than silently clobbering the earlier draft. The pending
+  // record carries the delegation run mode already chosen for the replacing
+  // draft, so confirming snapshots it with the queued message.
+  const [queueReplacePending, setQueueReplacePending] = useState<
+    false | { runMode?: DelegationRunMode }
+  >(false);
   const hasPendingConfirmation = useHasPendingConfirmation(chatId);
 
   // Enter-while-a-turn-is-generating queues the draft instead of sending.
   // Gated on isPendingResponse specifically (a turn is in flight) — not the
   // broader send lock, which also covers the initial history load that produces
   // no completion edge to drain on. Returns true when it consumed the event.
-  const enqueueCurrentMessage = useCallback((): boolean => {
-    if (!isPendingResponse || isAnyTokenLimitExceeded) {
-      return false;
-    }
-    // Leave the audio/dictation auto-send flows untouched.
-    if (
-      isDictating ||
-      isDictationStarting ||
-      isDictationCompleting ||
-      isCapturingAudio
-    ) {
-      return false;
-    }
-    const trimmedMessage = message.trim();
-    if (!trimmedMessage && attachedFiles.length === 0) {
-      return false;
-    }
-    // Depth-1: a message is already queued — confirm before overwriting it
-    // (data-loss safety) rather than silently replacing. Both Enter and the
-    // Send/Queue button reach this choke point, so the guard covers both.
-    if (getQueuedBySessionId(composeSessionId)) {
-      setQueueReplacePending(true);
-      return true;
-    }
-    setQueuedBySessionId(composeSessionId, {
-      message: trimmedMessage,
-      attachedFiles,
-      mentionedAssistants: pruneTrackedMentions(
-        trimmedMessage,
-        mentionedAssistants,
-      ),
-    });
-    setMessage("");
-    handleRemoveAllFiles();
-    return true;
-  }, [
-    isPendingResponse,
-    isAnyTokenLimitExceeded,
-    isDictating,
-    isDictationStarting,
-    isDictationCompleting,
-    isCapturingAudio,
-    message,
-    attachedFiles,
-    mentionedAssistants,
-    getQueuedBySessionId,
-    setQueuedBySessionId,
-    composeSessionId,
-    handleRemoveAllFiles,
-  ]);
-
-  // Confirmed overwrite: replace the queued message with the current composer
-  // draft and clear the composer.
-  const commitQueueReplace = useCallback(() => {
-    const trimmedMessage = message.trim();
-    if (trimmedMessage || attachedFiles.length > 0) {
+  //
+  // A mentioned draft first asks wait-or-background; the resolved choice
+  // re-enters through `decidedDelegation` and is snapshotted with the queued
+  // message — the mode belongs to that draft, not to whatever is selected when
+  // the drain later fires.
+  const enqueueCurrentMessage = useCallback(
+    (decidedDelegation?: { runMode?: DelegationRunMode }): boolean => {
+      if (!isPendingResponse || isAnyTokenLimitExceeded) {
+        return false;
+      }
+      // Leave the audio/dictation auto-send flows untouched.
+      if (
+        isDictating ||
+        isDictationStarting ||
+        isDictationCompleting ||
+        isCapturingAudio
+      ) {
+        return false;
+      }
+      const trimmedMessage = message.trim();
+      if (!trimmedMessage && attachedFiles.length === 0) {
+        return false;
+      }
+      if (
+        !decidedDelegation &&
+        shouldAskDelegationRunMode(trimmedMessage, mentionedAssistants)
+      ) {
+        setDelegationRunModeIntent("queue");
+        return true;
+      }
+      // Depth-1: a message is already queued — confirm before overwriting it
+      // (data-loss safety) rather than silently replacing. Both Enter and the
+      // Send/Queue button reach this choke point, so the guard covers both.
+      if (getQueuedBySessionId(composeSessionId)) {
+        setQueueReplacePending({ runMode: decidedDelegation?.runMode });
+        return true;
+      }
       setQueuedBySessionId(composeSessionId, {
         message: trimmedMessage,
         attachedFiles,
@@ -750,6 +775,48 @@ export const ChatInput = ({
           trimmedMessage,
           mentionedAssistants,
         ),
+        ...(decidedDelegation?.runMode
+          ? { delegationRunMode: decidedDelegation.runMode }
+          : {}),
+      });
+      setMessage("");
+      handleRemoveAllFiles();
+      return true;
+    },
+    [
+      isPendingResponse,
+      isAnyTokenLimitExceeded,
+      isDictating,
+      isDictationStarting,
+      isDictationCompleting,
+      isCapturingAudio,
+      message,
+      attachedFiles,
+      mentionedAssistants,
+      shouldAskDelegationRunMode,
+      getQueuedBySessionId,
+      setQueuedBySessionId,
+      composeSessionId,
+      handleRemoveAllFiles,
+    ],
+  );
+
+  // Confirmed overwrite: replace the queued message with the current composer
+  // draft and clear the composer.
+  const commitQueueReplace = useCallback(() => {
+    const trimmedMessage = message.trim();
+    if (trimmedMessage || attachedFiles.length > 0) {
+      const runMode = queueReplacePending
+        ? queueReplacePending.runMode
+        : undefined;
+      setQueuedBySessionId(composeSessionId, {
+        message: trimmedMessage,
+        attachedFiles,
+        mentionedAssistants: pruneTrackedMentions(
+          trimmedMessage,
+          mentionedAssistants,
+        ),
+        ...(runMode ? { delegationRunMode: runMode } : {}),
       });
       setMessage("");
       handleRemoveAllFiles();
@@ -759,13 +826,16 @@ export const ChatInput = ({
     message,
     attachedFiles,
     mentionedAssistants,
+    queueReplacePending,
     setQueuedBySessionId,
     composeSessionId,
     handleRemoveAllFiles,
   ]);
 
   // Return a queued payload to the composer (chip click-to-edit, abort, error),
-  // merging with whatever the user has typed since so nothing is lost.
+  // merging with whatever the user has typed since so no text or file is lost.
+  // An answered wait-or-background choice is deliberately NOT restored: back
+  // in the composer the draft is editable again, so the next send asks afresh.
   const restoreQueuedToComposer = useCallback(
     (queued: ComposeDraftState) => {
       const merged = mergeComposeDrafts(queued, {
@@ -1325,6 +1395,9 @@ export const ChatInput = ({
         messageContent,
         mentionedAssistants,
       );
+      // Set for the duration of this synchronous submit by the wrapper below;
+      // "wait" stays undefined so the request omits the field.
+      const delegationRunMode = pendingRunModeChoiceRef.current?.runMode;
 
       logger.log("Submit:", {
         messagePreview:
@@ -1334,14 +1407,26 @@ export const ChatInput = ({
         model: selectedModel?.chat_provider_id,
         selectedFacetIds,
         mentionedAssistantIds,
+        delegationRunMode,
       });
-      onSendMessage(
-        messageContent,
-        inputFileIds,
-        selectedModel?.chat_provider_id,
-        selectedFacetIds,
-        mentionedAssistantIds,
-      );
+      if (delegationRunMode) {
+        onSendMessage(
+          messageContent,
+          inputFileIds,
+          selectedModel?.chat_provider_id,
+          selectedFacetIds,
+          mentionedAssistantIds,
+          delegationRunMode,
+        );
+      } else {
+        onSendMessage(
+          messageContent,
+          inputFileIds,
+          selectedModel?.chat_provider_id,
+          selectedFacetIds,
+          mentionedAssistantIds,
+        );
+      }
     },
     isLoading ||
       isPendingResponse ||
@@ -1444,19 +1529,35 @@ export const ChatInput = ({
       setQueueReplacePending(false);
       // Model/facets are read live (not snapshotted at enqueue) so a selection
       // the user changes while the message waits applies to the sent message.
-      // Mentions are the exception: they are part of the queued text.
-      onSendMessage(
-        stillQueued.message,
+      // Mentions are the exception: they are part of the queued text — and the
+      // delegation run mode travels with them, answered for this draft when it
+      // was queued.
+      const queuedInputFileIds =
         stillQueued.attachedFiles.length > 0
           ? stillQueued.attachedFiles.map((file) => file.id)
-          : undefined,
-        selectedModel?.chat_provider_id,
-        selectedFacetIds,
-        resolveMentionedAssistantIds(
-          stillQueued.message,
-          stillQueued.mentionedAssistants,
-        ),
+          : undefined;
+      const queuedMentionedAssistantIds = resolveMentionedAssistantIds(
+        stillQueued.message,
+        stillQueued.mentionedAssistants,
       );
+      if (stillQueued.delegationRunMode) {
+        onSendMessage(
+          stillQueued.message,
+          queuedInputFileIds,
+          selectedModel?.chat_provider_id,
+          selectedFacetIds,
+          queuedMentionedAssistantIds,
+          stillQueued.delegationRunMode,
+        );
+      } else {
+        onSendMessage(
+          stillQueued.message,
+          queuedInputFileIds,
+          selectedModel?.chat_provider_id,
+          selectedFacetIds,
+          queuedMentionedAssistantIds,
+        );
+      }
     }, 0);
     return () => clearTimeout(timer);
   }, [
@@ -1768,6 +1869,62 @@ export const ChatInput = ({
     !isDictating &&
     !isDictationStarting &&
     !isCapturingAudio;
+
+  // Chokepoint in front of handleSubmit (form submit, Enter, and the
+  // post-choice resubmit all pass through): a mentioned send that has not
+  // answered wait-or-background yet opens the popover INSTEAD of submitting,
+  // leaving the draft untouched so a cancel costs nothing. Only a send that
+  // would actually fire is intercepted — the popover must never outlive a
+  // submit that handleSubmit would have dropped. Not memoized for the same
+  // reason as handleSubmit above.
+  const handleComposerSubmit = (e: FormEvent) => {
+    const decided = pendingRunModeChoiceRef.current;
+    if (
+      !decided &&
+      Boolean(canSendMessage) &&
+      !isSendDisabled &&
+      shouldAskDelegationRunMode(message.trim(), mentionedAssistants)
+    ) {
+      e.preventDefault();
+      setDelegationRunModeIntent("send");
+      return;
+    }
+    try {
+      // The submit callback inside handleSubmit reads the choice from the ref
+      // synchronously; clearing in `finally` keeps a submit that never reaches
+      // the callback (guards, empty draft) from leaking the choice into a
+      // later, unrelated send.
+      handleSubmit(e);
+    } finally {
+      pendingRunModeChoiceRef.current = null;
+    }
+  };
+
+  // A popover choice resumes the intercepted action with the chosen mode.
+  const resolveDelegationRunModeChoice = useCallback(
+    (runMode?: DelegationRunMode) => {
+      const intent = delegationRunModeIntent;
+      setDelegationRunModeIntent(null);
+      if (!intent) {
+        return;
+      }
+      focusInput();
+      if (intent === "queue" && enqueueCurrentMessage({ runMode })) {
+        return;
+      }
+      // Direct send — or the turn ended while the queue choice was open, in
+      // which case the draft can simply be sent now.
+      pendingRunModeChoiceRef.current = { runMode };
+      formRef.current?.requestSubmit();
+    },
+    [delegationRunModeIntent, enqueueCurrentMessage, focusInput],
+  );
+
+  // Escape/click-away: the send is abandoned entirely and the draft stays.
+  const cancelDelegationRunModeChoice = useCallback(() => {
+    setDelegationRunModeIntent(null);
+    focusInput();
+  }, [focusInput]);
 
   const shouldShowAudioModeSelector =
     audioConversationalEnabled && audioTranscriptionEnabled;
@@ -2239,7 +2396,7 @@ export const ChatInput = ({
         className={clsx("w-full ", className, {
           "pb-0 sm:pb-0": aiUsageAdvisory,
         })}
-        onSubmit={handleSubmit}
+        onSubmit={handleComposerSubmit}
       >
         {/* Token usage warnings */}
         <ChatInputTokenUsage
@@ -2573,7 +2730,7 @@ export const ChatInput = ({
                     if (enqueueCurrentMessage()) {
                       return;
                     }
-                    handleSubmit(e);
+                    handleComposerSubmit(e);
                   }
                 }}
                 placeholder={
@@ -2703,7 +2860,20 @@ export const ChatInput = ({
               )}
             </div>
 
-            <div className="flex min-w-0 flex-wrap items-center gap-[var(--theme-spacing-control-gap)]">
+            <div className="relative flex min-w-0 flex-wrap items-center gap-[var(--theme-spacing-control-gap)]">
+              {/* Out of flow like the mention popover's anchor: the popover
+                  positions off a measurable element, and the right edge of
+                  this cluster is where the Send/Queue button that triggered
+                  the choice sits. */}
+              {canChooseDelegationRunMode && (
+                <div className="pointer-events-none absolute right-0 top-0 size-0">
+                  <DelegationRunModePopover
+                    isOpen={delegationRunModeIntent !== null}
+                    onChoose={resolveDelegationRunModeChoice}
+                    onCancel={cancelDelegationRunModeChoice}
+                  />
+                </div>
+              )}
               {isAudioMode && (
                 <Button
                   type="button"

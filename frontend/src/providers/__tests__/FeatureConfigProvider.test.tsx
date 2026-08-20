@@ -158,6 +158,7 @@ describe("FeatureConfigProvider", () => {
         assistants: {
           enabled: false,
           delegationEnabled: false,
+          delegationAllowBackground: false,
           enableEditSharing: true,
           showRecentItems: false,
           showRecentItemsCollapsible: false,
@@ -840,6 +841,7 @@ describe("FeatureConfigProvider", () => {
       expect(result.current).toEqual({
         enabled: false,
         delegationEnabled: false,
+        delegationAllowBackground: false,
         enableEditSharing: true,
         showRecentItems: false,
         showRecentItemsCollapsible: false,
@@ -889,6 +891,7 @@ describe("FeatureConfigProvider", () => {
       expect(result.current).toEqual({
         enabled: true,
         delegationEnabled: false,
+        delegationAllowBackground: false,
         enableEditSharing: true,
         showRecentItems: true,
         showRecentItemsCollapsible: true,

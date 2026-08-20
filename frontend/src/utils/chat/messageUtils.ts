@@ -1,6 +1,9 @@
 import { extractTextFromContent } from "../adapters/contentPartAdapter";
 
-import type { ActionFacetRequest } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  ActionFacetRequest,
+  DelegationRunMode,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 
 /**
@@ -115,6 +118,7 @@ export interface SubmitStreamRequestBody {
   selected_facet_ids?: string[];
   action_facet?: ActionFacetRequest;
   mentioned_assistant_ids?: string[];
+  delegation_run_mode?: DelegationRunMode;
 }
 
 /**
@@ -126,6 +130,8 @@ export interface SubmitStreamRequestBody {
  * @param modelId Optional chat provider ID for model selection.
  * @param assistantId Optional assistant ID to associate with the chat.
  * @param mentionedAssistantIds Optional assistants to delegate this turn to.
+ * @param delegationRunMode Optional run mode for delegated mentions; left out
+ *   for the wire default ("wait").
  * @returns The request body object.
  */
 export function constructSubmitStreamRequestBody(
@@ -138,6 +144,7 @@ export function constructSubmitStreamRequestBody(
   selectedFacetIds?: string[],
   actionFacet?: ActionFacetRequest,
   mentionedAssistantIds?: string[],
+  delegationRunMode?: DelegationRunMode,
 ): SubmitStreamRequestBody {
   const body: SubmitStreamRequestBody = {
     user_message: userMessageContent,
@@ -166,6 +173,9 @@ export function constructSubmitStreamRequestBody(
   }
   if (mentionedAssistantIds && mentionedAssistantIds.length > 0) {
     body.mentioned_assistant_ids = mentionedAssistantIds;
+  }
+  if (delegationRunMode) {
+    body.delegation_run_mode = delegationRunMode;
   }
 
   return body;
