@@ -3681,6 +3681,11 @@ msgstr "Salida"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.background"
+msgstr "Enviado a segundo plano"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
 msgid "trace.delegation.done"
 msgstr "Delegado a {name}"
 

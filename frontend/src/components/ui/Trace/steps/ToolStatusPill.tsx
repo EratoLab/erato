@@ -43,6 +43,16 @@ interface ToolStatusPillProps {
 // eslint-disable-next-line lingui/no-unlocalized-strings -- utility classes
 const PILL_CLASS = "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium";
 
+/**
+ * Informational pill for a settled step whose state deserves naming without
+ * any alarm — the in-flight tone, but still: no animation, no error styling.
+ */
+export const SettledInfoPill = ({ label }: { label: string }) => (
+  <span className={clsx(PILL_CLASS, "bg-theme-info-bg text-theme-info-fg")}>
+    {label}
+  </span>
+);
+
 /** The pill next to a tool step's title, or nothing when the rail says it. */
 export const ToolStatusPill = ({
   status,

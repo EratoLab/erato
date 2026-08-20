@@ -142,6 +142,49 @@ describe("delegation step", () => {
     expect(screen.getByText("Delegated to Research")).toBeInTheDocument();
   });
 
+  it("settles a backgrounded dispatch the moment it lands, mid-stream", () => {
+    renderStep({ ...IDENTITY, background: true });
+
+    expect(screen.getByText("Delegated to Research")).toBeInTheDocument();
+    const pill = screen.getByText("Sent to background");
+    expect(pill).not.toHaveClass("bg-theme-error-bg");
+    expect(pill).not.toHaveClass("animate-pulse");
+    expect(screen.queryByText("Running")).toBeNull();
+    expect(screen.queryByText("Failed")).toBeNull();
+  });
+
+  it("keeps the backgrounded presentation frozen after the turn ends", () => {
+    renderStep({ ...IDENTITY, background: true }, undefined, false);
+
+    expect(screen.getByText("Delegated to Research")).toBeInTheDocument();
+    expect(screen.getByText("Sent to background")).toBeInTheDocument();
+    const link = screen.getByTestId("delegation-open-run");
+    expect(link).toHaveAttribute("href", "/a/asst-1/chat-7");
+    expect(link).toHaveAttribute("target", "_blank");
+    // Nothing to unfold: the part will never carry steps or a result.
+    expect(
+      screen.queryByRole("button", { name: /Delegated to Research/ }),
+    ).toBeNull();
+  });
+
+  it("says the detachment even over an approval decision", () => {
+    // ToolStatusPill gives an approval decision top priority; the background
+    // branch must win before it ever gets the chance.
+    render(
+      <ToolUseStep
+        part={part({ ...IDENTITY, background: true })}
+        status="done"
+        isStreaming={false}
+        isCollapsed={false}
+        isLastStep
+        approvalStatus="approved"
+      />,
+    );
+
+    expect(screen.getByText("Sent to background")).toBeInTheDocument();
+    expect(screen.queryByText("Approved")).toBeNull();
+  });
+
   it("offers the delegated run in a new tab from the first frame on", () => {
     renderStep({ ...IDENTITY, localTrace: { steps: [] } });
 
@@ -178,6 +221,7 @@ describe("delegation step", () => {
     ["no output yet", null],
     ["a foreign shape", { localTrace: { steps: [] } }],
     ["a non-object output", "delegated"],
+    ["a background marker with no run", { background: true }],
   ])("renders %s as the plain tool call it is", (_case, output) => {
     renderStep(output);
 

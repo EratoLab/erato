@@ -17,8 +17,38 @@ describe("parseDelegationEnvelope", () => {
       assistantName: "Research",
       delegateChatId: "chat-1",
       result: undefined,
+      background: false,
       truncated: false,
     });
+  });
+
+  it("reads a detached dispatch: marker, identity, and no status", () => {
+    expect(
+      parseDelegationEnvelope({
+        assistant_id: "asst-1",
+        assistant_name: "Research",
+        delegate_chat_id: "chat-1",
+        background: true,
+      }),
+    ).toMatchObject({
+      status: undefined,
+      background: true,
+      delegateChatId: "chat-1",
+    });
+  });
+
+  it("lets a settled status outrank a stray background marker", () => {
+    expect(
+      parseDelegationEnvelope({
+        ...RUNNING,
+        status: "completed",
+        background: true,
+      }),
+    ).toMatchObject({ status: "completed", background: false });
+  });
+
+  it("rejects a background marker with no run to open", () => {
+    expect(parseDelegationEnvelope({ background: true })).toBeUndefined();
   });
 
   it("reads a settled envelope with its result", () => {
@@ -81,6 +111,7 @@ describe("parseDelegationEnvelope", () => {
       assistantName: undefined,
       delegateChatId: undefined,
       result: undefined,
+      background: false,
       truncated: false,
     });
   });
