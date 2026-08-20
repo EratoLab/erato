@@ -159,6 +159,7 @@ pub(crate) fn resolve_directive_markers_in_generation_input(
                         &app_state.config.assistants.delegation.preamble,
                         marker.expected_output.as_deref(),
                         marker.constraints.as_deref(),
+                        marker.run_mode.unwrap_or_default(),
                     )
                 }
                 _ => return Some(input_message),

@@ -365,6 +365,12 @@ pub struct ContentPartDelegationPreambleMarker {
     pub expected_output: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub constraints: Option<String>,
+    /// How the run relates to its origin turn; the preamble tells a background
+    /// delegate its answer is read in place rather than returned. Absent means
+    /// awaited, so markers persisted before the field existed keep rendering
+    /// the same text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_mode: Option<DelegationRunMode>,
 }
 
 /// Statistics for a list of messages

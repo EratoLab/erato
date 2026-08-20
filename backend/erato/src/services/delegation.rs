@@ -90,10 +90,14 @@ fn bounded_untrusted(value: &str, max_chars: usize, fallback: &str) -> String {
 /// Build the `delegate_to_assistant` tool for the validated targets of this
 /// turn. The `assistant_id` (and any `file_ids`) are enum-constrained to what
 /// was validated/offered, and the description enumerates targets and
-/// attachments so the model selects them informed.
+/// attachments so the model selects them informed. The run mode changes what
+/// the description promises: a background dispatch never brings the answer
+/// back, and a model that expects a result would write a task brief that
+/// leans on a follow-up which cannot happen.
 pub fn build_delegate_to_assistant_tool(
     targets: &[DelegationTarget],
     offered_files: &[DelegationOfferedFile],
+    run_mode: DelegationRunMode,
     omit_tool_strict: bool,
 ) -> GenaiTool {
     let target_ids: Vec<String> = targets.iter().map(|target| target.id.to_string()).collect();
@@ -114,11 +118,22 @@ pub fn build_delegate_to_assistant_tool(
         .collect::<Vec<_>>()
         .join("\n");
 
+    let run_sentence = match run_mode {
+        DelegationRunMode::Wait => {
+            "The delegate works on the task in its own chat run and this tool returns its final \
+             answer as the result; the run may take a while."
+        }
+        DelegationRunMode::Background => {
+            "The delegate works on the task in its own chat run in the background: this tool \
+             returns as soon as the run is launched and the delegate's answer will NOT come back \
+             to this conversation, so the task brief must be fully self-contained — no follow-up \
+             is possible."
+        }
+    };
     let guidance = untrusted_guidance();
     let mut description = format!(
         "Delegate a task to one of the assistants the user mentioned in their message. \
-         The delegate works on the task in its own chat run and this tool returns its final \
-         answer as the result; the run may take a while. Give a self-contained task brief — \
+         {run_sentence} Give a self-contained task brief — \
          the delegate does not see this conversation unless you set \
          include_conversation_context. {guidance}\nAvailable assistants:\n\
          <{UNTRUSTED_TAG}>\n{target_lines}\n</{UNTRUSTED_TAG}>"
@@ -400,11 +415,20 @@ impl DelegationResultEnvelope {
     }
 }
 
-/// What a dispatched call produced: the model-facing envelope, and the
-/// UI-facing trace of the child run that ran alongside it.
-pub(crate) struct DelegationDispatchOutcome {
-    pub envelope: DelegationResultEnvelope,
-    pub trace: DelegationTrace,
+/// What a dispatched call produced. An awaited run hands back the result
+/// envelope plus the UI-facing trace of the child run; a background run is
+/// over from the parent's point of view the moment it launches, so all it
+/// carries is the identity of what was launched.
+pub(crate) enum DelegationDispatchOutcome {
+    Completed {
+        envelope: DelegationResultEnvelope,
+        trace: DelegationTrace,
+    },
+    Dispatched {
+        assistant_id: Uuid,
+        assistant_name: String,
+        delegate_chat_id: Uuid,
+    },
 }
 
 /// The parent generation's stream, and where on it the delegation tool part
@@ -513,14 +537,31 @@ async fn parent_abort_signal(
 }
 
 /// Renders the configured delegation preamble, filling the optional
-/// structured-brief sections. Called once per turn of a delegated run from the
-/// directive resolver, against the fields stored in the run's provenance.
+/// structured-brief sections and the run-mode-dependent result disposition.
+/// Called once per turn of a delegated run from the directive resolver,
+/// against the fields stored in the run's provenance.
 pub(crate) fn render_delegation_preamble(
     preamble_template: &str,
     expected_output: Option<&str>,
     constraints: Option<&str>,
+    run_mode: DelegationRunMode,
 ) -> String {
     let mut args = std::collections::HashMap::new();
+    args.insert(
+        "result_disposition".to_string(),
+        match run_mode {
+            DelegationRunMode::Wait => {
+                "Your final message is returned to the delegating conversation as the result of \
+                 this task; it is not shown to a person directly."
+            }
+            DelegationRunMode::Background => {
+                "You are working in the background: the delegating conversation will not receive \
+                 your final message automatically; the user opens this conversation to read it. \
+                 Your final message must stand alone as the complete task result."
+            }
+        }
+        .to_string(),
+    );
     args.insert(
         "expected_output_section".to_string(),
         expected_output
@@ -810,10 +851,11 @@ async fn discard_unstarted_delegated_chat(
 
 /// Dispatches a `delegate_to_assistant` call: validates the arguments against
 /// what this turn offered, creates the delegated child chat (owned by the
-/// origin user, full provenance envelope), runs the delegate as an awaited
-/// child run streaming its progress onto the parent's tool part, and returns
-/// the result. `Err` is a refusal message for the model — the caller refuses
-/// the call, never the turn.
+/// origin user, full provenance envelope) and starts the delegate's run. An
+/// awaited run streams its progress onto the parent's tool part and returns
+/// the result envelope; a background run returns at launch and the child
+/// finishes on its own. `Err` is a refusal message for the model — the caller
+/// refuses the call, never the turn.
 pub(crate) async fn dispatch_delegate_tool_call(
     app_state: &AppState,
     policy: &PolicyEngine,
@@ -907,6 +949,8 @@ pub(crate) async fn dispatch_delegate_tool_call(
         adopted_at: None,
         expected_output: bounded_brief_field(args.expected_output.as_deref()),
         constraints: bounded_brief_field(args.constraints.as_deref()),
+        run_mode: (context.run_mode == DelegationRunMode::Background)
+            .then_some(DelegationRunMode::Background),
     };
     let child_chat = crate::models::chat::create_delegated_chat(
         &app_state.db,
@@ -961,7 +1005,7 @@ pub(crate) async fn dispatch_delegate_tool_call(
             file_ids,
             previous_message_id,
         );
-    let mut handle = tokio::spawn(run_delegated_child(
+    let handle = tokio::spawn(run_delegated_child(
         app_state.clone(),
         policy.clone(),
         context.me_user.clone(),
@@ -969,6 +1013,26 @@ pub(crate) async fn dispatch_delegate_tool_call(
         child_request,
         child_chat.id,
     ));
+
+    // A background dispatch is over here: dropping the handle detaches the
+    // child (its own lifecycle guard persists and cleans up), no trace is
+    // tapped, and a parent abort is not forwarded — the run outlives the
+    // turn and stays stoppable through its own chat's abort. Nothing ever
+    // backfills the parent's tool part either: the parent's assistant
+    // message is written once at turn end, so the part stays frozen at the
+    // launch shape and that is also the model's permanent memory of the
+    // call when the turn is replayed. How the run went is read off the run
+    // itself, not off the parent turn.
+    if context.run_mode == DelegationRunMode::Background {
+        drop(child_rx);
+        drop(handle);
+        return Ok(DelegationDispatchOutcome::Dispatched {
+            assistant_id,
+            assistant_name: assistant.name,
+            delegate_chat_id: child_chat.id,
+        });
+    }
+    let mut handle = handle;
 
     let mut trace = DelegationTraceCollector::new(dispatch_started);
     let mut progress = DelegationProgressEmitter {
@@ -1057,7 +1121,7 @@ pub(crate) async fn dispatch_delegate_tool_call(
     trace.finish();
     progress.flush(&trace).await;
 
-    Ok(DelegationDispatchOutcome {
+    Ok(DelegationDispatchOutcome::Completed {
         envelope: build_result_envelope(
             app_state,
             child_chat.id,
@@ -1106,7 +1170,7 @@ mod tests {
         targets: &[DelegationTarget],
         offered_files: &[DelegationOfferedFile],
     ) -> String {
-        build_delegate_to_assistant_tool(targets, offered_files, false)
+        build_delegate_to_assistant_tool(targets, offered_files, DelegationRunMode::Wait, false)
             .description
             .expect("tool description")
     }
@@ -1308,6 +1372,7 @@ mod tests {
                 id: file_id,
                 filename: format!("{}.pdf", close_tag()),
             }],
+            DelegationRunMode::Wait,
             false,
         );
 
@@ -1348,12 +1413,60 @@ mod tests {
     fn the_preamble_renders_only_the_sections_it_was_given() {
         let template = "Directive.{{expected_output_section}}{{constraints_section}}";
 
-        let bare = render_delegation_preamble(template, None, Some(" "));
+        let bare = render_delegation_preamble(template, None, Some(" "), DelegationRunMode::Wait);
         assert_eq!(bare, "Directive.");
 
-        let full = render_delegation_preamble(template, Some("A list."), Some("Attachments only."));
+        let full = render_delegation_preamble(
+            template,
+            Some("A list."),
+            Some("Attachments only."),
+            DelegationRunMode::Wait,
+        );
         assert!(full.contains("Expected output:\nA list."));
         assert!(full.contains("Constraints:\nAttachments only."));
+    }
+
+    #[test]
+    fn the_preamble_tells_the_delegate_where_its_answer_goes() {
+        let template = "{{result_disposition}}";
+
+        let awaited = render_delegation_preamble(template, None, None, DelegationRunMode::Wait);
+        assert!(awaited.contains("returned to the delegating conversation"));
+
+        let background =
+            render_delegation_preamble(template, None, None, DelegationRunMode::Background);
+        assert!(background.contains("working in the background"));
+        assert!(background.contains("will not receive your final message automatically"));
+        assert!(!background.contains("returned to the delegating conversation"));
+    }
+
+    #[test]
+    fn a_template_without_the_disposition_placeholder_renders_without_it() {
+        let rendered = render_delegation_preamble(
+            "Custom operator directive.",
+            None,
+            None,
+            DelegationRunMode::Background,
+        );
+        assert_eq!(rendered, "Custom operator directive.");
+    }
+
+    #[test]
+    fn the_background_offer_says_the_answer_never_comes_back() {
+        let targets = [target("Helper", None)];
+        let wait_description =
+            build_delegate_to_assistant_tool(&targets, &[], DelegationRunMode::Wait, false)
+                .description
+                .expect("tool description");
+        let background_description =
+            build_delegate_to_assistant_tool(&targets, &[], DelegationRunMode::Background, false)
+                .description
+                .expect("tool description");
+
+        assert!(wait_description.contains("returns its final answer as the result"));
+        assert!(background_description.contains("will NOT come back to this conversation"));
+        assert!(background_description.contains("no follow-up is possible"));
+        assert!(!background_description.contains("returns its final answer as the result"));
     }
 
     fn delegation_config(enabled: bool, allow_background: bool) -> AssistantsDelegationConfig {

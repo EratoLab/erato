@@ -2898,6 +2898,7 @@ mod test_cases {
                 adopted_at: adopted.then(|| chrono::Utc::now().into()),
                 expected_output: expected_output.map(str::to_string),
                 constraints: constraints.map(str::to_string),
+                run_mode: None,
             }),
         };
         let mut chat = create_test_chat();
