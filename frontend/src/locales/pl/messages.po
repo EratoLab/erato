@@ -1363,6 +1363,11 @@ msgid "chat.fileDrop.overlay.label"
 msgstr "Upuść, aby przesłać"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegatedRunsSection.tsx
+msgid "chat.history.delegatedRuns"
+msgstr "Delegowane uruchomienia"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
 msgid "chat.history.filterMenu.groupBy"
 msgstr "Grupuj według"
@@ -1810,6 +1815,7 @@ msgstr "Wyślij"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+#: src/components/ui/Chat/DelegatedRunsSection.tsx
 #: src/utils/chat/recentChatSession.ts
 msgid "chat.newChat.title"
 msgstr "Nowy Czat"
@@ -3686,6 +3692,21 @@ msgstr "Przekazano do tła"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.background.failed"
+msgstr "Niepowodzenie w tle"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.background.finished"
+msgstr "Zakończono w tle"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.background.running"
+msgstr "Działa w tle"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
 msgid "trace.delegation.done"
 msgstr "Przekazano do {name}"
 
@@ -4287,7 +4308,7 @@ msgstr "Zamknij okno"
 msgid "Close modal overlay"
 msgstr "Zamknij nakładkę okna"
 
-#: src/components/ui/Chat/ChatHistorySidebar.tsx
+#: src/components/ui/Chat/SidebarCollapsibleSection.tsx
 msgid "Collapse {title}"
 msgstr ""
 
@@ -4576,7 +4597,7 @@ msgstr "Szacowanie użycia tokenów..."
 msgid "Exit audio mode"
 msgstr ""
 
-#: src/components/ui/Chat/ChatHistorySidebar.tsx
+#: src/components/ui/Chat/SidebarCollapsibleSection.tsx
 msgid "Expand {title}"
 msgstr ""
 

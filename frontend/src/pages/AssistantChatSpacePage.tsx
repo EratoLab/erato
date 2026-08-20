@@ -6,7 +6,7 @@ import { useParams } from "react-router-dom";
 import { Chat } from "@/components/ui/Chat/Chat";
 import { ChatEmptyState } from "@/components/ui/Chat/ChatEmptyState";
 import { Alert } from "@/components/ui/Feedback/Alert";
-import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
+import { seedGenerationStatusFromListing } from "@/hooks/chat/store/generationStatusStore";
 import { useDelegatedRunHeader } from "@/hooks/chat/useDelegatedRunHeader";
 import {
   useAvailableModels,
@@ -164,17 +164,7 @@ export default function AssistantChatSpacePage() {
   // Delegated runs are hidden from every listing, so nothing else seeds their
   // running or parked markers into the status store.
   useEffect(() => {
-    const { seedRunning, seedActionRequired } =
-      useGenerationStatusStore.getState();
-    for (const chat of chatsOfAssistant) {
-      if (!isDelegatedRun(chat)) continue;
-      if (chat.active_generation_started_at) {
-        seedRunning(chat.id, chat.active_generation_started_at);
-      }
-      if (chat.pending_tool_approval_at) {
-        seedActionRequired(chat.id, chat.pending_tool_approval_at);
-      }
-    }
+    seedGenerationStatusFromListing(chatsOfAssistant.filter(isDelegatedRun));
   }, [chatsOfAssistant]);
 
   // Handle message actions

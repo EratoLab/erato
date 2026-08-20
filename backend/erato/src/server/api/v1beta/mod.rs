@@ -1256,6 +1256,13 @@ pub struct RecentChat {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     provenance_kind: Option<String>,
+    /// How a delegated run was dispatched. Present only for delegation
+    /// provenance, and only as `background` — the mark of a detached run
+    /// whose result never flowed back to the origin turn. An awaited run
+    /// omits it, since its answer already returned inline.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false, example = "background")]
+    provenance_run_mode: Option<String>,
     /// The origin chat this chat was spawned from, if any. May reference a
     /// deleted chat.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2952,6 +2959,7 @@ async fn extend_recent_chats_to_api_model(
             active_generation_started_at: chat.active_generation_started_at,
             pending_tool_approval_at: chat.pending_tool_approval_at,
             provenance_kind: chat.provenance_kind,
+            provenance_run_mode: chat.provenance_run_mode,
             origin_chat_id: chat.origin_chat_id.map(|id| id.to_string()),
             origin_chat_title: chat.origin_chat_title,
             origin_assistant_id: chat.origin_assistant_id.map(|id| id.to_string()),

@@ -8,15 +8,15 @@ import { useHasPendingConfirmation } from "@/hooks/chat/store/confirmationRegist
 import { useGenerationStatusFor } from "@/hooks/chat/store/generationStatusStore";
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
 import { useThemedIcon } from "@/hooks/ui";
-import { UNTITLED_BACKEND_SENTINEL } from "@/utils/chat/recentChatSession";
+import { resolveRecentChatTitle } from "@/utils/chat/recentChatSession";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 import {
   chatAttentionStatusLabel,
-  chatAttentionStatusToneClass,
   resolveChatAttentionStatus,
 } from "@/utils/chatHistoryGrouping";
 import { createLogger } from "@/utils/debugLogger";
 
+import { ChatAttentionStatusDot } from "./ChatAttentionStatusDot";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { DropdownMenu } from "../Controls/DropdownMenu";
 import {
@@ -48,11 +48,11 @@ const useRowTitle = (session: ChatSession): string => {
   const titleHint = useChatHistoryStore(
     (state) => state.titleHintByChatId[session.id],
   );
-  const title = session.titleResolved ?? session.title;
-  if (title && title !== UNTITLED_BACKEND_SENTINEL) {
-    return title;
-  }
-  return titleHint ?? t`New Chat`;
+  return (
+    resolveRecentChatTitle(session.titleResolved ?? session.title) ??
+    titleHint ??
+    t`New Chat`
+  );
 };
 
 const ChatItemIcon = memo(() => {
@@ -85,27 +85,7 @@ const GenerationStatusIndicator = memo<{ chatId: string }>(({ chatId }) => {
 
   if (!status) return null;
 
-  // A bare dot; the status text lives in the title and the row's aria-label.
-  return (
-    <span
-      className={clsx(
-        "flex shrink-0 items-center",
-        chatAttentionStatusToneClass[status],
-      )}
-      title={chatAttentionStatusLabel(status)}
-      data-ui="chat-history-generation-status"
-      data-testid="chat-generation-status"
-      data-status={status}
-    >
-      <span
-        aria-hidden="true"
-        className={clsx(
-          "size-2 rounded-full bg-current",
-          status === "running" && "animate-pulse motion-reduce:animate-none",
-        )}
-      />
-    </span>
-  );
+  return <ChatAttentionStatusDot status={status} />;
 });
 
 // eslint-disable-next-line lingui/no-unlocalized-strings

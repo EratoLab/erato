@@ -1,6 +1,7 @@
 import { t } from "@lingui/core/macro";
 
 import { OpenNewWindowIcon } from "@/components/ui/icons";
+import { useDelegatedRunLiveStatus } from "@/hooks/chat/useDelegatedRunLiveStatus";
 import { useSidecarLocalTrace } from "@/lib/desktopSidecar/localTraceStore";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 
@@ -13,6 +14,7 @@ import type { ToolApprovalStatus } from "../Trace";
 import type { BaseStepProps, TraceStepStatus } from "../types";
 import type { DelegationEnvelope } from "@/lib/delegation/delegationEnvelope";
 import type { ToolUse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { ChatAttentionStatus } from "@/utils/chatHistoryGrouping";
 
 interface DelegationStepProps extends BaseStepProps {
   part: ToolUse & { content_type: "tool_use" };
@@ -85,6 +87,55 @@ const stepStatusFor = (
   return envelope.status === "completed" ? "done" : "error";
 };
 
+/**
+ * What the pill on a backgrounded dispatch says. The part itself is frozen
+ * at launch, so the default copy states the hand-off; when this client
+ * happens to know the run's real state — via the generation-status store or
+ * a cached recent-chats row — the truthful state overlays it, resolved by
+ * the same resolver as the delegated-runs list so the two surfaces cannot
+ * disagree about one run.
+ */
+const backgroundPill = (
+  liveStatus: ChatAttentionStatus | null,
+): { label: string; toneClassName?: string } => {
+  switch (liveStatus) {
+    // A parked approval still means the run is alive and working towards an
+    // outcome; the finer distinction belongs to the runs list, not here.
+    case "running":
+    case "action_required":
+      return {
+        label: t({
+          id: "trace.delegation.background.running",
+          message: "Running in the background",
+        }),
+        toneClassName: "bg-theme-info-bg text-theme-info-fg animate-pulse",
+      };
+    case "finished":
+      return {
+        label: t({
+          id: "trace.delegation.background.finished",
+          message: "Finished in the background",
+        }),
+        toneClassName: "bg-theme-success-bg text-theme-success-fg",
+      };
+    case "error":
+      return {
+        label: t({
+          id: "trace.delegation.background.failed",
+          message: "Failed in the background",
+        }),
+        toneClassName: "bg-theme-error-bg text-theme-error-fg",
+      };
+    default:
+      return {
+        label: t({
+          id: "trace.delegation.background",
+          message: "Sent to background",
+        }),
+      };
+  }
+};
+
 const resultPreview = (result: string | undefined): string | undefined => {
   const text = result?.trim();
   if (!text) {
@@ -142,6 +193,9 @@ export const DelegationStep = ({
     part.tool_name,
     part.output,
   );
+  const liveStatus = useDelegatedRunLiveStatus(
+    envelope.background ? envelope.delegateChatId : undefined,
+  );
   const stepStatus = stepStatusFor(envelope, status);
   const isRunning = stepStatus === "running" && isStreaming;
   const nested = trace && trace.steps.length > 0 ? trace : undefined;
@@ -195,15 +249,8 @@ export const DelegationStep = ({
         titleSlot={
           envelope.background ? (
             // The detachment is the one thing worth saying about this step —
-            // it outranks even an approval decision. The part is frozen at
-            // dispatch and never learns the run's fate, so the default copy
-            // states the hand-off, not a live state.
-            <SettledInfoPill
-              label={t({
-                id: "trace.delegation.background",
-                message: "Sent to background",
-              })}
-            />
+            // it outranks even an approval decision.
+            <SettledInfoPill {...backgroundPill(liveStatus)} />
           ) : (
             <ToolStatusPill
               status={stepStatus}

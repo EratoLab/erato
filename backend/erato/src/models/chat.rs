@@ -433,6 +433,10 @@ pub struct RecentChat {
     /// Provenance kind when the chat was spawned from another chat
     /// (`delegation`, handoff kinds).
     pub provenance_kind: Option<String>,
+    /// How a delegated run was dispatched. Stored only when the run was
+    /// detached (`background`); an awaited run records no run mode, so
+    /// absence on a delegation row means the answer already returned inline.
+    pub provenance_run_mode: Option<String>,
     /// The origin chat this chat was spawned from, if any. Dangling after the
     /// origin is deleted.
     pub origin_chat_id: Option<Uuid>,
@@ -486,6 +490,7 @@ struct ChatWithLatestMessage {
     active_generation_started_at: Option<DateTimeWithTimeZone>,
     pending_tool_approval_at: Option<DateTimeWithTimeZone>,
     provenance_kind: Option<String>,
+    provenance_run_mode: Option<String>,
     origin_chat_id: Option<Uuid>,
     origin_assistant_id: Option<Uuid>,
     delegated_run_outcome: Option<String>,
@@ -638,6 +643,7 @@ pub async fn get_recent_chats(
                 THEN "chats"."generation_ended_at"
             END AS "pending_tool_approval_at",
             ("chats"."assistant_configuration" #>> '{{provenance,kind}}') AS "provenance_kind",
+            ("chats"."assistant_configuration" #>> '{{provenance,run_mode}}') AS "provenance_run_mode",
             "chats"."origin_chat_id",
             (("chats"."assistant_configuration" #>> '{{provenance,origin_assistant_id}}'))::uuid AS "origin_assistant_id",
             CASE
@@ -931,6 +937,7 @@ pub async fn get_recent_chats(
                 active_generation_started_at: chat_with_msg.active_generation_started_at,
                 pending_tool_approval_at: chat_with_msg.pending_tool_approval_at,
                 provenance_kind: chat_with_msg.provenance_kind.clone(),
+                provenance_run_mode: chat_with_msg.provenance_run_mode.clone(),
                 origin_chat_id: chat_with_msg.origin_chat_id,
                 origin_chat_title: chat_with_msg
                     .origin_chat_id

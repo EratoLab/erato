@@ -25,6 +25,7 @@ import { BUDGET_QUERY_KEY } from "@/hooks/budget/useBudgetStatus";
 import {
   chatMessagesQuery as buildChatMessagesQuery,
   fetchChatMessages,
+  recentChatsQuery,
   useChatMessages,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { mapApiMessageToUiMessage } from "@/utils/adapters/messageAdapter";
@@ -463,8 +464,16 @@ export function useChatMessaging(
       // Don't clear optimistic state during navigation transition
       const isInTransition =
         useMessagingStore.getState().isInNavigationTransition;
-      // Refetch chat message history.
-      await refetchChatHistory();
+      // Refresh the chat lists with one awaited prefix invalidation. Every
+      // recent-chats variant — the sidebar's infinite list and the plain
+      // single-page caches, most visibly the origin-filtered listing of
+      // delegated runs, which must show a run launched this turn without
+      // waiting for staleness — sits under this key prefix, and active
+      // observers refetch before the await resolves. A separate sidebar
+      // refetch on top would fetch the same list a second time per turn.
+      await queryClient.invalidateQueries({
+        queryKey: recentChatsQuery({}).queryKey,
+      });
 
       if (effectiveChatId) {
         if (process.env.NODE_ENV === "development") {
@@ -664,7 +673,6 @@ export function useChatMessaging(
       newlyCreatedChatId,
       queryClient,
       clearCompletedUserMessages,
-      refetchChatHistory,
       setApiMessages,
       streamKey,
     ],

@@ -7,6 +7,7 @@ import { t } from "@lingui/core/macro";
 
 import type { ChatHistoryGroupBy } from "@/hooks/chat/store/chatHistoryFilterStore";
 import type { ChatGenerationStatus } from "@/hooks/chat/store/generationStatusStore";
+import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
 
 /** Kinds a chat row's status indicator can show. */
@@ -51,6 +52,47 @@ export const chatAttentionStatusToneClass: Record<ChatAttentionStatus, string> =
     error: "text-theme-error-fg",
     action_required: "text-theme-warning-fg",
   };
+
+/** `delegated_run_outcome` of a run that landed a clean assistant answer. */
+const RUN_OUTCOME_COMPLETED = "completed";
+/** `delegated_run_outcome` of a run that did not. */
+const RUN_OUTCOME_FAILED = "failed";
+
+/**
+ * A delegated run row's status indicator. The status store is the live
+ * authority (seeded from the listing and kept fresh by the poll), so a
+ * running or parked entry outranks the listing's terminal outcome — a chat
+ * can be generating again after adoption while its outcome already exists.
+ * A "cleared" tombstone means an observed outcome was consumed, so neither
+ * the stale listing markers nor a pending fallback may resurrect it; the row
+ * shows no indicator until the refetched listing carries the durable
+ * outcome. A row with no signal at all is a run between dispatch and its
+ * generation lease, which is live, not broken.
+ */
+export function resolveDelegatedRunStatus(
+  chat: Pick<
+    RecentChat,
+    | "delegated_run_outcome"
+    | "active_generation_started_at"
+    | "pending_tool_approval_at"
+  >,
+  storeStatus: ChatGenerationStatus | undefined,
+): ChatAttentionStatus | null {
+  if (
+    storeStatus?.kind === "running" ||
+    storeStatus?.kind === "action_required"
+  ) {
+    return storeStatus.kind;
+  }
+  if (chat.delegated_run_outcome === RUN_OUTCOME_COMPLETED) return "finished";
+  if (chat.delegated_run_outcome === RUN_OUTCOME_FAILED) return "error";
+  if (storeStatus?.kind === "finished" || storeStatus?.kind === "error") {
+    return storeStatus.kind;
+  }
+  if (storeStatus?.kind === "cleared") return null;
+  if (chat.pending_tool_approval_at) return "action_required";
+  return "running";
+}
 
 /**
  * Rank used when one indicator has to stand in for a set of chats: the most

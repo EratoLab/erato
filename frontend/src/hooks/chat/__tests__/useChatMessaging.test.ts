@@ -7,6 +7,7 @@ import { setIdToken } from "@/auth/tokenStore";
 import {
   chatMessagesQuery,
   fetchChatMessages,
+  recentChatsQuery,
   useChatMessages,
   useMessageSubmitSse,
   useRecentChats,
@@ -1046,6 +1047,41 @@ describe("useChatMessaging", () => {
     expect(persistedMessages["assistant-real-new-1"].content).toEqual([
       { content_type: "text", text: "Completed reply" },
     ]);
+  });
+
+  it("invalidates the recent-chats prefix on completion so origin-filtered listings refresh", async () => {
+    const { startStreaming, sendSSEEvent } = setupChatMessagingTest();
+
+    await startStreaming("dispatch a background run");
+    await sendSSEEvent({
+      message_type: "assistant_message_started",
+      message_id: "assistant-invalidate-recents-1",
+    });
+
+    mockInvalidateQueries.mockClear();
+
+    await sendSSEEvent({
+      message_type: "assistant_message_completed",
+      message_id: "assistant-invalidate-recents-1",
+      message: {
+        id: "assistant-invalidate-recents-1",
+        role: "assistant",
+        created_at: "2026-02-18T12:00:01.000Z",
+        updated_at: "2026-02-18T12:00:01.000Z",
+        content: [{ content_type: "text", text: "done" }],
+        input_files_ids: [],
+        is_message_in_active_thread: true,
+      },
+    });
+
+    // One prefix invalidation refreshes every list variant — the sidebar's
+    // infinite list and the origin-filtered delegated-runs listing alike.
+    // The prefix must come from the empty-variables key builder, or it would
+    // stop matching the variants.
+    expect(recentChatsQuery).toHaveBeenCalledWith({});
+    expect(mockInvalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["recentChats"],
+    });
   });
 
   it("should prefer streaming content over api snapshot when ids collide during streaming", async () => {

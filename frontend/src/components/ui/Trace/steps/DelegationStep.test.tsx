@@ -1,11 +1,17 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useSidecarLocalTraceStore } from "@/lib/desktopSidecar/localTraceStore";
+import { recentChatsQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import { ToolUseStep } from "./ToolUseStep";
 
-import type { ToolUse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  RecentChat,
+  ToolUse,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 const IDENTITY = {
   assistant_id: "asst-1",
@@ -23,15 +29,42 @@ const part = (output: unknown, toolName = "delegate_to_assistant") =>
     output,
   }) as unknown as ToolUse & { content_type: "tool_use" };
 
+// A fresh client per test: the live-status overlay reads cached
+// recent-chats rows, and tests seed them explicitly.
+let queryClient: QueryClient;
+
 const renderStep = (output: unknown, toolName?: string, streaming = true) =>
   render(
-    <ToolUseStep
-      part={part(output, toolName)}
-      status={streaming ? "running" : "done"}
-      isStreaming={streaming}
-      isCollapsed={false}
-      isLastStep
-    />,
+    <QueryClientProvider client={queryClient}>
+      <ToolUseStep
+        part={part(output, toolName)}
+        status={streaming ? "running" : "done"}
+        isStreaming={streaming}
+        isCollapsed={false}
+        isLastStep
+      />
+    </QueryClientProvider>,
+  );
+
+/** Seed the origin-filtered delegated-runs listing the overlay resolves from. */
+const seedRunListing = (chats: Partial<RecentChat>[]) =>
+  queryClient.setQueryData(
+    recentChatsQuery({
+      queryParams: {
+        origin_chat_id: "origin-1",
+        include_delegated: true,
+        limit: 50,
+      },
+    }).queryKey,
+    {
+      chats,
+      stats: {
+        current_offset: 0,
+        has_more: false,
+        returned_count: chats.length,
+        total_count: chats.length,
+      },
+    },
   );
 
 /** Whether the node sits inside a collapsed (0fr) trace body. */
@@ -39,7 +72,15 @@ const isFolded = (node: HTMLElement): boolean =>
   node.closest('div[style*="0fr"]') !== null;
 
 describe("delegation step", () => {
-  afterEach(() => useSidecarLocalTraceStore.setState({ traces: {} }));
+  beforeEach(() => {
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+  });
+  afterEach(() => {
+    useSidecarLocalTraceStore.setState({ traces: {} });
+    useGenerationStatusStore.getState().reset();
+  });
 
   it("names the delegate and shows its steps while the run is in flight", () => {
     renderStep({
@@ -71,21 +112,28 @@ describe("delegation step", () => {
     });
 
     rerender(
-      <ToolUseStep
-        part={part({
-          ...IDENTITY,
-          localTrace: {
-            steps: [
-              { sequence: 0, id: "search_web", status: "ok", durationMs: 900 },
-              { sequence: 1, id: "answer", status: "running" },
-            ],
-          },
-        })}
-        status="running"
-        isStreaming
-        isCollapsed={false}
-        isLastStep
-      />,
+      <QueryClientProvider client={queryClient}>
+        <ToolUseStep
+          part={part({
+            ...IDENTITY,
+            localTrace: {
+              steps: [
+                {
+                  sequence: 0,
+                  id: "search_web",
+                  status: "ok",
+                  durationMs: 900,
+                },
+                { sequence: 1, id: "answer", status: "running" },
+              ],
+            },
+          })}
+          status="running"
+          isStreaming
+          isCollapsed={false}
+          isLastStep
+        />
+      </QueryClientProvider>,
     );
 
     expect(screen.getAllByText("search_web")).toHaveLength(1);
@@ -171,18 +219,62 @@ describe("delegation step", () => {
     // ToolStatusPill gives an approval decision top priority; the background
     // branch must win before it ever gets the chance.
     render(
-      <ToolUseStep
-        part={part({ ...IDENTITY, background: true })}
-        status="done"
-        isStreaming={false}
-        isCollapsed={false}
-        isLastStep
-        approvalStatus="approved"
-      />,
+      <QueryClientProvider client={queryClient}>
+        <ToolUseStep
+          part={part({ ...IDENTITY, background: true })}
+          status="done"
+          isStreaming={false}
+          isCollapsed={false}
+          isLastStep
+          approvalStatus="approved"
+        />
+      </QueryClientProvider>,
     );
 
     expect(screen.getByText("Sent to background")).toBeInTheDocument();
     expect(screen.queryByText("Approved")).toBeNull();
+  });
+
+  it("overlays the live state while the run is genuinely running, then its outcome", () => {
+    act(() => {
+      useGenerationStatusStore
+        .getState()
+        .seedRunning("chat-7", "2026-08-19T12:00:00.000Z");
+    });
+    renderStep({ ...IDENTITY, background: true }, undefined, false);
+
+    const running = screen.getByText("Running in the background");
+    expect(running).toHaveClass("animate-pulse");
+    expect(screen.queryByText("Sent to background")).toBeNull();
+
+    // The same client observes the run end badly; the pill follows.
+    act(() => {
+      useGenerationStatusStore.getState().markTerminalLocal("chat-7", "error");
+    });
+    const failed = screen.getByText("Failed in the background");
+    expect(failed).toHaveClass("bg-theme-error-bg");
+    expect(failed).not.toHaveClass("animate-pulse");
+  });
+
+  it("overlays the durable outcome from a cached listing row", () => {
+    // What a reload leaves behind: no store entry, but the origin-filtered
+    // listing (refetched on mount) carries the run's durable outcome.
+    seedRunListing([{ id: "chat-7", delegated_run_outcome: "completed" }]);
+    renderStep({ ...IDENTITY, background: true }, undefined, false);
+
+    const pill = screen.getByText("Finished in the background");
+    expect(pill).toHaveClass("bg-theme-success-bg");
+    expect(screen.queryByText("Sent to background")).toBeNull();
+  });
+
+  it("falls back to the neutral hand-off copy when nothing is known", () => {
+    // A listing that no longer contains the run says nothing about it.
+    seedRunListing([{ id: "chat-other", delegated_run_outcome: "completed" }]);
+    renderStep({ ...IDENTITY, background: true }, undefined, false);
+
+    expect(screen.getByText("Sent to background")).toBeInTheDocument();
+    expect(screen.queryByText("Running in the background")).toBeNull();
+    expect(screen.queryByText("Finished in the background")).toBeNull();
   });
 
   it("offers the delegated run in a new tab from the first frame on", () => {
