@@ -61,13 +61,17 @@ pub struct AssistantWithFiles {
     pub files: Vec<FileInfo>,
 }
 
-fn normalize_assistant_facet_ids(facet_ids: Option<Vec<String>>) -> Option<Vec<String>> {
-    let facet_ids = facet_ids?;
+/// Dedupes while collapsing an empty list to `None`. Generation-time filters
+/// treat `None` as "no restriction" but an empty list as "restrict to
+/// nothing", so storing `Some([])` would brick the assistant; clients clear a
+/// restriction by sending `[]`, which must land as `None`.
+fn normalize_assistant_id_list(ids: Option<Vec<String>>) -> Option<Vec<String>> {
+    let ids = ids?;
     let mut deduped = Vec::new();
 
-    for facet_id in facet_ids {
-        if !deduped.contains(&facet_id) {
-            deduped.push(facet_id);
+    for id in ids {
+        if !deduped.contains(&id) {
+            deduped.push(id);
         }
     }
 
@@ -103,8 +107,8 @@ pub async fn create_assistant(
         name: Set(name),
         description: Set(description),
         prompt: Set(prompt),
-        mcp_server_ids: Set(mcp_server_ids),
-        facet_ids: Set(normalize_assistant_facet_ids(facet_ids)),
+        mcp_server_ids: Set(normalize_assistant_id_list(mcp_server_ids)),
+        facet_ids: Set(normalize_assistant_id_list(facet_ids)),
         default_chat_provider: Set(default_chat_provider),
         enforce_facet_settings: Set(enforce_facet_settings),
         archived_at: Set(None),
@@ -483,11 +487,11 @@ pub async fn update_assistant(
     }
 
     if let Some(new_mcp_server_ids) = mcp_server_ids {
-        active_assistant.mcp_server_ids = Set(new_mcp_server_ids);
+        active_assistant.mcp_server_ids = Set(normalize_assistant_id_list(new_mcp_server_ids));
     }
 
     if let Some(new_facet_ids) = facet_ids {
-        active_assistant.facet_ids = Set(normalize_assistant_facet_ids(new_facet_ids));
+        active_assistant.facet_ids = Set(normalize_assistant_id_list(new_facet_ids));
     }
 
     if let Some(new_default_chat_provider) = default_chat_provider {

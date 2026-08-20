@@ -103,9 +103,9 @@ export default function AssistantEditPage() {
         enforce_facet_settings: formData.enforceFacetSettings,
         // Always include file_ids to allow clearing files when empty
         file_ids: formData.files.map((f) => f.id),
-        ...(formData.mcpServerIds.length > 0 && {
-          mcp_server_ids: formData.mcpServerIds,
-        }),
+        // Always sent: an empty list clears the restriction back to
+        // "all servers" (omitting the field would leave it unchanged)
+        mcp_server_ids: formData.mcpServerIds,
       } as unknown as Parameters<typeof updateAssistant>[0]["body"];
 
       await updateAssistant({

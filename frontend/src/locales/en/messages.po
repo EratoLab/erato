@@ -155,6 +155,51 @@ msgid "assistant.form.files.sharepoint.warning"
 msgstr "Some files are linked from Sharepoint. If you share this assistant, ensure those files are also shared with recipients."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Assistant/McpServerSelector.tsx
+msgid "assistant.form.mcpServers.allServers"
+msgstr "No servers selected — this assistant can use every server available to the person chatting with it."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/McpServerSelector.tsx
+msgid "assistant.form.mcpServers.connectAction"
+msgstr "Connect in Settings"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.mcpServers.helpText"
+msgstr "Optional: Restrict which MCP servers may provide capabilities to this assistant. With no selection, the assistant can use every server available to the person chatting with it."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.mcpServers.label"
+msgstr "MCP Servers"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/McpServerSelector.tsx
+msgid "assistant.form.mcpServers.restricted"
+msgstr "This assistant can only use the selected servers."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/McpServerSelector.tsx
+msgid "assistant.form.mcpServers.status.connected"
+msgstr "Connected"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/McpServerSelector.tsx
+msgid "assistant.form.mcpServers.status.needsConnection"
+msgstr "Requires connection"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/McpServerSelector.tsx
+msgid "assistant.form.mcpServers.status.unavailable"
+msgstr "Unavailable"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.mcpServers.unavailable"
+msgstr "Some previously configured MCP servers are no longer available and were removed from this assistant."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.model.helpText"
 msgstr "Optional: Choose which model this assistant should use by default"

@@ -364,6 +364,71 @@ async fn test_update_assistant_endpoint(pool: Pool<Postgres>) {
     assert_eq!(assistant_response["mcp_server_ids"], json!(["server1"])); // Should remain unchanged
 }
 
+/// Test clearing an assistant's MCP server restriction with an empty list.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+///
+/// # Test Behavior
+/// Verifies that updating with `mcp_server_ids: []` removes the restriction
+/// entirely (stored as NULL = all servers) instead of persisting an empty
+/// list, which generation-time filtering would read as "no servers at all".
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_update_assistant_empty_mcp_servers_clears_restriction(pool: Pool<Postgres>) {
+    let app_state = test_app_state(hermetic_app_config(None, None), pool).await;
+
+    let user = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .expect("Failed to create user");
+
+    let assistant = erato::models::assistant::create_assistant(
+        &app_state.db,
+        &PolicyEngine::new(),
+        &erato::policy::types::Subject::User(user.id.to_string()),
+        "Restricted Assistant".to_string(),
+        None,
+        "You are a restricted assistant.".to_string(),
+        Some(vec!["server1".to_string()]),
+        None,
+        None,
+        false,
+    )
+    .await
+    .expect("Failed to create assistant");
+    assert_eq!(assistant.mcp_server_ids, Some(vec!["server1".to_string()]));
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let response = server
+        .put(&format!("/api/v1beta/assistants/{}", assistant.id))
+        .json(&json!({ "mcp_server_ids": [] }))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+
+    assert_eq!(response.status_code(), http::StatusCode::OK);
+    let assistant_response: Value = response.json();
+    // skip_serializing_if drops the field entirely once the restriction is gone
+    assert_eq!(assistant_response["mcp_server_ids"], json!(null));
+
+    let get_response = server
+        .get(&format!("/api/v1beta/assistants/{}", assistant.id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    assert_eq!(get_response.status_code(), http::StatusCode::OK);
+    let fetched: Value = get_response.json();
+    assert_eq!(fetched["mcp_server_ids"], json!(null));
+}
+
 /// Test archiving an assistant.
 ///
 /// # Test Categories

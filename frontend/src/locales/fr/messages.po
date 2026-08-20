@@ -155,6 +155,51 @@ msgid "assistant.form.files.sharepoint.warning"
 msgstr "Certains fichiers sont liés depuis Sharepoint. Si vous partagez cet assistant, assurez-vous de partager également ces fichiers avec les destinataires."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Assistant/McpServerSelector.tsx
+msgid "assistant.form.mcpServers.allServers"
+msgstr "Aucun serveur sélectionné — cet assistant peut utiliser tous les serveurs disponibles pour la personne qui discute avec lui."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/McpServerSelector.tsx
+msgid "assistant.form.mcpServers.connectAction"
+msgstr "Connecter dans les paramètres"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.mcpServers.helpText"
+msgstr "Optionnel : Limitez les serveurs MCP pouvant fournir des capacités à cet assistant. Sans sélection, l'assistant peut utiliser tous les serveurs disponibles pour la personne qui discute avec lui."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.mcpServers.label"
+msgstr "Serveurs MCP"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/McpServerSelector.tsx
+msgid "assistant.form.mcpServers.restricted"
+msgstr "Cet assistant ne peut utiliser que les serveurs sélectionnés."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/McpServerSelector.tsx
+msgid "assistant.form.mcpServers.status.connected"
+msgstr "Connecté"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/McpServerSelector.tsx
+msgid "assistant.form.mcpServers.status.needsConnection"
+msgstr "Connexion requise"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/McpServerSelector.tsx
+msgid "assistant.form.mcpServers.status.unavailable"
+msgstr "Indisponible"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.mcpServers.unavailable"
+msgstr "Certains serveurs MCP configurés précédemment ne sont plus disponibles et ont été retirés de cet assistant."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.model.helpText"
 msgstr "Optionnel : Choisissez quel modèle cet assistant doit utiliser par défaut"

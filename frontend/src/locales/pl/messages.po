@@ -155,6 +155,51 @@ msgid "assistant.form.files.sharepoint.warning"
 msgstr "Niektóre pliki są połączone z Sharepoint. Jeśli udostępniasz tego asystenta, upewnij się, że te same pliki są również udostępnione odbiorcom."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Assistant/McpServerSelector.tsx
+msgid "assistant.form.mcpServers.allServers"
+msgstr "Nie wybrano serwerów — ten asystent może korzystać z każdego serwera dostępnego dla osoby prowadzącej czat."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/McpServerSelector.tsx
+msgid "assistant.form.mcpServers.connectAction"
+msgstr "Połącz w ustawieniach"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.mcpServers.helpText"
+msgstr "Opcjonalnie: Ogranicz, które serwery MCP mogą udostępniać funkcje temu asystentowi. Bez wyboru asystent może korzystać z każdego serwera dostępnego dla osoby prowadzącej czat."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.mcpServers.label"
+msgstr "Serwery MCP"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/McpServerSelector.tsx
+msgid "assistant.form.mcpServers.restricted"
+msgstr "Ten asystent może korzystać tylko z wybranych serwerów."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/McpServerSelector.tsx
+msgid "assistant.form.mcpServers.status.connected"
+msgstr "Połączono"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/McpServerSelector.tsx
+msgid "assistant.form.mcpServers.status.needsConnection"
+msgstr "Wymaga połączenia"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/McpServerSelector.tsx
+msgid "assistant.form.mcpServers.status.unavailable"
+msgstr "Niedostępny"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.mcpServers.unavailable"
+msgstr "Niektóre wcześniej skonfigurowane serwery MCP nie są już dostępne i zostały usunięte z tego asystenta."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.model.helpText"
 msgstr "Opcjonalnie: Wybierz, który model ten asystent powinien domyślnie używać"
