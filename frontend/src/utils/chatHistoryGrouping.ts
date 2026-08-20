@@ -63,11 +63,14 @@ const RUN_OUTCOME_FAILED = "failed";
  * authority (seeded from the listing and kept fresh by the poll), so a
  * running or parked entry outranks the listing's terminal outcome — a chat
  * can be generating again after adoption while its outcome already exists.
- * A "cleared" tombstone means an observed outcome was consumed, so neither
- * the stale listing markers nor a pending fallback may resurrect it; the row
- * shows no indicator until the refetched listing carries the durable
- * outcome. A row with no signal at all is a run between dispatch and its
- * generation lease, which is live, not broken.
+ * This is a status column, not an unread marker: a "cleared" tombstone
+ * (outcome consumed, e.g. by opening the run) keeps saying the consumed
+ * outcome here, exactly what the refetched listing's durable outcome will
+ * say after a reload — while still blocking the stale listing markers and
+ * the pending fallback from resurrecting a live state. A tombstone that
+ * consumed no outcome (a decided approval, an entry that went unknown)
+ * shows nothing. A row with no signal at all is a run between dispatch and
+ * its generation lease, which is live, not broken.
  */
 export function resolveDelegatedRunStatus(
   chat: Pick<
@@ -89,7 +92,7 @@ export function resolveDelegatedRunStatus(
   if (storeStatus?.kind === "finished" || storeStatus?.kind === "error") {
     return storeStatus.kind;
   }
-  if (storeStatus?.kind === "cleared") return null;
+  if (storeStatus?.kind === "cleared") return storeStatus.consumed ?? null;
   if (chat.pending_tool_approval_at) return "action_required";
   return "running";
 }

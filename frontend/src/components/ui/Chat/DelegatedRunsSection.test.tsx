@@ -1,11 +1,12 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { skipToken } from "@tanstack/react-query";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import {
+  selectAttentionCount,
   selectPollDriverCount,
   useGenerationStatusStore,
 } from "@/hooks/chat/store/generationStatusStore";
@@ -22,6 +23,15 @@ import type { Messages } from "@lingui/core";
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   useRecentChats: vi.fn(() => ({ data: undefined, isLoading: false })),
 }));
+
+const navigateMock = vi.fn();
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual("react-router-dom");
+  return {
+    ...actual,
+    useNavigate: () => navigateMock,
+  };
+});
 
 const recentChat = (overrides: Partial<RecentChat> & { id: string }) =>
   ({
@@ -311,6 +321,153 @@ describe("DelegatedRunsSection", () => {
   });
 });
 
+describe("DelegatedRunsSection check-off", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    useGenerationStatusStore.getState().reset();
+    i18n.load("en", enMessages as unknown as Messages);
+    i18n.activate("en");
+  });
+
+  const settledRuns = () =>
+    mockRuns([
+      recentChat({ id: "run-1", delegated_run_outcome: "completed" }),
+      recentChat({ id: "run-2", delegated_run_outcome: "failed" }),
+    ]);
+
+  it("offers the dismiss action on settled rows only", () => {
+    mockRuns([
+      recentChat({
+        id: "run-1",
+        active_generation_started_at: "2026-08-19T12:00:00.000Z",
+      }),
+      recentChat({ id: "run-2", delegated_run_outcome: "completed" }),
+      recentChat({
+        id: "run-3",
+        pending_tool_approval_at: "2026-08-19T12:01:00.000Z",
+      }),
+    ]);
+
+    renderSection("origin-1");
+    expandRuns();
+
+    const dismissButtons = screen.getAllByTestId("delegated-run-dismiss");
+    expect(dismissButtons).toHaveLength(1);
+    expect(dismissButtons[0].closest('[data-chat-id="run-2"]')).not.toBeNull();
+    expect(dismissButtons[0]).toHaveAccessibleName("Dismiss run");
+  });
+
+  it("removes the checked-off row, keeps the others, and survives a reload", () => {
+    settledRuns();
+    const { unmount } = renderSection("origin-1");
+    expandRuns();
+
+    let rows = screen.getAllByTestId("delegated-run-item");
+    fireEvent.click(within(rows[0]).getByTestId("delegated-run-dismiss"));
+
+    rows = screen.getAllByTestId("delegated-run-item");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveAttribute("href", "/a/assistant-1/run-2");
+    expect(localStorage.getItem("erato.chat.dismissedDelegatedRuns")).toEqual(
+      JSON.stringify(["run-1"]),
+    );
+
+    // Fresh mount with the listing unchanged (it still returns the run):
+    // the persisted dismissal keeps the row out.
+    unmount();
+    renderSection("origin-1");
+    expandRuns();
+    rows = screen.getAllByTestId("delegated-run-item");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveAttribute("href", "/a/assistant-1/run-2");
+  });
+
+  it("hides the section entirely once every run is checked off", () => {
+    mockRuns([recentChat({ id: "run-1", delegated_run_outcome: "completed" })]);
+    const { container } = renderSection("origin-1");
+    expandRuns();
+
+    fireEvent.click(screen.getByTestId("delegated-run-dismiss"));
+
+    expect(
+      container.querySelector('[data-ui="delegated-runs-section"]'),
+    ).toBeNull();
+  });
+
+  it("consumes a locally observed outcome so the attention badge drops", () => {
+    mockRuns([recentChat({ id: "run-1" })]);
+    act(() => {
+      const store = useGenerationStatusStore.getState();
+      store.seedRunning("run-1", "2026-08-19T12:00:00.000Z");
+      store.markTerminalLocal("run-1", "finished");
+    });
+
+    renderSection("origin-1");
+    expandRuns();
+    expect(selectAttentionCount(useGenerationStatusStore.getState())).toBe(1);
+
+    fireEvent.click(screen.getByTestId("delegated-run-dismiss"));
+
+    expect(
+      useGenerationStatusStore.getState().statusByChatId["run-1"],
+    ).toMatchObject({ kind: "cleared" });
+    expect(selectAttentionCount(useGenerationStatusStore.getState())).toBe(0);
+  });
+
+  it("keeps a visited run's settled state and check-off across a reload", () => {
+    // The cached listing is stale — fetched while the run still ran — and
+    // this client then watched the run finish before the user opened it.
+    mockRuns([recentChat({ id: "run-1" })]);
+    act(() => {
+      const store = useGenerationStatusStore.getState();
+      store.seedRunning("run-1", "2026-08-19T12:00:00.000Z");
+      store.markTerminalLocal("run-1", "finished");
+      store.setCurrentChatId("run-1");
+    });
+
+    const { unmount } = renderSection("origin-1");
+    expandRuns();
+
+    // Visiting consumed the notification, not the status: the row still
+    // says finished and can still be checked off. (Regression: the volatile
+    // tombstone used to blank both, and a reload — durable outcome, empty
+    // store — brought them back, reading as dismissed runs reappearing.)
+    const row = screen.getByTestId("delegated-run-item");
+    expect(within(row).getByTestId("chat-generation-status")).toHaveAttribute(
+      "data-status",
+      "finished",
+    );
+    fireEvent.click(within(row).getByTestId("delegated-run-dismiss"));
+    expect(screen.queryByTestId("delegated-run-item")).toBeNull();
+
+    // Reload: memory gone, listing fresh with the durable outcome. The
+    // persisted check-off keeps the row out.
+    unmount();
+    act(() => useGenerationStatusStore.getState().reset());
+    mockRuns([recentChat({ id: "run-1", delegated_run_outcome: "completed" })]);
+    const { container } = renderSection("origin-1");
+    expect(
+      container.querySelector('[data-ui="delegated-runs-section"]'),
+    ).toBeNull();
+  });
+
+  it("opening a run still navigates while checking one off does not", () => {
+    settledRuns();
+    renderSection("origin-1");
+    expandRuns();
+
+    const rows = screen.getAllByTestId("delegated-run-item");
+    fireEvent.click(rows[1]);
+    expect(navigateMock).toHaveBeenCalledWith("/a/assistant-1/run-2");
+
+    navigateMock.mockClear();
+    fireEvent.click(within(rows[0]).getByTestId("delegated-run-dismiss"));
+    expect(navigateMock).not.toHaveBeenCalled();
+    expect(screen.getAllByTestId("delegated-run-item")).toHaveLength(1);
+  });
+});
+
 describe("resolveDelegatedRunStatus", () => {
   const runningStore = {
     kind: "running",
@@ -331,13 +488,22 @@ describe("resolveDelegatedRunStatus", () => {
     ).toBe("running");
   });
 
-  it("shows no indicator for a consumed outcome despite stale row markers", () => {
+  it("shows no indicator for a tombstone that consumed no outcome, despite stale row markers", () => {
     expect(
       resolveDelegatedRunStatus(
         { active_generation_started_at: "2026-08-19T12:00:00.000Z" },
         { kind: "cleared", startedAt: null },
       ),
     ).toBeNull();
+  });
+
+  it("keeps stating the outcome a tombstone consumed, blocking stale live markers", () => {
+    expect(
+      resolveDelegatedRunStatus(
+        { active_generation_started_at: "2026-08-19T12:00:00.000Z" },
+        { kind: "cleared", startedAt: null, consumed: "finished" },
+      ),
+    ).toBe("finished");
   });
 
   it("maps a pending-approval marker to action required before seeding", () => {

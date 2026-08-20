@@ -305,6 +305,39 @@ describe("generationStatusStore", () => {
     });
   });
 
+  describe("consumeTerminalOutcome", () => {
+    it("tombstones a finished outcome and blocks stale re-seeding", () => {
+      store().seedRunning("chat-1", iso(0));
+      store().markTerminalLocal("chat-1", "finished");
+      store().consumeTerminalOutcome("chat-1");
+      // The consumed kind survives on the tombstone, so status surfaces can
+      // keep stating the outcome a reload would restore from the listing.
+      expect(statusOf("chat-1")).toMatchObject({
+        kind: "cleared",
+        startedAt: iso(0),
+        consumed: "finished",
+      });
+
+      // Stale list row still carrying the consumed generation's marker.
+      store().seedRunning("chat-1", iso(0));
+      expect(statusOf("chat-1")).toMatchObject({ kind: "cleared" });
+      expect(selectAttentionCount(store())).toBe(0);
+    });
+
+    it("leaves live entries and unknown chats untouched", () => {
+      store().seedRunning("chat-1", iso(0));
+      store().consumeTerminalOutcome("chat-1");
+      expect(statusOf("chat-1")).toMatchObject({ kind: "running" });
+
+      store().seedActionRequired("chat-2", iso(0));
+      store().consumeTerminalOutcome("chat-2");
+      expect(statusOf("chat-2")).toMatchObject({ kind: "action_required" });
+
+      store().consumeTerminalOutcome("chat-3");
+      expect(statusOf("chat-3")).toBeUndefined();
+    });
+  });
+
   describe("setCurrentChatId", () => {
     it("clears a terminal status on the chat being navigated to", () => {
       store().seedRunning("chat-1", iso(0));
@@ -313,6 +346,7 @@ describe("generationStatusStore", () => {
       expect(statusOf("chat-1")).toMatchObject({
         kind: "cleared",
         startedAt: iso(0),
+        consumed: "finished",
       });
       expect(store().currentChatId).toBe("chat-1");
     });
