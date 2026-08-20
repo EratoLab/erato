@@ -1,13 +1,14 @@
 import { t } from "@lingui/core/macro";
 import { skipToken } from "@tanstack/react-query";
 import clsx from "clsx";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
   seedGenerationStatusFromListing,
   useGenerationStatusStore,
 } from "@/hooks/chat/store/generationStatusStore";
+import { usePersistedState } from "@/hooks/usePersistedState";
 import { useRecentChats } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useAssistantsFeature } from "@/providers/FeatureConfigProvider";
 import {
@@ -23,13 +24,45 @@ import {
 
 import { ChatAttentionStatusDot } from "./ChatAttentionStatusDot";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
+import { Button } from "../Controls/Button";
 import { Collapse } from "../Controls/Collapse";
 import { MessageTimestamp } from "../Message/MessageTimestamp";
-import { OpenNewWindowIcon, ChevronRightIcon } from "../icons";
+import { OpenNewWindowIcon, CheckIcon, ChevronRightIcon } from "../icons";
 
 import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
-const DelegatedRunRow = memo<{ chat: RecentChat }>(({ chat }) => {
+/**
+ * Checked-off runs, deliberately per-device: a run's outcome is a property
+ * of the chat and no per-user seen-state exists server-side, so a dismissal
+ * recorded here does not follow the user to their other devices.
+ */
+const DISMISSED_DELEGATED_RUNS_STORAGE_KEY =
+  "erato.chat.dismissedDelegatedRuns";
+
+/**
+ * Delegated runs stay listable forever, so the set only grows. The cap
+ * bounds it by shedding the oldest dismissals — worst case a long-forgotten
+ * run reappears in its origin chat's section and can be checked off again.
+ */
+const DISMISSED_RUNS_LIMIT = 500;
+
+/** Stable fallback: `useSyncExternalStore` needs a referentially constant
+ * snapshot for the unset case. */
+const NO_DISMISSED_RUN_IDS: readonly string[] = [];
+
+const parseDismissedRunIds = (value: unknown): readonly string[] | null =>
+  Array.isArray(value) && value.every((entry) => typeof entry === "string")
+    ? value
+    : null;
+
+// Hoisted so the setter (and with it each row's dismiss callback) keeps a
+// stable identity across renders.
+const DISMISSED_RUN_IDS_OPTIONS = { parse: parseDismissedRunIds };
+
+const DelegatedRunRow = memo<{
+  chat: RecentChat;
+  onDismiss: (chatId: string) => void;
+}>(({ chat, onDismiss }) => {
   const navigate = useNavigate();
   const storeStatus = useGenerationStatusStore(
     (state) => state.statusByChatId[chat.id],
@@ -43,6 +76,7 @@ const DelegatedRunRow = memo<{ chat: RecentChat }>(({ chat }) => {
   const href = getChatUrl(chat.id, chat.assistant_id);
 
   const isLive = status === "running" || status === "action_required";
+  const isSettled = status === "finished" || status === "error";
   // Elapsed anchors to the live generation's start when one is known; a
   // settled run shows when it last wrote instead.
   const liveStartedAt =
@@ -93,6 +127,27 @@ const DelegatedRunRow = memo<{ chat: RecentChat }>(({ chat }) => {
           className="size-3.5 shrink-0 text-theme-fg-muted opacity-0 group-hover/run:opacity-100 group-focus-visible/run:opacity-100"
           aria-hidden="true"
         />
+        {isSettled && (
+          /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent bubbling */
+          <div
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            <Button
+              variant="icon-only"
+              size="sm"
+              icon={<CheckIcon className="size-4" />}
+              aria-label={t({
+                id: "chat.history.delegatedRuns.dismiss",
+                message: "Dismiss run",
+              })}
+              onClick={() => onDismiss(chat.id)}
+              data-testid="delegated-run-dismiss"
+            />
+          </div>
+        )}
       </InteractiveContainer>
     </a>
   );
@@ -135,12 +190,37 @@ export const DelegatedRunsSection = memo<DelegatedRunsSectionProps>(
           }
         : skipToken,
     );
+    const [dismissedRunIds, setDismissedRunIds] = usePersistedState(
+      DISMISSED_DELEGATED_RUNS_STORAGE_KEY,
+      NO_DISMISSED_RUN_IDS,
+      DISMISSED_RUN_IDS_OPTIONS,
+    );
     // Awaited delegations already delivered their answer inline to the
     // origin turn; only detached (background) runs have a life of their own
-    // worth listing here.
+    // worth listing here. A row leaves this list through the persisted
+    // check-off and nothing else: opening a run keeps both the row and its
+    // settled status — the dot is a status column, not an unread marker —
+    // so what the list shows never rides in-memory state a reload drops.
     const runs = useMemo(
-      () => (data?.chats ?? []).filter(isBackgroundRun),
-      [data?.chats],
+      () =>
+        (data?.chats ?? [])
+          .filter(isBackgroundRun)
+          .filter((chat) => !dismissedRunIds.includes(chat.id)),
+      [data?.chats, dismissedRunIds],
+    );
+
+    const dismissRun = useCallback(
+      (chatId: string) => {
+        // Also consume a locally observed outcome so the attention badge
+        // stops counting the checked-off run.
+        useGenerationStatusStore.getState().consumeTerminalOutcome(chatId);
+        setDismissedRunIds((previous) =>
+          previous.includes(chatId)
+            ? previous
+            : [...previous, chatId].slice(-DISMISSED_RUNS_LIMIT),
+        );
+      },
+      [setDismissedRunIds],
     );
 
     // Seed the status store from the listing's running and pending-approval
@@ -215,7 +295,11 @@ export const DelegatedRunsSection = memo<DelegatedRunsSectionProps>(
                 data-ui="delegated-runs-list"
               >
                 {runs.map((chat) => (
-                  <DelegatedRunRow key={chat.id} chat={chat} />
+                  <DelegatedRunRow
+                    key={chat.id}
+                    chat={chat}
+                    onDismiss={dismissRun}
+                  />
                 ))}
               </div>
             )}

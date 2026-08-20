@@ -1368,6 +1368,11 @@ msgid "chat.history.delegatedRuns"
 msgstr "Delegowane uruchomienia"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegatedRunsSection.tsx
+msgid "chat.history.delegatedRuns.dismiss"
+msgstr "Odrzuć uruchomienie"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
 msgid "chat.history.filterMenu.groupBy"
 msgstr "Grupuj według"

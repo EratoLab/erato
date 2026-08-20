@@ -12,8 +12,13 @@ import type {
  * "finished"/"error" exist only when this client observed a chat leave the
  * running set, so a page refresh clears them by design. "cleared" is a
  * tombstone left when an outcome is consumed (or a running entry goes
- * unknown): it renders nothing but remembers which generation it refers to,
- * so stale list rows and in-flight poll responses cannot resurrect it.
+ * unknown): it remembers which generation it refers to, so stale list rows
+ * and in-flight poll responses cannot resurrect it. Notification surfaces
+ * (badges, sidebar dots) render nothing for it; when the outcome kind was
+ * known at consumption it survives in `consumed`, so status surfaces (the
+ * delegated-runs checklist, the trace pill) can keep stating the truth — a
+ * reload replaces them with the durable listing outcome, and the two must
+ * agree or visited runs appear to change state across reloads.
  *
  * `startedAt` carries the server-side start time when seeded from list rows
  * or the poll, and the client clock when seeded by this tab's own sends —
@@ -31,7 +36,12 @@ export type ChatGenerationStatus =
   | { kind: "action_required"; startedAt: string; localSeenAt: number }
   | { kind: "finished"; startedAt: string | null }
   | { kind: "error"; startedAt: string | null }
-  | { kind: "cleared"; startedAt: string | null };
+  | {
+      kind: "cleared";
+      startedAt: string | null;
+      /** Outcome kind this tombstone consumed, when one was known. */
+      consumed?: "finished" | "error";
+    };
 
 /**
  * A freshly seeded running entry is not cleared by a poll snapshot that does
@@ -57,6 +67,10 @@ interface GenerationStatusStore {
   markApprovalDecided: (chatId: string) => void;
   applyPollSnapshot: (entries: GeneratingChat[]) => void;
   markTerminalLocal: (chatId: string, kind: "finished" | "error") => void;
+  /** The user acknowledged a finished/error outcome without opening the chat
+   * (e.g. checked its run off a list); tombstone it so badges stop counting
+   * it while stale rows still cannot resurrect it. */
+  consumeTerminalOutcome: (chatId: string) => void;
   setCurrentChatId: (chatId: string | null) => void;
   clearStatus: (chatId: string) => void;
   reset: () => void;
@@ -241,6 +255,7 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
                 next[entry.chat_id] = {
                   kind: "cleared",
                   startedAt: entry.started_at,
+                  consumed: entry.state === "completed" ? "finished" : "error",
                 };
               } else {
                 next[entry.chat_id] =
@@ -287,7 +302,7 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
               return {
                 statusByChatId: {
                   ...prev.statusByChatId,
-                  [chatId]: { kind: "cleared", startedAt },
+                  [chatId]: { kind: "cleared", startedAt, consumed: kind },
                 },
               };
             }
@@ -300,6 +315,30 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
           },
           false,
           "generationStatus/markTerminalLocal",
+        ),
+
+      consumeTerminalOutcome: (chatId) =>
+        set(
+          (prev) => {
+            const existing = prev.statusByChatId[chatId];
+            // A live entry stays: the acknowledgement targets an outcome, and
+            // a run that is generating (again) has none to consume yet.
+            if (existing?.kind !== "finished" && existing?.kind !== "error") {
+              return prev;
+            }
+            return {
+              statusByChatId: {
+                ...prev.statusByChatId,
+                [chatId]: {
+                  kind: "cleared",
+                  startedAt: existing.startedAt,
+                  consumed: existing.kind,
+                },
+              },
+            };
+          },
+          false,
+          "generationStatus/consumeTerminalOutcome",
         ),
 
       setCurrentChatId: (chatId) =>
@@ -322,6 +361,7 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
                   [chatId as string]: {
                     kind: "cleared",
                     startedAt: status.startedAt,
+                    consumed: status.kind,
                   },
                 },
               };
