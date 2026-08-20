@@ -17,16 +17,25 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 COPY desktop-sidecar-protocol /app/desktop-sidecar-protocol
 RUN pnpm run build
 
+# The normalize script is copied before the install on purpose: the SBOM and
+# license steps below must share exact cache lineage with the install, because
+# the registry cache restores layers but never `--mount=type=cache` contents.
+# If anything between the install and those steps could invalidate on its own,
+# they would re-execute in a build whose install was a cache hit — reading a
+# pnpm store that is empty in that build.
+COPY scripts/normalize-pnpm-license-json.mjs /app/scripts/normalize-pnpm-license-json.mjs
 COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml /app/frontend/
 COPY frontend-utils /app/frontend-utils
 WORKDIR /app/frontend
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --ignore-scripts --config.confirmModulesPurge=false
 
-COPY frontend /app/frontend
-COPY scripts/normalize-pnpm-license-json.mjs /app/scripts/normalize-pnpm-license-json.mjs
-RUN pnpm rebuild @swc/core esbuild msw protobufjs unrs-resolver
+# Dependency metadata only — kept ahead of the source copy so application
+# changes can neither invalidate them nor strand them without a store.
 RUN mkdir -p /app/sbom && pnpm sbom --sbom-format cyclonedx --sbom-spec-version 1.7 > /app/sbom/frontend.cdx.json
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm licenses list --prod --json | node ../scripts/normalize-pnpm-license-json.mjs | ./node_modules/.bin/pnpm-licenses generate-disclaimer --json-input --output-file=/app/sbom/frontend.txt
+
+COPY frontend /app/frontend
+RUN pnpm rebuild @swc/core esbuild msw protobufjs unrs-resolver
 RUN NODE_OPTIONS=--max-old-space-size=8192 pnpm run build:lib
 RUN NODE_OPTIONS=--max-old-space-size=8192 pnpm run build
 
@@ -35,11 +44,13 @@ WORKDIR /app/office-addin
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm update @erato/frontend --config.confirmModulesPurge=false
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --config.confirmModulesPurge=false
 
+# Ahead of the source copy for the same store-lineage reason as the frontend's.
+RUN mkdir -p /app/sbom && pnpm sbom --sbom-format cyclonedx --sbom-spec-version 1.7 > /app/sbom/office-addin.cdx.json
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm licenses list --prod --json | node ../scripts/normalize-pnpm-license-json.mjs | ./node_modules/.bin/pnpm-licenses generate-disclaimer --json-input --output-file=/app/sbom/office-addin.txt
+
 RUN cp pnpm-lock.yaml /tmp/office-addin-pnpm-lock.yaml
 COPY office-addin /app/office-addin
 RUN cp /tmp/office-addin-pnpm-lock.yaml pnpm-lock.yaml
-RUN mkdir -p /app/sbom && pnpm sbom --sbom-format cyclonedx --sbom-spec-version 1.7 > /app/sbom/office-addin.cdx.json
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm licenses list --prod --json | node ../scripts/normalize-pnpm-license-json.mjs | ./node_modules/.bin/pnpm-licenses generate-disclaimer --json-input --output-file=/app/sbom/office-addin.txt
 RUN NODE_OPTIONS=--max-old-space-size=8192 pnpm run build
 
 # Final stage - empty image with just the static files for all served frontends
