@@ -1,4 +1,4 @@
-import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
 import {
@@ -6,6 +6,10 @@ import {
   useGenerationStatusStore,
   type ChatGenerationStatus,
 } from "@/hooks/chat/store/generationStatusStore";
+import {
+  isPaginated,
+  type RecentChatsCacheEntry,
+} from "@/hooks/chat/useChatHistory";
 import {
   recentChatsQuery,
   useGeneratingChats,
@@ -48,9 +52,11 @@ const pollInterval = (): number | false => {
  * title lands in the same commit as the Finished badge, and the running
  * marker is removed so a remount cannot re-seed a finished generation.
  * Prefix-targeted, because the list is cached under one key per filter/pinned
- * variant and a chat may sit in several of them.
+ * variant and a chat may sit in several of them — including the plain
+ * single-page caches (e.g. an origin-filtered delegated-runs listing), whose
+ * rows would otherwise keep a stale running marker.
  */
-const patchTerminalChats = (
+export const patchTerminalChats = (
   queryClient: ReturnType<typeof useQueryClient>,
   entries: GeneratingChat[],
 ) => {
@@ -64,37 +70,37 @@ const patchTerminalChats = (
   if (terminal.size === 0) {
     return;
   }
-  queryClient.setQueriesData<InfiniteData<RecentChatsResponse>>(
+  const patchPage = (page: RecentChatsResponse): RecentChatsResponse => {
+    const chats = page.chats.map((chat) => {
+      const entry = terminal.get(chat.id);
+      if (!entry) return chat;
+      const title = entry.title ?? chat.title_resolved;
+      if (
+        chat.title_resolved === title &&
+        chat.active_generation_started_at === undefined &&
+        chat.pending_tool_approval_at === undefined
+      ) {
+        return chat;
+      }
+      // Clearing the pending marker keeps a stale row from re-seeding an
+      // approval that was already decided.
+      return {
+        ...chat,
+        title_resolved: title,
+        active_generation_started_at: undefined,
+        pending_tool_approval_at: undefined,
+      };
+    });
+    return chats.every((chat, index) => chat === page.chats[index])
+      ? page
+      : { ...page, chats };
+  };
+  queryClient.setQueriesData<RecentChatsCacheEntry>(
     { queryKey: recentChatsQuery({}).queryKey },
     (current) => {
-      // The prefix also matches non-paginated recent-chats caches, which have
-      // no `pages` to patch.
-      if (!current || !Array.isArray(current.pages)) return current;
-      const pages = current.pages.map((page) => {
-        const chats = page.chats.map((chat) => {
-          const entry = terminal.get(chat.id);
-          if (!entry) return chat;
-          const title = entry.title ?? chat.title_resolved;
-          if (
-            chat.title_resolved === title &&
-            chat.active_generation_started_at === undefined &&
-            chat.pending_tool_approval_at === undefined
-          ) {
-            return chat;
-          }
-          // Clearing the pending marker keeps a stale row from re-seeding an
-          // approval that was already decided.
-          return {
-            ...chat,
-            title_resolved: title,
-            active_generation_started_at: undefined,
-            pending_tool_approval_at: undefined,
-          };
-        });
-        return chats.every((chat, index) => chat === page.chats[index])
-          ? page
-          : { ...page, chats };
-      });
+      if (!current) return current;
+      if (!isPaginated(current)) return patchPage(current);
+      const pages = current.pages.map(patchPage);
       return pages.every((page, index) => page === current.pages[index])
         ? current
         : { ...current, pages };

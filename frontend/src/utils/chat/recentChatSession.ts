@@ -12,13 +12,38 @@ import type { ChatSession } from "@/types/chat";
 /** `title_resolved` sentinel the backend returns while a chat has no title. */
 export const UNTITLED_BACKEND_SENTINEL = "Untitled Chat";
 
+/**
+ * A real, displayable title — or `null` when the backend has none yet, so
+ * the caller can fall through to its own placeholder.
+ */
+export function resolveRecentChatTitle(
+  title: string | null | undefined,
+): string | null {
+  return title && title !== UNTITLED_BACKEND_SENTINEL ? title : null;
+}
+
 /** `provenance_kind` of a chat spawned by in-chat delegation. */
 export const DELEGATION_PROVENANCE_KIND = "delegation";
+
+/** `provenance_run_mode` of a delegated run that detached from its origin turn. */
+export const BACKGROUND_RUN_MODE = "background";
 
 export function isDelegatedRun(
   chat: Pick<RecentChat, "provenance_kind">,
 ): boolean {
   return chat.provenance_kind === DELEGATION_PROVENANCE_KIND;
+}
+
+/**
+ * A delegated run with a life of its own: it detached at dispatch, so its
+ * outcome lands in its own chat rather than inline in the origin turn.
+ */
+export function isBackgroundRun(
+  chat: Pick<RecentChat, "provenance_kind" | "provenance_run_mode">,
+): boolean {
+  return (
+    isDelegatedRun(chat) && chat.provenance_run_mode === BACKGROUND_RUN_MODE
+  );
 }
 
 export function mapRecentChatToSession(chat: RecentChat): ChatSession {

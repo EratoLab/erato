@@ -4213,7 +4213,10 @@ async fn test_listing_hides_delegated_runs_and_exposes_provenance(pool: Pool<Pos
                 adopted_at: None,
                 expected_output: None,
                 constraints: None,
-                run_mode: None,
+                // One detached run among awaited ones, so the listing's
+                // run-mode passthrough is exercised in both directions.
+                run_mode: (index == 0)
+                    .then_some(erato::models::message::DelegationRunMode::Background),
             },
             format!("Delegated run {index}"),
         )
@@ -4298,6 +4301,22 @@ async fn test_listing_hides_delegated_runs_and_exposes_provenance(pool: Pool<Pos
         delegated_entry["origin_chat_title"]
             .as_str()
             .is_some_and(|title| !title.is_empty())
+    );
+    // The detached run carries its run mode; an awaited run stores none and
+    // the listing must preserve that absence, since clients read presence of
+    // `background` as "this run has a life of its own".
+    assert_eq!(delegated_entry["provenance_run_mode"], "background");
+    let awaited_entry = listing["chats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|chat| chat["id"] == delegated_ids[1].as_str())
+        .unwrap();
+    assert!(
+        !awaited_entry
+            .as_object()
+            .unwrap()
+            .contains_key("provenance_run_mode")
     );
 
     // Composes with the type filter: delegated runs are assistant-bound.

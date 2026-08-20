@@ -44,11 +44,23 @@ interface ToolStatusPillProps {
 const PILL_CLASS = "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium";
 
 /**
- * Informational pill for a settled step whose state deserves naming without
- * any alarm — the in-flight tone, but still: no animation, no error styling.
+ * Informational pill for a settled step whose state deserves naming.
+ * Defaults to the calm in-flight tone — no animation, no error styling —
+ * with `toneClassName` for callers that overlay a known state onto it.
  */
-export const SettledInfoPill = ({ label }: { label: string }) => (
-  <span className={clsx(PILL_CLASS, "bg-theme-info-bg text-theme-info-fg")}>
+export const SettledInfoPill = ({
+  label,
+  toneClassName,
+}: {
+  label: string;
+  toneClassName?: string;
+}) => (
+  <span
+    className={clsx(
+      PILL_CLASS,
+      toneClassName ?? "bg-theme-info-bg text-theme-info-fg",
+    )}
+  >
     {label}
   </span>
 );

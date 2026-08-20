@@ -7596,6 +7596,11 @@
             "type": "string",
             "description": "Provenance kind when the chat was spawned from another chat (e.g.\n`delegation` for a delegated run). Clients derive \"is delegated run\"\nfrom this value."
           },
+          "provenance_run_mode": {
+            "type": "string",
+            "description": "How a delegated run was dispatched. Present only for delegation\nprovenance, and only as `background` — the mark of a detached run\nwhose result never flowed back to the origin turn. An awaited run\nomits it, since its answer already returned inline.",
+            "example": "background"
+          },
           "title_by_summary": {
             "type": [
               "string",

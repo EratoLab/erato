@@ -1,7 +1,10 @@
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 
-import type { GeneratingChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  GeneratingChat,
+  RecentChat,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
  * Per-chat generation status for the sidebar indicators.
@@ -360,6 +363,31 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
     },
   ),
 );
+
+/**
+ * Seed the store from a chat listing's running and pending-approval markers.
+ * The generating poll is gated on the store, so a surface that lists chats
+ * has to push what the rows already say — otherwise the poll never starts
+ * and the indicators never observe a transition. The compared seed path
+ * keeps stale rows from resurrecting anything newer.
+ */
+export function seedGenerationStatusFromListing(
+  chats: readonly Pick<
+    RecentChat,
+    "id" | "active_generation_started_at" | "pending_tool_approval_at"
+  >[],
+): void {
+  const { seedRunning, seedActionRequired } =
+    useGenerationStatusStore.getState();
+  for (const chat of chats) {
+    if (chat.active_generation_started_at) {
+      seedRunning(chat.id, chat.active_generation_started_at);
+    }
+    if (chat.pending_tool_approval_at) {
+      seedActionRequired(chat.id, chat.pending_tool_approval_at);
+    }
+  }
+}
 
 export const selectRunningCount = (state: GenerationStatusStore): number =>
   Object.values(state.statusByChatId).filter(

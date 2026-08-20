@@ -32,7 +32,10 @@ import {
   useChatHistoryFilterStore,
   type ChatHistoryFilterValues,
 } from "./store/chatHistoryFilterStore";
-import { useGenerationStatusStore } from "./store/generationStatusStore";
+import {
+  seedGenerationStatusFromListing,
+  useGenerationStatusStore,
+} from "./store/generationStatusStore";
 import { getStreamKey, useMessagingStore } from "./store/messagingStore";
 
 import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -72,9 +75,9 @@ type InfiniteRecentChats = InfiniteData<RecentChatsPage>;
  * The recent-chats key prefix also covers surfaces that read a single page
  * through a plain query, so a cache edit has to expect either shape.
  */
-type RecentChatsCacheEntry = InfiniteRecentChats | RecentChatsPage;
+export type RecentChatsCacheEntry = InfiniteRecentChats | RecentChatsPage;
 
-const isPaginated = (
+export const isPaginated = (
   entry: RecentChatsCacheEntry,
 ): entry is InfiniteRecentChats =>
   Array.isArray((entry as InfiniteRecentChats).pages);
@@ -461,6 +464,7 @@ export function useChatHistory({
       pending_tool_approval_at: undefined,
       // A just-created chat is never a delegated run.
       provenance_kind: undefined,
+      provenance_run_mode: undefined,
       origin_chat_id: undefined,
       origin_chat_title: undefined,
       origin_assistant_id: undefined,
@@ -473,16 +477,7 @@ export function useChatHistory({
   // markers, so generations started (or parked) elsewhere get an indicator
   // without waiting for a poll.
   useEffect(() => {
-    const { seedRunning, seedActionRequired } =
-      useGenerationStatusStore.getState();
-    for (const chat of chats) {
-      if (chat.active_generation_started_at) {
-        seedRunning(chat.id, chat.active_generation_started_at);
-      }
-      if (chat.pending_tool_approval_at) {
-        seedActionRequired(chat.id, chat.pending_tool_approval_at);
-      }
-    }
+    seedGenerationStatusFromListing(chats);
   }, [chats]);
 
   // Navigate to a specific chat (assistant-aware)

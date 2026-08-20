@@ -46,6 +46,7 @@ import {
 } from "./ChatInputControlsContext";
 import { ChatMessage as ChatMessageComponent } from "./ChatMessage";
 import { ChatShareDialog } from "./ChatShareDialog";
+import { DelegatedRunsSection } from "./DelegatedRunsSection";
 import { EditChatTitleDialog } from "./EditChatTitleDialog";
 import { Button } from "../Controls/Button";
 import { ChatErrorBoundary } from "../Feedback/ChatErrorBoundary";
@@ -869,6 +870,10 @@ export const Chat = ({
                 </MessageEditProvider>
               </>
             )}
+            {/* Background runs launched from this chat sit right above the
+                composer — in view even on small screens, where the sidebar
+                is hidden. Renders nothing while the chat has none. */}
+            {!readOnly ? <DelegatedRunsSection chatId={currentChatId} /> : null}
             {/* ChatInput lives in a stable JSX position so React doesn't
                 unmount it during the empty-state ↔ messages layout flip.
                 Anything previously hoisted to survive that unmount (audio
