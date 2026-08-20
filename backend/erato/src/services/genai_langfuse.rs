@@ -278,6 +278,7 @@ pub fn create_trace_metadata(
     tool_names: &[String],
     filenames: &[String],
     mcp_servers_unavailable: &[String],
+    mcp_servers_needing_auth: &[String],
     was_aborted: bool,
     platform: Option<&str>,
 ) -> Option<JsonValue> {
@@ -300,6 +301,13 @@ pub fn create_trace_metadata(
         metadata.insert(
             "mcp_servers_unavailable".to_string(),
             json!(mcp_servers_unavailable),
+        );
+    }
+
+    if !mcp_servers_needing_auth.is_empty() {
+        metadata.insert(
+            "mcp_servers_needing_auth".to_string(),
+            json!(mcp_servers_needing_auth),
         );
     }
 
@@ -902,6 +910,7 @@ mod tests {
             &["search".to_string()],
             &["report.pdf".to_string(), "notes.txt".to_string()],
             &["mock_mcp_unavailable_500".to_string()],
+            &["mock_mcp_oauth".to_string()],
             true,
             Some("web"),
         )
@@ -914,7 +923,8 @@ mod tests {
                 "erato_platform": "web",
                 "erato_generation_aborted": true,
                 "filenames": ["report.pdf", "notes.txt"],
-                "mcp_servers_unavailable": ["mock_mcp_unavailable_500"]
+                "mcp_servers_unavailable": ["mock_mcp_unavailable_500"],
+                "mcp_servers_needing_auth": ["mock_mcp_oauth"]
             })
         );
     }

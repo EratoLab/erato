@@ -1436,6 +1436,11 @@ pub struct ChatMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     mcp_servers_unavailable: Option<Vec<String>>,
+    /// MCP server IDs skipped for this generation because the requesting user
+    /// has not completed the server's OAuth authorization yet
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    mcp_servers_needing_auth: Option<Vec<String>>,
     /// When the message was created
     created_at: DateTime<FixedOffset>,
     /// When the message was last updated
@@ -2175,6 +2180,9 @@ impl ChatMessage {
         let mcp_servers_unavailable = generation_metadata
             .as_ref()
             .and_then(|metadata| metadata.mcp_servers_unavailable.clone());
+        let mcp_servers_needing_auth = generation_metadata
+            .as_ref()
+            .and_then(|metadata| metadata.mcp_servers_needing_auth.clone());
         Ok(ChatMessage {
             id: msg.id.to_string(),
             chat_id: msg.chat_id.to_string(),
@@ -2183,6 +2191,7 @@ impl ChatMessage {
             error,
             error_report: None,
             mcp_servers_unavailable,
+            mcp_servers_needing_auth,
             created_at: msg.created_at,
             updated_at: msg.updated_at,
             previous_message_id: msg.previous_message_id.map(|id| id.to_string()),

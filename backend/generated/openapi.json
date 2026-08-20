@@ -4847,6 +4847,13 @@
             "type": "boolean",
             "description": "Whether this message is in the active thread"
           },
+          "mcp_servers_needing_auth": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "MCP server IDs skipped for this generation because the requesting user\nhas not completed the server's OAuth authorization yet"
+          },
           "mcp_servers_unavailable": {
             "type": "array",
             "items": {

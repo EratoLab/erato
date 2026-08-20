@@ -4609,6 +4609,7 @@ fn answer_metadata(
         was_aborted: was_aborted.then_some(true),
         error,
         mcp_servers_unavailable: None,
+        mcp_servers_needing_auth: None,
     }
 }
 

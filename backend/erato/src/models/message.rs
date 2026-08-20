@@ -179,6 +179,11 @@ pub struct GenerationMetadata {
     /// MCP server IDs that were unavailable while preparing this generation.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mcp_servers_unavailable: Option<Vec<String>>,
+    /// MCP server IDs skipped because the requesting user had not completed
+    /// the server's OAuth authorization. Distinct from unavailable: these
+    /// servers work, the user just needs to connect them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mcp_servers_needing_auth: Option<Vec<String>>,
 }
 
 /// Role of the message author (as defined by the LLM providers)

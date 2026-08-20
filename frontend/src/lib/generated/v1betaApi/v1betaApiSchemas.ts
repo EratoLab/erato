@@ -713,6 +713,11 @@ export type ChatMessage = {
    */
   is_message_in_active_thread: boolean;
   /**
+   * MCP server IDs skipped for this generation because the requesting user
+   * has not completed the server's OAuth authorization yet
+   */
+  mcp_servers_needing_auth?: string[];
+  /**
    * MCP server IDs that were unavailable while preparing this generation
    */
   mcp_servers_unavailable?: string[];
