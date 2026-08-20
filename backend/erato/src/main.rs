@@ -16,6 +16,7 @@ use erato::services::sentry::{extend_with_sentry_layers, setup_sentry};
 use erato::startup_log;
 use erato::state::AppState;
 use erato::{ApiDoc, server};
+use std::time::Duration;
 use tower_http::cors::CorsLayer;
 use tower_http::set_header::SetResponseHeaderLayer;
 
@@ -65,6 +66,26 @@ fn configured_tokio_worker_threads() -> usize {
         Err(std::env::VarError::NotUnicode(e)) => {
             panic!("\"{ENV_WORKER_THREADS}\" must be valid unicode, error: {e:?}")
         }
+    }
+}
+
+/// Resolves on the first shutdown request: SIGTERM (how Kubernetes asks a pod
+/// to stop) or Ctrl-C.
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install SIGTERM handler");
+        tokio::select! {
+            _ = sigterm.recv() => {}
+            _ = tokio::signal::ctrl_c() => {}
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl-C handler");
     }
 }
 
@@ -159,6 +180,8 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
             DeploymentIdentity::from_env().server_header(),
         ));
 
+    let background_tasks = state.background_tasks.clone();
+
     let app = if config.integrations.otel.enabled {
         app
             // include trace context as header into the response
@@ -173,7 +196,74 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
     tracing::info!(api_docs_url = %format!("http://{}/scalar", local_addr), "API docs available");
     tracing::info!(frontend_url = %format!("http://{}", local_addr), "Frontend available");
     tracing::info!(listen_addr = %local_addr, worker_threads, "Server listening");
-    axum::serve(listener, app.into_make_service()).await?;
+
+    // Everything after the signal shares one deadline: the connection drain
+    // and the generation drain draw from the same budget, so the total
+    // post-signal time stays within the deployment's termination grace
+    // period no matter which phase consumes it.
+    let drain_window = Duration::from_secs(config.generation_status.shutdown_drain_secs);
+    let (drain_deadline_tx, drain_deadline_rx) =
+        tokio::sync::watch::channel(None::<tokio::time::Instant>);
+    let shutdown = {
+        let background_tasks = background_tasks.clone();
+        async move {
+            shutdown_signal().await;
+            tracing::info!("Shutdown signal received; draining in-flight generations");
+            let _ = drain_deadline_tx.send(Some(tokio::time::Instant::now() + drain_window));
+            // Aborting before the connection drain matters: the graceful
+            // shutdown below waits for open responses, and a live SSE stream
+            // only ends once its generation stops — without the abort, the
+            // server would sit on streaming connections until killed.
+            background_tasks.request_abort_all().await;
+        }
+    };
+    // The graceful shutdown awaits every open response without a timeout of
+    // its own, so a wedged handler or a stalled SSE tail could hold the serve
+    // future open past the grace period — and everything below it, abort
+    // sweep, generation drain and logging, would never run. Once the deadline
+    // passes, dropping the serve future closes the remaining connections,
+    // which is the correct outcome at that point.
+    let deadline_elapsed = {
+        let mut deadline_rx = drain_deadline_rx.clone();
+        async move {
+            // An error means the serve future resolved without a signal ever
+            // arriving; this branch then simply never fires.
+            if deadline_rx
+                .wait_for(|deadline| deadline.is_some())
+                .await
+                .is_err()
+            {
+                std::future::pending::<()>().await;
+            }
+            let deadline = (*deadline_rx.borrow()).expect("set before the sender is dropped");
+            tokio::time::sleep_until(deadline).await;
+        }
+    };
+    tokio::select! {
+        result = axum::serve(listener, app.into_make_service()).with_graceful_shutdown(shutdown) => result?,
+        () = deadline_elapsed => {
+            tracing::warn!("Shutdown deadline elapsed with connections still open; dropping them");
+        }
+    }
+
+    // A second sweep for generations spawned by requests that were already
+    // past the listener when the signal fired.
+    background_tasks.request_abort_all().await;
+    if !drain_window.is_zero() {
+        // The generation drain gets whatever the connection drain left of
+        // the shared deadline, never a fresh window.
+        let remaining = (*drain_deadline_rx.borrow())
+            .map(|deadline| deadline.saturating_duration_since(tokio::time::Instant::now()))
+            .unwrap_or(drain_window);
+        if background_tasks.drain(remaining).await {
+            tracing::info!("All in-flight generations recorded their outcome");
+        } else {
+            tracing::warn!(
+                drain_secs = config.generation_status.shutdown_drain_secs,
+                "Exiting with generations still in flight; the stale-lease reaper will mark them errored"
+            );
+        }
+    }
 
     Ok(())
 }
@@ -181,6 +271,15 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn shutdown_signal_stays_pending_until_a_signal_arrives() {
+        let result = tokio::time::timeout(Duration::from_millis(20), shutdown_signal()).await;
+        assert!(
+            result.is_err(),
+            "the shutdown future must not resolve on its own"
+        );
+    }
 
     #[test]
     fn configured_tokio_worker_threads_has_minimum() {

@@ -4226,7 +4226,7 @@ Configuration for the persisted per-chat generation status that powers the chat 
 
 **Type:** `object`
 
-**Default behavior:** `heartbeat_interval_secs` defaults to `10`, `stale_after_secs` to `30`, and `terminal_retention_secs` to `60`.
+**Default behavior:** `heartbeat_interval_secs` defaults to `10`, `stale_after_secs` to `30`, `terminal_retention_secs` to `60`, and `shutdown_drain_secs` to `25`.
 
 **Example:**
 
@@ -4235,6 +4235,7 @@ Configuration for the persisted per-chat generation status that powers the chat 
 heartbeat_interval_secs = 10
 stale_after_secs = 30
 terminal_retention_secs = 60
+shutdown_drain_secs = 25
 ```
 
 #### `generation_status.heartbeat_interval_secs`
@@ -4266,3 +4267,15 @@ Seconds a completed or errored generation remains visible in the generating-chat
 **Type:** `number`
 
 **Default value:** `60`
+
+#### `generation_status.shutdown_drain_secs`
+
+{/* erato_toml_config_key: generation_status.shutdown_drain_secs */}
+
+Upper bound in seconds on how long the process keeps running after a shutdown signal (SIGTERM or Ctrl-C): one deadline shared by the connection drain and the generation drain, within which aborted in-flight generations persist their terminal outcome before exiting. Without this window, a deploy would kill generations mid-stream and their chats would only be marked as errored once the stale-heartbeat reaper notices. Set to `0` to skip the wait entirely.
+
+The value should stay below the deployment's termination grace period (Kubernetes defaults to 30 seconds), or the process gets killed before the drain finishes.
+
+**Type:** `number`
+
+**Default value:** `25`

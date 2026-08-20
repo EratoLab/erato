@@ -3533,6 +3533,15 @@ pub struct GenerationStatusConfig {
     // Defaults to 60.
     #[serde(default = "default_generation_status_terminal_retention_secs")]
     pub terminal_retention_secs: u64,
+
+    // Upper bound in seconds on how long the process keeps running after a
+    // shutdown signal: one deadline shared by the connection drain and the
+    // generation drain, within which aborted in-flight generations persist
+    // their terminal outcome before exiting. 0 skips the wait entirely.
+    // Defaults to 25, leaving headroom inside Kubernetes' default 30-second
+    // termination grace period.
+    #[serde(default = "default_generation_status_shutdown_drain_secs")]
+    pub shutdown_drain_secs: u64,
 }
 
 fn default_generation_status_heartbeat_interval_secs() -> u64 {
@@ -3547,12 +3556,17 @@ fn default_generation_status_terminal_retention_secs() -> u64 {
     60
 }
 
+fn default_generation_status_shutdown_drain_secs() -> u64 {
+    25
+}
+
 impl Default for GenerationStatusConfig {
     fn default() -> Self {
         Self {
             heartbeat_interval_secs: default_generation_status_heartbeat_interval_secs(),
             stale_after_secs: default_generation_status_stale_after_secs(),
             terminal_retention_secs: default_generation_status_terminal_retention_secs(),
+            shutdown_drain_secs: default_generation_status_shutdown_drain_secs(),
         }
     }
 }
