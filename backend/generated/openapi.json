@@ -2852,6 +2852,16 @@
             "schema": {
               "type": "boolean"
             }
+          },
+          {
+            "name": "origin_chat_id",
+            "in": "query",
+            "description": "If provided, only return chats spawned from this origin chat. Composes with `include_delegated` rather than overriding it, so listing a chat's delegated runs requires passing both.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
@@ -2864,6 +2874,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Invalid origin_chat_id format"
           },
           "500": {
             "description": "Server error while retrieving chats"

@@ -2642,10 +2642,12 @@ async fn assemble_chat_messages_response(
         ("q" = Option<String>, Query, description = "Optional full-text search query for chat titles. User-provided titles take precedence over generated summary titles. Empty values are treated like an unfiltered recent chats list."),
         ("pinned" = Option<bool>, Query, description = "If provided, filter chats by their pinned state."),
         ("type" = Option<RecentChatTypeFilter>, Query, description = "If provided, only return chats of the given kind: `chat` for chats without an assistant, `assistant` for assistant-based chats."),
-        ("include_delegated" = Option<bool>, Query, description = "Whether to include delegated runs (chats spawned by in-chat delegation). Defaults to false; delegated runs are hidden from listings unless requested.")
+        ("include_delegated" = Option<bool>, Query, description = "Whether to include delegated runs (chats spawned by in-chat delegation). Defaults to false; delegated runs are hidden from listings unless requested."),
+        ("origin_chat_id" = Option<Uuid>, Query, description = "If provided, only return chats spawned from this origin chat. Composes with `include_delegated` rather than overriding it, so listing a chat's delegated runs requires passing both.")
     ),
     responses(
         (status = OK, body = RecentChatsResponse, description = "Successfully retrieved chats with pagination metadata"),
+        (status = BAD_REQUEST, description = "Invalid origin_chat_id format"),
         (status = INTERNAL_SERVER_ERROR, description = "Server error while retrieving chats")
     ),
     security(
@@ -2682,6 +2684,14 @@ pub async fn recent_chats(
         .get("include_delegated")
         .and_then(|value| value.parse::<bool>().ok())
         .unwrap_or(false);
+    let origin_chat_id = if let Some(value) = params.get("origin_chat_id") {
+        Some(Uuid::parse_str(value).map_err(|e| {
+            tracing::error!("Invalid origin_chat_id format: {}", e);
+            StatusCode::BAD_REQUEST
+        })?)
+    } else {
+        None
+    };
 
     policy
         .rebuild_data_if_needed(&app_state.db, &app_state.config)
@@ -2708,6 +2718,7 @@ pub async fn recent_chats(
             chat_type,
             search_query,
             include_delegated,
+            origin_chat_id,
         },
         app_state.config.generation_status.stale_after_secs,
     )

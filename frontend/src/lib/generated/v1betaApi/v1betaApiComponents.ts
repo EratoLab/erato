@@ -5383,6 +5383,12 @@ export type RecentChatsQueryParams = {
    * Whether to include delegated runs (chats spawned by in-chat delegation). Defaults to false; delegated runs are hidden from listings unless requested.
    */
   include_delegated?: boolean;
+  /**
+   * If provided, only return chats spawned from this origin chat. Composes with `include_delegated` rather than overriding it, so listing a chat's delegated runs requires passing both.
+   *
+   * @format uuid
+   */
+  origin_chat_id?: string;
 };
 
 export type RecentChatsError = Fetcher.ErrorWrapper<undefined>;
