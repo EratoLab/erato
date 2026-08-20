@@ -2771,8 +2771,20 @@ pub struct AssistantsDelegationConfig {
     #[serde(default)]
     pub allow_background: bool,
 
+    // Maximum number of one user's delegated background runs that may be in
+    // flight at once; further background launches are refused until a run
+    // finishes. Counted over live generation leases without locking, so
+    // concurrent dispatches can briefly overshoot it — the cap exists to stop
+    // runaway fan-out, not to be exact. A single message is also capped at
+    // this many background launches. `0` disables the cap.
+    // Defaults to `5`.
+    #[serde(default = "default_delegation_max_concurrent_background_runs")]
+    pub max_concurrent_background_runs: usize,
+
     // Maximum wall-clock duration in seconds a delegated child run may take
-    // before it is aborted and reported to the origin chat as timed out.
+    // before it is aborted. An awaited run is reported to the origin chat as
+    // timed out; a background run just stops, keeping whatever partial answer
+    // it produced in its own chat.
     // Defaults to `600`.
     #[serde(default = "default_delegation_run_timeout_seconds")]
     pub run_timeout_seconds: u64,
@@ -2817,6 +2829,7 @@ impl Default for AssistantsDelegationConfig {
         Self {
             enabled: false,
             allow_background: false,
+            max_concurrent_background_runs: default_delegation_max_concurrent_background_runs(),
             run_timeout_seconds: default_delegation_run_timeout_seconds(),
             max_mentions_per_message: default_delegation_max_mentions_per_message(),
             result_max_chars: default_delegation_result_max_chars(),
@@ -2824,6 +2837,10 @@ impl Default for AssistantsDelegationConfig {
             preamble: default_delegation_preamble(),
         }
     }
+}
+
+fn default_delegation_max_concurrent_background_runs() -> usize {
+    5
 }
 
 fn default_delegation_run_timeout_seconds() -> u64 {

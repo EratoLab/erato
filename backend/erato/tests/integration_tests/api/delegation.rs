@@ -3437,6 +3437,652 @@ async fn test_regenerate_request_wait_overrides_persisted_background(pool: Pool<
     assert!(provenance_of(&second_child).run_mode.is_none());
 }
 
+/// Waits until the chat's generation left the `running` state and returns the
+/// terminal state it landed on.
+async fn wait_for_child_terminal(
+    db: &sea_orm::DatabaseConnection,
+    child_chat_id: Uuid,
+) -> Option<String> {
+    for _ in 0..100 {
+        let state = erato::db::entity::chats::Entity::find_by_id(child_chat_id)
+            .one(db)
+            .await
+            .unwrap()
+            .unwrap()
+            .generation_state;
+        if state.as_deref() != Some("running") {
+            return state;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+    panic!("delegated child chat {child_chat_id} never left the running state");
+}
+
+/// Every terminal `tool_call_update` for a tool, in stream order.
+fn terminal_tool_call_updates(events: &[Event], tool_name: &str) -> Vec<Value> {
+    events
+        .iter()
+        .filter_map(|event| serde_json::from_str::<Value>(&event.data).ok())
+        .filter(|json| {
+            json["message_type"] == "tool_call_update"
+                && json["tool_name"] == tool_name
+                && json["status"] != "in_progress"
+        })
+        .collect()
+}
+
+/// A background run has no dispatch loop watching it, so the deadline is
+/// enforced from inside the child task itself: the run self-aborts, the
+/// cooperative wind-down persists the partial answer, and the generation
+/// reaches a terminal state — while the parent, long since finished at
+/// launch, is untouched.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_background_run_timeout_self_aborts_detached_child(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    // Child: a first chunk, then a stall far past the run timeout.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["CHILD-TIMEBOX-TASK"],
+                &["dispatched"],
+            ));
+        let mut actions =
+            crate::test_utils::build_openai_text_streaming_response(&["CHILD-TIMEBOX-PARTIAL"]);
+        actions.insert(2, BodyAction::Delay(std::time::Duration::from_secs(30)));
+        mock_llm_sse_response(then, actions);
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&["dispatched"], &[]));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["PARENT-TIMEBOX-FINAL"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["timebox parent question"],
+                &["CHILD-TIMEBOX-TASK", "dispatched"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_delegate_timebox",
+                "delegate_to_assistant",
+                json!({
+                    "assistant_id": DELEGATE_ASSISTANT_FIXED_ID,
+                    "task": "CHILD-TIMEBOX-TASK start and stall",
+                }),
+            )]),
+        );
+    });
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.assistants.delegation.enabled = true;
+    app_config.assistants.delegation.allow_background = true;
+    app_config.assistants.delegation.run_timeout_seconds = 1;
+    let app_state = test_app_state(app_config, pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    insert_fixed_delegate_assistant(&app_state.db, me.id, &delegate_prompt(), None).await;
+    let server = app_server(app_state.clone());
+
+    let response = submit_with_mentions_and_run_mode(
+        &server,
+        None,
+        "timebox parent question",
+        &[DELEGATE_ASSISTANT_FIXED_ID],
+        "background",
+    )
+    .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+
+    // The parent settled at launch and never hears about the timeout.
+    let output = find_tool_call_update_output(&events, "delegate_to_assistant");
+    assert!(output.get("status").is_none());
+    assert_eq!(output["background"], true);
+    assert!(extract_full_text_answer(&events).contains("PARENT-TIMEBOX-FINAL"));
+    let delegate_chat_id = Uuid::parse_str(output["delegate_chat_id"].as_str().unwrap()).unwrap();
+
+    // The child self-aborted on its deadline: terminal generation state, and
+    // the partial answer it had streamed is persisted in its own chat.
+    let terminal = wait_for_child_terminal(&app_state.db, delegate_chat_id).await;
+    assert!(
+        matches!(terminal.as_deref(), Some("completed") | Some("errored")),
+        "got terminal state {terminal:?}"
+    );
+    let partial_persisted = chat_messages_by_created_at(&app_state.db, delegate_chat_id)
+        .await
+        .iter()
+        .any(|row| {
+            row.raw_message["role"] == "assistant"
+                && row.raw_message["content"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .any(|part| {
+                        part["text"]
+                            .as_str()
+                            .is_some_and(|text| text.contains("CHILD-TIMEBOX-PARTIAL"))
+                    })
+        });
+    assert!(
+        partial_persisted,
+        "the aborted child must keep its partial answer"
+    );
+}
+
+async fn insert_shared_generation(
+    db: &sea_orm::DatabaseConnection,
+    chat_id: Uuid,
+    generation_id: Uuid,
+    started_age_secs: i64,
+) {
+    use sea_orm::{ConnectionTrait, Statement};
+    db.execute_raw(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        r#"INSERT INTO temp_chat_generations
+               (generation_id, chat_id, owner_pod, state, started_at, heartbeat_at)
+           VALUES ($1, $2, 'other-pod', 'running',
+                   now() - make_interval(secs => $3::double precision), now())"#,
+        [
+            generation_id.into(),
+            chat_id.into(),
+            (started_age_secs as f64).into(),
+        ],
+    ))
+    .await
+    .expect("insert shared generation");
+}
+
+async fn pending_abort_count(db: &sea_orm::DatabaseConnection, generation_id: Uuid) -> i64 {
+    use sea_orm::{ConnectionTrait, Statement};
+    db.query_one_raw(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        r#"SELECT COUNT(*) AS "count"
+           FROM temp_chat_generation_commands
+           WHERE generation_id = $1 AND command_type = 'abort' AND consumed_at IS NULL"#,
+        [generation_id.into()],
+    ))
+    .await
+    .unwrap()
+    .unwrap()
+    .try_get::<i64>("", "count")
+    .unwrap()
+}
+
+/// The maintenance backstop aborts a delegated run whose generation row
+/// outlived the deadline on a pod that is wedged rather than dead — and only
+/// those: a delegated run within its deadline, an overdue plain chat and an
+/// overdue ADOPTED run are all left alone, and a still-pending abort is not
+/// stacked onto.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_timeout_backstop_aborts_only_overdue_delegated_runs(pool: Pool<Postgres>) {
+    // Delegation stays disabled so the app's own maintenance loop never runs
+    // the backstop; the test drives the factored function directly.
+    let app_config = crate::test_utils::hermetic_app_config(None, None);
+    let app_state = test_app_state(app_config, pool).await;
+    erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+
+    let assistant = create_assistant(&server, "Backstop Assistant", "prompt").await;
+    let assistant_id = Uuid::parse_str(&assistant).unwrap();
+    let origin_chat = Uuid::parse_str(&create_chat(&server, Some(&assistant)).await).unwrap();
+
+    let overdue_delegated = Uuid::parse_str(&create_chat(&server, Some(&assistant)).await).unwrap();
+    let fresh_delegated = Uuid::parse_str(&create_chat(&server, Some(&assistant)).await).unwrap();
+    let overdue_plain = Uuid::parse_str(&create_chat(&server, Some(&assistant)).await).unwrap();
+    let overdue_adopted = Uuid::parse_str(&create_chat(&server, Some(&assistant)).await).unwrap();
+    for chat_id in [overdue_delegated, fresh_delegated, overdue_adopted] {
+        write_delegation_provenance(&app_state.db, chat_id, assistant_id, origin_chat, None).await;
+    }
+    let adopted_chat = erato::db::entity::chats::Entity::find_by_id(overdue_adopted)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("adopted chat");
+    erato::models::chat::mark_delegated_run_adopted(&app_state.db, &adopted_chat)
+        .await
+        .unwrap();
+
+    let overdue_delegated_generation = Uuid::new_v4();
+    let fresh_delegated_generation = Uuid::new_v4();
+    let overdue_plain_generation = Uuid::new_v4();
+    let overdue_adopted_generation = Uuid::new_v4();
+    insert_shared_generation(
+        &app_state.db,
+        overdue_delegated,
+        overdue_delegated_generation,
+        700,
+    )
+    .await;
+    insert_shared_generation(
+        &app_state.db,
+        fresh_delegated,
+        fresh_delegated_generation,
+        10,
+    )
+    .await;
+    insert_shared_generation(&app_state.db, overdue_plain, overdue_plain_generation, 700).await;
+    insert_shared_generation(
+        &app_state.db,
+        overdue_adopted,
+        overdue_adopted_generation,
+        700,
+    )
+    .await;
+
+    let enqueued =
+        erato::services::background_tasks::BackgroundTaskManager::enqueue_overdue_delegated_run_aborts(
+            &app_state.db,
+            620.0,
+        )
+        .await
+        .unwrap();
+    assert_eq!(enqueued, 1);
+    assert_eq!(
+        pending_abort_count(&app_state.db, overdue_delegated_generation).await,
+        1
+    );
+    assert_eq!(
+        pending_abort_count(&app_state.db, fresh_delegated_generation).await,
+        0
+    );
+    assert_eq!(
+        pending_abort_count(&app_state.db, overdue_plain_generation).await,
+        0
+    );
+    assert_eq!(
+        pending_abort_count(&app_state.db, overdue_adopted_generation).await,
+        0
+    );
+
+    // The pending abort is not duplicated while nothing consumes it.
+    let enqueued_again =
+        erato::services::background_tasks::BackgroundTaskManager::enqueue_overdue_delegated_run_aborts(
+            &app_state.db,
+            620.0,
+        )
+        .await
+        .unwrap();
+    assert_eq!(enqueued_again, 0);
+    assert_eq!(
+        pending_abort_count(&app_state.db, overdue_delegated_generation).await,
+        1
+    );
+}
+
+/// The owner-wide concurrency cap: with one background run in flight a second
+/// launch is refused as a call refusal the model recovers from in prose, and
+/// once the first run reaches a terminal state the freed slot admits a new
+/// launch.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_background_concurrency_cap_refuses_and_frees(pool: Pool<Postgres>) {
+    let refusal_recorder = RequestBodyRecorder::new();
+
+    let mut mocks = MockSet::new();
+    // Child 1: slow enough to still be running when the second launch is tried.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["CHILD-CAP-ONE-TASK"],
+                &["dispatched"],
+            ));
+        let mut actions =
+            crate::test_utils::build_openai_text_streaming_response(&["CHILD-CAP-ONE-ANSWER done"]);
+        actions.insert(0, BodyAction::Delay(std::time::Duration::from_secs(8)));
+        mock_llm_sse_response(then, actions);
+    });
+    // Child 3: immediate.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["CHILD-CAP-THREE-TASK"],
+                &["dispatched"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&[
+                "CHILD-CAP-THREE-ANSWER done",
+            ]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["cap question one", "dispatched"],
+                &[],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["PARENT-CAP-ONE-FINAL"]),
+        );
+    });
+    {
+        let recorder = refusal_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &["cap question two", "Delegation refused"],
+                    &[],
+                ))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&["PARENT-CAP-TWO-FINAL"]),
+            );
+        });
+    }
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["cap question three", "dispatched"],
+                &[],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["PARENT-CAP-THREE-FINAL"]),
+        );
+    });
+    for (question, call_id, task) in [
+        (
+            "cap question one",
+            "call_cap_one",
+            "CHILD-CAP-ONE-TASK take your time",
+        ),
+        (
+            "cap question two",
+            "call_cap_two",
+            "CHILD-CAP-TWO-TASK never launches",
+        ),
+        (
+            "cap question three",
+            "call_cap_three",
+            "CHILD-CAP-THREE-TASK quick",
+        ),
+    ] {
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &[question],
+                    &["dispatched", "Delegation refused"],
+                ));
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                    call_id,
+                    "delegate_to_assistant",
+                    json!({
+                        "assistant_id": DELEGATE_ASSISTANT_FIXED_ID,
+                        "task": task,
+                    }),
+                )]),
+            );
+        });
+    }
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.assistants.delegation.enabled = true;
+    app_config.assistants.delegation.allow_background = true;
+    app_config
+        .assistants
+        .delegation
+        .max_concurrent_background_runs = 1;
+    let app_state = test_app_state(app_config, pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    insert_fixed_delegate_assistant(&app_state.db, me.id, &delegate_prompt(), None).await;
+    let server = app_server(app_state.clone());
+
+    // First launch takes the only slot.
+    let response = submit_with_mentions_and_run_mode(
+        &server,
+        None,
+        "cap question one",
+        &[DELEGATE_ASSISTANT_FIXED_ID],
+        "background",
+    )
+    .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let output = find_tool_call_update_output(&events, "delegate_to_assistant");
+    assert_eq!(output["background"], true);
+    let first_child_id = Uuid::parse_str(output["delegate_chat_id"].as_str().unwrap()).unwrap();
+
+    // Second launch while the first still runs: refused, turn completes.
+    let response = submit_with_mentions_and_run_mode(
+        &server,
+        None,
+        "cap question two",
+        &[DELEGATE_ASSISTANT_FIXED_ID],
+        "background",
+    )
+    .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let output = find_tool_call_update_output(&events, "delegate_to_assistant");
+    assert_eq!(output["status"], "error");
+    assert!(
+        output["error"]
+            .as_str()
+            .unwrap()
+            .contains("background runs in flight")
+    );
+    assert!(extract_full_text_answer(&events).contains("PARENT-CAP-TWO-FINAL"));
+    let refusal_bodies = refusal_recorder.bodies();
+    assert!(refusal_bodies.iter().any(|body| body.contains(
+        "Delegation refused: You already have 1 background runs in flight; wait for one to finish."
+    )));
+
+    // The refused call left no delegated chat behind.
+    assert!(
+        erato::db::entity::chats::Entity::find()
+            .filter(erato::db::entity::chats::Column::OwnerUserId.eq(me.id.to_string()))
+            .all(&app_state.db)
+            .await
+            .unwrap()
+            .iter()
+            .filter(|chat| chat.origin_chat_id.is_some())
+            .count()
+            == 1
+    );
+
+    // Once the first run finishes, the slot frees up.
+    wait_for_child_completion(&app_state.db, first_child_id, "CHILD-CAP-ONE-ANSWER").await;
+    let response = submit_with_mentions_and_run_mode(
+        &server,
+        None,
+        "cap question three",
+        &[DELEGATE_ASSISTANT_FIXED_ID],
+        "background",
+    )
+    .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let output = find_tool_call_update_output(&events, "delegate_to_assistant");
+    assert_eq!(output["background"], true);
+    let third_child_id = Uuid::parse_str(output["delegate_chat_id"].as_str().unwrap()).unwrap();
+    wait_for_child_completion(&app_state.db, third_child_id, "CHILD-CAP-THREE-ANSWER").await;
+}
+
+/// The per-message counter refuses a second background launch within one turn
+/// even before the first is visible as a running generation — with a wording
+/// of its own, and without failing the turn.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_per_message_background_cap_refuses_second_launch_in_one_turn(pool: Pool<Postgres>) {
+    let refusal_recorder = RequestBodyRecorder::new();
+
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["CHILD-TURNCAP-A-TASK"],
+                &["dispatched"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["CHILD-TURNCAP-ANSWER done"]),
+        );
+    });
+    {
+        let recorder = refusal_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&["most allowed per message"], &[]))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&["PARENT-TURNCAP-FINAL"]),
+            );
+        });
+    }
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["turncap parent question"],
+                &[
+                    "CHILD-TURNCAP-A-TASK",
+                    "dispatched",
+                    "most allowed per message",
+                ],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[
+                (
+                    "call_turncap_a",
+                    "delegate_to_assistant",
+                    json!({
+                        "assistant_id": DELEGATE_ASSISTANT_FIXED_ID,
+                        "task": "CHILD-TURNCAP-A-TASK first launch",
+                    }),
+                ),
+                (
+                    "call_turncap_b",
+                    "delegate_to_assistant",
+                    json!({
+                        "assistant_id": DELEGATE_ASSISTANT_FIXED_ID,
+                        "task": "CHILD-TURNCAP-B-TASK second launch",
+                    }),
+                ),
+            ]),
+        );
+    });
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.assistants.delegation.enabled = true;
+    app_config.assistants.delegation.allow_background = true;
+    app_config
+        .assistants
+        .delegation
+        .max_concurrent_background_runs = 1;
+    let app_state = test_app_state(app_config, pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    insert_fixed_delegate_assistant(&app_state.db, me.id, &delegate_prompt(), None).await;
+    let server = app_server(app_state.clone());
+
+    let response = submit_with_mentions_and_run_mode(
+        &server,
+        None,
+        "turncap parent question",
+        &[DELEGATE_ASSISTANT_FIXED_ID],
+        "background",
+    )
+    .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+
+    let updates = terminal_tool_call_updates(&events, "delegate_to_assistant");
+    assert_eq!(updates.len(), 2, "got: {updates:?}");
+    let launched = updates
+        .iter()
+        .find(|update| update["tool_call_id"] == "call_turncap_a")
+        .expect("first call's terminal update");
+    assert_eq!(launched["status"], "success");
+    assert_eq!(launched["output"]["background"], true);
+    let refused = updates
+        .iter()
+        .find(|update| update["tool_call_id"] == "call_turncap_b")
+        .expect("second call's terminal update");
+    assert_eq!(refused["status"], "error");
+    assert!(
+        refused["output"]["error"]
+            .as_str()
+            .unwrap()
+            .contains("most allowed per message")
+    );
+
+    assert!(extract_full_text_answer(&events).contains("PARENT-TURNCAP-FINAL"));
+    let refusal_bodies = refusal_recorder.bodies();
+    assert!(
+        refusal_bodies
+            .iter()
+            .any(|body| body.contains("Delegation refused: This turn already launched 1"))
+    );
+}
+
 async fn rebuilt_policy(app_state: &erato::state::AppState) -> erato::policy::engine::PolicyEngine {
     let policy = erato::policy::engine::PolicyEngine::new();
     policy

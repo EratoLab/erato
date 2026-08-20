@@ -622,21 +622,46 @@ fn run_delegated_child(
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), eyre::Report>> + Send>> {
     Box::pin(
         async move {
+            let run_timeout = std::time::Duration::from_secs(
+                app_state.config.assistants.delegation.run_timeout_seconds,
+            );
             crate::server::api::v1beta::message_streaming::with_generation_task_lifecycle(
                 &app_state.background_tasks,
                 &child_task,
                 chat_id,
-                crate::server::api::v1beta::message_streaming::run_message_submit_task(
-                    &child_task,
-                    &app_state,
-                    &policy,
-                    &me_user,
-                    &request,
-                    crate::models::message::GenerationRequestContext { platform: None },
-                    chat_id,
-                    true,
-                    Vec::new(),
-                ),
+                async {
+                    let run =
+                        crate::server::api::v1beta::message_streaming::run_message_submit_task(
+                            &child_task,
+                            &app_state,
+                            &policy,
+                            &me_user,
+                            &request,
+                            crate::models::message::GenerationRequestContext { platform: None },
+                            chat_id,
+                            true,
+                            Vec::new(),
+                        );
+                    tokio::pin!(run);
+                    tokio::select! {
+                        result = &mut run => result,
+                        // This timer is the run deadline's enforcement: it
+                        // lives in the child task itself, so it shares the
+                        // run's failure domain and bounds a run nothing
+                        // awaits. The dispatch loop keeps a second timer for
+                        // awaited runs purely to classify the envelope as
+                        // `timeout` for the parent; both request the same
+                        // idempotent abort. The run is then awaited to
+                        // completion — the abort is cooperative, and the
+                        // wind-down is what persists the partial answer
+                        // before the lifecycle tail records the outcome.
+                        _ = tokio::time::sleep(run_timeout) => {
+                            tracing::info!("Delegated child run hit its deadline; aborting");
+                            child_task.request_abort();
+                            run.await
+                        }
+                    }
+                },
             )
             .await
         }
@@ -932,6 +957,42 @@ pub(crate) async fn dispatch_delegate_tool_call(
         "The mentioned assistant is no longer available.".to_string()
     })?;
 
+    // A background run consumes a concurrency slot the moment it launches and
+    // frees it only when its own generation ends, so the cap is checked before
+    // anything is created. Two layers, both soft, both refusing the call and
+    // never the turn: the per-generation counter first, because a launch made
+    // moments ago by this same turn is not yet visible as a running
+    // generation; then the owner-wide count of live runs.
+    if context.run_mode == DelegationRunMode::Background
+        && config.max_concurrent_background_runs > 0
+    {
+        let cap = config.max_concurrent_background_runs;
+        if context
+            .background_dispatches
+            .load(std::sync::atomic::Ordering::Relaxed)
+            >= cap
+        {
+            return Err(format!(
+                "This turn already launched {cap} background run(s), the most allowed per message; delegate the remaining work in a later message."
+            ));
+        }
+        let in_flight = crate::models::chat::count_running_background_delegated_runs(
+            &app_state.db,
+            &context.origin_chat.owner_user_id,
+            app_state.config.generation_status.stale_after_secs,
+        )
+        .await
+        .map_err(|error| {
+            tracing::warn!(%error, "Failed to count in-flight background delegated runs");
+            "Failed to check the background run limit.".to_string()
+        })?;
+        if in_flight >= cap as u64 {
+            return Err(format!(
+                "You already have {in_flight} background runs in flight; wait for one to finish."
+            ));
+        }
+    }
+
     let parent_depth = crate::models::chat::parse_assistant_configuration(context.origin_chat)
         .ok()
         .flatten()
@@ -1024,6 +1085,9 @@ pub(crate) async fn dispatch_delegate_tool_call(
     // call when the turn is replayed. How the run went is read off the run
     // itself, not off the parent turn.
     if context.run_mode == DelegationRunMode::Background {
+        context
+            .background_dispatches
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         drop(child_rx);
         drop(handle);
         return Ok(DelegationDispatchOutcome::Dispatched {
@@ -1046,6 +1110,10 @@ pub(crate) async fn dispatch_delegate_tool_call(
         sent_version: 0,
         last_frame_at: None,
     };
+    // Classification only: the deadline's enforcement is the twin timer
+    // inside [`run_delegated_child`], which also covers runs this loop never
+    // awaits. This arm is what turns the deadline into a `timeout` envelope
+    // for the parent — the child's own wind-down joins as a plain completion.
     let run_timeout =
         tokio::time::sleep(std::time::Duration::from_secs(config.run_timeout_seconds));
     tokio::pin!(run_timeout);

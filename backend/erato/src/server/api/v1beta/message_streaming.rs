@@ -1729,7 +1729,8 @@ mod generation_task_lifecycle_tests {
     async fn events_of_run(
         run: Result<(), Report>,
     ) -> (Vec<StreamingEvent>, BackgroundTaskManager, Uuid) {
-        let background_tasks = BackgroundTaskManager::new(None, GenerationStatusConfig::default());
+        let background_tasks =
+            BackgroundTaskManager::new(None, GenerationStatusConfig::default(), None);
         let chat_id = Uuid::new_v4();
         let (_receiver, task) = background_tasks.start_task(chat_id, Uuid::new_v4()).await;
 
@@ -1811,6 +1812,11 @@ pub(crate) struct DelegationDispatchContext<'a> {
     /// Effective run mode for this turn's delegated runs — resolved and
     /// gate-downgraded at request time, so dispatch executes it as-is.
     pub run_mode: crate::models::message::DelegationRunMode,
+    /// Background launches this generation already made. A launch is not yet
+    /// visible as a running generation when the next call of the same turn is
+    /// dispatched, so within a turn this counter is what keeps the
+    /// concurrency cap honest.
+    pub background_dispatches: std::sync::atomic::AtomicUsize,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -8299,6 +8305,7 @@ pub(crate) async fn run_message_submit_task(
             origin_chat: &chat,
             origin_user_message_id: saved_user_message.id,
             run_mode: effective_delegation_run_mode,
+            background_dispatches: std::sync::atomic::AtomicUsize::new(0),
         }),
     );
 
@@ -8719,6 +8726,7 @@ pub async fn regenerate_message_sse(
                         origin_chat: &chat,
                         origin_user_message_id: previous_message.id,
                         run_mode: effective_delegation_run_mode,
+                        background_dispatches: std::sync::atomic::AtomicUsize::new(0),
                     }),
                 )
                 .await;
@@ -9215,6 +9223,7 @@ pub async fn edit_message_sse(
                         origin_chat: &chat,
                         origin_user_message_id: saved_user_message.id,
                         run_mode: effective_delegation_run_mode,
+                        background_dispatches: std::sync::atomic::AtomicUsize::new(0),
                     }),
                 )
                 .await;
