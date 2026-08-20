@@ -31,6 +31,7 @@ import type {
   DelegationRunMode,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
+import type { AssistantMention } from "@/utils/chat/assistantMentions";
 import type { FileType } from "@/utils/fileTypes";
 import type { ReactNode } from "react";
 
@@ -83,7 +84,7 @@ export interface ChatContextValue {
     assistantId?: string,
     selectedFacetIds?: string[],
     actionFacet?: { id: string; args?: Record<string, string> },
-    mentionedAssistantIds?: string[],
+    mentionedAssistants?: AssistantMention[],
     delegationRunMode?: DelegationRunMode,
   ) => Promise<string | undefined>;
   editMessage: (

@@ -2099,7 +2099,7 @@ describe("useChatMessaging", () => {
           undefined,
           undefined,
           undefined,
-          ["assistant-research"],
+          [{ id: "assistant-research", name: "Researcher" }],
           "background",
         );
       });
@@ -2128,7 +2128,7 @@ describe("useChatMessaging", () => {
           undefined,
           undefined,
           undefined,
-          ["assistant-research"],
+          [{ id: "assistant-research", name: "Researcher" }],
         );
       });
 

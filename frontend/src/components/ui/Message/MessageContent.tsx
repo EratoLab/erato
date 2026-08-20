@@ -15,6 +15,7 @@ import {
 import { CheckIcon, CopyIcon } from "@/components/ui/icons";
 import { useOptionalTranslation } from "@/hooks/i18n";
 import { useTraceFeature } from "@/providers/FeatureConfigProvider";
+import { findMentionRanges } from "@/utils/chat/assistantMentions";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { EratoAppointmentBlock } from "./EratoAppointmentBlock";
@@ -31,6 +32,7 @@ import type {
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { UiImagePart } from "@/utils/adapters/contentPartAdapter";
 import type { OutlookArtifact } from "@/utils/adapters/messageAdapter";
+import type { AssistantMention } from "@/utils/chat/assistantMentions";
 import type { Components } from "react-markdown";
 
 interface MessageContentProps {
@@ -61,6 +63,12 @@ interface MessageContentProps {
    * unchanged. See {@link OutlookArtifact}.
    */
   outlookArtifact?: OutlookArtifact;
+  /**
+   * Resolved `{id, name}` mentions of this (user) message. When present,
+   * `@Name` tokens matching them render as highlighted pills; names that do
+   * not resolve are never passed in, so their tokens stay plain text.
+   */
+  mentionedAssistants?: AssistantMention[];
 }
 
 /**
@@ -345,6 +353,42 @@ const isImageFile = (file: FileUploadItem): boolean =>
     file.file_capability.mime_types[0] ?? "",
   ) === "image";
 
+// eslint-disable-next-line lingui/no-unlocalized-strings -- URL scheme
+const ERATO_MENTION_SCHEME = "erato-mention://";
+
+/**
+ * Rewrites each resolved `@Name` token into a markdown link on an
+ * `erato-mention://<id>` URL, following the `autolinkEratoFiles` pattern of
+ * preprocessing the source text and letting the `a` component override give
+ * the token its real rendering (a highlight pill, not a link). Ranges come
+ * from `findMentionRanges` over the raw text — the same reading the composer
+ * highlight and the submitted ids use — never a bare `@word` regex.
+ */
+const linkAssistantMentions = (
+  text: string,
+  mentions: AssistantMention[],
+): string => {
+  const ranges = findMentionRanges(text, mentions);
+  if (ranges.length === 0) {
+    return text;
+  }
+
+  let result = "";
+  let cursor = 0;
+  for (const range of ranges) {
+    // Escape link-text delimiters so a bracketed assistant name cannot break
+    // out of the link syntax.
+    const token = text
+      .slice(range.start, range.end)
+      .replace(/([\\[\]])/g, "\\$1");
+    result += text.slice(cursor, range.start);
+    result += `[${token}](${ERATO_MENTION_SCHEME}${range.id})`;
+    cursor = range.end;
+  }
+  result += text.slice(cursor);
+  return result;
+};
+
 const autolinkEratoFiles = (text: string): string => {
   // eslint-disable-next-line lingui/no-unlocalized-strings
   if (!text.includes("erato-file://")) {
@@ -478,6 +522,7 @@ export const MessageContent = memo(function MessageContent({
   updatedAt,
   hasError = false,
   outlookArtifact,
+  mentionedAssistants,
 }: MessageContentProps) {
   const imageAdvisory = useOptionalTranslation("chat.message.image_advisory");
   const { maskReasoningText } = useTraceFeature();
@@ -588,6 +633,29 @@ export const MessageContent = memo(function MessageContent({
     code: MarkdownCode,
     // Ensure links open in new tab
     a({ href, id, children, node: _node, ...props }) {
+      if (href?.startsWith(ERATO_MENTION_SCHEME)) {
+        const mentionId = href.slice(ERATO_MENTION_SCHEME.length);
+        const mention = mentionedAssistants?.find(
+          (candidate) => candidate.id === mentionId,
+        );
+        // Only ids this message actually mentions get the pill; a hand-typed
+        // erato-mention link degrades to its plain text.
+        if (!mention) {
+          return <>{children}</>;
+        }
+        // Not a link: the token's meaning is "this run of text addressed that
+        // assistant", so it renders as the same pill the composer backdrop
+        // paints — same tone tokens, same inset outline.
+        return (
+          <span
+            className="rounded-[var(--theme-radius-control)] bg-theme-info-bg box-decoration-clone shadow-[inset_0_0_0_1px_var(--theme-info-border)]"
+            data-mention-id={mentionId}
+            data-testid="message-assistant-mention"
+          >
+            {children}
+          </span>
+        );
+      }
       const rewrittenHref = rewriteFootnoteValue(href, messageId);
       const rewrittenId = rewriteFootnoteValue(id, messageId);
       const isHashLink = rewrittenHref?.startsWith("#") ?? false;
@@ -958,7 +1026,11 @@ export const MessageContent = memo(function MessageContent({
   };
 
   const renderMarkdown = (text: string) => {
-    const linkedTextContent = autolinkEratoFiles(text);
+    const mentionLinkedText =
+      mentionedAssistants && mentionedAssistants.length > 0
+        ? linkAssistantMentions(text, mentionedAssistants)
+        : text;
+    const linkedTextContent = autolinkEratoFiles(mentionLinkedText);
 
     return (
       <BlockCodeContext.Provider value={{ isBlockCode: false, isStreaming }}>
@@ -969,7 +1041,10 @@ export const MessageContent = memo(function MessageContent({
             components={components}
             urlTransform={(url) =>
               // eslint-disable-next-line lingui/no-unlocalized-strings
-              url.startsWith("erato-file://") ? url : defaultUrlTransform(url)
+              url.startsWith("erato-file://") ||
+              url.startsWith(ERATO_MENTION_SCHEME)
+                ? url
+                : defaultUrlTransform(url)
             }
             // Handle incomplete markdown patterns gracefully
             skipHtml={false}

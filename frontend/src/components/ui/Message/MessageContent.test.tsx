@@ -1316,4 +1316,81 @@ describe("MessageContent", () => {
       expect(rawBlock).toHaveTextContent("Final answer");
     });
   });
+
+  describe("assistant mentions", () => {
+    const dataMention = { id: "assistant-data", name: "Data Analyst" };
+    const bobMention = { id: "assistant-bob", name: "Bob" };
+
+    it("highlights resolved mentions while markdown keeps working around them", () => {
+      renderWithTheme(
+        <MessageContent
+          content={textContent(
+            "Please ask @Data Analyst about **quarterly numbers**",
+          )}
+          preserveSoftLineBreaks
+          mentionedAssistants={[dataMention]}
+        />,
+      );
+
+      const mention = screen.getByTestId("message-assistant-mention");
+      expect(mention).toHaveTextContent("@Data Analyst");
+      expect(mention).toHaveAttribute("data-mention-id", "assistant-data");
+      // Same tone tokens as the composer backdrop highlight.
+      expect(mention.className).toContain("bg-theme-info-bg");
+      expect(screen.getByText("quarterly numbers").tagName).toBe("STRONG");
+    });
+
+    it("highlights each of several mentions", () => {
+      renderWithTheme(
+        <MessageContent
+          content={textContent("ask @Data Analyst and @Bob please")}
+          mentionedAssistants={[dataMention, bobMention]}
+        />,
+      );
+
+      const mentions = screen.getAllByTestId("message-assistant-mention");
+      expect(mentions).toHaveLength(2);
+      expect(mentions[0]).toHaveTextContent("@Data Analyst");
+      expect(mentions[1]).toHaveTextContent("@Bob");
+    });
+
+    it("leaves tokens that resolve to no mention as plain text", () => {
+      renderWithTheme(
+        <MessageContent
+          content={textContent("ask @Ghost and @Data Analyst")}
+          mentionedAssistants={[dataMention]}
+        />,
+      );
+
+      expect(screen.getByTestId("message-assistant-mention")).toHaveTextContent(
+        "@Data Analyst",
+      );
+      expect(screen.getByText(/@Ghost/)).toBeInTheDocument();
+    });
+
+    it("renders identical text unchanged without the mentions prop", () => {
+      renderWithTheme(
+        <MessageContent content={textContent("ask @Data Analyst please")} />,
+      );
+
+      expect(
+        screen.queryByTestId("message-assistant-mention"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByText(/ask @Data Analyst please/)).toBeInTheDocument();
+    });
+
+    it("does not style a hand-typed erato-mention link for a foreign id", () => {
+      renderWithTheme(
+        <MessageContent
+          content={textContent("[@Faker](erato-mention://other-id)")}
+          mentionedAssistants={[dataMention]}
+        />,
+      );
+
+      expect(
+        screen.queryByTestId("message-assistant-mention"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByText("@Faker")).toBeInTheDocument();
+    });
+  });
 });

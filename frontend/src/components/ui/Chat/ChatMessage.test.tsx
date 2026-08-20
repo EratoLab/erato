@@ -421,4 +421,65 @@ describe("ChatMessage", () => {
       ).not.toBeInTheDocument();
     });
   });
+
+  describe("assistant mentions", () => {
+    const renderMessage = async (message: UiChatMessage) => {
+      const Controls = () => <div data-testid="message-controls-probe" />;
+
+      const { i18n } = await import("@lingui/core");
+      i18n.load("en", enMessages as unknown as Messages);
+      i18n.activate("en");
+
+      render(
+        <I18nProvider i18n={i18n}>
+          <ChatMessage
+            message={message}
+            controls={Controls}
+            controlsContext={{
+              currentUserId: "user_1",
+              dialogOwnerId: "user_1",
+              isSharedDialog: false,
+            }}
+            onMessageAction={async () => true}
+          />
+        </I18nProvider>,
+      );
+    };
+
+    it("hands a user message's resolved mentions to the content renderer", async () => {
+      await renderMessage({
+        id: "msg_user_mentions",
+        content: [{ content_type: "text", text: "ask @Researcher" }],
+        role: "user",
+        sender: "user",
+        authorId: "user_1",
+        createdAt: new Date("2025-01-01T12:00:00Z").toISOString(),
+        status: "complete",
+        mentioned_assistants: [{ id: "assistant-1", name: "Researcher" }],
+      });
+
+      expect(messageContentMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mentionedAssistants: [{ id: "assistant-1", name: "Researcher" }],
+        }),
+      );
+    });
+
+    it("withholds mentions from assistant messages", async () => {
+      await renderMessage({
+        id: "msg_assistant_mentions",
+        content: [{ content_type: "text", text: "quoting @Researcher" }],
+        role: "assistant",
+        sender: "assistant",
+        authorId: "assistant_1",
+        createdAt: new Date("2025-01-01T12:00:00Z").toISOString(),
+        status: "complete",
+        mentioned_assistants: [{ id: "assistant-1", name: "Researcher" }],
+      });
+
+      expect(messageContentMock).toHaveBeenCalledWith(
+        expect.objectContaining({ mentionedAssistants: undefined }),
+      );
+    });
+  });
 });

@@ -1,5 +1,6 @@
 import {
   ChatInput,
+  type AssistantMention,
   type ChatInputControlsHandle,
   type ChatModel,
   type FileType,
@@ -13,7 +14,7 @@ export interface AddinChatInputCoreProps {
     inputFileIds?: string[],
     modelId?: string,
     selectedFacetIds?: string[],
-    mentionedAssistantIds?: string[],
+    mentionedAssistants?: AssistantMention[],
   ) => void;
   handleFileAttachments?: (files: FileUploadItem[]) => void;
   isLoading?: boolean;

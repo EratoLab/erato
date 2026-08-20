@@ -7,6 +7,7 @@ import type {
   DelegationRunMode,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { MessageAction } from "@/types/message-controls";
+import type { AssistantMention } from "@/utils/chat/assistantMentions";
 
 const logger = createLogger("HOOK", "useChatActions");
 
@@ -19,7 +20,7 @@ interface UseChatActionsProps {
     assistantId?: string,
     selectedFacetIds?: string[],
     actionFacet?: ActionFacetRequest,
-    mentionedAssistantIds?: string[],
+    mentionedAssistants?: AssistantMention[],
     delegationRunMode?: DelegationRunMode,
   ) => Promise<string | undefined>;
   onMessageAction?: (action: MessageAction) => Promise<boolean>;
@@ -64,7 +65,7 @@ export function useChatActions({
       modelId?: string,
       assistantId?: string,
       selectedFacetIds?: string[],
-      mentionedAssistantIds?: string[],
+      mentionedAssistants?: AssistantMention[],
       delegationRunMode?: DelegationRunMode,
     ) => {
       if (message.trim() || (inputFileIds && inputFileIds.length > 0)) {
@@ -75,7 +76,7 @@ export function useChatActions({
           assistantId,
           selectedFacetIds,
           undefined,
-          mentionedAssistantIds,
+          mentionedAssistants,
           delegationRunMode,
         );
       }

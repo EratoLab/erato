@@ -387,6 +387,7 @@ export type {
 } from "@/types/message-controls";
 export type { ChatInputControlsHandle } from "@/components/ui/Chat/ChatInputControlsContext";
 export type { ChatInputAttachmentPreviewProps } from "@/types/chat-input-attachment-preview";
+export type { AssistantMention } from "@/utils/chat/assistantMentions";
 export type {
   ActionFacetInfo,
   ActionFacetRequest,

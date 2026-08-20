@@ -953,6 +953,123 @@ async fn test_regenerate_and_edit_replay_persisted_mentions(pool: Pool<Postgres>
     bad_edit.assert_status(axum::http::StatusCode::BAD_REQUEST);
 }
 
+/// The messages read API resolves persisted mentions into `{id, name}` pairs
+/// on the user message, ids that no longer resolve are omitted, and both
+/// assistant messages and mention-less user messages carry no key at all. The
+/// SSE `user_message_saved` payload carries the same pairs, so the just-sent
+/// message can highlight without waiting for a refetch.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_messages_read_resolves_mentioned_assistants(pool: Pool<Postgres>) {
+    let (app_state, _llm) = delegation_enabled_state_with_llm(pool).await;
+    let server = app_server(app_state.clone());
+
+    let alpha = create_assistant(&server, "Mention Alpha", "prompt").await;
+    let beta = create_assistant(&server, "Mention Beta", "prompt").await;
+
+    let response = submit_with_mentions(
+        &server,
+        None,
+        "ask @Mention Alpha and @Mention Beta",
+        &[&alpha, &beta],
+    )
+    .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let chat_id = crate::test_utils::extract_chat_id(&events).unwrap();
+
+    let expected_pairs = json!([
+        { "id": alpha, "name": "Mention Alpha" },
+        { "id": beta, "name": "Mention Beta" }
+    ]);
+
+    // The live event already carries the resolved pairs.
+    let saved_event = events
+        .iter()
+        .find_map(|event| {
+            let json = serde_json::from_str::<Value>(&event.data).ok()?;
+            (json["message_type"] == "user_message_saved").then_some(json)
+        })
+        .expect("user_message_saved event");
+    assert_eq!(
+        saved_event["message"]["mentioned_assistants"],
+        expected_pairs
+    );
+
+    let list_messages = |chat_id: String| {
+        let server = &server;
+        async move {
+            let response = server
+                .get(&format!("/api/v1beta/chats/{chat_id}/messages"))
+                .with_bearer_token(TEST_JWT_TOKEN)
+                .await;
+            response.assert_status_ok();
+            response.json::<Value>()["messages"].clone()
+        }
+    };
+
+    let messages = list_messages(chat_id.clone()).await;
+    let user_message = messages
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["role"] == "user")
+        .expect("user message");
+    assert_eq!(user_message["mentioned_assistants"], expected_pairs);
+    let assistant_message = messages
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["role"] == "assistant")
+        .expect("assistant message");
+    assert!(
+        assistant_message.get("mentioned_assistants").is_none(),
+        "assistant messages must not carry the key"
+    );
+
+    // An id that no longer resolves is omitted while the rest keep resolving.
+    let chat_uuid = Uuid::parse_str(&chat_id).unwrap();
+    let rows = chat_messages_by_created_at(&app_state.db, chat_uuid).await;
+    let user_row = rows
+        .iter()
+        .find(|row| row.raw_message["role"] == "user")
+        .expect("user message row");
+    let mut input_parameters = user_row.input_parameters.clone().unwrap();
+    input_parameters["mentioned_assistant_ids"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!("00000000-0000-0000-0000-00000000dead"));
+    let mut active: erato::db::entity::messages::ActiveModel = user_row.clone().into();
+    active.input_parameters = ActiveValue::Set(Some(input_parameters));
+    active.update(&app_state.db).await.unwrap();
+
+    let messages = list_messages(chat_id.clone()).await;
+    let user_message = messages
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["role"] == "user")
+        .expect("user message");
+    assert_eq!(user_message["mentioned_assistants"], expected_pairs);
+
+    // A mention-less user message carries no key at all.
+    let plain_chat = create_chat(&server, None).await;
+    submit_message(&server, &plain_chat, None, "no mentions here", vec![]).await;
+    let messages = list_messages(plain_chat).await;
+    let plain_user_message = messages
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["role"] == "user")
+        .expect("plain user message");
+    assert!(plain_user_message.get("mentioned_assistants").is_none());
+}
+
 /// The requested run mode round-trips into the user message's
 /// `input_parameters`: `background` is persisted verbatim even though
 /// `allow_background` is off — the gate applies at dispatch, not at

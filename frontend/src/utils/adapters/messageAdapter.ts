@@ -75,6 +75,7 @@ export function mapApiMessageToUiMessage(
     mcp_servers_needing_auth: apiMessage.mcp_servers_needing_auth ?? undefined,
     action_facet_id: apiMessage.action_facet_id ?? undefined,
     action_facet_args: apiMessage.action_facet_args ?? undefined,
+    mentioned_assistants: apiMessage.mentioned_assistants ?? undefined,
   };
 }
 

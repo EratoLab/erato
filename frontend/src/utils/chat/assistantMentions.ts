@@ -116,24 +116,32 @@ export function findMentionRanges(
   return ranges.sort((a, b) => a.start - b.start);
 }
 
-/** The ids the composer should submit: tracked order, deduped, text wins. */
-export function resolveMentionedAssistantIds(
+/** The mentions the composer should submit: tracked order, deduped, text wins. */
+export function resolveMentionedAssistants(
   text: string,
   tracked: AssistantMention[],
-): string[] {
+): AssistantMention[] {
   const present = new Set(
     findMentionRanges(text, tracked).map((range) => range.id),
   );
-  const ids: string[] = [];
+  const mentions: AssistantMention[] = [];
   const seen = new Set<string>();
   for (const mention of tracked) {
     if (seen.has(mention.id) || !present.has(mention.id)) {
       continue;
     }
     seen.add(mention.id);
-    ids.push(mention.id);
+    mentions.push(mention);
   }
-  return ids;
+  return mentions;
+}
+
+/** The ids the composer should submit: tracked order, deduped, text wins. */
+export function resolveMentionedAssistantIds(
+  text: string,
+  tracked: AssistantMention[],
+): string[] {
+  return resolveMentionedAssistants(text, tracked).map((mention) => mention.id);
 }
 
 /**

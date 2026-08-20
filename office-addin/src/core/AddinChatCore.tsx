@@ -26,6 +26,7 @@ import {
   useProfile,
   useStandardMessageActions,
   type ActionFacetRequest,
+  type AssistantMention,
   type ChatInputControlsHandle,
   type ChatMessageProps,
   type DropdownMenuItem,
@@ -63,7 +64,7 @@ export interface AddinChatInputRenderProps {
     selectedFacetIds?: string[],
     actionFacet?: ActionFacetRequest,
     hostContextIdentity?: string | null,
-    mentionedAssistantIds?: string[],
+    mentionedAssistants?: AssistantMention[],
   ) => void;
   onFilePreview: (file: FileUploadItem) => void;
   handleFileAttachments: (files: FileUploadItem[]) => void;
@@ -236,7 +237,7 @@ function useAddinChatController({
       selectedFacetIds,
       actionFacet,
       hostContextIdentity,
-      mentionedAssistantIds,
+      mentionedAssistants,
     ) => {
       hostCallbacksRef.current.beforeSend?.(hostContextIdentity);
       void chat
@@ -247,7 +248,7 @@ function useAddinChatController({
           assistantId,
           selectedFacetIds,
           actionFacet,
-          mentionedAssistantIds,
+          mentionedAssistants,
         )
         .then(() => chat.refetchHistory());
     },
@@ -455,7 +456,7 @@ function NeutralAddinChatHost({ controller }: AddinChatHostProps) {
             inputFileIds,
             modelId,
             selectedFacetIds,
-            mentionedAssistantIds,
+            mentionedAssistants,
           ) =>
             props.onSendMessage(
               message,
@@ -464,7 +465,7 @@ function NeutralAddinChatHost({ controller }: AddinChatHostProps) {
               selectedFacetIds,
               undefined,
               undefined,
-              mentionedAssistantIds,
+              mentionedAssistants,
             )
           }
         />

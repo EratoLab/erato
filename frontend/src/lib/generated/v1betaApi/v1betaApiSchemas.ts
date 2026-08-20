@@ -722,6 +722,12 @@ export type ChatMessage = {
    */
   mcp_servers_unavailable?: string[];
   /**
+   * Assistants the user @-mentioned in this message, resolved to display
+   * names at read time. Mentions whose assistant no longer resolves are
+   * omitted; absent on assistant messages and mention-less user messages.
+   */
+  mentioned_assistants?: MentionedAssistant[];
+  /**
    * The ID of the previous message in the thread, if any
    */
   previous_message_id?: string;
@@ -1612,6 +1618,20 @@ export type McpServerStatusValue =
   | "SUCCESS"
   | "FAILURE"
   | "NEEDS_AUTHENTICATION";
+
+/**
+ * An assistant the user @-mentioned in a message, resolved for display.
+ */
+export type MentionedAssistant = {
+  /**
+   * The unique ID of the mentioned assistant
+   */
+  id: string;
+  /**
+   * The assistant's display name at read time
+   */
+  name: string;
+};
 
 export type Message = {
   id: string;

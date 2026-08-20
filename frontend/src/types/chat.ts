@@ -2,7 +2,10 @@
  * Types for chat functionality.
  */
 
-import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  ContentPart,
+  MentionedAssistant,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 export type ContentFilterCategory =
   | "hate"
@@ -157,6 +160,13 @@ export interface Message {
   action_facet_id?: string;
   /** The action facet arguments supplied with this user message, if any. */
   action_facet_args?: Record<string, string>;
+  /**
+   * Assistants this user message @-mentioned, as resolved `{id, name}` pairs.
+   * Server-provided on persisted messages; on optimistic messages, seeded
+   * from the composer's tracked mentions so the highlight needs no
+   * round-trip.
+   */
+  mentioned_assistants?: MentionedAssistant[];
   /**
    * Set on assistant messages produced under an Outlook action facet — drives
    * insert/replace email-artifact rendering in {@link Message} content

@@ -454,6 +454,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         StarterPromptInfo,
         StarterPromptsResponse,
         ChatMessage,
+        MentionedAssistant,
         ChatMessageStats,
         ChatMessagesResponse,
         RecentChatStats,
@@ -1413,6 +1414,15 @@ pub struct MessageFeedback {
     updated_at: DateTime<FixedOffset>,
 }
 
+/// An assistant the user @-mentioned in a message, resolved for display.
+#[derive(Debug, Clone, ToSchema, Serialize, Deserialize)]
+pub struct MentionedAssistant {
+    /// The unique ID of the mentioned assistant
+    id: String,
+    /// The assistant's display name at read time
+    name: String,
+}
+
 /// A message in a chat
 #[derive(Debug, Clone, ToSchema, Serialize, Deserialize)]
 pub struct ChatMessage {
@@ -1471,6 +1481,11 @@ pub struct ChatMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     action_facet_args: Option<HashMap<String, String>>,
+    /// Assistants the user @-mentioned in this message, resolved to display
+    /// names at read time. Mentions whose assistant no longer resolves are
+    /// omitted; absent on assistant messages and mention-less user messages.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    mentioned_assistants: Vec<MentionedAssistant>,
 }
 
 /// Statistics for a list of chat messages
@@ -2227,8 +2242,87 @@ impl ChatMessage {
                         .ok()
                 })
                 .and_then(|p| p.action_facet_args),
+            // Needs the assistants table for names, so it is filled separately
+            // (like `files`) — batched per page, or per message on SSE.
+            mentioned_assistants: vec![],
         })
     }
+
+    /// Fills `mentioned_assistants` from the ids persisted on `model`,
+    /// resolving display names in one query. Single-message counterpart of
+    /// `resolve_mentioned_assistants_for_messages`, for the SSE emission
+    /// sites; resolution failure degrades to no mentions rather than
+    /// aborting the stream (the read APIs still resolve them later).
+    pub async fn with_mentioned_assistants(
+        mut self,
+        db: &sea_orm::DatabaseConnection,
+        model: &messages::Model,
+    ) -> Self {
+        match resolve_mentioned_assistants_for_messages(db, std::slice::from_ref(model)).await {
+            Ok(mut by_message) => {
+                self.mentioned_assistants = by_message.remove(&model.id).unwrap_or_default();
+            }
+            Err(error) => {
+                tracing::warn!(
+                    message_id = %model.id,
+                    "Failed to resolve mentioned assistants: {error}"
+                );
+            }
+        }
+        self
+    }
+}
+
+/// Resolves the assistant mentions persisted on the given message models into
+/// display pairs, with a single assistants query for the whole page. Names are
+/// looked up without per-assistant access checks — the mention was validated
+/// at submit and displaying it in an already-readable message grants nothing —
+/// mirroring how recent-chat listings resolve `assistant_name`. Ids that no
+/// longer resolve are omitted.
+async fn resolve_mentioned_assistants_for_messages(
+    db: &sea_orm::DatabaseConnection,
+    messages: &[messages::Model],
+) -> Result<HashMap<Uuid, Vec<MentionedAssistant>>, Report> {
+    let mut ids_by_message: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
+    let mut all_ids: HashSet<Uuid> = HashSet::new();
+    for msg in messages {
+        // Unparseable input parameters degrade to "no mentions", matching the
+        // tolerant reads in `from_model_with_feedback`.
+        let Some(ids) = models::message::get_input_mentioned_assistant_ids_from_message(msg)
+            .ok()
+            .flatten()
+        else {
+            continue;
+        };
+        if ids.is_empty() {
+            continue;
+        }
+        all_ids.extend(ids.iter().copied());
+        ids_by_message.insert(msg.id, ids);
+    }
+
+    if ids_by_message.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let all_ids: Vec<Uuid> = all_ids.into_iter().collect();
+    let names = models::assistant::get_assistant_names_by_ids(db, &all_ids).await?;
+
+    Ok(ids_by_message
+        .into_iter()
+        .map(|(message_id, ids)| {
+            let resolved: Vec<MentionedAssistant> = ids
+                .into_iter()
+                .filter_map(|id| {
+                    names.get(&id).map(|name| MentionedAssistant {
+                        id: id.to_string(),
+                        name: name.clone(),
+                    })
+                })
+                .collect();
+            (message_id, resolved)
+        })
+        .collect())
 }
 
 fn render_message_error_report(
@@ -2603,6 +2697,13 @@ async fn assemble_chat_messages_response(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let assistant_id = chat.and_then(|chat| chat.assistant_id);
 
+    // Batch query: display names for every mention on the page.
+    let mut mentioned_assistants_by_message =
+        resolve_mentioned_assistants_for_messages(&app_state.db, &messages)
+            .await
+            .wrap_err("Failed to resolve mentioned assistants")
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     // Convert the messages to the API response format with feedback and files
     let converted_messages: Result<Vec<ChatMessage>, Report> = messages
         .into_iter()
@@ -2612,6 +2713,9 @@ async fn assemble_chat_messages_response(
             chat_message.error_report = chat_message.error.as_ref().map(|error| {
                 render_message_error_report(&app_state.config, &msg, assistant_id, error)
             });
+            chat_message.mentioned_assistants = mentioned_assistants_by_message
+                .remove(&msg.id)
+                .unwrap_or_default();
 
             // Populate files for this message
             chat_message.files = msg
