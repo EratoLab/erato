@@ -7,7 +7,7 @@ import { getChatUrl } from "@/utils/chat/urlUtils";
 import { NestedTraceView } from "../NestedTraceView";
 import { TraceStep } from "../TraceStep";
 import { railIconFor } from "../icons";
-import { ToolStatusPill } from "./ToolStatusPill";
+import { SettledInfoPill, ToolStatusPill } from "./ToolStatusPill";
 
 import type { ToolApprovalStatus } from "../Trace";
 import type { BaseStepProps, TraceStepStatus } from "../types";
@@ -74,6 +74,11 @@ const stepStatusFor = (
   envelope: DelegationEnvelope,
   status: TraceStepStatus,
 ): TraceStepStatus => {
+  // A detached dispatch is settled the moment it exists; its part will never
+  // report the outcome, so "done" here means the hand-off, not the run.
+  if (envelope.background) {
+    return "done";
+  }
   if (envelope.status === undefined) {
     return status;
   }
@@ -188,11 +193,24 @@ export const DelegationStep = ({
         hasTrailingRailLine={!isLastStep}
         title={stepTitle(envelope.assistantName, isRunning)}
         titleSlot={
-          <ToolStatusPill
-            status={stepStatus}
-            approvalStatus={approvalStatus}
-            label={outcome}
-          />
+          envelope.background ? (
+            // The detachment is the one thing worth saying about this step —
+            // it outranks even an approval decision. The part is frozen at
+            // dispatch and never learns the run's fate, so the default copy
+            // states the hand-off, not a live state.
+            <SettledInfoPill
+              label={t({
+                id: "trace.delegation.background",
+                message: "Sent to background",
+              })}
+            />
+          ) : (
+            <ToolStatusPill
+              status={stepStatus}
+              approvalStatus={approvalStatus}
+              label={outcome}
+            />
+          )
         }
         headerSlot={
           envelope.delegateChatId !== undefined ? (

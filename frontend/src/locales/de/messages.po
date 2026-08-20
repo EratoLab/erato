@@ -3681,6 +3681,11 @@ msgstr "Ausgabe"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.background"
+msgstr "In den Hintergrund übergeben"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
 msgid "trace.delegation.done"
 msgstr "An {name} delegiert"
 

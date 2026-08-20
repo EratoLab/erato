@@ -230,6 +230,7 @@ export { SidecarLocalTraceView } from "@/components/ui/Trace/SidecarLocalTraceVi
 export type { SidecarLocalTraceViewProps } from "@/components/ui/Trace/SidecarLocalTraceView";
 export { DelegationStep } from "@/components/ui/Trace/steps/DelegationStep";
 export { ReasoningStep } from "@/components/ui/Trace/steps/ReasoningStep";
+export { SettledInfoPill } from "@/components/ui/Trace/steps/ToolStatusPill";
 export { ToolStatusPill } from "@/components/ui/Trace/steps/ToolStatusPill";
 export { ToolUseStep } from "@/components/ui/Trace/steps/ToolUseStep";
 export { Trace } from "@/components/ui/Trace/Trace";

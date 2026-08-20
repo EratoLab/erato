@@ -6,6 +6,9 @@
  * the whole envelope, so one frame is the full picture and the live, resumed,
  * and reloaded views all parse the same thing.
  *
+ * A backgrounded dispatch freezes its part at launch: identity plus a
+ * `background` marker, never a status — the run settles out of sight.
+ *
  * A dispatch that never happened returns `{status: "error", error}` instead —
  * no run, no chat to open, nothing to nest — and is deliberately not an
  * envelope here, so the call renders like any other tool call.
@@ -26,12 +29,17 @@ const SETTLED_STATUSES = new Set([
 const MAX_NAME_CHARS = 128;
 
 export interface DelegationEnvelope {
-  /** Absent while the delegate is still running. */
+  /** Absent while the delegate is still running — or forever, when detached. */
   status?: string;
   assistantId?: string;
   assistantName?: string;
   delegateChatId?: string;
   result?: string;
+  /**
+   * The dispatch detached: the parent turn ended at launch, the part is
+   * frozen as-is, and the run's outcome will never arrive here.
+   */
+  background: boolean;
   /** Whether the backend clipped `result` before sending it. */
   truncated: boolean;
 }
@@ -77,6 +85,12 @@ export function parseDelegationEnvelope(
     assistantName: boundedString(record.assistant_name, MAX_NAME_CHARS),
     delegateChatId,
     result: typeof record.result === "string" ? record.result : undefined,
+    // The marker only means "settled at dispatch" on a status-less part with
+    // a run to point at; anything else keeps its own meaning.
+    background:
+      record.background === true &&
+      status === undefined &&
+      delegateChatId !== undefined,
     truncated: record.truncated === true,
   };
 }
