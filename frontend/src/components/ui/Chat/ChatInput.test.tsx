@@ -4736,4 +4736,503 @@ describe("ChatInput", () => {
       expect(props.toolsDisabled).toBe(true);
     });
   });
+
+  describe("wait-or-background choice", () => {
+    const RESEARCHER = {
+      id: "assistant-research",
+      name: "Researcher",
+      description: "Finds and cites sources",
+      owner_email: "research@example.com",
+    };
+
+    const submitHandlerThatSends =
+      (
+        message: string,
+        attachedFiles: FileUploadItem[],
+        innerOnSendMessage: (message: string, inputFileIds?: string[]) => void,
+        isLoading: boolean,
+        disabled: boolean,
+        resetMessage: () => void,
+      ) =>
+      (event: FormEvent) => {
+        event.preventDefault();
+        if (isLoading || disabled) return;
+        const trimmed = message.trim();
+        const fileIds = attachedFiles.map((file) => file.id);
+        if (trimmed || fileIds.length > 0) {
+          innerOnSendMessage(trimmed, fileIds.length > 0 ? fileIds : undefined);
+          resetMessage();
+        }
+      };
+
+    const enableDelegation = ({ allowBackground = true } = {}) => {
+      mockUseAssistantsFeature.mockReturnValue({
+        enabled: true,
+        delegationEnabled: true,
+        delegationAllowBackground: allowBackground,
+      });
+      mockUseListAssistants.mockReturnValue({ data: [RESEARCHER] });
+      mockUseFrequentAssistants.mockReturnValue({
+        data: { assistants: [RESEARCHER] },
+      });
+      mockUseChatInputHandlers.mockReturnValue({
+        attachedFiles: [],
+        fileError: null,
+        setFileError: vi.fn(),
+        handleFilesUploaded: vi.fn(),
+        handleRemoveFile: vi.fn(),
+        handleRemoveAllFiles: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        createSubmitHandler: submitHandlerThatSends,
+      });
+    };
+
+    const flushFrame = async () => {
+      await act(async () => {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      });
+    };
+
+    const typeWithCaretAtEnd = (textarea: HTMLElement, value: string) => {
+      fireEvent.change(textarea, { target: { value } });
+      (textarea as HTMLTextAreaElement).setSelectionRange(
+        value.length,
+        value.length,
+      );
+      fireEvent.select(textarea);
+    };
+
+    const renderComposer = async (
+      onSendMessage: (...args: unknown[]) => void,
+      { isPendingResponse = false, isMessagingLoading = false } = {},
+    ) => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const { i18n } = await import("@lingui/core");
+      const ui = (pending: boolean) => {
+        mockUseChatContext.mockReturnValue({
+          isPendingResponse: pending,
+          isMessagingLoading,
+          isUploading: false,
+          cancelMessage: vi.fn(),
+          messagingError: null,
+        });
+        return (
+          <QueryClientProvider client={queryClient}>
+            <I18nProvider i18n={i18n}>
+              <ChatInput onSendMessage={onSendMessage} chatId="chat-1" />
+            </I18nProvider>
+          </QueryClientProvider>
+        );
+      };
+      const view = render(ui(isPendingResponse));
+      return {
+        textarea: screen.getByPlaceholderText("Type a message..."),
+        rerenderWithPending: (pending: boolean) => view.rerender(ui(pending)),
+      };
+    };
+
+    const draftWithMention = (textarea: HTMLElement, text: string) => {
+      typeWithCaretAtEnd(textarea, "@Res");
+      fireEvent.click(
+        screen.getByTestId("chat-input-mention-option-assistant-research"),
+      );
+      typeWithCaretAtEnd(textarea, text);
+    };
+
+    const popover = () =>
+      screen.queryByTestId("chat-input-delegation-run-mode");
+
+    beforeEach(() => {
+      useMessageQueueStore.setState({ queuedBySessionId: {} });
+    });
+
+    it("sends a plain draft straight through without asking", async () => {
+      enableDelegation();
+      const onSendMessage = vi.fn();
+      const { textarea } = await renderComposer(onSendMessage);
+
+      typeWithCaretAtEnd(textarea, "no delegation here");
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      expect(popover()).not.toBeInTheDocument();
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "no delegation here",
+        undefined,
+        undefined,
+        [],
+        [],
+      );
+    });
+
+    it("asks before a mentioned send and holds the draft until a choice is made", async () => {
+      enableDelegation();
+      const onSendMessage = vi.fn();
+      const { textarea } = await renderComposer(onSendMessage);
+
+      draftWithMention(textarea, "@Researcher please dig in");
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      expect(popover()).toBeInTheDocument();
+      expect(onSendMessage).not.toHaveBeenCalled();
+      expect(textarea).toHaveValue("@Researcher please dig in");
+    });
+
+    it("choosing to wait sends without a run mode", async () => {
+      enableDelegation();
+      const onSendMessage = vi.fn();
+      const { textarea } = await renderComposer(onSendMessage);
+
+      draftWithMention(textarea, "@Researcher please dig in");
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+      fireEvent.click(
+        screen.getByTestId("chat-input-delegation-run-mode-wait"),
+      );
+
+      expect(popover()).not.toBeInTheDocument();
+      expect(onSendMessage).toHaveBeenCalledTimes(1);
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "@Researcher please dig in",
+        undefined,
+        undefined,
+        [],
+        ["assistant-research"],
+      );
+      expect(textarea).toHaveValue("");
+    });
+
+    it("choosing background sends delegation_run_mode background", async () => {
+      enableDelegation();
+      const onSendMessage = vi.fn();
+      const { textarea } = await renderComposer(onSendMessage);
+
+      draftWithMention(textarea, "@Researcher please dig in");
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+      fireEvent.click(
+        screen.getByTestId("chat-input-delegation-run-mode-background"),
+      );
+
+      expect(onSendMessage).toHaveBeenCalledTimes(1);
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "@Researcher please dig in",
+        undefined,
+        undefined,
+        [],
+        ["assistant-research"],
+        "background",
+      );
+    });
+
+    it("resolves Enter to wait: the safe option holds focus and a stray Enter never backgrounds", async () => {
+      enableDelegation();
+      const onSendMessage = vi.fn();
+      const { textarea } = await renderComposer(onSendMessage);
+
+      draftWithMention(textarea, "@Researcher please dig in");
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+      await flushFrame();
+
+      // A real browser's Enter activates the focused row, which must be the
+      // wait option.
+      expect(
+        screen.getByTestId("chat-input-delegation-run-mode-wait"),
+      ).toHaveFocus();
+
+      // An Enter landing in the panel outside any row also resolves to wait.
+      fireEvent.keyDown(screen.getByTestId("chat-input-delegation-run-mode"), {
+        key: "Enter",
+      });
+
+      expect(onSendMessage).toHaveBeenCalledTimes(1);
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "@Researcher please dig in",
+        undefined,
+        undefined,
+        [],
+        ["assistant-research"],
+      );
+    });
+
+    it("cancels on Escape, keeping the draft", async () => {
+      enableDelegation();
+      const onSendMessage = vi.fn();
+      const { textarea } = await renderComposer(onSendMessage);
+
+      draftWithMention(textarea, "@Researcher please dig in");
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+      expect(popover()).toBeInTheDocument();
+
+      fireEvent.keyDown(document, { key: "Escape" });
+
+      expect(popover()).not.toBeInTheDocument();
+      expect(onSendMessage).not.toHaveBeenCalled();
+      expect(textarea).toHaveValue("@Researcher please dig in");
+    });
+
+    it("does not ask when the server does not allow background", async () => {
+      enableDelegation({ allowBackground: false });
+      const onSendMessage = vi.fn();
+      const { textarea } = await renderComposer(onSendMessage);
+
+      draftWithMention(textarea, "@Researcher please dig in");
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      expect(popover()).not.toBeInTheDocument();
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "@Researcher please dig in",
+        undefined,
+        undefined,
+        [],
+        ["assistant-research"],
+      );
+    });
+
+    it("does not ask when the delegation feature is off, even for a draft carrying mentions", async () => {
+      enableDelegation();
+      const onSendMessage = vi.fn();
+      const { textarea, rerenderWithPending } =
+        await renderComposer(onSendMessage);
+
+      draftWithMention(textarea, "@Researcher please dig in");
+      // The tracked mention outlives the feature flip (e.g. a restored draft
+      // in a deployment that later turned delegation off).
+      mockUseAssistantsFeature.mockReturnValue({
+        enabled: true,
+        delegationEnabled: false,
+        delegationAllowBackground: true,
+      });
+      rerenderWithPending(false);
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      expect(popover()).not.toBeInTheDocument();
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "@Researcher please dig in",
+        undefined,
+        undefined,
+        [],
+        ["assistant-research"],
+      );
+    });
+
+    it("asks at queue time and drains the snapshotted background mode", async () => {
+      enableDelegation();
+      const onSendMessage = vi.fn();
+      const { textarea, rerenderWithPending } = await renderComposer(
+        onSendMessage,
+        { isPendingResponse: true },
+      );
+
+      draftWithMention(textarea, "@Researcher take over");
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      expect(popover()).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("chat-input-queued-message"),
+      ).not.toBeInTheDocument();
+
+      fireEvent.click(
+        screen.getByTestId("chat-input-delegation-run-mode-background"),
+      );
+
+      // The choice is snapshotted with the queued draft, not read live later.
+      expect(
+        screen.getByTestId("chat-input-queued-message"),
+      ).toBeInTheDocument();
+      expect(textarea).toHaveValue("");
+      expect(
+        Object.values(useMessageQueueStore.getState().queuedBySessionId).map(
+          (queued) => queued?.delegationRunMode,
+        ),
+      ).toEqual(["background"]);
+
+      rerenderWithPending(false);
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      });
+
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "@Researcher take over",
+        undefined,
+        undefined,
+        [],
+        ["assistant-research"],
+        "background",
+      );
+    });
+
+    it("drains a queued wait choice without the run mode argument", async () => {
+      enableDelegation();
+      const onSendMessage = vi.fn();
+      const { textarea, rerenderWithPending } = await renderComposer(
+        onSendMessage,
+        { isPendingResponse: true },
+      );
+
+      draftWithMention(textarea, "@Researcher take over");
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+      fireEvent.click(
+        screen.getByTestId("chat-input-delegation-run-mode-wait"),
+      );
+
+      expect(
+        screen.getByTestId("chat-input-queued-message"),
+      ).toBeInTheDocument();
+
+      rerenderWithPending(false);
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      });
+
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "@Researcher take over",
+        undefined,
+        undefined,
+        [],
+        ["assistant-research"],
+      );
+    });
+
+    it("asks again on the next mentioned send instead of remembering the choice", async () => {
+      enableDelegation();
+      const onSendMessage = vi.fn();
+      const { textarea } = await renderComposer(onSendMessage);
+
+      draftWithMention(textarea, "@Researcher first task");
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+      fireEvent.click(
+        screen.getByTestId("chat-input-delegation-run-mode-background"),
+      );
+      expect(onSendMessage).toHaveBeenCalledTimes(1);
+
+      draftWithMention(textarea, "@Researcher second task");
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      expect(popover()).toBeInTheDocument();
+      expect(onSendMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it("carries the background choice through a confirmed queue replace", async () => {
+      enableDelegation();
+      const onSendMessage = vi.fn();
+      const { textarea } = await renderComposer(onSendMessage, {
+        isPendingResponse: true,
+      });
+
+      // A plain draft is already queued for the running turn.
+      typeWithCaretAtEnd(textarea, "plain draft first");
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+      expect(
+        screen.getByTestId("chat-input-queued-message"),
+      ).toBeInTheDocument();
+
+      // The replacing draft answers wait-or-background before the depth-1
+      // overwrite guard asks for confirmation.
+      draftWithMention(textarea, "@Researcher replace with this");
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+      fireEvent.click(
+        screen.getByTestId("chat-input-delegation-run-mode-background"),
+      );
+
+      expect(
+        screen.getByText("Replace the queued message?"),
+      ).toBeInTheDocument();
+      fireEvent.click(screen.getByText("Replace"));
+
+      // The choice rode setQueueReplacePending -> commitQueueReplace into the
+      // queued snapshot; the earlier plain draft is gone.
+      expect(
+        Object.values(useMessageQueueStore.getState().queuedBySessionId),
+      ).toEqual([
+        expect.objectContaining({
+          message: "@Researcher replace with this",
+          delegationRunMode: "background",
+        }),
+      ]);
+      expect(onSendMessage).not.toHaveBeenCalled();
+    });
+
+    it("leaves the run mode off the replacing snapshot when the choice was wait", async () => {
+      enableDelegation();
+      const onSendMessage = vi.fn();
+      const { textarea } = await renderComposer(onSendMessage, {
+        isPendingResponse: true,
+      });
+
+      typeWithCaretAtEnd(textarea, "plain draft first");
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      draftWithMention(textarea, "@Researcher replace with this");
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+      fireEvent.click(
+        screen.getByTestId("chat-input-delegation-run-mode-wait"),
+      );
+      fireEvent.click(screen.getByText("Replace"));
+
+      const queued = Object.values(
+        useMessageQueueStore.getState().queuedBySessionId,
+      );
+      expect(queued).toEqual([
+        expect.objectContaining({ message: "@Researcher replace with this" }),
+      ]);
+      expect(queued[0]).not.toHaveProperty("delegationRunMode");
+    });
+
+    it("sends directly when the turn completed while the popover was open", async () => {
+      enableDelegation();
+      const onSendMessage = vi.fn();
+      const { textarea, rerenderWithPending } = await renderComposer(
+        onSendMessage,
+        { isPendingResponse: true },
+      );
+
+      // The popover opened for a queue intent...
+      draftWithMention(textarea, "@Researcher take over");
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+      expect(popover()).toBeInTheDocument();
+
+      // ...but the turn finishes before the user answers.
+      rerenderWithPending(false);
+      fireEvent.click(
+        screen.getByTestId("chat-input-delegation-run-mode-background"),
+      );
+
+      // Exactly one direct send with the chosen mode; nothing was queued.
+      expect(onSendMessage).toHaveBeenCalledTimes(1);
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "@Researcher take over",
+        undefined,
+        undefined,
+        [],
+        ["assistant-research"],
+        "background",
+      );
+      expect(
+        Object.values(useMessageQueueStore.getState().queuedBySessionId),
+      ).toEqual([]);
+      expect(
+        screen.queryByTestId("chat-input-queued-message"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("neither asks nor sends when the send gate is closed", async () => {
+      enableDelegation();
+      const onSendMessage = vi.fn();
+      const { textarea } = await renderComposer(onSendMessage, {
+        isMessagingLoading: true,
+      });
+
+      draftWithMention(textarea, "@Researcher please dig in");
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      // A submit that would not actually fire must not open the popover
+      // either — it would outlive a send that was never going to happen.
+      expect(popover()).not.toBeInTheDocument();
+      expect(onSendMessage).not.toHaveBeenCalled();
+      expect(textarea).toHaveValue("@Researcher please dig in");
+    });
+  });
 });

@@ -169,7 +169,11 @@ export function AddMenuActionRow({
   );
 }
 
-function SectionHeader({
+/**
+ * Non-interactive section label. Exported so popovers outside this menu — the
+ * composer's run-mode choice — carry the same header channel.
+ */
+export function AddMenuSectionHeader({
   id,
   children,
 }: {
@@ -294,7 +298,9 @@ export function ChatInputAddMenu({
         aria-labelledby={section.header != null ? headerId : undefined}
       >
         {section.header != null && (
-          <SectionHeader id={headerId}>{section.header}</SectionHeader>
+          <AddMenuSectionHeader id={headerId}>
+            {section.header}
+          </AddMenuSectionHeader>
         )}
         {section.items.map((item) =>
           renderActionRow(item, `chat-input-add-menu-extra-${item.id}`),
@@ -350,9 +356,9 @@ export function ChatInputAddMenu({
           aria-labelledby={toolsHeaderId}
           className="flex flex-col"
         >
-          <SectionHeader id={toolsHeaderId}>
+          <AddMenuSectionHeader id={toolsHeaderId}>
             {t({ id: "chatInput.addMenu.toolsHeader", message: "Tools" })}
-          </SectionHeader>
+          </AddMenuSectionHeader>
           {tools.map((tool) => {
             const toolDisabled = isBusy || tool.disabled;
             return (

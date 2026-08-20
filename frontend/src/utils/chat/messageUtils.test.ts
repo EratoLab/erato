@@ -102,4 +102,37 @@ describe("constructSubmitStreamRequestBody", () => {
       ),
     ).not.toHaveProperty("mentioned_assistant_ids");
   });
+
+  it("carries the delegation run mode when one was chosen", () => {
+    const body = constructSubmitStreamRequestBody(
+      "ask @Researcher",
+      undefined,
+      undefined,
+      "chat-1",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      ["assistant-1"],
+      "background",
+    );
+
+    expect(body.delegation_run_mode).toBe("background");
+  });
+
+  it("omits delegation_run_mode by default, leaving the wire default (wait)", () => {
+    expect(
+      constructSubmitStreamRequestBody(
+        "ask @Researcher",
+        undefined,
+        undefined,
+        "chat-1",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        ["assistant-1"],
+      ),
+    ).not.toHaveProperty("delegation_run_mode");
+  });
 });

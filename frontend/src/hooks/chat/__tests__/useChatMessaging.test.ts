@@ -2037,4 +2037,68 @@ describe("useChatMessaging", () => {
       );
     });
   });
+
+  describe("delegation run mode", () => {
+    const getSubmitStreamBodies = () =>
+      mockCreateSSEConnection.mock.calls
+        .filter((call: unknown[]) =>
+          (call[0] as string).includes("/submitstream"),
+        )
+        .map((call: unknown[]) =>
+          JSON.parse((call[1] as { body: string }).body),
+        );
+
+    it("threads a chosen background mode into the submitstream body", async () => {
+      mockCreateSSEConnection.mockClear();
+
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+
+      await act(async () => {
+        await result.current.sendMessage(
+          "@Researcher take over",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          ["assistant-research"],
+          "background",
+        );
+      });
+
+      const bodies = getSubmitStreamBodies();
+      expect(bodies.length).toBe(1);
+      expect(bodies[0]).toMatchObject({
+        user_message: "@Researcher take over",
+        mentioned_assistant_ids: ["assistant-research"],
+        delegation_run_mode: "background",
+      });
+    });
+
+    it("omits delegation_run_mode when no mode was chosen", async () => {
+      mockCreateSSEConnection.mockClear();
+
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+
+      await act(async () => {
+        await result.current.sendMessage(
+          "@Researcher take over",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          ["assistant-research"],
+        );
+      });
+
+      const bodies = getSubmitStreamBodies();
+      expect(bodies.length).toBe(1);
+      expect(bodies[0]).not.toHaveProperty("delegation_run_mode");
+    });
+  });
 });

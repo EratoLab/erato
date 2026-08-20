@@ -86,6 +86,8 @@ interface AssistantsFeatureConfig {
   enabled: boolean;
   /** Whether a message may delegate to other assistants via @-mentions */
   delegationEnabled: boolean;
+  /** Whether the deployment lets a delegated run be sent to the background */
+  delegationAllowBackground: boolean;
   /** Whether assistants may be shared with edit access */
   enableEditSharing: boolean;
   /** Whether recent assistants should be shown in the sidebar */
@@ -270,6 +272,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
   assistants: {
     enabled: false,
     delegationEnabled: false,
+    delegationAllowBackground: false,
     enableEditSharing: true,
     showRecentItems: false,
     showRecentItemsCollapsible: false,
@@ -380,6 +383,9 @@ function createFeatureConfig(
     assistants: {
       enabled: environment.assistantsEnabled,
       delegationEnabled: Boolean(environment.assistantsDelegationEnabled),
+      delegationAllowBackground: Boolean(
+        environment.assistantsDelegationAllowBackground,
+      ),
       enableEditSharing: environment.assistantsEnableEditSharing ?? true,
       showRecentItems: environment.assistantsShowRecentItems,
       showRecentItemsCollapsible:

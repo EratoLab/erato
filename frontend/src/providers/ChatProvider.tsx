@@ -28,6 +28,7 @@ import type {
   FileUploadItem,
   ChatModel,
   ContentPart,
+  DelegationRunMode,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 import type { FileType } from "@/utils/fileTypes";
@@ -83,6 +84,7 @@ export interface ChatContextValue {
     selectedFacetIds?: string[],
     actionFacet?: { id: string; args?: Record<string, string> },
     mentionedAssistantIds?: string[],
+    delegationRunMode?: DelegationRunMode,
   ) => Promise<string | undefined>;
   editMessage: (
     messageId: string,

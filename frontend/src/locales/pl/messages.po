@@ -1922,6 +1922,31 @@ msgid "chatInput.addMenu.trigger"
 msgstr "Dodaj pliki i narzędzia"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegationRunModePopover.tsx
+msgid "chatInput.delegationRunMode.background.description"
+msgstr "Odpowiedź nie pojawi się w tej rozmowie; pozostanie w osobnym czacie."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegationRunModePopover.tsx
+msgid "chatInput.delegationRunMode.background.label"
+msgstr "Uruchom w tle"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegationRunModePopover.tsx
+msgid "chatInput.delegationRunMode.title"
+msgstr "Jak uruchomić wspomnianych asystentów?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegationRunModePopover.tsx
+msgid "chatInput.delegationRunMode.wait.description"
+msgstr "Odpowiedź pojawi się w tej rozmowie."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegationRunModePopover.tsx
+msgid "chatInput.delegationRunMode.wait.label"
+msgstr "Czekaj na odpowiedź"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/AssistantMentionPopover.tsx
 #: src/components/ui/Chat/assistantMentionSection.ts
 msgid "chatInput.mentions.browse"

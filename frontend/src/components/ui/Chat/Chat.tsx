@@ -60,6 +60,7 @@ import type { ChatMessage } from "../MessageList/MessageList";
 import type {
   FileUploadItem,
   ChatModel,
+  DelegationRunMode,
   UserProfile,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
@@ -356,6 +357,7 @@ export const Chat = ({
       modelId?: string,
       selectedFacetIds?: string[],
       mentionedAssistantIds?: string[],
+      delegationRunMode?: DelegationRunMode,
     ) => {
       logger.log("[CHAT_FLOW] Chat - handleSendMessage called", {
         files: inputFileIds,
@@ -363,6 +365,7 @@ export const Chat = ({
         assistantId,
         selectedFacetIds,
         mentionedAssistantIds,
+        delegationRunMode,
       });
 
       baseHandleSendMessage(
@@ -372,6 +375,7 @@ export const Chat = ({
         assistantId,
         selectedFacetIds,
         mentionedAssistantIds,
+        delegationRunMode,
       ).catch((error) => {
         logger.log("[CHAT_FLOW] Error sending message:", error);
       });

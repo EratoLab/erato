@@ -44,6 +44,8 @@ const FRONTEND_ENV_KEY_ASSISTANTS_MAX_SYSTEM_PROMPT_LENGTH: &str =
     "ASSISTANTS_MAX_SYSTEM_PROMPT_LENGTH";
 const FRONTEND_ENV_KEY_ASSISTANTS_MAX_FILES: &str = "ASSISTANTS_MAX_FILES";
 const FRONTEND_ENV_KEY_ASSISTANTS_DELEGATION_ENABLED: &str = "ASSISTANTS_DELEGATION_ENABLED";
+const FRONTEND_ENV_KEY_ASSISTANTS_DELEGATION_ALLOW_BACKGROUND: &str =
+    "ASSISTANTS_DELEGATION_ALLOW_BACKGROUND";
 const FRONTEND_ENV_KEY_STARTER_PROMPTS_ENABLED: &str = "STARTER_PROMPTS_ENABLED";
 const FRONTEND_ENV_KEY_PROMPT_OPTIMIZER_ENABLED: &str = "PROMPT_OPTIMIZER_ENABLED";
 const FRONTEND_ENV_KEY_USER_PREFERENCES_ENABLED: &str = "USER_PREFERENCES_ENABLED";
@@ -365,6 +367,10 @@ fn build_frontend_environment(
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_ASSISTANTS_DELEGATION_ENABLED.to_string(),
         Value::Bool(config.assistants.delegation.enabled),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_ASSISTANTS_DELEGATION_ALLOW_BACKGROUND.to_string(),
+        Value::Bool(config.assistants.delegation.allow_background),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_STARTER_PROMPTS_ENABLED.to_string(),
@@ -1165,6 +1171,7 @@ mod tests {
         let mut config = AppConfig::default();
         config.assistants.enabled = true;
         config.assistants.delegation.enabled = true;
+        config.assistants.delegation.allow_background = true;
 
         for frontend_kind in [FrontendKind::Web, FrontendKind::OfficeAddin] {
             let environment = build_frontend_environment(&config, frontend_kind);
@@ -1172,6 +1179,12 @@ mod tests {
                 environment
                     .additional_environment
                     .get(FRONTEND_ENV_KEY_ASSISTANTS_DELEGATION_ENABLED),
+                Some(&Value::Bool(true))
+            );
+            assert_eq!(
+                environment
+                    .additional_environment
+                    .get(FRONTEND_ENV_KEY_ASSISTANTS_DELEGATION_ALLOW_BACKGROUND),
                 Some(&Value::Bool(true))
             );
         }

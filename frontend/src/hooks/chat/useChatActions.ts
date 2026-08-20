@@ -2,7 +2,10 @@ import { useCallback } from "react";
 
 import { createLogger } from "@/utils/debugLogger";
 
-import type { ActionFacetRequest } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  ActionFacetRequest,
+  DelegationRunMode,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { MessageAction } from "@/types/message-controls";
 
 const logger = createLogger("HOOK", "useChatActions");
@@ -17,6 +20,7 @@ interface UseChatActionsProps {
     selectedFacetIds?: string[],
     actionFacet?: ActionFacetRequest,
     mentionedAssistantIds?: string[],
+    delegationRunMode?: DelegationRunMode,
   ) => Promise<string | undefined>;
   onMessageAction?: (action: MessageAction) => Promise<boolean>;
 }
@@ -61,6 +65,7 @@ export function useChatActions({
       assistantId?: string,
       selectedFacetIds?: string[],
       mentionedAssistantIds?: string[],
+      delegationRunMode?: DelegationRunMode,
     ) => {
       if (message.trim() || (inputFileIds && inputFileIds.length > 0)) {
         return sendMessage(
@@ -71,6 +76,7 @@ export function useChatActions({
           selectedFacetIds,
           undefined,
           mentionedAssistantIds,
+          delegationRunMode,
         );
       }
       return Promise.resolve(undefined);

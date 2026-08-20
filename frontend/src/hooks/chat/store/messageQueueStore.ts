@@ -2,6 +2,17 @@ import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 
 import type { ComposeDraftState } from "@/hooks/chat/useComposeSession";
+import type { DelegationRunMode } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
+/**
+ * A queued draft plus the delegation run mode chosen when it was queued.
+ * The mode belongs to the queued message — the user answered wait-or-background
+ * for that draft specifically — so it is snapshotted here rather than read
+ * live at drain time. Absent means the wire default ("wait").
+ */
+export type QueuedMessageState = ComposeDraftState & {
+  delegationRunMode?: DelegationRunMode;
+};
 
 /**
  * The depth-1 "send when the current turn finishes" queue (ERMAIN-470), keyed
@@ -11,16 +22,16 @@ import type { ComposeDraftState } from "@/hooks/chat/useComposeSession";
  * directly — no manual invalidation token.
  */
 interface MessageQueueStore {
-  queuedBySessionId: Partial<Record<string, ComposeDraftState>>;
-  setQueued: (sessionId: string, queued: ComposeDraftState) => void;
+  queuedBySessionId: Partial<Record<string, QueuedMessageState>>;
+  setQueued: (sessionId: string, queued: QueuedMessageState) => void;
   clearQueued: (sessionId: string) => void;
-  getQueued: (sessionId: string) => ComposeDraftState | null;
+  getQueued: (sessionId: string) => QueuedMessageState | null;
 }
 
 const readQueued = (
-  queuedBySessionId: Partial<Record<string, ComposeDraftState>>,
+  queuedBySessionId: Partial<Record<string, QueuedMessageState>>,
   sessionId: string,
-): ComposeDraftState | null => queuedBySessionId[sessionId] ?? null;
+): QueuedMessageState | null => queuedBySessionId[sessionId] ?? null;
 
 export const useMessageQueueStore = create<MessageQueueStore>()(
   devtools(
@@ -61,7 +72,9 @@ export const useMessageQueueStore = create<MessageQueueStore>()(
 );
 
 /** Reactive read of the message queued for `sessionId`, or null. */
-export const useQueuedMessage = (sessionId: string): ComposeDraftState | null =>
+export const useQueuedMessage = (
+  sessionId: string,
+): QueuedMessageState | null =>
   useMessageQueueStore((state) =>
     readQueued(state.queuedBySessionId, sessionId),
   );
