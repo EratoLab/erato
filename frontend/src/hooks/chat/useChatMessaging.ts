@@ -1073,15 +1073,16 @@ export function useChatMessaging(
               }
             }
             recentlyCompletedByKeyRef.current[activeStreamKey] = Date.now();
-            // By completion the chat is listable (its first message is
-            // saved), so the placeholder row is no longer needed; clearing
-            // it here also guarantees a leaked placeholder cannot outlive
-            // its stream.
-            clearPendingChat(activeStreamKey);
             void handleRefetchAndClear({
               invalidate: true,
               logContext: "Assistant message completed",
             }).then(() => {
+              // Backstop for a placeholder the listed-row swap missed (a
+              // chat that never became listable for this user). Deferred
+              // until the awaited listing invalidation has landed, so a
+              // normally-listable chat swaps placeholder for real row
+              // without a frame where the sidebar shows neither.
+              clearPendingChat(activeStreamKey);
               // Reset submission flag after refetch completes
               setSubmittingForKey(activeStreamKey, false);
               logger.log(

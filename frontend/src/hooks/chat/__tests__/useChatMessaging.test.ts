@@ -1,6 +1,6 @@
 import { renderHook, act } from "@testing-library/react";
 import { createElement } from "react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
 import { setIdToken } from "@/auth/tokenStore";
@@ -1730,8 +1730,30 @@ describe("useChatMessaging", () => {
       return vi.fn();
     });
 
+    // Park the router on /chat/new — the one route chat_created navigates
+    // away from. A resume connection can outlive its chat's route, so a
+    // replay can arrive here; it must not hijack the route the user is on.
+    let currentPathname = "";
+    const LocationProbe = () => {
+      currentPathname = useLocation().pathname;
+      return null;
+    };
+    const NewChatRouteWrapper = ({ children }: { children: ReactNode }) =>
+      createElement(
+        MemoryRouter,
+        {
+          initialEntries: ["/chat/new"],
+          future: {
+            v7_startTransition: true,
+            v7_relativeSplatPath: true,
+          },
+        },
+        createElement(LocationProbe),
+        children,
+      );
+
     renderHook(() => useChatMessaging("chat-delegated-1"), {
-      wrapper: TestWrapper,
+      wrapper: NewChatRouteWrapper,
     });
 
     expect(resumeCallbacks.onMessage).toBeDefined();
@@ -1754,6 +1776,8 @@ describe("useChatMessaging", () => {
     expect(
       useGenerationStatusStore.getState().statusByChatId["chat-delegated-1"],
     ).toBeUndefined();
+    expect(currentPathname).toBe("/chat/new");
+    expect(useMessagingStore.getState().isInNavigationTransition).toBe(false);
   });
 
   it("should seed the pending sidebar chat for a genuine first-turn chat_created", async () => {
