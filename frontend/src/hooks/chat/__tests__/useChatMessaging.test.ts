@@ -1,6 +1,6 @@
 import { renderHook, act } from "@testing-library/react";
 import { createElement } from "react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
 import { setIdToken } from "@/auth/tokenStore";
@@ -105,6 +105,7 @@ vi.mock("@/utils/sse/sseClient", () => {
 
 import { useGenerationStatusStore } from "../store/generationStatusStore";
 import { useMessagingStore } from "../store/messagingStore";
+import { useChatHistoryStore } from "../useChatHistory";
 import { useChatMessaging } from "../useChatMessaging";
 
 import type { ReactNode } from "react";
@@ -1704,6 +1705,215 @@ describe("useChatMessaging", () => {
     expect(
       orderedMessages.filter((message) => message.id === "msg-inflight-user"),
     ).toHaveLength(1);
+  });
+
+  it("should not seed a pending sidebar chat from a replayed chat_created frame", async () => {
+    // Entering a chat force-resumes its stream, and resumestream replays the
+    // full event history — including a chat_created frame for a chat this
+    // client never submitted (most visibly a background delegated run). The
+    // replay arrives on a stream already keyed by the chat id and must not
+    // trip the new-chat bookkeeping.
+    mockUseChatMessages.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn().mockResolvedValue({}),
+    });
+
+    let resumeCallbacks: {
+      onMessage?: (event: SSEEvent) => void;
+    } = {};
+    mockCreateSSEConnection.mockImplementation((url, callbacks) => {
+      if (url.includes("/resumestream")) {
+        resumeCallbacks = callbacks;
+      }
+      return vi.fn();
+    });
+
+    // Park the router on /chat/new — the one route chat_created navigates
+    // away from. A resume connection can outlive its chat's route, so a
+    // replay can arrive here; it must not hijack the route the user is on.
+    let currentPathname = "";
+    const LocationProbe = () => {
+      currentPathname = useLocation().pathname;
+      return null;
+    };
+    const NewChatRouteWrapper = ({ children }: { children: ReactNode }) =>
+      createElement(
+        MemoryRouter,
+        {
+          initialEntries: ["/chat/new"],
+          future: {
+            v7_startTransition: true,
+            v7_relativeSplatPath: true,
+          },
+        },
+        createElement(LocationProbe),
+        children,
+      );
+
+    renderHook(() => useChatMessaging("chat-delegated-1"), {
+      wrapper: NewChatRouteWrapper,
+    });
+
+    expect(resumeCallbacks.onMessage).toBeDefined();
+
+    await act(async () => {
+      resumeCallbacks.onMessage?.({
+        data: JSON.stringify({
+          message_type: "chat_created",
+          chat_id: "chat-delegated-1",
+        }),
+        type: "message",
+      });
+    });
+
+    expect(useChatHistoryStore.getState().pendingChat).toBeNull();
+    expect(useMessagingStore.getState().newlyCreatedChatId).toBeNull();
+    expect(
+      useMessagingStore.getState().isAwaitingFirstStreamChunkForNewChat,
+    ).toBe(false);
+    expect(
+      useGenerationStatusStore.getState().statusByChatId["chat-delegated-1"],
+    ).toBeUndefined();
+    expect(currentPathname).toBe("/chat/new");
+    expect(useMessagingStore.getState().isInNavigationTransition).toBe(false);
+  });
+
+  it("should seed the pending sidebar chat for a genuine first-turn chat_created", async () => {
+    mockUseChatMessages.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn().mockResolvedValue({}),
+    });
+
+    const { result } = renderHook(() => useChatMessaging(null), {
+      wrapper: TestWrapper,
+    });
+
+    await act(async () => {
+      await result.current.sendMessage("Hello from new chat");
+    });
+
+    await act(async () => {
+      sseCallbacks.onMessage?.({
+        data: JSON.stringify({
+          message_type: "chat_created",
+          chat_id: "chat-new-seed-1",
+        }),
+        type: "message",
+      });
+    });
+
+    expect(useChatHistoryStore.getState().pendingChat?.id).toBe(
+      "chat-new-seed-1",
+    );
+    expect(useMessagingStore.getState().newlyCreatedChatId).toBe(
+      "chat-new-seed-1",
+    );
+    expect(
+      useMessagingStore.getState().isAwaitingFirstStreamChunkForNewChat,
+    ).toBe(true);
+    expect(
+      useGenerationStatusStore.getState().statusByChatId["chat-new-seed-1"]
+        ?.kind,
+    ).toBe("running");
+    expect(
+      useChatHistoryStore.getState().titleHintByChatId["chat-new-seed-1"],
+    ).toBe("Hello from new chat");
+  });
+
+  it("should clear the pending chat when the turn completes", async () => {
+    mockUseChatMessages.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn().mockResolvedValue({}),
+    });
+
+    const { result } = renderHook(() => useChatMessaging(null), {
+      wrapper: TestWrapper,
+    });
+
+    await act(async () => {
+      await result.current.sendMessage("Complete me");
+    });
+
+    await act(async () => {
+      sseCallbacks.onMessage?.({
+        data: JSON.stringify({
+          message_type: "chat_created",
+          chat_id: "chat-complete-1",
+        }),
+        type: "message",
+      });
+    });
+    expect(useChatHistoryStore.getState().pendingChat?.id).toBe(
+      "chat-complete-1",
+    );
+
+    await act(async () => {
+      sseCallbacks.onMessage?.({
+        data: JSON.stringify({
+          message_type: "assistant_message_completed",
+          message_id: "assistant-complete-clear-1",
+          message: {
+            id: "assistant-complete-clear-1",
+            role: "assistant",
+            created_at: "2026-02-18T12:00:01.000Z",
+            updated_at: "2026-02-18T12:00:01.000Z",
+            content: [{ content_type: "text", text: "Done" }],
+            input_files_ids: [],
+            is_message_in_active_thread: true,
+          },
+        }),
+        type: "message",
+      });
+    });
+
+    expect(useChatHistoryStore.getState().pendingChat).toBeNull();
+  });
+
+  it("should clear a leaked pending chat when its resume stream closes", async () => {
+    mockUseChatMessages.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn().mockResolvedValue({}),
+    });
+
+    let resumeCallbacks: {
+      onClose?: () => void;
+    } = {};
+    mockCreateSSEConnection.mockImplementation((url, callbacks) => {
+      if (url.includes("/resumestream")) {
+        resumeCallbacks = callbacks;
+      }
+      return vi.fn();
+    });
+
+    renderHook(() => useChatMessaging("chat-leak-1"), {
+      wrapper: TestWrapper,
+    });
+
+    expect(resumeCallbacks.onClose).toBeDefined();
+
+    // A placeholder leaked for this chat earlier in the session. The stream
+    // is not marked as streaming, so only an unconditional clear on stream
+    // end can remove it.
+    act(() => {
+      useChatHistoryStore.getState().setPendingChat({
+        id: "chat-leak-1",
+        createdAt: "2026-02-18T12:00:00.000Z",
+      });
+    });
+
+    await act(async () => {
+      resumeCallbacks.onClose?.();
+    });
+
+    expect(useChatHistoryStore.getState().pendingChat).toBeNull();
   });
 
   it("should remove the replaced user message and every later turn on edit submit", async () => {
