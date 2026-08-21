@@ -1599,8 +1599,12 @@ async fn bg_stream_save_user_message(
     .await
     .wrap_err("Failed to submit user message")?;
 
+    // Resolved here so the live event carries the same display pairs the read
+    // API serves — the just-sent message highlights without a refetch.
     let saved_user_message_wrapped = ChatMessage::from_model(saved_user_message.clone())
-        .wrap_err("Failed to convert user message")?;
+        .wrap_err("Failed to convert user message")?
+        .with_mentioned_assistants(&app_state.db, &saved_user_message)
+        .await;
 
     task.send_event(StreamingEvent::UserMessageSaved {
         message_id: saved_user_message.id,
@@ -9078,8 +9082,13 @@ pub async fn edit_message_sse(
             .await
             .wrap_err("Failed to submit edited user message")?;
 
+            // Resolved here so the live event carries the same display pairs
+            // the read API serves — the edited message highlights without a
+            // refetch (the edit composer does not re-send mention names).
             let saved_user_message_wrapped = ChatMessage::from_model(saved_user_message.clone())
-                .wrap_err("Failed to convert saved edited user message")?;
+                .wrap_err("Failed to convert saved edited user message")?
+                .with_mentioned_assistants(&app_state.db, &saved_user_message)
+                .await;
 
             let user_message_saved: EditMessageStreamingResponseMessage =
                 MessageSubmitStreamingResponseUserMessageSaved {

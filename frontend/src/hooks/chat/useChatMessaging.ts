@@ -68,6 +68,7 @@ import type {
   MessageSubmitStreamingResponseMessage,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
+import type { AssistantMention } from "@/utils/chat/assistantMentions";
 
 const logger = createLogger("HOOK", "useChatMessaging");
 const COMPLETION_CLOSE_DEDUP_MS = 5000;
@@ -1382,7 +1383,7 @@ export function useChatMessaging(
       assistantId?: string,
       selectedFacetIds?: string[],
       actionFacet?: ActionFacetRequest,
-      mentionedAssistantIds?: string[],
+      mentionedAssistants?: AssistantMention[],
       delegationRunMode?: DelegationRunMode,
     ): Promise<string | undefined> => {
       // Prevent duplicate submissions
@@ -1396,8 +1397,14 @@ export function useChatMessaging(
         `[DEBUG_STREAMING] sendMessage called. Content: "${content}", Files: ${inputFileIds?.length ?? 0}, Model: ${modelId ?? "default"}, Assistant: ${assistantId ?? "none"}`,
       );
 
-      // Create optimistic user message immediately on submit so UI updates first.
-      const userMessage = createOptimisticUserMessage(content, inputFileIds);
+      // Create optimistic user message immediately on submit so UI updates
+      // first. The tracked mentions ride along so the highlight shows before
+      // the server echoes the resolved pairs in user_message_saved.
+      const userMessage = createOptimisticUserMessage(
+        content,
+        inputFileIds,
+        mentionedAssistants,
+      );
       logger.log(
         "[DEBUG_STREAMING] sendMessage: Adding optimistic user message to store:",
         userMessage,
@@ -1498,7 +1505,7 @@ export function useChatMessaging(
           assistantId,
           selectedFacetIds,
           actionFacet,
-          mentionedAssistantIds,
+          mentionedAssistants?.map((mention) => mention.id),
           delegationRunMode,
         );
 

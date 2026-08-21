@@ -7,6 +7,7 @@ import {
   mentionToken,
   pruneTrackedMentions,
   resolveMentionedAssistantIds,
+  resolveMentionedAssistants,
 } from "../assistantMentions";
 
 import type { AssistantMention } from "../assistantMentions";
@@ -176,6 +177,18 @@ describe("findMentionRanges", () => {
     expect(new Set(findMentionRanges(text, tracked).map((r) => r.id))).toEqual(
       new Set(resolveMentionedAssistantIds(text, tracked)),
     );
+  });
+});
+
+describe("resolveMentionedAssistants", () => {
+  it("returns the full pairs the ids are derived from", () => {
+    expect(
+      resolveMentionedAssistants("@Data then @Researcher", [
+        researcher,
+        dataAssistant,
+      ]),
+    ).toEqual([researcher, dataAssistant]);
+    expect(resolveMentionedAssistants("plain text", [researcher])).toEqual([]);
   });
 });
 

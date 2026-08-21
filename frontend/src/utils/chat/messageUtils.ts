@@ -5,16 +5,21 @@ import type {
   DelegationRunMode,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
+import type { AssistantMention } from "@/utils/chat/assistantMentions";
 
 /**
  * Creates an optimistic user message object to be added to the UI immediately.
  * @param content The content of the user message.
  * @param inputFileIds Optional array of input file IDs associated with the message.
+ * @param mentionedAssistants The mentions resolved at send time; carried so the
+ *                            message highlights them before the server echoes
+ *                            its own resolved pairs.
  * @returns A message object with a temporary ID and 'sending' status.
  */
 export function createOptimisticUserMessage(
   content: string,
   inputFileIds?: string[],
+  mentionedAssistants?: AssistantMention[],
 ): Message {
   const timestamp = Date.now();
   const tempUserMessageId = `temp-user-${timestamp}`;
@@ -25,6 +30,10 @@ export function createOptimisticUserMessage(
     createdAt: new Date(timestamp).toISOString(),
     status: "sending",
     input_files_ids: inputFileIds,
+    mentioned_assistants:
+      mentionedAssistants && mentionedAssistants.length > 0
+        ? mentionedAssistants
+        : undefined,
   };
 }
 

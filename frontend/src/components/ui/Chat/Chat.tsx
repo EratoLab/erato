@@ -70,6 +70,7 @@ import type {
   MessageControlsComponent,
   MessageControlsContext,
 } from "@/types/message-controls";
+import type { AssistantMention } from "@/utils/chat/assistantMentions";
 import type { FileType } from "@/utils/fileTypes";
 import type React from "react";
 
@@ -357,7 +358,7 @@ export const Chat = ({
       inputFileIds?: string[],
       modelId?: string,
       selectedFacetIds?: string[],
-      mentionedAssistantIds?: string[],
+      mentionedAssistants?: AssistantMention[],
       delegationRunMode?: DelegationRunMode,
     ) => {
       logger.log("[CHAT_FLOW] Chat - handleSendMessage called", {
@@ -365,7 +366,7 @@ export const Chat = ({
         model: modelId,
         assistantId,
         selectedFacetIds,
-        mentionedAssistantIds,
+        mentionedAssistants,
         delegationRunMode,
       });
 
@@ -375,7 +376,7 @@ export const Chat = ({
         modelId,
         assistantId,
         selectedFacetIds,
-        mentionedAssistantIds,
+        mentionedAssistants,
         delegationRunMode,
       ).catch((error) => {
         logger.log("[CHAT_FLOW] Error sending message:", error);

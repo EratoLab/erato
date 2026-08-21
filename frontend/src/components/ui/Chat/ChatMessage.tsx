@@ -247,6 +247,11 @@ export const ChatMessage = memo(function ChatMessage({
             updatedAt={message.updatedAt}
             hasError={!!message.error}
             outlookArtifact={message.outlookArtifact}
+            // Mentions are a user-message affordance; an assistant echoing
+            // "@Name" is quoting, not addressing, so it never highlights.
+            mentionedAssistants={
+              isUser ? message.mentioned_assistants : undefined
+            }
           />
 
           {/* Only the assistant message of the affected generation carries

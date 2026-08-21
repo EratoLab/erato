@@ -91,6 +91,9 @@ export function handleUserMessageSaved(
         createdAt: serverConfirmedMessage.created_at,
         status: "complete" as const, // Message is saved, so status is complete
         input_files_ids: serverConfirmedMessage.input_files_ids,
+        // Server-resolved pairs replace the optimistic ones so the mention
+        // highlight survives the temp → real message swap.
+        mentioned_assistants: serverConfirmedMessage.mentioned_assistants,
       };
 
       // Find the temporary message by content comparison (extract text from ContentPart[])

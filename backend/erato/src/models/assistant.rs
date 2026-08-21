@@ -61,6 +61,29 @@ pub struct AssistantWithFiles {
     pub files: Vec<FileInfo>,
 }
 
+/// Display names for a set of assistants in one query, keyed by id. Ids that
+/// no longer resolve are simply absent from the map. Deliberately without a
+/// per-assistant access check: callers use this to label references the
+/// requester already legitimately holds (their own persisted mentions, their
+/// chat's assistant), mirroring how recent-chat listings resolve
+/// `assistant_name`. Do not reach for this where the id itself is untrusted.
+pub async fn get_assistant_names_by_ids(
+    conn: &DatabaseConnection,
+    assistant_ids: &[Uuid],
+) -> Result<std::collections::HashMap<Uuid, String>, Report> {
+    if assistant_ids.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+    Ok(Assistants::find()
+        .filter(assistants::Column::Id.is_in(assistant_ids.iter().copied()))
+        .all(conn)
+        .await
+        .wrap_err("Failed to resolve assistant names")?
+        .into_iter()
+        .map(|assistant| (assistant.id, assistant.name))
+        .collect())
+}
+
 /// Dedupes while collapsing an empty list to `None`. Generation-time filters
 /// treat `None` as "no restriction" but an empty list as "restrict to
 /// nothing", so storing `Some([])` would brick the assistant; clients clear a

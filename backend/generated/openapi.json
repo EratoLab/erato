@@ -4861,6 +4861,13 @@
             },
             "description": "MCP server IDs that were unavailable while preparing this generation"
           },
+          "mentioned_assistants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MentionedAssistant"
+            },
+            "description": "Assistants the user @-mentioned in this message, resolved to display\nnames at read time. Mentions whose assistant no longer resolves are\nomitted; absent on assistant messages and mention-less user messages."
+          },
           "previous_message_id": {
             "type": "string",
             "description": "The ID of the previous message in the thread, if any"
@@ -6738,6 +6745,24 @@
           "FAILURE",
           "NEEDS_AUTHENTICATION"
         ]
+      },
+      "MentionedAssistant": {
+        "type": "object",
+        "description": "An assistant the user @-mentioned in a message, resolved for display.",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The unique ID of the mentioned assistant"
+          },
+          "name": {
+            "type": "string",
+            "description": "The assistant's display name at read time"
+          }
+        }
       },
       "Message": {
         "type": "object",

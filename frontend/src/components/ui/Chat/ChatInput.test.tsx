@@ -4309,7 +4309,7 @@ describe("ChatInput", () => {
         undefined,
         undefined,
         [],
-        ["assistant-research"],
+        [{ id: "assistant-research", name: "Researcher" }],
       );
     });
 
@@ -4348,7 +4348,7 @@ describe("ChatInput", () => {
         undefined,
         undefined,
         [],
-        ["assistant-research"],
+        [{ id: "assistant-research", name: "Researcher" }],
       );
     });
 
@@ -4420,7 +4420,7 @@ describe("ChatInput", () => {
         undefined,
         undefined,
         [],
-        ["assistant-research"],
+        [{ id: "assistant-research", name: "Researcher" }],
       );
     });
 
@@ -4467,7 +4467,7 @@ describe("ChatInput", () => {
         undefined,
         undefined,
         [],
-        ["assistant-research"],
+        [{ id: "assistant-research", name: "Researcher" }],
       );
     });
 
@@ -4525,7 +4525,7 @@ describe("ChatInput", () => {
         undefined,
         undefined,
         [],
-        ["assistant-research"],
+        [{ id: "assistant-research", name: "Researcher" }],
       );
     });
 
@@ -4900,7 +4900,7 @@ describe("ChatInput", () => {
         undefined,
         undefined,
         [],
-        ["assistant-research"],
+        [{ id: "assistant-research", name: "Researcher" }],
       );
       expect(textarea).toHaveValue("");
     });
@@ -4922,7 +4922,7 @@ describe("ChatInput", () => {
         undefined,
         undefined,
         [],
-        ["assistant-research"],
+        [{ id: "assistant-research", name: "Researcher" }],
         "background",
       );
     });
@@ -4953,7 +4953,7 @@ describe("ChatInput", () => {
         undefined,
         undefined,
         [],
-        ["assistant-research"],
+        [{ id: "assistant-research", name: "Researcher" }],
       );
     });
 
@@ -4987,7 +4987,7 @@ describe("ChatInput", () => {
         undefined,
         undefined,
         [],
-        ["assistant-research"],
+        [{ id: "assistant-research", name: "Researcher" }],
       );
     });
 
@@ -5014,7 +5014,7 @@ describe("ChatInput", () => {
         undefined,
         undefined,
         [],
-        ["assistant-research"],
+        [{ id: "assistant-research", name: "Researcher" }],
       );
     });
 
@@ -5059,7 +5059,7 @@ describe("ChatInput", () => {
         undefined,
         undefined,
         [],
-        ["assistant-research"],
+        [{ id: "assistant-research", name: "Researcher" }],
         "background",
       );
     });
@@ -5092,7 +5092,7 @@ describe("ChatInput", () => {
         undefined,
         undefined,
         [],
-        ["assistant-research"],
+        [{ id: "assistant-research", name: "Researcher" }],
       );
     });
 
@@ -5207,7 +5207,7 @@ describe("ChatInput", () => {
         undefined,
         undefined,
         [],
-        ["assistant-research"],
+        [{ id: "assistant-research", name: "Researcher" }],
         "background",
       );
       expect(

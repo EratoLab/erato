@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   collectSupersededMessageIds,
   constructSubmitStreamRequestBody,
+  createOptimisticUserMessage,
 } from "./messageUtils";
 
 import type { Message } from "@/types/chat";
@@ -134,5 +135,29 @@ describe("constructSubmitStreamRequestBody", () => {
         ["assistant-1"],
       ),
     ).not.toHaveProperty("delegation_run_mode");
+  });
+});
+
+describe("createOptimisticUserMessage", () => {
+  it("carries the send-time mentions so the highlight needs no round-trip", () => {
+    const optimistic = createOptimisticUserMessage(
+      "ask @Researcher",
+      undefined,
+      [{ id: "assistant-1", name: "Researcher" }],
+    );
+
+    expect(optimistic.mentioned_assistants).toEqual([
+      { id: "assistant-1", name: "Researcher" },
+    ]);
+    expect(optimistic.status).toBe("sending");
+  });
+
+  it("leaves the field absent without mentions", () => {
+    expect(
+      createOptimisticUserMessage("plain").mentioned_assistants,
+    ).toBeUndefined();
+    expect(
+      createOptimisticUserMessage("plain", undefined, []).mentioned_assistants,
+    ).toBeUndefined();
   });
 });

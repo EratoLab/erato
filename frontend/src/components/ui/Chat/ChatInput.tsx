@@ -61,6 +61,7 @@ import {
   detectMentionTrigger,
   pruneTrackedMentions,
   resolveMentionedAssistantIds,
+  resolveMentionedAssistants,
 } from "@/utils/chat/assistantMentions";
 import { resolveChatSendErrorMessage } from "@/utils/chatSendErrorMessage";
 import { createLogger } from "@/utils/debugLogger";
@@ -231,7 +232,11 @@ interface ChatInputProps {
     inputFileIds?: string[],
     modelId?: string,
     selectedFacetIds?: string[],
-    mentionedAssistantIds?: string[],
+    /**
+     * Resolved `{id, name}` pairs rather than bare ids: the optimistic
+     * message needs the names to highlight before the server echoes them.
+     */
+    mentionedAssistants?: AssistantMention[],
     delegationRunMode?: DelegationRunMode,
   ) => void;
   onRegenerate?: () => void;
@@ -1391,7 +1396,7 @@ export const ChatInput = ({
         return;
       }
 
-      const mentionedAssistantIds = resolveMentionedAssistantIds(
+      const resolvedMentions = resolveMentionedAssistants(
         messageContent,
         mentionedAssistants,
       );
@@ -1406,7 +1411,7 @@ export const ChatInput = ({
         files: inputFileIds,
         model: selectedModel?.chat_provider_id,
         selectedFacetIds,
-        mentionedAssistantIds,
+        mentionedAssistantIds: resolvedMentions.map((mention) => mention.id),
         delegationRunMode,
       });
       if (delegationRunMode) {
@@ -1415,7 +1420,7 @@ export const ChatInput = ({
           inputFileIds,
           selectedModel?.chat_provider_id,
           selectedFacetIds,
-          mentionedAssistantIds,
+          resolvedMentions,
           delegationRunMode,
         );
       } else {
@@ -1424,7 +1429,7 @@ export const ChatInput = ({
           inputFileIds,
           selectedModel?.chat_provider_id,
           selectedFacetIds,
-          mentionedAssistantIds,
+          resolvedMentions,
         );
       }
     },
@@ -1536,7 +1541,7 @@ export const ChatInput = ({
         stillQueued.attachedFiles.length > 0
           ? stillQueued.attachedFiles.map((file) => file.id)
           : undefined;
-      const queuedMentionedAssistantIds = resolveMentionedAssistantIds(
+      const queuedMentionedAssistants = resolveMentionedAssistants(
         stillQueued.message,
         stillQueued.mentionedAssistants,
       );
@@ -1546,7 +1551,7 @@ export const ChatInput = ({
           queuedInputFileIds,
           selectedModel?.chat_provider_id,
           selectedFacetIds,
-          queuedMentionedAssistantIds,
+          queuedMentionedAssistants,
           stillQueued.delegationRunMode,
         );
       } else {
@@ -1555,7 +1560,7 @@ export const ChatInput = ({
           queuedInputFileIds,
           selectedModel?.chat_provider_id,
           selectedFacetIds,
-          queuedMentionedAssistantIds,
+          queuedMentionedAssistants,
         );
       }
     }, 0);
