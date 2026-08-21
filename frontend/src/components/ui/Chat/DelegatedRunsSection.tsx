@@ -11,6 +11,7 @@ import {
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { useRecentChats } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useAssistantsFeature } from "@/providers/FeatureConfigProvider";
+import { delegatedRunsListingParams } from "@/utils/chat/delegatedRunDispatch";
 import {
   isBackgroundRun,
   resolveRecentChatTitle,
@@ -174,20 +175,11 @@ export const DelegatedRunsSection = memo<DelegatedRunsSectionProps>(
     const { enabled: assistantsEnabled, delegationEnabled } =
       useAssistantsFeature();
     const canHaveRuns = assistantsEnabled && delegationEnabled;
-    // The origin filter composes with `include_delegated` rather than
-    // implying it — without the latter, delegated children stay hidden and
-    // this query returns nothing.
+    // The params come from the shared builder so a dispatch frame's cache
+    // seed lands under exactly this key.
     const { data } = useRecentChats(
       canHaveRuns && chatId
-        ? {
-            queryParams: {
-              origin_chat_id: chatId,
-              include_delegated: true,
-              // The section is a recency window, not a paginated history:
-              // one page, sized to comfortably cover a chat's recent runs.
-              limit: 50,
-            },
-          }
+        ? { queryParams: delegatedRunsListingParams(chatId) }
         : skipToken,
     );
     const [dismissedRunIds, setDismissedRunIds] = usePersistedState(

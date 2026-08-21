@@ -29,6 +29,7 @@ import {
   useChatMessages,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { mapApiMessageToUiMessage } from "@/utils/adapters/messageAdapter";
+import { seedDispatchedDelegatedRun } from "@/utils/chat/delegatedRunDispatch";
 import {
   createOptimisticUserMessage,
   collectSupersededMessageIds,
@@ -1080,13 +1081,30 @@ export function useChatMessaging(
             handleToolCallProposed(responseData, activeStreamKey);
             break;
 
-          case "tool_call_update":
+          case "tool_call_update": {
             logger.log(
               "[DEBUG_STREAMING] processStreamEvent: tool_call_update event received. Full payload:",
               responseData,
             );
             handleToolCallUpdate(responseData, activeStreamKey);
+            // A background dispatch surfaces in this chat's delegated-runs
+            // listing right away, without waiting for the turn to end; the
+            // terminal invalidation later replaces the seed with server truth.
+            const dispatchOriginChatId =
+              activeStreamKey !== NEW_CHAT_STREAM_KEY
+                ? activeStreamKey
+                : (chatId ??
+                  useMessagingStore.getState().newlyCreatedChatId ??
+                  null);
+            if (dispatchOriginChatId) {
+              seedDispatchedDelegatedRun(
+                queryClient,
+                dispatchOriginChatId,
+                responseData,
+              );
+            }
             break;
+          }
 
           case "client_tool_call":
             // Run the registered executor and POST the result to resume the
