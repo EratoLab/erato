@@ -389,6 +389,10 @@ describe("DelegatedRunsSection check-off", () => {
     expect(dismissButtons[0].closest('[data-chat-id="run-2"]')).not.toBeNull();
     expect(dismissButtons[0]).toHaveAccessibleName("Dismiss run");
     expect(dismissButtons[0]).toHaveAttribute("title", "Dismiss run");
+    // The strong hover step — the row hover already paints --theme-bg-hover.
+    expect(dismissButtons[0]).toHaveClass(
+      "hover:!bg-[var(--theme-bg-hover-strong)]",
+    );
   });
 
   it("removes the checked-off row, keeps the others, and survives a reload", () => {

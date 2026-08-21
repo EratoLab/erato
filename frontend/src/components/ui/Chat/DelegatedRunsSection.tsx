@@ -145,6 +145,11 @@ const DelegatedRunRow = memo<{
             <Button
               variant="icon-only"
               size="sm"
+              // The row under the pointer is already painted with
+              // --theme-bg-hover, so the variant's own hover is invisible
+              // here; the strong step keeps the chip readable. Important,
+              // because the variant's own hover class wins the cascade.
+              className="hover:!bg-[var(--theme-bg-hover-strong)]"
               icon={<CloseIcon className="size-4" />}
               aria-label={dismissLabel}
               title={dismissLabel}
