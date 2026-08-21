@@ -1829,6 +1829,16 @@ msgid "chat.message.link.fallback"
 msgstr "Link"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/McpNeedsAuthNotice.tsx
+msgid "chat.message.mcpNeedsAuth.connect"
+msgstr "Connect"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpNeedsAuthNotice.tsx
+msgid "chat.message.mcpNeedsAuth.text"
+msgstr "{serverCount, plural, one {{serverList} is available in this chat but not connected, so its tools were not used.} other {{serverList} are available in this chat but not connected, so their tools were not used.}}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/MermaidBlock.tsx
 msgid "chat.message.mermaid.diagram"
 msgstr "Mermaid diagram"

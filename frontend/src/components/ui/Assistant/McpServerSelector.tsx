@@ -1,9 +1,9 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useCallback, useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/Controls/Button";
+import { useOpenMcpServersSettings } from "@/hooks/ui/useOpenMcpServersSettings";
 
 import { CheckCircleIcon, ErrorIcon, WarningCircleIcon } from "../icons";
 
@@ -37,21 +37,12 @@ export const McpServerSelector = ({
   onSelectionChange,
   disabled = false,
 }: McpServerSelectorProps) => {
-  const [searchParams, setSearchParams] = useSearchParams();
-
   const selectedServerIdsSet = useMemo(
     () => new Set(selectedServerIds),
     [selectedServerIds],
   );
 
-  const openServerSettings = useCallback(() => {
-    /* eslint-disable lingui/no-unlocalized-strings -- URL query parameter keys */
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.set("preferencesDialog", "open");
-    nextParams.set("preferencesTab", "serversTools");
-    /* eslint-enable lingui/no-unlocalized-strings */
-    setSearchParams(nextParams);
-  }, [searchParams, setSearchParams]);
+  const openServerSettings = useOpenMcpServersSettings();
 
   const toggleServerSelection = useCallback(
     (serverId: string) => {
@@ -163,19 +154,24 @@ export const McpServerSelector = ({
                         message: "Requires connection",
                       })}
                     </span>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      disabled={disabled}
-                      onClick={openServerSettings}
-                      data-testid={`mcp-server-connect-${server.id}`}
-                    >
-                      {t({
-                        id: "assistant.form.mcpServers.connectAction",
-                        message: "Connect in Settings",
-                      })}
-                    </Button>
+                    {/* A null callback means no Router-mounted settings
+                        chrome exists on this host, so the shortcut would be
+                        a dead button — the status label alone stands. */}
+                    {openServerSettings && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        disabled={disabled}
+                        onClick={openServerSettings}
+                        data-testid={`mcp-server-connect-${server.id}`}
+                      >
+                        {t({
+                          id: "assistant.form.mcpServers.connectAction",
+                          message: "Connect in Settings",
+                        })}
+                      </Button>
+                    )}
                   </>
                 )}
                 {isUnavailable && (
