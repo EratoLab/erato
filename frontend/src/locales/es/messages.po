@@ -1418,6 +1418,16 @@ msgid "chat.history.delegatedRuns.dismiss"
 msgstr "Descartar ejecución"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegatedRunsSection.tsx
+msgid "chat.history.delegatedRuns.toggle"
+msgstr "Ejecuciones delegadas ({runCount})"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegatedRunsSection.tsx
+msgid "chat.history.delegatedRuns.toggleStatus"
+msgstr "Ejecuciones delegadas ({runCount}), {attentionLabel}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
 msgid "chat.history.filterMenu.groupBy"
 msgstr "Agrupar por"

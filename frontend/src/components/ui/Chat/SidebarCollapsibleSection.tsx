@@ -3,7 +3,7 @@ import clsx from "clsx";
 import { memo, useEffect, useState } from "react";
 
 import { Collapse, COLLAPSE_DURATION_MS } from "../Controls/Collapse";
-import { ChevronRightIcon } from "../icons";
+import { DisclosureChevron } from "../Controls/DisclosureChevron";
 
 // Nav rows and chat rows share one themeable geometry class so a single
 // theme.css channel reaches both row families.
@@ -78,14 +78,14 @@ export const SidebarCollapsibleSection = memo<{
             <h3 className="theme-transition truncate text-xs font-semibold uppercase tracking-wide text-theme-fg-muted group-hover/toggle:text-theme-fg-primary group-focus-visible/toggle:text-theme-fg-primary">
               {title}
             </h3>
-            <ChevronRightIcon
+            <DisclosureChevron
+              open={isExpanded}
               className={clsx(
-                "theme-transition size-3 shrink-0 text-theme-fg-muted group-hover/toggle:text-theme-fg-primary group-focus-visible/toggle:text-theme-fg-primary",
+                "group-hover/toggle:text-theme-fg-primary group-focus-visible/toggle:text-theme-fg-primary",
                 "opacity-0 group-hover:opacity-100 group-focus-visible/toggle:opacity-100",
                 // Touch devices get no hover reveal, so the non-default
                 // collapsed state must stay visible on its own.
                 !isExpanded && "opacity-100",
-                isExpanded ? "rotate-90" : "rotate-0",
               )}
             />
           </button>

@@ -308,6 +308,38 @@ describe("DelegatedRunsSection", () => {
     });
   });
 
+  it("labels the toggle with the count and status, wired to the list panel", () => {
+    mockRuns([
+      recentChat({ id: "run-1", delegated_run_outcome: "completed" }),
+      recentChat({ id: "run-2", delegated_run_outcome: "failed" }),
+    ]);
+    renderSection("origin-1");
+
+    // The badge and the dot are aria-hidden, so the name carries both.
+    const toggle = screen.getByTestId("delegated-runs-toggle");
+    expect(toggle).toHaveAccessibleName("Delegated runs (2), Error");
+
+    const panelId = toggle.getAttribute("aria-controls");
+    expect(panelId).toBeTruthy();
+    expandRuns();
+    const panel = document.getElementById(panelId ?? "");
+    expect(panel).not.toBeNull();
+    expect(
+      within(panel as HTMLElement).getAllByTestId("delegated-run-item"),
+    ).toHaveLength(2);
+  });
+
+  it("reveals the open-in-new-window hint from the focusable row itself", () => {
+    mockRuns([recentChat({ id: "run-1" })]);
+    renderSection("origin-1");
+    expandRuns();
+
+    // The reveal group must sit on the anchor that receives focus — on an
+    // inner div, group-focus-visible never fires and keyboard users never
+    // see the icon.
+    expect(screen.getByTestId("delegated-run-item")).toHaveClass("group/run");
+  });
+
   it("expands as a plain disclosure without capturing focus", () => {
     mockRuns([recentChat({ id: "run-1" })]);
     renderSection("origin-1");
@@ -356,6 +388,11 @@ describe("DelegatedRunsSection check-off", () => {
     expect(dismissButtons).toHaveLength(1);
     expect(dismissButtons[0].closest('[data-chat-id="run-2"]')).not.toBeNull();
     expect(dismissButtons[0]).toHaveAccessibleName("Dismiss run");
+    expect(dismissButtons[0]).toHaveAttribute("title", "Dismiss run");
+    // The strong hover step — the row hover already paints --theme-bg-hover.
+    expect(dismissButtons[0]).toHaveClass(
+      "hover:!bg-[var(--theme-bg-hover-strong)]",
+    );
   });
 
   it("removes the checked-off row, keeps the others, and survives a reload", () => {

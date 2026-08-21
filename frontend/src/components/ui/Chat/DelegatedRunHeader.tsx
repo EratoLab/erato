@@ -1,4 +1,5 @@
 import { t } from "@lingui/core/macro";
+import { useNavigate } from "react-router-dom";
 
 import { delegatedRunOrigin } from "@/utils/chat/delegatedRunOrigin";
 import { getChatUrl } from "@/utils/chat/urlUtils";
@@ -18,13 +19,15 @@ export interface DelegatedRunHeaderProps extends DelegatedRunProvenance {
   isArchived?: boolean;
 }
 
+// dt/dd as flat grid children, so the label column sizes to the widest
+// label instead of a fixed width that clips longer translations.
 const Field = ({ label, value }: { label: string; value: string }) => (
-  <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
-    <dt className="shrink-0 text-theme-fg-muted sm:w-32">{label}</dt>
+  <>
+    <dt className="text-theme-fg-muted">{label}</dt>
     <dd className="min-w-0 whitespace-pre-wrap text-theme-fg-secondary">
       {value}
     </dd>
-  </div>
+  </>
 );
 
 /**
@@ -67,12 +70,16 @@ export const DelegatedRunHeader = ({
   isArchived = false,
   ...provenance
 }: DelegatedRunHeaderProps) => {
+  const navigate = useNavigate();
   const origin = delegatedRunOrigin(provenance);
   if (!origin) {
     return null;
   }
   const note = stateNote(isRunning, isArchived);
   const hasParameters = Boolean(expectedOutput) || Boolean(constraints);
+  const originHref = origin.chatId
+    ? getChatUrl(origin.chatId, origin.assistantId)
+    : null;
 
   return (
     <div
@@ -85,7 +92,7 @@ export const DelegatedRunHeader = ({
         </span>
         {assistantName ? (
           <>
-            <span aria-hidden className="text-theme-fg-muted">
+            <span aria-hidden="true" className="text-theme-fg-muted">
               ·
             </span>
             <span className="truncate text-theme-fg-secondary">
@@ -93,12 +100,23 @@ export const DelegatedRunHeader = ({
             </span>
           </>
         ) : null}
-        <span aria-hidden className="text-theme-fg-muted">
+        <span aria-hidden="true" className="text-theme-fg-muted">
           ·
         </span>
-        {origin.chatId ? (
+        {originHref ? (
           <a
-            href={getChatUrl(origin.chatId, origin.assistantId)}
+            href={originHref}
+            onClick={(e) => {
+              // Allow cmd/ctrl-click to open in new tab
+              if (e.metaKey || e.ctrlKey) {
+                return;
+              }
+              e.preventDefault();
+              navigate(originHref);
+            }}
+            // Persistent underline on purpose: a link sitting mid-sentence
+            // needs a resting affordance, like the prose links in message
+            // content — unlike hover-underlined control-style links.
             className="focus-ring-tight truncate rounded-[var(--theme-radius-base)] text-theme-fg-secondary underline underline-offset-2 hover:text-theme-fg-primary"
             data-testid="delegated-run-origin-link"
           >
@@ -114,7 +132,7 @@ export const DelegatedRunHeader = ({
         )}
       </div>
       {hasParameters ? (
-        <dl className="min-w-0 space-y-1">
+        <dl className="grid min-w-0 grid-cols-1 gap-y-0.5 sm:grid-cols-[auto,1fr] sm:gap-x-3 sm:gap-y-1">
           {expectedOutput ? (
             <Field
               label={t({

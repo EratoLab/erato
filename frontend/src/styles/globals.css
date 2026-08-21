@@ -144,6 +144,10 @@
   --theme-bg-sidebar: #e5e7eb;
   --theme-bg-accent: #e5e7eb; /* Monochrome accent */
   --theme-bg-hover: #e5e7eb;
+  /* One step past the flat hover, for a control hovered inside an
+     already-hovered row — painting --theme-bg-hover there again is
+     invisible. Derived, so custom themes keep the relationship. */
+  --theme-bg-hover-strong: color-mix(in srgb, var(--theme-bg-hover), black 6%);
   --theme-bg-selected: #d1d5db;
 
   /* Foreground colors */

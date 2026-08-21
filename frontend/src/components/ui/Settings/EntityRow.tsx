@@ -2,12 +2,8 @@ import clsx from "clsx";
 import { useId, useState } from "react";
 
 import { Collapse } from "../Controls/Collapse";
-import {
-  CheckCircleIcon,
-  ChevronRightIcon,
-  ErrorIcon,
-  WarningCircleIcon,
-} from "../icons";
+import { DisclosureChevron } from "../Controls/DisclosureChevron";
+import { CheckCircleIcon, ErrorIcon, WarningCircleIcon } from "../icons";
 
 import type { ReactNode } from "react";
 
@@ -88,12 +84,7 @@ export function EntityRow({
           onClick={() => setIsExpanded((value) => !value)}
           className="theme-transition focus-ring-tight flex min-w-0 flex-1 items-center gap-3 text-left"
         >
-          <ChevronRightIcon
-            className={clsx(
-              "size-4 shrink-0 text-theme-fg-muted transition-transform duration-200",
-              isExpanded && "rotate-90",
-            )}
-          />
+          <DisclosureChevron open={isExpanded} size="md" />
           <span className="min-w-0 flex-1 space-y-1">
             <span className="flex items-center gap-2">
               <span aria-hidden="true" className="shrink-0">

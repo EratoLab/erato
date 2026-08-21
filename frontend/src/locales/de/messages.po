@@ -1418,6 +1418,16 @@ msgid "chat.history.delegatedRuns.dismiss"
 msgstr "Lauf ausblenden"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegatedRunsSection.tsx
+msgid "chat.history.delegatedRuns.toggle"
+msgstr "Delegierte Läufe ({runCount})"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegatedRunsSection.tsx
+msgid "chat.history.delegatedRuns.toggleStatus"
+msgstr "Delegierte Läufe ({runCount}), {attentionLabel}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
 msgid "chat.history.filterMenu.groupBy"
 msgstr "Gruppieren nach"
