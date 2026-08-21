@@ -1056,6 +1056,7 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
               type="submit"
               variant="primary"
               disabled={!isFormValid || isSubmitting || isContextExceeded}
+              loading={isSubmitting}
             >
               {isSubmitting
                 ? t`Saving...`
