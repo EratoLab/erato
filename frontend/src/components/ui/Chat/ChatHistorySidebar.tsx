@@ -57,6 +57,7 @@ import {
 } from "./SidebarResizeHandle";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { Button } from "../Controls/Button";
+import { CountBadge } from "../Controls/CountBadge";
 import { UserProfileThemeDropdown } from "../Controls/UserProfileThemeDropdown";
 import { CopyErrorButton } from "../Feedback/CopyErrorButton";
 import {
@@ -87,10 +88,6 @@ const ASSISTANTS_SECTION_EXPANDED_STORAGE_KEY =
   "erato.sidebar.assistantsSectionExpanded";
 
 const GENERATION_ANNOUNCE_DEBOUNCE_MS = 1000;
-
-const generationBadgeClassName =
-  // eslint-disable-next-line lingui/no-unlocalized-strings -- CSS utility classes, not user-facing text
-  "flex min-w-4 items-center justify-center rounded-full bg-theme-action-primary-bg px-1 text-[10px] font-semibold leading-4 text-theme-action-primary-fg";
 
 /**
  * Running + session-observed finished/error + chats awaiting a tool
@@ -129,13 +126,13 @@ const GenerationRailBadge = () => {
   if (count === 0) return null;
 
   return (
-    <span
+    <CountBadge
+      variant="attention"
       data-testid="sidebar-generation-badge"
-      aria-hidden="true"
-      className={clsx("absolute -right-0.5 -top-0.5", generationBadgeClassName)}
+      className="absolute -right-0.5 -top-0.5"
     >
       {count}
-    </span>
+    </CountBadge>
   );
 };
 

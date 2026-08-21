@@ -13,6 +13,7 @@ import { useRovingMenuFocus } from "@/hooks/ui/useRovingMenuFocus";
 
 import { AnchoredPopover } from "../Controls/AnchoredPopover";
 import { Button } from "../Controls/Button";
+import { CountBadge } from "../Controls/CountBadge";
 import { CheckIcon, LoadingIcon, PlusIcon } from "../icons";
 
 import type React from "react";
@@ -451,12 +452,16 @@ export function ChatInputAddMenu({
           }
         >
           {showBadge && !isProcessing && (
-            <span
+            <CountBadge
+              variant="attention"
+              // Stays in the accessibility tree: the trigger's label does
+              // not carry the selection count, so the badge must.
+              aria-hidden={false}
               data-testid="chat-input-add-menu-badge"
-              className="absolute -right-0.5 -top-0.5 flex min-w-4 items-center justify-center rounded-full bg-theme-action-primary-bg px-1 text-[10px] font-semibold leading-4 text-theme-action-primary-fg"
+              className="absolute -right-0.5 -top-0.5"
             >
               {selectedCount}
-            </span>
+            </CountBadge>
           )}
         </Button>
       )}

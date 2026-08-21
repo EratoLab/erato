@@ -1,7 +1,6 @@
 import { t } from "@lingui/core/macro";
 import { skipToken } from "@tanstack/react-query";
-import clsx from "clsx";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useId, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -26,8 +25,10 @@ import { ChatAttentionStatusDot } from "./ChatAttentionStatusDot";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { Button } from "../Controls/Button";
 import { Collapse } from "../Controls/Collapse";
+import { CountBadge } from "../Controls/CountBadge";
+import { DisclosureChevron } from "../Controls/DisclosureChevron";
 import { MessageTimestamp } from "../Message/MessageTimestamp";
-import { OpenNewWindowIcon, CheckIcon, ChevronRightIcon } from "../icons";
+import { OpenNewWindowIcon, CloseIcon } from "../icons";
 
 import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
@@ -77,6 +78,10 @@ const DelegatedRunRow = memo<{
 
   const isLive = status === "running" || status === "action_required";
   const isSettled = status === "finished" || status === "error";
+  const dismissLabel = t({
+    id: "chat.history.delegatedRuns.dismiss",
+    message: "Dismiss run",
+  });
   // Elapsed anchors to the live generation's start when one is known; a
   // settled run shows when it last wrote instead.
   const liveStartedAt =
@@ -97,7 +102,9 @@ const DelegatedRunRow = memo<{
         e.preventDefault();
         navigate(href);
       }}
-      className="focus-ring-inset block rounded-[var(--theme-radius-base)]"
+      // The group lives here, on the element that actually receives focus,
+      // so the keyboard reveal below has a :focus-visible source.
+      className="focus-ring-inset group/run block rounded-[var(--theme-radius-base)]"
       aria-label={
         status ? `${name}, ${chatAttentionStatusLabel(status)}` : name
       }
@@ -106,7 +113,7 @@ const DelegatedRunRow = memo<{
       <InteractiveContainer
         useDiv={true}
         showFocusRing={false}
-        className="theme-transition group/run flex items-center gap-2 rounded-[var(--theme-radius-base)] px-2 py-1.5 text-left hover:bg-theme-bg-hover"
+        className="theme-transition flex items-center gap-2 rounded-[var(--theme-radius-base)] px-2 py-1.5 text-left hover:bg-theme-bg-hover"
         data-chat-id={chat.id}
         data-ui="delegated-run-item"
       >
@@ -138,11 +145,9 @@ const DelegatedRunRow = memo<{
             <Button
               variant="icon-only"
               size="sm"
-              icon={<CheckIcon className="size-4" />}
-              aria-label={t({
-                id: "chat.history.delegatedRuns.dismiss",
-                message: "Dismiss run",
-              })}
+              icon={<CloseIcon className="size-4" />}
+              aria-label={dismissLabel}
+              title={dismissLabel}
               onClick={() => onDismiss(chat.id)}
               data-testid="delegated-run-dismiss"
             />
@@ -231,6 +236,7 @@ export const DelegatedRunsSection = memo<DelegatedRunsSectionProps>(
     }, [runs]);
 
     const [isExpanded, setIsExpanded] = useState(false);
+    const panelId = useId();
 
     // The header's hint follows the runs' own status vocabulary; a run that
     // is merely running asks for nothing, so it never raises the hint.
@@ -249,6 +255,20 @@ export const DelegatedRunsSection = memo<DelegatedRunsSectionProps>(
       return null;
     }
 
+    const runCount = runs.length;
+    const attentionLabel = attentionStatus
+      ? chatAttentionStatusLabel(attentionStatus)
+      : null;
+    const toggleLabel = attentionLabel
+      ? t({
+          id: "chat.history.delegatedRuns.toggleStatus",
+          message: `Delegated runs (${runCount}), ${attentionLabel}`,
+        })
+      : t({
+          id: "chat.history.delegatedRuns.toggle",
+          message: `Delegated runs (${runCount})`,
+        });
+
     return (
       <div
         // Mirrors the composer's own width channel so the bar and the input
@@ -262,47 +282,46 @@ export const DelegatedRunsSection = memo<DelegatedRunsSectionProps>(
             type="button"
             onClick={() => setIsExpanded((expanded) => !expanded)}
             aria-expanded={isExpanded}
+            aria-controls={panelId}
+            // The count badge and the status dot are visual-only, so the
+            // name must say what they show (the dot's own contract).
+            aria-label={toggleLabel}
             className="focus-ring-inset theme-transition flex w-full items-center gap-2 rounded-[var(--theme-radius-message)] px-3 py-2 text-left hover:bg-theme-bg-hover"
             data-testid="delegated-runs-toggle"
           >
-            <ChevronRightIcon
-              className={clsx(
-                "theme-transition size-3 shrink-0 text-theme-fg-muted",
-                isExpanded ? "rotate-90" : "rotate-0",
-              )}
-              aria-hidden="true"
-            />
+            <DisclosureChevron open={isExpanded} />
             <span className="truncate text-xs font-semibold text-theme-fg-secondary">
               {t({
                 id: "chat.history.delegatedRuns",
                 message: "Delegated runs",
               })}
             </span>
-            <span
-              className="flex min-w-4 shrink-0 items-center justify-center rounded-full bg-theme-bg-secondary px-1 text-[10px] font-semibold leading-4 text-theme-fg-secondary"
+            <CountBadge
+              variant="count"
+              className="shrink-0"
               data-testid="delegated-runs-count"
             >
               {runs.length}
-            </span>
+            </CountBadge>
             {attentionStatus && (
               <ChatAttentionStatusDot status={attentionStatus} />
             )}
           </button>
           <Collapse isOpen={isExpanded}>
-            {isExpanded && (
-              <div
-                className="flex w-full min-w-0 flex-col gap-0.5 px-1.5 pb-1.5"
-                data-ui="delegated-runs-list"
-              >
-                {runs.map((chat) => (
+            <div
+              id={panelId}
+              className="flex w-full min-w-0 flex-col gap-0.5 px-1.5 pb-1.5"
+              data-ui="delegated-runs-list"
+            >
+              {isExpanded &&
+                runs.map((chat) => (
                   <DelegatedRunRow
                     key={chat.id}
                     chat={chat}
                     onDismiss={dismissRun}
                   />
                 ))}
-              </div>
-            )}
+            </div>
           </Collapse>
         </div>
       </div>

@@ -1,9 +1,18 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DelegatedRunHeader } from "./DelegatedRunHeader";
 
 import type { DelegatedRunHeaderProps } from "./DelegatedRunHeader";
+
+const navigateMock = vi.fn();
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual("react-router-dom");
+  return {
+    ...actual,
+    useNavigate: () => navigateMock,
+  };
+});
 
 const run = (
   overrides: Partial<DelegatedRunHeaderProps> = {},
@@ -17,6 +26,28 @@ const run = (
 });
 
 describe("DelegatedRunHeader", () => {
+  beforeEach(() => {
+    navigateMock.mockClear();
+  });
+
+  it("routes the origin link through the SPA instead of reloading", () => {
+    render(<DelegatedRunHeader {...run()} />);
+
+    fireEvent.click(screen.getByTestId("delegated-run-origin-link"));
+    expect(navigateMock).toHaveBeenCalledWith("/a/assistant-9/origin-1");
+
+    // Cmd/ctrl-click keeps the browser's open-in-new-tab behaviour. The
+    // document-level listener only keeps jsdom from following the href.
+    navigateMock.mockClear();
+    const swallowNavigation = (e: MouseEvent) => e.preventDefault();
+    document.addEventListener("click", swallowNavigation);
+    fireEvent.click(screen.getByTestId("delegated-run-origin-link"), {
+      metaKey: true,
+    });
+    document.removeEventListener("click", swallowNavigation);
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+
   it("names the run, its delegate and the conversation that dispatched it", () => {
     render(<DelegatedRunHeader {...run()} />);
 
