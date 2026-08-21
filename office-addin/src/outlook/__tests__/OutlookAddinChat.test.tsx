@@ -52,6 +52,8 @@ vi.mock("@erato/frontend/library", () => ({
     children,
   ChatMessage: () => null,
   DefaultMessageControls: () => null,
+  DelegatedRunsSection: () => null,
+  useDelegatedRunHeader: () => ({ header: null, composerLocked: false }),
   DocumentIcon: () => null,
   DropdownMenu: () => null,
   FeedbackCommentDialog: () => null,

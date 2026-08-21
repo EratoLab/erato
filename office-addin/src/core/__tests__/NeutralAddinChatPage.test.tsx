@@ -16,6 +16,12 @@ const spies = vi.hoisted(() => ({
     setNavigationTransition: vi.fn(),
   },
   clearNewlyCreatedChatId: vi.fn(),
+  useDelegatedRunHeader: vi.fn(
+    (): { header: ReactNode; composerLocked: boolean } => ({
+      header: null,
+      composerLocked: false,
+    }),
+  ),
   useRecentChats: vi.fn(() => ({
     data: { chats: [] },
     isLoading: false,
@@ -93,6 +99,21 @@ vi.mock("@erato/frontend/library", async () => {
       children,
     ChatMessage: () => null,
     DefaultMessageControls: () => null,
+    DelegatedRunsSection: ({
+      chatId,
+      onOpenRun,
+    }: {
+      chatId: string | null;
+      onOpenRun?: (chat: { id: string }) => void;
+    }) => (
+      <button
+        type="button"
+        data-testid="neutral-delegated-runs"
+        data-chat-id={chatId ?? ""}
+        onClick={() => onOpenRun?.({ id: "run-77" })}
+      />
+    ),
+    useDelegatedRunHeader: spies.useDelegatedRunHeader,
     DocumentIcon: () => null,
     DropdownMenu: () => null,
     FeedbackCommentDialog: () => null,
@@ -149,7 +170,12 @@ vi.mock("@erato/frontend/library", async () => {
 });
 
 vi.mock("../AddinChatInputCore", () => ({
-  AddinChatInputCore: () => <div data-testid="neutral-chat-input" />,
+  AddinChatInputCore: ({ disabled }: { disabled?: boolean }) => (
+    <div
+      data-testid="neutral-chat-input"
+      data-disabled={disabled ? "true" : "false"}
+    />
+  ),
 }));
 vi.mock("../AddinSettingsDialogCore", () => ({
   AddinSettingsDialogCore: () => null,
@@ -255,5 +281,39 @@ describe("NeutralAddinChatPage host boundary", () => {
     expect(spies.messagingStore.clearUserMessages).toHaveBeenCalled();
     expect(spies.messagingStore.resetStreaming).toHaveBeenCalled();
     expect(spies.clearNewlyCreatedChatId).toHaveBeenCalled();
+  });
+
+  it("hands the session's chat to the delegated-runs bar and opens a run in-pane", () => {
+    renderPage();
+
+    const bar = screen.getByTestId("neutral-delegated-runs");
+    expect(bar).toHaveAttribute("data-chat-id", "");
+
+    // The bar's open callback goes through the session controller, so the
+    // pane itself rebinds: messaging re-keys and the bar follows the run.
+    fireEvent.click(bar);
+
+    expect(screen.getByTestId("neutral-delegated-runs")).toHaveAttribute(
+      "data-chat-id",
+      "run-77",
+    );
+    expect(spies.useChatMessaging).toHaveBeenLastCalledWith(
+      expect.objectContaining({ chatId: "run-77" }),
+    );
+  });
+
+  it("locks the composer while a delegate still writes the open run", () => {
+    spies.useDelegatedRunHeader.mockReturnValue({
+      header: <div data-testid="neutral-run-banner" />,
+      composerLocked: true,
+    });
+
+    renderPage();
+
+    expect(screen.getByTestId("neutral-run-banner")).toBeInTheDocument();
+    expect(screen.getByTestId("neutral-chat-input")).toHaveAttribute(
+      "data-disabled",
+      "true",
+    );
   });
 });

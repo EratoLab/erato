@@ -3,6 +3,7 @@ import {
   ChatInputControlsProvider,
   ChatMessage,
   DefaultMessageControls,
+  DelegatedRunsSection,
   DocumentIcon,
   DropdownMenu,
   FeedbackCommentDialog,
@@ -19,6 +20,7 @@ import {
   useActiveModelSelection,
   useChatContext,
   useConversationDropzone,
+  useDelegatedRunHeader,
   useFileCapabilitiesContext,
   useFilePreviewModal,
   useFileUploadWithTokenCheck,
@@ -29,6 +31,7 @@ import {
   type AssistantMention,
   type ChatInputControlsHandle,
   type ChatMessageProps,
+  type DelegatedRunsSectionProps,
   type DropdownMenuItem,
   type FileUploadItem,
   type MessageAction,
@@ -71,6 +74,7 @@ export interface AddinChatInputRenderProps {
   chatId: string | null;
   assistantId?: string;
   isLoading: boolean;
+  disabled: boolean;
   controlledAvailableModels: AddinChatController["availableModels"];
   controlledSelectedModel: AddinChatController["selectedModel"];
   onControlledSelectedModelChange: AddinChatController["setSelectedModel"];
@@ -138,6 +142,12 @@ export interface AddinChatController {
   isSettingsOpen: boolean;
   setIsSettingsOpen: (isOpen: boolean) => void;
   headerMenuItems: DropdownMenuItem[];
+  /** Banner identifying the open chat as a delegated run; null otherwise. */
+  delegatedRunHeader: ReactNode;
+  /** A delegate still writing the run refuses sends with a 409; closing the
+   * composer is how the user learns that instead of by sending into it. */
+  composerLocked: boolean;
+  openDelegatedRun: NonNullable<DelegatedRunsSectionProps["onOpenRun"]>;
 }
 
 export interface AddinChatHostProps {
@@ -195,6 +205,24 @@ function useAddinChatController({
   const chat = useChatContext();
   const { profile } = useProfile();
   const { capabilities } = useFileCapabilitiesContext();
+  // In the pane a chat opens through the session controller, the same path
+  // the recent-chats picker takes; the pane serves no chat routes to
+  // navigate to.
+  const openChatInPane = useCallback(
+    (chatId: string) => chat.navigateToChat(chatId),
+    [chat],
+  );
+  const runHeaderOptions = useMemo(
+    () => ({ onOpenOrigin: openChatInPane }),
+    [openChatInPane],
+  );
+  const { header: delegatedRunHeader, composerLocked } = useDelegatedRunHeader(
+    chat.currentChatId,
+    runHeaderOptions,
+  );
+  const openDelegatedRun = useCallback<
+    NonNullable<DelegatedRunsSectionProps["onOpenRun"]>
+  >((run) => openChatInPane(run.id), [openChatInPane]);
   const { availableModels, selectedModel, setSelectedModel, isSelectionReady } =
     useActiveModelSelection({ initialModel: chat.currentChatLastModel });
   const acceptedFileTypes = useMemo(
@@ -430,6 +458,9 @@ function useAddinChatController({
     isSettingsOpen,
     setIsSettingsOpen,
     headerMenuItems,
+    delegatedRunHeader,
+    composerLocked,
+    openDelegatedRun,
   };
 }
 
@@ -508,6 +539,7 @@ export function AddinChatCoreView({
     chatId: controller.currentChatId,
     assistantId: controller.assistantId,
     isLoading: controller.isMessagingLoading,
+    disabled: controller.composerLocked,
     controlledAvailableModels: controller.availableModels,
     controlledSelectedModel: controller.selectedModel,
     onControlledSelectedModelChange: controller.setSelectedModel,
@@ -572,6 +604,11 @@ export function AddinChatCoreView({
               </div>
             ) : null}
             {beforeMessages}
+            {controller.delegatedRunHeader ? (
+              <div className="relative z-10 shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3">
+                {controller.delegatedRunHeader}
+              </div>
+            ) : null}
             {TopLeftAccessory ? (
               <TopLeftAccessory
                 availableModels={controller.availableModels}
@@ -604,6 +641,10 @@ export function AddinChatCoreView({
                 className="overscroll-none"
               />
             </MessageEditProvider>
+            <DelegatedRunsSection
+              chatId={controller.currentChatId}
+              onOpenRun={controller.openDelegatedRun}
+            />
             {renderInput(inputProps)}
           </div>
         </ChatErrorBoundary>

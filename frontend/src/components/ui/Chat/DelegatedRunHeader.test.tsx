@@ -84,6 +84,18 @@ describe("DelegatedRunHeader", () => {
     );
   });
 
+  it("turns the origin into a button when the host opens chats itself", () => {
+    const onOpenOrigin = vi.fn();
+    render(<DelegatedRunHeader {...run()} onOpenOrigin={onOpenOrigin} />);
+
+    const origin = screen.getByTestId("delegated-run-origin-link");
+    expect(origin.tagName).toBe("BUTTON");
+    expect(origin).not.toHaveAttribute("href");
+
+    fireEvent.click(origin);
+    expect(onOpenOrigin).toHaveBeenCalledWith("origin-1");
+  });
+
   it("renders the run parameters as labelled fields and omits absent ones", () => {
     render(
       <DelegatedRunHeader

@@ -12,8 +12,17 @@ export {
   type ThemeProviderProps,
 } from "@/components/providers/ThemeProvider";
 export { ApiProvider } from "@/components/providers/ApiProvider";
+export { GenerationStatusPoller } from "@/components/providers/GenerationStatusPoller";
 export * from "@/components/ui/Chat";
 export { ChatInputControlsProvider } from "@/components/ui/Chat/ChatInputControlsContext";
+export {
+  DelegatedRunsSection,
+  type DelegatedRunsSectionProps,
+} from "@/components/ui/Chat/DelegatedRunsSection";
+export {
+  useDelegatedRunHeader,
+  type DelegatedRunHeaderState,
+} from "@/hooks/chat/useDelegatedRunHeader";
 export {
   ChatMessage,
   type ChatMessageHostComponents,
