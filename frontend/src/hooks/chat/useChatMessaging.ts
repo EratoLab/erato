@@ -902,6 +902,23 @@ export function useChatMessaging(
             );
             {
               const previousStreamKey = activeStreamKey;
+              // A resume stream replays the chat's full event history, so
+              // this frame can announce a chat this client never submitted
+              // (most visibly a delegated run entered mid-generation). Such
+              // a replay arrives on a stream already keyed by the chat id;
+              // only a submit stream still keyed differently (the new-chat
+              // sentinel) carries a chat this client just created. Skip the
+              // new-chat bookkeeping for replays: seeding the pending
+              // sidebar row would leak a ghost "New Chat" entry that no
+              // listing refetch ever replaces, because the chat may never
+              // become listable for this user.
+              if (previousStreamKey === responseData.chat_id) {
+                logger.log(
+                  "[DEBUG_REDIRECT] processStreamEvent: chat_created frame is a replay (stream key already carries the chat id). Skipping new-chat bookkeeping.",
+                );
+                break;
+              }
+
               handleChatCreated(
                 responseData,
                 setNewlyCreatedChatId,
@@ -950,12 +967,7 @@ export function useChatMessaging(
                     .getState()
                     .setTitleHint(responseData.chat_id, titleHint);
                 }
-              }
 
-              if (
-                responseData.chat_id &&
-                previousStreamKey !== responseData.chat_id
-              ) {
                 const existingCleanup = getSSECleanupForKey(previousStreamKey);
                 if (existingCleanup) {
                   setSSECleanupForKey(previousStreamKey, null);
@@ -1061,6 +1073,11 @@ export function useChatMessaging(
               }
             }
             recentlyCompletedByKeyRef.current[activeStreamKey] = Date.now();
+            // By completion the chat is listable (its first message is
+            // saved), so the placeholder row is no longer needed; clearing
+            // it here also guarantees a leaked placeholder cannot outlive
+            // its stream.
+            clearPendingChat(activeStreamKey);
             void handleRefetchAndClear({
               invalidate: true,
               logContext: "Assistant message completed",
@@ -1284,6 +1301,10 @@ export function useChatMessaging(
 
             setSSECleanupForKey(resumeStreamKey, null);
             setSSEAbortCallback(null, resumeStreamKey);
+            // Not gated on stillStreaming: the placeholder can leak past the
+            // point where streaming state was already reset, and clearing is
+            // idempotent and scoped to this stream's chat.
+            clearPendingChat(resumeStreamKey);
 
             const stillStreaming = useMessagingStore
               .getState()
@@ -1291,7 +1312,6 @@ export function useChatMessaging(
             if (stillStreaming) {
               setError(connectionError);
               resetStreaming(resumeStreamKey);
-              clearPendingChat(resumeStreamKey);
               void handleRefetchAndClear({
                 logContext: `Resume stream error (${reason})`,
               });
@@ -1303,6 +1323,11 @@ export function useChatMessaging(
             );
             setSSECleanupForKey(resumeStreamKey, null);
             setSSEAbortCallback(null, resumeStreamKey);
+            // Not gated on stillStreaming: by the time a resume socket
+            // closes normally, streaming state is usually already reset, and
+            // a placeholder leaked earlier in the stream would otherwise
+            // survive forever. Clearing is idempotent and scoped.
+            clearPendingChat(resumeStreamKey);
 
             // A resume that closes while we still think we're streaming ended
             // without a completion event (e.g. the task died sending only
@@ -1316,7 +1341,6 @@ export function useChatMessaging(
                 "[DEBUG_STREAMING] resumestream closed while still streaming — reconciling from server.",
               );
               resetStreaming(resumeStreamKey);
-              clearPendingChat(resumeStreamKey);
               void handleRefetchAndClear({
                 logContext: `Resume stream closed without completion (${reason})`,
               });

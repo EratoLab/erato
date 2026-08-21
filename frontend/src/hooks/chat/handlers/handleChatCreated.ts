@@ -11,6 +11,11 @@ import type { MessageSubmitStreamingResponseChatCreated } from "@/lib/generated/
  * This is crucial for navigating the user to the newly created chat or for
  * subsequent API calls that require the chat ID.
  *
+ * Only call this for a chat this client just created on its own submit
+ * stream (`streamKey !== responseData.chat_id`). Resume streams replay the
+ * event history, and a replayed frame must not trip the new-chat
+ * bookkeeping performed here.
+ *
  * @param responseData - The data received from the 'chat_created' SSE event.
  *                       It should contain the 'chat_id' of the newly created chat.
  * @param setNewlyCreatedChatId - A state setter function from a React hook (e.g., useState)
