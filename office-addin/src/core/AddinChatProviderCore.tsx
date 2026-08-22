@@ -90,13 +90,16 @@ export function AddinChatProviderCore({
   const history = useInfiniteRecentChats({ filters });
   const chats = history.chats;
 
-  // The session policy's ask toast suggests and lists chats through this
-  // unfiltered listing, never the drawer-filtered one: narrowing a drawer
-  // filter must not silently change which chat the toast offers to resume.
-  // With the filters at their defaults both hooks share one query key, so
-  // this costs nothing until a filter is actually narrowed.
+  // Outlook's session policy suggests and lists chats for its ask toast
+  // through this unfiltered listing, never the drawer-filtered one: narrowing
+  // a drawer filter must not silently change which chat the toast offers to
+  // resume. Only Outlook's session controller consumes these chats — every
+  // other platform reuses the drawer's filters so both hooks share one query
+  // key and this second listing never runs its own request chain.
+  const sessionFilters =
+    platform === "outlook" ? SESSION_LISTING_FILTERS : filters;
   const sessionHistory = useInfiniteRecentChats({
-    filters: SESSION_LISTING_FILTERS,
+    filters: sessionFilters,
   });
 
   return (

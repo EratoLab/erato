@@ -23,9 +23,11 @@ const spies = vi.hoisted(() => {
     archiveChat: vi.fn(async () => undefined),
     updateChatTitle: vi.fn(async () => undefined),
     fetchNextHistoryPage: vi.fn(async () => undefined),
+    toastError: vi.fn(),
     chatContext: {
       chats: [] as { id: string }[],
       isLoading: false,
+      isHistoryLoading: false,
       currentChatId: null as string | null,
       hasNextHistoryPage: false,
       isFetchingNextHistoryPage: false,
@@ -40,12 +42,17 @@ const spies = vi.hoisted(() => {
       hasMore?: boolean;
       onLoadMore?: () => void;
       onSessionSelect: (id: string) => void;
+      onSessionArchive?: (id: string) => void;
       onSessionEditTitle?: (id: string) => void;
       onSessionShare?: (id: string) => void;
       disableRowLinks?: boolean;
     }>,
     renameDialogProps: {
-      current: null as { isOpen: boolean; generatedTitle: string } | null,
+      current: null as {
+        isOpen: boolean;
+        generatedTitle: string;
+        onSubmit?: (title: string) => Promise<void> | void;
+      } | null,
     },
     filterMenuStore,
     sharingEnabled: { current: true },
@@ -130,10 +137,15 @@ vi.mock("@erato/frontend/library", () => ({
     </button>
   ),
   SidebarToggleIcon: () => null,
-  EditChatTitleDialog: (props: { isOpen: boolean; generatedTitle: string }) => {
+  EditChatTitleDialog: (props: {
+    isOpen: boolean;
+    generatedTitle: string;
+    onSubmit?: (title: string) => Promise<void> | void;
+  }) => {
     spies.renameDialogProps.current = props;
     return props.isOpen ? <div data-testid="rename-dialog" /> : null;
   },
+  toast: { error: spies.toastError },
   hasActiveFilters: (values: { typeFilter: string; statusFilter: string }) =>
     values.typeFilter !== "all" || values.statusFilter !== "active",
   mapRecentChatToSession: (chat: { id: string }) => ({ id: chat.id }),
@@ -199,6 +211,7 @@ describe("AddinHistoryDrawerCore", () => {
     spies.sharingEnabled.current = true;
     spies.chatContext.chats = [{ id: "c1" }, { id: "c2" }];
     spies.chatContext.isLoading = false;
+    spies.chatContext.isHistoryLoading = false;
     spies.chatContext.hasNextHistoryPage = false;
     spies.filters = {
       typeFilter: "all",
@@ -446,9 +459,30 @@ describe("AddinHistoryDrawerCore", () => {
   it("shows the history skeleton while the first page loads", () => {
     spies.chatContext.chats = [];
     spies.chatContext.isLoading = true;
+    spies.chatContext.isHistoryLoading = true;
     renderDrawer();
 
     expect(screen.getByTestId("chat-history-skeleton")).toBeInTheDocument();
+  });
+
+  // The provider's composed isLoading also covers the open chat's messages
+  // fetch; a skeleton keyed on it would hide the filter row exactly when a
+  // narrowed filter matches nothing and needs widening.
+  it("keeps the no-matches row visible while only messages load", () => {
+    spies.chatContext.chats = [];
+    spies.chatContext.isLoading = true;
+    spies.chatContext.isHistoryLoading = false;
+    spies.filters = {
+      typeFilter: "assistant",
+      statusFilter: "active",
+      groupBy: "date",
+    };
+    renderDrawer();
+
+    expect(
+      screen.getByTestId("chat-history-no-filter-matches"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("chat-history-skeleton")).toBeNull();
   });
 
   it("shows an empty-state row when there are no chats at all", () => {
@@ -458,6 +492,41 @@ describe("AddinHistoryDrawerCore", () => {
     expect(
       screen.getByTestId("addin-history-drawer-empty"),
     ).toBeInTheDocument();
+  });
+
+  // Streaming hands the drawer a fresh context value per chunk — mirrored
+  // here by the mocked useChatContext, which mints a new object on every
+  // call around stable member functions, exactly the provider's shape. The
+  // handlers reaching ChatHistoryList must key on those members, or every
+  // chunk would re-render every history row.
+  it("keeps list handler identities stable across context-identity churn", () => {
+    const onClose = vi.fn();
+    const drawer = () => (
+      <AddinHistoryFilterStoreContext.Provider value={fakeFilterStore}>
+        <AddinHistoryDrawerCore
+          isOpen={true}
+          onClose={onClose}
+          onOpenSettings={vi.fn()}
+          panelId="drawer-panel"
+        />
+      </AddinHistoryFilterStoreContext.Provider>
+    );
+    const { rerender } = render(drawer());
+    const firstPass = spies.historyListProps.slice();
+    expect(firstPass.length).toBeGreaterThan(0);
+    // The sentinel-carrying group must hold an actual handler to compare.
+    expect(firstPass.at(-1)?.onLoadMore).toBeTypeOf("function");
+
+    spies.historyListProps.length = 0;
+    rerender(drawer());
+    const secondPass = spies.historyListProps.slice();
+
+    expect(secondPass).toHaveLength(firstPass.length);
+    secondPass.forEach((props, index) => {
+      expect(props.onSessionSelect).toBe(firstPass[index]?.onSessionSelect);
+      expect(props.onSessionArchive).toBe(firstPass[index]?.onSessionArchive);
+      expect(props.onLoadMore).toBe(firstPass[index]?.onLoadMore);
+    });
   });
 
   it("says when active filters match nothing instead of showing an empty void", () => {
@@ -473,5 +542,31 @@ describe("AddinHistoryDrawerCore", () => {
       screen.getByTestId("chat-history-no-filter-matches"),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("addin-history-drawer-empty")).toBeNull();
+  });
+
+  // The archive mutation rolls the row back on failure, so without a toast
+  // the chat silently reappears — and the rejection would escape unhandled.
+  it("toasts when archiving fails", async () => {
+    spies.archiveChat.mockRejectedValueOnce(new Error("archive failed"));
+    renderDrawer();
+
+    await act(async () => {
+      spies.historyListProps[0]?.onSessionArchive?.("c1");
+    });
+
+    expect(spies.toastError).toHaveBeenCalledTimes(1);
+  });
+
+  it("toasts when renaming fails and keeps the dialog open for a retry", async () => {
+    spies.updateChatTitle.mockRejectedValueOnce(new Error("rename failed"));
+    renderDrawer();
+
+    fireEvent.click(screen.getByTestId("rename-c1"));
+    await act(async () => {
+      await spies.renameDialogProps.current?.onSubmit?.("New title");
+    });
+
+    expect(spies.toastError).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("rename-dialog")).toBeInTheDocument();
   });
 });

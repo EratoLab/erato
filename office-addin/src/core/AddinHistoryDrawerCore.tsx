@@ -15,6 +15,7 @@ import {
   hasActiveFilters,
   mapRecentChatToSession,
   sidebarNavigationIconClassName,
+  toast,
   useAssistantsFeature,
   useChatContext,
   useChatSharingFeature,
@@ -64,6 +65,17 @@ export function AddinHistoryDrawerCore({
   sectionsAfterHistory,
 }: AddinHistoryDrawerCoreProps) {
   const chat = useChatContext();
+  // The context value gets a fresh identity on every streaming tick, but
+  // these members only change when the session changes. Handlers must key on
+  // them — depending on the whole value would re-mint every row callback per
+  // chunk and defeat ChatHistoryList's memo mid-stream.
+  const {
+    archiveChat,
+    createNewChat,
+    fetchNextHistoryPage,
+    navigateToChat,
+    updateChatTitle,
+  } = chat;
   const filterStore = useAddinHistoryFilterStore();
   const { enabled: assistantsEnabled } = useAssistantsFeature();
   const filters = useSanitizedChatHistoryFilters(
@@ -183,29 +195,59 @@ export function AddinHistoryDrawerCore({
 
   const handleSelect = useCallback(
     (sessionId: string) => {
-      chat.navigateToChat(sessionId);
+      navigateToChat(sessionId);
       onClose();
     },
-    [chat, onClose],
+    [navigateToChat, onClose],
   );
 
   const handleNewChat = useCallback(() => {
-    void chat.createNewChat();
+    void createNewChat();
     onClose();
-  }, [chat, onClose]);
+  }, [createNewChat, onClose]);
 
   const handleSubmitTitle = useCallback(
     async (title: string) => {
       if (!titleDialogSessionId) return;
       setIsUpdatingTitle(true);
       try {
-        await chat.updateChatTitle(titleDialogSessionId, title);
+        await updateChatTitle(titleDialogSessionId, title);
         setTitleDialogSessionId(null);
+      } catch {
+        // The dialog stays open on purpose: the typed title survives for a
+        // retry.
+        toast.error({
+          title: t({
+            id: "officeAddin.historyDrawer.renameFailed",
+            message: "Couldn't rename the chat",
+          }),
+        });
       } finally {
         setIsUpdatingTitle(false);
       }
     },
-    [chat, titleDialogSessionId],
+    [titleDialogSessionId, updateChatTitle],
+  );
+
+  const handleArchive = useCallback(
+    (sessionId: string) => {
+      // A failed archive rolls the row back silently (the mutation's
+      // rollback), so the toast is the only signal anything happened.
+      archiveChat(sessionId).catch(() => {
+        toast.error({
+          title: t({
+            id: "officeAddin.historyDrawer.archiveFailed",
+            message: "Couldn't archive the chat",
+          }),
+        });
+      });
+    },
+    [archiveChat],
+  );
+
+  const handleLoadMore = useCallback(
+    () => void fetchNextHistoryPage(),
+    [fetchNextHistoryPage],
   );
 
   const handlePanelKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -259,11 +301,18 @@ export function AddinHistoryDrawerCore({
   const activeTitleSession = titleDialogSessionId
     ? (sessions.find((session) => session.id === titleDialogSessionId) ?? null)
     : null;
-  const isInitialLoading = chat.isLoading && sessions.length === 0;
+  // Keyed on the history fetch alone: the composed isLoading also covers the
+  // open chat's messages fetch, and a skeleton shown for that would hide the
+  // filter row exactly when a narrowed filter needs widening.
+  const isInitialLoading = chat.isHistoryLoading && sessions.length === 0;
   const showNoMatches =
-    !chat.isLoading && sessions.length === 0 && hasActiveFilters(filters);
+    !chat.isHistoryLoading &&
+    sessions.length === 0 &&
+    hasActiveFilters(filters);
   const showEmpty =
-    !chat.isLoading && sessions.length === 0 && !hasActiveFilters(filters);
+    !chat.isHistoryLoading &&
+    sessions.length === 0 &&
+    !hasActiveFilters(filters);
 
   const filterMenu = (
     <ChatHistoryFilterMenu
@@ -290,14 +339,12 @@ export function AddinHistoryDrawerCore({
       // modified clicks included, selects in place.
       disableRowLinks={true}
       onSessionSelect={handleSelect}
-      onSessionArchive={(sessionId) => void chat.archiveChat(sessionId)}
+      onSessionArchive={handleArchive}
       onSessionEditTitle={setTitleDialogSessionId}
       onSessionShare={sharingEnabled ? setShareDialogChatId : undefined}
       hasMore={carriesLoadMore && chat.hasNextHistoryPage}
       isLoadingMore={carriesLoadMore ? chat.isFetchingNextHistoryPage : false}
-      onLoadMore={
-        carriesLoadMore ? () => void chat.fetchNextHistoryPage() : undefined
-      }
+      onLoadMore={carriesLoadMore ? handleLoadMore : undefined}
     />
   );
 
@@ -308,7 +355,11 @@ export function AddinHistoryDrawerCore({
         // sliding panel every frame; the scrim fades on opacity alone.
         // pointer-events-none while hidden lets a click land on the pane the
         // instant the exit slide starts instead of dying on the scrim.
-        className={`drawer-overlay-skin theme-transition fixed inset-0 z-50 ${
+        // will-change pins the scrim's compositor layer for the drawer's
+        // mounted lifetime: WebView2 can ghost stale frame content when a
+        // transitioned layer is de-promoted mid-scene, and the drawer
+        // unmounts when closed so the pinned layer is transient anyway.
+        className={`drawer-overlay-skin theme-transition will-change-[opacity] fixed inset-0 z-50 ${
           isShown ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
         role="presentation"
@@ -326,7 +377,7 @@ export function AddinHistoryDrawerCore({
             message: "Menu",
           })}
           onKeyDown={handlePanelKeyDown}
-          className={`sidebar-skin theme-transition absolute inset-y-0 left-0 flex w-[min(320px,calc(100vw-48px))] flex-col motion-reduce:transition-none ${
+          className={`sidebar-skin theme-transition will-change-transform absolute inset-y-0 left-0 flex w-[min(320px,calc(100vw-48px))] flex-col motion-reduce:transition-none ${
             isShown ? "translate-x-0" : "-translate-x-full"
           }`}
           data-testid="addin-history-drawer"

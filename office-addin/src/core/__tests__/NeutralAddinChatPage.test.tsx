@@ -45,16 +45,29 @@ const spies = vi.hoisted(() => ({
       composerLocked: false,
     }),
   ),
-  useInfiniteRecentChats: vi.fn(() => ({
-    chats: [],
-    isLoading: false,
-    error: null,
-    refetch: vi.fn(async () => undefined),
-    fetchNextPage: vi.fn(async () => undefined),
-    hasNextPage: false,
-    isFetchingNextPage: false,
-    queryKey: ["recent-chats"],
-  })),
+  refetchHistory: vi.fn(async () => undefined),
+  drawerProps: [] as Array<{
+    isOpen: boolean;
+    onClose: () => void;
+    onOpenSettings: () => void;
+  }>,
+  filterStoreState: {
+    typeFilter: "all",
+    statusFilter: "active",
+    groupBy: "date",
+  },
+  useInfiniteRecentChats: vi.fn(
+    (_options: { filters: { typeFilter: string; statusFilter: string } }) => ({
+      chats: [],
+      isLoading: false,
+      error: null,
+      refetch: spies.refetchHistory,
+      fetchNextPage: vi.fn(async () => undefined),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      queryKey: ["recent-chats"],
+    }),
+  ),
   useChatMessaging: vi.fn(() => ({
     messages: {},
     isLoading: false,
@@ -121,18 +134,19 @@ vi.mock("@erato/frontend/library", async () => {
       }),
     }),
     createChatHistoryFilterStore: () => {
-      const state = {
-        typeFilter: "all",
-        statusFilter: "active",
-        groupBy: "date",
+      // Reads through to the spies state on every call so tests can narrow a
+      // filter; the store instance itself is cached per platform across tests.
+      const readState = () => ({
+        ...spies.filterStoreState,
         setTypeFilter: vi.fn(),
         setStatusFilter: vi.fn(),
         setGroupBy: vi.fn(),
         resetToDefaults: vi.fn(),
-      };
+      });
       return Object.assign(
-        (selector: (s: typeof state) => unknown) => selector(state),
-        { getState: () => state },
+        (selector: (s: ReturnType<typeof readState>) => unknown) =>
+          selector(readState()),
+        { getState: readState },
       );
     },
     removeArchivedChatFromLists: vi.fn(async () => () => undefined),
@@ -244,8 +258,10 @@ vi.mock("@erato/frontend/library", async () => {
 });
 
 vi.mock("../AddinHistoryDrawerCore", () => ({
-  AddinHistoryDrawerCore: ({ isOpen }: { isOpen: boolean }) =>
-    isOpen ? <div data-testid="addin-history-drawer" /> : null,
+  AddinHistoryDrawerCore: (props: (typeof spies.drawerProps)[number]) => {
+    spies.drawerProps.push(props);
+    return props.isOpen ? <div data-testid="addin-history-drawer" /> : null;
+  },
 }));
 vi.mock("../AddinChatInputCore", () => ({
   AddinChatInputCore: (
@@ -272,6 +288,16 @@ describe("NeutralAddinChatPage host boundary", () => {
   beforeEach(() => {
     i18n.activate("en");
     Reflect.deleteProperty(globalThis, "Office");
+    spies.drawerProps.length = 0;
+    spies.filterStoreState.typeFilter = "all";
+    spies.filterStoreState.statusFilter = "active";
+    spies.filterStoreState.groupBy = "date";
+    // vi.restoreAllMocks does not reach vi.fn mocks, so a per-test
+    // mockReturnValue would otherwise leak into later tests.
+    spies.useDelegatedRunHeader.mockImplementation(() => ({
+      header: null,
+      composerLocked: false,
+    }));
   });
 
   afterEach(() => {
@@ -351,6 +377,7 @@ describe("NeutralAddinChatPage host boundary", () => {
   });
 
   it("lists chats through the filtered infinite query, never opting into delegated runs", () => {
+    spies.useInfiniteRecentChats.mockClear();
     renderPage();
 
     // The filters carry no include_delegated: the shared params builder
@@ -358,6 +385,37 @@ describe("NeutralAddinChatPage host boundary", () => {
     expect(spies.useInfiniteRecentChats).toHaveBeenCalledWith({
       filters: { typeFilter: "all", statusFilter: "active" },
     });
+    // Every listing the provider mounts — the drawer history and the session
+    // listing — carries these defaults; none opts into anything wider.
+    for (const [options] of spies.useInfiniteRecentChats.mock.calls) {
+      expect(options.filters).toEqual({
+        typeFilter: "all",
+        statusFilter: "active",
+      });
+    }
+  });
+
+  // Only Outlook's session controller consumes the second (session) listing;
+  // on every other platform it must collapse onto the drawer's filters so
+  // both hooks share one query-cache entry instead of running a duplicate
+  // unfiltered request chain for nobody.
+  it("collapses the session listing onto the drawer filters when narrowed", () => {
+    spies.filterStoreState.typeFilter = "assistant";
+    spies.useInfiniteRecentChats.mockClear();
+
+    renderPage();
+
+    const filterArgs = spies.useInfiniteRecentChats.mock.calls.map(
+      ([options]) => options.filters,
+    );
+    // Two listings per render pass: drawer history + session listing.
+    expect(filterArgs.length).toBeGreaterThanOrEqual(2);
+    for (const filters of filterArgs) {
+      expect(filters).toEqual({
+        typeFilter: "assistant",
+        statusFilter: "active",
+      });
+    }
   });
 
   it("wires New Chat through the provider's context value", () => {
@@ -434,6 +492,44 @@ describe("NeutralAddinChatPage host boundary", () => {
     );
   });
 
+  // The drawer's row handlers key on its onClose identity; a fresh arrow
+  // from this call site would re-mint them all every page render.
+  it("hands the drawer identity-stable close and settings handlers", () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const pageAt = () => (
+      <QueryClientProvider client={queryClient}>
+        <NeutralAddinChatPage />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(pageAt());
+    const first = spies.drawerProps.at(-1);
+    expect(first).toBeDefined();
+
+    rerender(pageAt());
+    const second = spies.drawerProps.at(-1);
+
+    // A fresh props object proves the drawer actually re-rendered.
+    expect(second).not.toBe(first);
+    expect(second?.onClose).toBe(first?.onClose);
+    expect(second?.onOpenSettings).toBe(first?.onOpenSettings);
+  });
+
+  // The messaging pipeline invalidates the recent-chats listings when the
+  // stream completes; sendMessage resolves already at dispatch, so a refetch
+  // chained onto it would land before the server lists the chat.
+  it("does not refetch history at dispatch time", async () => {
+    renderPage();
+
+    await act(async () => {
+      spies.inputProps.current?.onSendMessage("hello");
+    });
+
+    expect(spies.sendMessage).toHaveBeenCalled();
+    expect(spies.refetchHistory).not.toHaveBeenCalled();
+  });
+
   it("mirrors the open chat into the generation-status store", () => {
     renderPage();
     expect(spies.setGenerationCurrentChatId).toHaveBeenLastCalledWith(null);
@@ -457,6 +553,22 @@ describe("NeutralAddinChatPage host boundary", () => {
     expect(screen.getByTestId("neutral-chat-input")).toHaveAttribute(
       "data-disabled",
       "true",
+    );
+  });
+
+  // The floating drawer trigger is an opaque click-intercepting button over
+  // the top-left corner; without left clearance it sits on the run header's
+  // title whenever nothing renders above the header.
+  it("clears the delegated-run header past the floating drawer trigger", () => {
+    spies.useDelegatedRunHeader.mockReturnValue({
+      header: <div data-testid="neutral-run-banner" />,
+      composerLocked: false,
+    });
+
+    renderPage();
+
+    expect(screen.getByTestId("neutral-run-banner").parentElement).toHaveClass(
+      "pl-10",
     );
   });
 });

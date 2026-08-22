@@ -291,18 +291,19 @@ function useAddinChatController({
       delegationRunMode,
     ) => {
       hostCallbacksRef.current.beforeSend?.(hostContextIdentity);
-      void chat
-        .sendMessage(
-          message,
-          inputFileIds,
-          modelId,
-          assistantId,
-          selectedFacetIds,
-          actionFacet,
-          mentionedAssistants,
-          delegationRunMode,
-        )
-        .then(() => chat.refetchHistory());
+      // No history refetch here: sendMessage resolves at dispatch, before
+      // the server lists the chat, and the messaging pipeline already
+      // invalidates the recent-chats listings when the stream completes.
+      void chat.sendMessage(
+        message,
+        inputFileIds,
+        modelId,
+        assistantId,
+        selectedFacetIds,
+        actionFacet,
+        mentionedAssistants,
+        delegationRunMode,
+      );
     },
     [assistantId, chat],
   );
@@ -552,6 +553,18 @@ export function AddinChatCoreView({
 }) {
   const TopLeftAccessory = componentRegistry.ChatTopLeftAccessory;
   const feedback = controller.feedback;
+  const { setIsHistoryMenuOpen, setIsSettingsOpen } = controller;
+  // Stable identities for the drawer: fresh arrows here would churn its
+  // onClose/onOpenSettings props every render and defeat the stable-handler
+  // contract its list memoization depends on.
+  const closeHistoryDrawer = useCallback(
+    () => setIsHistoryMenuOpen(false),
+    [setIsHistoryMenuOpen],
+  );
+  const openSettingsFromDrawer = useCallback(
+    () => setIsSettingsOpen(true),
+    [setIsSettingsOpen],
+  );
   const inputProps: AddinChatInputRenderProps = {
     ref: controller.chatInputControlsRef,
     onSendMessage: controller.handleSendMessage,
@@ -634,7 +647,9 @@ export function AddinChatCoreView({
               ) : null}
               {beforeMessages}
               {controller.delegatedRunHeader ? (
-                <div className="relative z-10 shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3">
+                // pl-10 clears the floating drawer trigger, which otherwise
+                // sits on the header's title.
+                <div className="relative z-10 shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3 pl-10">
                   {controller.delegatedRunHeader}
                 </div>
               ) : null}
@@ -718,8 +733,8 @@ export function AddinChatCoreView({
           })}
           <AddinHistoryDrawerCore
             isOpen={controller.isHistoryMenuOpen}
-            onClose={() => controller.setIsHistoryMenuOpen(false)}
-            onOpenSettings={() => controller.setIsSettingsOpen(true)}
+            onClose={closeHistoryDrawer}
+            onOpenSettings={openSettingsFromDrawer}
             panelId={HISTORY_DRAWER_PANEL_ID}
             sectionsBeforeHistory={drawerSectionsBeforeHistory}
             sectionsAfterHistory={drawerSectionsAfterHistory}
