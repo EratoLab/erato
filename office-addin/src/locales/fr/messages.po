@@ -203,8 +203,8 @@ msgstr "Déposez pour téléverser"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
-msgid "officeAddin.chat.newChat"
-msgstr "Nouveau chat"
+#~ msgid "officeAddin.chat.newChat"
+#~ msgstr "Nouveau chat"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx

@@ -203,8 +203,8 @@ msgstr "Zum Hochladen ablegen"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
-msgid "officeAddin.chat.newChat"
-msgstr "Neuer Chat"
+#~ msgid "officeAddin.chat.newChat"
+#~ msgstr "Neuer Chat"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx

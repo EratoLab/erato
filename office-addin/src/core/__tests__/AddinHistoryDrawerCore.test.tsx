@@ -79,7 +79,14 @@ vi.mock("@erato/frontend/library", () => ({
   },
   ChatShareDialog: ({ isOpen }: { isOpen: boolean }) =>
     isOpen ? <div data-testid="share-dialog" /> : null,
-  CloseIcon: () => null,
+  NewChatItem: ({ onNewChat }: { onNewChat?: () => void }) => (
+    <button
+      type="button"
+      data-testid="new-chat-item"
+      onClick={() => onNewChat?.()}
+    />
+  ),
+  SidebarToggleIcon: () => null,
   EditChatTitleDialog: ({ isOpen }: { isOpen: boolean }) =>
     isOpen ? <div data-testid="rename-dialog" /> : null,
   groupChatSessions: (sessions: { id: string }[]) =>
@@ -211,7 +218,7 @@ describe("AddinHistoryDrawerCore", () => {
   it("starts a new chat and closes", () => {
     const { onClose } = renderDrawer();
 
-    fireEvent.click(screen.getByTestId("addin-history-drawer-new-chat"));
+    fireEvent.click(screen.getByTestId("new-chat-item"));
 
     expect(spies.createNewChat).toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();

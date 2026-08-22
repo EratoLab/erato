@@ -48,6 +48,12 @@ vi.mock("@erato/frontend/library", () => ({
   },
   // AddinChat's own imports.
   ChatErrorBoundary: ({ children }: { children?: ReactNode }) => children,
+  Button: ({
+    icon: _icon,
+    ...props
+  }: Record<string, unknown> & { icon?: unknown; ref?: unknown }) => (
+    <button {...(props as Record<string, never>)} />
+  ),
   ChatInputControlsProvider: ({ children }: { children?: ReactNode }) =>
     children,
   ChatMessage: () => null,

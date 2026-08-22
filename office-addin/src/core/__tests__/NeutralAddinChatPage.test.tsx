@@ -152,6 +152,12 @@ vi.mock("@erato/frontend/library", async () => {
       useState(initialValue),
 
     ChatErrorBoundary: ({ children }: { children?: ReactNode }) => children,
+    Button: ({
+      icon: _icon,
+      ...props
+    }: Record<string, unknown> & { icon?: unknown; ref?: unknown }) => (
+      <button {...(props as Record<string, never>)} />
+    ),
     ChatInputControlsProvider: ({ children }: { children?: ReactNode }) =>
       children,
     ChatMessage: () => null,

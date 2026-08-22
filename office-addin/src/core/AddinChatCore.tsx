@@ -1,4 +1,5 @@
 import {
+  Button,
   ChatErrorBoundary,
   ChatInputControlsProvider,
   ChatMessage,
@@ -568,10 +569,12 @@ export function AddinChatCoreView({
         <div className="app-shell-skin relative flex size-full min-w-0 flex-col">
           {/* Floats over the conversation: the pane is too narrow to spend a
               header row on a single trigger, and New Chat lives in the
-              drawer it opens. */}
-          <button
-            type="button"
+              drawer it opens. Same button anatomy as the web sidebar toggle,
+              so the drawer's header toggle reads as the same control. */}
+          <Button
             onClick={() => controller.setIsHistoryMenuOpen(true)}
+            variant="sidebar-icon"
+            icon={<SidebarToggleIcon />}
             aria-haspopup="dialog"
             aria-expanded={controller.isHistoryMenuOpen}
             aria-controls={HISTORY_DRAWER_PANEL_ID}
@@ -579,11 +582,9 @@ export function AddinChatCoreView({
               id: "officeAddin.historyDrawer.open",
               message: "Open menu",
             })}
-            className="focus-ring theme-transition absolute left-2 top-2 z-20 flex size-7 items-center justify-center rounded-[var(--theme-radius-control)] bg-theme-bg-primary text-theme-fg-secondary hover:bg-theme-bg-hover"
+            className="absolute left-2 top-2 z-20 bg-theme-bg-primary"
             data-testid="addin-history-drawer-trigger"
-          >
-            <SidebarToggleIcon className="size-4" aria-hidden="true" />
-          </button>
+          />
 
           <ChatErrorBoundary onReset={() => void controller.refetchHistory()}>
             <div

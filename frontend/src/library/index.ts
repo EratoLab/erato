@@ -287,6 +287,7 @@ export {
   ChatHistoryFilterMenu,
   type ChatHistoryFilterMenuProps,
 } from "@/components/ui/Chat/ChatHistoryFilterMenu";
+export { NewChatItem } from "@/components/ui/Chat/ChatHistorySidebar";
 export { EditChatTitleDialog } from "@/components/ui/Chat/EditChatTitleDialog";
 export { ChatShareDialog } from "@/components/ui/Chat/ChatShareDialog";
 export {

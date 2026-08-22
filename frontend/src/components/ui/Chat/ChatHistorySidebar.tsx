@@ -293,7 +293,8 @@ const ChatHistoryHeader = memo<{
 // eslint-disable-next-line lingui/no-unlocalized-strings
 ChatHistoryHeader.displayName = "ChatHistoryHeader";
 
-const NewChatItem = memo<{
+/** Exported for the add-in's history drawer, which renders the same row. */
+export const NewChatItem = memo<{
   onNewChat?: () => void;
   isSlimMode?: boolean;
 }>(({ onNewChat, isSlimMode = false }) => {

@@ -3,8 +3,9 @@ import {
   ChatHistoryFilterMenu,
   ChatHistoryList,
   ChatShareDialog,
-  CloseIcon,
   EditChatTitleDialog,
+  NewChatItem,
+  SidebarToggleIcon,
   groupChatSessions,
   hasActiveFilters,
   mapRecentChatToSession,
@@ -70,7 +71,7 @@ export function AddinHistoryDrawerCore({
   const { i18n } = useLingui();
 
   const panelRef = useRef<HTMLDivElement>(null);
-  const newChatRef = useRef<HTMLButtonElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
 
   // Slide choreography: mounted through both slides, `isShown` drives the
   // transform/opacity pair (the only animated properties — both composite-
@@ -157,7 +158,7 @@ export function AddinHistoryDrawerCore({
   useEffect(() => {
     if (!isOpen) return;
     const previouslyFocused = document.activeElement;
-    newChatRef.current?.focus();
+    toggleRef.current?.focus();
     return () => {
       if (previouslyFocused instanceof HTMLElement) {
         previouslyFocused.focus();
@@ -266,32 +267,30 @@ export function AddinHistoryDrawerCore({
           data-testid="addin-history-drawer"
           data-ui="addin-history-drawer"
         >
-          <div className="flex items-center justify-between border-b border-theme-border px-3 py-2">
-            <span className="text-sm font-semibold text-theme-fg-primary">
-              {t({ id: "officeAddin.historyDrawer.title", message: "Menu" })}
-            </span>
-            <Button
-              variant="icon-only"
-              size="sm"
-              icon={<CloseIcon className="size-4" />}
-              aria-label={t({
-                id: "officeAddin.historyDrawer.close",
-                message: "Close menu",
-              })}
-              onClick={onClose}
-              data-testid="addin-history-drawer-close"
-            />
+          {/* Same header anatomy as the web sidebar: the toggle sits where
+              the floating trigger sat, so open/close reads as one control. */}
+          <div
+            className="sidebar-section-skin sidebar-band-geometry flex border-b"
+            data-ui="sidebar-header"
+          >
+            <div className="flex w-full items-center">
+              <Button
+                ref={toggleRef}
+                onClick={onClose}
+                variant="sidebar-icon"
+                icon={<SidebarToggleIcon />}
+                className="sidebar-icon-col-geometry rotate-180"
+                aria-label={t({
+                  id: "officeAddin.historyDrawer.close",
+                  message: "Close menu",
+                })}
+                aria-expanded="true"
+                data-testid="addin-history-drawer-close"
+              />
+            </div>
           </div>
 
-          <button
-            ref={newChatRef}
-            type="button"
-            onClick={handleNewChat}
-            className="focus-ring-inset theme-transition mx-1.5 mt-1.5 rounded-[var(--theme-radius-base)] px-2 py-2 text-left text-sm font-medium text-theme-fg-primary hover:bg-theme-bg-hover"
-            data-testid="addin-history-drawer-new-chat"
-          >
-            {t({ id: "officeAddin.chat.newChat", message: "New Chat" })}
-          </button>
+          <NewChatItem onNewChat={handleNewChat} />
 
           {sectionsBeforeHistory}
 

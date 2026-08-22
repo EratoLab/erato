@@ -245,6 +245,12 @@ vi.mock("@erato/frontend/library", async () => {
     useUpdateChat: () => ({ mutateAsync: vi.fn(async () => undefined) }),
 
     ChatErrorBoundary: passthrough,
+    Button: ({
+      icon: _icon,
+      ...props
+    }: Record<string, unknown> & { icon?: unknown; ref?: unknown }) => (
+      <button {...(props as Record<string, never>)} />
+    ),
     ChatInputControlsProvider: passthrough,
     ChatMessage: () => null,
     DefaultMessageControls: () => null,

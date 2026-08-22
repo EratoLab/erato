@@ -203,8 +203,8 @@ msgstr "Suelta para subir"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
-msgid "officeAddin.chat.newChat"
-msgstr "Nuevo chat"
+#~ msgid "officeAddin.chat.newChat"
+#~ msgstr "Nuevo chat"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx

@@ -203,8 +203,8 @@ msgstr "Upuść, aby przesłać"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
-msgid "officeAddin.chat.newChat"
-msgstr "Nowy czat"
+#~ msgid "officeAddin.chat.newChat"
+#~ msgstr "Nowy czat"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
