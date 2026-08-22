@@ -43,11 +43,15 @@ const spies = vi.hoisted(() => ({
       composerLocked: false,
     }),
   ),
-  useRecentChats: vi.fn(() => ({
-    data: { chats: [] },
+  useInfiniteRecentChats: vi.fn(() => ({
+    chats: [],
     isLoading: false,
     error: null,
     refetch: vi.fn(async () => undefined),
+    fetchNextPage: vi.fn(async () => undefined),
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    queryKey: ["recent-chats"],
   })),
   useChatMessaging: vi.fn(() => ({
     messages: {},
@@ -110,15 +114,40 @@ vi.mock("@erato/frontend/library", async () => {
     useGenerationStatusStore: Object.assign(vi.fn(), {
       getState: () => ({
         setCurrentChatId: spies.setGenerationCurrentChatId,
+        clearStatus: vi.fn(),
       }),
     }),
+    createChatHistoryFilterStore: () => {
+      const state = {
+        typeFilter: "all",
+        statusFilter: "active",
+        groupBy: "date",
+        setTypeFilter: vi.fn(),
+        setStatusFilter: vi.fn(),
+        setGroupBy: vi.fn(),
+        resetToDefaults: vi.fn(),
+      };
+      return Object.assign(
+        (selector: (s: typeof state) => unknown) => selector(state),
+        { getState: () => state },
+      );
+    },
+    removeArchivedChatFromLists: vi.fn(async () => () => undefined),
+    sanitizeChatHistoryFilters: (values: unknown) => values,
+    seedGenerationStatusFromListing: vi.fn(),
+    useAssistantsFeature: () => ({
+      enabled: false,
+      delegationEnabled: false,
+      delegationAllowBackground: false,
+    }),
+    useInfiniteRecentChats: spies.useInfiniteRecentChats,
+    useUpdateChat: () => ({ mutateAsync: vi.fn(async () => undefined) }),
     useMessagingStore: Object.assign(() => spies.messagingStore, {
       getState: () => spies.messagingStore,
     }),
     useModelHistory: () => ({ currentChatLastModel: null }),
     usePersistedState: <T,>(_key: string, initialValue: T) =>
       useState(initialValue),
-    useRecentChats: spies.useRecentChats,
 
     ChatErrorBoundary: ({ children }: { children?: ReactNode }) => children,
     ChatInputControlsProvider: ({ children }: { children?: ReactNode }) =>
@@ -306,13 +335,14 @@ describe("NeutralAddinChatPage host boundary", () => {
     consoleError.mockRestore();
   });
 
-  it("lists chats without opting into delegated runs", () => {
+  it("lists chats through the filtered infinite query, never opting into delegated runs", () => {
     renderPage();
 
-    expect(spies.useRecentChats).toHaveBeenCalled();
-    for (const call of spies.useRecentChats.mock.calls) {
-      expect(call).toEqual([{}]);
-    }
+    // The filters carry no include_delegated: the shared params builder
+    // (covered in frontend tests) never emits it from these values.
+    expect(spies.useInfiniteRecentChats).toHaveBeenCalledWith({
+      filters: { typeFilter: "all", statusFilter: "active" },
+    });
   });
 
   it("wires New Chat through the provider's context value", () => {

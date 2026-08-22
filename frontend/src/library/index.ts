@@ -304,6 +304,7 @@ export {
 export {
   buildInfiniteChatsQueryKey,
   buildRecentChatsFilterParams,
+  removeArchivedChatFromLists,
   useInfiniteRecentChats,
   type RecentChatsListFilters,
 } from "@/hooks/chat/useInfiniteRecentChats";
@@ -364,6 +365,7 @@ export {
   defaultStaticFeatureConfig,
   useAudioConversationalFeature,
   useFeatureConfig,
+  useAssistantsFeature,
   useChatSharingFeature,
   useMessageFeedbackFeature,
   useTraceFeature,

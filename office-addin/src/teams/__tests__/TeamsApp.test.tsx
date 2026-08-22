@@ -209,12 +209,40 @@ vi.mock("@erato/frontend/library", async () => {
       spies.usePersistedState(key);
       return useState(initialValue);
     },
-    useRecentChats: () => ({
-      data: { chats: [] },
+    useInfiniteRecentChats: () => ({
+      chats: [],
       isLoading: false,
       error: null,
       refetch: vi.fn(async () => undefined),
+      fetchNextPage: vi.fn(async () => undefined),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      queryKey: ["recent-chats"],
     }),
+    createChatHistoryFilterStore: () => {
+      const state = {
+        typeFilter: "all",
+        statusFilter: "active",
+        groupBy: "date",
+        setTypeFilter: vi.fn(),
+        setStatusFilter: vi.fn(),
+        setGroupBy: vi.fn(),
+        resetToDefaults: vi.fn(),
+      };
+      return Object.assign(
+        (selector: (s: typeof state) => unknown) => selector(state),
+        { getState: () => state },
+      );
+    },
+    removeArchivedChatFromLists: vi.fn(async () => () => undefined),
+    sanitizeChatHistoryFilters: (values: unknown) => values,
+    seedGenerationStatusFromListing: vi.fn(),
+    useAssistantsFeature: () => ({
+      enabled: false,
+      delegationEnabled: false,
+      delegationAllowBackground: false,
+    }),
+    useUpdateChat: () => ({ mutateAsync: vi.fn(async () => undefined) }),
 
     ChatErrorBoundary: passthrough,
     ChatInputControlsProvider: passthrough,
