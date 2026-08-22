@@ -24,8 +24,113 @@ import {
 } from "./store/chatHistoryFilterStore";
 
 import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { InfiniteData, QueryClient } from "@tanstack/react-query";
 
 export const CHAT_HISTORY_PAGE_SIZE = 30;
+
+// Shape of the infinite recent-chats cache entry.
+type RecentChatsPage = Awaited<ReturnType<typeof fetchRecentChats>>;
+type InfiniteRecentChats = InfiniteData<RecentChatsPage>;
+/**
+ * The recent-chats key prefix also covers surfaces that read a single page
+ * through a plain query, so a cache edit has to expect either shape.
+ */
+export type RecentChatsCacheEntry = InfiniteRecentChats | RecentChatsPage;
+
+export const isPaginated = (
+  entry: RecentChatsCacheEntry,
+): entry is InfiniteRecentChats =>
+  Array.isArray((entry as InfiniteRecentChats).pages);
+
+function withoutChat(page: RecentChatsPage, chatId: string): RecentChatsPage {
+  const chats = page.chats.filter((chat) => chat.id !== chatId);
+  if (chats.length === page.chats.length) return page;
+  const removed = page.chats.length - chats.length;
+  return {
+    ...page,
+    chats,
+    stats: {
+      ...page.stats,
+      returned_count: Math.max(0, page.stats.returned_count - removed),
+      total_count: Math.max(0, page.stats.total_count - removed),
+    },
+  };
+}
+
+/**
+ * Whether a recent-chats cache key belongs to an archived-inclusive list
+ * variant, i.e. one whose rows legitimately keep an archived chat.
+ */
+function queryKeyIncludesArchived(queryKey: readonly unknown[]): boolean {
+  return queryKey.some(
+    (part) =>
+      typeof part === "object" &&
+      part !== null &&
+      (part as { include_archived?: boolean }).include_archived === true,
+  );
+}
+
+/**
+ * Optimistically remove an archived chat's row from every loaded page of
+ * every cached non-archived list variant, returning a rollback for a failed
+ * mutation.
+ *
+ * The caches are deliberately edited in place rather than invalidated: a
+ * refetch re-derives each page's offset from getNextPageParam, and once the
+ * archive shrinks the server-side result set every page boundary past the
+ * row shifts by one, silently skipping the chat that straddled it. Archived-
+ * inclusive variants legitimately keep the row, but its archived_at changed,
+ * so they are marked stale without refetching while mounted (same skew).
+ */
+export async function removeArchivedChatFromLists(
+  queryClient: QueryClient,
+  chatId: string,
+): Promise<() => void> {
+  // Settle in-flight list fetches first (e.g. a focus refetch): one
+  // resolving after the snapshot below would overwrite the optimistic
+  // removal and resurrect the archived row.
+  await queryClient.cancelQueries({
+    queryKey: recentChatsQuery({}).queryKey,
+  });
+
+  const previousEntries = queryClient.getQueriesData<RecentChatsCacheEntry>({
+    queryKey: recentChatsQuery({}).queryKey,
+  });
+
+  queryClient.setQueriesData<RecentChatsCacheEntry>(
+    {
+      queryKey: recentChatsQuery({}).queryKey,
+      predicate: (query) => !queryKeyIncludesArchived(query.queryKey),
+    },
+    (current) => {
+      if (!current) return current;
+      if (!isPaginated(current)) return withoutChat(current, chatId);
+      return {
+        ...current,
+        pages: current.pages.map((page) => withoutChat(page, chatId)),
+      };
+    },
+  );
+
+  const hasArchivedListVariant = previousEntries.some(([queryKey]) =>
+    queryKeyIncludesArchived(queryKey),
+  );
+  if (hasArchivedListVariant) {
+    void queryClient.invalidateQueries({
+      queryKey: recentChatsQuery({}).queryKey,
+      predicate: (query) => queryKeyIncludesArchived(query.queryKey),
+      refetchType: "none",
+    });
+  }
+
+  return () => {
+    for (const [queryKey, previousData] of previousEntries) {
+      if (previousData) {
+        queryClient.setQueryData(queryKey, previousData);
+      }
+    }
+  };
+}
 
 /** The filter-store values that reach the recent-chats request. */
 export type RecentChatsListFilters = Pick<
