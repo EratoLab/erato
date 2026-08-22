@@ -1077,12 +1077,11 @@ export function useChatMessaging(
               invalidate: true,
               logContext: "Assistant message completed",
             }).then(() => {
-              // Backstop for a placeholder the listed-row swap missed (a
-              // chat that never became listable for this user). Deferred
-              // until the awaited listing invalidation has landed, so a
-              // normally-listable chat swaps placeholder for real row
-              // without a frame where the sidebar shows neither.
-              clearPendingChat(activeStreamKey);
+              // Deliberately no clearPendingChat here: a chat the refetched
+              // list still does not return (filtered out, on a later page)
+              // has the placeholder as its only sidebar row, which must
+              // survive the finished turn. The listed-row swap clears it when
+              // the chat shows up; leaving for a new chat clears it otherwise.
               // Reset submission flag after refetch completes
               setSubmittingForKey(activeStreamKey, false);
               logger.log(

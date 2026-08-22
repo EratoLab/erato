@@ -1824,7 +1824,10 @@ describe("useChatMessaging", () => {
     ).toBe("Hello from new chat");
   });
 
-  it("should clear the pending chat when the turn completes", async () => {
+  it("should keep the pending chat when the turn completes while still unlisted", async () => {
+    // The placeholder is the open chat's only sidebar row until the list
+    // returns the chat; completion must not drop it. It is cleared by the
+    // listed-row swap or by the user leaving for a new chat.
     mockUseChatMessages.mockReturnValue({
       data: undefined,
       isLoading: false,
@@ -1872,7 +1875,9 @@ describe("useChatMessaging", () => {
       });
     });
 
-    expect(useChatHistoryStore.getState().pendingChat).toBeNull();
+    expect(useChatHistoryStore.getState().pendingChat?.id).toBe(
+      "chat-complete-1",
+    );
   });
 
   it("should clear a leaked pending chat when its resume stream closes", async () => {
