@@ -156,6 +156,7 @@ vi.mock("@erato/frontend/library", async () => {
     ProfileProvider: passthrough,
     ThemeProvider: passthrough,
     Toaster: () => null,
+    DelegatedRunOpenProvider: passthrough,
     DelegatedRunsSection: () => null,
     useDelegatedRunHeader: () => ({ header: null, composerLocked: false }),
     toast: {

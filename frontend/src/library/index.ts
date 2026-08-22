@@ -24,6 +24,7 @@ export {
   type DelegatedRunHeaderState,
 } from "@/hooks/chat/useDelegatedRunHeader";
 export { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
+export { DelegatedRunOpenProvider } from "@/providers/DelegatedRunOpenProvider";
 export {
   ChatMessage,
   type ChatMessageHostComponents,

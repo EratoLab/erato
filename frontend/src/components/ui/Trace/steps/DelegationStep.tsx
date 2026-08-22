@@ -3,6 +3,7 @@ import { t } from "@lingui/core/macro";
 import { OpenNewWindowIcon } from "@/components/ui/icons";
 import { useDelegatedRunLiveStatus } from "@/hooks/chat/useDelegatedRunLiveStatus";
 import { useSidecarLocalTrace } from "@/lib/desktopSidecar/localTraceStore";
+import { useDelegatedRunOpener } from "@/providers/DelegatedRunOpenProvider";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 
 import { NestedTraceView } from "../NestedTraceView";
@@ -154,10 +155,25 @@ const OpenDelegatedRunLink = ({
   chatId: string;
   assistantId: string | undefined;
 }) => {
+  const openRun = useDelegatedRunOpener();
   const label = t({
     id: "trace.delegation.openRun",
     message: "Open delegated run",
   });
+  if (openRun) {
+    return (
+      <button
+        type="button"
+        onClick={() => openRun(chatId)}
+        aria-label={label}
+        title={label}
+        data-testid="delegation-open-run"
+        className="focus-ring-tight inline-flex size-5 shrink-0 items-center justify-center rounded-[var(--theme-radius-base)] text-theme-fg-muted hover:text-theme-fg-primary"
+      >
+        <OpenNewWindowIcon className="size-3.5" />
+      </button>
+    );
+  }
   return (
     <a
       href={getChatUrl(chatId, assistantId)}

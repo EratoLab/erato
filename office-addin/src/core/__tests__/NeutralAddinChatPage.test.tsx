@@ -1,6 +1,12 @@
 import { i18n } from "@lingui/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NeutralAddinChatPage } from "../NeutralAddinChatPage";
@@ -17,6 +23,7 @@ const spies = vi.hoisted(() => ({
   },
   clearNewlyCreatedChatId: vi.fn(),
   setGenerationCurrentChatId: vi.fn(),
+  runOpenHandler: { current: null as ((chatId: string) => void) | null },
   useDelegatedRunHeader: vi.fn(
     (): { header: ReactNode; composerLocked: boolean } => ({
       header: null,
@@ -105,6 +112,16 @@ vi.mock("@erato/frontend/library", async () => {
       children,
     ChatMessage: () => null,
     DefaultMessageControls: () => null,
+    DelegatedRunOpenProvider: ({
+      onOpen,
+      children,
+    }: {
+      onOpen: (chatId: string) => void;
+      children?: ReactNode;
+    }) => {
+      spies.runOpenHandler.current = onOpen;
+      return children;
+    },
     DelegatedRunsSection: ({
       chatId,
       onOpenRun,
@@ -305,6 +322,19 @@ describe("NeutralAddinChatPage host boundary", () => {
     );
     expect(spies.useChatMessaging).toHaveBeenLastCalledWith(
       expect.objectContaining({ chatId: "run-77" }),
+    );
+  });
+
+  it("routes deep-surface run opens through the session controller", () => {
+    renderPage();
+    expect(spies.runOpenHandler.current).toBeTypeOf("function");
+
+    // The trace's open-run affordance reaches this handler via context; it
+    // must land on the same in-pane path as a picker selection.
+    act(() => spies.runOpenHandler.current?.("run-88"));
+
+    expect(spies.useChatMessaging).toHaveBeenLastCalledWith(
+      expect.objectContaining({ chatId: "run-88" }),
     );
   });
 

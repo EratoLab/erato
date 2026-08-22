@@ -3,6 +3,7 @@ import {
   ChatInputControlsProvider,
   ChatMessage,
   DefaultMessageControls,
+  DelegatedRunOpenProvider,
   DelegatedRunsSection,
   DocumentIcon,
   DropdownMenu,
@@ -148,6 +149,9 @@ export interface AddinChatController {
    * composer is how the user learns that instead of by sending into it. */
   composerLocked: boolean;
   openDelegatedRun: NonNullable<DelegatedRunsSectionProps["onOpenRun"]>;
+  /** Opens any chat in-pane via the session controller; also handed to deep
+   * surfaces (the trace's open-run affordance) through context. */
+  openChatById: (chatId: string) => void;
 }
 
 export interface AddinChatHostProps {
@@ -208,13 +212,13 @@ function useAddinChatController({
   // In the pane a chat opens through the session controller, the same path
   // the recent-chats picker takes; the pane serves no chat routes to
   // navigate to.
-  const openChatInPane = useCallback(
+  const openChatById = useCallback(
     (chatId: string) => chat.navigateToChat(chatId),
     [chat],
   );
   const runHeaderOptions = useMemo(
-    () => ({ onOpenOrigin: openChatInPane }),
-    [openChatInPane],
+    () => ({ onOpenOrigin: openChatById }),
+    [openChatById],
   );
   const { header: delegatedRunHeader, composerLocked } = useDelegatedRunHeader(
     chat.currentChatId,
@@ -222,7 +226,7 @@ function useAddinChatController({
   );
   const openDelegatedRun = useCallback<
     NonNullable<DelegatedRunsSectionProps["onOpenRun"]>
-  >((run) => openChatInPane(run.id), [openChatInPane]);
+  >((run) => openChatById(run.id), [openChatById]);
   const { availableModels, selectedModel, setSelectedModel, isSelectionReady } =
     useActiveModelSelection({ initialModel: chat.currentChatLastModel });
   const acceptedFileTypes = useMemo(
@@ -461,6 +465,7 @@ function useAddinChatController({
     delegatedRunHeader,
     composerLocked,
     openDelegatedRun,
+    openChatById,
   };
 }
 
@@ -553,137 +558,141 @@ export function AddinChatCoreView({
 
   return (
     <ChatInputControlsProvider value={controller.chatInputControls}>
-      <div className="app-shell-skin flex size-full min-w-0 flex-col">
-        <div className="chat-header-skin flex items-center justify-between border-b border-theme-border px-4 py-2">
-          <DropdownMenu
-            id="addin-header-menu"
-            align="left"
-            items={controller.headerMenuItems}
-          />
-          <button
-            type="button"
-            onClick={() => void controller.createNewChat()}
-            className="rounded-[var(--theme-radius-control)] bg-theme-bg-tertiary px-3 py-1 text-xs font-medium text-theme-fg-secondary transition-colors hover:bg-theme-bg-hover"
-          >
-            {t({ id: "officeAddin.chat.newChat", message: "New Chat" })}
-          </button>
-        </div>
-
-        <ChatErrorBoundary onReset={() => void controller.refetchHistory()}>
-          <div
-            {...dropzone.getRootProps()}
-            className="chat-body-skin relative flex min-h-0 min-w-0 flex-1 flex-col"
-            role="region"
-            aria-label={t({
-              id: "officeAddin.chat.conversation.aria",
-              message: "Chat conversation",
-            })}
-            data-ui="addin-chat-conversation-dropzone"
-          >
-            <input
-              {...dropzone.getInputProps()}
-              aria-label={t({
-                id: "officeAddin.chat.conversation.dropzone.ariaLabel",
-                message: "Drop files anywhere in the conversation to upload",
-              })}
+      {/* Deep message surfaces (the trace's open-run affordance) open chats
+          through the session controller instead of routes the pane lacks. */}
+      <DelegatedRunOpenProvider onOpen={controller.openChatById}>
+        <div className="app-shell-skin flex size-full min-w-0 flex-col">
+          <div className="chat-header-skin flex items-center justify-between border-b border-theme-border px-4 py-2">
+            <DropdownMenu
+              id="addin-header-menu"
+              align="left"
+              items={controller.headerMenuItems}
             />
-            {showDropOverlay ? (
-              <div
-                className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center overflow-hidden bg-[color:color-mix(in_srgb,var(--theme-shell-chat-body)_75%,transparent)]"
-                data-testid="addin-chat-drop-overlay"
-              >
-                <div className="relative flex flex-col items-center gap-2 px-6 py-5 text-center">
-                  <DocumentIcon className="size-10 text-[var(--theme-fg-primary)] drop-shadow-[0_8px_24px_rgba(0,0,0,0.18)]" />
-                  <p className="text-sm font-medium text-[var(--theme-fg-primary)]">
-                    {t({
-                      id: "officeAddin.chat.fileDrop.overlay.label",
-                      message: "Drop to upload",
-                    })}
-                  </p>
-                </div>
-              </div>
-            ) : null}
-            {beforeMessages}
-            {controller.delegatedRunHeader ? (
-              <div className="relative z-10 shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3">
-                {controller.delegatedRunHeader}
-              </div>
-            ) : null}
-            {TopLeftAccessory ? (
-              <TopLeftAccessory
-                availableModels={controller.availableModels}
-                selectedModel={controller.selectedModel}
-                onModelChange={controller.setSelectedModel}
-                isModelSelectionReady={controller.isSelectionReady}
-              />
-            ) : null}
-            <MessageEditProvider value={controller.messageEditValue}>
-              <MessageList
-                messages={messages}
-                messageOrder={controller.messageOrder}
-                loadOlderMessages={() => {}}
-                hasOlderMessages={false}
-                isPending={controller.isMessagingLoading}
-                currentSessionId={controller.currentChatId ?? ""}
-                pageSize={6}
-                maxWidth={768}
-                showTimestamps={true}
-                showAvatars={false}
-                userProfile={controller.profile ?? undefined}
-                controls={controller.resolvedMessageControls}
-                messageRenderer={controller.resolvedMessageRenderer}
-                controlsContext={controller.controlsContext}
-                onMessageAction={controller.standardMessageActionHandler}
-                useVirtualization={controller.messageOrder.length > 30}
-                virtualizationThreshold={30}
-                onFilePreview={controller.openPreviewModal}
-                onViewFeedback={feedback.openFeedbackViewDialog}
-                className="overscroll-none"
-              />
-            </MessageEditProvider>
-            <DelegatedRunsSection
-              chatId={controller.currentChatId}
-              onOpenRun={controller.openDelegatedRun}
-            />
-            {renderInput(inputProps)}
+            <button
+              type="button"
+              onClick={() => void controller.createNewChat()}
+              className="rounded-[var(--theme-radius-control)] bg-theme-bg-tertiary px-3 py-1 text-xs font-medium text-theme-fg-secondary transition-colors hover:bg-theme-bg-hover"
+            >
+              {t({ id: "officeAddin.chat.newChat", message: "New Chat" })}
+            </button>
           </div>
-        </ChatErrorBoundary>
 
-        <FilePreviewModal
-          isOpen={controller.isPreviewModalOpen}
-          onClose={controller.closePreviewModal}
-          file={controller.fileToPreview}
-          relatedFiles={controller.relatedFiles}
-        />
-        <FeedbackViewDialog
-          isOpen={feedback.feedbackViewDialogState.isOpen}
-          onClose={feedback.closeFeedbackViewDialog}
-          onEdit={feedback.switchToEditMode}
-          onRemove={() => void feedback.handleFeedbackViewDialogRemove()}
-          feedback={feedback.feedbackViewDialogState.feedback}
-          canEdit={
-            feedback.feedbackViewDialogState.feedback
-              ? feedback.canEditFeedback(
-                  feedback.feedbackViewDialogState.feedback,
-                )
-              : false
-          }
-          error={feedback.feedbackViewDialogState.error}
-        />
-        <FeedbackCommentDialog
-          isOpen={feedback.feedbackDialogState.isOpen}
-          onClose={feedback.closeFeedbackDialog}
-          onSubmit={feedback.handleFeedbackDialogSubmit}
-          sentiment={feedback.feedbackDialogState.sentiment}
-          mode={feedback.feedbackDialogState.mode}
-          initialComment={feedback.feedbackDialogState.initialComment}
-          error={feedback.feedbackDialogState.error}
-        />
-        {renderSettings({
-          isOpen: controller.isSettingsOpen,
-          onClose: () => controller.setIsSettingsOpen(false),
-        })}
-      </div>
+          <ChatErrorBoundary onReset={() => void controller.refetchHistory()}>
+            <div
+              {...dropzone.getRootProps()}
+              className="chat-body-skin relative flex min-h-0 min-w-0 flex-1 flex-col"
+              role="region"
+              aria-label={t({
+                id: "officeAddin.chat.conversation.aria",
+                message: "Chat conversation",
+              })}
+              data-ui="addin-chat-conversation-dropzone"
+            >
+              <input
+                {...dropzone.getInputProps()}
+                aria-label={t({
+                  id: "officeAddin.chat.conversation.dropzone.ariaLabel",
+                  message: "Drop files anywhere in the conversation to upload",
+                })}
+              />
+              {showDropOverlay ? (
+                <div
+                  className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center overflow-hidden bg-[color:color-mix(in_srgb,var(--theme-shell-chat-body)_75%,transparent)]"
+                  data-testid="addin-chat-drop-overlay"
+                >
+                  <div className="relative flex flex-col items-center gap-2 px-6 py-5 text-center">
+                    <DocumentIcon className="size-10 text-[var(--theme-fg-primary)] drop-shadow-[0_8px_24px_rgba(0,0,0,0.18)]" />
+                    <p className="text-sm font-medium text-[var(--theme-fg-primary)]">
+                      {t({
+                        id: "officeAddin.chat.fileDrop.overlay.label",
+                        message: "Drop to upload",
+                      })}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+              {beforeMessages}
+              {controller.delegatedRunHeader ? (
+                <div className="relative z-10 shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3">
+                  {controller.delegatedRunHeader}
+                </div>
+              ) : null}
+              {TopLeftAccessory ? (
+                <TopLeftAccessory
+                  availableModels={controller.availableModels}
+                  selectedModel={controller.selectedModel}
+                  onModelChange={controller.setSelectedModel}
+                  isModelSelectionReady={controller.isSelectionReady}
+                />
+              ) : null}
+              <MessageEditProvider value={controller.messageEditValue}>
+                <MessageList
+                  messages={messages}
+                  messageOrder={controller.messageOrder}
+                  loadOlderMessages={() => {}}
+                  hasOlderMessages={false}
+                  isPending={controller.isMessagingLoading}
+                  currentSessionId={controller.currentChatId ?? ""}
+                  pageSize={6}
+                  maxWidth={768}
+                  showTimestamps={true}
+                  showAvatars={false}
+                  userProfile={controller.profile ?? undefined}
+                  controls={controller.resolvedMessageControls}
+                  messageRenderer={controller.resolvedMessageRenderer}
+                  controlsContext={controller.controlsContext}
+                  onMessageAction={controller.standardMessageActionHandler}
+                  useVirtualization={controller.messageOrder.length > 30}
+                  virtualizationThreshold={30}
+                  onFilePreview={controller.openPreviewModal}
+                  onViewFeedback={feedback.openFeedbackViewDialog}
+                  className="overscroll-none"
+                />
+              </MessageEditProvider>
+              <DelegatedRunsSection
+                chatId={controller.currentChatId}
+                onOpenRun={controller.openDelegatedRun}
+              />
+              {renderInput(inputProps)}
+            </div>
+          </ChatErrorBoundary>
+
+          <FilePreviewModal
+            isOpen={controller.isPreviewModalOpen}
+            onClose={controller.closePreviewModal}
+            file={controller.fileToPreview}
+            relatedFiles={controller.relatedFiles}
+          />
+          <FeedbackViewDialog
+            isOpen={feedback.feedbackViewDialogState.isOpen}
+            onClose={feedback.closeFeedbackViewDialog}
+            onEdit={feedback.switchToEditMode}
+            onRemove={() => void feedback.handleFeedbackViewDialogRemove()}
+            feedback={feedback.feedbackViewDialogState.feedback}
+            canEdit={
+              feedback.feedbackViewDialogState.feedback
+                ? feedback.canEditFeedback(
+                    feedback.feedbackViewDialogState.feedback,
+                  )
+                : false
+            }
+            error={feedback.feedbackViewDialogState.error}
+          />
+          <FeedbackCommentDialog
+            isOpen={feedback.feedbackDialogState.isOpen}
+            onClose={feedback.closeFeedbackDialog}
+            onSubmit={feedback.handleFeedbackDialogSubmit}
+            sentiment={feedback.feedbackDialogState.sentiment}
+            mode={feedback.feedbackDialogState.mode}
+            initialComment={feedback.feedbackDialogState.initialComment}
+            error={feedback.feedbackDialogState.error}
+          />
+          {renderSettings({
+            isOpen: controller.isSettingsOpen,
+            onClose: () => controller.setIsSettingsOpen(false),
+          })}
+        </div>
+      </DelegatedRunOpenProvider>
     </ChatInputControlsProvider>
   );
 }

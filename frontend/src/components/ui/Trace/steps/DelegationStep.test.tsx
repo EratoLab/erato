@@ -1,10 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useSidecarLocalTraceStore } from "@/lib/desktopSidecar/localTraceStore";
 import { recentChatsQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { DelegatedRunOpenProvider } from "@/providers/DelegatedRunOpenProvider";
 
 import { ToolUseStep } from "./ToolUseStep";
 
@@ -213,6 +214,32 @@ describe("delegation step", () => {
     expect(
       screen.queryByRole("button", { name: /Delegated to Research/ }),
     ).toBeNull();
+  });
+
+  it("opens the run through the host's opener when one is provided", () => {
+    const openRun = vi.fn();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <DelegatedRunOpenProvider onOpen={openRun}>
+          <ToolUseStep
+            part={part({ ...IDENTITY, background: true })}
+            status="done"
+            isStreaming={false}
+            isCollapsed={false}
+            isLastStep
+          />
+        </DelegatedRunOpenProvider>
+      </QueryClientProvider>,
+    );
+
+    const control = screen.getByTestId("delegation-open-run");
+    // No href: a host that supplies an opener serves no chat routes for a
+    // new tab to land on.
+    expect(control.tagName).toBe("BUTTON");
+    expect(control).not.toHaveAttribute("href");
+
+    fireEvent.click(control);
+    expect(openRun).toHaveBeenCalledWith("chat-7");
   });
 
   it("says the detachment even over an approval decision", () => {
