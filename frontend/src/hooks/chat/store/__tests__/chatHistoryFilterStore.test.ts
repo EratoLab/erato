@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   CHAT_HISTORY_FILTER_DEFAULTS,
+  createChatHistoryFilterStore,
   hasActiveFilters,
   isDefaultFilters,
   sanitizeChatHistoryFilters,
@@ -179,5 +180,39 @@ describe("sanitizeChatHistoryFilters", () => {
     } as const;
 
     expect(sanitizeChatHistoryFilters(values, false)).toEqual(values);
+  });
+});
+
+describe("createChatHistoryFilterStore", () => {
+  it("keeps instances with different keys fully isolated", () => {
+    localStorage.clear();
+    const first = createChatHistoryFilterStore("test.filters.first");
+    const second = createChatHistoryFilterStore("test.filters.second");
+
+    first.getState().setTypeFilter("assistant");
+    first.getState().setGroupBy("unread");
+
+    expect(second.getState()).toMatchObject(CHAT_HISTORY_FILTER_DEFAULTS);
+    expect(
+      JSON.parse(localStorage.getItem("test.filters.first") ?? "{}"),
+    ).toMatchObject({ state: { typeFilter: "assistant", groupBy: "unread" } });
+    expect(localStorage.getItem("test.filters.second")).toBeNull();
+  });
+
+  it("rehydrates each instance from its own key only", async () => {
+    localStorage.clear();
+    localStorage.setItem(
+      "test.filters.stored",
+      JSON.stringify({ state: { statusFilter: "all" }, version: 0 }),
+    );
+
+    const stored = createChatHistoryFilterStore("test.filters.stored");
+    const fresh = createChatHistoryFilterStore("test.filters.fresh");
+    await Promise.resolve();
+
+    expect(stored.getState().statusFilter).toBe("all");
+    expect(fresh.getState().statusFilter).toBe(
+      CHAT_HISTORY_FILTER_DEFAULTS.statusFilter,
+    );
   });
 });

@@ -21,27 +21,33 @@ import {
   recentChatsQuery,
   chatMessagesQuery,
   type RecentChatsError,
-  type RecentChatsQueryParams,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
 
-import {
-  CHAT_HISTORY_FILTER_DEFAULTS,
-  useChatHistoryFilterStore,
-  type ChatHistoryFilterValues,
-} from "./store/chatHistoryFilterStore";
+import { useChatHistoryFilterStore } from "./store/chatHistoryFilterStore";
 import {
   seedGenerationStatusFromListing,
   useGenerationStatusStore,
 } from "./store/generationStatusStore";
 import { getStreamKey, useMessagingStore } from "./store/messagingStore";
+import {
+  useInfiniteRecentChats,
+  type RecentChatsListFilters,
+} from "./useInfiniteRecentChats";
 
 import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
+// Moved to their router-free home; re-exported for existing import sites.
+export {
+  CHAT_HISTORY_PAGE_SIZE,
+  buildInfiniteChatsQueryKey,
+  buildRecentChatsFilterParams,
+  type RecentChatsListFilters,
+} from "./useInfiniteRecentChats";
+
 const logger = createLogger("HOOK", "useChatHistory");
-const CHAT_HISTORY_PAGE_SIZE = 30;
 
 /**
  * A chat that exists on the backend but is not listable yet, with the moment it
@@ -225,45 +231,6 @@ export function deriveTitleHint(text: string): string | null {
   return `${stem.trimEnd()}…`;
 }
 
-/** The filter-store values that reach the recent-chats request. */
-export type RecentChatsListFilters = Pick<
-  ChatHistoryFilterValues,
-  "typeFilter" | "statusFilter"
->;
-
-/**
- * Query params the sidebar filters add to a recent-chats list request. Key
- * builders and the query itself must agree on these, so both go through here.
- */
-export function buildRecentChatsFilterParams(
-  filters: RecentChatsListFilters,
-): Pick<RecentChatsQueryParams, "type" | "include_archived"> {
-  return {
-    ...(filters.typeFilter === "all" ? {} : { type: filters.typeFilter }),
-    ...(filters.statusFilter === "all" ? { include_archived: true } : {}),
-  };
-}
-
-/**
- * Query key of the infinite recent-chats list; cache edits must target the
- * same key as the query itself.
- */
-export function buildInfiniteChatsQueryKey(
-  pinnedChatsEnabled = false,
-  filters: RecentChatsListFilters = CHAT_HISTORY_FILTER_DEFAULTS,
-) {
-  return [
-    ...recentChatsQuery({
-      queryParams: {
-        ...(pinnedChatsEnabled ? { pinned: false } : {}),
-        ...buildRecentChatsFilterParams(filters),
-      },
-    }).queryKey,
-    "infinite",
-    { limit: CHAT_HISTORY_PAGE_SIZE },
-  ];
-}
-
 /**
  * Whether a recent-chats cache key belongs to an archived-inclusive list
  * variant, i.e. one whose rows legitimately keep an archived chat.
@@ -323,12 +290,6 @@ export function useChatHistory({
     [typeFilter, statusFilter],
   );
 
-  // Stable query key for the infinite recent-chats list. Reused for both the
-  // query itself and for cache mutations (e.g. optimistic archive removal).
-  const infiniteChatsQueryKey = useMemo(
-    () => buildInfiniteChatsQueryKey(pinnedChatsEnabled, listFilters),
-    [pinnedChatsEnabled, listFilters],
-  );
   const pinnedChatsQueryKey = useMemo(
     () =>
       recentChatsQuery({
@@ -338,40 +299,16 @@ export function useChatHistory({
   );
 
   const {
-    data,
+    chats: listedChats,
     isLoading,
     error,
     refetch,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useInfiniteQuery<
-    Awaited<ReturnType<typeof fetchRecentChats>>,
-    RecentChatsError
-  >({
-    queryKey: infiniteChatsQueryKey,
-    initialPageParam: 0,
-    queryFn: ({ pageParam, signal }) => {
-      const offset = typeof pageParam === "number" ? pageParam : 0;
-      return fetchRecentChats(
-        {
-          ...fetcherOptions,
-          queryParams: {
-            limit: CHAT_HISTORY_PAGE_SIZE,
-            offset,
-            ...(pinnedChatsEnabled ? { pinned: false } : {}),
-            ...buildRecentChatsFilterParams(listFilters),
-          },
-        },
-        signal,
-      );
-    },
-    getNextPageParam: (lastPage) => {
-      if (!lastPage.stats.has_more || lastPage.stats.returned_count === 0) {
-        return undefined;
-      }
-      return lastPage.stats.current_offset + lastPage.stats.returned_count;
-    },
+  } = useInfiniteRecentChats({
+    filters: listFilters,
+    pinnedChatsEnabled,
   });
 
   const { data: pinnedChatsData } = useInfiniteQuery<
@@ -400,11 +337,6 @@ export function useChatHistory({
   // Memoize the empty array reference
   const emptyChats = useMemo(() => [], []);
 
-  // Extract chats from the paginated response structure, defaulting to a stable empty array reference
-  const listedChats = useMemo(
-    () => data?.pages.flatMap((page) => page.chats) ?? emptyChats,
-    [data?.pages, emptyChats],
-  );
   const pinnedChats = useMemo(
     () => pinnedChatsData?.pages.flatMap((page) => page.chats) ?? emptyChats,
     [emptyChats, pinnedChatsData?.pages],

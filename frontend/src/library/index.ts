@@ -276,8 +276,44 @@ export {
   DocumentIcon,
   MailIcon,
   MoonIcon,
+  SidebarToggleIcon,
   SunIcon,
 } from "@/components/ui/icons";
+export {
+  ChatHistoryFilterMenu,
+  type ChatHistoryFilterMenuProps,
+} from "@/components/ui/Chat/ChatHistoryFilterMenu";
+export { EditChatTitleDialog } from "@/components/ui/Chat/EditChatTitleDialog";
+export { ChatShareDialog } from "@/components/ui/Chat/ChatShareDialog";
+export {
+  CHAT_HISTORY_FILTER_DEFAULTS,
+  createChatHistoryFilterStore,
+  hasActiveFilters,
+  isDefaultFilters,
+  sanitizeChatHistoryFilters,
+  useSanitizedChatHistoryFilters,
+  type ChatHistoryFilterStoreHook,
+  type ChatHistoryFilterValues,
+  type ChatHistoryGroupBy,
+  type ChatHistoryStatusFilter,
+  type ChatHistoryTypeFilter,
+} from "@/hooks/chat/store/chatHistoryFilterStore";
+export {
+  buildInfiniteChatsQueryKey,
+  buildRecentChatsFilterParams,
+  useInfiniteRecentChats,
+  type RecentChatsListFilters,
+} from "@/hooks/chat/useInfiniteRecentChats";
+export {
+  groupChatSessions,
+  resolveChatAttentionStatus,
+  type ChatSessionGroup,
+} from "@/utils/chatHistoryGrouping";
+export {
+  UNTITLED_BACKEND_SENTINEL,
+  mapRecentChatToSession,
+} from "@/utils/chat/recentChatSession";
+export type { ChatSession } from "@/types/chat";
 export {
   useChatInputHandlers,
   useSidebar,
@@ -317,6 +353,7 @@ export {
   useArchiveChatEndpoint,
   useFacets,
   useRecentChats,
+  useUpdateChat,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 export {
   FeatureConfigProvider,
@@ -324,6 +361,7 @@ export {
   defaultStaticFeatureConfig,
   useAudioConversationalFeature,
   useFeatureConfig,
+  useChatSharingFeature,
   useMessageFeedbackFeature,
   useTraceFeature,
   useUploadFeature,

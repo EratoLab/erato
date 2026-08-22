@@ -68,72 +68,85 @@ export function hasActiveFilters(values: ChatHistoryFilterValues): boolean {
 }
 
 /**
- * Sidebar chat-list filter/sort preferences, persisted per browser so the
- * list comes back the way the user left it.
+ * Chat-list filter/sort preference store, persisted per browser under the
+ * given key so the list comes back the way the user left it. A factory
+ * because every surface family needs its own persistence: sharing one key
+ * would let a web sidebar filter silently shrink an add-in host's list.
  */
-export const useChatHistoryFilterStore = create<ChatHistoryFilterStore>()(
-  devtools(
-    persist(
-      (set) => ({
-        ...CHAT_HISTORY_FILTER_DEFAULTS,
+export function createChatHistoryFilterStore(persistName: string) {
+  return create<ChatHistoryFilterStore>()(
+    devtools(
+      persist(
+        (set) => ({
+          ...CHAT_HISTORY_FILTER_DEFAULTS,
 
-        setTypeFilter: (typeFilter) =>
-          set({ typeFilter }, false, "chatHistoryFilter/setTypeFilter"),
+          setTypeFilter: (typeFilter) =>
+            set({ typeFilter }, false, "chatHistoryFilter/setTypeFilter"),
 
-        setStatusFilter: (statusFilter) =>
-          set({ statusFilter }, false, "chatHistoryFilter/setStatusFilter"),
+          setStatusFilter: (statusFilter) =>
+            set({ statusFilter }, false, "chatHistoryFilter/setStatusFilter"),
 
-        setGroupBy: (groupBy) =>
-          set({ groupBy }, false, "chatHistoryFilter/setGroupBy"),
+          setGroupBy: (groupBy) =>
+            set({ groupBy }, false, "chatHistoryFilter/setGroupBy"),
 
-        resetToDefaults: () =>
-          set(
-            { ...CHAT_HISTORY_FILTER_DEFAULTS },
-            false,
-            "chatHistoryFilter/resetToDefaults",
-          ),
-      }),
-      {
-        name: "erato.sidebar.chatHistoryFilters",
-        partialize: (state) => ({
-          typeFilter: state.typeFilter,
-          statusFilter: state.statusFilter,
-          groupBy: state.groupBy,
+          resetToDefaults: () =>
+            set(
+              { ...CHAT_HISTORY_FILTER_DEFAULTS },
+              false,
+              "chatHistoryFilter/resetToDefaults",
+            ),
         }),
-        // localStorage is user-editable, so each rehydrated field must be
-        // coerced back into its union; an out-of-union value would otherwise
-        // flow unchecked into query params and the grouping switch.
-        merge: (persisted, current) => {
-          const stored = (persisted ?? {}) as Partial<
-            Record<keyof ChatHistoryFilterValues, unknown>
-          >;
-          return {
-            ...current,
-            typeFilter: coerceToUnion(
-              stored.typeFilter,
-              TYPE_FILTER_VALUES,
-              CHAT_HISTORY_FILTER_DEFAULTS.typeFilter,
-            ),
-            statusFilter: coerceToUnion(
-              stored.statusFilter,
-              STATUS_FILTER_VALUES,
-              CHAT_HISTORY_FILTER_DEFAULTS.statusFilter,
-            ),
-            groupBy: coerceToUnion(
-              stored.groupBy,
-              GROUP_BY_VALUES,
-              CHAT_HISTORY_FILTER_DEFAULTS.groupBy,
-            ),
-          };
+        {
+          name: persistName,
+          partialize: (state) => ({
+            typeFilter: state.typeFilter,
+            statusFilter: state.statusFilter,
+            groupBy: state.groupBy,
+          }),
+          // localStorage is user-editable, so each rehydrated field must be
+          // coerced back into its union; an out-of-union value would otherwise
+          // flow unchecked into query params and the grouping switch.
+          merge: (persisted, current) => {
+            const stored = (persisted ?? {}) as Partial<
+              Record<keyof ChatHistoryFilterValues, unknown>
+            >;
+            return {
+              ...current,
+              typeFilter: coerceToUnion(
+                stored.typeFilter,
+                TYPE_FILTER_VALUES,
+                CHAT_HISTORY_FILTER_DEFAULTS.typeFilter,
+              ),
+              statusFilter: coerceToUnion(
+                stored.statusFilter,
+                STATUS_FILTER_VALUES,
+                CHAT_HISTORY_FILTER_DEFAULTS.statusFilter,
+              ),
+              groupBy: coerceToUnion(
+                stored.groupBy,
+                GROUP_BY_VALUES,
+                CHAT_HISTORY_FILTER_DEFAULTS.groupBy,
+              ),
+            };
+          },
         },
+      ),
+      {
+        name: "Chat History Filter Store",
+        store: persistName,
+        enabled: process.env.NODE_ENV === "development",
       },
     ),
-    {
-      name: "Chat History Filter Store",
-      store: "chat-history-filter-store",
-      enabled: process.env.NODE_ENV === "development",
-    },
-  ),
+  );
+}
+
+export type ChatHistoryFilterStoreHook = ReturnType<
+  typeof createChatHistoryFilterStore
+>;
+
+/** The web sidebar's singleton instance. */
+export const useChatHistoryFilterStore = createChatHistoryFilterStore(
+  "erato.sidebar.chatHistoryFilters",
 );
 
 /**
@@ -159,13 +172,18 @@ export function sanitizeChatHistoryFilters(
   };
 }
 
-/** Store values with assistant-scoped ones sanitized for the current config. */
+/**
+ * Store values with assistant-scoped ones sanitized for the current config.
+ * The store must be the same instance for a component's whole lifetime — it
+ * is read through hooks.
+ */
 export const useSanitizedChatHistoryFilters = (
   assistantsEnabled: boolean,
+  store: ChatHistoryFilterStoreHook = useChatHistoryFilterStore,
 ): ChatHistoryFilterValues => {
-  const typeFilter = useChatHistoryFilterStore((state) => state.typeFilter);
-  const statusFilter = useChatHistoryFilterStore((state) => state.statusFilter);
-  const groupBy = useChatHistoryFilterStore((state) => state.groupBy);
+  const typeFilter = store((state) => state.typeFilter);
+  const statusFilter = store((state) => state.statusFilter);
+  const groupBy = store((state) => state.groupBy);
 
   return useMemo(
     () =>
