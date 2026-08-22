@@ -3,6 +3,7 @@ import {
   type AssistantMention,
   type ChatInputControlsHandle,
   type ChatModel,
+  type DelegationRunMode,
   type FileType,
   type FileUploadItem,
 } from "@erato/frontend/library";
@@ -15,6 +16,7 @@ export interface AddinChatInputCoreProps {
     modelId?: string,
     selectedFacetIds?: string[],
     mentionedAssistants?: AssistantMention[],
+    delegationRunMode?: DelegationRunMode,
   ) => void;
   handleFileAttachments?: (files: FileUploadItem[]) => void;
   isLoading?: boolean;

@@ -17,6 +17,12 @@ export interface DelegatedRunHeaderProps extends DelegatedRunProvenance {
   isRunning?: boolean;
   /** Archived, possibly by the cascade from the chat that dispatched it. */
   isArchived?: boolean;
+  /**
+   * Opens the origin chat in the host's own way. Left unset, the origin
+   * renders as a link to its chat route; a host without those routes
+   * supplies this and the origin becomes a button.
+   */
+  onOpenOrigin?: (chatId: string) => void;
 }
 
 // dt/dd as flat grid children, so the label column sizes to the widest
@@ -68,6 +74,7 @@ export const DelegatedRunHeader = ({
   constraints,
   isRunning = false,
   isArchived = false,
+  onOpenOrigin,
   ...provenance
 }: DelegatedRunHeaderProps) => {
   const navigate = useNavigate();
@@ -75,6 +82,7 @@ export const DelegatedRunHeader = ({
   if (!origin) {
     return null;
   }
+  const originChatId = origin.chatId;
   const note = stateNote(isRunning, isArchived);
   const hasParameters = Boolean(expectedOutput) || Boolean(constraints);
   const originHref = origin.chatId
@@ -103,25 +111,36 @@ export const DelegatedRunHeader = ({
         <span aria-hidden="true" className="text-theme-fg-muted">
           ·
         </span>
-        {originHref ? (
-          <a
-            href={originHref}
-            onClick={(e) => {
-              // Allow cmd/ctrl-click to open in new tab
-              if (e.metaKey || e.ctrlKey) {
-                return;
-              }
-              e.preventDefault();
-              navigate(originHref);
-            }}
-            // Persistent underline on purpose: a link sitting mid-sentence
-            // needs a resting affordance, like the prose links in message
-            // content — unlike hover-underlined control-style links.
-            className="focus-ring-tight truncate rounded-[var(--theme-radius-base)] text-theme-fg-secondary underline underline-offset-2 hover:text-theme-fg-primary"
-            data-testid="delegated-run-origin-link"
-          >
-            {origin.label}
-          </a>
+        {originChatId && originHref ? (
+          onOpenOrigin ? (
+            <button
+              type="button"
+              onClick={() => onOpenOrigin(originChatId)}
+              className="focus-ring-tight truncate rounded-[var(--theme-radius-base)] text-theme-fg-secondary underline underline-offset-2 hover:text-theme-fg-primary"
+              data-testid="delegated-run-origin-link"
+            >
+              {origin.label}
+            </button>
+          ) : (
+            <a
+              href={originHref}
+              onClick={(e) => {
+                // Allow cmd/ctrl-click to open in new tab
+                if (e.metaKey || e.ctrlKey) {
+                  return;
+                }
+                e.preventDefault();
+                navigate(originHref);
+              }}
+              // Persistent underline on purpose: a link sitting mid-sentence
+              // needs a resting affordance, like the prose links in message
+              // content — unlike hover-underlined control-style links.
+              className="focus-ring-tight truncate rounded-[var(--theme-radius-base)] text-theme-fg-secondary underline underline-offset-2 hover:text-theme-fg-primary"
+              data-testid="delegated-run-origin-link"
+            >
+              {origin.label}
+            </a>
+          )
         ) : (
           <span
             className="truncate text-theme-fg-muted"

@@ -12,8 +12,19 @@ export {
   type ThemeProviderProps,
 } from "@/components/providers/ThemeProvider";
 export { ApiProvider } from "@/components/providers/ApiProvider";
+export { GenerationStatusPoller } from "@/components/providers/GenerationStatusPoller";
 export * from "@/components/ui/Chat";
 export { ChatInputControlsProvider } from "@/components/ui/Chat/ChatInputControlsContext";
+export {
+  DelegatedRunsSection,
+  type DelegatedRunsSectionProps,
+} from "@/components/ui/Chat/DelegatedRunsSection";
+export {
+  useDelegatedRunHeader,
+  type DelegatedRunHeaderState,
+} from "@/hooks/chat/useDelegatedRunHeader";
+export { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
+export { DelegatedRunOpenProvider } from "@/providers/DelegatedRunOpenProvider";
 export {
   ChatMessage,
   type ChatMessageHostComponents,
@@ -388,6 +399,7 @@ export type {
 export type { ChatInputControlsHandle } from "@/components/ui/Chat/ChatInputControlsContext";
 export type { ChatInputAttachmentPreviewProps } from "@/types/chat-input-attachment-preview";
 export type { AssistantMention } from "@/utils/chat/assistantMentions";
+export type { DelegationRunMode } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 export type {
   ActionFacetInfo,
   ActionFacetRequest,

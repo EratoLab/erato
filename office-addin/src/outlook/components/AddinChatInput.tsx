@@ -10,6 +10,7 @@ import {
   type FileAttachmentGroupItem,
   type ActionFacetRequest,
   type AssistantMention,
+  type DelegationRunMode,
   type FileType,
   type FileUploadItem,
 } from "@erato/frontend/library";
@@ -85,6 +86,7 @@ interface AddinChatInputProps {
      */
     sendItemIdentity?: string | null,
     mentionedAssistants?: AssistantMention[],
+    delegationRunMode?: DelegationRunMode,
   ) => void;
   handleFileAttachments?: (files: FileUploadItem[]) => void;
   isLoading?: boolean;
@@ -665,6 +667,7 @@ export const AddinChatInput = forwardRef<
       modelId?: string,
       selectedFacetIds?: string[],
       mentionedAssistants?: AssistantMention[],
+      delegationRunMode?: DelegationRunMode,
     ) => {
       // Capture the item identity BEFORE any await: the uploads below can
       // take long enough for the user to switch emails, and the wrong-item
@@ -814,6 +817,7 @@ export const AddinChatInput = forwardRef<
           actionFacet,
           sendItemIdentity,
           mentionedAssistants,
+          delegationRunMode,
         );
         return;
       }
@@ -837,6 +841,7 @@ export const AddinChatInput = forwardRef<
             actionFacet,
             sendItemIdentity,
             mentionedAssistants,
+            delegationRunMode,
           );
           // No upload was attempted (e.g. only dismissed drops remain) and
           // nothing failed, so the staged drops are safe to clear.
@@ -878,6 +883,7 @@ export const AddinChatInput = forwardRef<
         actionFacet,
         sendItemIdentity,
         mentionedAssistants,
+        delegationRunMode,
       );
 
       // Clear the drops only when their files actually uploaded. On a failed
@@ -1039,6 +1045,7 @@ export const AddinChatInput = forwardRef<
           modelId,
           selectedFacetIds,
           mentionedAssistants,
+          delegationRunMode,
         ) => {
           void wrappedOnSendMessage(
             message,
@@ -1046,6 +1053,7 @@ export const AddinChatInput = forwardRef<
             modelId,
             selectedFacetIds,
             mentionedAssistants,
+            delegationRunMode,
           );
         }}
         disabled={

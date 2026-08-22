@@ -2,6 +2,7 @@ import {
   ApiProvider,
   DesktopSidecarProvider,
   FeatureConfigProvider,
+  GenerationStatusPoller,
   I18nProvider,
   ThemeProvider,
   Toaster,
@@ -95,6 +96,9 @@ export function SharedAddinShell({
           <FeatureConfigProvider config={SHARED_ADDIN_FEATURE_CONFIG}>
             <ApiProvider enableDevtools={false}>
               {children}
+              {/* Self-gated on the generation-status store: fully idle until
+                  a dispatch or a listing seeds a running chat. */}
+              <GenerationStatusPoller />
               <Toaster placement="bottom-center" />
             </ApiProvider>
           </FeatureConfigProvider>

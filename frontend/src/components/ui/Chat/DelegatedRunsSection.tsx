@@ -64,7 +64,8 @@ const DISMISSED_RUN_IDS_OPTIONS = { parse: parseDismissedRunIds };
 const DelegatedRunRow = memo<{
   chat: RecentChat;
   onDismiss: (chatId: string) => void;
-}>(({ chat, onDismiss }) => {
+  onOpen?: (chat: RecentChat) => void;
+}>(({ chat, onDismiss, onOpen }) => {
   const navigate = useNavigate();
   const storeStatus = useGenerationStatusStore(
     (state) => state.statusByChatId[chat.id],
@@ -92,6 +93,73 @@ const DelegatedRunRow = memo<{
   const timestamp =
     isLive && liveStartedAt ? liveStartedAt : chat.last_message_at;
 
+  const ariaLabel = status
+    ? `${name}, ${chatAttentionStatusLabel(status)}`
+    : name;
+
+  const rowContent = (
+    <>
+      {status && <ChatAttentionStatusDot status={status} />}
+      <span
+        className="min-w-0 flex-1 truncate text-sm font-medium"
+        title={name}
+      >
+        {name}
+      </span>
+      <span className="shrink-0 text-xs text-theme-fg-secondary">
+        <MessageTimestamp createdAt={new Date(timestamp)} autoUpdate={isLive} />
+      </span>
+      <OpenNewWindowIcon
+        className="size-3.5 shrink-0 text-theme-fg-muted opacity-0 group-hover/run:opacity-100 group-focus-visible/run:opacity-100"
+        aria-hidden="true"
+      />
+      {isSettled && (
+        /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent bubbling */
+        <div
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+        >
+          <Button
+            variant="icon-only"
+            size="sm"
+            // The row under the pointer is already painted with
+            // --theme-bg-hover, so the variant's own hover is invisible
+            // here; the strong step keeps the chip readable. Important,
+            // because the variant's own hover class wins the cascade.
+            className="hover:!bg-[var(--theme-bg-hover-strong)]"
+            icon={<CloseIcon className="size-4" />}
+            aria-label={dismissLabel}
+            title={dismissLabel}
+            onClick={() => onDismiss(chat.id)}
+            data-testid="delegated-run-dismiss"
+          />
+        </div>
+      )}
+    </>
+  );
+
+  // A host without the web app's chat routes (the add-in pane) opens a run
+  // through its own session machinery; rendering no href there keeps a
+  // middle- or cmd-click off routes the host does not serve.
+  if (onOpen) {
+    return (
+      <InteractiveContainer
+        useDiv={true}
+        showFocusRing={false}
+        onClick={() => onOpen(chat)}
+        className="focus-ring-inset theme-transition group/run flex cursor-pointer items-center gap-2 rounded-[var(--theme-radius-base)] px-2 py-1.5 text-left hover:bg-theme-bg-hover"
+        aria-label={ariaLabel}
+        data-chat-id={chat.id}
+        data-ui="delegated-run-item"
+        data-testid="delegated-run-item"
+      >
+        {rowContent}
+      </InteractiveContainer>
+    );
+  }
+
   return (
     <a
       href={href}
@@ -106,9 +174,7 @@ const DelegatedRunRow = memo<{
       // The group lives here, on the element that actually receives focus,
       // so the keyboard reveal below has a :focus-visible source.
       className="focus-ring-inset group/run block rounded-[var(--theme-radius-base)]"
-      aria-label={
-        status ? `${name}, ${chatAttentionStatusLabel(status)}` : name
-      }
+      aria-label={ariaLabel}
       data-testid="delegated-run-item"
     >
       <InteractiveContainer
@@ -118,47 +184,7 @@ const DelegatedRunRow = memo<{
         data-chat-id={chat.id}
         data-ui="delegated-run-item"
       >
-        {status && <ChatAttentionStatusDot status={status} />}
-        <span
-          className="min-w-0 flex-1 truncate text-sm font-medium"
-          title={name}
-        >
-          {name}
-        </span>
-        <span className="shrink-0 text-xs text-theme-fg-secondary">
-          <MessageTimestamp
-            createdAt={new Date(timestamp)}
-            autoUpdate={isLive}
-          />
-        </span>
-        <OpenNewWindowIcon
-          className="size-3.5 shrink-0 text-theme-fg-muted opacity-0 group-hover/run:opacity-100 group-focus-visible/run:opacity-100"
-          aria-hidden="true"
-        />
-        {isSettled && (
-          /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent bubbling */
-          <div
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-          >
-            <Button
-              variant="icon-only"
-              size="sm"
-              // The row under the pointer is already painted with
-              // --theme-bg-hover, so the variant's own hover is invisible
-              // here; the strong step keeps the chip readable. Important,
-              // because the variant's own hover class wins the cascade.
-              className="hover:!bg-[var(--theme-bg-hover-strong)]"
-              icon={<CloseIcon className="size-4" />}
-              aria-label={dismissLabel}
-              title={dismissLabel}
-              onClick={() => onDismiss(chat.id)}
-              data-testid="delegated-run-dismiss"
-            />
-          </div>
-        )}
+        {rowContent}
       </InteractiveContainer>
     </a>
   );
@@ -171,6 +197,12 @@ export interface DelegatedRunsSectionProps {
   /** Chat the user is viewing; the listed runs are the ones it dispatched.
    * Callers with no open chat pass null or "". */
   chatId: string | null;
+  /**
+   * Opens a run in the host's own way. Left unset, rows navigate to the
+   * run's chat route; a host without those routes supplies this instead and
+   * rows render without an href.
+   */
+  onOpenRun?: (chat: RecentChat) => void;
 }
 
 /**
@@ -181,7 +213,7 @@ export interface DelegatedRunsSectionProps {
  * state deserves to outlive the visit.
  */
 export const DelegatedRunsSection = memo<DelegatedRunsSectionProps>(
-  ({ chatId }) => {
+  ({ chatId, onOpenRun }) => {
     const { enabled: assistantsEnabled, delegationEnabled } =
       useAssistantsFeature();
     const canHaveRuns = assistantsEnabled && delegationEnabled;
@@ -316,6 +348,7 @@ export const DelegatedRunsSection = memo<DelegatedRunsSectionProps>(
                     key={chat.id}
                     chat={chat}
                     onDismiss={dismissRun}
+                    onOpen={onOpenRun}
                   />
                 ))}
             </div>

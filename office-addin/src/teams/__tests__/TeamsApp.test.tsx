@@ -148,10 +148,17 @@ vi.mock("@erato/frontend/library", async () => {
     DesktopSidecarProvider: passthrough,
     FeatureConfigProvider: passthrough,
     FileCapabilitiesProvider: passthrough,
+    GenerationStatusPoller: () => null,
+    useGenerationStatusStore: Object.assign(() => undefined, {
+      getState: () => ({ setCurrentChatId: () => undefined }),
+    }),
     I18nProvider: passthrough,
     ProfileProvider: passthrough,
     ThemeProvider: passthrough,
     Toaster: () => null,
+    DelegatedRunOpenProvider: passthrough,
+    DelegatedRunsSection: () => null,
+    useDelegatedRunHeader: () => ({ header: null, composerLocked: false }),
     toast: {
       info: vi.fn(),
       success: vi.fn(),

@@ -33,4 +33,18 @@ export function injectFrontendEnv() {
   if (import.meta.env.VITE_MSAL_AUTHORITY) {
     window.MSAL_AUTHORITY ??= import.meta.env.VITE_MSAL_AUTHORITY;
   }
+
+  // The assistants flags reach the library through `window.*`: the library
+  // bundle bakes `import.meta.env` at pack time, so a tarball packed without
+  // them (CI, a fresh worktree) resolves them from here. `??=` keeps the
+  // backend's HTML injection authoritative when it served the page.
+  if (import.meta.env.VITE_ASSISTANTS_ENABLED === "true") {
+    window.ASSISTANTS_ENABLED ??= true;
+  }
+  if (import.meta.env.VITE_ASSISTANTS_DELEGATION_ENABLED === "true") {
+    window.ASSISTANTS_DELEGATION_ENABLED ??= true;
+  }
+  if (import.meta.env.VITE_ASSISTANTS_DELEGATION_ALLOW_BACKGROUND === "true") {
+    window.ASSISTANTS_DELEGATION_ALLOW_BACKGROUND ??= true;
+  }
 }

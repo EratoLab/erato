@@ -1,6 +1,12 @@
 import { i18n } from "@lingui/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NeutralAddinChatPage } from "../NeutralAddinChatPage";
@@ -16,6 +22,27 @@ const spies = vi.hoisted(() => ({
     setNavigationTransition: vi.fn(),
   },
   clearNewlyCreatedChatId: vi.fn(),
+  setGenerationCurrentChatId: vi.fn(),
+  runOpenHandler: { current: null as ((chatId: string) => void) | null },
+  sendMessage: vi.fn(async () => undefined),
+  inputProps: {
+    current: null as null | {
+      onSendMessage: (
+        message: string,
+        inputFileIds?: string[],
+        modelId?: string,
+        selectedFacetIds?: string[],
+        mentionedAssistants?: { id: string; name: string }[],
+        delegationRunMode?: "wait" | "background",
+      ) => void;
+    },
+  },
+  useDelegatedRunHeader: vi.fn(
+    (): { header: ReactNode; composerLocked: boolean } => ({
+      header: null,
+      composerLocked: false,
+    }),
+  ),
   useRecentChats: vi.fn(() => ({
     data: { chats: [] },
     isLoading: false,
@@ -30,7 +57,7 @@ const spies = vi.hoisted(() => ({
     isFinalizing: false,
     streamingContent: null,
     error: null,
-    sendMessage: vi.fn(async () => undefined),
+    sendMessage: spies.sendMessage,
     editMessage: vi.fn(async () => undefined),
     regenerateMessage: vi.fn(async () => undefined),
     cancelMessage: vi.fn(),
@@ -80,6 +107,11 @@ vi.mock("@erato/frontend/library", async () => {
     useFileUploadStore: (
       selector: (state: { silentChatId: string | null }) => unknown,
     ) => selector({ silentChatId: null }),
+    useGenerationStatusStore: Object.assign(vi.fn(), {
+      getState: () => ({
+        setCurrentChatId: spies.setGenerationCurrentChatId,
+      }),
+    }),
     useMessagingStore: Object.assign(() => spies.messagingStore, {
       getState: () => spies.messagingStore,
     }),
@@ -93,6 +125,31 @@ vi.mock("@erato/frontend/library", async () => {
       children,
     ChatMessage: () => null,
     DefaultMessageControls: () => null,
+    DelegatedRunOpenProvider: ({
+      onOpen,
+      children,
+    }: {
+      onOpen: (chatId: string) => void;
+      children?: ReactNode;
+    }) => {
+      spies.runOpenHandler.current = onOpen;
+      return children;
+    },
+    DelegatedRunsSection: ({
+      chatId,
+      onOpenRun,
+    }: {
+      chatId: string | null;
+      onOpenRun?: (chat: { id: string }) => void;
+    }) => (
+      <button
+        type="button"
+        data-testid="neutral-delegated-runs"
+        data-chat-id={chatId ?? ""}
+        onClick={() => onOpenRun?.({ id: "run-77" })}
+      />
+    ),
+    useDelegatedRunHeader: spies.useDelegatedRunHeader,
     DocumentIcon: () => null,
     DropdownMenu: () => null,
     FeedbackCommentDialog: () => null,
@@ -149,7 +206,19 @@ vi.mock("@erato/frontend/library", async () => {
 });
 
 vi.mock("../AddinChatInputCore", () => ({
-  AddinChatInputCore: () => <div data-testid="neutral-chat-input" />,
+  AddinChatInputCore: (
+    props: NonNullable<(typeof spies.inputProps)["current"]> & {
+      disabled?: boolean;
+    },
+  ) => {
+    spies.inputProps.current = props;
+    return (
+      <div
+        data-testid="neutral-chat-input"
+        data-disabled={props.disabled ? "true" : "false"}
+      />
+    );
+  },
 }));
 vi.mock("../AddinSettingsDialogCore", () => ({
   AddinSettingsDialogCore: () => null,
@@ -255,5 +324,90 @@ describe("NeutralAddinChatPage host boundary", () => {
     expect(spies.messagingStore.clearUserMessages).toHaveBeenCalled();
     expect(spies.messagingStore.resetStreaming).toHaveBeenCalled();
     expect(spies.clearNewlyCreatedChatId).toHaveBeenCalled();
+  });
+
+  it("hands the session's chat to the delegated-runs bar and opens a run in-pane", () => {
+    renderPage();
+
+    const bar = screen.getByTestId("neutral-delegated-runs");
+    expect(bar).toHaveAttribute("data-chat-id", "");
+
+    // The bar's open callback goes through the session controller, so the
+    // pane itself rebinds: messaging re-keys and the bar follows the run.
+    fireEvent.click(bar);
+
+    expect(screen.getByTestId("neutral-delegated-runs")).toHaveAttribute(
+      "data-chat-id",
+      "run-77",
+    );
+    expect(spies.useChatMessaging).toHaveBeenLastCalledWith(
+      expect.objectContaining({ chatId: "run-77" }),
+    );
+  });
+
+  it("routes deep-surface run opens through the session controller", () => {
+    renderPage();
+    expect(spies.runOpenHandler.current).toBeTypeOf("function");
+
+    // The trace's open-run affordance reaches this handler via context; it
+    // must land on the same in-pane path as a picker selection.
+    act(() => spies.runOpenHandler.current?.("run-88"));
+
+    expect(spies.useChatMessaging).toHaveBeenLastCalledWith(
+      expect.objectContaining({ chatId: "run-88" }),
+    );
+  });
+
+  it("carries the background run-mode choice through to the send", () => {
+    renderPage();
+
+    // The composer's wait-or-background decision arrives as ChatInput's
+    // sixth argument; every hop of the add-in chain must hand it on, or a
+    // "background" dispatch silently degrades to an awaited one.
+    spies.inputProps.current?.onSendMessage(
+      "look into this",
+      undefined,
+      undefined,
+      undefined,
+      [{ id: "assistant-9", name: "Research" }],
+      "background",
+    );
+
+    expect(spies.sendMessage).toHaveBeenCalledWith(
+      "look into this",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      [{ id: "assistant-9", name: "Research" }],
+      "background",
+    );
+  });
+
+  it("mirrors the open chat into the generation-status store", () => {
+    renderPage();
+    expect(spies.setGenerationCurrentChatId).toHaveBeenLastCalledWith(null);
+
+    // Opening a run marks it viewed, which consumes a settled run's
+    // attention notification exactly like the web ChatProvider does.
+    fireEvent.click(screen.getByTestId("neutral-delegated-runs"));
+
+    expect(spies.setGenerationCurrentChatId).toHaveBeenLastCalledWith("run-77");
+  });
+
+  it("locks the composer while a delegate still writes the open run", () => {
+    spies.useDelegatedRunHeader.mockReturnValue({
+      header: <div data-testid="neutral-run-banner" />,
+      composerLocked: true,
+    });
+
+    renderPage();
+
+    expect(screen.getByTestId("neutral-run-banner")).toBeInTheDocument();
+    expect(screen.getByTestId("neutral-chat-input")).toHaveAttribute(
+      "data-disabled",
+      "true",
+    );
   });
 });

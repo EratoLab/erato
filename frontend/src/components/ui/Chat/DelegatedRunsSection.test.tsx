@@ -73,16 +73,23 @@ const renderSection = (
   config: Parameters<typeof StaticFeatureConfigProvider>[0]["config"] = {
     assistants: { enabled: true, delegationEnabled: true },
   },
+  onOpenRun?: (chat: RecentChat) => void,
 ) =>
   render(
     <StaticFeatureConfigProvider config={config}>
       <I18nProvider i18n={i18n}>
         <MemoryRouter>
-          <DelegatedRunsSection chatId={chatId} />
+          <DelegatedRunsSection chatId={chatId} onOpenRun={onOpenRun} />
         </MemoryRouter>
       </I18nProvider>
     </StaticFeatureConfigProvider>,
   );
+
+const DELEGATION_ON: Parameters<
+  typeof StaticFeatureConfigProvider
+>[0]["config"] = {
+  assistants: { enabled: true, delegationEnabled: true },
+};
 
 /** The bar starts collapsed; row-level assertions unfold it first. */
 const expandRuns = () =>
@@ -502,6 +509,64 @@ describe("DelegatedRunsSection check-off", () => {
     fireEvent.click(within(rows[0]).getByTestId("delegated-run-dismiss"));
     expect(navigateMock).not.toHaveBeenCalled();
     expect(screen.getAllByTestId("delegated-run-item")).toHaveLength(1);
+  });
+});
+
+describe("DelegatedRunsSection host-open seam", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    useGenerationStatusStore.getState().reset();
+    i18n.load("en", enMessages as unknown as Messages);
+    i18n.activate("en");
+  });
+
+  it("rows hand the run to onOpenRun and render without an href", () => {
+    mockRuns([recentChat({ id: "run-1" })]);
+    const onOpenRun = vi.fn();
+
+    renderSection("origin-1", DELEGATION_ON, onOpenRun);
+    expandRuns();
+
+    const row = screen.getByTestId("delegated-run-item");
+    // No href: a middle- or cmd-click cannot land on a chat route the host
+    // does not serve.
+    expect(row).not.toHaveAttribute("href");
+    expect(row).toHaveAttribute("role", "button");
+
+    fireEvent.click(row);
+    expect(onOpenRun).toHaveBeenCalledTimes(1);
+    expect(onOpenRun).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "run-1" }),
+    );
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  it("activates from the keyboard like any button", () => {
+    mockRuns([recentChat({ id: "run-1" })]);
+    const onOpenRun = vi.fn();
+
+    renderSection("origin-1", DELEGATION_ON, onOpenRun);
+    expandRuns();
+
+    fireEvent.keyDown(screen.getByTestId("delegated-run-item"), {
+      key: "Enter",
+    });
+    expect(onOpenRun).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "run-1" }),
+    );
+  });
+
+  it("checking a run off dismisses it without opening it", () => {
+    mockRuns([recentChat({ id: "run-1", delegated_run_outcome: "completed" })]);
+    const onOpenRun = vi.fn();
+
+    renderSection("origin-1", DELEGATION_ON, onOpenRun);
+    expandRuns();
+
+    fireEvent.click(screen.getByTestId("delegated-run-dismiss"));
+    expect(onOpenRun).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("delegated-run-item")).toBeNull();
   });
 });
 

@@ -43,7 +43,12 @@ const delegateIsWriting = (
 
 export const useDelegatedRunHeader = (
   chatId: string | null | undefined,
+  options?: {
+    /** Forwarded to the header's origin link; see `DelegatedRunHeaderProps`. */
+    onOpenOrigin?: (chatId: string) => void;
+  },
 ): DelegatedRunHeaderState => {
+  const onOpenOrigin = options?.onOpenOrigin;
   const { data: chat } = useChatDetail(
     chatId ? { pathParams: { chatId } } : skipToken,
   );
@@ -69,9 +74,10 @@ export const useDelegatedRunHeader = (
           constraints={chat.constraints}
           isRunning={isRunning}
           isArchived={isArchived}
+          onOpenOrigin={onOpenOrigin}
         />
       ),
       composerLocked: isRunning || isArchived,
     };
-  }, [chat, generationKind]);
+  }, [chat, generationKind, onOpenOrigin]);
 };
