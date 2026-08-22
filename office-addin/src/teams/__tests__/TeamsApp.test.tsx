@@ -351,7 +351,9 @@ describe("Teams personal tab composition", () => {
 
     expect(await screen.findByTestId("teams-message-list")).toBeInTheDocument();
     expect(screen.getByTestId("teams-chat-input")).toBeInTheDocument();
-    expect(screen.getByText("New Chat")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("addin-history-drawer-trigger"),
+    ).toBeInTheDocument();
     expect(globalThis).not.toHaveProperty("Office");
     expect(
       appendChild.mock.calls.some(

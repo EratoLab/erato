@@ -162,7 +162,9 @@ describe("AddinChat without any Graph provider mounted (Exchange SE / unsupporte
   it("renders instead of throwing 'Graph auth is not available on this host'", () => {
     expect(() => renderWithoutGraphProvider(<AddinChat />)).not.toThrow();
 
-    expect(screen.getByText("New Chat")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("addin-history-drawer-trigger"),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("addin-chat-input")).toBeInTheDocument();
   });
 
@@ -175,7 +177,9 @@ describe("AddinChat without any Graph provider mounted (Exchange SE / unsupporte
       ),
     ).not.toThrow();
 
-    expect(screen.getByText("New Chat")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("addin-history-drawer-trigger"),
+    ).toBeInTheDocument();
   });
 
   // With no backend a dropped `.msg` could never be resolved (parseMsgFile

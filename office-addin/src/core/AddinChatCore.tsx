@@ -565,31 +565,25 @@ export function AddinChatCoreView({
       {/* Deep message surfaces (the trace's open-run affordance) open chats
           through the session controller instead of routes the pane lacks. */}
       <DelegatedRunOpenProvider onOpen={controller.openChatById}>
-        <div className="app-shell-skin flex size-full min-w-0 flex-col">
-          <div className="chat-header-skin flex items-center justify-between border-b border-theme-border px-4 py-2">
-            <button
-              type="button"
-              onClick={() => controller.setIsHistoryMenuOpen(true)}
-              aria-haspopup="dialog"
-              aria-expanded={controller.isHistoryMenuOpen}
-              aria-controls={HISTORY_DRAWER_PANEL_ID}
-              aria-label={t({
-                id: "officeAddin.historyDrawer.open",
-                message: "Open menu",
-              })}
-              className="focus-ring theme-transition flex size-7 items-center justify-center rounded-[var(--theme-radius-control)] text-theme-fg-secondary hover:bg-theme-bg-hover"
-              data-testid="addin-history-drawer-trigger"
-            >
-              <SidebarToggleIcon className="size-4" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              onClick={() => void controller.createNewChat()}
-              className="rounded-[var(--theme-radius-control)] bg-theme-bg-tertiary px-3 py-1 text-xs font-medium text-theme-fg-secondary transition-colors hover:bg-theme-bg-hover"
-            >
-              {t({ id: "officeAddin.chat.newChat", message: "New Chat" })}
-            </button>
-          </div>
+        <div className="app-shell-skin relative flex size-full min-w-0 flex-col">
+          {/* Floats over the conversation: the pane is too narrow to spend a
+              header row on a single trigger, and New Chat lives in the
+              drawer it opens. */}
+          <button
+            type="button"
+            onClick={() => controller.setIsHistoryMenuOpen(true)}
+            aria-haspopup="dialog"
+            aria-expanded={controller.isHistoryMenuOpen}
+            aria-controls={HISTORY_DRAWER_PANEL_ID}
+            aria-label={t({
+              id: "officeAddin.historyDrawer.open",
+              message: "Open menu",
+            })}
+            className="focus-ring theme-transition absolute left-2 top-2 z-20 flex size-7 items-center justify-center rounded-[var(--theme-radius-control)] bg-theme-bg-primary text-theme-fg-secondary hover:bg-theme-bg-hover"
+            data-testid="addin-history-drawer-trigger"
+          >
+            <SidebarToggleIcon className="size-4" aria-hidden="true" />
+          </button>
 
           <ChatErrorBoundary onReset={() => void controller.refetchHistory()}>
             <div
@@ -632,12 +626,16 @@ export function AddinChatCoreView({
                 </div>
               ) : null}
               {TopLeftAccessory ? (
-                <TopLeftAccessory
-                  availableModels={controller.availableModels}
-                  selectedModel={controller.selectedModel}
-                  onModelChange={controller.setSelectedModel}
-                  isModelSelectionReady={controller.isSelectionReady}
-                />
+                // Cleared past the floating drawer trigger, which otherwise
+                // sits exactly on a top-left accessory.
+                <div className="pl-10">
+                  <TopLeftAccessory
+                    availableModels={controller.availableModels}
+                    selectedModel={controller.selectedModel}
+                    onModelChange={controller.setSelectedModel}
+                    isModelSelectionReady={controller.isSelectionReady}
+                  />
+                </div>
               ) : null}
               <MessageEditProvider value={controller.messageEditValue}>
                 <MessageList

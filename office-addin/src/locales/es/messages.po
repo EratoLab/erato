@@ -202,7 +202,6 @@ msgid "officeAddin.chat.fileDrop.overlay.label"
 msgstr "Suelta para subir"
 
 #. js-lingui-explicit-id
-#: src/core/AddinChatCore.tsx
 #: src/core/AddinHistoryDrawerCore.tsx
 msgid "officeAddin.chat.newChat"
 msgstr "Nuevo chat"

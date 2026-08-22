@@ -24,6 +24,7 @@ const spies = vi.hoisted(() => ({
   clearNewlyCreatedChatId: vi.fn(),
   setGenerationCurrentChatId: vi.fn(),
   runOpenHandler: { current: null as ((chatId: string) => void) | null },
+  chatContextValue: { current: null as ChatContextValue | null },
   sendMessage: vi.fn(async () => undefined),
   inputProps: {
     current: null as null | {
@@ -89,6 +90,7 @@ vi.mock("@erato/frontend/library", async () => {
       if (!context) {
         throw new Error("useChatContext must be used within a ChatProvider");
       }
+      spies.chatContextValue.current = context;
       return context;
     },
 
@@ -289,7 +291,9 @@ describe("NeutralAddinChatPage host boundary", () => {
 
     expect(renderPage).not.toThrow();
 
-    expect(screen.getByText("New Chat")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("addin-history-drawer-trigger"),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("neutral-message-list")).toBeInTheDocument();
     expect(screen.getByTestId("neutral-chat-input")).toBeInTheDocument();
     expect(
@@ -352,7 +356,11 @@ describe("NeutralAddinChatPage host boundary", () => {
   it("wires New Chat through the provider's context value", () => {
     renderPage();
 
-    fireEvent.click(screen.getByText("New Chat"));
+    // The header button is gone; New Chat now lives in the drawer, which
+    // reaches the same context action this drives directly.
+    act(() => {
+      void spies.chatContextValue.current?.createNewChat();
+    });
 
     expect(spies.messagingStore.abortActiveSSE).toHaveBeenCalled();
     expect(spies.messagingStore.clearUserMessages).toHaveBeenCalled();

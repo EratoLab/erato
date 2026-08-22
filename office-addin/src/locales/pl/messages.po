@@ -202,7 +202,6 @@ msgid "officeAddin.chat.fileDrop.overlay.label"
 msgstr "Upuść, aby przesłać"
 
 #. js-lingui-explicit-id
-#: src/core/AddinChatCore.tsx
 #: src/core/AddinHistoryDrawerCore.tsx
 msgid "officeAddin.chat.newChat"
 msgstr "Nowy czat"
