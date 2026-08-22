@@ -180,7 +180,7 @@ vi.mock("@erato/frontend/library", async () => {
     ),
     useDelegatedRunHeader: spies.useDelegatedRunHeader,
     DocumentIcon: () => null,
-    DropdownMenu: () => null,
+    SidebarToggleIcon: () => null,
     FeedbackCommentDialog: () => null,
     FeedbackViewDialog: () => null,
     FilePreviewModal: () => null,
@@ -234,6 +234,10 @@ vi.mock("@erato/frontend/library", async () => {
   };
 });
 
+vi.mock("../AddinHistoryDrawerCore", () => ({
+  AddinHistoryDrawerCore: ({ isOpen }: { isOpen: boolean }) =>
+    isOpen ? <div data-testid="addin-history-drawer" /> : null,
+}));
 vi.mock("../AddinChatInputCore", () => ({
   AddinChatInputCore: (
     props: NonNullable<(typeof spies.inputProps)["current"]> & {

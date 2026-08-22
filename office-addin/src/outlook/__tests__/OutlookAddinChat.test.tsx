@@ -57,7 +57,7 @@ vi.mock("@erato/frontend/library", () => ({
   DelegatedRunsSection: () => null,
   useDelegatedRunHeader: () => ({ header: null, composerLocked: false }),
   DocumentIcon: () => null,
-  DropdownMenu: () => null,
+  SidebarToggleIcon: () => null,
   FeedbackCommentDialog: () => null,
   FeedbackViewDialog: () => null,
   FilePreviewModal: () => null,
@@ -144,6 +144,10 @@ function renderWithoutGraphProvider(children: ReactNode) {
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>,
   );
 }
+
+vi.mock("../../core/AddinHistoryDrawerCore", () => ({
+  AddinHistoryDrawerCore: () => null,
+}));
 
 describe("AddinChat without any Graph provider mounted (Exchange SE / unsupported hosts)", () => {
   beforeEach(() => {

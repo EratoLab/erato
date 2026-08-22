@@ -249,7 +249,7 @@ vi.mock("@erato/frontend/library", async () => {
     ChatMessage: () => null,
     DefaultMessageControls: () => null,
     DocumentIcon: () => null,
-    DropdownMenu: () => null,
+    SidebarToggleIcon: () => null,
     FeedbackCommentDialog: () => null,
     FeedbackViewDialog: () => null,
     FilePreviewModal: () => null,
@@ -302,6 +302,10 @@ vi.mock("@erato/frontend/library", async () => {
     useStandardMessageActions: () => vi.fn(),
   };
 });
+
+vi.mock("../../core/AddinHistoryDrawerCore", () => ({
+  AddinHistoryDrawerCore: () => null,
+}));
 
 describe("Teams personal tab composition", () => {
   const originalOffice = Object.getOwnPropertyDescriptor(globalThis, "Office");

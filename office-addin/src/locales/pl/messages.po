@@ -203,6 +203,7 @@ msgstr "Upuść, aby przesłać"
 
 #. js-lingui-explicit-id
 #: src/core/AddinChatCore.tsx
+#: src/core/AddinHistoryDrawerCore.tsx
 msgid "officeAddin.chat.newChat"
 msgstr "Nowy czat"
 
@@ -537,9 +538,39 @@ msgid "officeAddin.fileSource.updatingThread"
 msgstr "Aktualizowanie…"
 
 #. js-lingui-explicit-id
-#: src/core/AddinChatCore.tsx
+#: src/core/AddinHistoryDrawerCore.tsx
 msgid "officeAddin.headerMenu.settings"
 msgstr "Ustawienia"
+
+#. js-lingui-explicit-id
+#: src/core/AddinHistoryDrawerCore.tsx
+msgid "officeAddin.historyDrawer.chats"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/core/AddinHistoryDrawerCore.tsx
+msgid "officeAddin.historyDrawer.close"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/core/AddinHistoryDrawerCore.tsx
+msgid "officeAddin.historyDrawer.noMatches"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/core/AddinChatCore.tsx
+msgid "officeAddin.historyDrawer.open"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/core/AddinHistoryDrawerCore.tsx
+msgid "officeAddin.historyDrawer.rename.generated.fallback"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/core/AddinHistoryDrawerCore.tsx
+msgid "officeAddin.historyDrawer.title"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/providers/OfficeProvider.tsx

@@ -6,12 +6,12 @@ import {
   DelegatedRunOpenProvider,
   DelegatedRunsSection,
   DocumentIcon,
-  DropdownMenu,
   FeedbackCommentDialog,
   FeedbackViewDialog,
   FilePreviewModal,
   MessageEditProvider,
   MessageList,
+  SidebarToggleIcon,
   chatMessagesQuery,
   componentRegistry,
   extractTextFromContent,
@@ -34,7 +34,6 @@ import {
   type ChatMessageProps,
   type DelegatedRunsSectionProps,
   type DelegationRunMode,
-  type DropdownMenuItem,
   type FileUploadItem,
   type MessageAction,
   type MessageControlsComponent,
@@ -45,6 +44,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import { AddinChatInputCore } from "./AddinChatInputCore";
+import { AddinHistoryDrawerCore } from "./AddinHistoryDrawerCore";
 import { AddinSettingsDialogCore } from "./AddinSettingsDialogCore";
 
 import type {
@@ -53,6 +53,9 @@ import type {
   MutableRefObject,
   ReactNode,
 } from "react";
+
+// Links the header trigger's aria-controls to the drawer's dialog panel.
+const HISTORY_DRAWER_PANEL_ID = "addin-history-drawer-panel";
 
 export interface AddinChatHostCallbacks {
   beforeSend?: (hostContextIdentity?: string | null) => void;
@@ -144,7 +147,8 @@ export interface AddinChatController {
   feedback: ReturnType<typeof useMessageFeedback>;
   isSettingsOpen: boolean;
   setIsSettingsOpen: (isOpen: boolean) => void;
-  headerMenuItems: DropdownMenuItem[];
+  isHistoryMenuOpen: boolean;
+  setIsHistoryMenuOpen: (isOpen: boolean) => void;
   /** Banner identifying the open chat as a delegated run; null otherwise. */
   delegatedRunHeader: ReactNode;
   /** A delegate still writing the run refuses sends with a 409; closing the
@@ -410,19 +414,7 @@ function useAddinChatController({
     [],
   );
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const headerMenuItems = useMemo<DropdownMenuItem[]>(
-    () => [
-      {
-        id: "settings",
-        label: t({
-          id: "officeAddin.headerMenu.settings",
-          message: "Settings",
-        }),
-        onClick: () => setIsSettingsOpen(true),
-      },
-    ],
-    [],
-  );
+  const [isHistoryMenuOpen, setIsHistoryMenuOpen] = useState(false);
 
   return {
     assistantId,
@@ -465,7 +457,8 @@ function useAddinChatController({
     feedback,
     isSettingsOpen,
     setIsSettingsOpen,
-    headerMenuItems,
+    isHistoryMenuOpen,
+    setIsHistoryMenuOpen,
     delegatedRunHeader,
     composerLocked,
     openDelegatedRun,
@@ -525,6 +518,8 @@ export function AddinChatCoreView({
   beforeMessages,
   renderInput,
   renderSettings,
+  drawerSectionsBeforeHistory,
+  drawerSectionsAfterHistory,
 }: {
   controller: AddinChatController;
   dropzone: Pick<
@@ -539,6 +534,9 @@ export function AddinChatCoreView({
     isOpen: boolean;
     onClose: () => void;
   }) => ReactNode;
+  /** Forwarded into the history drawer's future-section slots. */
+  drawerSectionsBeforeHistory?: ReactNode;
+  drawerSectionsAfterHistory?: ReactNode;
 }) {
   const TopLeftAccessory = componentRegistry.ChatTopLeftAccessory;
   const feedback = controller.feedback;
@@ -569,11 +567,21 @@ export function AddinChatCoreView({
       <DelegatedRunOpenProvider onOpen={controller.openChatById}>
         <div className="app-shell-skin flex size-full min-w-0 flex-col">
           <div className="chat-header-skin flex items-center justify-between border-b border-theme-border px-4 py-2">
-            <DropdownMenu
-              id="addin-header-menu"
-              align="left"
-              items={controller.headerMenuItems}
-            />
+            <button
+              type="button"
+              onClick={() => controller.setIsHistoryMenuOpen(true)}
+              aria-haspopup="dialog"
+              aria-expanded={controller.isHistoryMenuOpen}
+              aria-controls={HISTORY_DRAWER_PANEL_ID}
+              aria-label={t({
+                id: "officeAddin.historyDrawer.open",
+                message: "Open menu",
+              })}
+              className="focus-ring theme-transition flex size-7 items-center justify-center rounded-[var(--theme-radius-control)] text-theme-fg-secondary hover:bg-theme-bg-hover"
+              data-testid="addin-history-drawer-trigger"
+            >
+              <SidebarToggleIcon className="size-4" aria-hidden="true" />
+            </button>
             <button
               type="button"
               onClick={() => void controller.createNewChat()}
@@ -697,6 +705,14 @@ export function AddinChatCoreView({
             isOpen: controller.isSettingsOpen,
             onClose: () => controller.setIsSettingsOpen(false),
           })}
+          <AddinHistoryDrawerCore
+            isOpen={controller.isHistoryMenuOpen}
+            onClose={() => controller.setIsHistoryMenuOpen(false)}
+            onOpenSettings={() => controller.setIsSettingsOpen(true)}
+            panelId={HISTORY_DRAWER_PANEL_ID}
+            sectionsBeforeHistory={drawerSectionsBeforeHistory}
+            sectionsAfterHistory={drawerSectionsAfterHistory}
+          />
         </div>
       </DelegatedRunOpenProvider>
     </ChatInputControlsProvider>

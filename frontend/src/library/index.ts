@@ -275,6 +275,7 @@ export {
   useStandaloneFileUpload,
 } from "@/hooks/files";
 export {
+  CloseIcon,
   ComputerIcon,
   DocumentIcon,
   MailIcon,
