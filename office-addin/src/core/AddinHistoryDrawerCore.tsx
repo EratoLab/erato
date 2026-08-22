@@ -24,6 +24,7 @@ import {
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { useAddinHistoryFilterStore } from "./addinChatHistoryFilterStore";
 
@@ -348,7 +349,11 @@ export function AddinHistoryDrawerCore({
     />
   );
 
-  return (
+  // Portalled to body like ModalBase: rendered inline, the overlay's z-index
+  // is at the mercy of whatever stacking or compositing context the host
+  // shell happens to create around it — in the Office webviews that showed
+  // up as pre-open frame content painting over the open drawer.
+  return createPortal(
     <>
       <div
         // No blur on purpose: a backdrop-filter re-evaluates under the
@@ -514,6 +519,7 @@ export function AddinHistoryDrawerCore({
         chatId={shareDialogChatId}
         onClose={() => setShareDialogChatId(null)}
       />
-    </>
+    </>,
+    document.body,
   );
 }
