@@ -9,6 +9,7 @@ import {
   useFileCapabilitiesContext,
   useFileDropzone,
   useFileUploadStore,
+  useGenerationStatusStore,
   useMessagingStore,
   useModelHistory,
   usePersistedState,
@@ -155,6 +156,13 @@ function AddinChatDataProvider({
     currentChatId: session.currentChatId,
     chats,
   });
+
+  // Mirror the viewed chat into the generation-status store, as the web
+  // ChatProvider does: opening a settled run consumes its terminal
+  // notification, and the chat in view never carries an attention marker.
+  useEffect(() => {
+    useGenerationStatusStore.getState().setCurrentChatId(session.currentChatId);
+  }, [session.currentChatId]);
 
   const resetMessagingForNewChat = useCallback(() => {
     useMessagingStore.getState().abortActiveSSE();

@@ -149,6 +149,9 @@ vi.mock("@erato/frontend/library", async () => {
     FeatureConfigProvider: passthrough,
     FileCapabilitiesProvider: passthrough,
     GenerationStatusPoller: () => null,
+    useGenerationStatusStore: Object.assign(() => undefined, {
+      getState: () => ({ setCurrentChatId: () => undefined }),
+    }),
     I18nProvider: passthrough,
     ProfileProvider: passthrough,
     ThemeProvider: passthrough,

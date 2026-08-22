@@ -23,6 +23,7 @@ export {
   useDelegatedRunHeader,
   type DelegatedRunHeaderState,
 } from "@/hooks/chat/useDelegatedRunHeader";
+export { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 export {
   ChatMessage,
   type ChatMessageHostComponents,

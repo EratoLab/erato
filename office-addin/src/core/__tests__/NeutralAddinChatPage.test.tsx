@@ -16,6 +16,7 @@ const spies = vi.hoisted(() => ({
     setNavigationTransition: vi.fn(),
   },
   clearNewlyCreatedChatId: vi.fn(),
+  setGenerationCurrentChatId: vi.fn(),
   useDelegatedRunHeader: vi.fn(
     (): { header: ReactNode; composerLocked: boolean } => ({
       header: null,
@@ -86,6 +87,11 @@ vi.mock("@erato/frontend/library", async () => {
     useFileUploadStore: (
       selector: (state: { silentChatId: string | null }) => unknown,
     ) => selector({ silentChatId: null }),
+    useGenerationStatusStore: Object.assign(vi.fn(), {
+      getState: () => ({
+        setCurrentChatId: spies.setGenerationCurrentChatId,
+      }),
+    }),
     useMessagingStore: Object.assign(() => spies.messagingStore, {
       getState: () => spies.messagingStore,
     }),
@@ -300,6 +306,17 @@ describe("NeutralAddinChatPage host boundary", () => {
     expect(spies.useChatMessaging).toHaveBeenLastCalledWith(
       expect.objectContaining({ chatId: "run-77" }),
     );
+  });
+
+  it("mirrors the open chat into the generation-status store", () => {
+    renderPage();
+    expect(spies.setGenerationCurrentChatId).toHaveBeenLastCalledWith(null);
+
+    // Opening a run marks it viewed, which consumes a settled run's
+    // attention notification exactly like the web ChatProvider does.
+    fireEvent.click(screen.getByTestId("neutral-delegated-runs"));
+
+    expect(spies.setGenerationCurrentChatId).toHaveBeenLastCalledWith("run-77");
   });
 
   it("locks the composer while a delegate still writes the open run", () => {
