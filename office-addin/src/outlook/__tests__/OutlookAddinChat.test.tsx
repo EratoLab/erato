@@ -1,6 +1,6 @@
 import { i18n } from "@lingui/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { OutlookAddinChat as AddinChat } from "../OutlookAddinChat";
@@ -23,15 +23,23 @@ import type { ReactNode } from "react";
 
 // Hoisted so the dropzone stub can record the options AddinChat passes —
 // the `.msg` advertising test below asserts on `extraAcceptMimeTypes`.
-const { useConversationDropzoneMock } = vi.hoisted(() => ({
-  useConversationDropzoneMock: vi.fn(
-    (_options: { extraAcceptMimeTypes?: Record<string, string[]> }) => ({
-      getRootProps: () => ({}),
-      getInputProps: () => ({}),
-      isDragActive: false,
-      isDragAccept: false,
-    }),
-  ),
+const { useConversationDropzoneMock, dismissSessionToastsMock } = vi.hoisted(
+  () => ({
+    useConversationDropzoneMock: vi.fn(
+      (_options: { extraAcceptMimeTypes?: Record<string, string[]> }) => ({
+        getRootProps: () => ({}),
+        getInputProps: () => ({}),
+        isDragActive: false,
+        isDragAccept: false,
+      }),
+    ),
+    dismissSessionToastsMock: vi.fn(),
+  }),
+);
+
+vi.mock("../components/sessionAskToast", () => ({
+  dismissSessionToasts: dismissSessionToastsMock,
+  showSessionAskToast: vi.fn(),
 }));
 
 vi.mock("@erato/frontend/library", () => ({
@@ -200,5 +208,19 @@ describe("AddinChat without any Graph provider mounted (Exchange SE / unsupporte
     expect(dropzoneOptions?.extraAcceptMimeTypes).toEqual({
       "message/rfc822": [".eml"],
     });
+  });
+
+  // A pending ask toast floats interactive above the aria-modal drawer but
+  // outside its focus trap, and the drawer subsumes the toast's choices.
+  // Closing without picking releases the policy gate, whose re-evaluation
+  // re-shows a still-unanswered ask (covered in the session-controller
+  // tests), so dismissing here loses nothing.
+  it("dismisses pending session toasts when the history drawer opens", () => {
+    renderWithoutGraphProvider(<AddinChat />);
+    expect(dismissSessionToastsMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId("addin-history-drawer-trigger"));
+
+    expect(dismissSessionToastsMock).toHaveBeenCalled();
   });
 });

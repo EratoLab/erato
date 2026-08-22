@@ -551,6 +551,11 @@ msgstr "Paramètres"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
+msgid "officeAddin.historyDrawer.archiveFailed"
+msgstr "Impossible d'archiver la discussion"
+
+#. js-lingui-explicit-id
+#: src/core/AddinHistoryDrawerCore.tsx
 #~ msgid "officeAddin.historyDrawer.chats"
 #~ msgstr "Discussions"
 
@@ -578,6 +583,11 @@ msgstr "Ouvrir le menu"
 #: src/core/AddinHistoryDrawerCore.tsx
 #~ msgid "officeAddin.historyDrawer.rename.generated.fallback"
 #~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/core/AddinHistoryDrawerCore.tsx
+msgid "officeAddin.historyDrawer.renameFailed"
+msgstr "Impossible de renommer la discussion"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx

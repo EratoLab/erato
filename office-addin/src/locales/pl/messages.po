@@ -551,6 +551,11 @@ msgstr "Ustawienia"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
+msgid "officeAddin.historyDrawer.archiveFailed"
+msgstr "Nie udało się zarchiwizować czatu"
+
+#. js-lingui-explicit-id
+#: src/core/AddinHistoryDrawerCore.tsx
 #~ msgid "officeAddin.historyDrawer.chats"
 #~ msgstr "Czaty"
 
@@ -578,6 +583,11 @@ msgstr "Otwórz menu"
 #: src/core/AddinHistoryDrawerCore.tsx
 #~ msgid "officeAddin.historyDrawer.rename.generated.fallback"
 #~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/core/AddinHistoryDrawerCore.tsx
+msgid "officeAddin.historyDrawer.renameFailed"
+msgstr "Nie udało się zmienić nazwy czatu"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx

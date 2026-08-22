@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AddinChatInput } from "./components/AddinChatInput";
 import { AddinPinHintBanner } from "./components/AddinPinHintBanner";
 import { AddinSettingsDialog } from "./components/AddinSettingsDialog";
+import { dismissSessionToasts } from "./components/sessionAskToast";
 import {
   AddinChatCore,
   AddinChatCoreView,
@@ -73,6 +74,11 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
   useEffect(() => {
     if (!isHistoryMenuOpen) return;
     holdSessionPolicy();
+    // A pending ask toast would float interactive above the modal drawer yet
+    // sit outside its focus trap, and the drawer subsumes its choices anyway.
+    // Dismissing is safe: closing without picking releases the gate, which
+    // re-evaluates the anchor policy and re-shows a still-unanswered ask.
+    dismissSessionToasts();
     return () => releaseSessionPolicy();
   }, [isHistoryMenuOpen]);
   const lastSchedulingSignalAt = useMemo(

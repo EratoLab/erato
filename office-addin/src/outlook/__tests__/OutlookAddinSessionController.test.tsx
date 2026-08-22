@@ -1,5 +1,5 @@
-import { act, render } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, render } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { OutlookAddinSessionController } from "../OutlookAddinSessionController";
 import {
@@ -61,6 +61,12 @@ function Harness({ anchor }: { anchor: { itemKey: string } | null }) {
 }
 
 describe("OutlookAddinSessionController policy gate", () => {
+  // Without cleanup, harnesses from earlier tests stay mounted and
+  // re-evaluate the policy whenever the shared gate notifies.
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     captured.current = null;
@@ -124,5 +130,18 @@ describe("OutlookAddinSessionController policy gate", () => {
 
     act(() => captured.current?.beginNewChat());
     expect(spies.dismissToasts).toHaveBeenCalledTimes(2);
+  });
+
+  // The drawer dismisses a pending ask toast the moment it opens. That is
+  // only safe because a hold released with an unchanged anchor and no pick
+  // re-evaluates the policy, which shows the still-unanswered ask again.
+  it("re-shows a still-unanswered ask after a hold with an unchanged anchor", () => {
+    render(<Harness anchor={ANCHOR_A} />);
+    expect(spies.showToast).toHaveBeenCalledTimes(1);
+
+    act(() => holdSessionPolicy());
+    act(() => releaseSessionPolicy());
+
+    expect(spies.showToast).toHaveBeenCalledTimes(2);
   });
 });
