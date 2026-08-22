@@ -63,7 +63,12 @@ const HISTORY_DRAWER_PANEL_ID = "addin-history-drawer-panel";
 // sidebar shell tokens keep the trigger on the sidebar theme channel while
 // it floats over the chat body.
 const floatingTriggerStyle: CSSProperties = {
-  backgroundColor: "var(--theme-shell-sidebar)",
+  // Composited over the shell base: themes may give the sidebar token glass
+  // alpha (see .drawer-panel-skin), and a translucent floating control over
+  // chat content reads as a rendering defect.
+  backgroundColor: "var(--theme-shell-app, var(--theme-bg-primary))",
+  backgroundImage:
+    "linear-gradient(var(--theme-shell-sidebar), var(--theme-shell-sidebar))",
   borderColor: "var(--theme-border-divider)",
   borderRadius: "var(--theme-radius-shell)",
   boxShadow: "var(--theme-elevation-shell)",

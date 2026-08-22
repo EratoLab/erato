@@ -382,7 +382,7 @@ export function AddinHistoryDrawerCore({
             message: "Menu",
           })}
           onKeyDown={handlePanelKeyDown}
-          className={`sidebar-skin theme-transition will-change-transform absolute inset-y-0 left-0 flex w-[min(320px,calc(100vw-48px))] flex-col motion-reduce:transition-none ${
+          className={`drawer-panel-skin theme-transition will-change-transform absolute inset-y-0 left-0 flex w-[min(320px,calc(100vw-48px))] flex-col motion-reduce:transition-none ${
             isShown ? "translate-x-0" : "-translate-x-full"
           }`}
           data-testid="addin-history-drawer"

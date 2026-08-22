@@ -393,3 +393,22 @@ body {
 .drawer-overlay-skin {
   background-color: var(--theme-overlay-modal);
 }
+
+/* Drawer panel surface. Themes may give the sidebar token glass alpha and
+   pair it with a backdrop blur scoped to the web sidebar's data-ui hook; the
+   drawer deliberately skips the blur (it re-filters under the sliding panel
+   every frame in the Office webviews), so a translucent token would read as
+   content bleeding through. Compositing it over the shell base reproduces
+   what the web sidebar shows through its glass, opaquely. */
+.drawer-panel-skin {
+  background-color: var(--theme-shell-app, var(--theme-bg-primary));
+  background-image: linear-gradient(
+    var(--theme-shell-sidebar),
+    var(--theme-shell-sidebar)
+  );
+  border-color: var(
+    --theme-shell-sidebar-divider-color,
+    var(--theme-border-divider)
+  );
+  box-shadow: var(--theme-elevation-shell);
+}
