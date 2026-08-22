@@ -30,6 +30,7 @@ const spies = vi.hoisted(() => ({
   createEntraNaaAuthSource: vi.fn(),
   sessionAuthSource: vi.fn(),
   usePersistedState: vi.fn(),
+  updateChatTitle: vi.fn(async () => undefined),
   messagingStore: {
     abortActiveSSE: vi.fn(),
     clearUserMessages: vi.fn(),
@@ -235,14 +236,14 @@ vi.mock("@erato/frontend/library", async () => {
       );
     },
     removeArchivedChatFromLists: vi.fn(async () => () => undefined),
-    sanitizeChatHistoryFilters: (values: unknown) => values,
     seedGenerationStatusFromListing: vi.fn(),
     useAssistantsFeature: () => ({
       enabled: false,
       delegationEnabled: false,
       delegationAllowBackground: false,
     }),
-    useUpdateChat: () => ({ mutateAsync: vi.fn(async () => undefined) }),
+    useChatHistoryFilterFoldback: () => undefined,
+    useUpdateChatTitle: () => spies.updateChatTitle,
 
     ChatErrorBoundary: passthrough,
     Button: ({

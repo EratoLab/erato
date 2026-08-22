@@ -17,6 +17,14 @@ msgstr ""
 # Explicit IDs
 # ==============================
 #. js-lingui-explicit-id
+#: src/core/AddinHistoryDrawerCore.tsx
+msgid "chat.history.recent"
+msgstr ""
+
+# ==============================
+# Explicit IDs
+# ==============================
+#. js-lingui-explicit-id
 #: src/outlook/components/OutlookEratoAppointmentRenderer.tsx
 msgid "officeAddin.appointmentRenderer.alwaysAllowLocked"
 msgstr "Votre organisation exige une confirmation chaque fois que cette action s'exécute automatiquement."
@@ -543,33 +551,38 @@ msgstr "Paramètres"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
-msgid "officeAddin.historyDrawer.chats"
-msgstr ""
+#~ msgid "officeAddin.historyDrawer.chats"
+#~ msgstr "Discussions"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
 msgid "officeAddin.historyDrawer.close"
-msgstr ""
+msgstr "Fermer le menu"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
-msgid "officeAddin.historyDrawer.noMatches"
-msgstr ""
+msgid "officeAddin.historyDrawer.empty"
+msgstr "Aucune discussion pour le moment"
+
+#. js-lingui-explicit-id
+#: src/core/AddinHistoryDrawerCore.tsx
+#~ msgid "officeAddin.historyDrawer.noMatches"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/core/AddinChatCore.tsx
 msgid "officeAddin.historyDrawer.open"
-msgstr ""
+msgstr "Ouvrir le menu"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
-msgid "officeAddin.historyDrawer.rename.generated.fallback"
-msgstr ""
+#~ msgid "officeAddin.historyDrawer.rename.generated.fallback"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
 msgid "officeAddin.historyDrawer.title"
-msgstr ""
+msgstr "Menu"
 
 #. js-lingui-explicit-id
 #: src/providers/OfficeProvider.tsx

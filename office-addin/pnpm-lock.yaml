@@ -503,7 +503,7 @@ packages:
     hasBin: true
 
   '@erato/frontend@file:../frontend/dist-package/erato-frontend.tgz':
-    resolution: {integrity: sha512-kYtP/ekosI2+woNybiHsLj0YkBEEOrAEd4/EAZrR7CMSPYfSVJzxl3oIUYiWG6T0Kggoj3H8OtepBVig6eED7g==, tarball: file:../frontend/dist-package/erato-frontend.tgz}
+    resolution: {integrity: sha512-imVKDZD+TobZU2id1Wl/8Wri43Wh9SCKlwqWVIx2sXNZGVcVd9/mmdm1SVGzdvDnWpQEqevEreluvQFL0duJHA==, tarball: file:../frontend/dist-package/erato-frontend.tgz}
     version: 0.1.0
     peerDependencies:
       '@lingui/core': ^5.9.4

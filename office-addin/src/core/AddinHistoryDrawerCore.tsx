@@ -2,20 +2,23 @@ import {
   Button,
   ChatHistoryFilterMenu,
   ChatHistoryList,
+  ChatHistoryListSkeleton,
   ChatShareDialog,
   EditChatTitleDialog,
   NewChatItem,
+  NoFilterMatchesRow,
+  SettingsIcon,
+  sidebarInsetClassName,
+  SidebarCollapsibleSection,
+  SidebarNavigationItem,
   SidebarToggleIcon,
-  groupChatSessions,
   hasActiveFilters,
   mapRecentChatToSession,
-  resolveChatAttentionStatus,
+  sidebarNavigationIconClassName,
   useAssistantsFeature,
   useChatContext,
   useChatSharingFeature,
-  useConfirmationRegistryStore,
-  useGenerationStatusStore,
-  useLingui,
+  useGroupedChatSessions,
   useSanitizedChatHistoryFilters,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
@@ -68,7 +71,6 @@ export function AddinHistoryDrawerCore({
     filterStore,
   );
   const { enabled: sharingEnabled } = useChatSharingFeature();
-  const { i18n } = useLingui();
 
   const panelRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -122,41 +124,54 @@ export function AddinHistoryDrawerCore({
   );
   const [isUpdatingTitle, setIsUpdatingTitle] = useState(false);
 
+  // A dialog left open when the drawer closes would otherwise survive the
+  // unmount in this state and resurrect on the next open.
+  useEffect(() => {
+    if (isOpen) return;
+    setTitleDialogSessionId(null);
+    setShareDialogChatId(null);
+  }, [isOpen]);
+
   const sessions = useMemo(
     () => (chat.chats ?? []).map(mapRecentChatToSession),
     [chat.chats],
   );
 
-  const statusByChatId = useGenerationStatusStore(
-    (state) => state.statusByChatId,
-  );
-  const pendingIdsByChatId = useConfirmationRegistryStore(
-    (state) => state.pendingIdsByChatId,
-  );
-  const groups = useMemo(
+  const groups = useGroupedChatSessions(sessions, filters.groupBy);
+
+  // Grouped-mode collapse state is per-mount on purpose: date-bucket keys
+  // churn daily, so persisting them would accumulate stale entries.
+  const [collapsedGroupKeys, setCollapsedGroupKeys] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
+  const setGroupExpanded = useCallback((key: string, expanded: boolean) => {
+    setCollapsedGroupKeys((previous) => {
+      const next = new Set(previous);
+      if (expanded) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
+
+  // The infinite-scroll sentinel must sit inside a visible list, so it
+  // follows the last still-expanded group rather than simply the last one.
+  // With every group collapsed there is no sentinel at all.
+  const lastExpandedGroupKey = useMemo(
     () =>
-      groupChatSessions(sessions, filters.groupBy, {
-        now: new Date(),
-        locale: i18n.locale,
-        needsAttention: (session) =>
-          resolveChatAttentionStatus(
-            statusByChatId[session.id],
-            (pendingIdsByChatId[session.id]?.length ?? 0) > 0,
-          ) !== null,
-      }),
-    [
-      sessions,
-      filters.groupBy,
-      i18n.locale,
-      statusByChatId,
-      pendingIdsByChatId,
-    ],
+      groups.findLast((group) => !collapsedGroupKeys.has(group.key))?.key ??
+      null,
+    [groups, collapsedGroupKeys],
   );
 
   // Focus moves into the panel on open and back to where it came from on
-  // close, so the trigger keeps its place in the tab order.
+  // close, so the trigger keeps its place in the tab order. Gated on the
+  // mount state: on open the panel is still unmounted in the commit that
+  // flips `isOpen`, so focusing must wait for the commit that mounts it.
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !isMounted) return;
     const previouslyFocused = document.activeElement;
     toggleRef.current?.focus();
     return () => {
@@ -164,7 +179,7 @@ export function AddinHistoryDrawerCore({
         previouslyFocused.focus();
       }
     };
-  }, [isOpen]);
+  }, [isOpen, isMounted]);
 
   const handleSelect = useCallback(
     (sessionId: string) => {
@@ -193,10 +208,21 @@ export function AddinHistoryDrawerCore({
     [chat, titleDialogSessionId],
   );
 
-  // Element-scoped on purpose: the filter menu's popover closes itself on a
-  // document-level Escape without the event ever reaching this panel, so the
-  // first Escape closes the menu and only the second closes the drawer.
   const handlePanelKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    // Popovers (the filter menu, row menus) portal their panels to
+    // document.body but stay React-tree children of this panel, so their
+    // keydowns bubble back through React into this handler. Their own close
+    // handling listens on the document, which the stopPropagation below
+    // would starve — one Escape would close the whole drawer instead of the
+    // popover. An event whose DOM target is outside the panel belongs to
+    // such a portalled layer and is not ours to handle.
+    if (
+      panelRef.current &&
+      event.target instanceof Node &&
+      !panelRef.current.contains(event.target)
+    ) {
+      return;
+    }
     if (event.key === "Escape") {
       event.stopPropagation();
       onClose();
@@ -233,8 +259,44 @@ export function AddinHistoryDrawerCore({
   const activeTitleSession = titleDialogSessionId
     ? (sessions.find((session) => session.id === titleDialogSessionId) ?? null)
     : null;
+  const isInitialLoading = chat.isLoading && sessions.length === 0;
   const showNoMatches =
-    sessions.length === 0 && !chat.isLoading && hasActiveFilters(filters);
+    !chat.isLoading && sessions.length === 0 && hasActiveFilters(filters);
+  const showEmpty =
+    !chat.isLoading && sessions.length === 0 && !hasActiveFilters(filters);
+
+  const filterMenu = (
+    <ChatHistoryFilterMenu
+      assistantsEnabled={assistantsEnabled}
+      store={filterStore}
+    />
+  );
+  const emptyRow = (
+    <p
+      className="sidebar-content-col-geometry py-2 pr-3 text-xs text-theme-fg-muted"
+      data-testid="addin-history-drawer-empty"
+    >
+      {t({ id: "officeAddin.historyDrawer.empty", message: "No chats yet" })}
+    </p>
+  );
+  const renderChatList = (
+    groupSessions: typeof sessions,
+    carriesLoadMore: boolean,
+  ) => (
+    <ChatHistoryList
+      sessions={groupSessions}
+      currentSessionId={chat.currentChatId}
+      onSessionSelect={handleSelect}
+      onSessionArchive={(sessionId) => void chat.archiveChat(sessionId)}
+      onSessionEditTitle={setTitleDialogSessionId}
+      onSessionShare={sharingEnabled ? setShareDialogChatId : undefined}
+      hasMore={carriesLoadMore && chat.hasNextHistoryPage}
+      isLoadingMore={carriesLoadMore ? chat.isFetchingNextHistoryPage : false}
+      onLoadMore={
+        carriesLoadMore ? () => void chat.fetchNextHistoryPage() : undefined
+      }
+    />
+  );
 
   return (
     <>
@@ -261,7 +323,7 @@ export function AddinHistoryDrawerCore({
             message: "Menu",
           })}
           onKeyDown={handlePanelKeyDown}
-          className={`theme-transition absolute inset-y-0 left-0 flex w-[min(320px,calc(100vw-48px))] flex-col bg-theme-bg-primary shadow-xl motion-reduce:transition-none ${
+          className={`sidebar-skin theme-transition absolute inset-y-0 left-0 flex w-[min(320px,calc(100vw-48px))] flex-col motion-reduce:transition-none ${
             isShown ? "translate-x-0" : "-translate-x-full"
           }`}
           data-testid="addin-history-drawer"
@@ -294,91 +356,100 @@ export function AddinHistoryDrawerCore({
 
           {sectionsBeforeHistory}
 
-          <div className="flex items-center justify-between px-3 pt-2">
-            <span className="text-xs font-semibold text-theme-fg-secondary">
-              {t({ id: "officeAddin.historyDrawer.chats", message: "Chats" })}
-            </span>
-            <ChatHistoryFilterMenu
-              assistantsEnabled={assistantsEnabled}
-              store={filterStore}
-            />
-          </div>
-
           <div
-            className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5 pb-2"
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-2"
             data-ui="addin-history-drawer-list"
           >
-            {showNoMatches ? (
-              <p
-                className="px-2 py-3 text-xs text-theme-fg-muted"
-                data-testid="addin-history-drawer-empty"
+            {/* Same composition as the web sidebar: group sections are
+                top-level SIBLINGS (never nested — a wrapper section would
+                stack a second sidebar inset under theirs and shift every row
+                off the rail column), with the filter menu riding the first
+                group's actions slot. */}
+            {isInitialLoading ? (
+              <div className={sidebarInsetClassName}>
+                <ChatHistoryListSkeleton />
+              </div>
+            ) : filters.groupBy === "none" ? (
+              <SidebarCollapsibleSection
+                title={t({ id: "chat.history.recent", message: "Recent" })}
+                actions={filterMenu}
               >
-                {t({
-                  id: "officeAddin.historyDrawer.noMatches",
-                  message: "No chats match the current filters",
-                })}
-              </p>
-            ) : (
-              groups.map((group, index) => (
-                <div key={group.key}>
-                  {group.label ? (
-                    <p className="px-2 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wide text-theme-fg-muted">
-                      {group.label}
-                    </p>
-                  ) : null}
-                  <ChatHistoryList
-                    sessions={group.sessions}
-                    currentSessionId={chat.currentChatId}
-                    onSessionSelect={handleSelect}
-                    onSessionArchive={(sessionId) =>
-                      void chat.archiveChat(sessionId)
-                    }
-                    onSessionEditTitle={setTitleDialogSessionId}
-                    onSessionShare={
-                      sharingEnabled ? setShareDialogChatId : undefined
-                    }
-                    isLoading={chat.isLoading && sessions.length === 0}
-                    hasMore={
-                      index === groups.length - 1 && chat.hasNextHistoryPage
-                    }
-                    isLoadingMore={chat.isFetchingNextHistoryPage}
-                    onLoadMore={() => void chat.fetchNextHistoryPage()}
-                  />
+                {showNoMatches ? (
+                  <NoFilterMatchesRow />
+                ) : showEmpty ? (
+                  emptyRow
+                ) : (
+                  renderChatList(sessions, true)
+                )}
+              </SidebarCollapsibleSection>
+            ) : groups.length === 0 ? (
+              <>
+                {/* No group headers exist to host the filter menu, so a bare
+                    header row keeps its trigger reachable. */}
+                <div
+                  className={`${sidebarInsetClassName} sidebar-trailing-col-geometry flex items-center justify-end py-1`}
+                  data-ui="chat-history-filter-row"
+                >
+                  {filterMenu}
                 </div>
-              ))
+                {showNoMatches ? (
+                  <div className={sidebarInsetClassName}>
+                    <NoFilterMatchesRow />
+                  </div>
+                ) : showEmpty ? (
+                  <div className={sidebarInsetClassName}>{emptyRow}</div>
+                ) : null}
+              </>
+            ) : (
+              groups.map((group, index) => {
+                const carriesLoadMore = group.key === lastExpandedGroupKey;
+                return (
+                  <div key={group.key} data-ui="chat-history-group">
+                    <SidebarCollapsibleSection
+                      title={group.label ?? ""}
+                      expanded={!collapsedGroupKeys.has(group.key)}
+                      onExpandedChange={(expanded) =>
+                        setGroupExpanded(group.key, expanded)
+                      }
+                      actions={index === 0 ? filterMenu : undefined}
+                    >
+                      {renderChatList(group.sessions, carriesLoadMore)}
+                    </SidebarCollapsibleSection>
+                  </div>
+                );
+              })
             )}
           </div>
 
           {sectionsAfterHistory}
 
-          <div className="border-t border-theme-border p-1.5">
-            <button
-              type="button"
+          {/* !p-0: the nav row carries the sidebar inset channel itself, so
+              the band's own padding must lose — and it needs the important
+              modifier because the skin class shares specificity and comes
+              later in the built stylesheet. */}
+          <div
+            className="sidebar-section-skin border-t !p-0"
+            data-ui="sidebar-footer"
+          >
+            <SidebarNavigationItem
+              label={t({
+                id: "officeAddin.headerMenu.settings",
+                message: "Settings",
+              })}
+              icon={<SettingsIcon className={sidebarNavigationIconClassName} />}
               onClick={() => {
                 onClose();
                 onOpenSettings();
               }}
-              className="focus-ring-inset theme-transition w-full rounded-[var(--theme-radius-base)] px-2 py-2 text-left text-sm text-theme-fg-primary hover:bg-theme-bg-hover"
-              data-testid="addin-history-drawer-settings"
-            >
-              {t({
-                id: "officeAddin.headerMenu.settings",
-                message: "Settings",
-              })}
-            </button>
+              data-ui="addin-history-drawer-settings"
+            />
           </div>
         </div>
       </div>
 
       <EditChatTitleDialog
         isOpen={activeTitleSession !== null}
-        generatedTitle={
-          activeTitleSession?.titleBySummary ??
-          t({
-            id: "officeAddin.historyDrawer.rename.generated.fallback",
-            message: "Untitled Chat",
-          })
-        }
+        generatedTitle={activeTitleSession?.titleBySummary ?? ""}
         initialUserProvidedTitle={activeTitleSession?.titleByUserProvided}
         isSubmitting={isUpdatingTitle}
         onClose={() => setTitleDialogSessionId(null)}

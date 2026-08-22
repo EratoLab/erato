@@ -23,6 +23,7 @@ const spies = vi.hoisted(() => ({
   },
   clearNewlyCreatedChatId: vi.fn(),
   setGenerationCurrentChatId: vi.fn(),
+  updateChatTitle: vi.fn(async () => undefined),
   runOpenHandler: { current: null as ((chatId: string) => void) | null },
   chatContextValue: { current: null as ChatContextValue | null },
   sendMessage: vi.fn(async () => undefined),
@@ -135,15 +136,15 @@ vi.mock("@erato/frontend/library", async () => {
       );
     },
     removeArchivedChatFromLists: vi.fn(async () => () => undefined),
-    sanitizeChatHistoryFilters: (values: unknown) => values,
     seedGenerationStatusFromListing: vi.fn(),
     useAssistantsFeature: () => ({
       enabled: false,
       delegationEnabled: false,
       delegationAllowBackground: false,
     }),
+    useChatHistoryFilterFoldback: () => undefined,
     useInfiniteRecentChats: spies.useInfiniteRecentChats,
-    useUpdateChat: () => ({ mutateAsync: vi.fn(async () => undefined) }),
+    useUpdateChatTitle: () => spies.updateChatTitle,
     useMessagingStore: Object.assign(() => spies.messagingStore, {
       getState: () => spies.messagingStore,
     }),

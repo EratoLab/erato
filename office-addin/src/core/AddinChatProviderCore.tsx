@@ -4,11 +4,11 @@ import {
   mapMessageToUiMessage,
   recentChatsQuery,
   removeArchivedChatFromLists,
-  sanitizeChatHistoryFilters,
   seedGenerationStatusFromListing,
   useArchiveChatEndpoint,
   useAssistantsFeature,
   useBudgetStatus,
+  useChatHistoryFilterFoldback,
   useChatMessaging,
   useFileCapabilitiesContext,
   useFileDropzone,
@@ -18,7 +18,7 @@ import {
   useMessagingStore,
   useModelHistory,
   usePersistedState,
-  useUpdateChat,
+  useUpdateChatTitle,
   type ChatContextValue,
   type Message,
   type PersistedStateOptions,
@@ -73,22 +73,7 @@ export function AddinChatProviderCore({
 }) {
   const filterStore = getAddinChatHistoryFilterStore(platform);
   const { enabled: assistantsEnabled } = useAssistantsFeature();
-
-  // Fold assistant-scoped filter values back to their defaults in the store
-  // itself: the recent-chats query consumes the raw persisted values, so
-  // sanitizing only at render would let a stale persisted value keep
-  // filtering the request invisibly.
-  useEffect(() => {
-    if (assistantsEnabled) return;
-    const state = filterStore.getState();
-    const sanitized = sanitizeChatHistoryFilters(state, false);
-    if (sanitized.typeFilter !== state.typeFilter) {
-      state.setTypeFilter(sanitized.typeFilter);
-    }
-    if (sanitized.groupBy !== state.groupBy) {
-      state.setGroupBy(sanitized.groupBy);
-    }
-  }, [assistantsEnabled, filterStore]);
+  useChatHistoryFilterFoldback(assistantsEnabled, filterStore);
 
   const typeFilter = filterStore((state) => state.typeFilter);
   const statusFilter = filterStore((state) => state.statusFilter);
@@ -223,8 +208,6 @@ function AddinChatDataProvider({
   );
   const archiveChat = useCallback(
     async (chatId: string) => {
-      // An archived chat has no row, so its status must not keep counting.
-      useGenerationStatusStore.getState().clearStatus(chatId);
       if (filters.statusFilter === "all") {
         // The archived-inclusive result set does not shrink, which is what
         // makes refetch-driven offset skew impossible — plain invalidate.
@@ -241,6 +224,11 @@ function AddinChatDataProvider({
           throw error;
         }
       }
+      // An archived chat has no row, so its status must not keep counting.
+      // Cleared only once the mutation succeeded: there is no restore API,
+      // so clearing earlier would drop the marker of a chat whose row a
+      // failed archive puts back.
+      useGenerationStatusStore.getState().clearStatus(chatId);
       if (session.currentChatId === chatId) {
         session.beginNewChat();
         resetMessagingForNewChat();
@@ -255,23 +243,7 @@ function AddinChatDataProvider({
     ],
   );
 
-  const { mutateAsync: updateChatMutation } = useUpdateChat();
-  const updateChatTitle = useCallback(
-    async (chatId: string, titleByUserProvided?: string) => {
-      const trimmedTitle = titleByUserProvided?.trim();
-      await updateChatMutation({
-        pathParams: { chatId },
-        body: trimmedTitle
-          ? { title_by_user_provided: trimmedTitle }
-          : // Empty value removes the custom title on the backend.
-            {},
-      });
-      await queryClient.invalidateQueries({
-        queryKey: recentChatsQuery({}).queryKey,
-      });
-    },
-    [queryClient, updateChatMutation],
-  );
+  const updateChatTitle = useUpdateChatTitle();
 
   // Seed the status store from the backend's running and pending-approval
   // markers, so generations started (or parked) elsewhere get an indicator

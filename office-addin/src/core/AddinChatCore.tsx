@@ -49,6 +49,7 @@ import { AddinHistoryDrawerCore } from "./AddinHistoryDrawerCore";
 import { AddinSettingsDialogCore } from "./AddinSettingsDialogCore";
 
 import type {
+  CSSProperties,
   ComponentProps,
   ComponentType,
   MutableRefObject,
@@ -57,6 +58,16 @@ import type {
 
 // Links the header trigger's aria-controls to the drawer's dialog panel.
 const HISTORY_DRAWER_PANEL_ID = "addin-history-drawer-panel";
+
+// Same surface recipe as the web sidebar's floating hidden-mode toggle: the
+// sidebar shell tokens keep the trigger on the sidebar theme channel while
+// it floats over the chat body.
+const floatingTriggerStyle: CSSProperties = {
+  backgroundColor: "var(--theme-shell-sidebar)",
+  borderColor: "var(--theme-border-divider)",
+  borderRadius: "var(--theme-radius-shell)",
+  boxShadow: "var(--theme-elevation-shell)",
+};
 
 export interface AddinChatHostCallbacks {
   beforeSend?: (hostContextIdentity?: string | null) => void;
@@ -582,7 +593,8 @@ export function AddinChatCoreView({
               id: "officeAddin.historyDrawer.open",
               message: "Open menu",
             })}
-            className="absolute left-2 top-2 z-20 bg-theme-bg-primary"
+            className="absolute left-2 top-2 z-20 border"
+            style={floatingTriggerStyle}
             data-testid="addin-history-drawer-trigger"
           />
 

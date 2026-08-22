@@ -17,6 +17,14 @@ msgstr ""
 # Explicit IDs
 # ==============================
 #. js-lingui-explicit-id
+#: src/core/AddinHistoryDrawerCore.tsx
+msgid "chat.history.recent"
+msgstr "Recent"
+
+# ==============================
+# Explicit IDs
+# ==============================
+#. js-lingui-explicit-id
 #: src/outlook/components/OutlookEratoAppointmentRenderer.tsx
 msgid "officeAddin.appointmentRenderer.alwaysAllowLocked"
 msgstr "Your organization requires confirmation each time this action runs automatically."
@@ -543,8 +551,8 @@ msgstr "Settings"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
-msgid "officeAddin.historyDrawer.chats"
-msgstr "Chats"
+#~ msgid "officeAddin.historyDrawer.chats"
+#~ msgstr "Chats"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
@@ -553,8 +561,13 @@ msgstr "Close menu"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
-msgid "officeAddin.historyDrawer.noMatches"
-msgstr "No chats match the current filters"
+msgid "officeAddin.historyDrawer.empty"
+msgstr "No chats yet"
+
+#. js-lingui-explicit-id
+#: src/core/AddinHistoryDrawerCore.tsx
+#~ msgid "officeAddin.historyDrawer.noMatches"
+#~ msgstr "No chats match the current filters"
 
 #. js-lingui-explicit-id
 #: src/core/AddinChatCore.tsx
@@ -563,8 +576,8 @@ msgstr "Open menu"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
-msgid "officeAddin.historyDrawer.rename.generated.fallback"
-msgstr "Untitled Chat"
+#~ msgid "officeAddin.historyDrawer.rename.generated.fallback"
+#~ msgstr "Untitled Chat"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx

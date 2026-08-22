@@ -6,6 +6,7 @@ import {
   render,
   screen,
 } from "@testing-library/react";
+import { createPortal } from "react-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AddinHistoryDrawerCore } from "../AddinHistoryDrawerCore";
@@ -39,8 +40,12 @@ const spies = vi.hoisted(() => {
       hasMore?: boolean;
       onLoadMore?: () => void;
       onSessionSelect: (id: string) => void;
+      onSessionEditTitle?: (id: string) => void;
       onSessionShare?: (id: string) => void;
     }>,
+    renameDialogProps: {
+      current: null as { isOpen: boolean; generatedTitle: string } | null,
+    },
     filterMenuStore,
     sharingEnabled: { current: true },
   };
@@ -60,12 +65,18 @@ vi.mock("@erato/frontend/library", () => ({
     return (
       <div data-testid="history-list">
         {props.sessions.map((session) => (
-          <button
-            key={session.id}
-            type="button"
-            data-testid={`row-${session.id}`}
-            onClick={() => props.onSessionSelect(session.id)}
-          />
+          <div key={session.id}>
+            <button
+              type="button"
+              data-testid={`row-${session.id}`}
+              onClick={() => props.onSessionSelect(session.id)}
+            />
+            <button
+              type="button"
+              data-testid={`rename-${session.id}`}
+              onClick={() => props.onSessionEditTitle?.(session.id)}
+            />
+          </div>
         ))}
         {props.hasMore ? (
           <button
@@ -77,6 +88,7 @@ vi.mock("@erato/frontend/library", () => ({
       </div>
     );
   },
+  ChatHistoryListSkeleton: () => <div data-testid="chat-history-skeleton" />,
   ChatShareDialog: ({ isOpen }: { isOpen: boolean }) =>
     isOpen ? <div data-testid="share-dialog" /> : null,
   NewChatItem: ({ onNewChat }: { onNewChat?: () => void }) => (
@@ -86,20 +98,45 @@ vi.mock("@erato/frontend/library", () => ({
       onClick={() => onNewChat?.()}
     />
   ),
+  NoFilterMatchesRow: () => <p data-testid="chat-history-no-filter-matches" />,
+  sidebarInsetClassName: "sidebar-inset-geometry",
+  SettingsIcon: () => null,
+  SidebarCollapsibleSection: ({
+    title,
+    actions,
+    children,
+  }: {
+    title: string;
+    actions?: ReactNode;
+    children: ReactNode;
+  }) => (
+    <div data-testid="collapsible-section" data-title={title}>
+      {actions}
+      {children}
+    </div>
+  ),
+  SidebarNavigationItem: ({
+    label,
+    onClick,
+    "data-ui": dataUi,
+  }: {
+    label: string;
+    onClick?: () => void;
+    "data-ui"?: string;
+  }) => (
+    <button type="button" data-testid={dataUi} onClick={() => onClick?.()}>
+      {label}
+    </button>
+  ),
   SidebarToggleIcon: () => null,
-  EditChatTitleDialog: ({ isOpen }: { isOpen: boolean }) =>
-    isOpen ? <div data-testid="rename-dialog" /> : null,
-  groupChatSessions: (sessions: { id: string }[]) =>
-    sessions.length === 0
-      ? []
-      : [
-          { key: "a", label: "Group A", sessions: sessions.slice(0, 1) },
-          { key: "b", label: "Group B", sessions: sessions.slice(1) },
-        ].filter((group) => group.sessions.length > 0),
+  EditChatTitleDialog: (props: { isOpen: boolean; generatedTitle: string }) => {
+    spies.renameDialogProps.current = props;
+    return props.isOpen ? <div data-testid="rename-dialog" /> : null;
+  },
   hasActiveFilters: (values: { typeFilter: string; statusFilter: string }) =>
     values.typeFilter !== "all" || values.statusFilter !== "active",
   mapRecentChatToSession: (chat: { id: string }) => ({ id: chat.id }),
-  resolveChatAttentionStatus: () => null,
+  sidebarNavigationIconClassName: "",
   useAssistantsFeature: () => ({ enabled: true }),
   useChatContext: () => ({
     ...spies.chatContext,
@@ -110,15 +147,13 @@ vi.mock("@erato/frontend/library", () => ({
     fetchNextHistoryPage: spies.fetchNextHistoryPage,
   }),
   useChatSharingFeature: () => ({ enabled: spies.sharingEnabled.current }),
-  useConfirmationRegistryStore: (
-    selector: (state: {
-      pendingIdsByChatId: Record<string, string[]>;
-    }) => unknown,
-  ) => selector({ pendingIdsByChatId: {} }),
-  useGenerationStatusStore: (
-    selector: (state: { statusByChatId: Record<string, unknown> }) => unknown,
-  ) => selector({ statusByChatId: {} }),
-  useLingui: () => ({ i18n: { locale: "en" } }),
+  useGroupedChatSessions: (sessions: { id: string }[]) =>
+    sessions.length === 0
+      ? []
+      : [
+          { key: "a", label: "Group A", sessions: sessions.slice(0, 1) },
+          { key: "b", label: "Group B", sessions: sessions.slice(1) },
+        ].filter((group) => group.sessions.length > 0),
   useSanitizedChatHistoryFilters: () => spies.filters,
 }));
 
@@ -129,7 +164,7 @@ const renderDrawer = (
   overrides: Partial<
     Pick<
       Parameters<typeof AddinHistoryDrawerCore>[0],
-      "isOpen" | "onClose" | "onOpenSettings"
+      "isOpen" | "onClose" | "onOpenSettings" | "sectionsBeforeHistory"
     >
   > = {},
 ) => {
@@ -142,6 +177,7 @@ const renderDrawer = (
         onClose={onClose}
         onOpenSettings={onOpenSettings}
         panelId="drawer-panel"
+        sectionsBeforeHistory={overrides.sectionsBeforeHistory}
       />
     </AddinHistoryFilterStoreContext.Provider>,
   );
@@ -157,6 +193,7 @@ describe("AddinHistoryDrawerCore", () => {
     i18n.activate("en");
     vi.clearAllMocks();
     spies.historyListProps.length = 0;
+    spies.renameDialogProps.current = null;
     spies.filterMenuStore.current = null;
     spies.sharingEnabled.current = true;
     spies.chatContext.chats = [{ id: "c1" }, { id: "c2" }];
@@ -203,6 +240,32 @@ describe("AddinHistoryDrawerCore", () => {
     });
 
     expect(onClose).toHaveBeenCalled();
+  });
+
+  // Portalled popover content (the filter menu, row menus) lives under
+  // document.body in the DOM but inside the panel in the React tree, so its
+  // keydowns re-enter the panel handler. The handler must leave those events
+  // alone — the popovers close themselves through document-level listeners
+  // that its stopPropagation would otherwise starve. The portal here stands
+  // in for a real popover: same React parentage, same out-of-panel DOM
+  // target, so the guard is exercised through the genuine event path.
+  it("ignores Escape arriving from portalled popover content", () => {
+    const { onClose } = renderDrawer({
+      sectionsBeforeHistory: createPortal(
+        <button type="button" data-testid="portalled-popover-content" />,
+        document.body,
+      ),
+    });
+
+    fireEvent.keyDown(screen.getByTestId("portalled-popover-content"), {
+      key: "Escape",
+    });
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(screen.getByTestId("addin-history-drawer"), {
+      key: "Escape",
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("closes only when the backdrop element itself is clicked", () => {
@@ -299,6 +362,101 @@ describe("AddinHistoryDrawerCore", () => {
     }
   });
 
+  // Regression: the panel mounts a commit after `isOpen` flips, so a focus
+  // effect keyed on the open state alone ran against a null ref and keyboard
+  // users never entered the panel.
+  it("moves focus into the panel when opened from closed", () => {
+    vi.useFakeTimers();
+    try {
+      const drawerAt = (isOpen: boolean) => (
+        <AddinHistoryFilterStoreContext.Provider value={fakeFilterStore}>
+          <AddinHistoryDrawerCore
+            isOpen={isOpen}
+            onClose={vi.fn()}
+            onOpenSettings={vi.fn()}
+            panelId="drawer-panel"
+          />
+        </AddinHistoryFilterStoreContext.Provider>
+      );
+      const { rerender } = render(drawerAt(false));
+      expect(screen.queryByTestId("addin-history-drawer")).toBeNull();
+
+      rerender(drawerAt(true));
+      act(() => {
+        vi.advanceTimersByTime(64);
+      });
+
+      const panel = screen.getByTestId("addin-history-drawer");
+      expect(panel.contains(document.activeElement)).toBe(true);
+      expect(document.activeElement).toBe(
+        screen.getByTestId("addin-history-drawer-close"),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("disarms open dialogs when the drawer closes", () => {
+    vi.useFakeTimers();
+    try {
+      const drawerAt = (isOpen: boolean) => (
+        <AddinHistoryFilterStoreContext.Provider value={fakeFilterStore}>
+          <AddinHistoryDrawerCore
+            isOpen={isOpen}
+            onClose={vi.fn()}
+            onOpenSettings={vi.fn()}
+            panelId="drawer-panel"
+          />
+        </AddinHistoryFilterStoreContext.Provider>
+      );
+      const { rerender } = render(drawerAt(true));
+      act(() => {
+        vi.advanceTimersByTime(64);
+      });
+
+      fireEvent.click(screen.getByTestId("rename-c1"));
+      expect(screen.getByTestId("rename-dialog")).toBeInTheDocument();
+
+      rerender(drawerAt(false));
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+      rerender(drawerAt(true));
+      act(() => {
+        vi.advanceTimersByTime(64);
+      });
+      expect(screen.queryByTestId("rename-dialog")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("leaves the generated-title fallback to the rename dialog", () => {
+    renderDrawer();
+
+    fireEvent.click(screen.getByTestId("rename-c1"));
+
+    expect(spies.renameDialogProps.current?.isOpen).toBe(true);
+    expect(spies.renameDialogProps.current?.generatedTitle).toBe("");
+  });
+
+  it("shows the history skeleton while the first page loads", () => {
+    spies.chatContext.chats = [];
+    spies.chatContext.isLoading = true;
+    renderDrawer();
+
+    expect(screen.getByTestId("chat-history-skeleton")).toBeInTheDocument();
+  });
+
+  it("shows an empty-state row when there are no chats at all", () => {
+    spies.chatContext.chats = [];
+    renderDrawer();
+
+    expect(
+      screen.getByTestId("addin-history-drawer-empty"),
+    ).toBeInTheDocument();
+  });
+
   it("says when active filters match nothing instead of showing an empty void", () => {
     spies.chatContext.chats = [];
     spies.filters = {
@@ -309,7 +467,8 @@ describe("AddinHistoryDrawerCore", () => {
     renderDrawer();
 
     expect(
-      screen.getByTestId("addin-history-drawer-empty"),
+      screen.getByTestId("chat-history-no-filter-matches"),
     ).toBeInTheDocument();
+    expect(screen.queryByTestId("addin-history-drawer-empty")).toBeNull();
   });
 });
