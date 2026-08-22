@@ -399,6 +399,7 @@ export type {
 export type { ChatInputControlsHandle } from "@/components/ui/Chat/ChatInputControlsContext";
 export type { ChatInputAttachmentPreviewProps } from "@/types/chat-input-attachment-preview";
 export type { AssistantMention } from "@/utils/chat/assistantMentions";
+export type { DelegationRunMode } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 export type {
   ActionFacetInfo,
   ActionFacetRequest,

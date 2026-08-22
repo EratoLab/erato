@@ -24,6 +24,19 @@ const spies = vi.hoisted(() => ({
   clearNewlyCreatedChatId: vi.fn(),
   setGenerationCurrentChatId: vi.fn(),
   runOpenHandler: { current: null as ((chatId: string) => void) | null },
+  sendMessage: vi.fn(async () => undefined),
+  inputProps: {
+    current: null as null | {
+      onSendMessage: (
+        message: string,
+        inputFileIds?: string[],
+        modelId?: string,
+        selectedFacetIds?: string[],
+        mentionedAssistants?: { id: string; name: string }[],
+        delegationRunMode?: "wait" | "background",
+      ) => void;
+    },
+  },
   useDelegatedRunHeader: vi.fn(
     (): { header: ReactNode; composerLocked: boolean } => ({
       header: null,
@@ -44,7 +57,7 @@ const spies = vi.hoisted(() => ({
     isFinalizing: false,
     streamingContent: null,
     error: null,
-    sendMessage: vi.fn(async () => undefined),
+    sendMessage: spies.sendMessage,
     editMessage: vi.fn(async () => undefined),
     regenerateMessage: vi.fn(async () => undefined),
     cancelMessage: vi.fn(),
@@ -193,12 +206,19 @@ vi.mock("@erato/frontend/library", async () => {
 });
 
 vi.mock("../AddinChatInputCore", () => ({
-  AddinChatInputCore: ({ disabled }: { disabled?: boolean }) => (
-    <div
-      data-testid="neutral-chat-input"
-      data-disabled={disabled ? "true" : "false"}
-    />
-  ),
+  AddinChatInputCore: (
+    props: NonNullable<(typeof spies.inputProps)["current"]> & {
+      disabled?: boolean;
+    },
+  ) => {
+    spies.inputProps.current = props;
+    return (
+      <div
+        data-testid="neutral-chat-input"
+        data-disabled={props.disabled ? "true" : "false"}
+      />
+    );
+  },
 }));
 vi.mock("../AddinSettingsDialogCore", () => ({
   AddinSettingsDialogCore: () => null,
@@ -335,6 +355,33 @@ describe("NeutralAddinChatPage host boundary", () => {
 
     expect(spies.useChatMessaging).toHaveBeenLastCalledWith(
       expect.objectContaining({ chatId: "run-88" }),
+    );
+  });
+
+  it("carries the background run-mode choice through to the send", () => {
+    renderPage();
+
+    // The composer's wait-or-background decision arrives as ChatInput's
+    // sixth argument; every hop of the add-in chain must hand it on, or a
+    // "background" dispatch silently degrades to an awaited one.
+    spies.inputProps.current?.onSendMessage(
+      "look into this",
+      undefined,
+      undefined,
+      undefined,
+      [{ id: "assistant-9", name: "Research" }],
+      "background",
+    );
+
+    expect(spies.sendMessage).toHaveBeenCalledWith(
+      "look into this",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      [{ id: "assistant-9", name: "Research" }],
+      "background",
     );
   });
 

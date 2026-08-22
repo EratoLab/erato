@@ -33,6 +33,7 @@ import {
   type ChatInputControlsHandle,
   type ChatMessageProps,
   type DelegatedRunsSectionProps,
+  type DelegationRunMode,
   type DropdownMenuItem,
   type FileUploadItem,
   type MessageAction,
@@ -69,6 +70,7 @@ export interface AddinChatInputRenderProps {
     actionFacet?: ActionFacetRequest,
     hostContextIdentity?: string | null,
     mentionedAssistants?: AssistantMention[],
+    delegationRunMode?: DelegationRunMode,
   ) => void;
   onFilePreview: (file: FileUploadItem) => void;
   handleFileAttachments: (files: FileUploadItem[]) => void;
@@ -270,6 +272,7 @@ function useAddinChatController({
       actionFacet,
       hostContextIdentity,
       mentionedAssistants,
+      delegationRunMode,
     ) => {
       hostCallbacksRef.current.beforeSend?.(hostContextIdentity);
       void chat
@@ -281,6 +284,7 @@ function useAddinChatController({
           selectedFacetIds,
           actionFacet,
           mentionedAssistants,
+          delegationRunMode,
         )
         .then(() => chat.refetchHistory());
     },
@@ -493,6 +497,7 @@ function NeutralAddinChatHost({ controller }: AddinChatHostProps) {
             modelId,
             selectedFacetIds,
             mentionedAssistants,
+            delegationRunMode,
           ) =>
             props.onSendMessage(
               message,
@@ -502,6 +507,7 @@ function NeutralAddinChatHost({ controller }: AddinChatHostProps) {
               undefined,
               undefined,
               mentionedAssistants,
+              delegationRunMode,
             )
           }
         />
