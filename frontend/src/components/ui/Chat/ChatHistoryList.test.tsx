@@ -340,3 +340,48 @@ describe("ChatHistoryList", () => {
     });
   });
 });
+
+describe("disableRowLinks", () => {
+  const renderRows = async (disableRowLinks: boolean, onSelect = vi.fn()) => {
+    const { i18n } = await import("@lingui/core");
+    i18n.load("en", enMessages as unknown as Messages);
+    i18n.activate("en");
+    render(
+      <I18nProvider i18n={i18n}>
+        <ChatHistoryList
+          sessions={sessions}
+          currentSessionId={null}
+          onSessionSelect={onSelect}
+          disableRowLinks={disableRowLinks}
+        />
+      </I18nProvider>,
+    );
+    return onSelect;
+  };
+
+  it("renders rows without hrefs so no click can navigate the host", async () => {
+    const onSelect = await renderRows(true);
+
+    const row = screen.getByRole("button", { name: "First chat" });
+    expect(row).not.toHaveAttribute("href");
+
+    const { fireEvent } = await import("@testing-library/react");
+    // Modified clicks select in place: the host has no tab to open.
+    fireEvent.click(row, { metaKey: true });
+    expect(onSelect).toHaveBeenCalledWith("chat-1");
+  });
+
+  it("keeps the link escape hatch by default", async () => {
+    const onSelect = await renderRows(false);
+
+    const row = screen.getByRole("link", { name: "First chat" });
+    expect(row).toHaveAttribute("href");
+
+    const { fireEvent } = await import("@testing-library/react");
+    const swallowNavigation = (e: MouseEvent) => e.preventDefault();
+    document.addEventListener("click", swallowNavigation);
+    fireEvent.click(row, { metaKey: true });
+    document.removeEventListener("click", swallowNavigation);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+});

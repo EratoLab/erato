@@ -61,6 +61,12 @@ export interface AddinSessionControllerProps {
 
 type RecentChatsResult = ReturnType<typeof useInfiniteRecentChats>;
 
+// The server-default listing shape (every type, archived excluded).
+const SESSION_LISTING_FILTERS: RecentChatsListFilters = {
+  typeFilter: "all",
+  statusFilter: "active",
+};
+
 export function AddinChatProviderCore({
   children,
   platform,
@@ -84,9 +90,18 @@ export function AddinChatProviderCore({
   const history = useInfiniteRecentChats({ filters });
   const chats = history.chats;
 
+  // The session policy's ask toast suggests and lists chats through this
+  // unfiltered listing, never the drawer-filtered one: narrowing a drawer
+  // filter must not silently change which chat the toast offers to resume.
+  // With the filters at their defaults both hooks share one query key, so
+  // this costs nothing until a filter is actually narrowed.
+  const sessionHistory = useInfiniteRecentChats({
+    filters: SESSION_LISTING_FILTERS,
+  });
+
   return (
     <AddinHistoryFilterStoreContext.Provider value={filterStore}>
-      <SessionController chats={chats}>
+      <SessionController chats={sessionHistory.chats}>
         {(session) => (
           <AddinChatDataProvider
             chats={chats}

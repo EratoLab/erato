@@ -286,6 +286,9 @@ export function AddinHistoryDrawerCore({
     <ChatHistoryList
       sessions={groupSessions}
       currentSessionId={chat.currentChatId}
+      // The pane serves no chat routes and has no tabs; every activation,
+      // modified clicks included, selects in place.
+      disableRowLinks={true}
       onSessionSelect={handleSelect}
       onSessionArchive={(sessionId) => void chat.archiveChat(sessionId)}
       onSessionEditTitle={setTitleDialogSessionId}

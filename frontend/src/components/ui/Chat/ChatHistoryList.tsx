@@ -121,6 +121,12 @@ export interface ChatHistoryListProps {
   hasMore?: boolean;
   isLoadingMore?: boolean;
   onLoadMore?: () => void;
+  /**
+   * For hosts that serve no chat routes (the add-in pane): rows render
+   * without hrefs, and every activation — modified clicks included — goes
+   * through onSessionSelect.
+   */
+  disableRowLinks?: boolean;
 }
 
 const ChatHistoryListItem = memo<{
@@ -138,6 +144,7 @@ const ChatHistoryListItem = memo<{
   canEdit?: boolean;
   onShowDetails?: () => void;
   showTimestamps?: boolean;
+  disableRowLinks?: boolean;
 }>(
   ({
     session,
@@ -154,6 +161,7 @@ const ChatHistoryListItem = memo<{
     canEdit = true,
     onShowDetails,
     showTimestamps = true,
+    disableRowLinks = false,
   }) => {
     const generationStatus = useRowGenerationStatus(session.id);
     const rowTitle = useRowTitle(session);
@@ -172,6 +180,147 @@ const ChatHistoryListItem = memo<{
             id: "chat.history.menu.pin",
             message: "Pin",
           });
+    const rowAriaLabel = generationStatus
+      ? `${rowTitle}, ${chatAttentionStatusLabel(generationStatus)}`
+      : rowTitle;
+    const rowBody = (
+      <InteractiveContainer
+        useDiv={true}
+        showFocusRing={false}
+        className={clsx(
+          "sidebar-content-col-geometry sidebar-trailing-col-geometry sidebar-row-geometry theme-transition flex flex-col py-1.5 pb-3.5 text-left",
+          isActive
+            ? "sidebar-row-selected"
+            : "hover:bg-[var(--theme-shell-sidebar-hover)]",
+          layout === "compact" ? "gap-0.5" : "gap-1",
+        )}
+        data-chat-id={session.id}
+        data-ui="chat-history-item"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <GenerationStatusIndicator chatId={session.id} />
+            <ChatItemIcon />
+            <span className="truncate font-medium" title={rowTitle}>
+              {rowTitle}
+            </span>
+          </div>
+          {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent bubbling */}
+          <div
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            <DropdownMenu
+              triggerButtonVariant="sidebar-icon"
+              items={[
+                ...(onPin
+                  ? [
+                      {
+                        label: pinMenuLabel,
+                        icon: isPinned ? (
+                          <PinSlashIcon className="size-4" />
+                        ) : (
+                          <PinIcon className="size-4" />
+                        ),
+                        onClick: onPin,
+                        disabled: !canEdit || isPinLimitReached,
+                      },
+                    ]
+                  : []),
+                ...(onShare
+                  ? [
+                      {
+                        label: t({
+                          id: "chat.share.button",
+                          message: "Share",
+                        }),
+                        icon: <ShareIcon className="size-4" />,
+                        onClick: onShare,
+                        disabled: !canEdit,
+                      },
+                    ]
+                  : []),
+                ...(onEditTitle
+                  ? [
+                      {
+                        label: t({
+                          id: "chat.history.menu.rename",
+                          message: "Rename",
+                        }),
+                        icon: <EditIcon className="size-4" />,
+                        onClick: onEditTitle,
+                        disabled: !canEdit,
+                      },
+                    ]
+                  : []),
+                {
+                  label: t`Remove`,
+                  icon: <Trash className="size-4" />,
+                  variant: "danger",
+                  onClick: onArchive ?? (() => {}),
+                  confirmAction: true,
+                  confirmTitle: t`Confirm Removal`,
+                  confirmMessage: t`Are you sure you want to remove this chat?`,
+                },
+              ]}
+            />
+          </div>
+        </div>
+        {layout !== "compact" && showTimestamps && (
+          <>
+            <p
+              className={clsx(
+                "truncate text-xs",
+                session.metadata?.fileCount == 0
+                  ? "text-theme-fg-muted"
+                  : "text-theme-fg-secondary",
+              )}
+              title={
+                session.metadata?.fileCount === 0
+                  ? t`No files`
+                  : session.metadata?.fileCount === 1
+                    ? t`1 file`
+                    : `${session.metadata?.fileCount ?? 0} files`
+              }
+            >
+              <Plural
+                value={session.metadata?.fileCount ?? 0}
+                _0="No files"
+                one="# file"
+                other="# files"
+              />
+            </p>
+            {session.updatedAt && (
+              <p className="text-xs text-theme-fg-secondary">
+                <MessageTimestamp createdAt={new Date(session.updatedAt)} />
+              </p>
+            )}
+          </>
+        )}
+      </InteractiveContainer>
+    );
+
+    // A host without the web app's chat routes (the add-in pane) has no tab
+    // for a modified click to open; there every activation selects in place,
+    // and rendering no href keeps a middle click from navigating the webview
+    // itself.
+    if (disableRowLinks) {
+      return (
+        <InteractiveContainer
+          useDiv={true}
+          showFocusRing={false}
+          onClick={() => onSelect()}
+          className={`${sidebarRowLinkClassName} cursor-pointer`}
+          aria-label={rowAriaLabel}
+          aria-current={isActive ? "page" : undefined}
+        >
+          {rowBody}
+        </InteractiveContainer>
+      );
+    }
+
     return (
       <a
         href={getChatUrl(session.id, session.assistantId)}
@@ -180,134 +329,14 @@ const ChatHistoryListItem = memo<{
           if (e.metaKey || e.ctrlKey) {
             return;
           }
-          // Prevent default navigation for normal clicks
           e.preventDefault();
           onSelect();
         }}
         className={sidebarRowLinkClassName}
-        aria-label={
-          generationStatus
-            ? `${rowTitle}, ${chatAttentionStatusLabel(generationStatus)}`
-            : rowTitle
-        }
+        aria-label={rowAriaLabel}
         aria-current={isActive ? "page" : undefined}
       >
-        <InteractiveContainer
-          useDiv={true}
-          showFocusRing={false}
-          className={clsx(
-            "sidebar-content-col-geometry sidebar-trailing-col-geometry sidebar-row-geometry theme-transition flex flex-col py-1.5 pb-3.5 text-left",
-            isActive
-              ? "sidebar-row-selected"
-              : "hover:bg-[var(--theme-shell-sidebar-hover)]",
-            layout === "compact" ? "gap-0.5" : "gap-1",
-          )}
-          data-chat-id={session.id}
-          data-ui="chat-history-item"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex min-w-0 flex-1 items-center gap-2">
-              <GenerationStatusIndicator chatId={session.id} />
-              <ChatItemIcon />
-              <span className="truncate font-medium" title={rowTitle}>
-                {rowTitle}
-              </span>
-            </div>
-            {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent bubbling */}
-            <div
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-              }}
-            >
-              <DropdownMenu
-                triggerButtonVariant="sidebar-icon"
-                items={[
-                  ...(onPin
-                    ? [
-                        {
-                          label: pinMenuLabel,
-                          icon: isPinned ? (
-                            <PinSlashIcon className="size-4" />
-                          ) : (
-                            <PinIcon className="size-4" />
-                          ),
-                          onClick: onPin,
-                          disabled: !canEdit || isPinLimitReached,
-                        },
-                      ]
-                    : []),
-                  ...(onShare
-                    ? [
-                        {
-                          label: t({
-                            id: "chat.share.button",
-                            message: "Share",
-                          }),
-                          icon: <ShareIcon className="size-4" />,
-                          onClick: onShare,
-                          disabled: !canEdit,
-                        },
-                      ]
-                    : []),
-                  ...(onEditTitle
-                    ? [
-                        {
-                          label: t({
-                            id: "chat.history.menu.rename",
-                            message: "Rename",
-                          }),
-                          icon: <EditIcon className="size-4" />,
-                          onClick: onEditTitle,
-                          disabled: !canEdit,
-                        },
-                      ]
-                    : []),
-                  {
-                    label: t`Remove`,
-                    icon: <Trash className="size-4" />,
-                    variant: "danger",
-                    onClick: onArchive ?? (() => {}),
-                    confirmAction: true,
-                    confirmTitle: t`Confirm Removal`,
-                    confirmMessage: t`Are you sure you want to remove this chat?`,
-                  },
-                ]}
-              />
-            </div>
-          </div>
-          {layout !== "compact" && showTimestamps && (
-            <>
-              <p
-                className={clsx(
-                  "truncate text-xs",
-                  session.metadata?.fileCount == 0
-                    ? "text-theme-fg-muted"
-                    : "text-theme-fg-secondary",
-                )}
-                title={
-                  session.metadata?.fileCount === 0
-                    ? t`No files`
-                    : session.metadata?.fileCount === 1
-                      ? t`1 file`
-                      : `${session.metadata?.fileCount ?? 0} files`
-                }
-              >
-                <Plural
-                  value={session.metadata?.fileCount ?? 0}
-                  _0="No files"
-                  one="# file"
-                  other="# files"
-                />
-              </p>
-              {session.updatedAt && (
-                <p className="text-xs text-theme-fg-secondary">
-                  <MessageTimestamp createdAt={new Date(session.updatedAt)} />
-                </p>
-              )}
-            </>
-          )}
-        </InteractiveContainer>
+        {rowBody}
       </a>
     );
   },
@@ -335,6 +364,7 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
     isLoadingMore = false,
     onLoadMore,
     showTimestamps = true,
+    disableRowLinks = false,
   }) => {
     const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -378,6 +408,7 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
             isActive={currentSessionId === session.id}
             layout={layout}
             showTimestamps={showTimestamps}
+            disableRowLinks={disableRowLinks}
             onSelect={() => {
               logger.log(`Session item click: ${session.id}`);
               onSessionSelect(session.id);

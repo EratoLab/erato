@@ -42,6 +42,7 @@ const spies = vi.hoisted(() => {
       onSessionSelect: (id: string) => void;
       onSessionEditTitle?: (id: string) => void;
       onSessionShare?: (id: string) => void;
+      disableRowLinks?: boolean;
     }>,
     renameDialogProps: {
       current: null as { isOpen: boolean; generatedTitle: string } | null,
@@ -218,6 +219,8 @@ describe("AddinHistoryDrawerCore", () => {
 
     expect(spies.navigateToChat).toHaveBeenCalledWith("c1");
     expect(onClose).toHaveBeenCalled();
+    // The pane has no tabs: rows must render without link escape hatches.
+    expect(spies.historyListProps[0]?.disableRowLinks).toBe(true);
   });
 
   it("puts the pagination sentinel on the last group only", () => {
