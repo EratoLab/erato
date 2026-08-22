@@ -73,7 +73,9 @@ export function AddinPinHintBanner({ onDismiss }: AddinPinHintBannerProps) {
       aria-live="polite"
       data-testid="addin-pin-hint-banner"
       data-ui="addin-pin-hint-banner"
-      className="flex items-start gap-2 border-b border-theme-warning-border bg-theme-warning-bg px-4 py-2 text-theme-warning-fg"
+      // pl-10 clears the floating drawer trigger, which overlays the pane's
+      // top-left corner now that no header row reserves space for it.
+      className="flex items-start gap-2 border-b border-theme-warning-border bg-theme-warning-bg py-2 pl-10 pr-4 text-theme-warning-fg"
     >
       <PinIcon className="mt-0.5 size-4 shrink-0" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">

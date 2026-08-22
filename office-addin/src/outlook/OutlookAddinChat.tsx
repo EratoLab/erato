@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AddinChatInput } from "./components/AddinChatInput";
 import { AddinPinHintBanner } from "./components/AddinPinHintBanner";
 import { AddinSettingsDialog } from "./components/AddinSettingsDialog";
+import { dismissSessionToasts } from "./components/sessionAskToast";
 import {
   AddinChatCore,
   AddinChatCoreView,
@@ -23,6 +24,7 @@ import { useOutlookMessageFetcher } from "./hooks/useOutlookMessageFetcher";
 import { useOffice } from "../providers/OfficeProvider";
 import { useOutlookEmailSource } from "./providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "./providers/OutlookMailItemProvider";
+import { holdSessionPolicy, releaseSessionPolicy } from "./sessionPolicy";
 import { resolveEditExchangeItemIdentity } from "./utils/exchangeItemIdentity";
 import { FreshCompletionTracker } from "./utils/freshCompletionTracker";
 import {
@@ -64,6 +66,21 @@ export function OutlookAddinChat({
 function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
   useOutlookClientTools();
   const { chatInputControls, uploadFiles } = controller;
+
+  // While the history drawer is open, mail-item switches must not interleave
+  // a session toast underneath it; the gate defers the anchor policy until
+  // the drawer closes (or this host unmounts).
+  const isHistoryMenuOpen = controller.isHistoryMenuOpen;
+  useEffect(() => {
+    if (!isHistoryMenuOpen) return;
+    holdSessionPolicy();
+    // A pending ask toast would float interactive above the modal drawer yet
+    // sit outside its focus trap, and the drawer subsumes its choices anyway.
+    // Dismissing is safe: closing without picking releases the gate, which
+    // re-evaluates the anchor policy and re-shows a still-unanswered ask.
+    dismissSessionToasts();
+    return () => releaseSessionPolicy();
+  }, [isHistoryMenuOpen]);
   const lastSchedulingSignalAt = useMemo(
     () =>
       newestSchedulingSignalAt(

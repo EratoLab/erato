@@ -3,23 +3,34 @@ import {
   getSupportedFileTypes,
   mapMessageToUiMessage,
   recentChatsQuery,
+  removeArchivedChatFromLists,
+  seedGenerationStatusFromListing,
   useArchiveChatEndpoint,
+  useAssistantsFeature,
   useBudgetStatus,
+  useChatHistoryFilterFoldback,
   useChatMessaging,
   useFileCapabilitiesContext,
   useFileDropzone,
   useFileUploadStore,
   useGenerationStatusStore,
+  useInfiniteRecentChats,
   useMessagingStore,
   useModelHistory,
   usePersistedState,
-  useRecentChats,
+  useUpdateChatTitle,
   type ChatContextValue,
   type Message,
   type PersistedStateOptions,
+  type RecentChatsListFilters,
 } from "@erato/frontend/library";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import {
+  AddinHistoryFilterStoreContext,
+  getAddinChatHistoryFilterStore,
+} from "./addinChatHistoryFilterStore";
 
 import type { ComponentType, MutableRefObject, ReactNode } from "react";
 
@@ -48,7 +59,13 @@ export interface AddinSessionControllerProps {
   children: (session: AddinSessionController) => ReactNode;
 }
 
-type RecentChatsResult = ReturnType<typeof useRecentChats>;
+type RecentChatsResult = ReturnType<typeof useInfiniteRecentChats>;
+
+// The server-default listing shape (every type, archived excluded).
+const SESSION_LISTING_FILTERS: RecentChatsListFilters = {
+  typeFilter: "all",
+  statusFilter: "active",
+};
 
 export function AddinChatProviderCore({
   children,
@@ -60,22 +77,47 @@ export function AddinChatProviderCore({
   platform: string;
   SessionController?: ComponentType<AddinSessionControllerProps>;
 }) {
-  const history = useRecentChats({});
-  const chats = useMemo(() => history.data?.chats ?? [], [history.data]);
+  const filterStore = getAddinChatHistoryFilterStore(platform);
+  const { enabled: assistantsEnabled } = useAssistantsFeature();
+  useChatHistoryFilterFoldback(assistantsEnabled, filterStore);
+
+  const typeFilter = filterStore((state) => state.typeFilter);
+  const statusFilter = filterStore((state) => state.statusFilter);
+  const filters = useMemo<RecentChatsListFilters>(
+    () => ({ typeFilter, statusFilter }),
+    [typeFilter, statusFilter],
+  );
+  const history = useInfiniteRecentChats({ filters });
+  const chats = history.chats;
+
+  // Outlook's session policy suggests and lists chats for its ask toast
+  // through this unfiltered listing, never the drawer-filtered one: narrowing
+  // a drawer filter must not silently change which chat the toast offers to
+  // resume. Only Outlook's session controller consumes these chats — every
+  // other platform reuses the drawer's filters so both hooks share one query
+  // key and this second listing never runs its own request chain.
+  const sessionFilters =
+    platform === "outlook" ? SESSION_LISTING_FILTERS : filters;
+  const sessionHistory = useInfiniteRecentChats({
+    filters: sessionFilters,
+  });
 
   return (
-    <SessionController chats={chats}>
-      {(session) => (
-        <AddinChatDataProvider
-          chats={chats}
-          history={history}
-          platform={platform}
-          session={session}
-        >
-          {children}
-        </AddinChatDataProvider>
-      )}
-    </SessionController>
+    <AddinHistoryFilterStoreContext.Provider value={filterStore}>
+      <SessionController chats={sessionHistory.chats}>
+        {(session) => (
+          <AddinChatDataProvider
+            chats={chats}
+            history={history}
+            filters={filters}
+            platform={platform}
+            session={session}
+          >
+            {children}
+          </AddinChatDataProvider>
+        )}
+      </SessionController>
+    </AddinHistoryFilterStoreContext.Provider>
   );
 }
 
@@ -131,12 +173,14 @@ function AddinChatDataProvider({
   children,
   chats,
   history,
+  filters,
   platform,
   session,
 }: {
   children: ReactNode;
   chats: ChatContextValue["chats"];
   history: RecentChatsResult;
+  filters: RecentChatsListFilters;
   platform: string;
   session: AddinSessionController;
 }) {
@@ -182,17 +226,49 @@ function AddinChatDataProvider({
   );
   const archiveChat = useCallback(
     async (chatId: string) => {
-      await archiveChatMutation({ pathParams: { chatId }, body: {} });
-      await queryClient.invalidateQueries({
-        queryKey: recentChatsQuery({}).queryKey,
-      });
+      if (filters.statusFilter === "all") {
+        // The archived-inclusive result set does not shrink, which is what
+        // makes refetch-driven offset skew impossible — plain invalidate.
+        await archiveChatMutation({ pathParams: { chatId }, body: {} });
+        void queryClient.invalidateQueries({
+          queryKey: recentChatsQuery({}).queryKey,
+        });
+      } else {
+        const rollback = await removeArchivedChatFromLists(queryClient, chatId);
+        try {
+          await archiveChatMutation({ pathParams: { chatId }, body: {} });
+        } catch (error) {
+          rollback();
+          throw error;
+        }
+      }
+      // An archived chat has no row, so its status must not keep counting.
+      // Cleared only once the mutation succeeded: there is no restore API,
+      // so clearing earlier would drop the marker of a chat whose row a
+      // failed archive puts back.
+      useGenerationStatusStore.getState().clearStatus(chatId);
       if (session.currentChatId === chatId) {
         session.beginNewChat();
         resetMessagingForNewChat();
       }
     },
-    [archiveChatMutation, queryClient, resetMessagingForNewChat, session],
+    [
+      archiveChatMutation,
+      filters.statusFilter,
+      queryClient,
+      resetMessagingForNewChat,
+      session,
+    ],
   );
+
+  const updateChatTitle = useUpdateChatTitle();
+
+  // Seed the status store from the backend's running and pending-approval
+  // markers, so generations started (or parked) elsewhere get an indicator
+  // without waiting for a poll.
+  useEffect(() => {
+    seedGenerationStatusFromListing(chats);
+  }, [chats]);
 
   const silentChatId = useFileUploadStore((state) => state.silentChatId);
   const {
@@ -245,7 +321,10 @@ function AddinChatDataProvider({
 
   const isLoading = isHistoryLoading || isMessagingLoading;
   const error = historyError ?? messagingError;
-  const fetchNextHistoryPage = useCallback(async () => {}, []);
+  const { fetchNextPage, hasNextPage, isFetchingNextPage } = history;
+  const fetchNextHistoryPage = useCallback(async () => {
+    await fetchNextPage();
+  }, [fetchNextPage]);
   const mountKey = useMemo(
     () => `new-chat-session-${session.newChatCounter}`,
     [session.newChatCounter],
@@ -299,13 +378,13 @@ function AddinChatDataProvider({
       historyError,
       createNewChat,
       archiveChat,
-      updateChatTitle: async () => {},
+      updateChatTitle,
       pinChat: async () => {},
       navigateToChat,
       refetchHistory,
       fetchNextHistoryPage,
-      hasNextHistoryPage: false,
-      isFetchingNextHistoryPage: false,
+      hasNextHistoryPage: hasNextPage ?? false,
+      isFetchingNextHistoryPage: isFetchingNextPage,
       messages: transformedMessages,
       messageOrder,
       isMessagingLoading,
@@ -341,7 +420,9 @@ function AddinChatDataProvider({
     editMessage,
     error,
     fetchNextHistoryPage,
+    hasNextPage,
     historyError,
+    isFetchingNextPage,
     isFinalizing,
     isHistoryLoading,
     isLoading,
@@ -361,6 +442,7 @@ function AddinChatDataProvider({
     session.newChatCounter,
     silentChatId,
     streamingContent,
+    updateChatTitle,
     uploadError,
     uploadFiles,
     uploadedFiles,

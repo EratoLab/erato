@@ -23,7 +23,10 @@ export {
   useDelegatedRunHeader,
   type DelegatedRunHeaderState,
 } from "@/hooks/chat/useDelegatedRunHeader";
-export { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
+export {
+  seedGenerationStatusFromListing,
+  useGenerationStatusStore,
+} from "@/hooks/chat/store/generationStatusStore";
 export { DelegatedRunOpenProvider } from "@/providers/DelegatedRunOpenProvider";
 export {
   ChatMessage,
@@ -89,8 +92,19 @@ export {
 } from "@/components/ui/Assistant/AssistantWelcomeScreen";
 export {
   ChatHistoryList,
+  ChatHistoryListSkeleton,
   type ChatHistoryListProps,
 } from "@/components/ui/Chat/ChatHistoryList";
+export {
+  SidebarCollapsibleSection,
+  sidebarInsetClassName,
+  sidebarItemClassName,
+} from "@/components/ui/Chat/SidebarCollapsibleSection";
+export {
+  SidebarNavigationItem,
+  sidebarNavigationIconClassName,
+  type SidebarNavigationItemProps,
+} from "@/components/ui/Chat/SidebarNavigationItem";
 export type { ChatTopLeftAccessoryProps } from "@/components/ui/Chat/ChatTopLeftAccessory";
 export { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
 export { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoading";
@@ -272,12 +286,58 @@ export {
   useStandaloneFileUpload,
 } from "@/hooks/files";
 export {
+  CloseIcon,
   ComputerIcon,
   DocumentIcon,
   MailIcon,
   MoonIcon,
+  SettingsIcon,
+  SidebarToggleIcon,
   SunIcon,
 } from "@/components/ui/icons";
+export {
+  ChatHistoryFilterMenu,
+  type ChatHistoryFilterMenuProps,
+} from "@/components/ui/Chat/ChatHistoryFilterMenu";
+export {
+  NewChatItem,
+  NoFilterMatchesRow,
+} from "@/components/ui/Chat/ChatHistorySidebar";
+export { EditChatTitleDialog } from "@/components/ui/Chat/EditChatTitleDialog";
+export { ChatShareDialog } from "@/components/ui/Chat/ChatShareDialog";
+export {
+  CHAT_HISTORY_FILTER_DEFAULTS,
+  createChatHistoryFilterStore,
+  hasActiveFilters,
+  isDefaultFilters,
+  sanitizeChatHistoryFilters,
+  useChatHistoryFilterFoldback,
+  useSanitizedChatHistoryFilters,
+  type ChatHistoryFilterStoreHook,
+  type ChatHistoryFilterValues,
+  type ChatHistoryGroupBy,
+  type ChatHistoryStatusFilter,
+  type ChatHistoryTypeFilter,
+} from "@/hooks/chat/store/chatHistoryFilterStore";
+export {
+  buildInfiniteChatsQueryKey,
+  buildRecentChatsFilterParams,
+  removeArchivedChatFromLists,
+  useInfiniteRecentChats,
+  useUpdateChatTitle,
+  type RecentChatsListFilters,
+} from "@/hooks/chat/useInfiniteRecentChats";
+export { useGroupedChatSessions } from "@/hooks/chat/useGroupedChatSessions";
+export {
+  groupChatSessions,
+  resolveChatAttentionStatus,
+  type ChatSessionGroup,
+} from "@/utils/chatHistoryGrouping";
+export {
+  UNTITLED_BACKEND_SENTINEL,
+  mapRecentChatToSession,
+} from "@/utils/chat/recentChatSession";
+export type { ChatSession } from "@/types/chat";
 export {
   useChatInputHandlers,
   useSidebar,
@@ -317,6 +377,7 @@ export {
   useArchiveChatEndpoint,
   useFacets,
   useRecentChats,
+  useUpdateChat,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 export {
   FeatureConfigProvider,
@@ -324,6 +385,8 @@ export {
   defaultStaticFeatureConfig,
   useAudioConversationalFeature,
   useFeatureConfig,
+  useAssistantsFeature,
+  useChatSharingFeature,
   useMessageFeedbackFeature,
   useTraceFeature,
   useUploadFeature,

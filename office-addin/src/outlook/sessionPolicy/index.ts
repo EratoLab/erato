@@ -23,3 +23,9 @@ export {
   type OutlookSessionStorageValue,
 } from "./persistence";
 export type { OutlookSessionAnchor, OutlookSessionPreferences } from "./types";
+export {
+  holdSessionPolicy,
+  isSessionPolicyHeld,
+  releaseSessionPolicy,
+  subscribeSessionPolicyGate,
+} from "./policyGate";

@@ -13,10 +13,13 @@ import type { ChatSession } from "@/types/chat";
 import type { Messages } from "@lingui/core";
 import type { ReactNode } from "react";
 
+const timestampCreatedAtLog = vi.hoisted(() => [] as Date[]);
+
 vi.mock("@/components/ui", () => ({
-  MessageTimestamp: ({ createdAt }: { createdAt: Date }) => (
-    <span>{createdAt.toISOString()}</span>
-  ),
+  MessageTimestamp: ({ createdAt }: { createdAt: Date }) => {
+    timestampCreatedAtLog.push(createdAt);
+    return <span>{createdAt.toISOString()}</span>;
+  },
 }));
 
 vi.mock("@/hooks/ui", () => ({
@@ -118,6 +121,35 @@ describe("ChatHistoryList", () => {
     const unpinItem = screen.getByRole("button", { name: "Unpin" });
     expect(unpinItem).toBeEnabled();
     expect(unpinItem.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("keeps the MessageTimestamp Date instance stable across list re-renders", async () => {
+    const { i18n } = await import("@lingui/core");
+    // A fresh onSessionSelect per render defeats the list memo, so the rows
+    // themselves re-render — the scenario the stable Date must survive.
+    const makeUi = () => (
+      <I18nProvider i18n={i18n}>
+        <ChatHistoryList
+          sessions={sessions}
+          currentSessionId={null}
+          onSessionSelect={vi.fn()}
+        />
+      </I18nProvider>
+    );
+
+    timestampCreatedAtLog.length = 0;
+    const { rerender } = render(makeUi());
+    const firstRenderDates = [...timestampCreatedAtLog];
+    expect(firstRenderDates).toHaveLength(sessions.length);
+
+    timestampCreatedAtLog.length = 0;
+    rerender(makeUi());
+    const secondRenderDates = [...timestampCreatedAtLog];
+    expect(secondRenderDates).toHaveLength(sessions.length);
+
+    secondRenderDates.forEach((createdAt, index) => {
+      expect(createdAt).toBe(firstRenderDates[index]);
+    });
   });
 
   it("uses the sidebar token surface for active history rows", async () => {
@@ -338,5 +370,50 @@ describe("ChatHistoryList", () => {
       ).toBeInTheDocument();
       expect(screen.queryByText("Should not show")).not.toBeInTheDocument();
     });
+  });
+});
+
+describe("disableRowLinks", () => {
+  const renderRows = async (disableRowLinks: boolean, onSelect = vi.fn()) => {
+    const { i18n } = await import("@lingui/core");
+    i18n.load("en", enMessages as unknown as Messages);
+    i18n.activate("en");
+    render(
+      <I18nProvider i18n={i18n}>
+        <ChatHistoryList
+          sessions={sessions}
+          currentSessionId={null}
+          onSessionSelect={onSelect}
+          disableRowLinks={disableRowLinks}
+        />
+      </I18nProvider>,
+    );
+    return onSelect;
+  };
+
+  it("renders rows without hrefs so no click can navigate the host", async () => {
+    const onSelect = await renderRows(true);
+
+    const row = screen.getByRole("button", { name: "First chat" });
+    expect(row).not.toHaveAttribute("href");
+
+    const { fireEvent } = await import("@testing-library/react");
+    // Modified clicks select in place: the host has no tab to open.
+    fireEvent.click(row, { metaKey: true });
+    expect(onSelect).toHaveBeenCalledWith("chat-1");
+  });
+
+  it("keeps the link escape hatch by default", async () => {
+    const onSelect = await renderRows(false);
+
+    const row = screen.getByRole("link", { name: "First chat" });
+    expect(row).toHaveAttribute("href");
+
+    const { fireEvent } = await import("@testing-library/react");
+    const swallowNavigation = (e: MouseEvent) => e.preventDefault();
+    document.addEventListener("click", swallowNavigation);
+    fireEvent.click(row, { metaKey: true });
+    document.removeEventListener("click", swallowNavigation);
+    expect(onSelect).not.toHaveBeenCalled();
   });
 });
