@@ -92,8 +92,19 @@ export {
 } from "@/components/ui/Assistant/AssistantWelcomeScreen";
 export {
   ChatHistoryList,
+  ChatHistoryListSkeleton,
   type ChatHistoryListProps,
 } from "@/components/ui/Chat/ChatHistoryList";
+export {
+  SidebarCollapsibleSection,
+  sidebarInsetClassName,
+  sidebarItemClassName,
+} from "@/components/ui/Chat/SidebarCollapsibleSection";
+export {
+  SidebarNavigationItem,
+  sidebarNavigationIconClassName,
+  type SidebarNavigationItemProps,
+} from "@/components/ui/Chat/SidebarNavigationItem";
 export type { ChatTopLeftAccessoryProps } from "@/components/ui/Chat/ChatTopLeftAccessory";
 export { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
 export { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoading";
@@ -280,6 +291,7 @@ export {
   DocumentIcon,
   MailIcon,
   MoonIcon,
+  SettingsIcon,
   SidebarToggleIcon,
   SunIcon,
 } from "@/components/ui/icons";
@@ -287,7 +299,10 @@ export {
   ChatHistoryFilterMenu,
   type ChatHistoryFilterMenuProps,
 } from "@/components/ui/Chat/ChatHistoryFilterMenu";
-export { NewChatItem } from "@/components/ui/Chat/ChatHistorySidebar";
+export {
+  NewChatItem,
+  NoFilterMatchesRow,
+} from "@/components/ui/Chat/ChatHistorySidebar";
 export { EditChatTitleDialog } from "@/components/ui/Chat/EditChatTitleDialog";
 export { ChatShareDialog } from "@/components/ui/Chat/ChatShareDialog";
 export {
@@ -296,6 +311,7 @@ export {
   hasActiveFilters,
   isDefaultFilters,
   sanitizeChatHistoryFilters,
+  useChatHistoryFilterFoldback,
   useSanitizedChatHistoryFilters,
   type ChatHistoryFilterStoreHook,
   type ChatHistoryFilterValues,
@@ -308,8 +324,10 @@ export {
   buildRecentChatsFilterParams,
   removeArchivedChatFromLists,
   useInfiniteRecentChats,
+  useUpdateChatTitle,
   type RecentChatsListFilters,
 } from "@/hooks/chat/useInfiniteRecentChats";
+export { useGroupedChatSessions } from "@/hooks/chat/useGroupedChatSessions";
 export {
   groupChatSessions,
   resolveChatAttentionStatus,

@@ -1,7 +1,6 @@
 "use client";
 
 import { plural, t } from "@lingui/core/macro";
-import { useLingui } from "@lingui/react";
 import clsx from "clsx";
 import { memo, useRef, useState, useEffect, useCallback, useMemo } from "react";
 import { ErrorBoundary } from "react-error-boundary";
@@ -16,8 +15,7 @@ import {
 import { defaultThemeConfig } from "@/config/themeConfig";
 import {
   hasActiveFilters,
-  sanitizeChatHistoryFilters,
-  useChatHistoryFilterStore,
+  useChatHistoryFilterFoldback,
   useSanitizedChatHistoryFilters,
 } from "@/hooks/chat/store/chatHistoryFilterStore";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
@@ -27,6 +25,7 @@ import {
   useGenerationStatusStore,
 } from "@/hooks/chat/store/generationStatusStore";
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
+import { useGroupedChatSessions } from "@/hooks/chat/useGroupedChatSessions";
 import { useResponsiveCollapsedMode, useThemedIcon } from "@/hooks/ui";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { useAssistantHubConfig } from "@/lib/generated/v1betaApi/v1betaApiComponents";
@@ -35,10 +34,6 @@ import {
   useSidebarFeature,
 } from "@/providers/FeatureConfigProvider";
 import { UNTITLED_BACKEND_SENTINEL } from "@/utils/chat/recentChatSession";
-import {
-  groupChatSessions,
-  resolveChatAttentionStatus,
-} from "@/utils/chatHistoryGrouping";
 import { createLogger } from "@/utils/debugLogger";
 import { checkFileExists } from "@/utils/themeUtils";
 
@@ -49,13 +44,15 @@ import {
   parsePersistedBoolean,
   SidebarCollapsibleSection as CollapsibleSection,
   sidebarInsetClassName,
-  sidebarItemClassName,
 } from "./SidebarCollapsibleSection";
+import {
+  SidebarNavigationItem,
+  sidebarNavigationIconClassName,
+} from "./SidebarNavigationItem";
 import {
   SidebarResizeHandle,
   useApplySidebarWidth,
 } from "./SidebarResizeHandle";
-import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { Button } from "../Controls/Button";
 import { CountBadge } from "../Controls/CountBadge";
 import { UserProfileThemeDropdown } from "../Controls/UserProfileThemeDropdown";
@@ -73,11 +70,6 @@ import type { ChatSession } from "@/types/chat";
 
 // Create logger for this component
 const logger = createLogger("UI", "ChatHistorySidebar");
-const activeSidebarItemClassName = "sidebar-row-geometry sidebar-row-selected";
-// Inset ring for the same reason as the chat rows: the row inset is
-// themeable and can be narrower than an outside-drawn ring.
-const sidebarLinkClassName =
-  "focus-ring-inset block rounded-[var(--theme-radius-shell)]";
 
 const RECENT_CHATS_SECTION_EXPANDED_STORAGE_KEY =
   "erato.sidebar.recentChatsSectionExpanded";
@@ -302,39 +294,21 @@ export const NewChatItem = memo<{
   const newChatIconId = useThemedIcon("navigation", "newChat");
 
   return (
-    <div className={clsx(sidebarInsetClassName, "py-1")}>
-      <InteractiveContainer
-        useDiv={true}
-        showFocusRing={false}
-        onClick={() => {
-          logger.log("[CHAT_FLOW] New chat item clicked");
-          onNewChat?.();
-        }}
-        className={clsx(
-          sidebarItemClassName,
-          "focus-ring-inset theme-transition flex items-center text-left hover:bg-[var(--theme-shell-sidebar-hover)]",
-          "sidebar-content-col-geometry gap-3 py-2 pr-3",
-        )}
-        aria-label={t`New Chat`}
-        title={isSlimMode ? t`New Chat` : undefined}
-      >
+    <SidebarNavigationItem
+      label={t`New Chat`}
+      icon={
         <ResolvedIcon
           iconId={newChatIconId}
           fallbackIcon={PlusIcon}
-          className="size-4 shrink-0 text-theme-fg-secondary"
+          className={sidebarNavigationIconClassName}
         />
-        <span
-          className={clsx(
-            "whitespace-nowrap font-medium text-theme-fg-primary transition-opacity duration-150",
-            isSlimMode
-              ? "w-0 overflow-hidden opacity-0"
-              : "opacity-100 delay-150",
-          )}
-        >
-          {t`New Chat`}
-        </span>
-      </InteractiveContainer>
-    </div>
+      }
+      isSlimMode={isSlimMode}
+      onClick={() => {
+        logger.log("[CHAT_FLOW] New chat item clicked");
+        onNewChat?.();
+      }}
+    />
   );
 });
 
@@ -349,82 +323,25 @@ const SearchNavigationItem = memo<{
   const searchIconId = useThemedIcon("navigation", "search");
 
   return (
-    <div className={clsx(sidebarInsetClassName, "py-1")}>
-      {isOnSearchPage ? (
-        <InteractiveContainer
-          useDiv={true}
-          interactive={false}
-          className={clsx(
-            activeSidebarItemClassName,
-            "flex items-center text-left",
-            "sidebar-content-col-geometry gap-3 py-2 pr-3",
-          )}
-          aria-label={t`Search`}
-          title={isSlimMode ? t`Search` : undefined}
-          data-ui="sidebar-search-item"
-        >
-          <ResolvedIcon
-            iconId={searchIconId}
-            fallbackIcon={SearchIcon}
-            className="size-4 shrink-0 text-theme-fg-secondary"
-          />
-          <span
-            className={clsx(
-              "whitespace-nowrap font-medium text-theme-fg-primary transition-opacity duration-150",
-              isSlimMode
-                ? "w-0 overflow-hidden opacity-0"
-                : "opacity-100 delay-150",
-            )}
-          >
-            {t`Search`}
-          </span>
-        </InteractiveContainer>
-      ) : (
-        <a
-          href="/search"
-          onClick={(e) => {
-            // Allow cmd/ctrl-click to open in new tab
-            if (e.metaKey || e.ctrlKey) {
-              return;
-            }
-            // Prevent default navigation for normal clicks
-            e.preventDefault();
-            logger.log("[CHAT_FLOW] Search navigation item clicked");
-            onSearch?.();
-          }}
-          className={sidebarLinkClassName}
-          aria-label={t`Search`}
-          title={isSlimMode ? t`Search` : undefined}
-        >
-          <InteractiveContainer
-            useDiv={true}
-            showFocusRing={false}
-            className={clsx(
-              sidebarItemClassName,
-              "theme-transition flex items-center text-left hover:bg-[var(--theme-shell-sidebar-hover)]",
-              "sidebar-content-col-geometry gap-3 py-2 pr-3",
-            )}
-            data-ui="sidebar-search-item"
-          >
-            <ResolvedIcon
-              iconId={searchIconId}
-              fallbackIcon={SearchIcon}
-              className="size-4 shrink-0 text-theme-fg-secondary"
-            />
-            <span
-              className={clsx(
-                "whitespace-nowrap font-medium text-theme-fg-primary transition-opacity duration-150",
-                isSlimMode
-                  ? "w-0 overflow-hidden opacity-0"
-                  : "opacity-100 delay-150",
-              )}
-            >
-              {t`Search`}
-            </span>
-          </InteractiveContainer>
-        </a>
-      )}
-    </div>
+    <SidebarNavigationItem
+      label={t`Search`}
+      icon={
+        <ResolvedIcon
+          iconId={searchIconId}
+          fallbackIcon={SearchIcon}
+          className={sidebarNavigationIconClassName}
+        />
+      }
+      // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal route path
+      href="/search"
+      active={isOnSearchPage}
+      isSlimMode={isSlimMode}
+      onClick={() => {
+        logger.log("[CHAT_FLOW] Search navigation item clicked");
+        onSearch?.();
+      }}
+      data-ui="sidebar-search-item"
+    />
   );
 });
 
@@ -440,82 +357,24 @@ const AssistantsNavigationItem = memo<{
   const assistantsIconId = useThemedIcon("navigation", "assistants");
 
   return (
-    <div className={clsx(sidebarInsetClassName, "py-1")}>
-      {isOnAssistantsPage ? (
-        <InteractiveContainer
-          useDiv={true}
-          interactive={false}
-          className={clsx(
-            activeSidebarItemClassName,
-            "flex items-center text-left",
-            "sidebar-content-col-geometry gap-3 py-2 pr-3",
-          )}
-          aria-label={t`Assistants`}
-          title={isSlimMode ? t`Assistants` : undefined}
-          data-ui="sidebar-assistants-item"
-        >
-          <ResolvedIcon
-            iconId={assistantsIconId}
-            fallbackIcon={EditIcon}
-            className="size-4 shrink-0 text-theme-fg-secondary"
-          />
-          <span
-            className={clsx(
-              "whitespace-nowrap font-medium text-theme-fg-primary transition-opacity duration-150",
-              isSlimMode
-                ? "w-0 overflow-hidden opacity-0"
-                : "opacity-100 delay-150",
-            )}
-          >
-            {t`Assistants`}
-          </span>
-        </InteractiveContainer>
-      ) : (
-        <a
-          href={href}
-          onClick={(e) => {
-            // Allow cmd/ctrl-click to open in new tab
-            if (e.metaKey || e.ctrlKey) {
-              return;
-            }
-            // Prevent default navigation for normal clicks
-            e.preventDefault();
-            logger.log("[ASSISTANTS_FLOW] Assistants navigation item clicked");
-            onAssistants?.();
-          }}
-          className={sidebarLinkClassName}
-          aria-label={t`Assistants`}
-          title={isSlimMode ? t`Assistants` : undefined}
-        >
-          <InteractiveContainer
-            useDiv={true}
-            showFocusRing={false}
-            className={clsx(
-              sidebarItemClassName,
-              "theme-transition flex items-center text-left hover:bg-[var(--theme-shell-sidebar-hover)]",
-              "sidebar-content-col-geometry gap-3 py-2 pr-3",
-            )}
-            data-ui="sidebar-assistants-item"
-          >
-            <ResolvedIcon
-              iconId={assistantsIconId}
-              fallbackIcon={EditIcon}
-              className="size-4 shrink-0 text-theme-fg-secondary"
-            />
-            <span
-              className={clsx(
-                "whitespace-nowrap font-medium text-theme-fg-primary transition-opacity duration-150",
-                isSlimMode
-                  ? "w-0 overflow-hidden opacity-0"
-                  : "opacity-100 delay-150",
-              )}
-            >
-              {t`Assistants`}
-            </span>
-          </InteractiveContainer>
-        </a>
-      )}
-    </div>
+    <SidebarNavigationItem
+      label={t`Assistants`}
+      icon={
+        <ResolvedIcon
+          iconId={assistantsIconId}
+          fallbackIcon={EditIcon}
+          className={sidebarNavigationIconClassName}
+        />
+      }
+      href={href}
+      active={isOnAssistantsPage}
+      isSlimMode={isSlimMode}
+      onClick={() => {
+        logger.log("[ASSISTANTS_FLOW] Assistants navigation item clicked");
+        onAssistants?.();
+      }}
+      data-ui="sidebar-assistants-item"
+    />
   );
 });
 
@@ -544,7 +403,8 @@ const ChatHistoryFooter = memo<{
 // eslint-disable-next-line lingui/no-unlocalized-strings
 ChatHistoryFooter.displayName = "ChatHistoryFooter";
 
-const NoFilterMatchesRow = () => (
+/** Exported for the add-in's history drawer, which shows the same row. */
+export const NoFilterMatchesRow = () => (
   <p
     className="sidebar-content-col-geometry py-2 pr-3 text-xs text-theme-fg-muted"
     data-testid="chat-history-no-filter-matches"
@@ -665,21 +525,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       (state) => state.statusByChatId,
     );
 
-    // Fold assistant-scoped filter values back to their defaults in the store
-    // itself: the recent-chats query (and any other reader) consumes the raw
-    // persisted values, so sanitizing only at render would let a stale
-    // persisted value keep filtering the request invisibly.
-    useEffect(() => {
-      if (assistantsEnabled) return;
-      const store = useChatHistoryFilterStore.getState();
-      const sanitized = sanitizeChatHistoryFilters(store, false);
-      if (sanitized.typeFilter !== store.typeFilter) {
-        store.setTypeFilter(sanitized.typeFilter);
-      }
-      if (sanitized.groupBy !== store.groupBy) {
-        store.setGroupBy(sanitized.groupBy);
-      }
-    }, [assistantsEnabled]);
+    useChatHistoryFilterFoldback(assistantsEnabled);
 
     const chatHistoryFilters =
       useSanitizedChatHistoryFilters(assistantsEnabled);
@@ -699,28 +545,9 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
         return next;
       });
     }, []);
-    const pendingConfirmationIdsByChatId = useConfirmationRegistryStore(
-      (state) => state.pendingIdsByChatId,
-    );
-    const { i18n } = useLingui();
-    const recentChatGroups = useMemo(
-      () =>
-        groupChatSessions(sessions, chatHistoryFilters.groupBy, {
-          now: new Date(),
-          locale: i18n.locale,
-          needsAttention: (session) =>
-            resolveChatAttentionStatus(
-              generationStatusByChatId[session.id],
-              (pendingConfirmationIdsByChatId[session.id]?.length ?? 0) > 0,
-            ) !== null,
-        }),
-      [
-        sessions,
-        chatHistoryFilters.groupBy,
-        i18n.locale,
-        generationStatusByChatId,
-        pendingConfirmationIdsByChatId,
-      ],
+    const recentChatGroups = useGroupedChatSessions(
+      sessions,
+      chatHistoryFilters.groupBy,
     );
 
     // The infinite-scroll sentinel must sit inside a visible list, so it

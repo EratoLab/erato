@@ -7,16 +7,18 @@
  * params on purpose — filtering client-side would corrupt the offset-based
  * pagination this rides on.
  */
-import { useInfiniteQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useMemo } from "react";
 
 import {
   fetchRecentChats,
   recentChatsQuery,
+  useUpdateChat,
   type RecentChatsError,
   type RecentChatsQueryParams,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
+import { createLogger } from "@/utils/debugLogger";
 
 import {
   CHAT_HISTORY_FILTER_DEFAULTS,
@@ -25,6 +27,8 @@ import {
 
 import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { InfiniteData, QueryClient } from "@tanstack/react-query";
+
+const logger = createLogger("HOOK", "useInfiniteRecentChats");
 
 export const CHAT_HISTORY_PAGE_SIZE = 30;
 
@@ -242,4 +246,34 @@ export function useInfiniteRecentChats({
     isFetchingNextPage,
     queryKey,
   };
+}
+
+/**
+ * Callback that renames a chat and refreshes every recent-chats list variant.
+ */
+export function useUpdateChatTitle() {
+  const queryClient = useQueryClient();
+  const { mutateAsync: updateChatMutation } = useUpdateChat();
+
+  return useCallback(
+    async (chatId: string, titleByUserProvided?: string) => {
+      const queryKey = recentChatsQuery({}).queryKey;
+
+      try {
+        const trimmedTitle = titleByUserProvided?.trim();
+        await updateChatMutation({
+          pathParams: { chatId },
+          body: trimmedTitle
+            ? { title_by_user_provided: trimmedTitle }
+            : // Empty value removes custom title on backend.
+              {},
+        });
+        await queryClient.invalidateQueries({ queryKey });
+      } catch (error) {
+        logger.log(`Failed to update chat title for ${chatId}:`, error);
+        throw error;
+      }
+    },
+    [queryClient, updateChatMutation],
+  );
 }

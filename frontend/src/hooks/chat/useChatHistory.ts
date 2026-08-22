@@ -31,6 +31,7 @@ import { getStreamKey, useMessagingStore } from "./store/messagingStore";
 import {
   removeArchivedChatFromLists,
   useInfiniteRecentChats,
+  useUpdateChatTitle,
   type RecentChatsListFilters,
 } from "./useInfiniteRecentChats";
 
@@ -526,27 +527,7 @@ export function useChatHistory({
   );
 
   // Update chat title_by_user_provided
-  const updateChatTitle = useCallback(
-    async (chatId: string, titleByUserProvided?: string) => {
-      const queryKey = recentChatsQuery({}).queryKey;
-
-      try {
-        const trimmedTitle = titleByUserProvided?.trim();
-        await updateChatMutation({
-          pathParams: { chatId },
-          body: trimmedTitle
-            ? { title_by_user_provided: trimmedTitle }
-            : // Empty value removes custom title on backend.
-              {},
-        });
-        await queryClient.invalidateQueries({ queryKey });
-      } catch (error) {
-        logger.log(`Failed to update chat title for ${chatId}:`, error);
-        throw error;
-      }
-    },
-    [queryClient, updateChatMutation],
-  );
+  const updateChatTitle = useUpdateChatTitle();
 
   const pinChat = useCallback(
     async (chatId: string, isPinned: boolean) => {

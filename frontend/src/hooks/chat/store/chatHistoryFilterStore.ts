@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
 
@@ -193,4 +193,27 @@ export const useSanitizedChatHistoryFilters = (
       ),
     [typeFilter, statusFilter, groupBy, assistantsEnabled],
   );
+};
+
+/**
+ * Folds assistant-scoped filter values back to their defaults in the store
+ * itself while assistants are disabled: the recent-chats query (and any other
+ * reader) consumes the raw persisted values, so sanitizing only at render
+ * would let a stale persisted value keep filtering the request invisibly.
+ */
+export const useChatHistoryFilterFoldback = (
+  assistantsEnabled: boolean,
+  store: ChatHistoryFilterStoreHook = useChatHistoryFilterStore,
+): void => {
+  useEffect(() => {
+    if (assistantsEnabled) return;
+    const state = store.getState();
+    const sanitized = sanitizeChatHistoryFilters(state, false);
+    if (sanitized.typeFilter !== state.typeFilter) {
+      state.setTypeFilter(sanitized.typeFilter);
+    }
+    if (sanitized.groupBy !== state.groupBy) {
+      state.setGroupBy(sanitized.groupBy);
+    }
+  }, [assistantsEnabled, store]);
 };
