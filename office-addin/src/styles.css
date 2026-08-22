@@ -385,3 +385,11 @@ body {
     width: 100%;
   }
 }
+
+/* Scrim behind the history drawer. Deliberately NOT the modal overlay skin:
+   its backdrop blur re-filters the region behind the scrim on every frame
+   while the panel slides over it — the main drawer-jank source in the
+   Office webviews — and the panel's shadow already carries the depth cue. */
+.drawer-overlay-skin {
+  background-color: var(--theme-overlay-modal);
+}

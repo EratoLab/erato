@@ -1,5 +1,11 @@
 import { i18n } from "@lingui/core";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AddinHistoryDrawerCore } from "../AddinHistoryDrawerCore";
@@ -229,6 +235,61 @@ describe("AddinHistoryDrawerCore", () => {
     spies.sharingEnabled.current = false;
     renderDrawer();
     expect(spies.historyListProps[0]?.onSessionShare).toBeUndefined();
+  });
+
+  it("mounts off-screen and slides in one frame later", () => {
+    vi.useFakeTimers();
+    try {
+      renderDrawer();
+
+      const panel = screen.getByTestId("addin-history-drawer");
+      expect(panel.className).toContain("-translate-x-full");
+
+      // Two animation frames flip the visual state so the slide has a
+      // painted start frame.
+      act(() => {
+        vi.advanceTimersByTime(64);
+      });
+      expect(panel.className).toContain(" translate-x-0");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stays mounted through the exit slide, then unmounts on the backstop", () => {
+    vi.useFakeTimers();
+    try {
+      const onClose = vi.fn();
+      const drawerAt = (isOpen: boolean) => (
+        <AddinHistoryFilterStoreContext.Provider value={fakeFilterStore}>
+          <AddinHistoryDrawerCore
+            isOpen={isOpen}
+            onClose={onClose}
+            onOpenSettings={vi.fn()}
+            panelId="drawer-panel"
+          />
+        </AddinHistoryFilterStoreContext.Provider>
+      );
+      const { rerender } = render(drawerAt(true));
+      act(() => {
+        vi.advanceTimersByTime(64);
+      });
+
+      rerender(drawerAt(false));
+      // Exit phase: still in the DOM, translated away, scrim click-through.
+      const panel = screen.getByTestId("addin-history-drawer");
+      expect(panel.className).toContain("-translate-x-full");
+      expect(
+        screen.getByTestId("addin-history-drawer-backdrop").className,
+      ).toContain("pointer-events-none");
+
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+      expect(screen.queryByTestId("addin-history-drawer")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("says when active filters match nothing instead of showing an empty void", () => {

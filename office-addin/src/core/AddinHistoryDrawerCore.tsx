@@ -27,6 +27,11 @@ import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+/** Unmount backstop for the exit slide: a backgrounded webview can swallow
+ * `transitionend`, and reduced motion never fires one — an invisible drawer
+ * must not stay mounted eating clicks. Just past the 150ms transition. */
+const EXIT_FALLBACK_MS = 250;
+
 export interface AddinHistoryDrawerCoreProps {
   isOpen: boolean;
   onClose: () => void;
@@ -66,6 +71,47 @@ export function AddinHistoryDrawerCore({
 
   const panelRef = useRef<HTMLDivElement>(null);
   const newChatRef = useRef<HTMLButtonElement>(null);
+
+  // Slide choreography: mounted through both slides, `isShown` drives the
+  // transform/opacity pair (the only animated properties — both composite-
+  // only, so the slide stays smooth in the Office webviews).
+  const [isMounted, setIsMounted] = useState(isOpen);
+  const [isShown, setIsShown] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setIsShown(false);
+      return;
+    }
+    setIsMounted(true);
+    // Two frames so the off-screen start state paints (and the list's heavy
+    // first paint lands) before the slide begins.
+    const second = { id: 0 };
+    const first = window.requestAnimationFrame(() => {
+      second.id = window.requestAnimationFrame(() => setIsShown(true));
+    });
+    return () => {
+      window.cancelAnimationFrame(first);
+      window.cancelAnimationFrame(second.id);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen || !isMounted) return;
+    const panel = panelRef.current;
+    const finish = () => setIsMounted(false);
+    const fallback = window.setTimeout(finish, EXIT_FALLBACK_MS);
+    const handleTransitionEnd = (event: TransitionEvent) => {
+      if (event.target === panel && event.propertyName === "transform") {
+        finish();
+      }
+    };
+    panel?.addEventListener("transitionend", handleTransitionEnd);
+    return () => {
+      window.clearTimeout(fallback);
+      panel?.removeEventListener("transitionend", handleTransitionEnd);
+    };
+  }, [isOpen, isMounted]);
 
   const [titleDialogSessionId, setTitleDialogSessionId] = useState<
     string | null
@@ -179,7 +225,7 @@ export function AddinHistoryDrawerCore({
     }
   };
 
-  if (!isOpen) {
+  if (!isMounted) {
     return null;
   }
 
@@ -192,7 +238,13 @@ export function AddinHistoryDrawerCore({
   return (
     <>
       <div
-        className="modal-overlay-skin fixed inset-0 z-50"
+        // No blur on purpose: a backdrop-filter re-evaluates under the
+        // sliding panel every frame; the scrim fades on opacity alone.
+        // pointer-events-none while hidden lets a click land on the pane the
+        // instant the exit slide starts instead of dying on the scrim.
+        className={`drawer-overlay-skin theme-transition fixed inset-0 z-50 ${
+          isShown ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
         role="presentation"
         onClick={handleBackdropClick}
         data-testid="addin-history-drawer-backdrop"
@@ -208,7 +260,9 @@ export function AddinHistoryDrawerCore({
             message: "Menu",
           })}
           onKeyDown={handlePanelKeyDown}
-          className="theme-transition absolute inset-y-0 left-0 flex w-[min(320px,calc(100vw-48px))] flex-col bg-theme-bg-primary shadow-xl motion-reduce:transition-none"
+          className={`theme-transition absolute inset-y-0 left-0 flex w-[min(320px,calc(100vw-48px))] flex-col bg-theme-bg-primary shadow-xl motion-reduce:transition-none ${
+            isShown ? "translate-x-0" : "-translate-x-full"
+          }`}
           data-testid="addin-history-drawer"
           data-ui="addin-history-drawer"
         >
