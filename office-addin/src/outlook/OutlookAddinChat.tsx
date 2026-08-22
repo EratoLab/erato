@@ -23,6 +23,7 @@ import { useOutlookMessageFetcher } from "./hooks/useOutlookMessageFetcher";
 import { useOffice } from "../providers/OfficeProvider";
 import { useOutlookEmailSource } from "./providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "./providers/OutlookMailItemProvider";
+import { holdSessionPolicy, releaseSessionPolicy } from "./sessionPolicy";
 import { resolveEditExchangeItemIdentity } from "./utils/exchangeItemIdentity";
 import { FreshCompletionTracker } from "./utils/freshCompletionTracker";
 import {
@@ -64,6 +65,16 @@ export function OutlookAddinChat({
 function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
   useOutlookClientTools();
   const { chatInputControls, uploadFiles } = controller;
+
+  // While the history drawer is open, mail-item switches must not interleave
+  // a session toast underneath it; the gate defers the anchor policy until
+  // the drawer closes (or this host unmounts).
+  const isHistoryMenuOpen = controller.isHistoryMenuOpen;
+  useEffect(() => {
+    if (!isHistoryMenuOpen) return;
+    holdSessionPolicy();
+    return () => releaseSessionPolicy();
+  }, [isHistoryMenuOpen]);
   const lastSchedulingSignalAt = useMemo(
     () =>
       newestSchedulingSignalAt(
