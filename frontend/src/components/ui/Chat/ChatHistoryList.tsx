@@ -1,7 +1,7 @@
 import { t } from "@lingui/core/macro";
 import { Plural } from "@lingui/react/macro";
 import clsx from "clsx";
-import { memo, useEffect, useRef } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 
 import { MessageTimestamp } from "@/components/ui";
 import { useHasPendingConfirmation } from "@/hooks/chat/store/confirmationRegistryStore";
@@ -165,6 +165,12 @@ const ChatHistoryListItem = memo<{
   }) => {
     const generationStatus = useRowGenerationStatus(session.id);
     const rowTitle = useRowTitle(session);
+    // A stable Date instance: an inline `new Date(...)` would defeat
+    // MessageTimestamp's shallow memo on every list render.
+    const updatedAtDate = useMemo(
+      () => (session.updatedAt ? new Date(session.updatedAt) : null),
+      [session.updatedAt],
+    );
     const isPinLimitReached = !isPinned && pinnedChatsCount >= pinnedChatsLimit;
     const pinMenuLabel = isPinLimitReached
       ? t({
@@ -292,9 +298,9 @@ const ChatHistoryListItem = memo<{
                 other="# files"
               />
             </p>
-            {session.updatedAt && (
+            {updatedAtDate && (
               <p className="text-xs text-theme-fg-secondary">
-                <MessageTimestamp createdAt={new Date(session.updatedAt)} />
+                <MessageTimestamp createdAt={updatedAtDate} />
               </p>
             )}
           </>

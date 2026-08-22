@@ -13,10 +13,13 @@ import type { ChatSession } from "@/types/chat";
 import type { Messages } from "@lingui/core";
 import type { ReactNode } from "react";
 
+const timestampCreatedAtLog = vi.hoisted(() => [] as Date[]);
+
 vi.mock("@/components/ui", () => ({
-  MessageTimestamp: ({ createdAt }: { createdAt: Date }) => (
-    <span>{createdAt.toISOString()}</span>
-  ),
+  MessageTimestamp: ({ createdAt }: { createdAt: Date }) => {
+    timestampCreatedAtLog.push(createdAt);
+    return <span>{createdAt.toISOString()}</span>;
+  },
 }));
 
 vi.mock("@/hooks/ui", () => ({
@@ -118,6 +121,35 @@ describe("ChatHistoryList", () => {
     const unpinItem = screen.getByRole("button", { name: "Unpin" });
     expect(unpinItem).toBeEnabled();
     expect(unpinItem.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("keeps the MessageTimestamp Date instance stable across list re-renders", async () => {
+    const { i18n } = await import("@lingui/core");
+    // A fresh onSessionSelect per render defeats the list memo, so the rows
+    // themselves re-render — the scenario the stable Date must survive.
+    const makeUi = () => (
+      <I18nProvider i18n={i18n}>
+        <ChatHistoryList
+          sessions={sessions}
+          currentSessionId={null}
+          onSessionSelect={vi.fn()}
+        />
+      </I18nProvider>
+    );
+
+    timestampCreatedAtLog.length = 0;
+    const { rerender } = render(makeUi());
+    const firstRenderDates = [...timestampCreatedAtLog];
+    expect(firstRenderDates).toHaveLength(sessions.length);
+
+    timestampCreatedAtLog.length = 0;
+    rerender(makeUi());
+    const secondRenderDates = [...timestampCreatedAtLog];
+    expect(secondRenderDates).toHaveLength(sessions.length);
+
+    secondRenderDates.forEach((createdAt, index) => {
+      expect(createdAt).toBe(firstRenderDates[index]);
+    });
   });
 
   it("uses the sidebar token surface for active history rows", async () => {
