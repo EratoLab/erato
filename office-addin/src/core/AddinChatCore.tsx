@@ -1,4 +1,5 @@
 import {
+  Button,
   ChatErrorBoundary,
   ChatInputControlsProvider,
   ChatMessage,
@@ -6,12 +7,12 @@ import {
   DelegatedRunOpenProvider,
   DelegatedRunsSection,
   DocumentIcon,
-  DropdownMenu,
   FeedbackCommentDialog,
   FeedbackViewDialog,
   FilePreviewModal,
   MessageEditProvider,
   MessageList,
+  SidebarToggleIcon,
   chatMessagesQuery,
   componentRegistry,
   extractTextFromContent,
@@ -34,7 +35,6 @@ import {
   type ChatMessageProps,
   type DelegatedRunsSectionProps,
   type DelegationRunMode,
-  type DropdownMenuItem,
   type FileUploadItem,
   type MessageAction,
   type MessageControlsComponent,
@@ -45,14 +45,34 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import { AddinChatInputCore } from "./AddinChatInputCore";
+import { AddinHistoryDrawerCore } from "./AddinHistoryDrawerCore";
 import { AddinSettingsDialogCore } from "./AddinSettingsDialogCore";
 
 import type {
+  CSSProperties,
   ComponentProps,
   ComponentType,
   MutableRefObject,
   ReactNode,
 } from "react";
+
+// Links the header trigger's aria-controls to the drawer's dialog panel.
+const HISTORY_DRAWER_PANEL_ID = "addin-history-drawer-panel";
+
+// Same surface recipe as the web sidebar's floating hidden-mode toggle: the
+// sidebar shell tokens keep the trigger on the sidebar theme channel while
+// it floats over the chat body.
+const floatingTriggerStyle: CSSProperties = {
+  // Composited over the shell base: themes may give the sidebar token glass
+  // alpha (see .drawer-panel-skin), and a translucent floating control over
+  // chat content reads as a rendering defect.
+  backgroundColor: "var(--theme-shell-app, var(--theme-bg-primary))",
+  backgroundImage:
+    "linear-gradient(var(--theme-shell-sidebar), var(--theme-shell-sidebar))",
+  borderColor: "var(--theme-border-divider)",
+  borderRadius: "var(--theme-radius-shell)",
+  boxShadow: "var(--theme-elevation-shell)",
+};
 
 export interface AddinChatHostCallbacks {
   beforeSend?: (hostContextIdentity?: string | null) => void;
@@ -144,7 +164,8 @@ export interface AddinChatController {
   feedback: ReturnType<typeof useMessageFeedback>;
   isSettingsOpen: boolean;
   setIsSettingsOpen: (isOpen: boolean) => void;
-  headerMenuItems: DropdownMenuItem[];
+  isHistoryMenuOpen: boolean;
+  setIsHistoryMenuOpen: (isOpen: boolean) => void;
   /** Banner identifying the open chat as a delegated run; null otherwise. */
   delegatedRunHeader: ReactNode;
   /** A delegate still writing the run refuses sends with a 409; closing the
@@ -275,18 +296,19 @@ function useAddinChatController({
       delegationRunMode,
     ) => {
       hostCallbacksRef.current.beforeSend?.(hostContextIdentity);
-      void chat
-        .sendMessage(
-          message,
-          inputFileIds,
-          modelId,
-          assistantId,
-          selectedFacetIds,
-          actionFacet,
-          mentionedAssistants,
-          delegationRunMode,
-        )
-        .then(() => chat.refetchHistory());
+      // No history refetch here: sendMessage resolves at dispatch, before
+      // the server lists the chat, and the messaging pipeline already
+      // invalidates the recent-chats listings when the stream completes.
+      void chat.sendMessage(
+        message,
+        inputFileIds,
+        modelId,
+        assistantId,
+        selectedFacetIds,
+        actionFacet,
+        mentionedAssistants,
+        delegationRunMode,
+      );
     },
     [assistantId, chat],
   );
@@ -410,19 +432,7 @@ function useAddinChatController({
     [],
   );
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const headerMenuItems = useMemo<DropdownMenuItem[]>(
-    () => [
-      {
-        id: "settings",
-        label: t({
-          id: "officeAddin.headerMenu.settings",
-          message: "Settings",
-        }),
-        onClick: () => setIsSettingsOpen(true),
-      },
-    ],
-    [],
-  );
+  const [isHistoryMenuOpen, setIsHistoryMenuOpen] = useState(false);
 
   return {
     assistantId,
@@ -465,7 +475,8 @@ function useAddinChatController({
     feedback,
     isSettingsOpen,
     setIsSettingsOpen,
-    headerMenuItems,
+    isHistoryMenuOpen,
+    setIsHistoryMenuOpen,
     delegatedRunHeader,
     composerLocked,
     openDelegatedRun,
@@ -525,6 +536,8 @@ export function AddinChatCoreView({
   beforeMessages,
   renderInput,
   renderSettings,
+  drawerSectionsBeforeHistory,
+  drawerSectionsAfterHistory,
 }: {
   controller: AddinChatController;
   dropzone: Pick<
@@ -539,9 +552,24 @@ export function AddinChatCoreView({
     isOpen: boolean;
     onClose: () => void;
   }) => ReactNode;
+  /** Forwarded into the history drawer's future-section slots. */
+  drawerSectionsBeforeHistory?: ReactNode;
+  drawerSectionsAfterHistory?: ReactNode;
 }) {
   const TopLeftAccessory = componentRegistry.ChatTopLeftAccessory;
   const feedback = controller.feedback;
+  const { setIsHistoryMenuOpen, setIsSettingsOpen } = controller;
+  // Stable identities for the drawer: fresh arrows here would churn its
+  // onClose/onOpenSettings props every render and defeat the stable-handler
+  // contract its list memoization depends on.
+  const closeHistoryDrawer = useCallback(
+    () => setIsHistoryMenuOpen(false),
+    [setIsHistoryMenuOpen],
+  );
+  const openSettingsFromDrawer = useCallback(
+    () => setIsSettingsOpen(true),
+    [setIsSettingsOpen],
+  );
   const inputProps: AddinChatInputRenderProps = {
     ref: controller.chatInputControlsRef,
     onSendMessage: controller.handleSendMessage,
@@ -567,21 +595,26 @@ export function AddinChatCoreView({
       {/* Deep message surfaces (the trace's open-run affordance) open chats
           through the session controller instead of routes the pane lacks. */}
       <DelegatedRunOpenProvider onOpen={controller.openChatById}>
-        <div className="app-shell-skin flex size-full min-w-0 flex-col">
-          <div className="chat-header-skin flex items-center justify-between border-b border-theme-border px-4 py-2">
-            <DropdownMenu
-              id="addin-header-menu"
-              align="left"
-              items={controller.headerMenuItems}
-            />
-            <button
-              type="button"
-              onClick={() => void controller.createNewChat()}
-              className="rounded-[var(--theme-radius-control)] bg-theme-bg-tertiary px-3 py-1 text-xs font-medium text-theme-fg-secondary transition-colors hover:bg-theme-bg-hover"
-            >
-              {t({ id: "officeAddin.chat.newChat", message: "New Chat" })}
-            </button>
-          </div>
+        <div className="app-shell-skin relative flex size-full min-w-0 flex-col">
+          {/* Floats over the conversation: the pane is too narrow to spend a
+              header row on a single trigger, and New Chat lives in the
+              drawer it opens. Same button anatomy as the web sidebar toggle,
+              so the drawer's header toggle reads as the same control. */}
+          <Button
+            onClick={() => controller.setIsHistoryMenuOpen(true)}
+            variant="sidebar-icon"
+            icon={<SidebarToggleIcon />}
+            aria-haspopup="dialog"
+            aria-expanded={controller.isHistoryMenuOpen}
+            aria-controls={HISTORY_DRAWER_PANEL_ID}
+            aria-label={t({
+              id: "officeAddin.historyDrawer.open",
+              message: "Open menu",
+            })}
+            className="absolute left-2 top-2 z-20 border"
+            style={floatingTriggerStyle}
+            data-testid="addin-history-drawer-trigger"
+          />
 
           <ChatErrorBoundary onReset={() => void controller.refetchHistory()}>
             <div
@@ -619,17 +652,23 @@ export function AddinChatCoreView({
               ) : null}
               {beforeMessages}
               {controller.delegatedRunHeader ? (
-                <div className="relative z-10 shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3">
+                // pl-10 clears the floating drawer trigger, which otherwise
+                // sits on the header's title.
+                <div className="relative z-10 shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3 pl-10">
                   {controller.delegatedRunHeader}
                 </div>
               ) : null}
               {TopLeftAccessory ? (
-                <TopLeftAccessory
-                  availableModels={controller.availableModels}
-                  selectedModel={controller.selectedModel}
-                  onModelChange={controller.setSelectedModel}
-                  isModelSelectionReady={controller.isSelectionReady}
-                />
+                // Cleared past the floating drawer trigger, which otherwise
+                // sits exactly on a top-left accessory.
+                <div className="pl-10">
+                  <TopLeftAccessory
+                    availableModels={controller.availableModels}
+                    selectedModel={controller.selectedModel}
+                    onModelChange={controller.setSelectedModel}
+                    isModelSelectionReady={controller.isSelectionReady}
+                  />
+                </div>
               ) : null}
               <MessageEditProvider value={controller.messageEditValue}>
                 <MessageList
@@ -697,6 +736,14 @@ export function AddinChatCoreView({
             isOpen: controller.isSettingsOpen,
             onClose: () => controller.setIsSettingsOpen(false),
           })}
+          <AddinHistoryDrawerCore
+            isOpen={controller.isHistoryMenuOpen}
+            onClose={closeHistoryDrawer}
+            onOpenSettings={openSettingsFromDrawer}
+            panelId={HISTORY_DRAWER_PANEL_ID}
+            sectionsBeforeHistory={drawerSectionsBeforeHistory}
+            sectionsAfterHistory={drawerSectionsAfterHistory}
+          />
         </div>
       </DelegatedRunOpenProvider>
     </ChatInputControlsProvider>

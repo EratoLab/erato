@@ -3,7 +3,13 @@ import {
   useMessagingStore,
   usePersistedState,
 } from "@erato/frontend/library";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import {
   dismissSessionToasts,
@@ -16,11 +22,13 @@ import {
   OUTLOOK_SESSION_KEY,
   OUTLOOK_SESSION_PREFERENCES_KEY,
   anchorsEqualForPreferences,
+  isSessionPolicyHeld,
   migrateLegacyChatIdKey,
   outlookAnchorFromItem,
   outlookSessionPersistedOptions,
   outlookSessionPreferencesPersistedOptions,
   resolveSupportedMailboxItem,
+  subscribeSessionPolicyGate,
   type OutlookSessionAnchor,
   type OutlookSessionStorageValue,
 } from "./sessionPolicy";
@@ -119,6 +127,8 @@ export function OutlookAddinSessionController({
     clearNewlyCreatedChatIdRef.current();
   }, []);
   const beginNewChat = useCallback(() => {
+    // An explicit decision answers whatever a pending ask toast was asking.
+    dismissSessionToasts();
     setNewChatCounter((value) => value + 1);
     setCurrentChatId(null, currentAnchor);
   }, [currentAnchor, setCurrentChatId]);
@@ -127,8 +137,16 @@ export function OutlookAddinSessionController({
     resetMessaging();
   }, [beginNewChat, resetMessaging]);
   const selectChat = useCallback(
-    (chatId: string) => setCurrentChatId(chatId, currentAnchor),
+    (chatId: string) => {
+      dismissSessionToasts();
+      setCurrentChatId(chatId, currentAnchor);
+    },
     [currentAnchor, setCurrentChatId],
+  );
+
+  const isPolicyHeld = useSyncExternalStore(
+    subscribeSessionPolicyGate,
+    isSessionPolicyHeld,
   );
 
   const lastEvaluatedAnchorRef = useRef<OutlookSessionAnchor | null | "unset">(
@@ -145,6 +163,12 @@ export function OutlookAddinSessionController({
 
   useEffect(() => {
     if (currentAnchor === null) return;
+    // Deferred, not interleaved: while the drawer holds the gate, anchor
+    // changes wait — before the anchor ref moves and before any toast is
+    // touched. Intermediate flickers collapse for free, release re-evaluates
+    // exactly once, and a pick made during the hold has already re-anchored,
+    // so the deferred evaluation resolves silently.
+    if (isPolicyHeld) return;
     const previousAnchor = lastEvaluatedAnchorRef.current;
     const trigger =
       previousAnchor === "unset"
@@ -216,6 +240,7 @@ export function OutlookAddinSessionController({
     );
   }, [
     currentAnchor,
+    isPolicyHeld,
     resetMessaging,
     sessionPreferences,
     setCurrentChatId,

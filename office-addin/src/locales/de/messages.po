@@ -17,6 +17,14 @@ msgstr ""
 # Explicit IDs
 # ==============================
 #. js-lingui-explicit-id
+#: src/core/AddinHistoryDrawerCore.tsx
+msgid "chat.history.recent"
+msgstr ""
+
+# ==============================
+# Explicit IDs
+# ==============================
+#. js-lingui-explicit-id
 #: src/outlook/components/OutlookEratoAppointmentRenderer.tsx
 msgid "officeAddin.appointmentRenderer.alwaysAllowLocked"
 msgstr "Ihre Organisation verlangt jedes Mal eine Bestätigung, wenn diese Aktion automatisch ausgeführt wird."
@@ -202,9 +210,9 @@ msgid "officeAddin.chat.fileDrop.overlay.label"
 msgstr "Zum Hochladen ablegen"
 
 #. js-lingui-explicit-id
-#: src/core/AddinChatCore.tsx
-msgid "officeAddin.chat.newChat"
-msgstr "Neuer Chat"
+#: src/core/AddinHistoryDrawerCore.tsx
+#~ msgid "officeAddin.chat.newChat"
+#~ msgstr "Neuer Chat"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
@@ -537,9 +545,54 @@ msgid "officeAddin.fileSource.updatingThread"
 msgstr "Wird aktualisiert…"
 
 #. js-lingui-explicit-id
-#: src/core/AddinChatCore.tsx
+#: src/core/AddinHistoryDrawerCore.tsx
 msgid "officeAddin.headerMenu.settings"
 msgstr "Einstellungen"
+
+#. js-lingui-explicit-id
+#: src/core/AddinHistoryDrawerCore.tsx
+msgid "officeAddin.historyDrawer.archiveFailed"
+msgstr "Chat konnte nicht archiviert werden"
+
+#. js-lingui-explicit-id
+#: src/core/AddinHistoryDrawerCore.tsx
+#~ msgid "officeAddin.historyDrawer.chats"
+#~ msgstr "Chats"
+
+#. js-lingui-explicit-id
+#: src/core/AddinHistoryDrawerCore.tsx
+msgid "officeAddin.historyDrawer.close"
+msgstr "Menü schließen"
+
+#. js-lingui-explicit-id
+#: src/core/AddinHistoryDrawerCore.tsx
+msgid "officeAddin.historyDrawer.empty"
+msgstr "Noch keine Chats"
+
+#. js-lingui-explicit-id
+#: src/core/AddinHistoryDrawerCore.tsx
+#~ msgid "officeAddin.historyDrawer.noMatches"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/core/AddinChatCore.tsx
+msgid "officeAddin.historyDrawer.open"
+msgstr "Menü öffnen"
+
+#. js-lingui-explicit-id
+#: src/core/AddinHistoryDrawerCore.tsx
+#~ msgid "officeAddin.historyDrawer.rename.generated.fallback"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/core/AddinHistoryDrawerCore.tsx
+msgid "officeAddin.historyDrawer.renameFailed"
+msgstr "Chat konnte nicht umbenannt werden"
+
+#. js-lingui-explicit-id
+#: src/core/AddinHistoryDrawerCore.tsx
+msgid "officeAddin.historyDrawer.title"
+msgstr "Menü"
 
 #. js-lingui-explicit-id
 #: src/providers/OfficeProvider.tsx

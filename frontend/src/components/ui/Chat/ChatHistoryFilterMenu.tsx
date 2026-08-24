@@ -20,6 +20,7 @@ import { Button } from "../Controls/Button";
 import { CheckIcon, ChevronRightIcon, FilterSortIcon } from "../icons";
 
 import type {
+  ChatHistoryFilterStoreHook,
   ChatHistoryGroupBy,
   ChatHistoryStatusFilter,
   ChatHistoryTypeFilter,
@@ -30,6 +31,13 @@ export interface ChatHistoryFilterMenuProps {
   /** Shows the assistant-scoped entries (Type row, group-by-Type option). */
   assistantsEnabled: boolean;
   className?: string;
+  /**
+   * Filter store instance the menu reads and writes. Defaults to the web
+   * sidebar's singleton; surfaces with their own persistence (the add-in
+   * drawer) pass their own. Must stay the same instance for the component's
+   * lifetime.
+   */
+  store?: ChatHistoryFilterStoreHook;
 }
 
 type SubmenuKey = "type" | "status" | "groupBy";
@@ -102,6 +110,7 @@ function buildRow<V extends string>(
 export function ChatHistoryFilterMenu({
   assistantsEnabled,
   className,
+  store = useChatHistoryFilterStore,
 }: ChatHistoryFilterMenuProps) {
   const [isOpen, setIsOpenState] = useState(false);
   const [openSubmenu, setOpenSubmenu] = useState<SubmenuKey | null>(null);
@@ -126,19 +135,13 @@ export function ChatHistoryFilterMenu({
   // "hover, read, then click" gesture), not toggle it away.
   const submenuOpenedByHoverRef = useRef(false);
 
-  const typeFilter = useChatHistoryFilterStore((state) => state.typeFilter);
-  const statusFilter = useChatHistoryFilterStore((state) => state.statusFilter);
-  const groupBy = useChatHistoryFilterStore((state) => state.groupBy);
-  const setTypeFilter = useChatHistoryFilterStore(
-    (state) => state.setTypeFilter,
-  );
-  const setStatusFilter = useChatHistoryFilterStore(
-    (state) => state.setStatusFilter,
-  );
-  const setGroupBy = useChatHistoryFilterStore((state) => state.setGroupBy);
-  const resetToDefaults = useChatHistoryFilterStore(
-    (state) => state.resetToDefaults,
-  );
+  const typeFilter = store((state) => state.typeFilter);
+  const statusFilter = store((state) => state.statusFilter);
+  const groupBy = store((state) => state.groupBy);
+  const setTypeFilter = store((state) => state.setTypeFilter);
+  const setStatusFilter = store((state) => state.setStatusFilter);
+  const setGroupBy = store((state) => state.setGroupBy);
+  const resetToDefaults = store((state) => state.resetToDefaults);
 
   const filters = sanitizeChatHistoryFilters(
     { typeFilter, statusFilter, groupBy },

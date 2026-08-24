@@ -30,6 +30,7 @@ const spies = vi.hoisted(() => ({
   createEntraNaaAuthSource: vi.fn(),
   sessionAuthSource: vi.fn(),
   usePersistedState: vi.fn(),
+  updateChatTitle: vi.fn(async () => undefined),
   messagingStore: {
     abortActiveSSE: vi.fn(),
     clearUserMessages: vi.fn(),
@@ -209,19 +210,53 @@ vi.mock("@erato/frontend/library", async () => {
       spies.usePersistedState(key);
       return useState(initialValue);
     },
-    useRecentChats: () => ({
-      data: { chats: [] },
+    useInfiniteRecentChats: () => ({
+      chats: [],
       isLoading: false,
       error: null,
       refetch: vi.fn(async () => undefined),
+      fetchNextPage: vi.fn(async () => undefined),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      queryKey: ["recent-chats"],
     }),
+    createChatHistoryFilterStore: () => {
+      const state = {
+        typeFilter: "all",
+        statusFilter: "active",
+        groupBy: "date",
+        setTypeFilter: vi.fn(),
+        setStatusFilter: vi.fn(),
+        setGroupBy: vi.fn(),
+        resetToDefaults: vi.fn(),
+      };
+      return Object.assign(
+        (selector: (s: typeof state) => unknown) => selector(state),
+        { getState: () => state },
+      );
+    },
+    removeArchivedChatFromLists: vi.fn(async () => () => undefined),
+    seedGenerationStatusFromListing: vi.fn(),
+    useAssistantsFeature: () => ({
+      enabled: false,
+      delegationEnabled: false,
+      delegationAllowBackground: false,
+    }),
+    useChatHistoryFilterFoldback: () => undefined,
+    useUpdateChatTitle: () => spies.updateChatTitle,
 
     ChatErrorBoundary: passthrough,
+    Button: ({
+      icon: _icon,
+      ...props
+    }: Record<string, unknown> & { icon?: unknown; ref?: unknown }) => (
+      <button {...(props as Record<string, never>)} />
+    ),
     ChatInputControlsProvider: passthrough,
     ChatMessage: () => null,
     DefaultMessageControls: () => null,
     DocumentIcon: () => null,
-    DropdownMenu: () => null,
+    SidebarToggleIcon: () => null,
     FeedbackCommentDialog: () => null,
     FeedbackViewDialog: () => null,
     FilePreviewModal: () => null,
@@ -275,6 +310,10 @@ vi.mock("@erato/frontend/library", async () => {
   };
 });
 
+vi.mock("../../core/AddinHistoryDrawerCore", () => ({
+  AddinHistoryDrawerCore: () => null,
+}));
+
 describe("Teams personal tab composition", () => {
   const originalOffice = Object.getOwnPropertyDescriptor(globalThis, "Office");
 
@@ -319,7 +358,9 @@ describe("Teams personal tab composition", () => {
 
     expect(await screen.findByTestId("teams-message-list")).toBeInTheDocument();
     expect(screen.getByTestId("teams-chat-input")).toBeInTheDocument();
-    expect(screen.getByText("New Chat")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("addin-history-drawer-trigger"),
+    ).toBeInTheDocument();
     expect(globalThis).not.toHaveProperty("Office");
     expect(
       appendChild.mock.calls.some(
