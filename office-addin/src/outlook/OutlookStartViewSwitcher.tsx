@@ -5,8 +5,10 @@ import {
   componentRegistry,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { dismissSessionToasts } from "./components/sessionAskToast";
+import { holdSessionPolicy, releaseSessionPolicy } from "./sessionPolicy";
 import { useGraphTokenOptional } from "../core/auth/GraphTokenProvider";
 
 import type { AddinStartViewProps } from "@erato/frontend/library";
@@ -47,6 +49,18 @@ export function OutlookStartViewSwitcher({
   const [view, setView] = useState<"start" | "chat">("start");
 
   const openChat = useCallback(() => setView("chat"), []);
+
+  // While the start view is shown, mail-item switches must not surface a
+  // session ask toast on top of it (toasts float at z-1000). Same counted
+  // gate the history drawer uses: hold defers the anchor policy, releasing
+  // re-evaluates the latest state exactly once.
+  const startViewActive = StartView !== null && view === "start";
+  useEffect(() => {
+    if (!startViewActive) return;
+    holdSessionPolicy();
+    dismissSessionToasts();
+    return () => releaseSessionPolicy();
+  }, [startViewActive]);
 
   // Start views request custom-audience API tokens; warming the oauth2-proxy
   // session with one would hand the proxy a token it cannot redeem, so the

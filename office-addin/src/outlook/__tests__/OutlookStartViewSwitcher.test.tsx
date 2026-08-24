@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { OutlookStartViewSwitcher } from "../OutlookStartViewSwitcher";
+import { isSessionPolicyHeld } from "../sessionPolicy";
 
 import type { AddinStartViewProps } from "@erato/frontend/library";
 
@@ -88,5 +89,35 @@ describe("OutlookStartViewSwitcher", () => {
     expect(screen.getByTestId("stub-token-availability")).toHaveTextContent(
       "no-token",
     );
+  });
+
+  it("holds the session policy only while the start view is shown", () => {
+    componentRegistry.AddinStartView = StubStartView;
+    const { unmount } = render(
+      <OutlookStartViewSwitcher platform="outlook">
+        <div data-testid="chat-surface" />
+      </OutlookStartViewSwitcher>,
+    );
+
+    expect(isSessionPolicyHeld()).toBe(true);
+
+    fireEvent.click(screen.getByTestId("addin-start-view-toggle"));
+    expect(isSessionPolicyHeld()).toBe(false);
+
+    fireEvent.click(screen.getByTestId("addin-start-view-toggle"));
+    expect(isSessionPolicyHeld()).toBe(true);
+
+    unmount();
+    expect(isSessionPolicyHeld()).toBe(false);
+  });
+
+  it("does not touch the session policy when no start view is registered", () => {
+    render(
+      <OutlookStartViewSwitcher platform="outlook">
+        <div data-testid="chat-surface" />
+      </OutlookStartViewSwitcher>,
+    );
+
+    expect(isSessionPolicyHeld()).toBe(false);
   });
 });
