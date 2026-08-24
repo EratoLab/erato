@@ -286,6 +286,7 @@ export {
   useStandaloneFileUpload,
 } from "@/hooks/files";
 export {
+  ChatBubbleIcon,
   CloseIcon,
   ComputerIcon,
   DocumentIcon,
@@ -405,6 +406,7 @@ export {
   type EratoEmailCodeBlockProps,
   type EratoAppointmentCodeBlockProps,
   type ChatAddMenuExtraContentProps,
+  type AddinStartViewProps,
 } from "@/config/componentRegistry";
 export {
   registerClientToolExecutor,

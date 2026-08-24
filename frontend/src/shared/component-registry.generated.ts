@@ -89,6 +89,7 @@ export { ArrowUp } from "@/components/ui/icons/index";
 export { ArrowUpIcon } from "@/components/ui/icons/index";
 export { AtSignIcon } from "@/components/ui/icons/index";
 export { BrainIcon } from "@/components/ui/icons/index";
+export { ChatBubbleIcon } from "@/components/ui/icons/index";
 export { Check } from "@/components/ui/icons/index";
 export { CheckCircle } from "@/components/ui/icons/index";
 export { CheckCircleIcon } from "@/components/ui/icons/index";

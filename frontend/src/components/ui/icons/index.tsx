@@ -13,6 +13,7 @@ import {
   SunLight,
   HalfMoon,
   Computer,
+  ChatBubbleEmpty,
   Plus,
   CandlestickChart,
   Check,
@@ -268,6 +269,10 @@ export const MultiplePagesIcon = ({ className, ...props }: IconProps) => (
 
 export const MailIcon = ({ className, ...props }: IconProps) => (
   <Mail className={className} {...props} />
+);
+
+export const ChatBubbleIcon = ({ className, ...props }: IconProps) => (
+  <ChatBubbleEmpty className={className} {...props} />
 );
 
 export const SearchIcon = ({ className, ...props }: IconProps) => (
