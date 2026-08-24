@@ -30,6 +30,10 @@ export interface GraphTokenContextValue {
    * `{ suppressSignInPrompt: true }` also skips the sign-in TOAST on failure —
    * for OPTIONAL scopes (directory search) whose absence is an expected steady
    * state the caller degrades on, not something to prompt the user over.
+   * `{ skipSessionWarm: true }` skips the opportunistic oauth2-proxy session
+   * refresh — REQUIRED for custom API resource scopes (non-Graph audiences):
+   * warming the session with such a token would hand the proxy an access token
+   * it cannot use.
    */
   acquireToken: (
     scopes: string[],
@@ -37,6 +41,7 @@ export interface GraphTokenContextValue {
       forceRefresh?: boolean;
       allowInteraction?: boolean;
       suppressSignInPrompt?: boolean;
+      skipSessionWarm?: boolean;
     },
   ) => Promise<string>;
 }
@@ -92,6 +97,7 @@ export function GraphTokenProvider({
         forceRefresh?: boolean;
         allowInteraction?: boolean;
         suppressSignInPrompt?: boolean;
+        skipSessionWarm?: boolean;
       },
     ): Promise<string> => {
       try {
@@ -101,7 +107,12 @@ export function GraphTokenProvider({
         );
         // Opportunistically warm the proxy session from the token we just got,
         // but only if it's gone stale — reusing the core's dedup + staleness ref.
-        if (shouldRefreshOauth2ProxySession(lastRedeemedAtRef.current)) {
+        // Skipped for custom-audience tokens (skipSessionWarm): the proxy can
+        // only redeem tokens minted for its own resource.
+        if (
+          !options?.skipSessionWarm &&
+          shouldRefreshOauth2ProxySession(lastRedeemedAtRef.current)
+        ) {
           await redeemSessionForToken(bootstrap, "refreshing");
         }
         return accessToken;
