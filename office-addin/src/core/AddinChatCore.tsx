@@ -557,6 +557,10 @@ export function AddinChatCoreView({
   drawerSectionsAfterHistory?: ReactNode;
 }) {
   const TopLeftAccessory = componentRegistry.ChatTopLeftAccessory;
+  // When a kit registers a start view, its toggle floats at the top RIGHT
+  // (mirroring the drawer trigger), so the trigger-clearance rows need the
+  // symmetric pr-10 as well.
+  const hasStartViewToggle = componentRegistry.AddinStartView !== null;
   const feedback = controller.feedback;
   const { setIsHistoryMenuOpen, setIsSettingsOpen } = controller;
   // Stable identities for the drawer: fresh arrows here would churn its
@@ -654,14 +658,16 @@ export function AddinChatCoreView({
               {controller.delegatedRunHeader ? (
                 // pl-10 clears the floating drawer trigger, which otherwise
                 // sits on the header's title.
-                <div className="relative z-10 shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3 pl-10">
+                <div
+                  className={`relative z-10 shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3 pl-10${hasStartViewToggle ? " pr-10" : ""}`}
+                >
                   {controller.delegatedRunHeader}
                 </div>
               ) : null}
               {TopLeftAccessory ? (
                 // Cleared past the floating drawer trigger, which otherwise
                 // sits exactly on a top-left accessory.
-                <div className="pl-10">
+                <div className={`pl-10${hasStartViewToggle ? " pr-10" : ""}`}>
                   <TopLeftAccessory
                     availableModels={controller.availableModels}
                     selectedModel={controller.selectedModel}

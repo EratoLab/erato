@@ -1,3 +1,4 @@
+import { componentRegistry } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 
 export interface AddinPinHintBannerProps {
@@ -67,6 +68,9 @@ function DismissIcon({ className }: { className?: string }) {
  * best we can do is teach the user to pin. Dismissible.
  */
 export function AddinPinHintBanner({ onDismiss }: AddinPinHintBannerProps) {
+  // Mirror the left trigger clearance on the right when a kit-registered
+  // start view adds its floating toggle there.
+  const hasStartViewToggle = componentRegistry.AddinStartView !== null;
   return (
     <div
       role="status"
@@ -75,7 +79,7 @@ export function AddinPinHintBanner({ onDismiss }: AddinPinHintBannerProps) {
       data-ui="addin-pin-hint-banner"
       // pl-10 clears the floating drawer trigger, which overlays the pane's
       // top-left corner now that no header row reserves space for it.
-      className="flex items-start gap-2 border-b border-theme-warning-border bg-theme-warning-bg py-2 pl-10 pr-4 text-theme-warning-fg"
+      className={`flex items-start gap-2 border-b border-theme-warning-border bg-theme-warning-bg py-2 pl-10 ${hasStartViewToggle ? "pr-10" : "pr-4"} text-theme-warning-fg`}
     >
       <PinIcon className="mt-0.5 size-4 shrink-0" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
