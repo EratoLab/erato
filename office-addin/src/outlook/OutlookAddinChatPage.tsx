@@ -5,6 +5,7 @@ import {
 
 import { OutlookAddinChat } from "./OutlookAddinChat";
 import { OutlookAddinSessionController } from "./OutlookAddinSessionController";
+import { OutlookStartViewSwitcher } from "./OutlookStartViewSwitcher";
 import { AddinChatProviderCore } from "../core/AddinChatProviderCore";
 
 /** Outlook composition of generic chat data with Outlook session policy. */
@@ -16,7 +17,9 @@ export function OutlookAddinChatPage() {
           platform="outlook"
           SessionController={OutlookAddinSessionController}
         >
-          <OutlookAddinChat />
+          <OutlookStartViewSwitcher platform="outlook">
+            <OutlookAddinChat />
+          </OutlookStartViewSwitcher>
         </AddinChatProviderCore>
       </FileCapabilitiesProvider>
     </ProfileProvider>

@@ -1150,6 +1150,16 @@ msgstr "Téléverser le manifeste généré"
 #~ msgstr "et téléversez-y le fichier téléchargé."
 
 #. js-lingui-explicit-id
+#: src/outlook/OutlookStartViewSwitcher.tsx
+msgid "officeAddin.startView.openChat"
+msgstr "Passer au chat"
+
+#. js-lingui-explicit-id
+#: src/outlook/OutlookStartViewSwitcher.tsx
+msgid "officeAddin.startView.openStart"
+msgstr "Passer à la vue de démarrage"
+
+#. js-lingui-explicit-id
 #: src/teams/components/TeamsChatAddMenuExtraContent.tsx
 msgid "officeAddin.teams.fileSource.chats"
 msgstr "Conversations Teams…"
