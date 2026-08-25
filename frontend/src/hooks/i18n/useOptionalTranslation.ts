@@ -1,12 +1,37 @@
-import { t } from "@lingui/core/macro";
+import { i18n } from "@lingui/core";
+
+/**
+ * Look up a translation that may not be present in the active catalog.
+ *
+ * Lingui treats a missing message with an empty fallback as the message ID,
+ * then warns in production because that ID is an uncompiled string. Check the
+ * catalog before asking Lingui to resolve the message so optional translations
+ * stay silent when they are not configured.
+ */
+export function getOptionalTranslation(translationId: string): string | null {
+  const message = i18n.messages[translationId];
+  if (!(translationId in i18n.messages)) {
+    return null;
+  }
+
+  // Raw catalog entries are valid for optional translations without values,
+  // and returning them directly also avoids Lingui's production warning when
+  // a dynamically loaded catalog has not been compiled.
+  if (typeof message === "string") {
+    return message.trim() === "" ? null : message;
+  }
+
+  const result = i18n._(translationId);
+  return typeof result === "string" && result.trim() !== "" ? result : null;
+}
 
 /**
  * Hook to get an optional translation.
  * Returns the translated string if it exists, or null if no translation is provided.
  *
- * When a translation ID has no entry in the locale files, Lingui returns the ID itself.
- * This hook detects that case and returns null instead, allowing conditional rendering
- * based on whether a customer has provided a translation.
+ * When a translation ID has no entry in the locale files, this returns null,
+ * allowing conditional rendering based on whether a customer has provided a
+ * translation.
  *
  * @param translationId - The translation ID to look up
  * @returns The translated string if available, or null if not provided
@@ -21,19 +46,5 @@ import { t } from "@lingui/core/macro";
  * ```
  */
 export function useOptionalTranslation(translationId: string): string | null {
-  // Attempt to translate with an empty fallback message
-  // eslint-disable-next-line lingui/no-single-variables-to-translate
-  const result = t({ id: translationId, message: "" });
-
-  // If Lingui returns the ID itself, no translation exists
-  if (result === translationId) {
-    return null;
-  }
-
-  // If the result is empty, treat it as no translation
-  if (!result || result.trim() === "") {
-    return null;
-  }
-
-  return result;
+  return getOptionalTranslation(translationId);
 }

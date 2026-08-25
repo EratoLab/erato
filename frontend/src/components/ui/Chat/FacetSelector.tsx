@@ -3,6 +3,7 @@ import clsx from "clsx";
 import { useCallback, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
+import { getOptionalTranslation } from "@/hooks/i18n";
 
 import { DropdownMenu } from "../Controls/DropdownMenu";
 import { AtSignIcon, ChevronDownIcon, ResolvedIcon, ToolsIcon } from "../icons";
@@ -36,12 +37,7 @@ interface FacetSelectorProps {
 export function getFacetDisplayName(facet: FacetInfo): string {
   // eslint-disable-next-line lingui/no-unlocalized-strings -- Translation key is dynamic by facet ID
   const translationId = `facets.${facet.id}.display_name`;
-  // eslint-disable-next-line lingui/no-single-variables-to-translate
-  const translatedName = t({ id: translationId, message: "" });
-  if (translatedName && translatedName !== translationId) {
-    return translatedName;
-  }
-  return facet.display_name;
+  return getOptionalTranslation(translationId) ?? facet.display_name;
 }
 
 export const FacetSelector = ({

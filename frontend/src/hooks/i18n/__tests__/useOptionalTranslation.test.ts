@@ -1,5 +1,5 @@
 import { i18n } from "@lingui/core";
-import { describe, it, expect, afterEach } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { messages as enMessages } from "@/locales/en/messages.json";
 
@@ -32,6 +32,31 @@ describe("useOptionalTranslation", () => {
     const result = useOptionalTranslation("test.tooltip.nonexistent.key.xyz");
 
     expect(result).toBeNull();
+  });
+
+  it("should not warn when an optional translation does not exist", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    expect(
+      useOptionalTranslation("test.tooltip.missing.without.warning"),
+    ).toBeNull();
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it("should return raw optional catalog entries without warning", () => {
+    i18n.load("en", {
+      ...(enMessages as unknown as Messages),
+      "test.tooltip.raw": "Raw tooltip",
+    });
+    i18n.activate("en");
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    expect(useOptionalTranslation("test.tooltip.raw")).toBe("Raw tooltip");
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 
   it("should return null when translation is empty string", () => {

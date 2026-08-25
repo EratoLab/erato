@@ -1,1 +1,4 @@
-export { useOptionalTranslation } from "./useOptionalTranslation";
+export {
+  getOptionalTranslation,
+  useOptionalTranslation,
+} from "./useOptionalTranslation";
