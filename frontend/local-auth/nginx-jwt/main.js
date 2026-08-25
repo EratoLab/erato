@@ -70,6 +70,16 @@ function parseCookies(cookieHeader) {
   return cookies;
 }
 
+function targetLocationForUri(uri) {
+  if (uri === "/admin" || uri.startsWith("/admin/")) {
+    return "@admin";
+  }
+  if (uri.startsWith("/api/")) {
+    return "@backend";
+  }
+  return "@frontend";
+}
+
 function handleRequest(r) {
   // JWT secret key - should be stored securely
   const jwtSecret = "erato-nginx-jwt-secret-key-change-in-production";
@@ -125,10 +135,7 @@ function handleRequest(r) {
     }
 
     // Determine which upstream to use based on the path
-    let targetLocation = "@frontend";
-    if (r.uri.startsWith("/api/")) {
-      targetLocation = "@backend";
-    }
+    const targetLocation = targetLocationForUri(r.uri);
 
     // Forward to appropriate upstream with cleaned URL
     const newUri = r.uri + (newArgs ? "?" + newArgs : "");
@@ -141,10 +148,7 @@ function handleRequest(r) {
       // Existing auth header, forward as-is
       r.variables.auth_jwt = authHeader;
 
-      let targetLocation = "@frontend";
-      if (r.uri.startsWith("/api/")) {
-        targetLocation = "@backend";
-      }
+      const targetLocation = targetLocationForUri(r.uri);
       r.internalRedirect(targetLocation);
     } else {
       // No authentication provided
