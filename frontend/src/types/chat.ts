@@ -220,6 +220,12 @@ export interface ChatSession {
   assistantId?: string | null;
   /** How this chat was spawned from another one, when it was. */
   provenanceKind?: string;
+  /**
+   * Terminal outcome of a delegated run — absent while it is still live, and
+   * for chats that are not runs. Derived from the chat's own content, so a
+   * client that never observed the run still sees how it ended.
+   */
+  delegatedRunOutcome?: string;
   /** May reference a chat that no longer exists. */
   originChatId?: string;
   /** Absent once the origin chat is gone, even while `originChatId` is set. */

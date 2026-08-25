@@ -8,11 +8,12 @@ import { useHasPendingConfirmation } from "@/hooks/chat/store/confirmationRegist
 import { useGenerationStatusFor } from "@/hooks/chat/store/generationStatusStore";
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
 import { useThemedIcon } from "@/hooks/ui";
+import { delegatedRunOrigin } from "@/utils/chat/delegatedRunOrigin";
 import { resolveRecentChatTitle } from "@/utils/chat/recentChatSession";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 import {
   chatAttentionStatusLabel,
-  resolveChatAttentionStatus,
+  resolveSessionRowStatus,
 } from "@/utils/chatHistoryGrouping";
 import { createLogger } from "@/utils/debugLogger";
 
@@ -74,22 +75,11 @@ const ChatItemIcon = memo(() => {
 // eslint-disable-next-line lingui/no-unlocalized-strings -- Component display name, not user-facing text
 ChatItemIcon.displayName = "ChatItemIcon";
 
-const useRowGenerationStatus = (chatId: string): ChatAttentionStatus | null => {
-  const status = useGenerationStatusFor(chatId);
-  const hasPendingConfirmation = useHasPendingConfirmation(chatId);
-  return resolveChatAttentionStatus(status, hasPendingConfirmation);
+const useRowStatus = (session: ChatSession): ChatAttentionStatus | null => {
+  const storeStatus = useGenerationStatusFor(session.id);
+  const hasPendingConfirmation = useHasPendingConfirmation(session.id);
+  return resolveSessionRowStatus(session, storeStatus, hasPendingConfirmation);
 };
-
-const GenerationStatusIndicator = memo<{ chatId: string }>(({ chatId }) => {
-  const status = useRowGenerationStatus(chatId);
-
-  if (!status) return null;
-
-  return <ChatAttentionStatusDot status={status} />;
-});
-
-// eslint-disable-next-line lingui/no-unlocalized-strings
-GenerationStatusIndicator.displayName = "GenerationStatusIndicator";
 
 export interface ChatHistoryListProps {
   sessions: ChatSession[];
@@ -163,8 +153,11 @@ const ChatHistoryListItem = memo<{
     showTimestamps = true,
     disableRowLinks = false,
   }) => {
-    const generationStatus = useRowGenerationStatus(session.id);
+    const generationStatus = useRowStatus(session);
     const rowTitle = useRowTitle(session);
+    // Present only for delegated runs, so it doubles as the "this row is a
+    // run" test — the rows only a widened filter puts in this list.
+    const runOrigin = delegatedRunOrigin(session);
     // A stable Date instance: an inline `new Date(...)` would defeat
     // MessageTimestamp's shallow memo on every list render.
     const updatedAtDate = useMemo(
@@ -186,9 +179,13 @@ const ChatHistoryListItem = memo<{
             id: "chat.history.menu.pin",
             message: "Pin",
           });
-    const rowAriaLabel = generationStatus
-      ? `${rowTitle}, ${chatAttentionStatusLabel(generationStatus)}`
-      : rowTitle;
+    const rowAriaLabel = [
+      rowTitle,
+      runOrigin?.label,
+      generationStatus ? chatAttentionStatusLabel(generationStatus) : null,
+    ]
+      .filter(Boolean)
+      .join(", ");
     const rowBody = (
       <InteractiveContainer
         useDiv={true}
@@ -205,7 +202,9 @@ const ChatHistoryListItem = memo<{
       >
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <GenerationStatusIndicator chatId={session.id} />
+            {generationStatus && (
+              <ChatAttentionStatusDot status={generationStatus} />
+            )}
             <ChatItemIcon />
             <span className="truncate font-medium" title={rowTitle}>
               {rowTitle}
@@ -261,19 +260,38 @@ const ChatHistoryListItem = memo<{
                       },
                     ]
                   : []),
-                {
-                  label: t`Remove`,
-                  icon: <Trash className="size-4" />,
-                  variant: "danger",
-                  onClick: onArchive ?? (() => {}),
-                  confirmAction: true,
-                  confirmTitle: t`Confirm Removal`,
-                  confirmMessage: t`Are you sure you want to remove this chat?`,
-                },
+                // Withheld from delegated runs: archiving one neither checks
+                // nor cancels a generation still in flight, a run parked on a
+                // tool approval can never be resumed afterwards, and there is
+                // no unarchive route to undo any of it. Runs age out on their
+                // own; the purpose-built runs list offers no destructive
+                // action either.
+                ...(runOrigin
+                  ? []
+                  : [
+                      {
+                        label: t`Remove`,
+                        icon: <Trash className="size-4" />,
+                        variant: "danger" as const,
+                        onClick: onArchive ?? (() => {}),
+                        confirmAction: true,
+                        confirmTitle: t`Confirm Removal`,
+                        confirmMessage: t`Are you sure you want to remove this chat?`,
+                      },
+                    ]),
               ]}
             />
           </div>
         </div>
+        {runOrigin && (
+          <p
+            className="truncate text-xs text-theme-fg-muted"
+            title={runOrigin.label}
+            data-testid="chat-history-item-run-origin"
+          >
+            {runOrigin.label}
+          </p>
+        )}
         {layout !== "compact" && showTimestamps && (
           <>
             <p

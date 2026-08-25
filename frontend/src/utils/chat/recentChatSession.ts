@@ -51,6 +51,7 @@ export function mapRecentChatToSession(chat: RecentChat): ChatSession {
     id: chat.id,
     assistantId: chat.assistant_id,
     provenanceKind: chat.provenance_kind,
+    delegatedRunOutcome: chat.delegated_run_outcome,
     originChatId: chat.origin_chat_id,
     originChatTitle: chat.origin_chat_title,
     title:

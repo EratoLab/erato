@@ -511,7 +511,7 @@ packages:
     hasBin: true
 
   '@erato/frontend@file:../frontend/dist-package/erato-frontend.tgz':
-    resolution: {integrity: sha512-vIQsUXpJn6qRqDSRKqyu/T9MI1keZT0+yHgbQe/LLfyjHwb3pIjyzLJY2u5yy/sk3gZY5zR+4GgeSE9/4HvwAA==, tarball: file:../frontend/dist-package/erato-frontend.tgz}
+    resolution: {integrity: sha512-t/H0hMr83RDY/CHhWxu3qZK03nODnGoT42Zm/bZzqfu2WFNSXwn6/sQcAfgLyRgeJL8dA4KMN+locGVSZLkEJQ==, tarball: file:../frontend/dist-package/erato-frontend.tgz}
     version: 0.1.0
     peerDependencies:
       '@lingui/core': ^5.9.4
@@ -2422,6 +2422,7 @@ packages:
   eslint@9.39.4:
     resolution: {integrity: sha512-XoMjdBOwe/esVgEvLmNsD3IRHkm7fbKIUGvrleloJXUZgDHig2IPWNniv+GwjyJXzuNqVjlr5+4yVUZjycJwfQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'

@@ -130,11 +130,20 @@ describe("isDefaultFilters", () => {
     expect(
       isDefaultFilters({ ...CHAT_HISTORY_FILTER_DEFAULTS, groupBy: "none" }),
     ).toBe(false);
+    // Load-bearing: the add-in collapses its session listing onto the
+    // drawer's query key while this holds, and a widened facet is a
+    // different request.
+    expect(
+      isDefaultFilters({
+        ...CHAT_HISTORY_FILTER_DEFAULTS,
+        delegatedFilter: "shown",
+      }),
+    ).toBe(false);
   });
 });
 
 describe("hasActiveFilters", () => {
-  it("counts type and status deviations but ignores grouping", () => {
+  it("counts membership-changing deviations but ignores grouping", () => {
     expect(hasActiveFilters(CHAT_HISTORY_FILTER_DEFAULTS)).toBe(false);
     expect(
       hasActiveFilters({ ...CHAT_HISTORY_FILTER_DEFAULTS, groupBy: "none" }),
@@ -148,38 +157,71 @@ describe("hasActiveFilters", () => {
         statusFilter: "all",
       }),
     ).toBe(true);
+    // Adds rows rather than dropping them, but the list is still not the
+    // default set — the trigger's dot has to say so.
+    expect(
+      hasActiveFilters({
+        ...CHAT_HISTORY_FILTER_DEFAULTS,
+        delegatedFilter: "shown",
+      }),
+    ).toBe(true);
   });
 });
 
 describe("sanitizeChatHistoryFilters", () => {
+  const allEnabled = { assistantsEnabled: true, delegationEnabled: true };
   const assistantScoped = {
     typeFilter: "assistant",
     statusFilter: "all",
+    delegatedFilter: "shown",
     groupBy: "type",
   } as const;
 
-  it("passes values through when assistants are enabled", () => {
-    expect(sanitizeChatHistoryFilters(assistantScoped, true)).toEqual(
+  it("passes values through when assistants and delegation are enabled", () => {
+    expect(sanitizeChatHistoryFilters(assistantScoped, allEnabled)).toEqual(
       assistantScoped,
     );
   });
 
   it("falls assistant-scoped values back to defaults when disabled", () => {
-    expect(sanitizeChatHistoryFilters(assistantScoped, false)).toEqual({
+    expect(
+      sanitizeChatHistoryFilters(assistantScoped, {
+        assistantsEnabled: false,
+        delegationEnabled: false,
+      }),
+    ).toEqual({
       typeFilter: "all",
       statusFilter: "all",
+      delegatedFilter: "hidden",
       groupBy: "date",
     });
+  });
+
+  it("folds only the delegated facet when delegation alone is off", () => {
+    // A persisted "shown" would otherwise keep widening the request — and
+    // splitting the cache — behind a menu row that is no longer rendered.
+    expect(
+      sanitizeChatHistoryFilters(assistantScoped, {
+        assistantsEnabled: true,
+        delegationEnabled: false,
+      }),
+    ).toEqual({ ...assistantScoped, delegatedFilter: "hidden" });
   });
 
   it("keeps assistant-independent values when disabled", () => {
     const values = {
       typeFilter: "all",
       statusFilter: "active",
+      delegatedFilter: "hidden",
       groupBy: "unread",
     } as const;
 
-    expect(sanitizeChatHistoryFilters(values, false)).toEqual(values);
+    expect(
+      sanitizeChatHistoryFilters(values, {
+        assistantsEnabled: false,
+        delegationEnabled: false,
+      }),
+    ).toEqual(values);
   });
 });
 

@@ -4,17 +4,25 @@ import { devtools, persist } from "zustand/middleware";
 
 export type ChatHistoryTypeFilter = "all" | "chat" | "assistant";
 export type ChatHistoryStatusFilter = "active" | "all";
+export type ChatHistoryDelegatedFilter = "hidden" | "shown";
 export type ChatHistoryGroupBy = "date" | "type" | "unread" | "none";
 
 export interface ChatHistoryFilterValues {
   typeFilter: ChatHistoryTypeFilter;
   statusFilter: ChatHistoryStatusFilter;
+  /**
+   * Whether chats spawned as delegated runs join the list. Orthogonal to
+   * `typeFilter` rather than a value of it: a delegated run is usually an
+   * assistant chat, so the two dimensions have to compose.
+   */
+  delegatedFilter: ChatHistoryDelegatedFilter;
   groupBy: ChatHistoryGroupBy;
 }
 
 interface ChatHistoryFilterStore extends ChatHistoryFilterValues {
   setTypeFilter: (typeFilter: ChatHistoryTypeFilter) => void;
   setStatusFilter: (statusFilter: ChatHistoryStatusFilter) => void;
+  setDelegatedFilter: (delegatedFilter: ChatHistoryDelegatedFilter) => void;
   setGroupBy: (groupBy: ChatHistoryGroupBy) => void;
   resetToDefaults: () => void;
 }
@@ -22,6 +30,7 @@ interface ChatHistoryFilterStore extends ChatHistoryFilterValues {
 export const CHAT_HISTORY_FILTER_DEFAULTS: ChatHistoryFilterValues = {
   typeFilter: "all",
   statusFilter: "active",
+  delegatedFilter: "hidden",
   groupBy: "date",
 };
 
@@ -33,6 +42,10 @@ const TYPE_FILTER_VALUES: readonly ChatHistoryTypeFilter[] = [
 const STATUS_FILTER_VALUES: readonly ChatHistoryStatusFilter[] = [
   "active",
   "all",
+];
+const DELEGATED_FILTER_VALUES: readonly ChatHistoryDelegatedFilter[] = [
+  "hidden",
+  "shown",
 ];
 const GROUP_BY_VALUES: readonly ChatHistoryGroupBy[] = [
   "date",
@@ -52,18 +65,21 @@ export function isDefaultFilters(values: ChatHistoryFilterValues): boolean {
   return (
     values.typeFilter === CHAT_HISTORY_FILTER_DEFAULTS.typeFilter &&
     values.statusFilter === CHAT_HISTORY_FILTER_DEFAULTS.statusFilter &&
+    values.delegatedFilter === CHAT_HISTORY_FILTER_DEFAULTS.delegatedFilter &&
     values.groupBy === CHAT_HISTORY_FILTER_DEFAULTS.groupBy
   );
 }
 
 /**
- * Whether a filter that can exclude chats from the list is active. Grouping
- * only rearranges the same rows, so it deliberately does not count.
+ * Whether a filter that changes which chats the list contains is active —
+ * whether it drops rows (type, status) or adds them (delegated runs).
+ * Grouping only rearranges the same rows, so it deliberately does not count.
  */
 export function hasActiveFilters(values: ChatHistoryFilterValues): boolean {
   return (
     values.typeFilter !== CHAT_HISTORY_FILTER_DEFAULTS.typeFilter ||
-    values.statusFilter !== CHAT_HISTORY_FILTER_DEFAULTS.statusFilter
+    values.statusFilter !== CHAT_HISTORY_FILTER_DEFAULTS.statusFilter ||
+    values.delegatedFilter !== CHAT_HISTORY_FILTER_DEFAULTS.delegatedFilter
   );
 }
 
@@ -86,6 +102,13 @@ export function createChatHistoryFilterStore(persistName: string) {
           setStatusFilter: (statusFilter) =>
             set({ statusFilter }, false, "chatHistoryFilter/setStatusFilter"),
 
+          setDelegatedFilter: (delegatedFilter) =>
+            set(
+              { delegatedFilter },
+              false,
+              "chatHistoryFilter/setDelegatedFilter",
+            ),
+
           setGroupBy: (groupBy) =>
             set({ groupBy }, false, "chatHistoryFilter/setGroupBy"),
 
@@ -101,6 +124,7 @@ export function createChatHistoryFilterStore(persistName: string) {
           partialize: (state) => ({
             typeFilter: state.typeFilter,
             statusFilter: state.statusFilter,
+            delegatedFilter: state.delegatedFilter,
             groupBy: state.groupBy,
           }),
           // localStorage is user-editable, so each rehydrated field must be
@@ -121,6 +145,14 @@ export function createChatHistoryFilterStore(persistName: string) {
                 stored.statusFilter,
                 STATUS_FILTER_VALUES,
                 CHAT_HISTORY_FILTER_DEFAULTS.statusFilter,
+              ),
+              // Absent from every blob persisted before this facet existed,
+              // which coerces to the default — the same "hidden" the list has
+              // always had.
+              delegatedFilter: coerceToUnion(
+                stored.delegatedFilter,
+                DELEGATED_FILTER_VALUES,
+                CHAT_HISTORY_FILTER_DEFAULTS.delegatedFilter,
               ),
               groupBy: coerceToUnion(
                 stored.groupBy,
@@ -149,22 +181,40 @@ export const useChatHistoryFilterStore = createChatHistoryFilterStore(
   "erato.sidebar.chatHistoryFilters",
 );
 
+/** The feature gates that decide which filter values the menu offers. */
+export interface ChatHistoryFilterCapabilities {
+  assistantsEnabled: boolean;
+  /**
+   * Delegation implies assistants, so the delegated facet needs both gates —
+   * same pairing `DelegatedRunsSection` uses to decide a chat can have runs.
+   */
+  delegationEnabled: boolean;
+}
+
 /**
- * Assistant-scoped values (a type filter other than "all", grouping by type)
- * only make sense while assistants are available. A value persisted when they
- * were enabled falls back to its default instead of invisibly filtering or
- * grouping the list by a criterion the menu no longer offers.
+ * Feature-scoped values fall back to their defaults while the feature that
+ * offers them is off, instead of invisibly filtering, grouping or widening
+ * the list by a criterion the menu no longer shows:
+ * - assistants: a type filter other than "all", grouping by type;
+ * - delegation: showing delegated runs.
  */
 export function sanitizeChatHistoryFilters(
   values: ChatHistoryFilterValues,
-  assistantsEnabled: boolean,
+  { assistantsEnabled, delegationEnabled }: ChatHistoryFilterCapabilities,
 ): ChatHistoryFilterValues {
+  const delegatedFilter =
+    assistantsEnabled && delegationEnabled
+      ? values.delegatedFilter
+      : CHAT_HISTORY_FILTER_DEFAULTS.delegatedFilter;
   if (assistantsEnabled) {
-    return values;
+    return delegatedFilter === values.delegatedFilter
+      ? values
+      : { ...values, delegatedFilter };
   }
   return {
     ...values,
     typeFilter: CHAT_HISTORY_FILTER_DEFAULTS.typeFilter,
+    delegatedFilter,
     groupBy:
       values.groupBy === "type"
         ? CHAT_HISTORY_FILTER_DEFAULTS.groupBy
@@ -178,20 +228,31 @@ export function sanitizeChatHistoryFilters(
  * is read through hooks.
  */
 export const useSanitizedChatHistoryFilters = (
-  assistantsEnabled: boolean,
+  { assistantsEnabled, delegationEnabled }: ChatHistoryFilterCapabilities,
   store: ChatHistoryFilterStoreHook = useChatHistoryFilterStore,
 ): ChatHistoryFilterValues => {
   const typeFilter = store((state) => state.typeFilter);
   const statusFilter = store((state) => state.statusFilter);
+  const delegatedFilter = store((state) => state.delegatedFilter);
   const groupBy = store((state) => state.groupBy);
 
+  // Capabilities are destructured into primitives on purpose: callers build
+  // the object inline, so depending on its identity would rerun this on every
+  // render.
   return useMemo(
     () =>
       sanitizeChatHistoryFilters(
-        { typeFilter, statusFilter, groupBy },
-        assistantsEnabled,
+        { typeFilter, statusFilter, delegatedFilter, groupBy },
+        { assistantsEnabled, delegationEnabled },
       ),
-    [typeFilter, statusFilter, groupBy, assistantsEnabled],
+    [
+      typeFilter,
+      statusFilter,
+      delegatedFilter,
+      groupBy,
+      assistantsEnabled,
+      delegationEnabled,
+    ],
   );
 };
 
@@ -202,18 +263,24 @@ export const useSanitizedChatHistoryFilters = (
  * would let a stale persisted value keep filtering the request invisibly.
  */
 export const useChatHistoryFilterFoldback = (
-  assistantsEnabled: boolean,
+  { assistantsEnabled, delegationEnabled }: ChatHistoryFilterCapabilities,
   store: ChatHistoryFilterStoreHook = useChatHistoryFilterStore,
 ): void => {
   useEffect(() => {
-    if (assistantsEnabled) return;
+    if (assistantsEnabled && delegationEnabled) return;
     const state = store.getState();
-    const sanitized = sanitizeChatHistoryFilters(state, false);
+    const sanitized = sanitizeChatHistoryFilters(state, {
+      assistantsEnabled,
+      delegationEnabled,
+    });
     if (sanitized.typeFilter !== state.typeFilter) {
       state.setTypeFilter(sanitized.typeFilter);
+    }
+    if (sanitized.delegatedFilter !== state.delegatedFilter) {
+      state.setDelegatedFilter(sanitized.delegatedFilter);
     }
     if (sanitized.groupBy !== state.groupBy) {
       state.setGroupBy(sanitized.groupBy);
     }
-  }, [assistantsEnabled, store]);
+  }, [assistantsEnabled, delegationEnabled, store]);
 };

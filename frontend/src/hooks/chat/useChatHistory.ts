@@ -243,9 +243,12 @@ export function useChatHistory({
   // to their defaults in the store itself.
   const typeFilter = useChatHistoryFilterStore((state) => state.typeFilter);
   const statusFilter = useChatHistoryFilterStore((state) => state.statusFilter);
+  const delegatedFilter = useChatHistoryFilterStore(
+    (state) => state.delegatedFilter,
+  );
   const listFilters = useMemo<RecentChatsListFilters>(
-    () => ({ typeFilter, statusFilter }),
-    [typeFilter, statusFilter],
+    () => ({ typeFilter, statusFilter, delegatedFilter }),
+    [typeFilter, statusFilter, delegatedFilter],
   );
 
   const pinnedChatsQueryKey = useMemo(

@@ -22,6 +22,7 @@ const spies = vi.hoisted(() => ({
     setNavigationTransition: vi.fn(),
   },
   clearNewlyCreatedChatId: vi.fn(),
+  generationIndicatorCount: { current: 0 },
   setGenerationCurrentChatId: vi.fn(),
   updateChatTitle: vi.fn(async () => undefined),
   runOpenHandler: { current: null as ((chatId: string) => void) | null },
@@ -54,6 +55,7 @@ const spies = vi.hoisted(() => ({
   filterStoreState: {
     typeFilter: "all",
     statusFilter: "active",
+    delegatedFilter: "hidden",
     groupBy: "date",
   },
   useInfiniteRecentChats: vi.fn(
@@ -140,6 +142,7 @@ vi.mock("@erato/frontend/library", async () => {
         ...spies.filterStoreState,
         setTypeFilter: vi.fn(),
         setStatusFilter: vi.fn(),
+        setDelegatedFilter: vi.fn(),
         setGroupBy: vi.fn(),
         resetToDefaults: vi.fn(),
       });
@@ -204,6 +207,14 @@ vi.mock("@erato/frontend/library", async () => {
     useDelegatedRunHeader: spies.useDelegatedRunHeader,
     DocumentIcon: () => null,
     SidebarToggleIcon: () => null,
+    useGenerationIndicatorCount: () => spies.generationIndicatorCount.current,
+    CountBadge: ({
+      children,
+      ...props
+    }: {
+      children?: ReactNode;
+      variant?: string;
+    }) => <span {...props}>{children}</span>,
     FeedbackCommentDialog: () => null,
     FeedbackViewDialog: () => null,
     FilePreviewModal: () => null,
@@ -299,7 +310,9 @@ describe("NeutralAddinChatPage host boundary", () => {
     spies.drawerProps.length = 0;
     spies.filterStoreState.typeFilter = "all";
     spies.filterStoreState.statusFilter = "active";
+    spies.filterStoreState.delegatedFilter = "hidden";
     spies.filterStoreState.groupBy = "date";
+    spies.generationIndicatorCount.current = 0;
     // vi.restoreAllMocks does not reach vi.fn mocks, so a per-test
     // mockReturnValue would otherwise leak into later tests.
     spies.useDelegatedRunHeader.mockImplementation(() => ({
@@ -395,14 +408,16 @@ describe("NeutralAddinChatPage host boundary", () => {
     consoleError.mockRestore();
   });
 
-  it("lists chats through the filtered infinite query, never opting into delegated runs", () => {
+  it("lists chats through the filtered infinite query, keeping delegated runs out by default", () => {
     spies.useInfiniteRecentChats.mockClear();
     renderPage();
 
-    // The filters carry no include_delegated: the shared params builder
-    // (covered in frontend tests) never emits it from these values.
     expect(spies.useInfiniteRecentChats).toHaveBeenCalledWith({
-      filters: { typeFilter: "all", statusFilter: "active" },
+      filters: {
+        typeFilter: "all",
+        statusFilter: "active",
+        delegatedFilter: "hidden",
+      },
     });
     // Every listing the provider mounts — the drawer history and the session
     // listing — carries these defaults; none opts into anything wider.
@@ -410,8 +425,24 @@ describe("NeutralAddinChatPage host boundary", () => {
       expect(options.filters).toEqual({
         typeFilter: "all",
         statusFilter: "active",
+        delegatedFilter: "hidden",
       });
     }
+  });
+
+  it("carries a widened delegated facet into the drawer's listing", () => {
+    spies.filterStoreState.delegatedFilter = "shown";
+    spies.useInfiniteRecentChats.mockClear();
+
+    renderPage();
+
+    expect(spies.useInfiniteRecentChats).toHaveBeenCalledWith({
+      filters: {
+        typeFilter: "all",
+        statusFilter: "active",
+        delegatedFilter: "shown",
+      },
+    });
   });
 
   // Only Outlook's session controller consumes the second (session) listing;
@@ -433,6 +464,7 @@ describe("NeutralAddinChatPage host boundary", () => {
       expect(filters).toEqual({
         typeFilter: "assistant",
         statusFilter: "active",
+        delegatedFilter: "hidden",
       });
     }
   });
@@ -589,5 +621,45 @@ describe("NeutralAddinChatPage host boundary", () => {
     expect(screen.getByTestId("neutral-run-banner").parentElement).toHaveClass(
       "pl-10",
     );
+  });
+
+  // The pane's only aggregate signal: with the drawer shut there is no row to
+  // carry a status dot, so a run that ended in another chat has nowhere else
+  // to announce itself.
+  describe("drawer trigger attention badge", () => {
+    it("stays bare while nothing wants attention", () => {
+      renderPage();
+
+      expect(
+        screen.queryByTestId("addin-history-drawer-attention-badge"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId("addin-history-drawer-trigger"),
+      ).toHaveAccessibleName("Open menu");
+    });
+
+    it("shows the count and says it in the trigger's name", () => {
+      spies.generationIndicatorCount.current = 3;
+
+      renderPage();
+
+      expect(
+        screen.getByTestId("addin-history-drawer-attention-badge"),
+      ).toHaveTextContent("3");
+      // CountBadge is aria-hidden, so the button's own label has to carry it.
+      expect(
+        screen.getByTestId("addin-history-drawer-trigger"),
+      ).toHaveAccessibleName("Open menu, 3 chats need attention");
+    });
+
+    it("singularizes a lone chat", () => {
+      spies.generationIndicatorCount.current = 1;
+
+      renderPage();
+
+      expect(
+        screen.getByTestId("addin-history-drawer-trigger"),
+      ).toHaveAccessibleName("Open menu, 1 chat needs attention");
+    });
   });
 });

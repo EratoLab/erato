@@ -252,20 +252,46 @@ describe("recent-chats filter wiring", () => {
       buildRecentChatsFilterParams({
         typeFilter: "all",
         statusFilter: "active",
+        delegatedFilter: "hidden",
       }),
     ).toEqual({});
     expect(
       buildRecentChatsFilterParams({
         typeFilter: "chat",
         statusFilter: "active",
+        delegatedFilter: "hidden",
       }),
     ).toEqual({ type: "chat" });
     expect(
       buildRecentChatsFilterParams({
         typeFilter: "assistant",
         statusFilter: "all",
+        delegatedFilter: "hidden",
       }),
     ).toEqual({ type: "assistant", include_archived: true });
+  });
+
+  it("composes the delegated facet with the type filter", () => {
+    // The two are orthogonal: a delegated run is usually an assistant chat,
+    // so asking for runs must not imply — or drop — a type.
+    expect(
+      buildRecentChatsFilterParams({
+        typeFilter: "all",
+        statusFilter: "active",
+        delegatedFilter: "shown",
+      }),
+    ).toEqual({ include_delegated: true });
+    expect(
+      buildRecentChatsFilterParams({
+        typeFilter: "assistant",
+        statusFilter: "all",
+        delegatedFilter: "shown",
+      }),
+    ).toEqual({
+      type: "assistant",
+      include_archived: true,
+      include_delegated: true,
+    });
   });
 
   it("fetches the list with the active filter params", () => {
@@ -313,15 +339,26 @@ describe("recent-chats filter wiring", () => {
     );
   });
 
-  it("never opts the sidebar into delegated runs", () => {
+  it("opts into delegated runs only when the facet asks for them", () => {
     const typeFilters: ChatHistoryTypeFilter[] = ["all", "chat", "assistant"];
     const statusFilters: ChatHistoryStatusFilter[] = ["active", "all"];
 
     for (const typeFilter of typeFilters) {
       for (const statusFilter of statusFilters) {
         expect(
-          buildRecentChatsFilterParams({ typeFilter, statusFilter }),
+          buildRecentChatsFilterParams({
+            typeFilter,
+            statusFilter,
+            delegatedFilter: "hidden",
+          }),
         ).not.toHaveProperty("include_delegated");
+        expect(
+          buildRecentChatsFilterParams({
+            typeFilter,
+            statusFilter,
+            delegatedFilter: "shown",
+          }),
+        ).toHaveProperty("include_delegated", true);
       }
     }
   });

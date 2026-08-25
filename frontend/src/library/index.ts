@@ -27,6 +27,8 @@ export {
   seedGenerationStatusFromListing,
   useGenerationStatusStore,
 } from "@/hooks/chat/store/generationStatusStore";
+export { useGenerationIndicatorCount } from "@/hooks/chat/useGenerationIndicatorCount";
+export { CountBadge } from "@/components/ui/Controls/CountBadge";
 export { DelegatedRunOpenProvider } from "@/providers/DelegatedRunOpenProvider";
 export {
   ChatMessage,

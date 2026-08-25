@@ -5,6 +5,8 @@
  */
 import { t } from "@lingui/core/macro";
 
+import { DELEGATION_PROVENANCE_KIND } from "@/utils/chat/recentChatSession";
+
 import type { ChatHistoryGroupBy } from "@/hooks/chat/store/chatHistoryFilterStore";
 import type { ChatGenerationStatus } from "@/hooks/chat/store/generationStatusStore";
 import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -97,6 +99,59 @@ export function resolveDelegatedRunStatus(
   return "running";
 }
 
+/** What a session row needs for its status, however it was listed. */
+export interface SessionRowStatusInput {
+  provenanceKind?: string;
+  delegatedRunOutcome?: string;
+}
+
+/**
+ * The one classifier behind a listed row's status dot AND its "Unread"
+ * bucket. Delegated runs resolve through the delegated rules — their outcome
+ * is durable on the chat, so their dot survives a reload the in-memory store
+ * does not — while ordinary chats keep the session-observed marker. Both
+ * channels of an unresolved tool confirmation still outrank everything.
+ *
+ * Callers must not reimplement either branch: a dot that disagrees with its
+ * bucket is the defect this exists to prevent.
+ */
+export function resolveSessionRowStatus(
+  session: SessionRowStatusInput,
+  storeStatus: ChatGenerationStatus | undefined,
+  hasPendingConfirmation: boolean,
+): ChatAttentionStatus | null {
+  if (session.provenanceKind === DELEGATION_PROVENANCE_KIND) {
+    if (hasPendingConfirmation) return "action_required";
+    return resolveDelegatedRunStatus(
+      { delegated_run_outcome: session.delegatedRunOutcome },
+      storeStatus,
+    );
+  }
+  return resolveChatAttentionStatus(storeStatus, hasPendingConfirmation);
+}
+
+/**
+ * Whether a row's status is still asking something of the user.
+ *
+ * Narrower than "has a status" for delegated runs only: a consumed tombstone
+ * keeps reporting its outcome as a status column (that is what makes the dot
+ * survive dismissal), but the user has already answered it, so it must not
+ * sit in "Unread" forever.
+ */
+export function sessionNeedsAttention(
+  session: SessionRowStatusInput,
+  storeStatus: ChatGenerationStatus | undefined,
+  hasPendingConfirmation: boolean,
+): boolean {
+  if (!hasPendingConfirmation && storeStatus?.kind === "cleared") {
+    return false;
+  }
+  return (
+    resolveSessionRowStatus(session, storeStatus, hasPendingConfirmation) !==
+    null
+  );
+}
+
 /**
  * Rank used when one indicator has to stand in for a set of chats: the most
  * demanding status wins, and a still-running one is the least demanding.
@@ -127,7 +182,10 @@ export interface GroupChatSessionsDeps {
   now: Date;
   /** BCP 47 tag for the localized day labels. */
   locale: string;
-  /** Whether the session's row currently shows a status indicator. */
+  /**
+   * Whether the session's row is still asking something of the user. Supply
+   * it from `sessionNeedsAttention` so the bucket cannot drift from the dot.
+   */
   needsAttention: (session: ChatSession) => boolean;
 }
 

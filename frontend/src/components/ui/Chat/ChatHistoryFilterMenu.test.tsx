@@ -1,6 +1,12 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useChatHistoryFilterStore } from "@/hooks/chat/store/chatHistoryFilterStore";
@@ -18,10 +24,13 @@ describe("ChatHistoryFilterMenu", () => {
     useChatHistoryFilterStore.getState().resetToDefaults();
   });
 
-  function renderMenu(assistantsEnabled = true) {
+  function renderMenu(assistantsEnabled = true, delegationEnabled = true) {
     return render(
       <I18nProvider i18n={i18n}>
-        <ChatHistoryFilterMenu assistantsEnabled={assistantsEnabled} />
+        <ChatHistoryFilterMenu
+          assistantsEnabled={assistantsEnabled}
+          delegationEnabled={delegationEnabled}
+        />
       </I18nProvider>,
     );
   }
@@ -53,6 +62,53 @@ describe("ChatHistoryFilterMenu", () => {
     expect(
       screen.getByTestId("chat-history-filter-menu-reset"),
     ).toBeInTheDocument();
+  });
+
+  it("offers the delegated-runs row only while delegation is on", () => {
+    renderMenu(true, false);
+    openMenu();
+    expect(
+      screen.queryByTestId("chat-history-filter-menu-row-delegated"),
+    ).not.toBeInTheDocument();
+
+    cleanup();
+    renderMenu(true, true);
+    openMenu();
+    expect(
+      screen.getByTestId("chat-history-filter-menu-row-delegated"),
+    ).toHaveTextContent("Hidden");
+  });
+
+  it("hides the delegated-runs row when assistants are off entirely", () => {
+    // Delegation implies assistants; the row must not outlive them.
+    renderMenu(false, true);
+    openMenu();
+
+    expect(
+      screen.queryByTestId("chat-history-filter-menu-row-delegated"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("writes the delegated facet to the store without touching the type", () => {
+    vi.useFakeTimers();
+    try {
+      useChatHistoryFilterStore.getState().setTypeFilter("assistant");
+      renderMenu();
+      openMenu();
+      fireEvent.click(
+        screen.getByTestId("chat-history-filter-menu-row-delegated"),
+      );
+      fireEvent.click(
+        screen.getByTestId("chat-history-filter-menu-option-delegated-shown"),
+      );
+
+      const state = useChatHistoryFilterStore.getState();
+      expect(state.delegatedFilter).toBe("shown");
+      expect(state.typeFilter).toBe("assistant");
+      flushCloseDelay();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("marks the trigger expanded while open", () => {

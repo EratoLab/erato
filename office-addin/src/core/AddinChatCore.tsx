@@ -3,6 +3,7 @@ import {
   ChatErrorBoundary,
   ChatInputControlsProvider,
   ChatMessage,
+  CountBadge,
   DefaultMessageControls,
   DelegatedRunOpenProvider,
   DelegatedRunsSection,
@@ -26,6 +27,7 @@ import {
   useFileCapabilitiesContext,
   useFilePreviewModal,
   useFileUploadWithTokenCheck,
+  useGenerationIndicatorCount,
   useMessageFeedback,
   useModelSwitches,
   useProfile,
@@ -41,7 +43,7 @@ import {
   type MessageControlsComponent,
   type MessageControlsContext,
 } from "@erato/frontend/library";
-import { t } from "@lingui/core/macro";
+import { plural, t } from "@lingui/core/macro";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef, useState } from "react";
 
@@ -74,6 +76,67 @@ const floatingTriggerStyle: CSSProperties = {
   borderRadius: "var(--theme-radius-shell)",
   boxShadow: "var(--theme-elevation-shell)",
 };
+
+/**
+ * The pane's one piece of chrome: opens the history drawer, and carries the
+ * aggregate attention count while it is shut.
+ *
+ * Its own component so the status store's churn repaints a badge rather than
+ * the conversation, and because the count belongs in the button's accessible
+ * name — CountBadge stays hidden from the a11y tree, a bare number being
+ * noise to read out.
+ */
+function HistoryDrawerTrigger({
+  isOpen,
+  onOpen,
+}: {
+  isOpen: boolean;
+  onOpen: () => void;
+}) {
+  const attentionCount = useGenerationIndicatorCount();
+
+  return (
+    /* Floats over the conversation: the pane is too narrow to spend a header
+       row on a single trigger, and New Chat lives in the drawer it opens.
+       Same button anatomy as the web sidebar toggle, so the drawer's header
+       toggle reads as the same control. */
+    <Button
+      onClick={onOpen}
+      variant="sidebar-icon"
+      icon={<SidebarToggleIcon />}
+      aria-haspopup="dialog"
+      aria-expanded={isOpen}
+      aria-controls={HISTORY_DRAWER_PANEL_ID}
+      aria-label={
+        attentionCount > 0
+          ? t({
+              id: "officeAddin.historyDrawer.openWithAttention",
+              message: plural(attentionCount, {
+                one: "Open menu, # chat needs attention",
+                other: "Open menu, # chats need attention",
+              }),
+            })
+          : t({
+              id: "officeAddin.historyDrawer.open",
+              message: "Open menu",
+            })
+      }
+      className="absolute left-2 top-2 z-20 border"
+      style={floatingTriggerStyle}
+      data-testid="addin-history-drawer-trigger"
+    >
+      {attentionCount > 0 && (
+        <CountBadge
+          variant="attention"
+          data-testid="addin-history-drawer-attention-badge"
+          className="absolute -right-0.5 -top-0.5"
+        >
+          {attentionCount}
+        </CountBadge>
+      )}
+    </Button>
+  );
+}
 
 export interface AddinChatHostCallbacks {
   beforeSend?: (hostContextIdentity?: string | null) => void;
@@ -608,24 +671,9 @@ export function AddinChatCoreView({
           through the session controller instead of routes the pane lacks. */}
       <DelegatedRunOpenProvider onOpen={controller.openChatById}>
         <div className="app-shell-skin relative flex size-full min-w-0 flex-col">
-          {/* Floats over the conversation: the pane is too narrow to spend a
-              header row on a single trigger, and New Chat lives in the
-              drawer it opens. Same button anatomy as the web sidebar toggle,
-              so the drawer's header toggle reads as the same control. */}
-          <Button
-            onClick={() => controller.setIsHistoryMenuOpen(true)}
-            variant="sidebar-icon"
-            icon={<SidebarToggleIcon />}
-            aria-haspopup="dialog"
-            aria-expanded={controller.isHistoryMenuOpen}
-            aria-controls={HISTORY_DRAWER_PANEL_ID}
-            aria-label={t({
-              id: "officeAddin.historyDrawer.open",
-              message: "Open menu",
-            })}
-            className="absolute left-2 top-2 z-20 border"
-            style={floatingTriggerStyle}
-            data-testid="addin-history-drawer-trigger"
+          <HistoryDrawerTrigger
+            isOpen={controller.isHistoryMenuOpen}
+            onOpen={() => controller.setIsHistoryMenuOpen(true)}
           />
 
           <ChatErrorBoundary onReset={() => void controller.refetchHistory()}>
