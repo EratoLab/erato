@@ -98,12 +98,18 @@ chat_provider_ids = ["test-token-limit"]
 # Global default idle timeout for MCP sessions in seconds (default: 3600)
 # [mcp_servers_global]
 # max_session_idle_seconds = 3600
+# # Offer the synthetic `wait` tool for all discovered MCP tools (default: false)
+# enable_wait = false
+# # Maximum wait duration in seconds (default: 60)
+# max_wait_seconds = 60
 #
 # [mcp_servers.file_provider]
 # transport_type = "sse"
 # url = "http://127.0.0.1:63490/sse"
 # allow_tools = ["get_*", "list_pages"]
 # exclude_tools = ["get_secret_*"]
+# # Or opt in only selected tools on this server:
+# wait_tools = ["dispatch_*", "poll_*"]
 # [mcp_servers.file_provider.authentication]
 # mode = "none"
 # # Optional per-server override (seconds)

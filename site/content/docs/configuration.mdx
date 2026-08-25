@@ -2876,6 +2876,42 @@ Server-specific settings can override this value via `mcp_servers.<server-id>.ma
 
 **Operational note:** For MCP servers where each session allocates substantial resources (e.g. memory-heavy tools, expensive backend handles), use a lower idle timeout to reclaim server capacity faster.
 
+#### `mcp_servers_global.enable_wait`
+
+{/* erato_toml_config_key: mcp_servers_global.enable_wait */}
+
+Whether to offer Erato's synthetic `wait` tool alongside all discovered MCP tools. The `wait` tool pauses the current generation for a requested number of seconds, which is useful when an MCP tool starts deferred work or returns a result that should be polled later.
+
+When disabled, individual MCP servers can opt in selected tools with `mcp_servers.<server-id>.wait_tools`.
+
+**Type:** `boolean`
+
+**Default value:** `false`
+
+**Example:**
+
+```toml
+[mcp_servers_global]
+enable_wait = true
+```
+
+#### `mcp_servers_global.max_wait_seconds`
+
+{/* erato_toml_config_key: mcp_servers_global.max_wait_seconds */}
+
+Maximum number of seconds that the synthetic `wait` tool may pause a generation in one call. The value must be greater than zero.
+
+**Type:** `integer` (greater than 0)
+
+**Default value:** `60`
+
+**Example:**
+
+```toml
+[mcp_servers_global]
+max_wait_seconds = 120
+```
+
 #### `mcp_servers_global.show_frontend_tab`
 
 {/* erato_toml_config_key: mcp_servers_global.show_frontend_tab */}
@@ -2986,6 +3022,27 @@ List of wildcard patterns selecting tools to remove from the tools permitted by 
 ```toml
 allow_tools = ["get_*"]
 exclude_tools = ["get_secret_*"]
+```
+
+#### `mcp_servers.<server-id>.wait_tools`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.wait_tools.[] */}
+
+Optional list of wildcard patterns selecting the MCP tools that may use the synthetic `wait` tool for deferred results. Patterns match the unqualified MCP tool name, and `*` matches any sequence of characters.
+
+An empty list disables waiting for this server unless `mcp_servers_global.enable_wait` is enabled. When the global setting is enabled, the `wait` tool is available for all discovered MCP tools and this list is not needed.
+
+**Type:** `array<string>`
+
+**Default value:** `[]`
+
+**Example:**
+
+```toml
+[mcp_servers.research]
+transport_type = "streamable_http"
+url = "https://mcp.example.com/mcp"
+wait_tools = ["dispatch_*", "poll_*"]
 ```
 
 #### `mcp_servers.<server-id>.authentication`

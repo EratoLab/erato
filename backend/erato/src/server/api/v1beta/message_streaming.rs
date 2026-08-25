@@ -45,6 +45,7 @@ use crate::services::genai_langfuse::{
 };
 use crate::services::langfuse::TracingLangfuseClient;
 use crate::services::mcp_manager::{McpRequestAuthContext, convert_mcp_tools_to_genai_tools};
+use crate::services::mcp_session_manager::is_tool_allowed_to_wait;
 use crate::services::prompt_composition::traits::{
     FileResolver, MessageRepository, PromptProvider,
 };
@@ -2589,6 +2590,35 @@ pub(crate) async fn prepare_chat_request_with_adapters(
             );
         }
     }
+    // Offer the synthetic wait tool when waiting is enabled globally or when
+    // an MCP server explicitly allows one of the discovered tools to defer a
+    // continuation. The tool is only useful alongside MCP tools, and MCP wins
+    // if a server already exposes the reserved name.
+    let wait_tool_enabled = !generation_mcp_tools.is_empty()
+        && (app_state.config.mcp_servers_global.enable_wait
+            || generation_mcp_tools.iter().any(|managed_tool| {
+                app_state
+                    .config
+                    .mcp_servers
+                    .get(&managed_tool.server_id)
+                    .is_some_and(|config| is_tool_allowed_to_wait(&managed_tool.tool.name, config))
+            }));
+    if wait_tool_enabled {
+        let name_taken_by_mcp_tool = generation_mcp_tools
+            .iter()
+            .any(|tool| tool.tool.name == crate::services::mcp_wait::WAIT_TOOL_NAME);
+        if name_taken_by_mcp_tool {
+            tracing::warn!(
+                "Not offering the wait tool: an MCP tool already uses the name '{}'",
+                crate::services::mcp_wait::WAIT_TOOL_NAME
+            );
+        } else {
+            chat_request_tools.push(crate::services::mcp_wait::build_wait_tool(
+                app_state.config.mcp_servers_global.max_wait_seconds,
+                effective_model_settings.compat_omit_strict,
+            ));
+        }
+    }
     if !chat_request_tools.is_empty() {
         chat_request.tools = Some(chat_request_tools);
     } else {
@@ -2973,6 +3003,15 @@ async fn stream_generate_chat_completion<
     // generation wall-clock budget. A per-facet `client_tool.timeout_ms` (see
     // the park below) overrides this default per tool.
     const DEFAULT_CLIENT_TOOL_PARK_TIMEOUT_MS: u64 = 60_000;
+    struct PendingWait {
+        tool_call: genai::chat::ToolCall,
+        seconds: u64,
+        deadline: tokio::time::Instant,
+        tool_call_started: String,
+        otel_tool_call_start_time: Option<SystemTime>,
+        tool_call_parent_observation_id: Option<String>,
+        error: Option<String>,
+    }
     let mut unfinished_tool_calls: std::collections::VecDeque<genai::chat::ToolCall> =
         std::collections::VecDeque::new();
     let mut current_turn = 0;
@@ -3119,6 +3158,7 @@ async fn stream_generate_chat_completion<
         // — for a parallel batch of client-action proposals the FIRST one
         // must be the one that wins.
         let mut current_turn_tool_responses = vec![];
+        let mut pending_waits = Vec::new();
         while let Some(unfinished_tool_call) = unfinished_tool_calls.pop_front() {
             let otel_tool_call_start_time = tracing_client
                 .as_ref()
@@ -3217,6 +3257,46 @@ async fn stream_generate_chat_completion<
                     call_id: unfinished_tool_call.call_id.clone(),
                     content: error_message,
                 });
+                continue;
+            }
+
+            // A wait is deliberately deferred until the rest of this
+            // assistant turn's tool-call batch has been processed. This lets
+            // a model dispatch or poll several independent MCP calls before
+            // the next completion, while still making the continuation wait
+            // for the requested duration.
+            if unfinished_tool_call.fn_name == crate::services::mcp_wait::WAIT_TOOL_NAME
+                && !available_mcp_tools_by_name
+                    .contains_key(crate::services::mcp_wait::WAIT_TOOL_NAME)
+            {
+                let tool_call_started = tool_call_started_at
+                    .remove(&unfinished_tool_call.call_id)
+                    .unwrap_or_else(now_timestamp);
+                let tool_call_parent_observation_id =
+                    tool_call_parent_observation_ids.remove(&unfinished_tool_call.call_id);
+                match crate::services::mcp_wait::parse_wait_seconds(
+                    &unfinished_tool_call.fn_arguments,
+                    app_state.config.mcp_servers_global.max_wait_seconds,
+                ) {
+                    Ok(seconds) => pending_waits.push(PendingWait {
+                        tool_call: unfinished_tool_call,
+                        seconds,
+                        deadline: tokio::time::Instant::now() + Duration::from_secs(seconds),
+                        tool_call_started,
+                        otel_tool_call_start_time,
+                        tool_call_parent_observation_id,
+                        error: None,
+                    }),
+                    Err(error) => pending_waits.push(PendingWait {
+                        tool_call: unfinished_tool_call,
+                        seconds: 0,
+                        deadline: tokio::time::Instant::now(),
+                        tool_call_started,
+                        otel_tool_call_start_time,
+                        tool_call_parent_observation_id,
+                        error: Some(error),
+                    }),
+                }
                 continue;
             }
 
@@ -4221,6 +4301,118 @@ async fn stream_generate_chat_completion<
                 }
             };
         }
+        if !pending_waits.is_empty() {
+            let latest_wait_deadline = pending_waits
+                .iter()
+                .map(|pending_wait| pending_wait.deadline)
+                .max()
+                .unwrap_or_else(tokio::time::Instant::now);
+            if latest_wait_deadline > tokio::time::Instant::now() {
+                if let Some(task) = streaming_task {
+                    tokio::select! {
+                        _ = tokio::time::sleep_until(latest_wait_deadline) => {}
+                        _ = task.wait_for_abort() => {
+                            let generation_metadata = build_generation_metadata(
+                                total_prompt_tokens,
+                                total_completion_tokens,
+                                total_total_tokens,
+                                total_reasoning_tokens,
+                                langfuse_trace_id.clone(),
+                                true,
+                                None,
+                                non_empty_string(&captured_reasoning_summary),
+                                non_empty_vec(&captured_reasoning_items),
+                                non_empty_vec(&captured_reasoning_item_encrypted_content),
+                            );
+                            break 'loop_call_turns Ok((current_message_content, generation_metadata));
+                        }
+                    }
+                } else {
+                    tokio::time::sleep_until(latest_wait_deadline).await;
+                }
+            }
+
+            for pending_wait in pending_waits {
+                let (status, bg_status, message_status, output_value, response_text) =
+                    match pending_wait.error {
+                        Some(error) => (
+                            ToolCallStatus::Error,
+                            BgToolCallStatus::Error,
+                            MessageToolCallStatus::Error,
+                            json!({ "status": "error", "error": error }),
+                            format!("Could not wait: {error}"),
+                        ),
+                        None => (
+                            ToolCallStatus::Success,
+                            BgToolCallStatus::Success,
+                            MessageToolCallStatus::Success,
+                            json!({
+                                "status": "success",
+                                "waited_seconds": pending_wait.seconds,
+                            }),
+                            format!("Waited for {} seconds.", pending_wait.seconds),
+                        ),
+                    };
+                let tool_error =
+                    matches!(status, ToolCallStatus::Error).then(|| response_text.clone());
+                let update_event = MessageSubmitStreamingResponseToolCallUpdate {
+                    message_id: assistant_message_id,
+                    content_index: current_message_content.len(),
+                    tool_call_id: pending_wait.tool_call.call_id.clone(),
+                    tool_name: pending_wait.tool_call.fn_name.clone(),
+                    input: Some(pending_wait.tool_call.fn_arguments.clone()),
+                    status,
+                    progress_message: None,
+                    output: Some(output_value.clone()),
+                };
+                if let Some(task) = streaming_task {
+                    send_background_event(
+                        task,
+                        StreamingEvent::ToolCallUpdate {
+                            message_id: assistant_message_id,
+                            content_index: current_message_content.len(),
+                            tool_call_id: pending_wait.tool_call.call_id.clone(),
+                            tool_name: pending_wait.tool_call.fn_name.clone(),
+                            input: Some(pending_wait.tool_call.fn_arguments.clone()),
+                            status: bg_status,
+                            progress_message: None,
+                            output: Some(output_value.clone()),
+                        },
+                        "broadcast completed wait tool call",
+                    )
+                    .await;
+                }
+                let message: MSG = update_event.into();
+                send_generation_event(&message, tx.clone()).await?;
+                current_message_content.push(ContentPart::ToolUse(ToolUse {
+                    tool_call_id: pending_wait.tool_call.call_id.clone(),
+                    status: message_status,
+                    tool_name: pending_wait.tool_call.fn_name.clone(),
+                    input: Some(pending_wait.tool_call.fn_arguments.clone()),
+                    progress_message: None,
+                    output: Some(output_value.clone()),
+                    started_at: Some(pending_wait.tool_call_started),
+                    ended_at: Some(now_timestamp()),
+                }));
+                persist_otel_tool_call(
+                    tracing_client.as_ref(),
+                    &pending_wait.tool_call,
+                    Some(output_value),
+                    pending_wait.otel_tool_call_start_time,
+                    Some(SystemTime::now()),
+                    pending_wait.tool_call_parent_observation_id,
+                    assistant_id,
+                    &langfuse_trace_enrichment.platform,
+                    tool_error.as_deref(),
+                )
+                .await;
+                current_turn_tool_responses.push(genai::chat::ToolResponse {
+                    call_id: pending_wait.tool_call.call_id,
+                    content: response_text,
+                });
+            }
+        }
+
         if !current_turn_tool_responses.is_empty() {
             current_turn_chat_request.messages.push(GenAiChatMessage {
                 role: ChatRole::Tool,
@@ -9795,8 +9987,28 @@ async fn run_continue_message_task(
     let generation_input_messages =
         resolve_directive_markers_in_generation_input(app_state, generation_input_messages);
     let mut chat_request = generation_input_messages.into_chat_request();
-    chat_request.tools = (!available_mcp_tools.is_empty())
-        .then(|| convert_mcp_tools_to_genai_tools(available_mcp_tools.clone(), false));
+    let mut continuation_tools =
+        convert_mcp_tools_to_genai_tools(available_mcp_tools.clone(), false);
+    let wait_tool_enabled = !available_mcp_tools.is_empty()
+        && (app_state.config.mcp_servers_global.enable_wait
+            || available_mcp_tools.iter().any(|managed_tool| {
+                app_state
+                    .config
+                    .mcp_servers
+                    .get(&managed_tool.server_id)
+                    .is_some_and(|config| is_tool_allowed_to_wait(&managed_tool.tool.name, config))
+            }));
+    if wait_tool_enabled
+        && !available_mcp_tools
+            .iter()
+            .any(|tool| tool.tool.name == crate::services::mcp_wait::WAIT_TOOL_NAME)
+    {
+        continuation_tools.push(crate::services::mcp_wait::build_wait_tool(
+            app_state.config.mcp_servers_global.max_wait_seconds,
+            false,
+        ));
+    }
+    chat_request.tools = (!continuation_tools.is_empty()).then_some(continuation_tools);
     chat_request.messages.push(GenAiChatMessage {
         role: ChatRole::Assistant,
         content: MessageContent::from_tool_calls(vec![genai::chat::ToolCall {

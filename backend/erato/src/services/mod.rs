@@ -17,6 +17,7 @@ pub mod mcp_manager;
 pub mod mcp_oauth;
 pub mod mcp_session_manager;
 pub mod mcp_transports;
+pub mod mcp_wait;
 pub mod ms_graph;
 pub mod prompt_composition;
 pub mod prompt_guardrails;

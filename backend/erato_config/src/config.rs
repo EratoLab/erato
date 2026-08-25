@@ -921,6 +921,10 @@ impl AppConfig {
             panic!("Invalid MCP server permissions configuration: {}", e);
         }
 
+        if let Err(e) = config.mcp_servers_global.validate() {
+            panic!("Invalid MCP servers global configuration: {}", e);
+        }
+
         // Validate facet permissions configuration
         if let Err(e) = config.facet_permissions.validate() {
             panic!("Invalid facet permissions configuration: {}", e);
@@ -2265,6 +2269,11 @@ pub struct McpServerConfig {
     // Wildcard patterns selecting tools to remove after `allow_tools` is applied.
     #[serde(default)]
     pub exclude_tools: Vec<String>,
+    // Wildcard patterns selecting tools that may ask the model to wait before
+    // continuing the current generation. An empty list disables waiting for
+    // this server unless the global setting is enabled.
+    #[serde(default)]
+    pub wait_tools: Vec<String>,
     // Authentication settings for requests to this MCP server.
     #[serde(default)]
     pub authentication: McpServerAuthenticationConfig,
@@ -2355,7 +2364,7 @@ fn default_mcp_fixed_auth_prefix() -> String {
     "Bearer ".to_string()
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct McpServersGlobalConfig {
     // Global default maximum idle time (in seconds) before MCP sessions are evicted.
     // Individual MCP servers can override this via `mcp_servers.<id>.max_session_idle_seconds`.
@@ -2368,10 +2377,48 @@ pub struct McpServersGlobalConfig {
     #[serde(default)]
     pub show_frontend_tab: bool,
 
+    /// Whether the synthetic `wait` tool is available for all discovered MCP
+    /// tools. Disabled by default; individual servers can opt in via
+    /// `mcp_servers.<id>.wait_tools`.
+    #[serde(default)]
+    pub enable_wait: bool,
+
+    /// Maximum number of seconds the synthetic `wait` tool may defer a
+    /// continuation. Defaults to one minute.
+    #[serde(default = "default_mcp_wait_max_seconds")]
+    pub max_wait_seconds: u64,
+
     /// Global policy for confirming MCP tool calls. Disabled by default to
     /// preserve the historical behavior of executing configured MCP tools.
     #[serde(default)]
     pub approval: McpToolApprovalConfig,
+}
+
+impl Default for McpServersGlobalConfig {
+    fn default() -> Self {
+        Self {
+            max_session_idle_seconds: None,
+            show_frontend_tab: false,
+            enable_wait: false,
+            max_wait_seconds: default_mcp_wait_max_seconds(),
+            approval: McpToolApprovalConfig::default(),
+        }
+    }
+}
+
+impl McpServersGlobalConfig {
+    pub fn validate(&self) -> Result<(), Report> {
+        if self.max_wait_seconds == 0 {
+            return Err(eyre!(
+                "mcp_servers_global.max_wait_seconds must be greater than 0"
+            ));
+        }
+        Ok(())
+    }
+}
+
+fn default_mcp_wait_max_seconds() -> u64 {
+    60
 }
 
 /// The global MCP tool-call approval policy.
