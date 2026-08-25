@@ -28,6 +28,7 @@
  * };
  */
 
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { memo, useCallback, useState } from "react";
 
@@ -42,12 +43,15 @@ import { MessageContent } from "@/components/ui/Message/MessageContent";
 import { useImageLightbox } from "@/hooks/ui/useImageLightbox";
 import { useGetFile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useMessageFeedbackFeature } from "@/providers/FeatureConfigProvider";
+import {
+  isPromptInjectionFilterDetails,
+  type MessageErrorFilterDetails,
+} from "@/types/chat";
 import { hasToolCalls as messageHasToolCalls } from "@/utils/adapters/toolCallAdapter";
 import { isImageFile } from "@/utils/file/fileTypeUtils";
 
 import type { ChatMessageProps } from "@/components/ui/Chat/ChatMessage";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
-import type { MessageErrorFilterDetails } from "@/types/chat";
 
 export const ChatMessageBubble = memo(function ChatMessageBubble({
   message,
@@ -125,10 +129,21 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({
                 className="mb-3"
                 data-testid="chat-message-error"
               >
-                <p>{getErrorDescription(message.error.error_type)}</p>
-                {getErrorCta(message.error.error_type) && (
+                <p>
+                  {getErrorDescription(
+                    message.error.error_type,
+                    message.error.filter_details,
+                  )}
+                </p>
+                {getErrorCta(
+                  message.error.error_type,
+                  message.error.filter_details,
+                ) && (
                   <p className="mt-2">
-                    {getErrorCta(message.error.error_type)}
+                    {getErrorCta(
+                      message.error.error_type,
+                      message.error.filter_details,
+                    )}
                   </p>
                 )}
                 {renderContentFilterDetails(
@@ -317,6 +332,22 @@ const renderContentFilterDetails = (
     return null;
   }
 
+  if (isPromptInjectionFilterDetails(filterDetails)) {
+    return (
+      <div className="mt-2 text-xs">
+        <div className="font-medium">
+          {t({
+            id: "chat.message.error.variant.prompt_injection.offending_text",
+            message: "Offending text",
+          })}
+        </div>
+        <blockquote className="mt-1 break-words border-l-2 pl-2 italic">
+          {filterDetails.matched_text}
+        </blockquote>
+      </div>
+    );
+  }
+
   const filteredCategories = Object.entries(filterDetails)
     .filter(([, details]) => details.filtered)
     .map(([category, details]) => ({
@@ -351,8 +382,19 @@ const getErrorTitle = (errorType: string) => {
   return "Assistant error";
 };
 
-const getErrorDescription = (errorType: string) => {
+const getErrorDescription = (
+  errorType: string,
+  filterDetails?: MessageErrorFilterDetails | null,
+) => {
   if (errorType === "content_filter") {
+    if (isPromptInjectionFilterDetails(filterDetails)) {
+      return t({
+        id: "chat.message.error.variant.prompt_injection",
+        message:
+          "The request was blocked because it matched a prompt injection guardrail.",
+      });
+    }
+
     return "The response was filtered due to the prompt triggering content management policy.";
   }
 
@@ -367,8 +409,19 @@ const getErrorDescription = (errorType: string) => {
   return "The assistant was unable to respond.";
 };
 
-const getErrorCta = (errorType: string) => {
+const getErrorCta = (
+  errorType: string,
+  filterDetails?: MessageErrorFilterDetails | null,
+) => {
   if (errorType === "content_filter") {
+    if (isPromptInjectionFilterDetails(filterDetails)) {
+      return t({
+        id: "chat.message.error.variant.prompt_injection.cta",
+        message:
+          "Please edit the previous message to remove the offending text before continuing.",
+      });
+    }
+
     return "Please try again with a different message that avoids the filtered categories.";
   }
 

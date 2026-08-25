@@ -19,9 +19,27 @@ export interface MessageErrorFilterDetail {
   severity: ContentFilterSeverity;
 }
 
-export type MessageErrorFilterDetails = Partial<
+export type ProviderContentFilterDetails = Partial<
   Record<ContentFilterCategory, MessageErrorFilterDetail>
 >;
+
+export interface PromptInjectionFilterDetails {
+  pattern_id: string;
+  matched_text: string;
+}
+
+export type MessageErrorFilterDetails =
+  | ProviderContentFilterDetails
+  | PromptInjectionFilterDetails;
+
+export const isPromptInjectionFilterDetails = (
+  filterDetails?: MessageErrorFilterDetails | null,
+): filterDetails is PromptInjectionFilterDetails =>
+  !!filterDetails &&
+  "pattern_id" in filterDetails &&
+  typeof filterDetails.pattern_id === "string" &&
+  "matched_text" in filterDetails &&
+  typeof filterDetails.matched_text === "string";
 
 export interface MessageError {
   error_description: string;

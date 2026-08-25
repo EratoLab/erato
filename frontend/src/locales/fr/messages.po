@@ -1815,6 +1815,21 @@ msgstr "Génération interrompue. Boucle d'hallucination détectée. Veuillez r�
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.variant.prompt_injection"
+msgstr "La requête a été bloquée, car elle correspondait à une règle de protection contre les injections de prompt."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.variant.prompt_injection.cta"
+msgstr "Veuillez modifier le message précédent pour supprimer le texte problématique avant de continuer."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.variant.prompt_injection.offending_text"
+msgstr "Texte problématique"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
 msgid "chat.message.error.variant.rate_limit"
 msgstr "Limite de requêtes ou quota dépassé. Cela peut aussi arriver si votre entrée est trop volumineuse."
 
