@@ -154,10 +154,7 @@ test(
       "Please edit the previous message to remove the offending text before continuing.",
     );
 
-    await chatIsReadyToChat(page, {
-      expectAssistantResponse: true,
-      loadingTimeoutMs: 30000,
-    });
+    await expect(textbox).toBeDisabled({ timeout: 30000 });
   },
 );
 

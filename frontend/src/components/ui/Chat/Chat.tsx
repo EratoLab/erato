@@ -35,6 +35,7 @@ import {
   usePinnedChatsFeature,
   useSidebarFeature,
 } from "@/providers/FeatureConfigProvider";
+import { isPromptInjectionFilterDetails } from "@/types/chat";
 import { mapRecentChatToSession } from "@/utils/chat/recentChatSession";
 import { createLogger } from "@/utils/debugLogger";
 
@@ -305,6 +306,14 @@ export const Chat = ({
   const canEditForCurrentChat = Array.isArray(chatHistory)
     ? !!chatHistory.find((c) => c.id === (currentChatId ?? ""))?.can_edit
     : false;
+  const lastMessage =
+    messageOrder.length > 0
+      ? messages[messageOrder[messageOrder.length - 1]]
+      : undefined;
+  const isLastMessageBlockedByPromptInjection =
+    lastMessage?.role === "assistant" &&
+    lastMessage.error?.error_type === "content_filter" &&
+    isPromptInjectionFilterDetails(lastMessage.error.filter_details);
   const { shareLink: currentChatShareLink } = useChatShareLink(
     chatSharingEnabled && currentChatId && messageOrder.length > 0
       ? currentChatId
@@ -679,7 +688,7 @@ export const Chat = ({
       assistantId={assistantId}
       className="p-2 sm:p-4"
       isLoading={chatLoading}
-      disabled={composerDisabled}
+      disabled={composerDisabled || isLastMessageBlockedByPromptInjection}
       showControls
       maxFiles={maxFiles}
       onRegenerate={onRegenerate}

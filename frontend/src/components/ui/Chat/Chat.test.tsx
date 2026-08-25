@@ -21,7 +21,12 @@ vi.mock("./ChatHistorySidebar", () => ({
   ChatHistorySidebar: () => <div data-testid="sidebar-stub" />,
 }));
 vi.mock("./ChatInput", () => ({
-  ChatInput: () => <div data-testid="chat-input-stub" />,
+  ChatInput: (props: { disabled?: boolean }) => (
+    <div
+      data-testid="chat-input-stub"
+      data-disabled={String(Boolean(props.disabled))}
+    />
+  ),
 }));
 vi.mock("../MessageList/MessageList", () => ({
   MessageList: () => <div data-testid="message-list-stub" />,
@@ -242,6 +247,69 @@ describe("Chat surface composition", () => {
       container.querySelector('[data-ui="delegated-runs-section"]'),
     ).toBeNull();
     expect(screen.getByTestId("chat-input-stub")).toBeInTheDocument();
+  });
+
+  it("disables the composer after a prompt injection guardrail blocks the last message", () => {
+    mockRuns([]);
+
+    renderChat({
+      messages: {
+        "assistant-error": {
+          id: "assistant-error",
+          content: [],
+          role: "assistant",
+          sender: "assistant",
+          authorId: "assistant-1",
+          createdAt: "2026-08-25T12:00:00.000Z",
+          status: "error",
+          error: {
+            error_type: "content_filter",
+            error_description: "blocked",
+            filter_details: {
+              pattern_id: "ignore-previous-instructions",
+              matched_text: "Ignore previous instructions",
+            },
+          },
+        },
+      },
+      messageOrder: ["assistant-error"],
+    });
+
+    expect(screen.getByTestId("chat-input-stub")).toHaveAttribute(
+      "data-disabled",
+      "true",
+    );
+  });
+
+  it("does not disable the composer for a non-prompt content filter", () => {
+    mockRuns([]);
+
+    renderChat({
+      messages: {
+        "assistant-error": {
+          id: "assistant-error",
+          content: [],
+          role: "assistant",
+          sender: "assistant",
+          authorId: "assistant-1",
+          createdAt: "2026-08-25T12:00:00.000Z",
+          status: "error",
+          error: {
+            error_type: "content_filter",
+            error_description: "filtered",
+            filter_details: {
+              sexual: { filtered: true, severity: "high" },
+            },
+          },
+        },
+      },
+      messageOrder: ["assistant-error"],
+    });
+
+    expect(screen.getByTestId("chat-input-stub")).toHaveAttribute(
+      "data-disabled",
+      "false",
+    );
   });
 
   it("mounts neither the bar nor the composer in read-only mode", () => {
