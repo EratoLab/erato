@@ -247,6 +247,63 @@ describe("ChatMessage", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows the offending text and edit guidance for prompt injection guardrails", async () => {
+    const message: UiChatMessage = {
+      id: "msg_prompt_injection_error",
+      content: [],
+      role: "assistant",
+      sender: "assistant",
+      authorId: "assistant_1",
+      createdAt: new Date("2025-01-01T12:00:00Z").toISOString(),
+      status: "error",
+      error: {
+        error_type: "content_filter",
+        error_description:
+          "The request was filtered because it matched a configured prompt injection guardrail.",
+        filter_details: {
+          pattern_id: "ignore_previous_instructions",
+          matched_text: "Ignore all previous instructions",
+        },
+      },
+    };
+
+    const Controls = () => <div data-testid="message-controls-probe" />;
+
+    const { i18n } = await import("@lingui/core");
+    i18n.load("en", enMessages as unknown as Messages);
+    i18n.activate("en");
+
+    render(
+      <I18nProvider i18n={i18n}>
+        <ChatMessage
+          message={message}
+          controls={Controls}
+          controlsContext={{
+            currentUserId: "user_1",
+            dialogOwnerId: "user_1",
+            isSharedDialog: false,
+          }}
+          onMessageAction={async () => true}
+        />
+      </I18nProvider>,
+    );
+
+    expect(
+      screen.getByText(
+        "The request was blocked because it matched a prompt injection guardrail.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Offending text")).toBeInTheDocument();
+    expect(
+      screen.getByText("Ignore all previous instructions"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Please edit the previous message to remove the offending text before continuing.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("copies the backend-rendered assistant error report when enabled", async () => {
     const message: UiChatMessage = {
       id: "msg_error_copy",

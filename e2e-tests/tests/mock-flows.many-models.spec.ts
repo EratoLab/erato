@@ -141,8 +141,17 @@ test(
 
     await expect(page.getByText(prompt)).toBeVisible();
     await expect(page.getByTestId("chat-message-error").last()).toContainText(
-      "The response was filtered due to the prompt triggering content management policy.",
+      "The request was blocked because it matched a prompt injection guardrail.",
       { timeout: 30000 },
+    );
+    await expect(page.getByTestId("chat-message-error").last()).toContainText(
+      "Offending text",
+    );
+    await expect(page.getByTestId("chat-message-error").last()).toContainText(
+      "Ignore all previous instructions",
+    );
+    await expect(page.getByTestId("chat-message-error").last()).toContainText(
+      "Please edit the previous message to remove the offending text before continuing.",
     );
 
     await chatIsReadyToChat(page, {

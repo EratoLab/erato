@@ -15,6 +15,10 @@ import {
   useErrorReportFeature,
   useMessageFeedbackFeature,
 } from "@/providers/FeatureConfigProvider";
+import {
+  isPromptInjectionFilterDetails,
+  type MessageErrorFilterDetails,
+} from "@/types/chat";
 import { hasToolCalls as messageHasToolCalls } from "@/utils/adapters/toolCallAdapter";
 import { isImageFile } from "@/utils/file/fileTypeUtils";
 import { teamsUploadDisplayName } from "@/utils/teams/teamsUploadName";
@@ -40,7 +44,6 @@ import type {
   MessageFeedback,
   UserProfile,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
-import type { MessageErrorFilterDetails } from "@/types/chat";
 import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
 
 const getPreviewUrl = (
@@ -208,9 +211,22 @@ export const ChatMessage = memo(function ChatMessage({
               className="mb-3"
               data-testid="chat-message-error"
             >
-              <p>{getErrorDescription(message.error.error_type)}</p>
-              {getErrorCta(message.error.error_type) && (
-                <p className="mt-2">{getErrorCta(message.error.error_type)}</p>
+              <p>
+                {getErrorDescription(
+                  message.error.error_type,
+                  message.error.filter_details,
+                )}
+              </p>
+              {getErrorCta(
+                message.error.error_type,
+                message.error.filter_details,
+              ) && (
+                <p className="mt-2">
+                  {getErrorCta(
+                    message.error.error_type,
+                    message.error.filter_details,
+                  )}
+                </p>
               )}
               {renderContentFilterDetails(
                 message.error.error_type,
@@ -338,6 +354,22 @@ const renderContentFilterDetails = (
     return null;
   }
 
+  if (isPromptInjectionFilterDetails(filterDetails)) {
+    return (
+      <div className="mt-2 text-xs">
+        <div className="font-medium">
+          {t({
+            id: "chat.message.error.variant.prompt_injection.offending_text",
+            message: "Offending text",
+          })}
+        </div>
+        <blockquote className="mt-1 break-words border-l-2 pl-2 italic">
+          {filterDetails.matched_text}
+        </blockquote>
+      </div>
+    );
+  }
+
   const filteredCategories = Object.entries(filterDetails)
     .filter(([, details]) => details.filtered)
     .map(([category, details]) => ({
@@ -408,8 +440,19 @@ const getErrorTitle = (errorType: string) => {
   });
 };
 
-const getErrorDescription = (errorType: string) => {
+const getErrorDescription = (
+  errorType: string,
+  filterDetails?: MessageErrorFilterDetails | null,
+) => {
   if (errorType === "content_filter") {
+    if (isPromptInjectionFilterDetails(filterDetails)) {
+      return t({
+        id: "chat.message.error.variant.prompt_injection",
+        message:
+          "The request was blocked because it matched a prompt injection guardrail.",
+      });
+    }
+
     return t({
       id: "chat.message.error.variant.content_filter",
       message:
@@ -439,8 +482,19 @@ const getErrorDescription = (errorType: string) => {
   });
 };
 
-const getErrorCta = (errorType: string) => {
+const getErrorCta = (
+  errorType: string,
+  filterDetails?: MessageErrorFilterDetails | null,
+) => {
   if (errorType === "content_filter") {
+    if (isPromptInjectionFilterDetails(filterDetails)) {
+      return t({
+        id: "chat.message.error.variant.prompt_injection.cta",
+        message:
+          "Please edit the previous message to remove the offending text before continuing.",
+      });
+    }
+
     return t({
       id: "chat.message.error.variant.content_filter.cta",
       message:

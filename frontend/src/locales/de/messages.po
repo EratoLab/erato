@@ -1815,6 +1815,21 @@ msgstr "Generierung abgebrochen. Halluzinationsschleife erkannt. Bitte generiere
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.variant.prompt_injection"
+msgstr "Die Anfrage wurde blockiert, weil sie eine Prompt-Injection-Guardrail ausgelöst hat."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.variant.prompt_injection.cta"
+msgstr "Bitte bearbeiten Sie die vorherige Nachricht, um den problematischen Text zu entfernen, bevor Sie fortfahren."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.variant.prompt_injection.offending_text"
+msgstr "Beanstandeter Text"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
 msgid "chat.message.error.variant.rate_limit"
 msgstr "Anfragelimit oder Kontingent überschritten. Das kann auch passieren, wenn deine Eingabe zu groß ist."
 

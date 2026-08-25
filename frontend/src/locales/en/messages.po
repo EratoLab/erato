@@ -1815,6 +1815,21 @@ msgstr "Generation aborted. Hallucination loop detected. Please regenerate the m
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.variant.prompt_injection"
+msgstr "The request was blocked because it matched a prompt injection guardrail."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.variant.prompt_injection.cta"
+msgstr "Please edit the previous message to remove the offending text before continuing."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.variant.prompt_injection.offending_text"
+msgstr "Offending text"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
 msgid "chat.message.error.variant.rate_limit"
 msgstr "Rate limit or quota exceeded. This can also happen if your input is too large."
 
