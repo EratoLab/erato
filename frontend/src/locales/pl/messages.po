@@ -3243,6 +3243,11 @@ msgstr "Jak asystent powinien się zachowywać? np. Preferuj zwięzłe wypunktow
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.fields.defaultModel.label"
+msgstr "Model domyślny"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.fields.jobTitle.label"
 msgstr "Stanowisko"
 

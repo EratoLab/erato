@@ -353,6 +353,7 @@ test(
       preference_job_title: jobTitle,
       preference_assistant_custom_instructions: customInstructions,
       preference_assistant_additional_information: additionalInformation,
+      preference_default_chat_provider: null,
     });
 
     await page

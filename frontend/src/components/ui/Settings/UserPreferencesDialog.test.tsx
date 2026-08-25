@@ -83,6 +83,7 @@ const userProfile: UserProfile = {
     "Prefer concise bullet points and highlight risks first.",
   preference_assistant_additional_information:
     "I work with enterprise customers in regulated industries.",
+  preference_default_chat_provider: undefined,
 };
 
 const createJsonResponse = (payload: unknown, status = 200) =>
@@ -406,6 +407,9 @@ describe("UserPreferencesDialog", () => {
     // server list and the persisted tool approvals, and a Response body can
     // only be consumed once.
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input).includes("/me/models")) {
+        return createJsonResponse([]);
+      }
       if (String(input).includes("/me/mcp-tool-approval-settings")) {
         return createJsonResponse({ settings: [] });
       }
@@ -653,12 +657,17 @@ describe("UserPreferencesDialog", () => {
     const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
     const refetchQueries = vi.spyOn(queryClient, "refetchQueries");
     const onClose = vi.fn();
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ archived_chat_count: 2 }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        if (String(input).includes("/me/models")) {
+          return createJsonResponse([]);
+        }
+        return new Response(JSON.stringify({ archived_chat_count: 2 }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      });
 
     renderDialog({ queryClient, onClose });
 
@@ -690,7 +699,11 @@ describe("UserPreferencesDialog", () => {
     const onClose = vi.fn();
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
-      .mockResolvedValue(createJsonResponse(userProfile));
+      .mockImplementation(async (input) =>
+        String(input).includes("/me/models")
+          ? createJsonResponse([])
+          : createJsonResponse(userProfile),
+      );
 
     renderDialog({ queryClient, onClose });
 
@@ -720,11 +733,49 @@ describe("UserPreferencesDialog", () => {
           "Prefer concise bullet points and highlight risks first.",
         preference_assistant_additional_information:
           "I work with enterprise customers in regulated industries.",
+        preference_default_chat_provider: null,
       });
       expect(invalidateQueries).toHaveBeenCalledWith({
         queryKey: profileQuery({}).queryKey,
       });
       expect(onClose).toHaveBeenCalled();
+    });
+  });
+
+  it("saves the selected model as the user's default", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        if (String(input).includes("/me/models")) {
+          return createJsonResponse([
+            {
+              chat_provider_id: "model-one",
+              model_display_name: "Model One",
+            },
+            {
+              chat_provider_id: "model-two",
+              model_display_name: "Model Two",
+            },
+          ]);
+        }
+        return createJsonResponse(userProfile);
+      });
+
+    renderDialog();
+
+    fireEvent.click(await screen.findByTitle("No default model"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Model Two" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      const requestCall = fetchMock.mock.calls.find(
+        ([url]) => url === "/api/v1beta/me/profile/preferences",
+      );
+      expect(JSON.parse(String(requestCall?.[1]?.body))).toEqual(
+        expect.objectContaining({
+          preference_default_chat_provider: "model-two",
+        }),
+      );
     });
   });
 

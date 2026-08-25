@@ -13,6 +13,7 @@ import {
   useDisconnectMcpServerOauth,
   useListMcpServers,
   useStartMcpServerOauth,
+  useAvailableModels,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import {
   useAudioDictationFeature,
@@ -20,8 +21,7 @@ import {
   useUserPreferencesFeature,
 } from "@/providers/FeatureConfigProvider";
 
-import { AudioInputTabContent } from "./AudioInputTabContent";
-import { ServersToolsPane } from "./ServersToolsPane";
+import { ModelSelector } from "../Chat/ModelSelector";
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
 import { FormField, Input, Textarea } from "../Input";
@@ -34,8 +34,11 @@ import {
   VoiceIcon,
 } from "../icons";
 import { AppearanceTabContent } from "./AppearanceTabContent";
+import { AudioInputTabContent } from "./AudioInputTabContent";
+import { ServersToolsPane } from "./ServersToolsPane";
 
 import type {
+  ChatModel,
   UpdateProfilePreferencesRequest,
   UserProfile,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -90,6 +93,7 @@ export function UserPreferencesDialog({
   const [jobTitle, setJobTitle] = useState("");
   const [customInstructions, setCustomInstructions] = useState("");
   const [additionalInformation, setAdditionalInformation] = useState("");
+  const [defaultModel, setDefaultModel] = useState<ChatModel | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [mcpError, setMcpError] = useState<string | null>(null);
@@ -107,6 +111,14 @@ export function UserPreferencesDialog({
   const { mutateAsync: disconnectMcpServerOauthMutation } =
     useDisconnectMcpServerOauth();
   const { mutateAsync: startMcpServerOauthMutation } = useStartMcpServerOauth();
+  const { data: availableModelsResponse } = useAvailableModels(
+    isOpen ? {} : skipToken,
+  );
+  const availableModels = useMemo(
+    () =>
+      Array.isArray(availableModelsResponse) ? availableModelsResponse : [],
+    [availableModelsResponse],
+  );
   // The pane owns rendering the server list; this instance shares its query
   // key and exists so the OAuth callback/disconnect flows can refetch.
   const { refetch: refetchMcpServers } = useListMcpServers(
@@ -173,7 +185,22 @@ export function UserPreferencesDialog({
     setAdditionalInformation(
       userProfile?.preference_assistant_additional_information ?? "",
     );
+    setDefaultModel(null);
   }, [isOpen, requestedDefaultTab, userProfile]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    setDefaultModel(
+      availableModels.find(
+        (model) =>
+          model.chat_provider_id ===
+          userProfile?.preference_default_chat_provider,
+      ) ?? null,
+    );
+  }, [availableModels, isOpen, userProfile?.preference_default_chat_provider]);
 
   useEffect(() => {
     if (!visibleTabs.includes(activeTab)) {
@@ -263,9 +290,12 @@ export function UserPreferencesDialog({
       customInstructions !==
         (userProfile?.preference_assistant_custom_instructions ?? "") ||
       additionalInformation !==
-        (userProfile?.preference_assistant_additional_information ?? ""),
+        (userProfile?.preference_assistant_additional_information ?? "") ||
+      defaultModel?.chat_provider_id !==
+        (userProfile?.preference_default_chat_provider ?? null),
     [
       additionalInformation,
+      defaultModel,
       customInstructions,
       jobTitle,
       nickname,
@@ -377,6 +407,8 @@ export function UserPreferencesDialog({
         preference_assistant_additional_information: toNullableValue(
           additionalInformation,
         ),
+        preference_default_chat_provider:
+          defaultModel?.chat_provider_id ?? null,
       } as unknown as UpdateProfilePreferencesRequest;
 
       await fetchUpdateProfilePreferences({
@@ -540,6 +572,25 @@ export function UserPreferencesDialog({
                 hidden={activeTab !== "personalization"}
                 className="space-y-4"
               >
+                {availableModels.length > 0 ? (
+                  <FormField
+                    label={t({
+                      id: "preferences.dialog.fields.defaultModel.label",
+                      message: "Default model",
+                    })}
+                    htmlFor="model-selector-dropdown"
+                  >
+                    <ModelSelector
+                      availableModels={availableModels}
+                      selectedModel={defaultModel}
+                      onModelChange={setDefaultModel}
+                      allowNoSelection
+                      onClearSelection={() => setDefaultModel(null)}
+                      align="left"
+                    />
+                  </FormField>
+                ) : null}
+
                 <FormField
                   label={t({
                     id: "preferences.dialog.fields.nickname.label",

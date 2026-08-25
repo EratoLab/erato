@@ -2691,6 +2691,10 @@ export type UpdateProfilePreferencesRequest = {
    */
   preference_assistant_custom_instructions?: null | undefined;
   /**
+   * Preferred default chat provider/model ID for new chats.
+   */
+  preference_default_chat_provider?: string | null | undefined;
+  /**
    * User's job title.
    */
   preference_job_title?: null | undefined;
@@ -2743,6 +2747,10 @@ export type UserProfile = {
    * Additional behaviour/style/tone preferences for the assistant.
    */
   preference_assistant_custom_instructions?: string;
+  /**
+   * The user's preferred default chat provider/model ID.
+   */
+  preference_default_chat_provider?: string;
   /**
    * User's job title.
    */

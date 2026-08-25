@@ -15,6 +15,7 @@ pub struct Model {
     pub assistant_custom_instructions: Option<String>,
     #[sea_orm(column_type = "Text", nullable)]
     pub assistant_additional_information: Option<String>,
+    pub default_chat_provider: Option<String>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }

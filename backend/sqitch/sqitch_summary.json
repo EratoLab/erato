@@ -36,7 +36,8 @@
     "deploy/0034_add_user_tool_approval_settings.sql",
     "deploy/0035_add_pinned_chats.sql",
     "deploy/0036_add_chat_provenance.sql",
-    "deploy/0037_normalize_empty_assistant_id_lists.sql"
+    "deploy/0037_normalize_empty_assistant_id_lists.sql",
+    "deploy/0038_add_default_chat_provider_to_user_preferences.sql"
   ],
-  "latest_change": "f396e86152c3672bbd2840208abeac92b86cd462"
+  "latest_change": "aa8f59be7ccc88df9e244d6061e4b4c52ba59ef9"
 }

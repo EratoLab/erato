@@ -769,6 +769,10 @@ pub struct UpdateProfilePreferencesRequest {
     #[serde(default, deserialize_with = "deserialize_patch_optional_string")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub preference_assistant_additional_information: Option<Option<String>>,
+    /// Preferred default chat provider/model ID for new chats.
+    #[serde(default, deserialize_with = "deserialize_patch_optional_string")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preference_default_chat_provider: Option<Option<String>>,
 }
 
 fn deserialize_patch_optional_string<'de, D>(
@@ -807,6 +811,7 @@ pub async fn update_profile_preferences(
             job_title: request.preference_job_title,
             assistant_custom_instructions: request.preference_assistant_custom_instructions,
             assistant_additional_information: request.preference_assistant_additional_information,
+            default_chat_provider: request.preference_default_chat_provider,
         },
     )
     .await
@@ -818,6 +823,7 @@ pub async fn update_profile_preferences(
     profile.preference_assistant_custom_instructions = updated_prefs.assistant_custom_instructions;
     profile.preference_assistant_additional_information =
         updated_prefs.assistant_additional_information;
+    profile.preference_default_chat_provider = updated_prefs.default_chat_provider;
 
     Ok(Json(profile))
 }
