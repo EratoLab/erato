@@ -155,6 +155,13 @@ fn is_tool_allowed_by_server_config(tool_name: &str, config: &McpServerConfig) -
             .any(|pattern| wildcard_matches(pattern, tool_name))
 }
 
+pub fn is_tool_allowed_to_wait(tool_name: &str, config: &McpServerConfig) -> bool {
+    config
+        .wait_tools
+        .iter()
+        .any(|pattern| wildcard_matches(pattern, tool_name))
+}
+
 fn wildcard_matches(pattern: &str, value: &str) -> bool {
     let pattern = pattern.as_bytes();
     let value = value.as_bytes();
@@ -834,7 +841,8 @@ pub struct ManagedTool {
 #[cfg(test)]
 mod tests {
     use super::{
-        filter_tools_by_server_config, is_tool_allowed_by_server_config, wildcard_matches,
+        filter_tools_by_server_config, is_tool_allowed_by_server_config, is_tool_allowed_to_wait,
+        wildcard_matches,
     };
     use crate::config::{McpServerAuthenticationConfig, McpServerConfig};
     use rmcp::model::Tool;
@@ -847,6 +855,7 @@ mod tests {
             allow_tools: allow_tools
                 .map(|patterns| patterns.into_iter().map(str::to_string).collect()),
             exclude_tools: exclude_tools.into_iter().map(str::to_string).collect(),
+            wait_tools: vec![],
             authentication: McpServerAuthenticationConfig::None,
             max_session_idle_seconds: None,
         }
@@ -898,6 +907,16 @@ mod tests {
         assert!(!is_tool_allowed_by_server_config("delete_page", &config));
         assert!(!is_tool_allowed_by_server_config("get_secret", &config));
         assert!(!is_tool_allowed_by_server_config("get_raw_page", &config));
+    }
+
+    #[test]
+    fn wait_tool_patterns_are_matched_independently() {
+        let mut config = server_config(None, vec![]);
+        config.wait_tools = vec!["dispatch_*".to_string(), "poll_status".to_string()];
+
+        assert!(is_tool_allowed_to_wait("dispatch_research", &config));
+        assert!(is_tool_allowed_to_wait("poll_status", &config));
+        assert!(!is_tool_allowed_to_wait("get_result", &config));
     }
 
     #[test]

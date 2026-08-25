@@ -12,6 +12,7 @@ The server exposes several MCP servers on different streamable HTTP endpoints:
 - `streamable HTTP /mcp/progress` - progress simulation server (same tools, `read_file` emits progress notifications)
 - `streamable HTTP /mcp/content-filter` - content-filter simulation server (`trigger_content_filter`, returns `is_error: true`)
 - `streamable HTTP /mcp/image-generation` - image generation server (`generate_image`, returns the shared cat image fixture)
+- `streamable HTTP /mcp/deep-research` - deep-research simulation (`deep_research_dispatch`, `deep_research_poll`); the first poll is pending and the next poll completes
 
 Default bind: `127.0.0.1:44321`
 

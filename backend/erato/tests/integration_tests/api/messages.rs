@@ -63,6 +63,7 @@ fn mcp_server_config(
         http_headers: None,
         allow_tools: None,
         exclude_tools: vec![],
+        wait_tools: vec![],
         authentication,
         max_session_idle_seconds: None,
     }

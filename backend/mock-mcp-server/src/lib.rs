@@ -1,4 +1,7 @@
+use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 use axum::{
     body::Body,
@@ -48,6 +51,8 @@ const FORWARDED_OIDC_ALLOWED_SUBJECTS: &[&str] =
     &["allowed-user", "08a8684b-db88-4b73-90a9-3cd166300004"];
 const FORWARDED_OIDC_ALLOWED_GROUP: &str = "mcp-auth-forwarded-oidc";
 const CAT_IMAGE_BASE64: &str = include_str!("../../mock-llm-server/image_data/cat_image.base64");
+
+const DEEP_RESEARCH_PENDING_POLLS: u32 = 1;
 
 #[derive(Debug, Clone, Serialize)]
 struct MechanismSummary {
@@ -99,6 +104,112 @@ struct GeneratedImage {
 #[derive(Debug, serde::Serialize, schemars::JsonSchema)]
 struct ImageGenerationResponse {
     images: Vec<GeneratedImage>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+struct DeepResearchDispatchParams {
+    /// The topic to research.
+    query: String,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+struct DeepResearchPollParams {
+    /// The task ID returned by deep_research_dispatch.
+    task_id: String,
+}
+
+#[derive(Debug, Clone)]
+struct DeepResearchJob {
+    query: String,
+    poll_count: u32,
+}
+
+#[derive(Clone, Default)]
+struct DeepResearchState {
+    next_task_id: Arc<AtomicU64>,
+    jobs: Arc<Mutex<HashMap<String, DeepResearchJob>>>,
+}
+
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+struct DeepResearchDispatchResponse {
+    task_id: String,
+    status: &'static str,
+    message: &'static str,
+}
+
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+struct DeepResearchPollResponse {
+    task_id: String,
+    status: &'static str,
+    poll_count: u32,
+    retry_after_seconds: Option<u32>,
+    result: Option<String>,
+}
+
+impl DeepResearchState {
+    fn dispatch(&self, query: String) -> Result<DeepResearchDispatchResponse, McpError> {
+        if query.trim().is_empty() {
+            return Err(McpError::invalid_params(
+                "The research query must not be empty",
+                None,
+            ));
+        }
+
+        let task_id = format!(
+            "deep-research-{}",
+            self.next_task_id.fetch_add(1, Ordering::Relaxed) + 1
+        );
+        let mut jobs = self
+            .jobs
+            .lock()
+            .map_err(|_| McpError::internal_error("Deep research state lock is poisoned", None))?;
+        jobs.insert(
+            task_id.clone(),
+            DeepResearchJob {
+                query,
+                poll_count: 0,
+            },
+        );
+
+        Ok(DeepResearchDispatchResponse {
+            task_id,
+            status: "pending",
+            message:
+                "Research dispatched. Poll the task for its result; it may be pending initially.",
+        })
+    }
+
+    fn poll(&self, task_id: String) -> Result<DeepResearchPollResponse, McpError> {
+        let mut jobs = self
+            .jobs
+            .lock()
+            .map_err(|_| McpError::internal_error("Deep research state lock is poisoned", None))?;
+        let job = jobs.get_mut(&task_id).ok_or_else(|| {
+            McpError::invalid_params(format!("Unknown deep research task: {task_id}"), None)
+        })?;
+
+        job.poll_count += 1;
+        if job.poll_count <= DEEP_RESEARCH_PENDING_POLLS {
+            return Ok(DeepResearchPollResponse {
+                task_id,
+                status: "pending",
+                poll_count: job.poll_count,
+                retry_after_seconds: Some(1),
+                result: None,
+            });
+        }
+
+        Ok(DeepResearchPollResponse {
+            task_id,
+            status: "completed",
+            poll_count: job.poll_count,
+            retry_after_seconds: None,
+            result: Some(format!(
+                "Mock deep-research findings for '{}': the topic has been researched successfully.",
+                job.query
+            )),
+        })
+    }
 }
 
 fn default_image_width() -> Option<u32> {
@@ -536,6 +647,79 @@ impl ServerHandler for ImageGenerationServer {
         server_info(
             "Image Generation MCP Server - Generate images from text prompts using configurable backends",
         )
+    }
+}
+
+#[derive(Clone)]
+struct DeepResearchServer {
+    #[allow(dead_code)]
+    tool_router: ToolRouter<Self>,
+    state: DeepResearchState,
+}
+
+impl DeepResearchServer {
+    fn new(state: DeepResearchState) -> Self {
+        Self {
+            tool_router: Self::tool_router(),
+            state,
+        }
+    }
+}
+
+#[tool_router]
+impl DeepResearchServer {
+    #[tool(
+        description = "Dispatch a long-running deep-research task. The returned task may not be ready immediately; use deep_research_poll with the task_id to check it.",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = true
+        )
+    )]
+    fn deep_research_dispatch(
+        &self,
+        Parameters(params): Parameters<DeepResearchDispatchParams>,
+    ) -> Result<rmcp::Json<DeepResearchDispatchResponse>, McpError> {
+        self.state.dispatch(params.query).map(rmcp::Json)
+    }
+
+    #[tool(
+        description = "Poll a dispatched deep-research task. The first poll returns status pending; poll again after waiting when the task is not ready.",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    fn deep_research_poll(
+        &self,
+        Parameters(params): Parameters<DeepResearchPollParams>,
+    ) -> Result<rmcp::Json<DeepResearchPollResponse>, McpError> {
+        self.state.poll(params.task_id).map(rmcp::Json)
+    }
+}
+
+impl ServerHandler for DeepResearchServer {
+    fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
+        call_tool_from_router(self, &self.tool_router, request, context)
+    }
+
+    fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
+        std::future::ready(Ok(list_tools_from_router(&self.tool_router)))
+    }
+
+    fn get_info(&self) -> ServerInfo {
+        server_info("Mock MCP deep-research server with dispatch and deferred polling")
     }
 }
 
@@ -1091,6 +1275,13 @@ fn builtin_mechanisms() -> Vec<MechanismSummary> {
             tools: &["generate_image"],
         },
         MechanismSummary {
+            name: "Deep research simulation server",
+            description:
+                "Dispatches a long-running research task and returns pending before completion",
+            endpoint: "Streamable HTTP /mcp/deep-research",
+            tools: &["deep_research_dispatch", "deep_research_poll"],
+        },
+        MechanismSummary {
             name: "Tool approval policy server",
             description: "Provides closed-world and open-world annotated tools",
             endpoint: "Streamable HTTP /mcp/approval-policy",
@@ -1170,6 +1361,11 @@ fn log_startup(addr: &str, mechanisms: &[MechanismSummary]) {
     println!(
         "  {} {}",
         "MCP HTTP".bright_cyan(),
+        "/mcp/deep-research".bright_yellow()
+    );
+    println!(
+        "  {} {}",
+        "MCP HTTP".bright_cyan(),
         "/mcp/approval-policy".bright_yellow()
     );
     println!(
@@ -1222,6 +1418,10 @@ pub fn app() -> Router {
         create_streamable_http_service(|| Ok(ContentFilterFileServer::new()));
     let image_generation_service =
         create_streamable_http_service(|| Ok(ImageGenerationServer::new()));
+    let deep_research_state = DeepResearchState::default();
+    let deep_research_service = create_streamable_http_service(move || {
+        Ok(DeepResearchServer::new(deep_research_state.clone()))
+    });
     let approval_policy_service =
         create_streamable_http_service(|| Ok(ApprovalPolicyServer::new()));
 
@@ -1248,6 +1448,7 @@ pub fn app() -> Router {
         .nest_service("/mcp/progress", progress_service)
         .nest_service("/mcp/content-filter", content_filter_service)
         .nest_service("/mcp/image-generation", image_generation_service)
+        .nest_service("/mcp/deep-research", deep_research_service)
         .nest_service("/mcp/approval-policy", approval_policy_service)
         .route(
             "/mcp/auth-none",
@@ -1307,4 +1508,40 @@ pub async fn serve(addr: SocketAddr) {
         })
         .await
         .unwrap_or_else(|e| panic!("Server error: {}", e));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn deep_research_is_pending_once_then_completes() {
+        let state = DeepResearchState::default();
+        let dispatched = state
+            .dispatch("latest battery research".to_string())
+            .expect("dispatch should succeed");
+
+        assert_eq!(dispatched.status, "pending");
+        let first_poll = state
+            .poll(dispatched.task_id.clone())
+            .expect("first poll should succeed");
+        assert_eq!(first_poll.status, "pending");
+        assert_eq!(first_poll.retry_after_seconds, Some(1));
+
+        let completed = state
+            .poll(dispatched.task_id)
+            .expect("second poll should succeed");
+        assert_eq!(completed.status, "completed");
+        assert!(completed
+            .result
+            .expect("completed research should have a result")
+            .contains("latest battery research"));
+    }
+
+    #[test]
+    fn deep_research_rejects_empty_queries_and_unknown_tasks() {
+        let state = DeepResearchState::default();
+        assert!(state.dispatch("  ".to_string()).is_err());
+        assert!(state.poll("missing-task".to_string()).is_err());
+    }
 }
