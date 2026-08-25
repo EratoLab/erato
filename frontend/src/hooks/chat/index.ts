@@ -11,4 +11,5 @@ export * from "./useChatActions";
 export * from "./useStandardMessageActions";
 export * from "./useTokenManagement";
 export * from "./useModelHistory";
+export * from "./useModelSwitches";
 export * from "./useActiveModelSelection";

@@ -19,6 +19,7 @@ import {
 import {
   useActiveModelSelection,
   useChatActions,
+  useModelSwitches,
   useStandardMessageActions,
 } from "@/hooks/chat";
 import { useMessageFeedback } from "@/hooks/chat/useMessageFeedback";
@@ -36,7 +37,6 @@ import {
   useSidebarFeature,
 } from "@/providers/FeatureConfigProvider";
 import { isPromptInjectionFilterDetails } from "@/types/chat";
-import { getModelSwitches } from "@/utils/chat/modelSwitches";
 import { mapRecentChatToSession } from "@/utils/chat/recentChatSession";
 import { createLogger } from "@/utils/debugLogger";
 
@@ -307,15 +307,11 @@ export const Chat = ({
   const canEditForCurrentChat = Array.isArray(chatHistory)
     ? !!chatHistory.find((c) => c.id === (currentChatId ?? ""))?.can_edit
     : false;
-  const modelSwitches = useMemo(() => {
-    const modelNames = new Map(
-      availableModels.map((model) => [
-        model.chat_provider_id,
-        model.model_display_name,
-      ]),
-    );
-    return getModelSwitches(messages, messageOrder, modelNames);
-  }, [availableModels, messageOrder, messages]);
+  const modelSwitches = useModelSwitches(
+    messages,
+    messageOrder,
+    availableModels,
+  );
   const lastMessage =
     messageOrder.length > 0
       ? messages[messageOrder[messageOrder.length - 1]]

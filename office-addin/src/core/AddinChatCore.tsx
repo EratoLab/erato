@@ -27,6 +27,7 @@ import {
   useFilePreviewModal,
   useFileUploadWithTokenCheck,
   useMessageFeedback,
+  useModelSwitches,
   useProfile,
   useStandardMessageActions,
   type ActionFacetRequest,
@@ -125,6 +126,7 @@ export interface AddinChatController {
   hostCallbacksRef: MutableRefObject<AddinChatHostCallbacks>;
   messages: ReturnType<typeof useChatContext>["messages"];
   messageOrder: string[];
+  modelSwitches: ReturnType<typeof useModelSwitches>;
   isMessagingLoading: boolean;
   isPendingResponse: boolean;
   chats: ReturnType<typeof useChatContext>["chats"];
@@ -252,6 +254,11 @@ function useAddinChatController({
   >((run) => openChatById(run.id), [openChatById]);
   const { availableModels, selectedModel, setSelectedModel, isSelectionReady } =
     useActiveModelSelection({ initialModel: chat.currentChatLastModel });
+  const modelSwitches = useModelSwitches(
+    chat.messages,
+    chat.messageOrder,
+    availableModels,
+  );
   const acceptedFileTypes = useMemo(
     () => getSupportedFileTypes(capabilities),
     [capabilities],
@@ -442,6 +449,7 @@ function useAddinChatController({
     hostCallbacksRef,
     messages: chat.messages,
     messageOrder: chat.messageOrder,
+    modelSwitches,
     isMessagingLoading: chat.isMessagingLoading,
     isPendingResponse: chat.isPendingResponse,
     chats: chat.chats,
@@ -697,6 +705,7 @@ export function AddinChatCoreView({
                   virtualizationThreshold={30}
                   onFilePreview={controller.openPreviewModal}
                   onViewFeedback={feedback.openFeedbackViewDialog}
+                  modelSwitches={controller.modelSwitches}
                   className="overscroll-none"
                 />
               </MessageEditProvider>

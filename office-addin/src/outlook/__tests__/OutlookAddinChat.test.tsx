@@ -90,6 +90,7 @@ vi.mock("@erato/frontend/library", () => ({
     setSelectedModel: vi.fn(),
     isSelectionReady: true,
   }),
+  useModelSwitches: () => ({}),
   useChatContext: () => ({
     messages: {},
     messageOrder: [],

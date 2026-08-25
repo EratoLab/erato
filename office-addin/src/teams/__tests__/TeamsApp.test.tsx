@@ -274,6 +274,7 @@ vi.mock("@erato/frontend/library", async () => {
       setSelectedModel: vi.fn(),
       isSelectionReady: true,
     }),
+    useModelSwitches: () => ({}),
     useConversationDropzone: () => ({
       getRootProps: () => ({}),
       getInputProps: () => ({}),

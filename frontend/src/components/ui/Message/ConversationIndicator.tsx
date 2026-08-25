@@ -2,6 +2,8 @@ import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { memo } from "react";
 
+import { TranscriptNotice } from "./TranscriptNotice";
+
 interface ConversationIndicatorProps {
   /**
    * The type of indicator to show
@@ -38,14 +40,11 @@ export const ConversationIndicator = memo<ConversationIndicatorProps>(
     };
 
     return (
-      <div
-        className={clsx(
-          "flex justify-center py-2 text-xs text-theme-fg-secondary",
-          className,
-        )}
+      <TranscriptNotice
+        className={clsx("py-2 text-theme-fg-secondary", className)}
       >
-        <span>{text ?? getDefaultText()}</span>
-      </div>
+        {text ?? getDefaultText()}
+      </TranscriptNotice>
     );
   },
 );
