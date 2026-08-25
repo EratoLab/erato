@@ -143,12 +143,12 @@ test(
     await page.getByRole("button", { name: "Upload Files" }).click();
     const fileChooser = await fileChooserPromise;
 
-    const filePath = "test-files/big-file-20mb.pdf";
+    const filePath = "test-files/big-file-60mb.pdf";
     await fileChooser.setFiles(filePath);
 
     // Use data-testid for robust error checking
     await expect(page.getByTestId("file-upload-error")).toBeVisible({
-      // Increased timeout, as uploading a 20MB file can take a while
+      // Increased timeout, as uploading a 60MB file can take a while
       timeout: 30000,
     });
 

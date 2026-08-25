@@ -61,7 +61,7 @@ beforeEach(() => {
     userPreferencesEnabled: true,
     userPreferencesDataTabEnabled: true,
     messageFeedbackEditTimeLimitSeconds: null,
-    maxUploadSizeBytes: 20971520,
+    maxUploadSizeBytes: 52428800,
     sidebarCollapsedMode: "hidden",
     sidebarLogoPath: null,
     sidebarLogoDarkPath: null,

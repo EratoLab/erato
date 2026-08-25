@@ -80,7 +80,7 @@ describe("FeatureConfigProvider", () => {
       userPreferencesEnabled: true,
       userPreferencesDataTabEnabled: true,
       messageFeedbackEditTimeLimitSeconds: null,
-      maxUploadSizeBytes: 20971520, // 20 MB - matches backend default
+      maxUploadSizeBytes: 52428800, // 50 MB - matches backend default
       audioTranscriptionEnabled: false,
       audioTranscriptionMaxRecordingDurationSeconds: 1200,
       audioDictationEnabled: false,
@@ -127,14 +127,14 @@ describe("FeatureConfigProvider", () => {
       expect(result.current).toEqual({
         upload: {
           enabled: true,
-          maxSizeBytes: 20971520,
-          maxSizeFormatted: "20 MB",
+          maxSizeBytes: 52428800,
+          maxSizeFormatted: "50 MB",
         },
         chatInput: {
           autofocus: true,
           emptyStateLayout: "bottom",
           showUsageAdvisory: true,
-          maxFiles: 5,
+          maxFiles: 10,
         },
         audioTranscription: {
           enabled: false,
@@ -165,7 +165,7 @@ describe("FeatureConfigProvider", () => {
           contextWarningThreshold: 0.5,
           contextFileContributorThreshold: 0.05,
           maxSystemPromptLength: null,
-          maxFiles: 5,
+          maxFiles: 10,
         },
         starterPrompts: {
           enabled: false,
@@ -230,7 +230,7 @@ describe("FeatureConfigProvider", () => {
         userPreferencesEnabled: true,
         userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
-        maxUploadSizeBytes: 20971520,
+        maxUploadSizeBytes: 52428800,
         sidebarCollapsedMode: "hidden",
         sidebarLogoPath: null,
         sidebarLogoDarkPath: null,
@@ -268,7 +268,7 @@ describe("FeatureConfigProvider", () => {
         userPreferencesEnabled: true,
         userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
-        maxUploadSizeBytes: 20971520,
+        maxUploadSizeBytes: 52428800,
         sidebarCollapsedMode: "hidden",
         sidebarLogoPath: null,
         sidebarLogoDarkPath: null,
@@ -296,7 +296,7 @@ describe("FeatureConfigProvider", () => {
         autofocus: true,
         emptyStateLayout: "bottom",
         showUsageAdvisory: false,
-        maxFiles: 5,
+        maxFiles: 10,
       });
     });
 
@@ -322,7 +322,7 @@ describe("FeatureConfigProvider", () => {
         userPreferencesEnabled: true,
         userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
-        maxUploadSizeBytes: 20971520,
+        maxUploadSizeBytes: 52428800,
         sidebarCollapsedMode: "hidden",
         sidebarLogoPath: null,
         sidebarLogoDarkPath: null,
@@ -359,7 +359,7 @@ describe("FeatureConfigProvider", () => {
         userPreferencesEnabled: true,
         userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
-        maxUploadSizeBytes: 20971520,
+        maxUploadSizeBytes: 52428800,
         sidebarCollapsedMode: "hidden",
         sidebarLogoPath: null,
         sidebarLogoDarkPath: null,
@@ -416,7 +416,7 @@ describe("FeatureConfigProvider", () => {
         userPreferencesEnabled: true,
         userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
-        maxUploadSizeBytes: 20971520,
+        maxUploadSizeBytes: 52428800,
         audioTranscriptionEnabled: false,
         audioTranscriptionMaxRecordingDurationSeconds: 1200,
         audioDictationEnabled: false,
@@ -476,7 +476,7 @@ describe("FeatureConfigProvider", () => {
         userPreferencesEnabled: true,
         userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
-        maxUploadSizeBytes: 20971520,
+        maxUploadSizeBytes: 52428800,
         audioTranscriptionEnabled: false,
         audioTranscriptionMaxRecordingDurationSeconds: 1200,
         audioDictationEnabled: false,
@@ -527,8 +527,8 @@ describe("FeatureConfigProvider", () => {
 
       expect(result.current).toEqual({
         enabled: true,
-        maxSizeBytes: 20971520,
-        maxSizeFormatted: "20 MB",
+        maxSizeBytes: 52428800,
+        maxSizeFormatted: "50 MB",
       });
     });
 
@@ -554,7 +554,7 @@ describe("FeatureConfigProvider", () => {
         userPreferencesEnabled: true,
         userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
-        maxUploadSizeBytes: 20971520,
+        maxUploadSizeBytes: 52428800,
         sidebarCollapsedMode: "hidden",
         sidebarLogoPath: null,
         sidebarLogoDarkPath: null,
@@ -592,7 +592,7 @@ describe("FeatureConfigProvider", () => {
         autofocus: true,
         emptyStateLayout: "bottom",
         showUsageAdvisory: true,
-        maxFiles: 5,
+        maxFiles: 10,
       });
     });
 
@@ -618,7 +618,7 @@ describe("FeatureConfigProvider", () => {
         userPreferencesEnabled: true,
         userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
-        maxUploadSizeBytes: 20971520,
+        maxUploadSizeBytes: 52428800,
         sidebarCollapsedMode: "hidden",
         sidebarLogoPath: null,
         sidebarLogoDarkPath: null,
@@ -654,7 +654,7 @@ describe("FeatureConfigProvider", () => {
         userPreferencesEnabled: true,
         userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
-        maxUploadSizeBytes: 20971520,
+        maxUploadSizeBytes: 52428800,
         sidebarCollapsedMode: "hidden",
         sidebarLogoPath: null,
         sidebarLogoDarkPath: null,
@@ -729,7 +729,7 @@ describe("FeatureConfigProvider", () => {
         messageFeedbackEditTimeLimitSeconds: null,
         audioTranscriptionEnabled: true,
         audioTranscriptionMaxRecordingDurationSeconds: 1200,
-        maxUploadSizeBytes: 20971520,
+        maxUploadSizeBytes: 52428800,
         sidebarCollapsedMode: "hidden",
         sidebarLogoPath: null,
         sidebarLogoDarkPath: null,
@@ -821,7 +821,7 @@ describe("FeatureConfigProvider", () => {
         messageFeedbackCommentsEnabled: false,
         userPreferencesEnabled: true,
         userPreferencesDataTabEnabled: true,
-        maxUploadSizeBytes: 20971520,
+        maxUploadSizeBytes: 52428800,
       });
 
       const { result } = renderHook(() => useAuthFeature(), {
@@ -848,7 +848,7 @@ describe("FeatureConfigProvider", () => {
         contextWarningThreshold: 0.5,
         contextFileContributorThreshold: 0.05,
         maxSystemPromptLength: null,
-        maxFiles: 5,
+        maxFiles: 10,
       });
     });
 
@@ -878,7 +878,7 @@ describe("FeatureConfigProvider", () => {
         userPreferencesEnabled: true,
         userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
-        maxUploadSizeBytes: 20971520,
+        maxUploadSizeBytes: 52428800,
         sidebarCollapsedMode: "hidden",
         sidebarLogoPath: null,
         sidebarLogoDarkPath: null,
@@ -935,7 +935,7 @@ describe("FeatureConfigProvider", () => {
         userPreferencesEnabled: true,
         userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
-        maxUploadSizeBytes: 20971520,
+        maxUploadSizeBytes: 52428800,
         audioTranscriptionEnabled: false,
         audioTranscriptionMaxRecordingDurationSeconds: 1200,
         audioDictationEnabled: false,
@@ -1011,7 +1011,7 @@ describe("FeatureConfigProvider", () => {
         userPreferencesEnabled: true,
         userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
-        maxUploadSizeBytes: 20971520,
+        maxUploadSizeBytes: 52428800,
         sidebarCollapsedMode: "hidden",
         sidebarLogoPath: null,
         sidebarLogoDarkPath: null,
@@ -1048,7 +1048,7 @@ describe("FeatureConfigProvider", () => {
         userPreferencesEnabled: true,
         userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
-        maxUploadSizeBytes: 20971520,
+        maxUploadSizeBytes: 52428800,
         sidebarCollapsedMode: "hidden",
         sidebarLogoPath: null,
         sidebarLogoDarkPath: null,
@@ -1114,7 +1114,7 @@ describe("FeatureConfigProvider", () => {
         userPreferencesEnabled: true,
         userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
-        maxUploadSizeBytes: 20971520,
+        maxUploadSizeBytes: 52428800,
         sidebarCollapsedMode: "slim",
         sidebarLogoPath: "/custom-theme/sidebar-logo.svg",
         sidebarLogoDarkPath: "/custom-theme/sidebar-logo-dark.svg",
@@ -1177,7 +1177,7 @@ describe("FeatureConfigProvider", () => {
         userPreferencesEnabled: false,
         userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
-        maxUploadSizeBytes: 20971520,
+        maxUploadSizeBytes: 52428800,
         sidebarCollapsedMode: "hidden",
         sidebarLogoPath: null,
         sidebarLogoDarkPath: null,
@@ -1214,7 +1214,7 @@ describe("FeatureConfigProvider", () => {
         userPreferencesEnabled: true,
         userPreferencesDataTabEnabled: false,
         messageFeedbackEditTimeLimitSeconds: null,
-        maxUploadSizeBytes: 20971520,
+        maxUploadSizeBytes: 52428800,
         sidebarCollapsedMode: "hidden",
         sidebarLogoPath: null,
         sidebarLogoDarkPath: null,
@@ -1261,7 +1261,7 @@ describe("FeatureConfigProvider", () => {
         userPreferencesEnabled: true,
         userPreferencesDataTabEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
-        maxUploadSizeBytes: 20971520,
+        maxUploadSizeBytes: 52428800,
         sidebarCollapsedMode: "hidden",
         sidebarLogoPath: null,
         sidebarLogoDarkPath: null,

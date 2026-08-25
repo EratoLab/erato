@@ -720,7 +720,7 @@ async fn process_virtual_files(
         .config
         .max_upload_size_bytes()
         .map(|v| v as usize)
-        .unwrap_or(20 * 1024 * 1024);
+        .unwrap_or(50 * 1024 * 1024);
 
     let mut converted = Vec::with_capacity(virtual_files.len());
     for vf in virtual_files {
