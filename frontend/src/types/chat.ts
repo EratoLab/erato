@@ -153,6 +153,8 @@ export interface Message {
   id: string;
   content: ContentPart[];
   role: "user" | "assistant" | "system";
+  /** Chat provider used for the generation associated with this message. */
+  chatProviderId?: string;
   createdAt: string;
   /**
    * Last-modified timestamp from the backend (ISO-8601). Set on persisted

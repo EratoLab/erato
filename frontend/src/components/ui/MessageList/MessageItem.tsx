@@ -6,6 +6,7 @@ import { useMessageEdit } from "./MessageEditContext";
 import { MessageEditor } from "./MessageEditor";
 import { ChatInputTokenUsage } from "../Chat/ChatInputTokenUsage";
 import { CHAT_MESSAGE_HOST_COMPONENTS, ChatMessage } from "../Chat/ChatMessage";
+import { ModelSwitchMarker } from "../Message/ModelSwitchMarker";
 
 import type { MessageEditContextValue } from "./MessageEditContext";
 import type { ChatMessageProps } from "../Chat/ChatMessage";
@@ -21,6 +22,7 @@ import type {
   MessageControlsContext,
 } from "@/types/message-controls";
 import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
+import type { ModelSwitch } from "@/utils/chat/modelSwitches";
 import type { ComponentType } from "react";
 
 export interface MessageItemProps {
@@ -40,6 +42,7 @@ export interface MessageItemProps {
   onFilePreview?: (file: FileUploadItem) => void;
   onViewFeedback?: (messageId: string, feedback: MessageFeedback) => void;
   allFilesById: Record<string, FileUploadItem>;
+  modelSwitch?: ModelSwitch;
 }
 
 // Memoized message item component with custom comparison
@@ -62,6 +65,7 @@ export const MessageItem = memo<MessageItemProps>(
     onFilePreview,
     onViewFeedback,
     allFilesById,
+    modelSwitch,
   }) => {
     const messageEdit = useMessageEdit();
 
@@ -70,6 +74,7 @@ export const MessageItem = memo<MessageItemProps>(
     if (messageEdit?.editingMessageId === messageId) {
       return (
         <div className={className}>
+          {modelSwitch && <ModelSwitchMarker {...modelSwitch} />}
           <MessageEditorRow
             message={message}
             messageEdit={messageEdit}
@@ -82,6 +87,7 @@ export const MessageItem = memo<MessageItemProps>(
 
     return (
       <div className={className}>
+        {modelSwitch && <ModelSwitchMarker {...modelSwitch} />}
         <Renderer
           key={messageId}
           message={mapMessageToUiMessage(message)}

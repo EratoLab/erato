@@ -1884,6 +1884,16 @@ msgid "chat.message.mermaid.showDiagram"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ModelSwitchMarker.tsx
+msgid "chat.message.modelChanged"
+msgstr "Modelo cambiado de {fromModel} a {toModel}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ModelSwitchMarker.tsx
+#~ msgid "chat.message.modelSwitched"
+#~ msgstr "Se cambió el modelo. Continuar esta conversación con un modelo diferente puede afectar a su contexto."
+
+#. js-lingui-explicit-id
 #: src/components/ui/MessageList/MessageEditor.tsx
 msgid "chat.messageEditor.ariaLabel"
 msgstr "Edita tu mensaje"

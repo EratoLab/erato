@@ -32,6 +32,7 @@ use crate::models::file_capability::{
 use crate::models::file_upload::{AudioTranscriptionMetadata, proxied_preview_url_for_file};
 use crate::models::message::{
     ContentPart, GenerationErrorType, GenerationMetadata, GenerationParameters, MessageSchema,
+    get_generation_chat_provider_id_from_message,
 };
 use crate::models::permissions;
 use crate::policy::engine::PolicyEngine;
@@ -1439,6 +1440,10 @@ pub struct ChatMessage {
     chat_id: String,
     /// Role of the message sender. May be on of "user", "assistant", "system"
     role: String,
+    /// The chat provider used to generate this message, if available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    chat_provider_id: Option<String>,
     /// The text content of the message
     content: Vec<ContentPart>,
     /// Optional error information if generation failed
@@ -2205,10 +2210,12 @@ impl ChatMessage {
         let mcp_servers_needing_auth = generation_metadata
             .as_ref()
             .and_then(|metadata| metadata.mcp_servers_needing_auth.clone());
+        let chat_provider_id = get_generation_chat_provider_id_from_message(&msg)?;
         Ok(ChatMessage {
             id: msg.id.to_string(),
             chat_id: msg.chat_id.to_string(),
             role: parsed_message.role.to_string(),
+            chat_provider_id,
             content: parsed_message.content,
             error,
             error_report: None,

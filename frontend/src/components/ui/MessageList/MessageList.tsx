@@ -31,6 +31,7 @@ import type {
   MessageControlsContext,
 } from "@/types/message-controls";
 import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
+import type { ModelSwitch } from "@/utils/chat/modelSwitches";
 import type { ComponentType } from "react";
 import type React from "react";
 
@@ -177,6 +178,9 @@ export interface MessageListProps {
    * Custom component to render when there are no messages
    */
   emptyStateComponent?: React.ReactNode;
+
+  /** Historical model switches keyed by the user message they precede. */
+  modelSwitches?: Record<string, ModelSwitch>;
 }
 
 const decodeRepeatedly = (value: string, maxIterations = 3): string => {
@@ -460,6 +464,7 @@ export const MessageList = memo<MessageListProps>(
     onViewFeedback,
     isTransitioning,
     emptyStateComponent,
+    modelSwitches,
   }) => {
     const uploadedFiles = useFileUploadStore((state) => state.uploadedFiles);
 
@@ -906,6 +911,7 @@ export const MessageList = memo<MessageListProps>(
                 onFilePreview={onFilePreview}
                 onViewFeedback={onViewFeedback}
                 allFilesById={allFilesById}
+                modelSwitches={modelSwitches}
               />
             ) : (
               <StandardMessageList
@@ -925,6 +931,7 @@ export const MessageList = memo<MessageListProps>(
                 onFilePreview={onFilePreview}
                 onViewFeedback={onViewFeedback}
                 allFilesById={allFilesById}
+                modelSwitches={modelSwitches}
               />
             )}
           </div>

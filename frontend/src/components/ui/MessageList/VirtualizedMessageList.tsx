@@ -14,6 +14,7 @@ import type {
   MessageControlsComponent,
   MessageControlsContext,
 } from "@/types/message-controls";
+import type { ModelSwitch } from "@/utils/chat/modelSwitches";
 import type { ComponentType } from "react";
 import type React from "react";
 
@@ -35,6 +36,7 @@ interface VirtualizedMessageListProps {
   onFilePreview?: (file: FileUploadItem) => void;
   onViewFeedback?: (messageId: string, feedback: MessageFeedback) => void;
   allFilesById: Record<string, FileUploadItem>;
+  modelSwitches?: Record<string, ModelSwitch>;
 }
 
 export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
@@ -54,6 +56,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
   onFilePreview,
   onViewFeedback,
   allFilesById,
+  modelSwitches,
 }) => {
   // Message renderer
   const renderMessages = useCallback(() => {
@@ -80,6 +83,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
           onViewFeedback={onViewFeedback}
           className={getMessageClassName(isNew)}
           allFilesById={allFilesById}
+          modelSwitch={modelSwitches?.[messageId]}
         />
       );
     });
@@ -100,6 +104,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
     onFilePreview,
     onViewFeedback,
     allFilesById,
+    modelSwitches,
   ]);
 
   return (
