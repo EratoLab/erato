@@ -3243,6 +3243,11 @@ msgstr "How should the assistant behave? e.g. Prefer concise bullet points"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.fields.defaultModel.label"
+msgstr "Default model"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.fields.jobTitle.label"
 msgstr "Job title"
 

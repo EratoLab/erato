@@ -3243,6 +3243,11 @@ msgstr "¿Cómo debería comportarse el asistente? p. ej. Prefiere viñetas conc
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.fields.defaultModel.label"
+msgstr "Modelo predeterminado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.fields.jobTitle.label"
 msgstr "Puesto de trabajo"
 

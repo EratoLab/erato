@@ -75,6 +75,10 @@ pub struct UserProfile {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub preference_assistant_additional_information: Option<String>,
+    /// The user's preferred default chat provider/model ID.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub preference_default_chat_provider: Option<String>,
 }
 
 impl UserProfile {
@@ -93,6 +97,7 @@ impl UserProfile {
             preference_job_title: None,
             preference_assistant_custom_instructions: None,
             preference_assistant_additional_information: None,
+            preference_default_chat_provider: None,
         }
     }
 
@@ -146,6 +151,7 @@ impl UserProfile {
             self.preference_assistant_custom_instructions = prefs.assistant_custom_instructions;
             self.preference_assistant_additional_information =
                 prefs.assistant_additional_information;
+            self.preference_default_chat_provider = prefs.default_chat_provider;
         }
     }
 }

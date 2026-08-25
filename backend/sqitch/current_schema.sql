@@ -515,6 +515,7 @@ CREATE TABLE public.user_preferences (
     job_title text,
     assistant_custom_instructions text,
     assistant_additional_information text,
+    default_chat_provider text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -1435,4 +1436,3 @@ ALTER TABLE ONLY public.user_tool_approval_settings
 --
 
 \unrestrict OM7cNXdBdyBvLZvgpYZtJmnVfBbiARdfWSfbAR86ERODzDTyXhtRLbkmz7CSgJk
-

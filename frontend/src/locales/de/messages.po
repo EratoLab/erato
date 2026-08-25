@@ -3243,6 +3243,11 @@ msgstr "Wie soll sich der Assistent verhalten? z. B. Bevorzuge knappe Stichpunkt
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.fields.defaultModel.label"
+msgstr "Standardmodell"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.fields.jobTitle.label"
 msgstr "Berufsbezeichnung"
 

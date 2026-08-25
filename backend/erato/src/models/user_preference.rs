@@ -10,6 +10,7 @@ pub struct UpdateUserPreferencesInput {
     pub job_title: Option<Option<String>>,
     pub assistant_custom_instructions: Option<Option<String>>,
     pub assistant_additional_information: Option<Option<String>>,
+    pub default_chat_provider: Option<Option<String>>,
 }
 
 pub async fn get_user_preferences(
@@ -40,6 +41,9 @@ pub async fn upsert_user_preferences(
             model.assistant_additional_information =
                 ActiveValue::Set(normalize_optional_text(value));
         }
+        if let Some(value) = input.default_chat_provider {
+            model.default_chat_provider = ActiveValue::Set(normalize_optional_text(value));
+        }
 
         Ok(model.update(conn).await?)
     } else {
@@ -52,6 +56,9 @@ pub async fn upsert_user_preferences(
             )),
             assistant_additional_information: ActiveValue::Set(normalize_optional_text(
                 input.assistant_additional_information.unwrap_or(None),
+            )),
+            default_chat_provider: ActiveValue::Set(normalize_optional_text(
+                input.default_chat_provider.unwrap_or(None),
             )),
             ..Default::default()
         };

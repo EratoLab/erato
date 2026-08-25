@@ -31,6 +31,7 @@ export interface ExpandedMeasurement {
   divider: Box | null;
   chatRows: Box[];
   chatTitles: Box[];
+  chatContentColumns: Box[];
   chatScrollbarWidth: number;
   footerTrigger: Box | null;
 }
@@ -211,6 +212,13 @@ export const measureExpanded = (page: Page): Promise<ExpandedMeasurement> =>
         // the title span and also carries a title attribute.
         chatRowEls.map((el) => el.querySelector("span.truncate[title]")),
       ),
+      chatContentColumns: requireBoxes(
+        // Attention indicators and optional chat icons are rendered inside
+        // this flex item, so the title itself is not a stable column anchor.
+        chatRowEls.map((el) =>
+          el.querySelector(":scope > div > div.flex.items-center"),
+        ),
+      ),
       chatScrollbarWidth: scroller
         ? scroller.offsetWidth - scroller.clientWidth
         : 0,
@@ -307,7 +315,7 @@ export const assertExpandedInvariants = (
     [
       ...m.navIcons.map((b) => b.left),
       ...m.sectionTitles.map((b) => b.left),
-      ...m.chatTitles.map((b) => b.left),
+      ...m.chatContentColumns.map((b) => b.left),
     ],
     "content column left edges",
   );

@@ -8794,6 +8794,13 @@
             ],
             "description": "Additional behaviour/style/tone preferences for the assistant."
           },
+          "preference_default_chat_provider": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Preferred default chat provider/model ID for new chats."
+          },
           "preference_job_title": {
             "type": [
               "string",
@@ -8859,6 +8866,10 @@
           "preference_assistant_custom_instructions": {
             "type": "string",
             "description": "Additional behaviour/style/tone preferences for the assistant."
+          },
+          "preference_default_chat_provider": {
+            "type": "string",
+            "description": "The user's preferred default chat provider/model ID."
           },
           "preference_job_title": {
             "type": "string",
