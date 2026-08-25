@@ -4801,6 +4801,10 @@
             "type": "string",
             "description": "The ID of the chat this message belongs to"
           },
+          "chat_provider_id": {
+            "type": "string",
+            "description": "The chat provider used to generate this message, if available."
+          },
           "content": {
             "type": "array",
             "items": {

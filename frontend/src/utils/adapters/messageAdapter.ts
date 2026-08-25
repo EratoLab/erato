@@ -52,6 +52,7 @@ export function mapApiMessageToUiMessage(
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     content: apiMessage.content ?? [],
     role: apiMessage.role as "user" | "assistant" | "system",
+    chatProviderId: apiMessage.chat_provider_id,
     sender: apiMessage.role,
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     createdAt: apiMessage.created_at ?? new Date().toISOString(),

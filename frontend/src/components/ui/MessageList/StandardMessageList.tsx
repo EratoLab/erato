@@ -12,6 +12,7 @@ import type {
   MessageControlsComponent,
   MessageControlsContext,
 } from "@/types/message-controls";
+import type { ModelSwitch } from "@/utils/chat/modelSwitches";
 import type { ComponentType } from "react";
 import type React from "react";
 
@@ -32,6 +33,7 @@ interface StandardMessageListProps {
   onFilePreview?: (file: FileUploadItem) => void;
   onViewFeedback?: (messageId: string, feedback: MessageFeedback) => void;
   allFilesById: Record<string, FileUploadItem>;
+  modelSwitches?: Record<string, ModelSwitch>;
 }
 
 export const StandardMessageList: React.FC<StandardMessageListProps> = ({
@@ -51,6 +53,7 @@ export const StandardMessageList: React.FC<StandardMessageListProps> = ({
   onFilePreview,
   onViewFeedback,
   allFilesById,
+  modelSwitches,
 }) => {
   return (
     <>
@@ -77,6 +80,7 @@ export const StandardMessageList: React.FC<StandardMessageListProps> = ({
             onViewFeedback={onViewFeedback}
             className={getMessageClassName(isNew)}
             allFilesById={allFilesById}
+            modelSwitch={modelSwitches?.[messageId]}
           />
         );
       })}

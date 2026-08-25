@@ -681,6 +681,10 @@ export type ChatMessage = {
    */
   chat_id: string;
   /**
+   * The chat provider used to generate this message, if available.
+   */
+  chat_provider_id?: string;
+  /**
    * The text content of the message
    */
   content: ContentPart[];
