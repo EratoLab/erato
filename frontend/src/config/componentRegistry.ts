@@ -76,6 +76,36 @@ export interface ChatAddMenuExtraContentProps {
 }
 
 /**
+ * Props for a kit/customer-provided start view hosted by the Office add-in
+ * shell. When registered, the Outlook task pane opens on this view instead of
+ * the chat and the shell renders an affordance to switch between the two.
+ * Everything the view may need is injected via props — registry components
+ * cannot import add-in-internal hooks.
+ */
+export interface AddinStartViewProps {
+  /** Switch the task pane to the regular chat view. */
+  openChat: () => void;
+  /** Host platform identifier (e.g. "outlook"), as stamped on X-Erato-Platform. */
+  platform: string;
+  /**
+   * Acquire an access token for the given scopes via the shell's auth source
+   * (MSAL NAA or standard PCA). Custom API resource scopes must be requested
+   * alone (MSAL forbids mixing resources in one request), and callers should
+   * pass `suppressSignInPrompt` for optional scopes whose absence they degrade
+   * on. Absent on hosts without client-side auth (e.g. Exchange on-prem behind
+   * oauth2-proxy) — the view MUST render a usable state without it.
+   */
+  acquireToken?: (
+    scopes: string[],
+    options?: {
+      forceRefresh?: boolean;
+      allowInteraction?: boolean;
+      suppressSignInPrompt?: boolean;
+    },
+  ) => Promise<string>;
+}
+
+/**
  * Registry of overridable components.
  * Each key maps to either a custom component or null (use default).
  */
@@ -221,6 +251,17 @@ export interface ComponentRegistry {
    * summary card (`DefaultEratoAppointmentCodeBlock`).
    */
   EratoAppointmentCodeBlock: ComponentType<EratoAppointmentCodeBlockProps> | null;
+
+  /**
+   * Start view hosted by the Office add-in shell (Outlook task pane). When a
+   * kit registers it, the task pane opens on this view first and the shell
+   * shows a toggle to switch to the regular chat and back. When null, the
+   * add-in opens directly in chat (default behavior).
+   *
+   * Consulted only by the Outlook add-in shell — the web app and the Teams
+   * tab never read it.
+   */
+  AddinStartView: ComponentType<AddinStartViewProps> | null;
 }
 
 type ComponentRegistryComponent<TKey extends keyof ComponentRegistry> = Exclude<
@@ -269,6 +310,7 @@ const emptyComponentRegistry = (): ComponentRegistry => ({
   ChatTopLeftAccessory: null,
   EratoEmailCodeBlock: null,
   EratoAppointmentCodeBlock: null,
+  AddinStartView: null,
 });
 
 const buildComponentRegistry = (
