@@ -7,6 +7,8 @@
 import { t } from "@lingui/core/macro";
 import { useMemo, useState } from "react";
 
+import { getOptionalTranslation } from "@/hooks/i18n";
+
 import { DropdownMenu } from "../Controls/DropdownMenu";
 import { ChevronDownIcon, ResolvedIcon } from "../icons";
 
@@ -44,13 +46,7 @@ function resolveModelDescription(model: ChatModel): string | null {
 
   // eslint-disable-next-line lingui/no-unlocalized-strings -- Translation key is dynamic by chat provider ID
   const translationId = `chat_models.${model.chat_provider_id}.description`;
-  // eslint-disable-next-line lingui/no-single-variables-to-translate
-  const translatedDescription = t({ id: translationId, message: "" });
-  if (translatedDescription && translatedDescription !== translationId) {
-    return translatedDescription;
-  }
-
-  return model.model_description;
+  return getOptionalTranslation(translationId) ?? model.model_description;
 }
 
 export function ModelSelectorOptionContent({

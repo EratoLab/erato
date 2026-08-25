@@ -3,6 +3,7 @@ import { skipToken } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 
 import { useChatInputControls } from "@/components/ui/Chat/ChatInputControlsContext";
+import { getOptionalTranslation } from "@/hooks/i18n";
 import { useStarterPrompts } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useStarterPromptsFeature } from "@/providers/FeatureConfigProvider";
 
@@ -17,13 +18,7 @@ function resolveStarterPromptTranslation(
   translationId: string,
   fallback: string,
 ): string {
-  // eslint-disable-next-line lingui/no-single-variables-to-translate
-  const translatedValue = t({ id: translationId, message: "" });
-  if (translatedValue && translatedValue !== translationId) {
-    return translatedValue;
-  }
-
-  return fallback;
+  return getOptionalTranslation(translationId) ?? fallback;
 }
 
 function getStarterPromptTitle(starterPrompt: StarterPromptInfo): string {

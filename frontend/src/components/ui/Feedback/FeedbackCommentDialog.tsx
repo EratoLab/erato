@@ -4,6 +4,8 @@ import { t } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
 import { useState, useCallback, useEffect } from "react";
 
+import { getOptionalTranslation } from "@/hooks/i18n";
+
 import { Button } from "../Controls/Button";
 import { Textarea } from "../Input/Textarea";
 import { ModalBase } from "../Modal/ModalBase";
@@ -125,31 +127,19 @@ export const FeedbackCommentDialog: React.FC<FeedbackCommentDialogProps> = ({
             onKeyDown={handleKeyDown}
             placeholder={(() => {
               // Try to get sentiment-specific placeholder first
-              let sentimentPlaceholder =
+              const sentimentPlaceholder =
                 sentiment === "positive"
-                  ? t({
-                      id: "feedback.comment.placeholder.positive",
-                      message: "", // eslint-disable-line lingui/no-single-variables-to-translate
-                    })
-                  : t({
-                      id: "feedback.comment.placeholder.negative",
-                      message: "", // eslint-disable-line lingui/no-single-variables-to-translate
-                    });
-
-              // In case no override is provided, lingui falls back to fill in the msgId.
-              // In this case we clear the string.
-              if (
-                sentimentPlaceholder ===
-                  "feedback.comment.placeholder.positive" ||
-                sentimentPlaceholder === "feedback.comment.placeholder.negative"
-              ) {
-                sentimentPlaceholder = "";
-              }
+                  ? getOptionalTranslation(
+                      "feedback.comment.placeholder.positive",
+                    )
+                  : getOptionalTranslation(
+                      "feedback.comment.placeholder.negative",
+                    );
 
               // If sentiment-specific placeholder is provided (not empty), use it
               // Otherwise fall back to the default placeholder
               return (
-                sentimentPlaceholder ||
+                sentimentPlaceholder ??
                 t({
                   id: "feedback.comment.placeholder",
                   message: "What could have been better?",
