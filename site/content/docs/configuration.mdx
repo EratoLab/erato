@@ -891,6 +891,7 @@ Each provider in `chat_providers.providers` supports the following fields:
 
 - **`provider_kind`** - The type of chat provider (`"openai"`, `"azure_openai"`, `"ollama"`)
 - **`model_name`** - The model identifier for the provider
+- **`validate_availability`** - Optional; when `true`, query the provider's model listing endpoint and only expose this model when it is returned
 - **`model_display_name`** - Optional display name for the model (falls back to `model_name`)
 - **`model_description`** - Optional frontend description shown below the model name; translatable via `chat_models.<chat-provider-id>.description`
 - **`model_icon`** - Optional frontend icon id, for example `iconoir-*`, `simpleicons-*`, `builtin-chatgpt`, or `/path/to/icon.svg`
@@ -927,6 +928,18 @@ The name of the model to use with the chat provider.
 **Type:** `string`
 
 **Example:** `"gpt-4o"`
+
+##### `chat_providers.providers.<provider-id>.validate_availability`
+
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.validate_availability */}
+
+Whether to query the provider's model listing endpoint before exposing this model in the UI. The request uses the configured base URL, request parameters, request headers, and API key. Header templates are rendered with the current user's context.
+
+**Type:** `boolean`
+
+**Default:** `false`
+
+**Example:** `true`
 
 ##### `chat_providers.providers.<provider-id>.model_display_name`
 

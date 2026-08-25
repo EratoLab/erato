@@ -318,6 +318,7 @@ mod test_cases {
         ChatProviderConfig {
             provider_kind: "openai".to_string(),
             model_name: "gpt-4".to_string(),
+            validate_availability: false,
             model_display_name: Some("GPT-4".to_string()),
             model_description: None,
             model_icon: None,

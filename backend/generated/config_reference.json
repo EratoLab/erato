@@ -213,6 +213,9 @@
   "chat_provider.system_prompt_langfuse.prompt_name": {
     "hide_in_docs": true
   },
+  "chat_provider.validate_availability": {
+    "hide_in_docs": true
+  },
   "chat_providers.all_providers.guardrails.filter_input_prompt_injection.enabled": {},
   "chat_providers.all_providers.guardrails.filter_input_prompt_injection.exclude_pattern_ids.[]": {},
   "chat_providers.all_providers.guardrails.filter_input_prompt_injection.filter_pattern_ids.[]": {},
@@ -258,6 +261,7 @@
   "chat_providers.providers.<provider-id>.system_prompt.prompt_name": {},
   "chat_providers.providers.<provider-id>.system_prompt.source": {},
   "chat_providers.providers.<provider-id>.system_prompt_langfuse.prompt_name": {},
+  "chat_providers.providers.<provider-id>.validate_availability": {},
   "chat_providers.summary.max_tokens": {},
   "chat_providers.summary.summary_chat_provider_id": {},
   "chat_providers.summary.system_prompt": {},

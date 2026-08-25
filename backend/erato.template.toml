@@ -47,6 +47,7 @@ priority_order = ["test-token-limit"]
 [chat_providers.providers.test-token-limit]
 provider_kind = "ollama"
 model_name = "smollm2:135m"
+# validate_availability = false  # Optional: only expose the model when it is returned by the provider's model list endpoint.
 model_display_name = "Test Model (Low Token Limit)"
 # model_description = "A short description shown below the model name in the frontend."
 # model_icon = "simpleicons-anthropic" # Optional: iconoir-*, simpleicons-*, builtin-chatgpt, or /custom/path.svg

@@ -29,6 +29,7 @@ use reqwest;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use sea_orm::prelude::Uuid;
 use sea_orm::{ConnectOptions, Database, DatabaseConnection};
+use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::str::FromStr;
@@ -36,6 +37,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, RwLock, Semaphore};
 use tracing::instrument;
+use url::Url;
 
 const ENCRYPTED_VALUE_PREFIX: &str = "enc-v1";
 const DEFAULT_SUMMARY_SYSTEM_PROMPT: &str = "Generate a summary for the topic of the following chat, based on the first message to the chat. The summary should be a short single sentence description like e.g. `Regex Search-and-Replace with Ripgrep` or `Explain a customer support handoff`. Only return that sentence and nothing else.";
@@ -573,6 +575,19 @@ impl AppState {
         subject: &Subject,
         user_groups: &[String],
     ) -> Result<Vec<AvailableModel>, Report> {
+        self.available_models_with_headers_context(policy, subject, user_groups, None)
+            .await
+    }
+
+    /// Get available chat models for a user, using the same per-user header
+    /// context as generation when validating provider availability.
+    pub async fn available_models_with_headers_context<'a>(
+        &self,
+        policy: &PolicyEngine,
+        subject: &Subject,
+        user_groups: &[String],
+        chat_provider_headers_context: Option<&ChatProviderHeadersContext<'a>>,
+    ) -> Result<Vec<AvailableModel>, Report> {
         let chat_provider_allowlist = self
             .determine_chat_provider_allowlist_for_user(policy, subject, user_groups)
             .await?;
@@ -584,18 +599,99 @@ impl AppState {
             .config
             .available_chat_providers(allowlist_refs.as_deref());
 
-        Ok(available_provider_ids
-            .into_iter()
-            .map(|provider_id| {
-                let config = self.config.get_chat_provider(provider_id);
-                AvailableModel {
-                    chat_provider_id: provider_id.to_string(),
-                    model_display_name: config.model_display_name().to_string(),
-                    model_description: config.model_description.clone(),
-                    model_icon: config.model_icon.clone(),
+        let mut available_models = Vec::with_capacity(available_provider_ids.len());
+        for provider_id in available_provider_ids {
+            let config = self.config.get_chat_provider(provider_id);
+            if config.validate_availability {
+                match self
+                    .chat_provider_model_is_available(config, chat_provider_headers_context)
+                    .await
+                {
+                    Ok(true) => {}
+                    Ok(false) => {
+                        tracing::info!(
+                            chat_provider_id = provider_id,
+                            model_name = %config.model_name,
+                            "Skipping unavailable chat model"
+                        );
+                        continue;
+                    }
+                    Err(error) => {
+                        tracing::warn!(
+                            chat_provider_id = provider_id,
+                            model_name = %config.model_name,
+                            %error,
+                            "Failed to validate chat model availability; skipping model"
+                        );
+                        continue;
+                    }
                 }
-            })
-            .collect())
+            }
+
+            available_models.push(AvailableModel {
+                chat_provider_id: provider_id.to_string(),
+                model_display_name: config.model_display_name().to_string(),
+                model_description: config.model_description.clone(),
+                model_icon: config.model_icon.clone(),
+            });
+        }
+
+        Ok(available_models)
+    }
+
+    async fn chat_provider_model_is_available<'a>(
+        &self,
+        config: &ChatProviderConfig,
+        chat_provider_headers_context: Option<&ChatProviderHeadersContext<'a>>,
+    ) -> Result<bool, Report> {
+        let mut url = Url::parse(
+            config
+                .base_url
+                .as_deref()
+                .unwrap_or_else(|| default_model_list_base_url(&config.provider_kind)),
+        )?;
+
+        let list_path = if config.provider_kind == "ollama" && config.base_url.is_none() {
+            "api/tags"
+        } else {
+            "models"
+        };
+        append_url_path(&mut url, list_path)?;
+        for (key, value) in config.additional_request_parameters_map() {
+            url.query_pairs_mut().append_pair(&key, &value);
+        }
+
+        let mut headers = Self::build_request_headers(config, chat_provider_headers_context)?;
+        if let Some(api_key) = &config.api_key {
+            let (header_name, header_value) = match config.provider_kind.as_str() {
+                "gemini" => ("x-goog-api-key", api_key.expose_secret().to_string()),
+                "ollama" => ("", String::new()),
+                _ => (
+                    "authorization",
+                    format!("Bearer {}", api_key.expose_secret()),
+                ),
+            };
+            if !header_name.is_empty() {
+                headers.insert(
+                    HeaderName::from_static(header_name),
+                    HeaderValue::from_str(&header_value)?,
+                );
+            }
+        }
+
+        let response = reqwest::Client::builder()
+            .default_headers(headers)
+            .build()?
+            .get(url.clone())
+            .send()
+            .await?
+            .error_for_status()?;
+        let body: JsonValue = response.json().await?;
+        let model_names = model_names_from_listing_response(body)?;
+
+        Ok(model_names
+            .iter()
+            .any(|model_name| model_name == &config.model_name))
     }
 
     pub fn default_file_storage_provider(&self) -> &FileStorage {
@@ -650,24 +746,7 @@ impl AppState {
     ) -> Result<GenaiClient, Report> {
         let base_url = config.base_url.clone();
         let request_params = config.additional_request_parameters_map();
-        let request_headers = config.additional_request_headers_map();
-        let header_renderer = ChatProviderHeadersRenderer::new();
-        let request_headers = request_headers
-            .into_iter()
-            .map(|(key, value)| {
-                let rendered_value = chat_provider_headers_context.map_or_else(
-                    || value.to_string(),
-                    |ctx| header_renderer.render(&value, ctx),
-                );
-                (key, rendered_value)
-            })
-            .collect::<HashMap<_, _>>();
-
-        // Add default headers if specified
-        let mut header_map = HeaderMap::new();
-        for (key, value) in request_headers {
-            header_map.insert(HeaderName::from_str(&key)?, HeaderValue::from_str(&value)?);
-        }
+        let header_map = Self::build_request_headers(&config, chat_provider_headers_context)?;
 
         let custom_client = reqwest::ClientBuilder::new()
             .default_headers(header_map)
@@ -735,6 +814,25 @@ impl AppState {
             },
         )).build();
         Ok(genai_client)
+    }
+
+    fn build_request_headers<'a>(
+        config: &ChatProviderConfig,
+        chat_provider_headers_context: Option<&ChatProviderHeadersContext<'a>>,
+    ) -> Result<HeaderMap, Report> {
+        let header_renderer = ChatProviderHeadersRenderer::new();
+        let mut headers = HeaderMap::new();
+        for (key, value) in config.additional_request_headers_map() {
+            let rendered_value = chat_provider_headers_context.map_or_else(
+                || value.to_string(),
+                |ctx| header_renderer.render(&value, ctx),
+            );
+            headers.insert(
+                HeaderName::from_str(&key)?,
+                HeaderValue::from_str(&rendered_value)?,
+            );
+        }
+        Ok(headers)
     }
 
     fn build_file_storage_providers(
@@ -961,6 +1059,39 @@ fn extract_system_prompt_from_langfuse_prompt(prompt: &LangfusePrompt) -> Result
     }
 }
 
+fn default_model_list_base_url(provider_kind: &str) -> &str {
+    match provider_kind {
+        "ollama" => "http://localhost:11434/",
+        "gemini" | "vertex_ai" => "https://generativelanguage.googleapis.com/v1beta/",
+        _ => "https://api.openai.com/v1/",
+    }
+}
+
+fn append_url_path(url: &mut Url, path: &str) -> Result<(), Report> {
+    let base_path = url.path().trim_end_matches('/');
+    url.set_path(&format!("{base_path}/{path}"));
+    Ok(())
+}
+
+fn model_names_from_listing_response(body: JsonValue) -> Result<Vec<String>, Report> {
+    let models = body
+        .get("data")
+        .or_else(|| body.get("models"))
+        .and_then(JsonValue::as_array)
+        .ok_or_else(|| eyre::eyre!("Model listing response did not contain a model array"))?;
+
+    Ok(models
+        .iter()
+        .filter_map(|model| {
+            model
+                .get("id")
+                .or_else(|| model.get("name"))
+                .and_then(JsonValue::as_str)
+                .map(|name| name.strip_prefix("models/").unwrap_or(name).to_string())
+        })
+        .collect())
+}
+
 pub struct ChatProviderConfigWithId {
     pub chat_provider_id: String,
     pub chat_provider_config: ChatProviderConfig,
@@ -976,5 +1107,43 @@ pub fn default_endpoint(kind: AdapterKind) -> Endpoint {
             Endpoint::from_static("https://generativelanguage.googleapis.com/v1beta/openai/")
         }
         _ => unimplemented!("Default endpoint not implemented for this adapter kind"),
+    }
+}
+
+#[cfg(test)]
+mod model_listing_tests {
+    use super::{append_url_path, model_names_from_listing_response};
+    use serde_json::json;
+    use url::Url;
+
+    #[test]
+    fn parses_openai_model_listing() {
+        let models = model_names_from_listing_response(json!({
+            "data": [{"id": "gpt-5"}, {"id": "other-model"}]
+        }))
+        .unwrap();
+
+        assert_eq!(models, ["gpt-5", "other-model"]);
+    }
+
+    #[test]
+    fn parses_gemini_model_listing_and_removes_prefix() {
+        let models = model_names_from_listing_response(json!({
+            "models": [{"name": "models/gemini-2.5-flash"}]
+        }))
+        .unwrap();
+
+        assert_eq!(models, ["gemini-2.5-flash"]);
+    }
+
+    #[test]
+    fn appends_model_path_without_discarding_existing_path_or_query() {
+        let mut url = Url::parse("https://gateway.example/v1/?tenant=acme").unwrap();
+        append_url_path(&mut url, "models").unwrap();
+
+        assert_eq!(
+            url.as_str(),
+            "https://gateway.example/v1/models?tenant=acme"
+        );
     }
 }

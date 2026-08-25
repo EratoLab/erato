@@ -1863,6 +1863,10 @@ pub struct ChatProviderConfig {
     //
     // E.g. `gpt-4o`
     pub model_name: String,
+    // Whether to query the provider's model listing endpoint before exposing
+    // this model to users. Defaults to `false`.
+    #[serde(default)]
+    pub validate_availability: bool,
     // The display name for the model shown to users.
     // Falls back to model_name if not provided.
     pub model_display_name: Option<String>,
@@ -2026,6 +2030,7 @@ impl ChatProviderConfig {
         Ok(ChatProviderConfig {
             provider_kind: provider_kind.to_string(),
             model_name: self.model_name,
+            validate_availability: self.validate_availability,
             model_display_name: self.model_display_name,
             model_description: self.model_description,
             model_icon: self.model_icon,
