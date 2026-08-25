@@ -92,6 +92,7 @@ use crate::services::file_storage::{
 use crate::services::genai::build_chat_options_for_completion;
 use crate::services::sentry::log_internal_server_error;
 use crate::services::template_rendering::consumers::error_report::ErrorReportRenderer;
+use crate::services::template_rendering::contexts::chat_provider_headers::ChatProviderHeadersContext;
 use crate::services::template_rendering::contexts::error_report::ErrorReportContext;
 use crate::state::{AppState, ChatProviderConfigWithId};
 use axum::extract::{DefaultBodyLimit, Path, State};
@@ -4011,7 +4012,15 @@ pub async fn available_models(
     Extension(policy): Extension<PolicyEngine>,
 ) -> Result<Json<Vec<ChatModel>>, StatusCode> {
     let models = app_state
-        .available_models(&policy, &me_user.to_subject(), &me_user.groups)
+        .available_models_with_headers_context(
+            &policy,
+            &me_user.to_subject(),
+            &me_user.groups,
+            Some(&ChatProviderHeadersContext::new(
+                &me_user.id,
+                &me_user.id_token_claims,
+            )),
+        )
         .await
         .map_err(log_internal_server_error)?
         .into_iter()
