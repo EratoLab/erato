@@ -61,10 +61,12 @@ export interface AddinSessionControllerProps {
 
 type RecentChatsResult = ReturnType<typeof useInfiniteRecentChats>;
 
-// The server-default listing shape (every type, archived excluded).
+// The server-default listing shape (every type, archived and delegated runs
+// excluded).
 const SESSION_LISTING_FILTERS: RecentChatsListFilters = {
   typeFilter: "all",
   statusFilter: "active",
+  delegatedFilter: "hidden",
 };
 
 export function AddinChatProviderCore({
@@ -78,14 +80,19 @@ export function AddinChatProviderCore({
   SessionController?: ComponentType<AddinSessionControllerProps>;
 }) {
   const filterStore = getAddinChatHistoryFilterStore(platform);
-  const { enabled: assistantsEnabled } = useAssistantsFeature();
-  useChatHistoryFilterFoldback(assistantsEnabled, filterStore);
+  const { enabled: assistantsEnabled, delegationEnabled } =
+    useAssistantsFeature();
+  useChatHistoryFilterFoldback(
+    { assistantsEnabled, delegationEnabled },
+    filterStore,
+  );
 
   const typeFilter = filterStore((state) => state.typeFilter);
   const statusFilter = filterStore((state) => state.statusFilter);
+  const delegatedFilter = filterStore((state) => state.delegatedFilter);
   const filters = useMemo<RecentChatsListFilters>(
-    () => ({ typeFilter, statusFilter }),
-    [typeFilter, statusFilter],
+    () => ({ typeFilter, statusFilter, delegatedFilter }),
+    [typeFilter, statusFilter, delegatedFilter],
   );
   const history = useInfiniteRecentChats({ filters });
   const chats = history.chats;

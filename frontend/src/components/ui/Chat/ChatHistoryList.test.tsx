@@ -80,6 +80,118 @@ describe("ChatHistoryList", () => {
     useConfirmationRegistryStore.setState({ pendingIdsByChatId: {} });
   });
 
+  describe("delegated run rows", () => {
+    const run: ChatSession = {
+      id: "run-1",
+      title: "Draft the summary",
+      messages: [],
+      updatedAt: new Date("2024-01-03").toISOString(),
+      provenanceKind: "delegation",
+      originChatId: "origin-1",
+      originChatTitle: "Q3 planning",
+      metadata: { fileCount: 0 },
+    };
+
+    const renderRun = async (session: ChatSession) => {
+      const { i18n } = await import("@lingui/core");
+      return render(
+        <I18nProvider i18n={i18n}>
+          <ChatHistoryList
+            sessions={[session]}
+            currentSessionId={null}
+            onSessionSelect={vi.fn()}
+          />
+        </I18nProvider>,
+      );
+    };
+
+    it("labels the row with where the run came from", async () => {
+      await renderRun(run);
+
+      expect(
+        screen.getByTestId("chat-history-item-run-origin"),
+      ).toHaveTextContent("From Q3 planning");
+    });
+
+    it("keeps its status from the durable outcome with an empty store", async () => {
+      // The cold-start case the whole facet exists for: nothing seeded the
+      // in-memory store, so only the listing's own outcome can carry it.
+      await renderRun({ ...run, delegatedRunOutcome: "failed" });
+
+      expect(screen.getByTestId("chat-generation-status")).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: /Draft the summary/ }),
+      ).toHaveAccessibleName(/failed|error/i);
+    });
+
+    it("lets a live store status outrank a recorded outcome", async () => {
+      useGenerationStatusStore.setState({
+        statusByChatId: {
+          "run-1": {
+            kind: "running",
+            startedAt: new Date().toISOString(),
+            localSeenAt: Date.now(),
+          },
+        },
+        currentChatId: null,
+      });
+
+      await renderRun({ ...run, delegatedRunOutcome: "completed" });
+
+      expect(
+        screen.getByRole("link", { name: /Draft the summary/ }),
+      ).toHaveAccessibleName(/generating|running/i);
+    });
+
+    it("leaves ordinary chats without an origin line", async () => {
+      await renderRun(sessions[0]);
+
+      expect(
+        screen.queryByTestId("chat-history-item-run-origin"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("withholds Remove from a run but keeps it on ordinary chats", async () => {
+      // Archiving a run neither checks nor cancels an in-flight generation,
+      // strands one parked on a tool approval, and cannot be undone.
+      const { i18n } = await import("@lingui/core");
+      const ui = (session: ChatSession) => (
+        <I18nProvider i18n={i18n}>
+          <ChatHistoryList
+            sessions={[session]}
+            currentSessionId={null}
+            onSessionSelect={vi.fn()}
+            onSessionArchive={vi.fn()}
+          />
+        </I18nProvider>
+      );
+
+      const { rerender } = render(ui(run));
+      expect(
+        screen.queryByRole("button", { name: "Remove" }),
+      ).not.toBeInTheDocument();
+
+      rerender(ui(sessions[0]));
+      expect(
+        screen.getByRole("button", { name: "Remove" }),
+      ).toBeInTheDocument();
+    });
+
+    it("lets a pending confirmation outrank a recorded outcome", async () => {
+      // The registry is the only channel for the open chat's parked approval;
+      // dropping it would let a stale "completed" hide a decision to make.
+      useConfirmationRegistryStore.setState({
+        pendingIdsByChatId: { "run-1": ["approval-1"] },
+      });
+
+      await renderRun({ ...run, delegatedRunOutcome: "completed" });
+
+      expect(
+        screen.getByRole("link", { name: /Draft the summary/ }),
+      ).toHaveAccessibleName(/action required/i);
+    });
+  });
+
   it("adds pin icons and disables pinning when the limit is reached", async () => {
     const { i18n } = await import("@lingui/core");
     render(

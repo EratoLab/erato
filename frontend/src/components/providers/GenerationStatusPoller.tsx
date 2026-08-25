@@ -114,15 +114,28 @@ export const patchTerminalChats = (
  * store. Renders nothing; otherwise the query is fully disabled (zero idle
  * requests). Parked chats keep the poll alive so a decision made on another
  * device or tab clears the indicator here.
+ *
+ * `seedOnMount` buys one request out of that idleness. The store is
+ * in-memory, and the listings that seed it hide delegated runs, so a surface
+ * that reloads often would otherwise come back knowing nothing about a
+ * background run it launched itself — and never start polling, because the
+ * poll is driven by what the store already knows. `/me/generating` is the
+ * only listing that carries those runs, so surfaces with that lifecycle (the
+ * add-in pane) ask it once on mount; the poll then either continues from
+ * what came back, or falls straight back to idle.
  */
-export function GenerationStatusPoller() {
+export function GenerationStatusPoller({
+  seedOnMount = false,
+}: {
+  seedOnMount?: boolean;
+} = {}) {
   const pollDriverCount = useGenerationStatusStore(selectPollDriverCount);
   const queryClient = useQueryClient();
 
   const { data, dataUpdatedAt } = useGeneratingChats(
     {},
     {
-      enabled: pollDriverCount > 0,
+      enabled: seedOnMount || pollDriverCount > 0,
       staleTime: 0,
       refetchOnWindowFocus: false,
       refetchInterval: pollInterval,

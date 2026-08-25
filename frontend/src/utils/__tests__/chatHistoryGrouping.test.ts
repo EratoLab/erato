@@ -5,6 +5,8 @@ import enMessages from "@/locales/en/messages.json";
 import {
   groupChatSessions,
   resolveChatAttentionStatus,
+  resolveSessionRowStatus,
+  sessionNeedsAttention,
   type GroupChatSessionsDeps,
 } from "@/utils/chatHistoryGrouping";
 
@@ -47,6 +49,63 @@ const localIso = (
   day: number,
   hour = 12,
 ): string => new Date(year, month, day, hour).toISOString();
+
+describe("resolveSessionRowStatus / sessionNeedsAttention", () => {
+  const startedAt = new Date(2026, 7, 14, 15, 0).toISOString();
+  const run = {
+    provenanceKind: "delegation",
+    delegatedRunOutcome: "failed",
+  };
+
+  it("reads a delegated run's status from its durable outcome", () => {
+    // The cold store after a reload: the listing seeds only running and
+    // action_required, never a terminal outcome.
+    expect(resolveSessionRowStatus(run, undefined, false)).toBe("error");
+    expect(resolveChatAttentionStatus(undefined, false)).toBeNull();
+  });
+
+  it("keeps the dot and the Unread bucket in agreement", () => {
+    // The defect this pair exists to prevent: a red dot under a bucket that
+    // means "nothing needs your attention".
+    expect(sessionNeedsAttention(run, undefined, false)).toBe(true);
+    expect(sessionNeedsAttention({}, undefined, false)).toBe(false);
+  });
+
+  it("lets a pending confirmation outrank a run's recorded outcome", () => {
+    expect(
+      resolveSessionRowStatus(
+        { ...run, delegatedRunOutcome: "completed" },
+        undefined,
+        true,
+      ),
+    ).toBe("action_required");
+  });
+
+  it("stops a dismissed run from sitting in Unread forever", () => {
+    // The tombstone keeps reporting the consumed outcome as a status column,
+    // which is what makes the dot survive dismissal — but the user answered
+    // it, so it is no longer asking anything.
+    const dismissed: ChatGenerationStatus = {
+      kind: "cleared",
+      startedAt,
+      consumed: "finished",
+    };
+
+    // The durable outcome outranks the tombstone, so a dismissed failed run
+    // rightly keeps its red dot — dismissal answers the notification, not the
+    // failure. Only the bucket changes.
+    expect(resolveSessionRowStatus(run, dismissed, false)).toBe("error");
+    expect(sessionNeedsAttention(run, dismissed, false)).toBe(false);
+
+    // With no durable outcome the dot falls back to the consumed one, and
+    // that must not re-enter Unread either.
+    const noOutcome = { provenanceKind: "delegation" };
+    expect(resolveSessionRowStatus(noOutcome, dismissed, false)).toBe(
+      "finished",
+    );
+    expect(sessionNeedsAttention(noOutcome, dismissed, false)).toBe(false);
+  });
+});
 
 describe("resolveChatAttentionStatus", () => {
   const running: ChatGenerationStatus = {

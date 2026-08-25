@@ -3,7 +3,7 @@ import { useMemo } from "react";
 
 import {
   groupChatSessions,
-  resolveChatAttentionStatus,
+  sessionNeedsAttention,
 } from "@/utils/chatHistoryGrouping";
 
 import { useConfirmationRegistryStore } from "./store/confirmationRegistryStore";
@@ -36,10 +36,11 @@ export function useGroupedChatSessions(
         now: new Date(),
         locale: i18n.locale,
         needsAttention: (session) =>
-          resolveChatAttentionStatus(
+          sessionNeedsAttention(
+            session,
             statusByChatId[session.id],
             (pendingIdsByChatId[session.id]?.length ?? 0) > 0,
-          ) !== null,
+          ),
       }),
     [sessions, groupBy, i18n.locale, statusByChatId, pendingIdsByChatId],
   );

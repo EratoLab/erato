@@ -18,13 +18,9 @@ import {
   useChatHistoryFilterFoldback,
   useSanitizedChatHistoryFilters,
 } from "@/hooks/chat/store/chatHistoryFilterStore";
-import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
-import {
-  selectAttentionCount,
-  selectRunningCount,
-  useGenerationStatusStore,
-} from "@/hooks/chat/store/generationStatusStore";
+import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
+import { useGenerationIndicatorCount } from "@/hooks/chat/useGenerationIndicatorCount";
 import { useGroupedChatSessions } from "@/hooks/chat/useGroupedChatSessions";
 import { useResponsiveCollapsedMode, useThemedIcon } from "@/hooks/ui";
 import { usePersistedState } from "@/hooks/usePersistedState";
@@ -80,33 +76,6 @@ const ASSISTANTS_SECTION_EXPANDED_STORAGE_KEY =
   "erato.sidebar.assistantsSectionExpanded";
 
 const GENERATION_ANNOUNCE_DEBOUNCE_MS = 1000;
-
-/**
- * Running + session-observed finished/error + chats awaiting a tool
- * decision. The latter come from two channels — the mount-driven
- * confirmation registry (open chat) and the server-seeded status store
- * (everything else) — deduplicated by chat id.
- */
-const useGenerationIndicatorCount = (): number => {
-  const runningCount = useGenerationStatusStore(selectRunningCount);
-  const attentionCount = useGenerationStatusStore(selectAttentionCount);
-  const statusByChatId = useGenerationStatusStore(
-    (state) => state.statusByChatId,
-  );
-  const pendingIdsByChatId = useConfirmationRegistryStore(
-    (state) => state.pendingIdsByChatId,
-  );
-  const actionRequiredCount = useMemo(() => {
-    const chatIds = new Set(Object.keys(pendingIdsByChatId));
-    for (const [chatId, status] of Object.entries(statusByChatId)) {
-      if (status?.kind === "action_required") {
-        chatIds.add(chatId);
-      }
-    }
-    return chatIds.size;
-  }, [pendingIdsByChatId, statusByChatId]);
-  return runningCount + attentionCount + actionRequiredCount;
-};
 
 /**
  * Count badge for the collapsed-rail toggles; anchors on the nearest
@@ -490,6 +459,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     // Get assistants feature flag
     const {
       enabled: assistantsEnabled,
+      delegationEnabled,
       showRecentItems: assistantsShowRecent,
       showRecentItemsCollapsible: assistantsShowRecentCollapsible,
     } = useAssistantsFeature();
@@ -525,10 +495,11 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       (state) => state.statusByChatId,
     );
 
-    useChatHistoryFilterFoldback(assistantsEnabled);
+    const filterCapabilities = { assistantsEnabled, delegationEnabled };
+    useChatHistoryFilterFoldback(filterCapabilities);
 
     const chatHistoryFilters =
-      useSanitizedChatHistoryFilters(assistantsEnabled);
+      useSanitizedChatHistoryFilters(filterCapabilities);
     // Grouped-mode collapse state is per-mount on purpose: date-bucket keys
     // churn daily, so persisting them would accumulate stale entries.
     const [collapsedGroupKeys, setCollapsedGroupKeys] = useState<
@@ -918,6 +889,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                         actions={
                           <ChatHistoryFilterMenu
                             assistantsEnabled={assistantsEnabled}
+                            delegationEnabled={delegationEnabled}
                           />
                         }
                       >
@@ -955,6 +927,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                         >
                           <ChatHistoryFilterMenu
                             assistantsEnabled={assistantsEnabled}
+                            delegationEnabled={delegationEnabled}
                           />
                         </div>
                         {hasActiveFilters(chatHistoryFilters) && (
@@ -979,6 +952,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                                 index === 0 ? (
                                   <ChatHistoryFilterMenu
                                     assistantsEnabled={assistantsEnabled}
+                                    delegationEnabled={delegationEnabled}
                                   />
                                 ) : undefined
                               }

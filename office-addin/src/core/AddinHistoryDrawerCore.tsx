@@ -78,9 +78,10 @@ export function AddinHistoryDrawerCore({
     updateChatTitle,
   } = chat;
   const filterStore = useAddinHistoryFilterStore();
-  const { enabled: assistantsEnabled } = useAssistantsFeature();
+  const { enabled: assistantsEnabled, delegationEnabled } =
+    useAssistantsFeature();
   const filters = useSanitizedChatHistoryFilters(
-    assistantsEnabled,
+    { assistantsEnabled, delegationEnabled },
     filterStore,
   );
   const { enabled: sharingEnabled } = useChatSharingFeature();
@@ -318,6 +319,7 @@ export function AddinHistoryDrawerCore({
   const filterMenu = (
     <ChatHistoryFilterMenu
       assistantsEnabled={assistantsEnabled}
+      delegationEnabled={delegationEnabled}
       store={filterStore}
     />
   );

@@ -580,6 +580,11 @@ msgid "officeAddin.historyDrawer.open"
 msgstr "Ouvrir le menu"
 
 #. js-lingui-explicit-id
+#: src/core/AddinChatCore.tsx
+msgid "officeAddin.historyDrawer.openWithAttention"
+msgstr "{attentionCount, plural, one {Ouvrir le menu, # conversation requiert votre attention} other {Ouvrir le menu, # conversations requièrent votre attention}}"
+
+#. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
 #~ msgid "officeAddin.historyDrawer.rename.generated.fallback"
 #~ msgstr ""

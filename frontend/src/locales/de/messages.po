@@ -1429,6 +1429,21 @@ msgstr "Delegierte Läufe ({runCount}), {attentionLabel}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.delegated"
+msgstr "Delegierte Ausführungen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.delegated.hidden"
+msgstr "Ausgeblendet"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
+msgid "chat.history.filterMenu.delegated.shown"
+msgstr "Eingeblendet"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
 msgid "chat.history.filterMenu.groupBy"
 msgstr "Gruppieren nach"
 

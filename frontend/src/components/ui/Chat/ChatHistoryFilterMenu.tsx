@@ -20,6 +20,7 @@ import { Button } from "../Controls/Button";
 import { CheckIcon, ChevronRightIcon, FilterSortIcon } from "../icons";
 
 import type {
+  ChatHistoryDelegatedFilter,
   ChatHistoryFilterStoreHook,
   ChatHistoryGroupBy,
   ChatHistoryStatusFilter,
@@ -30,6 +31,11 @@ import type React from "react";
 export interface ChatHistoryFilterMenuProps {
   /** Shows the assistant-scoped entries (Type row, group-by-Type option). */
   assistantsEnabled: boolean;
+  /**
+   * Shows the "Delegated runs" row. Composes with `assistantsEnabled`: a
+   * deployment without assistants has no delegation either.
+   */
+  delegationEnabled: boolean;
   className?: string;
   /**
    * Filter store instance the menu reads and writes. Defaults to the web
@@ -40,7 +46,7 @@ export interface ChatHistoryFilterMenuProps {
   store?: ChatHistoryFilterStoreHook;
 }
 
-type SubmenuKey = "type" | "status" | "groupBy";
+type SubmenuKey = "type" | "status" | "delegated" | "groupBy";
 
 interface SubmenuOption {
   id: string;
@@ -109,6 +115,7 @@ function buildRow<V extends string>(
  */
 export function ChatHistoryFilterMenu({
   assistantsEnabled,
+  delegationEnabled,
   className,
   store = useChatHistoryFilterStore,
 }: ChatHistoryFilterMenuProps) {
@@ -137,15 +144,18 @@ export function ChatHistoryFilterMenu({
 
   const typeFilter = store((state) => state.typeFilter);
   const statusFilter = store((state) => state.statusFilter);
+  const delegatedFilter = store((state) => state.delegatedFilter);
   const groupBy = store((state) => state.groupBy);
   const setTypeFilter = store((state) => state.setTypeFilter);
   const setStatusFilter = store((state) => state.setStatusFilter);
+  const setDelegatedFilter = store((state) => state.setDelegatedFilter);
   const setGroupBy = store((state) => state.setGroupBy);
   const resetToDefaults = store((state) => state.resetToDefaults);
 
+  const showDelegatedRow = assistantsEnabled && delegationEnabled;
   const filters = sanitizeChatHistoryFilters(
-    { typeFilter, statusFilter, groupBy },
-    assistantsEnabled,
+    { typeFilter, statusFilter, delegatedFilter, groupBy },
+    { assistantsEnabled, delegationEnabled },
   );
 
   const clearHoverTimers = useCallback(() => {
@@ -294,7 +304,12 @@ export function ChatHistoryFilterMenu({
           ROW_SELECTOR,
         );
         const key = rowElement?.dataset.filterMenuRow;
-        if (key === "type" || key === "status" || key === "groupBy") {
+        if (
+          key === "type" ||
+          key === "status" ||
+          key === "delegated" ||
+          key === "groupBy"
+        ) {
           event.preventDefault();
           event.stopPropagation();
           openSubmenuFor(key, { focusOptions: true });
@@ -350,6 +365,26 @@ export function ChatHistoryFilterMenu({
     },
   ];
 
+  const delegatedOptions: {
+    value: ChatHistoryDelegatedFilter;
+    label: string;
+  }[] = [
+    {
+      value: "hidden",
+      label: t({
+        id: "chat.history.filterMenu.delegated.hidden",
+        message: "Hidden",
+      }),
+    },
+    {
+      value: "shown",
+      label: t({
+        id: "chat.history.filterMenu.delegated.shown",
+        message: "Shown",
+      }),
+    },
+  ];
+
   const groupByOptions: { value: ChatHistoryGroupBy; label: string }[] = [
     {
       value: "date",
@@ -397,6 +432,19 @@ export function ChatHistoryFilterMenu({
     (value) => applyAndClose(() => setStatusFilter(value)),
   );
 
+  const delegatedRow = showDelegatedRow
+    ? buildRow(
+        "delegated",
+        t({
+          id: "chat.history.filterMenu.delegated",
+          message: "Delegated runs",
+        }),
+        delegatedOptions,
+        filters.delegatedFilter,
+        (value) => applyAndClose(() => setDelegatedFilter(value)),
+      )
+    : null;
+
   const groupByRow = buildRow(
     // eslint-disable-next-line lingui/no-unlocalized-strings -- submenu key, not user-facing
     "groupBy",
@@ -409,6 +457,7 @@ export function ChatHistoryFilterMenu({
   const rowsByKey: Record<SubmenuKey, SubmenuRow | null> = {
     type: typeRow,
     status: statusRow,
+    delegated: delegatedRow,
     groupBy: groupByRow,
   };
   const activeRow = openSubmenu ? rowsByKey[openSubmenu] : null;
@@ -508,6 +557,7 @@ export function ChatHistoryFilterMenu({
       >
         {typeRow && renderSubmenuRow(typeRow)}
         {renderSubmenuRow(statusRow)}
+        {delegatedRow && renderSubmenuRow(delegatedRow)}
         <div className={sectionDivider} />
         {renderSubmenuRow(groupByRow)}
         <div className={sectionDivider} />

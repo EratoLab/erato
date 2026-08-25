@@ -57,7 +57,21 @@ export function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      {/* Inside the gate, never beside it: the poller is self-gated on the
+          generation-status store and so stays idle between runs, but it seeds
+          once on mount — and mounted above the auth provider that would be a
+          request fired before `SessionAuthProvider` even exists, whose 401
+          drives a forced token refresh and advances the refresh backoff.
+          The seed exists because the pane reloads far more often than a tab
+          and a background run launched before the last reload appears in no
+          listing the pane reads. `isAuthenticated` stays true across
+          transient refresh failures, so this does not remount and re-seed. */}
+      <GenerationStatusPoller seedOnMount />
+    </>
+  );
 }
 
 type FeatureConfigOverrides = NonNullable<
@@ -96,9 +110,6 @@ export function SharedAddinShell({
           <FeatureConfigProvider config={SHARED_ADDIN_FEATURE_CONFIG}>
             <ApiProvider enableDevtools={false}>
               {children}
-              {/* Self-gated on the generation-status store: fully idle until
-                  a dispatch or a listing seeds a running chat. */}
-              <GenerationStatusPoller />
               <Toaster placement="bottom-center" />
             </ApiProvider>
           </FeatureConfigProvider>

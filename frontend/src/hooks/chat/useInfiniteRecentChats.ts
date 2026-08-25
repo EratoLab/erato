@@ -139,19 +139,25 @@ export async function removeArchivedChatFromLists(
 /** The filter-store values that reach the recent-chats request. */
 export type RecentChatsListFilters = Pick<
   ChatHistoryFilterValues,
-  "typeFilter" | "statusFilter"
+  "typeFilter" | "statusFilter" | "delegatedFilter"
 >;
 
 /**
  * Query params the list filters add to a recent-chats request. Key builders
- * and the query itself must agree on these, so both go through here.
+ * and the query itself must agree on these, so both go through here — which
+ * is also what keeps every filter a *server* param: a value that only reached
+ * the request would silently share a cache entry with its own opposite.
  */
 export function buildRecentChatsFilterParams(
   filters: RecentChatsListFilters,
-): Pick<RecentChatsQueryParams, "type" | "include_archived"> {
+): Pick<
+  RecentChatsQueryParams,
+  "type" | "include_archived" | "include_delegated"
+> {
   return {
     ...(filters.typeFilter === "all" ? {} : { type: filters.typeFilter }),
     ...(filters.statusFilter === "all" ? { include_archived: true } : {}),
+    ...(filters.delegatedFilter === "shown" ? { include_delegated: true } : {}),
   };
 }
 
