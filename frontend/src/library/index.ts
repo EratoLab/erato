@@ -273,6 +273,7 @@ export {
   useChatHistory,
   useChatMessaging,
   useModelHistory,
+  useModelSwitches,
   useStandardMessageActions,
   useTokenManagement,
   useActiveModelSelection,

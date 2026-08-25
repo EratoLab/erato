@@ -1,5 +1,6 @@
 import { Trans } from "@lingui/react/macro";
 
+import { TranscriptNotice } from "./TranscriptNotice";
 import { InfoIcon } from "../icons";
 
 /**
@@ -12,16 +13,17 @@ export const ModelSwitchMarker = ({
   fromModel: string;
   toModel: string;
 }) => (
-  <div
+  <TranscriptNotice
     role="note"
     data-testid="model-switch-marker"
-    className="mb-4 flex w-full items-center justify-center gap-2 text-xs text-theme-fg-muted"
+    className="text-theme-fg-muted"
+    // Separates the marker from the turn it introduces, on the same scale as
+    // the message padding so a theme that loosens messages loosens this too.
+    style={{ marginBottom: "var(--theme-spacing-message-padding-y)" }}
+    icon={<InfoIcon className="size-3.5 shrink-0" aria-hidden="true" />}
   >
-    <InfoIcon className="size-3.5 shrink-0" aria-hidden="true" />
-    <span>
-      <Trans id="chat.message.modelChanged">
-        Model changed from {fromModel} to {toModel}
-      </Trans>
-    </span>
-  </div>
+    <Trans id="chat.message.modelChanged">
+      Model changed from {fromModel} to {toModel}
+    </Trans>
+  </TranscriptNotice>
 );

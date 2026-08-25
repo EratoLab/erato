@@ -15,7 +15,7 @@ beforeAll(() => {
 });
 
 describe("ModelSwitchMarker", () => {
-  it("explains the impact of continuing with a different model", () => {
+  it("names both sides of the transition", () => {
     render(
       <I18nProvider i18n={i18n}>
         <ModelSwitchMarker fromModel="Model One" toModel="Model Two" />
@@ -25,9 +25,22 @@ describe("ModelSwitchMarker", () => {
     const marker = screen.getByTestId("model-switch-marker");
 
     expect(marker).toHaveAttribute("role", "note");
-    expect(marker).toHaveClass("w-full", "justify-center", "mb-4");
+    expect(marker).toHaveClass("w-full", "justify-center");
     expect(
       screen.getByText("Model changed from Model One to Model Two"),
     ).toBeInTheDocument();
+  });
+
+  it("takes its spacing from theme tokens so customer themes can retune it", () => {
+    render(
+      <I18nProvider i18n={i18n}>
+        <ModelSwitchMarker fromModel="Model One" toModel="Model Two" />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByTestId("model-switch-marker")).toHaveStyle({
+      gap: "var(--theme-spacing-control-gap)",
+      marginBottom: "var(--theme-spacing-message-padding-y)",
+    });
   });
 });

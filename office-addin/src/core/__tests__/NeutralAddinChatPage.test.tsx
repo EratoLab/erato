@@ -207,7 +207,12 @@ vi.mock("@erato/frontend/library", async () => {
     FeedbackCommentDialog: () => null,
     FeedbackViewDialog: () => null,
     FilePreviewModal: () => null,
-    MessageList: () => <div data-testid="neutral-message-list" />,
+    MessageList: ({ modelSwitches }: { modelSwitches?: unknown }) => (
+      <div
+        data-testid="neutral-message-list"
+        data-model-switches={JSON.stringify(modelSwitches ?? null)}
+      />
+    ),
     MessageEditProvider: ({ children }: { children?: ReactNode }) => children,
     chatMessagesQuery: () => ({ queryKey: ["chat-messages"] }),
     componentRegistry: {},
@@ -220,6 +225,9 @@ vi.mock("@erato/frontend/library", async () => {
       selectedModel: null,
       setSelectedModel: vi.fn(),
       isSelectionReady: true,
+    }),
+    useModelSwitches: () => ({
+      "message-2": { fromModel: "Model One", toModel: "Model Two" },
     }),
     useConversationDropzone: () => ({
       getRootProps: () => ({}),
@@ -337,6 +345,17 @@ describe("NeutralAddinChatPage host boundary", () => {
           new URL(node.src).hostname === "appsforoffice.microsoft.com",
       ),
     ).toBe(false);
+  });
+
+  it("shows model switches in the transcript, like the web surface", () => {
+    renderPage();
+
+    expect(screen.getByTestId("neutral-message-list")).toHaveAttribute(
+      "data-model-switches",
+      JSON.stringify({
+        "message-2": { fromModel: "Model One", toModel: "Model Two" },
+      }),
+    );
   });
 
   it("uses the chat body surface behind both messages and the composer", () => {

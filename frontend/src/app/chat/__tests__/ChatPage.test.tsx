@@ -125,6 +125,7 @@ vi.mock("@/hooks/chat", () => ({
     modelsError: null,
     isSelectionReady: false,
   }),
+  useModelSwitches: () => ({}),
   useStandardMessageActions: () => vi.fn().mockResolvedValue(false),
 }));
 

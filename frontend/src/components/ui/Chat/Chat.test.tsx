@@ -80,6 +80,7 @@ vi.mock("@/hooks/chat", () => ({
     handleSendMessage: vi.fn().mockResolvedValue(undefined),
     handleMessageAction: vi.fn(),
   }),
+  useModelSwitches: () => ({}),
   useStandardMessageActions: () => vi.fn(),
 }));
 
