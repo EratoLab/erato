@@ -264,7 +264,11 @@ test(
     });
 
     await expect.poll(() => uploadRequestCount).toBeGreaterThan(0);
-    await expect(page.getByText(/clipboard-image/i)).toBeVisible();
+    // An image stages as a thumbnail with no caption, so its name is carried
+    // by the remove control rather than by visible text.
+    await expect(
+      page.getByRole("button", { name: /remove clipboard-image/i }),
+    ).toBeVisible();
 
     await textbox.fill("what is in this image?");
     await textbox.press("Enter");
