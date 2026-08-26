@@ -102,11 +102,16 @@ export const AttachmentTileList: React.FC<AttachmentTileListProps> = ({
       <div
         className={clsx(
           "flex flex-col gap-2",
-          // The remove button overhangs its tile, and a scroll container clips
-          // on both axes — so the cap pays for that overhang in padding and
-          // takes it back in margin, leaving the tiles where they were.
+          // `overflow-y-auto` silently promotes `overflow-x` from `visible` to
+          // `auto` per spec, which clips the remove button's overhang and can
+          // raise a phantom horizontal scrollbar. So the cap pays for the
+          // overhang in padding, takes it back in margin to leave the tiles
+          // where they were, and pins `overflow-x` explicitly.
           capHeight &&
-            clsx(CAPPED_TILE_AREA, "-mr-1 -mt-1 overflow-y-auto pr-1 pt-1"),
+            clsx(
+              CAPPED_TILE_AREA,
+              "-mr-1 -mt-1 overflow-y-auto overflow-x-hidden pr-1 pt-1",
+            ),
         )}
       >
         {media.length > 0 && (
