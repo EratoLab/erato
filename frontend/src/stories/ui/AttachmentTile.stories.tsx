@@ -1,6 +1,7 @@
 import { action } from "@storybook/addon-actions";
 
 import { ChatInput } from "../../components/ui/Chat/ChatInput";
+import { ChatMessage } from "../../components/ui/Chat/ChatMessage";
 import { AttachmentTile } from "../../components/ui/FileUpload/AttachmentTile";
 import { AttachmentTileList } from "../../components/ui/FileUpload/AttachmentTileList";
 import { FILE_TYPES } from "../../utils/fileTypes";
@@ -273,4 +274,57 @@ export const RecipeInChatInput: Story = {
       ]}
     />
   ),
+};
+
+/**
+ * Recipe: the tile in a sent message, via the real `ChatMessage`. Read-only —
+ * a sent attachment has no remove affordance, because nothing can be removed
+ * from it. With captions off, the filename lives in the tile's `title` and its
+ * button label.
+ *
+ * `ChatMessage` resolves attachments from the `allFilesById` map the
+ * conversation already holds, so this needs no API.
+ */
+export const RecipeInSentMessage: Story = {
+  args: { items: [] },
+  render: () => {
+    const files = [
+      uploaded(
+        "m1",
+        "screenshot-pricing-slide.png",
+        photo("#8ec5fc", "#e0c3fc"),
+      ),
+      uploaded("m2", "team-offsite-photo.jpg", photo("#f6d365", "#fda085")),
+      uploaded("m3", "Erato_One-Pager_IT-Digital-Leitung.pdf"),
+      uploaded("m4", "Acme_Inc_Revenue_2000_2025.csv"),
+    ];
+
+    return (
+      <ChatMessage
+        message={{
+          id: "msg-1",
+          role: "user",
+          sender: "user",
+          authorId: "user_1",
+          createdAt: new Date(2026, 7, 26, 12, 0).toISOString(),
+          content: [
+            {
+              content_type: "text",
+              text: "What do you see in these attachments?",
+            },
+          ],
+          input_files_ids: files.map((file) => file.id),
+        }}
+        showAvatar
+        controlsContext={{
+          currentUserId: "user_1",
+          dialogOwnerId: "user_1",
+          isSharedDialog: false,
+        }}
+        onMessageAction={async () => true}
+        onFilePreview={action("file preview")}
+        allFilesById={Object.fromEntries(files.map((file) => [file.id, file]))}
+      />
+    );
+  },
 };

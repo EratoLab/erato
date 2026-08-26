@@ -3,14 +3,7 @@ import { Trans } from "@lingui/react/macro";
 import clsx from "clsx";
 import { memo, useCallback, useMemo, useState } from "react";
 
-import { InteractiveContainer } from "@/components/ui/Container/InteractiveContainer";
-import {
-  getFileName,
-  type FileResource,
-} from "@/components/ui/FileUpload/FilePreviewBase";
-import { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
 import { useImageLightbox } from "@/hooks/ui/useImageLightbox";
-import { useGetFile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import {
   useErrorReportFeature,
   useMessageFeedbackFeature,
@@ -20,10 +13,9 @@ import {
   type MessageErrorFilterDetails,
 } from "@/types/chat";
 import { hasToolCalls as messageHasToolCalls } from "@/utils/adapters/toolCallAdapter";
-import { isImageFile } from "@/utils/file/fileTypeUtils";
-import { teamsUploadDisplayName } from "@/utils/teams/teamsUploadName";
 
 import { McpNeedsAuthNotice } from "./McpNeedsAuthNotice";
+import { MessageAttachments } from "./MessageAttachments";
 import { Alert } from "../Feedback/Alert";
 import { Avatar } from "../Feedback/Avatar";
 import { CopyErrorButton } from "../Feedback/CopyErrorButton";
@@ -45,11 +37,6 @@ import type {
   UserProfile,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
-
-const getPreviewUrl = (
-  file: Pick<FileUploadItem, "preview_url" | "download_url">,
-): string =>
-  typeof file.preview_url === "string" ? file.preview_url : file.download_url;
 
 /**
  * Host-implemented building blocks handed to `ChatMessageRenderer` overrides.
@@ -292,16 +279,12 @@ export const ChatMessage = memo(function ChatMessage({
 
           {/* Display attached files if any */}
           {message.input_files_ids && message.input_files_ids.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              {message.input_files_ids.map((fileId) => (
-                <AttachedFile
-                  key={fileId}
-                  fileId={fileId}
-                  relatedFiles={siblingFiles}
-                  onFilePreview={onFilePreview}
-                />
-              ))}
-            </div>
+            <MessageAttachments
+              fileIds={message.input_files_ids}
+              filesById={filesById}
+              relatedFiles={siblingFiles}
+              onFilePreview={onFilePreview}
+            />
           )}
 
           {message.loading && message.content.length === 0 && (
@@ -572,114 +555,6 @@ const formatFilterLabel = (value: string) =>
     .split("_")
     .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
     .join(" ");
-
-// Helper component to fetch and display a single attached file
-const AttachedFile = ({
-  fileId,
-  relatedFiles,
-  onFilePreview,
-}: {
-  fileId: string;
-  relatedFiles: readonly FileUploadItem[];
-  onFilePreview?: (
-    file: FileUploadItem,
-    relatedFiles?: readonly FileUploadItem[],
-  ) => void;
-}) => {
-  const {
-    data: fileData,
-    isLoading,
-    error,
-  } = useGetFile(
-    { pathParams: { fileId } },
-    {
-      // Optional: configure react-query options like staleTime, cacheTime, etc.
-      staleTime: Infinity, // Assume file metadata doesn't change often
-    },
-  );
-
-  if (isLoading) {
-    return (
-      <div className="text-xs text-theme-fg-muted">
-        {t({ id: "chat.file.loading", message: "Loading file..." })}
-      </div>
-    );
-  }
-
-  if (error || !fileData) {
-    console.error(`Failed to load file ${fileId}:`, error);
-    return (
-      <div className="text-xs text-theme-error-fg">
-        {t({ id: "chat.file.error", message: "Error loading file" })}
-      </div>
-    );
-  }
-
-  const previewUrl = getPreviewUrl(fileData);
-  // A Teams upload is named after its bytes so the backend can join it to the
-  // message that carried it. That name is a key, not something to read; the
-  // transcript's own index holds the exact one, and this recovers the readable
-  // part for a chip that has only the upload.
-  const readableName = teamsUploadDisplayName(fileData.filename);
-  const shownFile: FileResource = readableName
-    ? { ...fileData, displayName: readableName }
-    : fileData;
-
-  // Check if it's an image using centralized utility
-  if (isImageFile(fileData.filename) && previewUrl) {
-    return (
-      <InteractiveContainer
-        useDiv={true}
-        fullWidth={false}
-        className="relative inline-block cursor-pointer"
-        aria-label={`${t({ id: "chat.file.preview.aria", message: "Preview attached file:" })} ${fileData.filename}`}
-        onClick={() => {
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-          if (onFilePreview && fileData) {
-            onFilePreview(fileData, relatedFiles);
-          } else if (previewUrl) {
-            window.open(previewUrl, "_blank", "noopener,noreferrer"); // eslint-disable-line lingui/no-unlocalized-strings
-          }
-        }}
-      >
-        <img
-          src={previewUrl}
-          alt={fileData.filename}
-          className="size-24 rounded-lg border border-theme-border-primary object-cover transition-transform hover:scale-105"
-        />
-        <div className="mt-1 max-w-[96px] truncate text-xs text-theme-fg-muted">
-          {getFileName(shownFile)}
-        </div>
-      </InteractiveContainer>
-    );
-  }
-
-  // For non-images, show the regular file button
-  return (
-    <InteractiveContainer
-      onClick={() => {
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-        if (onFilePreview && fileData) {
-          onFilePreview(fileData, relatedFiles);
-        } else if (previewUrl) {
-          window.open(previewUrl, "_blank", "noopener,noreferrer"); // eslint-disable-line lingui/no-unlocalized-strings
-        }
-      }}
-      aria-label={`${t({ id: "chat.file.preview.aria", message: "Preview attached file:" })} ${fileData.filename}`}
-      className="cursor-pointer hover:bg-theme-bg-accent"
-      useDiv={true}
-    >
-      <FilePreviewButton
-        file={shownFile}
-        onRemove={() => {}}
-        disabled={true}
-        showFileType={true}
-        showSize={true}
-        filenameTruncateLength={25}
-      />
-    </InteractiveContainer>
-  );
-};
 
 // Add display name for better debugging
 // eslint-disable-next-line lingui/no-unlocalized-strings

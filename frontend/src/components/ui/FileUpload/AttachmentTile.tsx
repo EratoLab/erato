@@ -130,10 +130,14 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
   // caller to pre-filter what it passes.
   const isMedia = Boolean(previewUrl) && fileType === "image" && !imageFailed;
 
+  // A thumbnail carries no caption, so the filename has to reach assistive
+  // tech some other way. Inside an activatable tile the button's own label
+  // says it, and repeating it on the image would announce it twice; standalone,
+  // the alt text is the only carrier.
   const face = isMedia ? (
     <img
       src={previewUrl ?? undefined}
-      alt={filename}
+      alt={onActivate ? "" : filename}
       onError={() => setImageFailed(true)}
       className={clsx(
         geometry.media,
@@ -145,6 +149,8 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
       className={clsx(
         "flex w-full items-center gap-2 rounded-[var(--theme-radius-base)] border p-2 text-left",
         "border-[var(--theme-border)] bg-[var(--theme-bg-secondary)]",
+        onActivate &&
+          "transition-colors group-hover:border-[var(--theme-border-focus)] group-hover:bg-[var(--theme-bg-accent)]",
       )}
     >
       <span
@@ -185,20 +191,24 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
       data-filetype={fileType}
     >
       {onActivate ? (
+        // Opening a preview mutates nothing, so it stays available even while
+        // the surface is disabled — `disabled` gates removal only.
         <button
           type="button"
           onClick={onActivate}
           title={filename}
-          aria-label={`${t`Preview attachment`} ${filename}`}
+          aria-label={`${t`Preview attachment`} ${filename}, ${typeLabel}`}
           className={clsx(
-            "block w-full rounded-[var(--theme-radius-base)] text-left",
+            "block w-full cursor-pointer rounded-[var(--theme-radius-base)] text-left",
             "focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus focus-visible:ring-offset-2",
-            !disabled && "cursor-pointer hover:opacity-90",
+            isMedia && "hover:opacity-90",
           )}
         >
           {face}
         </button>
       ) : (
+        // Not interactive, so it cannot hold focus — the title serves hover and
+        // the image's alt text serves assistive tech.
         <div title={filename}>{face}</div>
       )}
 
