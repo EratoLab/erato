@@ -15,6 +15,7 @@ export interface AttachmentTileItem {
   labelOverride?: string;
 }
 
+/** Mirrors the tile's own media test, so banding matches what each tile draws. */
 const isMediaItem = (item: AttachmentTileItem) =>
   Boolean(item.previewUrl) && getFileType(getFileName(item.file)) === "image";
 

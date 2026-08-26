@@ -116,7 +116,12 @@ export function audioEnvironmentForEngine(
  * a non-browser context.
  */
 export function getAudioEnvironment(userAgent?: string): AudioEnvironment {
-  const ua =
-    userAgent ?? (typeof navigator !== "undefined" ? navigator.userAgent : "");
+  // Guarding only the `navigator` object is not enough: embedded contexts can
+  // expose a navigator whose `userAgent` is undefined (the Storybook iframe
+  // does), which would otherwise reach `detectBrowserEngine` as a non-string.
+  // The DOM types declare both as always present, hence the suppression — the
+  // guard is against runtime reality, not against the type.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  const ua = userAgent ?? globalThis.navigator?.userAgent ?? "";
   return audioEnvironmentForEngine(detectBrowserEngine(ua));
 }

@@ -124,7 +124,11 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
       : FILE_TYPES[fileType].displayName || t`File`;
   }, [labelOverride, filename, fileType]);
   const geometry = TILE_GEOMETRY[size];
-  const isMedia = Boolean(previewUrl) && !imageFailed;
+  // Every upload carries a `preview_url`, including PDFs and spreadsheets —
+  // it proxies the raw bytes, not a rendered thumbnail. Only an image can be
+  // pointed at an <img>, so the type gate lives here rather than asking every
+  // caller to pre-filter what it passes.
+  const isMedia = Boolean(previewUrl) && fileType === "image" && !imageFailed;
 
   const face = isMedia ? (
     <img

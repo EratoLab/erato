@@ -1,3 +1,6 @@
+import { action } from "@storybook/addon-actions";
+
+import { ChatInput } from "../../components/ui/Chat/ChatInput";
 import { AttachmentTile } from "../../components/ui/FileUpload/AttachmentTile";
 import { AttachmentTileList } from "../../components/ui/FileUpload/AttachmentTileList";
 import { FILE_TYPES } from "../../utils/fileTypes";
@@ -31,10 +34,15 @@ const capability: FileCapability = {
   operations: ["extract_text"],
 };
 
-const uploaded = (id: string, filename: string): FileUploadItem => ({
+const uploaded = (
+  id: string,
+  filename: string,
+  previewUrl?: string,
+): FileUploadItem => ({
   id,
   filename,
   download_url: `https://example.invalid/${id}`,
+  preview_url: previewUrl,
   file_contents_unavailable_missing_permissions: false,
   is_sharepoint_file: false,
   file_capability: capability,
@@ -74,18 +82,6 @@ const longNameSet: AttachmentTileItem[] = [
   item("l3", "a.png", photo("#a1c4fd", "#c2e9fb")),
 ];
 
-/** Mock composer chrome, so tile density can be judged in its real container. */
-const ComposerShell = ({ children }: { children: React.ReactNode }) => (
-  <div className="rounded-[var(--theme-radius-input)] border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] p-3">
-    {children}
-    <p className="mt-3 text-sm text-[var(--theme-fg-muted)]">Type a message…</p>
-    <div className="mt-3 flex items-center justify-between text-xs text-[var(--theme-fg-muted)]">
-      <span>+ Tools</span>
-      <span>Mock-LLM ↑</span>
-    </div>
-  </div>
-);
-
 const meta = {
   title: "UI/AttachmentTile",
   component: AttachmentTileList,
@@ -119,11 +115,6 @@ export const ComposerCompact: Story = {
     onRemove: () => {},
     onActivate: () => {},
   },
-  render: (args) => (
-    <ComposerShell>
-      <AttachmentTileList {...args} />
-    </ComposerShell>
-  ),
 };
 
 export const ComposerAtFileLimit: Story = {
@@ -134,11 +125,6 @@ export const ComposerAtFileLimit: Story = {
     onRemoveAll: () => {},
     onActivate: () => {},
   },
-  render: (args) => (
-    <ComposerShell>
-      <AttachmentTileList {...args} />
-    </ComposerShell>
-  ),
 };
 
 export const ComposerNarrowPane: Story = {
@@ -157,13 +143,13 @@ export const ComposerNarrowPane: Story = {
       },
     },
   },
-  render: (args) => (
-    <div className="w-[320px] border border-dashed border-[var(--theme-border)] p-2">
-      <ComposerShell>
-        <AttachmentTileList {...args} />
-      </ComposerShell>
-    </div>
-  ),
+  decorators: [
+    (Story) => (
+      <div className="w-[320px] border border-dashed border-[var(--theme-border)] p-2">
+        <Story />
+      </div>
+    ),
+  ],
 };
 
 export const SentMessageMedium: Story = {
@@ -180,14 +166,6 @@ export const SentMessageMedium: Story = {
       },
     },
   },
-  render: (args) => (
-    <div className="rounded-[var(--theme-radius-message)] bg-[var(--theme-bg-secondary)] p-4">
-      <p className="mb-3 text-base text-[var(--theme-fg-primary)]">
-        What do you see in these attachments?
-      </p>
-      <AttachmentTileList {...args} />
-    </div>
-  ),
 };
 
 export const SentMessageWithCaptions: Story = {
@@ -205,14 +183,6 @@ export const SentMessageWithCaptions: Story = {
       },
     },
   },
-  render: (args) => (
-    <div className="rounded-[var(--theme-radius-message)] bg-[var(--theme-bg-secondary)] p-4">
-      <p className="mb-3 text-base text-[var(--theme-fg-primary)]">
-        What do you see in these attachments?
-      </p>
-      <AttachmentTileList {...args} />
-    </div>
-  ),
 };
 
 export const LongFilenames: Story = {
@@ -222,11 +192,6 @@ export const LongFilenames: Story = {
     onRemove: () => {},
     onActivate: () => {},
   },
-  render: (args) => (
-    <ComposerShell>
-      <AttachmentTileList {...args} />
-    </ComposerShell>
-  ),
 };
 
 /** Every configured type, to check the per-type icon colour actually lands. */
@@ -250,4 +215,41 @@ export const AllFileTypes: Story = {
       </div>
     );
   },
+};
+
+/**
+ * Recipe: the tile inside the real composer, not a stand-in for it. `ChatInput`
+ * renders `FileAttachmentsPreview`, which is what draws these tiles — so this
+ * story breaks if the composer's own wiring regresses.
+ *
+ * The model selector and tool menu stay empty because Storybook has no backend
+ * to answer `/me/models` and `/me/facets`.
+ */
+export const RecipeInChatInput: Story = {
+  args: { items: [] },
+  parameters: { layout: "fullscreen" },
+  decorators: [
+    (Story) => (
+      <div className="w-full bg-theme-bg-primary p-6">
+        <Story />
+      </div>
+    ),
+  ],
+  render: () => (
+    <ChatInput
+      onSendMessage={action("message sent")}
+      handleFileAttachments={action("handle file attachments")}
+      showControls
+      showFileTypes
+      initialFiles={[
+        uploaded(
+          "r1",
+          "screenshot-pricing-slide.png",
+          photo("#8ec5fc", "#e0c3fc"),
+        ),
+        uploaded("r2", "Erato_One-Pager_IT-Digital-Leitung.pdf"),
+        uploaded("r3", "Acme_Inc_Revenue_2000_2025.csv"),
+      ]}
+    />
+  ),
 };
