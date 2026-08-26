@@ -158,6 +158,21 @@ describe("FileAttachmentsPreview", () => {
     expect(onRemoveAllFiles).toHaveBeenCalledOnce();
   });
 
+  it("shows the staged count against the host's limit", async () => {
+    // The staged area caps and scrolls, so the count is what tells the user
+    // there is more attached than is visible.
+    await renderWithProviders(
+      <FileAttachmentsPreview
+        attachedFiles={[file("1", "spec.pdf"), file("2", "notes.txt")]}
+        maxFiles={50}
+        onRemoveFile={vi.fn()}
+        onRemoveAllFiles={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("2/50")).toBeInTheDocument();
+  });
+
   it("renders nothing when there is nothing attached", async () => {
     const { container } = await renderWithProviders(
       <FileAttachmentsPreview

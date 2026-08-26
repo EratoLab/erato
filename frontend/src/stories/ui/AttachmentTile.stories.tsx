@@ -185,6 +185,27 @@ export const SentMessageWithCaptions: Story = {
   },
 };
 
+/**
+ * Hosts raise the file limit well past the web default — the Outlook pane
+ * allows 50. The staged area caps and scrolls so the composer stays on screen.
+ */
+export const ComposerManyFilesScrolls: Story = {
+  args: {
+    items: [
+      ...fullSet,
+      ...Array.from({ length: 9 }, (_, index) =>
+        item(`bulk-${index}`, `Quarterly-report-part-${index + 1}.pdf`),
+      ),
+    ],
+    size: "compact",
+    capHeight: true,
+    maxFiles: 50,
+    onRemove: () => {},
+    onRemoveAll: () => {},
+    onActivate: () => {},
+  },
+};
+
 export const LongFilenames: Story = {
   args: {
     items: longNameSet,

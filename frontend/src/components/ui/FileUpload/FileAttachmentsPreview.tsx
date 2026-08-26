@@ -42,6 +42,7 @@ export interface FileAttachmentsPreviewProps {
  */
 export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
   attachedFiles,
+  maxFiles,
   onRemoveFile,
   onRemoveAllFiles,
   onFilePreview,
@@ -74,6 +75,8 @@ export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
           : undefined
       }
       disabled={disabled}
+      capHeight
+      maxFiles={maxFiles}
       className={clsx("mb-3", className)}
     />
   );
