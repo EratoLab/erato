@@ -835,7 +835,6 @@ test(
       "../test-files/sample-report-compressed.pdf",
     );
     await uploadFileInChat(page, sampleReportPath);
-    await expect(page.getByText(/Attachments/i)).toBeVisible();
     await expect(page.getByText(/sample.*compressed.*pdf/i)).toBeVisible({
       timeout: 10000,
     });
@@ -848,7 +847,7 @@ test(
     await expect(page).toHaveURL(new RegExp(`/chat/${secondChatId}$`));
 
     await expect(textbox).toHaveValue("");
-    await expect(page.getByText(/Attachments/i)).toHaveCount(0);
+    await expect(page.getByText(/sample.*compressed.*pdf/i)).toHaveCount(0);
 
     const secondChatDraft = "chat two draft text";
     await textbox.fill(secondChatDraft);
@@ -861,7 +860,6 @@ test(
     await expect(page).toHaveURL(new RegExp(`/chat/${firstChatId}$`));
 
     await expect(textbox).toHaveValue(firstChatDraft);
-    await expect(page.getByText(/Attachments/i)).toBeVisible();
     await expect(page.getByText(/sample.*compressed.*pdf/i)).toBeVisible({
       timeout: 10000,
     });
@@ -874,7 +872,7 @@ test(
     await expect(page).toHaveURL(new RegExp(`/chat/${secondChatId}$`));
 
     await expect(textbox).toHaveValue(secondChatDraft);
-    await expect(page.getByText(/Attachments/i)).toHaveCount(0);
+    await expect(page.getByText(/sample.*compressed.*pdf/i)).toHaveCount(0);
   },
 );
 
@@ -1413,14 +1411,12 @@ test(
     const editTextbox = page.getByTestId("message-editor-input");
     await expect(editTextbox).toBeVisible({ timeout: 30000 });
 
-    await expect(page.getByText(/Attachments/i)).toBeVisible();
-    await page
-      .locator(
-        'button[aria-label*="Remove sample-report-compressed.pdf"]:not([disabled])',
-      )
-      .first()
-      .click({ timeout: 10000 });
-    await expect(page.getByText(/Attachments/i)).not.toBeVisible();
+    const removeStagedFile = page.locator(
+      'button[aria-label*="Remove sample-report-compressed.pdf"]:not([disabled])',
+    );
+    await expect(removeStagedFile.first()).toBeVisible();
+    await removeStagedFile.first().click({ timeout: 10000 });
+    await expect(removeStagedFile).toHaveCount(0);
 
     await editTextbox.clear();
     await editTextbox.fill("please cite files after removing file");
