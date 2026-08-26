@@ -19,6 +19,8 @@ export type { ChatMessageHostComponents } from "@/components/ui/Chat/ChatMessage
 export type { ChatMessageProps } from "@/components/ui/Chat/ChatMessage";
 export type { ChatTopLeftAccessoryProps } from "@/components/ui/Chat/ChatTopLeftAccessory";
 export { McpNeedsAuthNotice } from "@/components/ui/Chat/McpNeedsAuthNotice";
+export { MessageAttachments } from "@/components/ui/Chat/MessageAttachments";
+export type { MessageAttachmentsProps } from "@/components/ui/Chat/MessageAttachments";
 export { DefaultStarterPromptsSection } from "@/components/ui/Chat/StarterPromptsSection";
 export { StarterPromptsSection } from "@/components/ui/Chat/StarterPromptsSection";
 export type { StarterPromptsRendererProps } from "@/components/ui/Chat/StarterPromptsSection";
