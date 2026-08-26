@@ -4,12 +4,12 @@ import { useId, useState } from "react";
 
 import { componentRegistry } from "@/config/componentRegistry";
 
+import { AttachmentTile } from "./AttachmentTile";
 import {
   FilePreviewBase,
   getFileName,
   type FileResource,
 } from "./FilePreviewBase";
-import { FilePreviewButton } from "./FilePreviewButton";
 import { FilePreviewLoading } from "./FilePreviewLoading";
 import { FILE_PREVIEW_STYLES } from "./fileUploadStyles";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
@@ -564,8 +564,18 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
                 : "rounded-t-[var(--theme-radius-input)]",
             ),
         );
+        // Tiles wrap into rows; checkbox rows and notices stay a column. In
+        // practice a group is homogeneous — staged emails are all selectable,
+        // compose-mode attachments all plain — so this never mixes.
+        const tilesOnly =
+          visibleItems.length > 0 &&
+          visibleItems.every(
+            (item) => item.kind === "attachment" || item.kind === "context",
+          );
         const itemsClassName = clsx(
-          "flex flex-col gap-2",
+          tilesOnly
+            ? "flex flex-wrap items-start gap-2"
+            : "flex flex-col gap-2",
           stickyGroupHeaders &&
             "rounded-b-md border-x border-b border-[var(--theme-border)] bg-[var(--theme-bg-primary)] px-3 pb-3 pt-2",
         );
@@ -689,34 +699,6 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
                     );
                   }
 
-                  // `context` chips are read-only by contract — no remove
-                  // affordance (there is nothing staged to remove).
-                  const content =
-                    item.kind === "context" ? (
-                      <FilePreviewBase
-                        file={item.file}
-                        onRemove={() => {}}
-                        disabled={disabled}
-                        className="w-full"
-                        showRemoveButton={false}
-                        showFileType={showFileTypes}
-                        showSize={showFileSizes}
-                        filenameTruncateLength={filenameTruncateLength}
-                        filenameClassName="max-w-full"
-                      />
-                    ) : (
-                      <FilePreviewButton
-                        file={item.file}
-                        onRemove={() => onRemoveFile(getFileId(item))}
-                        disabled={disabled}
-                        className="w-full"
-                        showFileType={showFileTypes}
-                        showSize={showFileSizes}
-                        filenameTruncateLength={filenameTruncateLength}
-                        filenameClassName="max-w-full"
-                      />
-                    );
-
                   const onOpen =
                     item.kind === "attachment" ? item.onOpen : undefined;
                   const activate =
@@ -725,20 +707,22 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
                       ? () => onFilePreview(item.file)
                       : undefined);
 
-                  if (!activate) {
-                    return <div key={getFileKey(item)}>{content}</div>;
-                  }
-
+                  // `context` chips are read-only by contract — no remove
+                  // affordance (there is nothing staged to remove).
                   return (
-                    <InteractiveContainer
+                    <AttachmentTile
                       key={getFileKey(item)}
-                      onClick={activate}
-                      useDiv={true}
-                      className="w-full cursor-pointer hover:bg-theme-bg-accent"
-                      aria-label={`${onOpen ? t`Open` : t`Preview attachment`} ${getFileName(item.file)}`}
-                    >
-                      {content}
-                    </InteractiveContainer>
+                      file={item.file}
+                      labelOverride={item.labelOverride}
+                      disabled={disabled}
+                      onRemove={
+                        item.kind === "context"
+                          ? undefined
+                          : () => onRemoveFile(getFileId(item))
+                      }
+                      onActivate={activate}
+                      activateLabel={onOpen ? t`Open` : undefined}
+                    />
                   );
                 })}
 

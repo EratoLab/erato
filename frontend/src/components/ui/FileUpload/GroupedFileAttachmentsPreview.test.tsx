@@ -73,19 +73,16 @@ describe("GroupedFileAttachmentsPreview", () => {
     );
 
     expect(screen.getByText("Current email")).toBeVisible();
-    expect(screen.getByText("message")).toBeVisible();
-    expect(screen.getByText(".html")).toBeVisible();
-    expect(screen.getByText("invoice")).toBeVisible();
-    expect(screen.getByText(".pdf")).toBeVisible();
-    expect(screen.queryByText("notes")).toBeNull();
+    expect(screen.getByText("message.html")).toBeVisible();
+    expect(screen.getByText("invoice.pdf")).toBeVisible();
+    expect(screen.queryByText("notes.docx")).toBeNull();
     expect(
       screen.getByRole("button", { name: /show 1 more item/i }),
     ).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: /show 1 more item/i }));
 
-    expect(screen.getByText("notes")).toBeVisible();
-    expect(screen.getByText(".docx")).toBeVisible();
+    expect(screen.getByText("notes.docx")).toBeVisible();
   });
 
   it("renders loading items inline with the standardized loading row", async () => {
@@ -193,12 +190,12 @@ describe("GroupedFileAttachmentsPreview", () => {
       name: /current email/i,
     });
     expect(groupToggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByText("invoice")).toBeNull();
+    expect(screen.queryByText("invoice.pdf")).toBeNull();
 
     fireEvent.click(groupToggle);
 
     expect(groupToggle).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("invoice")).toBeVisible();
+    expect(screen.getByText("invoice.pdf")).toBeVisible();
   });
 
   it("keeps each group at its own default when several are shown at once", async () => {
