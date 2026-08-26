@@ -390,7 +390,7 @@ describe("Teams personal tab composition", () => {
 
     expect(Object.keys(componentRegistry)).toEqual([
       "ChatAddMenuExtraContent",
-      "ChatAttachmentsPreview",
+      "ChatInputAttachmentPreview",
     ]);
   });
 

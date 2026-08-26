@@ -29,7 +29,7 @@ describe("installTeamsComponentRegistrations", () => {
 
     expect(registry).toEqual({
       ChatAddMenuExtraContent: addMenu,
-      ChatAttachmentsPreview: attachmentsPreview,
+      ChatInputAttachmentPreview: attachmentsPreview,
     });
   });
 });
