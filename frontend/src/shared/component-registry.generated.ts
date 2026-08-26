@@ -73,7 +73,6 @@ export type { FilePreviewBaseProps } from "@/components/ui/FileUpload/FilePrevie
 export type { FileResource } from "@/components/ui/FileUpload/FilePreviewBase";
 export type { FileUploadItemWithSize } from "@/components/ui/FileUpload/FilePreviewBase";
 export type { LocalFilePreviewItem } from "@/components/ui/FileUpload/FilePreviewBase";
-export { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
 export { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoading";
 export { FileSourceSelector } from "@/components/ui/FileUpload/FileSourceSelector";
 export type { FileSourceSelectorProps } from "@/components/ui/FileUpload/FileSourceSelector";
