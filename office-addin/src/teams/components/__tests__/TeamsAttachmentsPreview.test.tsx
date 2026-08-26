@@ -172,8 +172,9 @@ describe("TeamsAttachmentsPreview", () => {
     await screen.findByText("Product sync");
     fireEvent.click(groupHeader());
     // Matched on the row's own name, not the translated verb: this suite runs
-    // without a message catalogue.
-    fireEvent.click(screen.getByRole("button", { name: /all messages/i }));
+    // without a message catalogue. The trailing comma picks the activate
+    // button over the remove button, which carries the same filename.
+    fireEvent.click(screen.getByRole("button", { name: /all messages,/i }));
 
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent("Ada Lovelace");
@@ -193,7 +194,7 @@ describe("TeamsAttachmentsPreview", () => {
 
     await screen.findByText("Product sync");
     fireEvent.click(groupHeader());
-    fireEvent.click(screen.getByRole("button", { name: /all messages/i }));
+    fireEvent.click(screen.getByRole("button", { name: /all messages,/i }));
 
     // Matched on the file's own name: the surrounding "Preview attachment" is a
     // library string, and this suite runs without a catalogue.
