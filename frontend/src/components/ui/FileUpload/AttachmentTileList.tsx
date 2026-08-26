@@ -73,9 +73,6 @@ export const AttachmentTileList: React.FC<AttachmentTileListProps> = ({
     : count === 1
       ? t`1 file`
       : t`${count} files`;
-  // Only staging needs either affordance; a sent message has a fixed set and
-  // nothing to remove.
-  const showFooter = showRemoveAll || capHeight;
 
   // Thumbnails and pills have different heights, so interleaving them leaves
   // ragged holes wherever the wrap breaks. Banding by kind keeps each row one
@@ -125,25 +122,24 @@ export const AttachmentTileList: React.FC<AttachmentTileListProps> = ({
           </div>
         )}
       </div>
-      {showFooter && (
+      {/* The count rides along with the bulk control rather than appearing
+          on its own: a list short enough not to need one is also too short to
+          overflow the cap, so there is nothing the count would warn about. */}
+      {showRemoveAll && (
         <div className="flex items-center justify-between gap-2">
-          {/* A capped list can hide rows with nothing to say so; the count is
-              what tells the user there is more than they can see. */}
           <span className="text-xs text-[var(--theme-fg-muted)]">
             {countLabel}
           </span>
-          {showRemoveAll && (
-            <Button
-              onClick={onRemoveAll}
-              variant="ghost"
-              size="sm"
-              className="px-0 text-xs text-[var(--theme-fg-muted)]"
-              aria-label={t`Remove all attachments`}
-              disabled={disabled}
-            >
-              {t`Remove all`}
-            </Button>
-          )}
+          <Button
+            onClick={onRemoveAll}
+            variant="ghost"
+            size="sm"
+            className="px-0 text-xs text-[var(--theme-fg-muted)]"
+            aria-label={t`Remove all attachments`}
+            disabled={disabled}
+          >
+            {t`Remove all`}
+          </Button>
         </div>
       )}
     </div>
