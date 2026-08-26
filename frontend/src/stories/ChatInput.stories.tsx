@@ -1,9 +1,7 @@
 import { action } from "@storybook/addon-actions";
 
 import { ChatInput } from "../components/ui/Chat/ChatInput";
-import { ChatProvider } from "../providers/ChatProvider";
 import { StaticFeatureConfigProvider } from "../providers/FeatureConfigProvider";
-import { FileCapabilitiesProvider } from "../providers/FileCapabilitiesProvider";
 
 import type {
   FileCapability,
@@ -44,18 +42,15 @@ const meta: Meta<typeof ChatInput> = {
     acceptedFileTypes: { control: "text" },
   },
   decorators: [
+    // Layout only — the provider stack is global, in .storybook/preview.tsx.
     (Story) => (
-      <FileCapabilitiesProvider>
-        <ChatProvider>
-          <div className="flex h-screen w-full items-center justify-center bg-theme-bg-primary p-0">
-            <div className="flex size-full items-center justify-center rounded-lg bg-theme-bg-tertiary p-4 shadow-lg md:w-4/5 lg:w-3/4 xl:w-2/3">
-              <div className="w-full max-w-full">
-                <Story />
-              </div>
-            </div>
+      <div className="flex h-screen w-full items-center justify-center bg-theme-bg-primary p-0">
+        <div className="flex size-full items-center justify-center rounded-lg bg-theme-bg-tertiary p-4 shadow-lg md:w-4/5 lg:w-3/4 xl:w-2/3">
+          <div className="w-full max-w-full">
+            <Story />
           </div>
-        </ChatProvider>
-      </FileCapabilitiesProvider>
+        </div>
+      </div>
     ),
   ],
 };

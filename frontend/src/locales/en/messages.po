@@ -4026,6 +4026,7 @@ msgid "{attachmentCount} files"
 msgstr "{attachmentCount} files"
 
 #: src/components/ui/FilePreview/EmlPreview.tsx
+#: src/components/ui/FileUpload/AttachmentTileList.tsx
 msgid "{count} files"
 msgstr "{count} files"
 
@@ -4091,6 +4092,7 @@ msgstr "• Use \"Reset to Browser Detection\" to test fresh detection"
 
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/components/ui/FilePreview/EmlPreview.tsx
+#: src/components/ui/FileUpload/AttachmentTileList.tsx
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "1 file"
 msgstr "1 file"
@@ -4194,7 +4196,6 @@ msgstr "Attachment"
 #~ msgstr "Attachment ready to send"
 
 #: src/components/ui/FilePreview/EmlPreview.tsx
-#: src/components/ui/FileUpload/FileAttachmentsPreview.tsx
 msgid "Attachments"
 msgstr "Attachments"
 
@@ -4765,6 +4766,7 @@ msgstr "Failed to complete audio dictation."
 msgid "Failed to upload audio recording for transcription."
 msgstr "Failed to upload audio recording for transcription."
 
+#: src/components/ui/FileUpload/AttachmentTile.tsx
 #: src/components/ui/FileUpload/FilePreviewBase.tsx
 msgid "File"
 msgstr "File"
@@ -5070,7 +5072,7 @@ msgstr "Please wait"
 #~ msgid "Please wait for audio transcription to finish before sending this message."
 #~ msgstr "Please wait for audio transcription to finish before sending this message."
 
-#: src/components/ui/FileUpload/FileAttachmentsPreview.tsx
+#: src/components/ui/FileUpload/AttachmentTile.tsx
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 #: src/components/ui/Teams/TeamsConversationView.tsx
 msgid "Preview attachment"
@@ -5166,23 +5168,24 @@ msgid "Remaining context: {remainingContextPercentage}%"
 msgstr "Remaining context: {remainingContextPercentage}%"
 
 #: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/components/ui/FileUpload/AttachmentTile.tsx
 #: src/components/ui/FileUpload/FilePreviewBase.tsx
 #: src/components/ui/FileUpload/FilePreviewButton.tsx
 #: src/pages/SearchPage.tsx
 msgid "Remove"
 msgstr "Remove"
 
-#: src/components/ui/FileUpload/FileAttachmentsPreview.tsx
+#: src/components/ui/FileUpload/AttachmentTileList.tsx
 msgid "Remove all"
 msgstr "Remove all"
 
-#: src/components/ui/FileUpload/FileAttachmentsPreview.tsx
+#: src/components/ui/FileUpload/AttachmentTileList.tsx
 msgid "Remove all attachments"
 msgstr "Remove all attachments"
 
 #: src/components/ui/FileUpload/FileAttachmentsPreview.tsx
-msgid "Remove all files"
-msgstr "Remove all files"
+#~ msgid "Remove all files"
+#~ msgstr "Remove all files"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Removing this audio attachment will also clear its transcription. Continue?"

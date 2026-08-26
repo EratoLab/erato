@@ -1,11 +1,9 @@
-import { t } from "@lingui/core/macro";
 import clsx from "clsx";
+import { useMemo } from "react";
 
-import { FilePreviewButton } from "./FilePreviewButton";
-import { InteractiveContainer } from "../Container/InteractiveContainer";
-import { Button } from "../Controls/Button";
-import { Tooltip } from "../Controls/Tooltip";
+import { AttachmentTileList } from "./AttachmentTileList";
 
+import type { AttachmentTileItem } from "./AttachmentTileList";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
 
@@ -35,7 +33,12 @@ export interface FileAttachmentsPreviewProps {
 }
 
 /**
- * Component for displaying file attachments with header and preview grid
+ * Staged file attachments, drawn with the shared attachment tile.
+ *
+ * The props are the component-kit override contract and stay as they are even
+ * where the tile no longer needs them: `showFileSizes` has never had a size to
+ * show (the API type carries none) and `filenameTruncateLength` is now handled
+ * by CSS truncation against the tile width.
  */
 export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
   attachedFiles,
@@ -44,123 +47,37 @@ export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
   onRemoveAllFiles,
   onFilePreview,
   disabled = false,
-  showFileTypes = false,
-  showFileSizes = true,
   className = "",
-  filenameTruncateLength = 25,
-  surfaceVariant = "default",
 }) => {
-  const attachmentsFrameStyle =
-    surfaceVariant === "message"
-      ? ({
-          borderRadius: "var(--theme-radius-message)",
-          padding:
-            "var(--theme-spacing-message-padding-y) var(--theme-spacing-message-padding-x)",
-        } as const)
-      : undefined;
-  const attachmentsHeaderStyle =
-    surfaceVariant === "message"
-      ? ({
-          gap: "var(--theme-spacing-control-gap)",
-          marginBottom: "var(--theme-spacing-control-gap)",
-        } as const)
-      : undefined;
-  const attachmentsListStyle =
-    surfaceVariant === "message"
-      ? ({
-          gap: "var(--theme-spacing-control-gap)",
-        } as const)
-      : undefined;
+  const items = useMemo<AttachmentTileItem[]>(
+    () =>
+      attachedFiles.map((file) => ({
+        id: file.id,
+        file,
+        previewUrl: file.preview_url,
+      })),
+    [attachedFiles],
+  );
 
-  // Don't render anything if no files
   if (attachedFiles.length === 0) {
     return null;
   }
 
   return (
-    <div
-      className={clsx(
-        "mb-3",
-        surfaceVariant === "message" &&
-          "border bg-theme-bg-primary [border-color:var(--theme-border-attachment)]",
-        className,
-      )}
-      style={attachmentsFrameStyle}
-    >
-      <div
-        className={clsx(
-          "flex items-center justify-between",
-          surfaceVariant === "message" ? "" : "mb-2",
-        )}
-        style={attachmentsHeaderStyle}
-      >
-        <h3 className="text-sm font-medium text-[var(--theme-fg-secondary)]">
-          {t`Attachments`} ({attachedFiles.length}/{maxFiles})
-        </h3>
-        {attachedFiles.length > 1 && (
-          <Tooltip content={t`Remove all files`}>
-            <Button
-              onClick={onRemoveAllFiles}
-              variant="ghost"
-              size="sm"
-              className="text-xs"
-              aria-label={t`Remove all attachments`}
-              disabled={disabled}
-            >
-              {t`Remove all`}
-            </Button>
-          </Tooltip>
-        )}
-      </div>
-
-      <div
-        className={clsx(
-          // Cap height at ~3 list rows so a large drop (the add-in lifts the
-          // cap to 50) cannot push the textarea below the viewport. At low
-          // counts the content is shorter than max-height and no scrollbar
-          // appears.
-          "flex max-h-40 flex-col overflow-y-auto",
-          surfaceVariant === "message" ? "" : "gap-2",
-        )}
-        style={attachmentsListStyle}
-      >
-        {attachedFiles.map((file) =>
-          // Wrap in InteractiveContainer if preview handler is provided
-          onFilePreview ? (
-            <InteractiveContainer
-              key={file.id}
-              onClick={() => onFilePreview(file)}
-              useDiv={true}
-              className="w-full cursor-pointer hover:bg-theme-bg-accent"
-              aria-label={`${t`Preview attachment`} ${file.filename}`}
-            >
-              <FilePreviewButton
-                file={file}
-                onRemove={() => onRemoveFile(file.id)}
-                disabled={disabled}
-                className="w-full"
-                showFileType={showFileTypes}
-                showSize={showFileSizes}
-                filenameTruncateLength={filenameTruncateLength}
-                filenameClassName="max-w-full"
-              />
-            </InteractiveContainer>
-          ) : (
-            // Regular preview button without interactive container
-            <FilePreviewButton
-              key={file.id}
-              file={file}
-              onRemove={() => onRemoveFile(file.id)}
-              disabled={disabled}
-              className="w-full"
-              showFileType={showFileTypes}
-              showSize={showFileSizes}
-              filenameTruncateLength={filenameTruncateLength}
-              filenameClassName="max-w-full"
-            />
-          ),
-        )}
-      </div>
-    </div>
+    <AttachmentTileList
+      items={items}
+      size="compact"
+      onRemove={onRemoveFile}
+      onRemoveAll={onRemoveAllFiles}
+      onActivate={
+        onFilePreview
+          ? (item) => onFilePreview(item.file as FileUploadItem)
+          : undefined
+      }
+      disabled={disabled}
+      capHeight
+      maxFiles={maxFiles}
+      className={clsx("mb-3", className)}
+    />
   );
 };

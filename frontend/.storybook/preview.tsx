@@ -13,6 +13,7 @@ import {
 } from "../src/components/providers/ThemeProvider";
 import type { ThemeMode } from "../src/components/providers/ThemeProvider";
 import { FeatureConfigProvider } from "../src/providers/FeatureConfigProvider";
+import { RootProvider } from "../src/providers/RootProvider";
 import { defaultTheme, darkTheme } from "../src/config/theme";
 import { themes as storybookThemes } from "@storybook/theming";
 import type { Decorator } from "@storybook/react";
@@ -254,6 +255,18 @@ const withFeatureConfig: Decorator = (Story) => {
   );
 };
 
+// The same provider stack the app mounts, so a story can render a real
+// connected component instead of a stand-in. Story files that assemble their
+// own partial stack silently lose whichever provider they omit — ChatInput
+// rendered blank for exactly that reason.
+const withAppProviders: Decorator = (Story) => {
+  return (
+    <RootProvider>
+      <Story />
+    </RootProvider>
+  );
+};
+
 // Main theme decorator that ties everything together
 const withThemeDecorator: Decorator = (Story, context) => {
   const { globals } = context;
@@ -363,6 +376,11 @@ const preview: Preview = {
     },
   },
   decorators: [
+    // Later entries wrap earlier ones, so this list runs innermost-first. The
+    // app's own providers sit closest to the story, inside the infrastructure
+    // ones (router, query client, feature config) that they depend on.
+    withAppProviders,
+
     // Apply Router context first (needed for components using useNavigate)
     withRouter,
 
