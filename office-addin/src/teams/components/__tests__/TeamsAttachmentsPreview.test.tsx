@@ -140,20 +140,20 @@ describe("TeamsAttachmentsPreview", () => {
     renderPreview([unrelated]);
 
     expect(screen.queryByRole("button", { name: /product sync/i })).toBeNull();
-    expect(screen.getByText("holiday")).toBeVisible();
+    expect(screen.getByText("holiday.pdf")).toBeVisible();
   });
 
   it("renders the conversation out of the transcript's own index block", async () => {
     state.attachedTranscript = transcriptFile();
     // Nothing is mounted until the block parses: showing the flat chips first
     // and pulling them back out a frame later is worse than a blank region.
-    expect(screen.queryByText("holiday")).toBeNull();
+    expect(screen.queryByText("holiday.pdf")).toBeNull();
     renderPreview([transcript, image, unrelated]);
 
     expect(await screen.findByText("Product sync")).toBeVisible();
     // The upload the transcript names is claimed by the conversation card; only
     // the unrelated file is left to the flat chips.
-    expect(screen.getByText("holiday")).toBeVisible();
+    expect(screen.getByText("holiday.pdf")).toBeVisible();
     expect(screen.queryByText("teams-img-abc")).toBeNull();
   });
 
@@ -233,8 +233,8 @@ describe("TeamsAttachmentsPreview", () => {
     );
     renderPreview([transcript, image, unrelated]);
 
-    expect(await screen.findByText("holiday")).toBeVisible();
-    expect(screen.getByText("teams-Product_sync")).toBeVisible();
+    expect(await screen.findByText("holiday.pdf")).toBeVisible();
+    expect(screen.getByText("teams-Product_sync.md")).toBeVisible();
     expect(screen.queryByRole("button", { name: /product sync/i })).toBeNull();
   });
 
@@ -246,8 +246,8 @@ describe("TeamsAttachmentsPreview", () => {
     );
     renderPreview([transcript, image, unrelated]);
 
-    expect(await screen.findByText("holiday")).toBeVisible();
-    expect(screen.getByText("teams-Product_sync")).toBeVisible();
+    expect(await screen.findByText("holiday.pdf")).toBeVisible();
+    expect(screen.getByText("teams-Product_sync.md")).toBeVisible();
     expect(screen.queryByRole("button", { name: /product sync/i })).toBeNull();
   });
 });
