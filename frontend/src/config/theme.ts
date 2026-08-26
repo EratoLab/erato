@@ -250,6 +250,15 @@ export type ThemeLayout = {
     imagePreviewMaxWidth: string;
     imagePreviewMaxHeight: string;
   };
+  /** Attachment tiles: compact stages in the composer, medium carries the transcript. */
+  attachmentTile: {
+    compactMediaSize: string;
+    compactDocMaxWidth: string;
+    mediumMediaSize: string;
+    mediumDocMaxWidth: string;
+    /** Height the staged area caps at before it scrolls. */
+    stagedMaxHeight: string;
+  };
   sidebar: {
     width: string;
     slimWidth: string;
@@ -552,6 +561,13 @@ export const defaultTheme: Theme = {
       inputMaxWidth: "56rem",
       imagePreviewMaxWidth: "24rem",
       imagePreviewMaxHeight: "24rem",
+    },
+    attachmentTile: {
+      compactMediaSize: "3.5rem",
+      compactDocMaxWidth: "15rem",
+      mediumMediaSize: "7rem",
+      mediumDocMaxWidth: "18rem",
+      stagedMaxHeight: "12rem",
     },
     sidebar: {
       width: "17.5rem",

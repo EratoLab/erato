@@ -45,9 +45,6 @@ export interface AttachmentTileListProps {
   className?: string;
 }
 
-/** Roughly three rows of compact tiles, past which the list scrolls. */
-const CAPPED_TILE_AREA = "max-h-48";
-
 export const AttachmentTileList: React.FC<AttachmentTileListProps> = ({
   items,
   size = "compact",
@@ -105,11 +102,16 @@ export const AttachmentTileList: React.FC<AttachmentTileListProps> = ({
           // overhang in padding, takes it back in margin to leave the tiles
           // where they were, and pins `overflow-x` explicitly.
           capHeight &&
-            clsx(
-              CAPPED_TILE_AREA,
-              "-mr-1 -mt-1 overflow-y-auto overflow-x-hidden pr-1 pt-1",
-            ),
+            "-mr-1 -mt-1 overflow-y-auto overflow-x-hidden pr-1 pt-1",
         )}
+        style={
+          capHeight
+            ? {
+                maxHeight:
+                  "var(--theme-layout-attachment-tile-staged-max-height)",
+              }
+            : undefined
+        }
       >
         {media.length > 0 && (
           <div className="flex flex-wrap items-start gap-2">

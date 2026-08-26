@@ -23,18 +23,21 @@ import type React from "react";
  */
 export type AttachmentTileSize = "compact" | "medium";
 
+/**
+ * Tile dimensions come from theme tokens so a customer theme can retune them;
+ * the icon plate stays a class because it is proportional chrome, not a
+ * dimension anyone would want to override on its own.
+ */
 const TILE_GEOMETRY = {
   compact: {
-    media: "size-14",
-    mediaWidth: "w-14",
-    docWidth: "max-w-[15rem]",
+    mediaSize: "var(--theme-layout-attachment-tile-compact-media-size)",
+    docMaxWidth: "var(--theme-layout-attachment-tile-compact-doc-max-width)",
     iconBox: "size-8",
     icon: "size-4",
   },
   medium: {
-    media: "size-28",
-    mediaWidth: "w-28",
-    docWidth: "max-w-[18rem]",
+    mediaSize: "var(--theme-layout-attachment-tile-medium-media-size)",
+    docMaxWidth: "var(--theme-layout-attachment-tile-medium-doc-max-width)",
     iconBox: "size-10",
     icon: "size-5",
   },
@@ -153,10 +156,8 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
       src={previewUrl ?? undefined}
       alt={onActivate ? "" : filename}
       onError={() => setImageFailed(true)}
-      className={clsx(
-        geometry.media,
-        "rounded-[var(--theme-radius-base)] border object-cover [border-color:var(--theme-border-media)]",
-      )}
+      style={{ width: geometry.mediaSize, height: geometry.mediaSize }}
+      className="rounded-[var(--theme-radius-base)] border object-cover [border-color:var(--theme-border-media)]"
     />
   ) : (
     <div
@@ -199,9 +200,10 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
         // Media keeps its square; a document pill sizes to its name but never
         // grows to fill the row — that stretch is what makes today's chips
         // read as list rows rather than tiles.
-        isMedia ? "shrink-0" : clsx("min-w-0", geometry.docWidth),
+        isMedia ? "shrink-0" : "min-w-0",
         className,
       )}
+      style={isMedia ? undefined : { maxWidth: geometry.docMaxWidth }}
       data-filetype={fileType}
     >
       {onActivate ? (
@@ -236,10 +238,8 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
 
       {isMedia && showCaption && (
         <p
-          className={clsx(
-            geometry.mediaWidth,
-            "mt-1 truncate text-xs text-[var(--theme-fg-muted)]",
-          )}
+          className="mt-1 truncate text-xs text-[var(--theme-fg-muted)]"
+          style={{ width: geometry.mediaSize }}
           title={filename}
         >
           {filename}
