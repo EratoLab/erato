@@ -2506,7 +2506,7 @@ pub struct FrontendConfig {
     pub disable_upload: bool,
 
     // Maximum number of files that can be attached to a chat message.
-    // Defaults to `5`.
+    // Defaults to `10`.
     #[serde(
         default = "default_max_files_per_message",
         alias = "max_files_per_message"
@@ -2624,7 +2624,7 @@ impl Default for FrontendConfig {
 }
 
 fn default_max_files_per_message() -> usize {
-    5
+    10
 }
 
 impl FrontendConfig {
@@ -2781,7 +2781,7 @@ pub struct AssistantsConfig {
     pub max_system_prompt_length: Option<usize>,
 
     // Maximum number of files that can be associated with an assistant.
-    // Defaults to `5`.
+    // Defaults to `10`.
     #[serde(default = "default_max_assistant_files")]
     pub max_files: usize,
 
@@ -2960,7 +2960,7 @@ fn default_assistant_context_file_contributor_threshold() -> f64 {
 }
 
 fn default_max_assistant_files() -> usize {
-    5
+    10
 }
 
 impl AssistantsConfig {

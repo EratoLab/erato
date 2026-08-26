@@ -64,7 +64,7 @@ function validateAttachment(
       }),
     };
   }
-  const result = FileTypeUtil.validateMetadata({ filename, mimeType, size });
+  const result = FileTypeUtil.validateMetadata({ filename, mimeType });
   if (!result.valid) {
     return { ok: false, reason: result.error ?? "Invalid file" };
   }

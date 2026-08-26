@@ -117,7 +117,7 @@ use tracing::instrument;
 use utoipa::{OpenApi, ToSchema};
 use utoipa_axum::router::OpenApiRouter;
 
-const DEFAULT_MAX_BODY_LIMIT_BYTES: usize = 20 * 1024 * 1024; // 20MB
+const DEFAULT_MAX_BODY_LIMIT_BYTES: usize = 50 * 1024 * 1024; // 50MB
 const GRAPH_API_BASE_URL: &str = "https://graph.microsoft.com/v1.0";
 const MAX_PROFILE_PHOTO_BYTES: usize = 2 * 1024 * 1024;
 const PROFILE_PHOTO_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);

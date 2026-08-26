@@ -14,7 +14,7 @@ import { useUploadFeature } from "@/providers/FeatureConfigProvider";
 import { useFileCapabilitiesContext } from "@/providers/FileCapabilitiesProvider";
 import { createLogger } from "@/utils/debugLogger";
 import { validateFiles } from "@/utils/fileCapabilities";
-import { FileTypeUtil, FILE_TYPES } from "@/utils/fileTypes";
+import { FileTypeUtil } from "@/utils/fileTypes";
 import { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
 
 import {
@@ -195,28 +195,6 @@ export function useFileDropzone({
     },
   });
 
-  // Calculate max file size based on backend limit and accepted file types
-  const getMaxFileSize = useCallback((): number => {
-    // Start with the backend-configured max upload size
-    let maxSize = maxSizeBytes;
-
-    // If specific file types are accepted, check their limits too
-    if (acceptedFileTypes.length > 0) {
-      const typeMaxSize = acceptedFileTypes.reduce((max, type) => {
-        const typeConfig = FILE_TYPES[type];
-        if (!typeConfig.enabled || !typeConfig.maxSize) return max;
-        return Math.max(max, typeConfig.maxSize);
-      }, 0);
-
-      // Use the smaller of backend limit and file type limit
-      if (typeMaxSize > 0) {
-        maxSize = Math.min(maxSize, typeMaxSize);
-      }
-    }
-
-    return maxSize;
-  }, [acceptedFileTypes, maxSizeBytes]);
-
   // Function to upload files
   const uploadFiles = useCallback(
     async (files: File[]) => {
@@ -395,7 +373,7 @@ export function useFileDropzone({
         : undefined,
     multiple,
     disabled: disabled || isUploading || !uploadEnabled,
-    maxSize: getMaxFileSize(),
+    maxSize: maxSizeBytes,
   });
 
   // Format any dropzone validation errors or manually set errors

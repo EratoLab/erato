@@ -16,8 +16,8 @@ use serde_json::Value;
 use std::fmt::Write;
 use std::io;
 
-// Default maximum body limit in bytes (20MB) - must match DEFAULT_MAX_BODY_LIMIT_BYTES in server/api/v1beta/mod.rs
-const DEFAULT_MAX_BODY_LIMIT_BYTES: u64 = 20 * 1024 * 1024;
+// Default maximum body limit in bytes (50MB) - must match DEFAULT_MAX_BODY_LIMIT_BYTES in server/api/v1beta/mod.rs
+const DEFAULT_MAX_BODY_LIMIT_BYTES: u64 = 50 * 1024 * 1024;
 
 // The following keys are aligned with the `env.ts` of the frontend.
 // If you change the keys, you must also update them in the frontend.

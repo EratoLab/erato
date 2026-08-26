@@ -54,7 +54,7 @@ const createMockEnv = (overrides: Partial<Env> = {}): Env => ({
   userPreferencesDataTabEnabled: true,
   mcpServersTabEnabled: false,
   messageFeedbackEditTimeLimitSeconds: null,
-  maxUploadSizeBytes: 20971520,
+  maxUploadSizeBytes: 52428800,
   audioTranscriptionEnabled: false,
   audioTranscriptionMaxRecordingDurationSeconds: 1200,
   audioDictationEnabled: false,

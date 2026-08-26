@@ -192,8 +192,8 @@ chat_provider_ids = ["test-token-limit"]
 # translation_po_compilation_mode = "precompiled"
 # # Whether to disable file upload functionality in the UI (default: false)
 # disable_upload = true
-# # Maximum number of files that can be attached to one chat message (default: 5)
-# max_files = 5
+# # Maximum number of files that can be attached to one chat message (default: 10)
+# max_files = 10
 # # Whether to disable automatic focusing of the chat input field (default: false)
 # # This prevents unwanted scrolling behavior when navigating to pages with embedded chat
 # disable_chat_input_autofocus = true
@@ -341,8 +341,8 @@ chat_provider_ids = ["test-token-limit"]
 # # Maximum number of characters allowed in an assistant system prompt.
 # # When unset, no server-side length limit is enforced.
 # max_system_prompt_length = 5000
-# # Maximum number of files that can be associated with an assistant (default: 5)
-# max_files = 5
+# # Maximum number of files that can be associated with an assistant (default: 10)
+# max_files = 10
 # # Maximum number of characters allowed in an assistant's system prompt.
 # # When not set, no server-side limit is enforced and the frontend defaults to 5000 for UI validation.
 # max_system_prompt_length = 5000

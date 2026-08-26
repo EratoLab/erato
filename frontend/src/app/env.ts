@@ -132,8 +132,8 @@ declare global {
   }
 }
 
-// Default maximum body limit in bytes (20MB) - must match backend default
-const DEFAULT_MAX_BODY_LIMIT_BYTES = 20 * 1024 * 1024;
+// Default maximum body limit in bytes (50MB) - must match backend default
+const DEFAULT_MAX_BODY_LIMIT_BYTES = 50 * 1024 * 1024;
 // These are static runtime mount paths, not user-facing strings.
 // eslint-disable-next-line lingui/no-unlocalized-strings
 const COMMON_PUBLIC_BASE_PATH = "/public/common";

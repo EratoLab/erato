@@ -244,8 +244,8 @@ const FeatureConfigContext = createContext<FeatureConfig | null>(null);
 export const defaultStaticFeatureConfig: FeatureConfig = {
   upload: {
     enabled: true,
-    maxSizeBytes: 20 * 1024 * 1024,
-    maxSizeFormatted: "20 MB",
+    maxSizeBytes: 50 * 1024 * 1024,
+    maxSizeFormatted: "50 MB",
   },
   chatInput: {
     autofocus: true,

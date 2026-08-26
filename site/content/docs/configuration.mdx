@@ -197,7 +197,7 @@ disable_upload = true
 
 Maximum number of files that can be attached to one chat message. The backend enforces this limit for message submit/edit requests and multipart chat uploads; the frontend uses it to limit file selection.
 
-**Default value:** `5`
+**Default value:** `10`
 
 **Type:** `integer` (greater than 0)
 
@@ -1413,7 +1413,7 @@ The maximum individual file size that may be uploaded in kilobytes. This limit i
 
 **Type:** `number | None`
 
-**Default:** `20480` KB (20 MB) when no provider configures a limit
+**Default:** `51200` KB (50 MB) when no provider configures a limit
 
 **Example:** `102400` (100 MB), `10240` (10 MB)
 
@@ -3455,7 +3455,7 @@ max_system_prompt_length = 5000
 
 Maximum number of files that can be associated with an assistant. The backend enforces this limit for assistant create/update requests and standalone multipart uploads; the frontend uses it to limit file selection.
 
-**Default value:** `5`
+**Default value:** `10`
 
 **Type:** `integer` (greater than 0)
 

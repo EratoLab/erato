@@ -762,7 +762,7 @@ test(
     await page.goto("/chat/new");
     await chatIsReadyToChat(page);
 
-    const bigFilePath = path.join(__dirname, "../test-files/big-file-20mb.pdf");
+    const bigFilePath = path.join(__dirname, "../test-files/big-file-60mb.pdf");
     await uploadFileInChat(page, bigFilePath);
 
     await expect(page.getByTestId("file-upload-error")).toBeVisible({

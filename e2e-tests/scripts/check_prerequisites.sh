@@ -154,7 +154,7 @@ echo ""
 echo "7. Checking test files..."
 TEST_FILES_DIR="$E2E_DIR/test-files"
 REQUIRED_FILES=(
-    "big-file-20mb.pdf"
+    "big-file-60mb.pdf"
     "long-file-100k-words.pdf"
 )
 all_files_exist=true

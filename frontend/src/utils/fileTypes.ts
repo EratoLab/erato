@@ -27,8 +27,6 @@ export interface FileTypeConfig {
   extensions: string[];
   /** Mime type patterns (e.g. 'application/pdf', 'image/*') */
   mimeTypes: string[];
-  /** Max allowed file size in bytes */
-  maxSize?: number;
   /** Icon ID - either an iconoir-react icon name or a custom SVG path */
   iconId: string;
   /** Icon color - can be any valid CSS color */
@@ -45,7 +43,6 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
     displayName: "PDF",
     extensions: ["pdf"],
     mimeTypes: ["application/pdf"],
-    maxSize: 10 * 1024 * 1024, // 10MB
     iconId: "MultiplePages",
     iconColor: "rgb(244, 63, 94)", // rose-500
     enabled: true,
@@ -64,7 +61,6 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
       "tif",
     ],
     mimeTypes: ["image/*"],
-    maxSize: 5 * 1024 * 1024, // 5MB
     iconId: "MediaImage",
     iconColor: "rgb(59, 130, 246)", // blue-500
     enabled: true,
@@ -78,7 +74,6 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
       "application/rtf",
       "application/vnd.oasis.opendocument.text",
     ],
-    maxSize: 20 * 1024 * 1024, // 20MB
     iconId: "Page",
     iconColor: "rgb(79, 70, 229)", // indigo-500
     enabled: true,
@@ -92,7 +87,6 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
       "text/csv",
       "application/vnd.oasis.opendocument.spreadsheet",
     ],
-    maxSize: 20 * 1024 * 1024, // 20MB
     iconId: "Page",
     iconColor: "rgb(16, 185, 129)", // emerald-500
     enabled: true,
@@ -105,7 +99,6 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
       "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       "application/vnd.oasis.opendocument.presentation",
     ],
-    maxSize: 30 * 1024 * 1024, // 30MB
     iconId: "MultiplePages",
     iconColor: "rgb(245, 158, 11)", // amber-500
     enabled: true,
@@ -114,7 +107,6 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
     displayName: "Text",
     extensions: ["txt", "md", "markdown"],
     mimeTypes: ["text/plain", "text/markdown"],
-    maxSize: 2 * 1024 * 1024, // 2MB
     iconId: "Page",
     iconColor: "rgb(107, 114, 128)", // gray-500
     enabled: true,
@@ -139,7 +131,6 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
       "sh",
     ],
     mimeTypes: ["text/javascript", "application/json", "text/html", "text/css"],
-    maxSize: 2 * 1024 * 1024, // 2MB
     iconId: "Code",
     iconColor: "rgb(124, 58, 237)", // violet-600
     enabled: true,
@@ -153,7 +144,6 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
       "application/x-tar",
       "application/gzip",
     ],
-    maxSize: 50 * 1024 * 1024, // 50MB
     iconId: "Archive",
     iconColor: "rgb(202, 138, 4)", // yellow-600
     enabled: true,
@@ -162,7 +152,6 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
     displayName: "Audio",
     extensions: ["mp3", "wav", "ogg", "m4a", "flac"],
     mimeTypes: ["audio/*"],
-    maxSize: 30 * 1024 * 1024, // 30MB
     iconId: "MusicNote",
     iconColor: "rgb(219, 39, 119)", // pink-600
     enabled: true,
@@ -171,7 +160,6 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
     displayName: "Video",
     extensions: ["mp4", "avi", "mov", "webm", "mkv"],
     mimeTypes: ["video/*"],
-    maxSize: 100 * 1024 * 1024, // 100MB
     iconId: "MediaVideo",
     iconColor: "rgb(220, 38, 38)", // red-600
     enabled: true,
@@ -180,7 +168,6 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
     displayName: "Email",
     extensions: ["eml"],
     mimeTypes: ["message/rfc822"],
-    maxSize: 25 * 1024 * 1024, // 25MB — emails with inline attachments can run large
     iconId: "Mail",
     iconColor: "rgb(37, 99, 235)", // blue-600
     enabled: true,
@@ -222,7 +209,7 @@ export class FileTypeUtil {
   }
 
   /**
-   * Validate if a file is allowed based on its type and size
+   * Validate if a file is allowed based on its type
    * @param file - The file to validate
    * @returns Validation result object
    */
@@ -234,20 +221,15 @@ export class FileTypeUtil {
     return this.validateMetadata({
       filename: file.name,
       mimeType: file.type,
-      size: file.size,
     });
   }
 
   /**
-   * Metadata-only variant of `validateFile`. Lets callers run the same
-   * type/size checks without materialising the bytes — useful when
-   * validating parsed `.eml` attachments before the user confirms upload.
+   * Metadata-only variant of `validateFile`. Lets callers run the same type
+   * checks without materialising the bytes — useful when validating parsed
+   * `.eml` attachments before the user confirms upload.
    */
-  static validateMetadata(input: {
-    filename: string;
-    mimeType?: string;
-    size: number;
-  }): {
+  static validateMetadata(input: { filename: string; mimeType?: string }): {
     valid: boolean;
     error?: string;
     fileType: FileType;
@@ -262,15 +244,6 @@ export class FileTypeUtil {
       return {
         valid: false,
         error: `File type ${config.displayName} is not supported`,
-        fileType,
-      };
-    }
-
-    if (config.maxSize && input.size > config.maxSize) {
-      const maxSizeMB = Math.round(config.maxSize / (1024 * 1024));
-      return {
-        valid: false,
-        error: `File exceeds maximum size of ${maxSizeMB}MB`,
         fileType,
       };
     }
