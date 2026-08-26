@@ -1389,18 +1389,18 @@ msgstr "Deselect {facetDisplayName}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
-msgid "chat.file.error"
-msgstr "Error loading file"
+#~ msgid "chat.file.error"
+#~ msgstr "Error loading file"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
-msgid "chat.file.loading"
-msgstr "Loading file..."
+#~ msgid "chat.file.loading"
+#~ msgstr "Loading file..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
-msgid "chat.file.preview.aria"
-msgstr "Preview attached file:"
+#~ msgid "chat.file.preview.aria"
+#~ msgstr "Preview attached file:"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx

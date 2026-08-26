@@ -1389,18 +1389,18 @@ msgstr "Odznacz {facetDisplayName}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
-msgid "chat.file.error"
-msgstr "Błąd wczytywania pliku"
+#~ msgid "chat.file.error"
+#~ msgstr "Błąd wczytywania pliku"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
-msgid "chat.file.loading"
-msgstr "Ładowanie pliku..."
+#~ msgid "chat.file.loading"
+#~ msgstr "Ładowanie pliku..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
-msgid "chat.file.preview.aria"
-msgstr "Podgląd załączonego pliku:"
+#~ msgid "chat.file.preview.aria"
+#~ msgstr "Podgląd załączonego pliku:"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx

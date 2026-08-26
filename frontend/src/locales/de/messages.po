@@ -1389,18 +1389,18 @@ msgstr "Tool {facetDisplayName} abwählen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
-msgid "chat.file.error"
-msgstr "Fehler beim Laden der Datei"
+#~ msgid "chat.file.error"
+#~ msgstr "Fehler beim Laden der Datei"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
-msgid "chat.file.loading"
-msgstr "Datei wird geladen..."
+#~ msgid "chat.file.loading"
+#~ msgstr "Datei wird geladen..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
-msgid "chat.file.preview.aria"
-msgstr "Angehängte Datei anzeigen:"
+#~ msgid "chat.file.preview.aria"
+#~ msgstr "Angehängte Datei anzeigen:"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
