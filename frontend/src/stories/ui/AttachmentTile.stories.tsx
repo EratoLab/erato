@@ -169,6 +169,20 @@ export const SentMessageMedium: Story = {
   },
 };
 
+/**
+ * The middle tier: an image grows in place, capped at the chat image bounds,
+ * without leaving the transcript. The corner toggle appears on hover or focus;
+ * clicking the tile itself still opens the full preview.
+ */
+export const SentMessageExpandable: Story = {
+  args: {
+    items: fullSet,
+    size: "medium",
+    expandable: true,
+    onActivate: () => {},
+  },
+};
+
 export const SentMessageWithCaptions: Story = {
   args: {
     items: fullSet,

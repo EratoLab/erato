@@ -26,6 +26,8 @@ export interface AttachmentTileListProps {
   onRemoveAll?: () => void;
   onActivate?: (item: AttachmentTileItem) => void;
   showCaptions?: boolean;
+  /** Offers in-place growth on image tiles. Off in the composer, where the tile is an inventory marker rather than something to read. */
+  expandable?: boolean;
   disabled?: boolean;
   /**
    * Below this count the tiles speak for themselves, so the bulk control stays
@@ -52,6 +54,7 @@ export const AttachmentTileList: React.FC<AttachmentTileListProps> = ({
   onRemoveAll,
   onActivate,
   showCaptions = false,
+  expandable = false,
   disabled = false,
   removeAllThreshold = 3,
   capHeight = false,
@@ -85,6 +88,7 @@ export const AttachmentTileList: React.FC<AttachmentTileListProps> = ({
       size={size}
       labelOverride={item.labelOverride}
       showCaption={showCaptions}
+      expandable={expandable}
       disabled={disabled}
       onRemove={onRemove ? () => onRemove(item.id) : undefined}
       onActivate={onActivate ? () => onActivate(item) : undefined}

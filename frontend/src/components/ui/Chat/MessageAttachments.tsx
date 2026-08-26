@@ -101,6 +101,7 @@ export const MessageAttachments: React.FC<MessageAttachmentsProps> = ({
     <AttachmentTileList
       items={items}
       size="medium"
+      expandable
       className="mt-2"
       onActivate={
         onFilePreview
