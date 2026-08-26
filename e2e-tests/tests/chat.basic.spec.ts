@@ -19,7 +19,9 @@ test(
     await fileChooser.setFiles(filePath);
 
     await expect(page.getByText("PDF", { exact: true })).toBeVisible();
-    await expect(page.getByText("Attachments")).toBeVisible();
+    await expect(
+      page.getByText(/sample-report-compressed\.pdf/i),
+    ).toBeVisible();
   },
 );
 
@@ -208,7 +210,7 @@ test(
     expect(uploadRequests.length).toBe(0);
 
     // Verify no file appears in the attachments
-    await expect(page.getByText("Attachments")).not.toBeVisible();
+    await expect(page.locator("[data-filetype]")).toHaveCount(0);
   },
 );
 
@@ -260,7 +262,7 @@ test(
     expect(uploadRequests.length).toBe(0);
 
     // Verify no files appear in the attachments
-    await expect(page.getByText("Attachments")).not.toBeVisible();
+    await expect(page.locator("[data-filetype]")).toHaveCount(0);
   },
 );
 
@@ -342,7 +344,6 @@ test.describe("Can upload a file and get an AI response about its contents", () 
         // Verify the file appears in the UI
         const fileNamePrefix = fileName.slice(0, 10);
         await expect(page.getByText(fileNamePrefix)).toBeVisible();
-        await expect(page.getByText("Attachments")).toBeVisible();
 
         // Submit a message asking about the file contents
         const textbox = page.getByRole("textbox", {

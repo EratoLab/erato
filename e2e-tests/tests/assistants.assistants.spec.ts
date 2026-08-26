@@ -54,17 +54,12 @@ test.describe("Assistant Management", () => {
     const fileInput = page.locator('input[type="file"]');
     await fileInput.setInputFiles(testFilePath);
 
-    // Wait for upload to complete by checking for the attachments heading
-    await expect(
-      page.getByRole("heading", { name: /attachments/i }),
-    ).toBeVisible({
+    // Wait for upload to complete by checking for the staged file itself
+    // (its text may be truncated with an ellipsis).
+    await expect(page.getByText(/sample.*compressed.*pdf/i)).toBeVisible({
       timeout: 10000,
     });
 
-    // Also verify the file name appears (text may be truncated with ellipsis)
-    await expect(page.getByText(/sample.*compressed.*pdf/i)).toBeVisible({
-      timeout: 2000,
-    });
     await expect(
       page.getByRole("button", {
         name: /remove sample-report-compressed\.pdf/i,
@@ -162,16 +157,10 @@ test.describe("Assistant Management", () => {
     const fileInput = page.locator('input[type="file"]');
     await fileInput.setInputFiles(testFilePath);
 
-    // Wait for upload to complete by checking for the attachments heading
-    await expect(
-      page.getByRole("heading", { name: /attachments/i }),
-    ).toBeVisible({
-      timeout: 10000,
-    });
-
-    // Also verify the file name appears (text may be truncated with ellipsis)
+    // Wait for upload to complete by checking for the staged file itself
+    // (its text may be truncated with an ellipsis).
     await expect(page.getByText(/sample.*compressed.*pdf/i)).toBeVisible({
-      timeout: 2000,
+      timeout: 10000,
     });
 
     // Save changes
@@ -207,15 +196,12 @@ test.describe("Assistant Management", () => {
     const fileInput = page.locator('input[type="file"]');
     await fileInput.setInputFiles(testFilePath);
 
-    // Wait for upload to complete by checking for the attachments heading
-    await expect(
-      page.getByRole("heading", { name: /attachments/i }),
-    ).toBeVisible({
+    // Wait for upload to complete by checking for the staged file itself
+    // (its text may be truncated with an ellipsis).
+    await expect(page.getByText(/sample.*compressed.*pdf/i)).toBeVisible({
       timeout: 10000,
     });
 
-    // Wait for file to appear (text may be truncated with ellipsis)
-    await expect(page.getByText(/sample.*compressed.*pdf/i)).toBeVisible();
     await expect(
       page.getByRole("button", {
         name: /remove sample-report-compressed\.pdf/i,
@@ -313,14 +299,11 @@ test.describe("Assistant Management", () => {
     const fileInput = page.locator('input[type="file"]');
     await fileInput.setInputFiles(testFilePath);
 
-    // Wait for upload to complete by checking for the attachments heading
-    await expect(
-      page.getByRole("heading", { name: /attachments/i }),
-    ).toBeVisible({
+    // Wait for upload to complete by checking for the staged file itself
+    // (its text may be truncated with an ellipsis).
+    await expect(page.getByText(/sample.*compressed.*pdf/i)).toBeVisible({
       timeout: 10000,
     });
-
-    await expect(page.getByText(/sample.*compressed.*pdf/i)).toBeVisible();
 
     await page.getByRole("button", { name: /create assistant/i }).click();
     await page.waitForURL("/assistants/created");

@@ -68,7 +68,6 @@ const expectChatDragDropUploadToWork = async (page: Page) => {
   await expect(page.getByText("Drop to upload")).toBeVisible();
   await dispatchFileDragEvent(page, "drop", filePayload);
   await expect(page.getByTestId("chat-drop-overlay")).toHaveCount(0);
-  await expect(page.getByText("Attachments")).toBeVisible();
   await expect(page.getByText(/sample-report-compressed/i)).toBeVisible();
 };
 
@@ -265,7 +264,6 @@ test(
     });
 
     await expect.poll(() => uploadRequestCount).toBeGreaterThan(0);
-    await expect(page.getByText("Attachments")).toBeVisible();
     await expect(page.getByText(/clipboard-image/i)).toBeVisible();
 
     await textbox.fill("what is in this image?");
