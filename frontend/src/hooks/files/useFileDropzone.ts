@@ -26,6 +26,7 @@ import {
 } from "./errors";
 import { useFileUploadStore } from "./useFileUploadStore";
 
+import type { FileUploadItemWithSize } from "@/components/ui/FileUpload/FilePreviewBase";
 import type {
   FileUploadItem,
   FileUploadResponse,
@@ -134,6 +135,32 @@ interface UseFileDropzoneResult {
 /**
  * Modern hook for handling file dropzone and upload functionality
  */
+
+/**
+ * Carries each upload's byte size over from the browser `File` the user picked.
+ *
+ * The API type has no size field, so the value is otherwise lost the moment the
+ * local `File` is swapped for the server's record — even though the composer
+ * held it a line earlier. Matching is by filename rather than position, because
+ * response ordering is not part of the upload contract; a name duplicated
+ * within one batch is ambiguous, so it is dropped and that file simply shows no
+ * size.
+ */
+export function withLocalSizes(
+  uploaded: FileUploadItem[],
+  localFiles: File[],
+): FileUploadItemWithSize[] {
+  const sizeByName = new Map<string, number | null>();
+  for (const file of localFiles) {
+    sizeByName.set(file.name, sizeByName.has(file.name) ? null : file.size);
+  }
+
+  return uploaded.map((item) => {
+    const size = sizeByName.get(item.filename);
+    return typeof size === "number" ? { ...item, size } : item;
+  });
+}
+
 export function useFileDropzone({
   acceptedFileTypes = [],
   multiple = false,
@@ -286,9 +313,10 @@ export function useFileDropzone({
         }
 
         if (result.files.length > 0) {
-          addFiles(result.files);
-          onFilesUploaded?.(result.files);
-          uploadedItems = result.files; // Store the result
+          const sized = withLocalSizes(result.files, filesToUpload);
+          addFiles(sized);
+          onFilesUploaded?.(sized);
+          uploadedItems = sized; // Store the result
         }
       } catch (err) {
         logger.error("Error uploading files (outer catch):", err);

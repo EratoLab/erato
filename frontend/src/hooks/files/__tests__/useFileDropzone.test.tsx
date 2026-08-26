@@ -193,18 +193,19 @@ describe("useFileDropzone", () => {
       }),
     );
 
-    // Check state updates
+    // Check state updates. The server record carries no size, so each item is
+    // annotated with the byte size of the file the user actually picked.
     expect(result.current.isUploading).toBe(false);
     expect(result.current.uploadedFiles).toEqual([
-      createMockUploadedFile("file1", "test1.pdf"),
-      createMockUploadedFile("file2", "test2.jpg"),
+      { ...createMockUploadedFile("file1", "test1.pdf"), size: 12 },
+      { ...createMockUploadedFile("file2", "test2.jpg"), size: 10 },
     ]);
     expect(result.current.error).toBeNull();
 
     // Check callback
     expect(mockOnFilesUploaded).toHaveBeenCalledWith([
-      createMockUploadedFile("file1", "test1.pdf"),
-      createMockUploadedFile("file2", "test2.jpg"),
+      { ...createMockUploadedFile("file1", "test1.pdf"), size: 12 },
+      { ...createMockUploadedFile("file2", "test2.jpg"), size: 10 },
     ]);
   });
 
