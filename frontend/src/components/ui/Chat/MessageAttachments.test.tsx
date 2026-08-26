@@ -1,6 +1,6 @@
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
@@ -145,6 +145,45 @@ describe("MessageAttachments", () => {
       expect.objectContaining({ id: "1" }),
       files,
     );
+  });
+
+  it("grows an image in place, between the tile and the full preview", async () => {
+    const files = [file("1", "shot.png", "https://example.invalid/preview/1")];
+
+    await renderWithProviders(
+      <MessageAttachments
+        fileIds={["1"]}
+        filesById={byId(...files)}
+        relatedFiles={files}
+        onFilePreview={vi.fn()}
+      />,
+    );
+
+    const toggle = screen.getByRole("button", { name: /Expand shot\.png/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(toggle);
+
+    expect(
+      screen.getByRole("button", { name: /Collapse shot\.png/ }),
+    ).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("offers no in-place growth for a document, which has nothing larger to show", async () => {
+    const files = [file("1", "report.pdf")];
+
+    await renderWithProviders(
+      <MessageAttachments
+        fileIds={["1"]}
+        filesById={byId(...files)}
+        relatedFiles={files}
+        onFilePreview={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: /Expand/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("skips ids it cannot resolve rather than rendering a broken tile", async () => {
