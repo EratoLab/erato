@@ -183,6 +183,19 @@ chat_provider_ids = ["test-token-limit"]
 # icon_16_path = "assets/ribbon-icon-16.png"
 # icon_32_path = "assets/ribbon-icon-32.png"
 # icon_80_path = "assets/ribbon-icon-80.png"
+#
+# # Runtime hosting the Outlook launch event handlers. Required as soon as at
+# # least one launch event is configured. Both paths are resolved against the
+# # deployment base URL, so they must start with "/" and must not contain "..".
+# [integrations.ms_office.addin.launch_event_runtime]
+# page_path = "/public/component-kits/example/commands.html"    # HTML runtime for Outlook on the web, new Outlook, and Outlook on Mac
+# script_path = "/public/component-kits/example/launchevent.js"  # JavaScript-only override for classic Outlook on Windows
+#
+# # Outlook launch events the add-in subscribes to, rendered into the add-in
+# # manifest in the configured order. Supported event: "OnNewMessageCompose".
+# [[integrations.ms_office.addin.launch_events]]
+# event = "OnNewMessageCompose"
+# function_name = "onNewMessageComposeHandler"
 
 # Frontend configuration options for embedded scenarios
 # [frontend]
