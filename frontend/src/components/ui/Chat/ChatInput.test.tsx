@@ -4,7 +4,13 @@ import {
   QueryClientProvider,
   skipToken,
 } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { act } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -12,6 +18,8 @@ import { componentRegistry } from "@/config/componentRegistry";
 import { useComposeSessionStore } from "@/hooks/chat/store/composeSessionStore";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useMessageQueueStore } from "@/hooks/chat/store/messageQueueStore";
+import { UploadTooLargeError } from "@/hooks/files/errors";
+import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { ChatInput } from "./ChatInput";
@@ -208,9 +216,22 @@ vi.mock("../Controls/Button", () => ({
 vi.mock("../Feedback/Alert", () => ({
   Alert: ({
     children,
+    dismissible,
+    onDismiss,
     ...props
-  }: { children: ReactNode } & HTMLAttributes<HTMLDivElement>) => (
-    <div {...props}>{children}</div>
+  }: {
+    children: ReactNode;
+    dismissible?: boolean;
+    onDismiss?: () => void;
+  } & HTMLAttributes<HTMLDivElement>) => (
+    <div {...props}>
+      {children}
+      {dismissible && onDismiss && (
+        <button type="button" aria-label="Dismiss" onClick={onDismiss}>
+          dismiss
+        </button>
+      )}
+    </div>
   ),
 }));
 
@@ -326,6 +347,48 @@ describe("ChatInput", () => {
       hasRecordedAudioFile: () => false,
       toggleAudioRecording: vi.fn(),
     });
+  });
+
+  it("clears the shared upload error when the file error alert is dismissed", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const setFileError = vi.fn();
+    const uploadError = new UploadTooLargeError("50 MB");
+    mockUseChatInputHandlers.mockReturnValue({
+      attachedFiles: [],
+      fileError: uploadError.message,
+      setFileError,
+      handleFilesUploaded: vi.fn(),
+      handleRemoveFile: vi.fn(),
+      handleRemoveAllFiles: vi.fn(),
+      setAttachedFiles: vi.fn(),
+      createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
+    });
+    useFileUploadStore.getState().setError(uploadError);
+
+    const { i18n } = await import("@lingui/core");
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={vi.fn()} uploadError={uploadError} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByTestId("file-upload-error")).toBeInTheDocument();
+
+    fireEvent.click(
+      within(screen.getByTestId("file-upload-error")).getByRole("button", {
+        name: "Dismiss",
+      }),
+    );
+
+    expect(setFileError).toHaveBeenCalledWith(null);
+    expect(useFileUploadStore.getState().error).toBeNull();
   });
 
   it("re-focuses the chat textarea when a response finishes streaming", async () => {
