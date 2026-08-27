@@ -12,12 +12,8 @@ import {
   splitFilenameForDisplay,
   type FileResource,
 } from "./FilePreviewBase";
-import {
-  CloseIcon,
-  CollapseDiagonalIcon,
-  ExpandDiagonalIcon,
-  ResolvedIcon,
-} from "../icons";
+import { ExpandMediaButton } from "../Controls/ExpandMediaButton";
+import { CloseIcon, ResolvedIcon } from "../icons";
 
 import type React from "react";
 
@@ -254,27 +250,11 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
       )}
 
       {expandable && isMedia && (
-        <button
-          type="button"
-          onClick={() => setExpanded((value) => !value)}
-          aria-expanded={expanded}
-          aria-label={
-            expanded ? `${t`Collapse`} ${filename}` : `${t`Expand`} ${filename}`
-          }
-          className={clsx(
-            "absolute -left-1 -top-1 z-10 inline-flex size-5 items-center justify-center rounded-full",
-            "border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] text-[var(--theme-fg-muted)] shadow-sm",
-            "hover:text-[var(--theme-fg-primary)]",
-            "opacity-0 transition-opacity focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100",
-            "[@media(hover:none)]:opacity-100",
-          )}
-        >
-          {expanded ? (
-            <CollapseDiagonalIcon className="size-3" />
-          ) : (
-            <ExpandDiagonalIcon className="size-3" />
-          )}
-        </button>
+        <ExpandMediaButton
+          expanded={expanded}
+          onToggle={() => setExpanded((value) => !value)}
+          label={filename}
+        />
       )}
 
       {onRemove && (

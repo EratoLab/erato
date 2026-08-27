@@ -4434,7 +4434,7 @@ msgstr "Dialog schließen"
 msgid "Close modal overlay"
 msgstr "Dialog-Overlay schließen"
 
-#: src/components/ui/FileUpload/AttachmentTile.tsx
+#: src/components/ui/Controls/ExpandMediaButton.tsx
 msgid "Collapse"
 msgstr ""
 
@@ -4727,7 +4727,7 @@ msgstr "Tokennutzung wird geschätzt..."
 msgid "Exit audio mode"
 msgstr ""
 
-#: src/components/ui/FileUpload/AttachmentTile.tsx
+#: src/components/ui/Controls/ExpandMediaButton.tsx
 msgid "Expand"
 msgstr ""
 
