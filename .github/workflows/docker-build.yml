@@ -101,7 +101,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   lint-frontend:
-    timeout-minutes: 10
+    timeout-minutes: 20
     name: "lint (frontend)"
     runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
     steps:

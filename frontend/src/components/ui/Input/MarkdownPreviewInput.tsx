@@ -6,8 +6,12 @@ import remarkGfm from "remark-gfm";
 import { Textarea } from "./Textarea";
 
 import type { TextareaProps } from "./Textarea";
+import type { KeyboardEvent } from "react";
 
 type MarkdownPreviewTab = "markdown" | "preview";
+
+/** Left-to-right order of the tab strip, for arrow-key navigation. */
+const TAB_ORDER: MarkdownPreviewTab[] = ["markdown", "preview"];
 
 export interface MarkdownPreviewInputProps
   extends Omit<TextareaProps, "className"> {
@@ -53,6 +57,46 @@ export function MarkdownPreviewInput({
 
   const isMarkdownTab = activeTab === "markdown";
 
+  const tabIds: Record<MarkdownPreviewTab, string> = {
+    markdown: markdownTabId,
+    preview: previewTabId,
+  };
+
+  /**
+   * Automatic activation: selection and focus move together. Without this the
+   * selected tab is the only tab stop in the strip and a keyboard user cannot
+   * reach the other one.
+   */
+  const handleTabKeyDown = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    currentTab: MarkdownPreviewTab,
+  ) => {
+    const currentIndex = TAB_ORDER.indexOf(currentTab);
+    let nextTab: MarkdownPreviewTab;
+
+    switch (event.key) {
+      case "ArrowRight":
+        nextTab = TAB_ORDER[(currentIndex + 1) % TAB_ORDER.length];
+        break;
+      case "ArrowLeft":
+        nextTab =
+          TAB_ORDER[(currentIndex - 1 + TAB_ORDER.length) % TAB_ORDER.length];
+        break;
+      case "Home":
+        nextTab = TAB_ORDER[0];
+        break;
+      case "End":
+        nextTab = TAB_ORDER[TAB_ORDER.length - 1];
+        break;
+      default:
+        return;
+    }
+
+    event.preventDefault();
+    setActiveTab(nextTab);
+    document.getElementById(tabIds[nextTab])?.focus({ preventScroll: true });
+  };
+
   return (
     <div
       className={clsx(
@@ -79,6 +123,7 @@ export function MarkdownPreviewInput({
               disabled && "cursor-not-allowed opacity-50",
             )}
             onClick={() => setActiveTab("markdown")}
+            onKeyDown={(event) => handleTabKeyDown(event, "markdown")}
           >
             {markdownTabLabel}
           </button>
@@ -98,6 +143,7 @@ export function MarkdownPreviewInput({
               disabled && "cursor-not-allowed opacity-50",
             )}
             onClick={() => setActiveTab("preview")}
+            onKeyDown={(event) => handleTabKeyDown(event, "preview")}
           >
             {previewTabLabel}
           </button>
