@@ -58,6 +58,7 @@ export { AttachmentTileList } from "@/components/ui/FileUpload/AttachmentTileLis
 export type { AttachmentTileItem } from "@/components/ui/FileUpload/AttachmentTileList";
 export type { AttachmentTileListProps } from "@/components/ui/FileUpload/AttachmentTileList";
 export { FileAttachmentsPreview } from "@/components/ui/FileUpload/FileAttachmentsPreview";
+export type { ChatInputAttachmentPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
 export type { FileAttachmentsPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
 export { FilePreviewBase } from "@/components/ui/FileUpload/FilePreviewBase";
 export { formatFileSize } from "@/components/ui/FileUpload/FilePreviewBase";

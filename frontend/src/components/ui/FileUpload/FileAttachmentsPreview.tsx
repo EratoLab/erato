@@ -6,10 +6,16 @@ import type { AttachmentTileItem } from "./AttachmentTileList";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
 
-export interface FileAttachmentsPreviewProps {
+/**
+ * The staged-attachments contract a component kit implements.
+ *
+ * Lives here rather than under `src/types` so the shared-surface generator,
+ * which only walks `src/components`, can export it to kits.
+ */
+export interface ChatInputAttachmentPreviewProps {
   /** Array of file attachments to preview */
   attachedFiles: FileUploadItem[];
-  /** Max number of files allowed for display in header */
+  /** Max number of files allowed, shown as the staged count */
   maxFiles: number;
   /** Handler to remove a specific file */
   onRemoveFile: (fileId: string) => void;
@@ -21,6 +27,15 @@ export interface FileAttachmentsPreviewProps {
   disabled?: boolean;
   /** Whether to show file type info */
   showFileTypes?: boolean;
+}
+
+/**
+ * What the default preview additionally accepts. Declared as an extension so
+ * the kit contract above stays the single source of truth for the shared
+ * props rather than a hand-kept copy of them.
+ */
+export interface FileAttachmentsPreviewProps
+  extends ChatInputAttachmentPreviewProps {
   /** Whether to display file size */
   showFileSizes?: boolean;
   /** Optional CSS class name */

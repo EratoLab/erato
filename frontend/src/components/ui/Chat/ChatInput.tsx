@@ -13,10 +13,7 @@ import {
 import { FileAttachmentsPreview } from "@/components/ui/FileUpload";
 import { FileUploadWithTokenCheck } from "@/components/ui/FileUpload/FileUploadWithTokenCheck";
 import { ConfirmationDialog } from "@/components/ui/Modal/ConfirmationDialog";
-import {
-  componentRegistry,
-  resolveComponentOverride,
-} from "@/config/componentRegistry";
+import { componentRegistry } from "@/config/componentRegistry";
 import { useAudioDictationRecorder } from "@/hooks/audio/useAudioDictationRecorder";
 import { useAudioTranscriptionRecorder } from "@/hooks/audio/useAudioTranscriptionRecorder";
 import { useTokenManagement, useActiveModelSelection } from "@/hooks/chat";
@@ -2374,10 +2371,6 @@ export const ChatInput = ({
 
   const ChatInputAttachmentPreview =
     componentRegistry.ChatInputAttachmentPreview;
-  const AttachmentsPreview = resolveComponentOverride(
-    componentRegistry.ChatAttachmentsPreview,
-    FileAttachmentsPreview,
-  );
   const hasTopLeftAccessoryOverride =
     componentRegistry.ChatTopLeftAccessory !== null;
 
@@ -2671,28 +2664,21 @@ export const ChatInput = ({
           {/* Staged attachments belong inside the shell, above the textarea:
               they are part of what is about to be sent, not a separate card
               floating over the composer. The shell's own gap spaces them. */}
-          {ChatInputAttachmentPreview ? (
-            <ChatInputAttachmentPreview
-              attachedFiles={attachedFiles}
-              maxFiles={maxFiles}
-              onRemoveFile={handleRemoveFileById}
-              onRemoveAllFiles={handleRemoveAllFilesWithTokenReset}
-              onFilePreview={onFilePreview}
-              disabled={composeLocked}
-              showFileTypes={showFileTypes}
-            />
-          ) : (
-            <AttachmentsPreview
-              attachedFiles={attachedFiles}
-              maxFiles={maxFiles}
-              onRemoveFile={handleRemoveFileById}
-              onRemoveAllFiles={handleRemoveAllFilesWithTokenReset}
-              onFilePreview={onFilePreview}
-              disabled={composeLocked}
-              showFileTypes={showFileTypes}
-              surfaceVariant="message"
-            />
-          )}
+          {(() => {
+            const StagedAttachments =
+              ChatInputAttachmentPreview ?? FileAttachmentsPreview;
+            return (
+              <StagedAttachments
+                attachedFiles={attachedFiles}
+                maxFiles={maxFiles}
+                onRemoveFile={handleRemoveFileById}
+                onRemoveAllFiles={handleRemoveAllFilesWithTokenReset}
+                onFilePreview={onFilePreview}
+                disabled={composeLocked}
+                showFileTypes={showFileTypes}
+              />
+            );
+          })()}
 
           {!isAudioMode && (
             // isolate keeps the backdrop's negative layer above the shell's own
