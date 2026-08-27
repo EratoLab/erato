@@ -22,7 +22,10 @@ test(
     const filePath = "test-files/sample-report-compressed.pdf";
     await fileChooser.setFiles(filePath);
 
-    await expect(page.getByText("PDF", { exact: true })).toBeVisible();
+    // Type and size share one line. Asserting the size too makes this the
+    // regression test for carrying it over from the picked file, since the
+    // API record has no size of its own.
+    await expect(page.getByText(/^PDF · \d/)).toBeVisible();
     await expect(
       page.getByText(/sample-report-compressed\.pdf/i),
     ).toBeVisible();
