@@ -1,4 +1,3 @@
-import clsx from "clsx";
 import { useMemo } from "react";
 
 import { AttachmentTileList } from "./AttachmentTileList";
@@ -77,7 +76,7 @@ export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
       disabled={disabled}
       capHeight
       maxFiles={maxFiles}
-      className={clsx("mb-3", className)}
+      className={className}
     />
   );
 };

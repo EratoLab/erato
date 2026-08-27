@@ -963,12 +963,13 @@ describe("ChatInput", () => {
     fireEvent.click(screen.getByTestId("grouped-remove-file"));
     expect(removeFile).toHaveBeenCalledWith("file-1");
 
-    // The override replaces the region above the shell, so it must not land
-    // inside the shell the way ChatInputAttachmentPreview does.
+    // Staged attachments are part of what is about to be sent, so the override
+    // renders inside the shell alongside the default preview rather than as a
+    // separate card floating above it.
     const shell = container.querySelector('[data-ui="chat-input-shell"]');
     expect(
       shell?.querySelector('[data-testid="grouped-attachments-preview"]'),
-    ).toBeNull();
+    ).not.toBeNull();
   });
 
   it("renders the attachment preview override inline inside the input shell and suppresses the external preview", async () => {

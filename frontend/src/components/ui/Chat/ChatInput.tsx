@@ -2374,7 +2374,6 @@ export const ChatInput = ({
 
   const ChatInputAttachmentPreview =
     componentRegistry.ChatInputAttachmentPreview;
-  const hasAttachmentPreviewOverride = ChatInputAttachmentPreview !== null;
   const AttachmentsPreview = resolveComponentOverride(
     componentRegistry.ChatAttachmentsPreview,
     FileAttachmentsPreview,
@@ -2491,19 +2490,6 @@ export const ChatInput = ({
               })(),
             )}
           </div>
-        )}
-
-        {!hasAttachmentPreviewOverride && (
-          <AttachmentsPreview
-            attachedFiles={attachedFiles}
-            maxFiles={maxFiles}
-            onRemoveFile={handleRemoveFileById}
-            onRemoveAllFiles={handleRemoveAllFilesWithTokenReset}
-            onFilePreview={onFilePreview}
-            disabled={composeLocked}
-            showFileTypes={showFileTypes}
-            surfaceVariant="message"
-          />
         )}
 
         {/* File error message */}
@@ -2682,7 +2668,10 @@ export const ChatInput = ({
             </div>
           )}
 
-          {ChatInputAttachmentPreview && (
+          {/* Staged attachments belong inside the shell, above the textarea:
+              they are part of what is about to be sent, not a separate card
+              floating over the composer. The shell's own gap spaces them. */}
+          {ChatInputAttachmentPreview ? (
             <ChatInputAttachmentPreview
               attachedFiles={attachedFiles}
               maxFiles={maxFiles}
@@ -2691,6 +2680,17 @@ export const ChatInput = ({
               onFilePreview={onFilePreview}
               disabled={composeLocked}
               showFileTypes={showFileTypes}
+            />
+          ) : (
+            <AttachmentsPreview
+              attachedFiles={attachedFiles}
+              maxFiles={maxFiles}
+              onRemoveFile={handleRemoveFileById}
+              onRemoveAllFiles={handleRemoveAllFilesWithTokenReset}
+              onFilePreview={onFilePreview}
+              disabled={composeLocked}
+              showFileTypes={showFileTypes}
+              surfaceVariant="message"
             />
           )}
 

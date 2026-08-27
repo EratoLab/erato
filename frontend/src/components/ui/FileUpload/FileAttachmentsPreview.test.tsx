@@ -163,14 +163,18 @@ describe("FileAttachmentsPreview", () => {
     // there is more attached than is visible.
     await renderWithProviders(
       <FileAttachmentsPreview
-        attachedFiles={[file("1", "spec.pdf"), file("2", "notes.txt")]}
+        attachedFiles={[
+          file("1", "spec.pdf"),
+          file("2", "notes.txt"),
+          file("3", "data.csv"),
+        ]}
         maxFiles={50}
         onRemoveFile={vi.fn()}
         onRemoveAllFiles={vi.fn()}
       />,
     );
 
-    expect(screen.getByText("2/50")).toBeInTheDocument();
+    expect(screen.getByText("3/50")).toBeInTheDocument();
   });
 
   it("renders nothing when there is nothing attached", async () => {

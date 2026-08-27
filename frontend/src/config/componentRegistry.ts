@@ -142,14 +142,13 @@ export interface ComponentRegistry {
   ChatInputAttachmentPreview: ComponentType<ChatInputAttachmentPreviewProps> | null;
 
   /**
-   * Override for the attachments region the composer renders above the chat
-   * input shell. It receives exactly the props the default flat preview gets,
-   * so a replacement can render its own layout (e.g. grouped cards) and still
-   * handle removal and preview.
+   * Override for the staged-attachments region, which the composer renders
+   * inside the chat input shell, above the textarea. It receives exactly the
+   * props the default preview gets, so a replacement can render its own layout
+   * (e.g. grouped cards) and still handle removal and preview.
    *
    * When null, the default `FileAttachmentsPreview` renders. Ignored while
-   * `ChatInputAttachmentPreview` is set — that override moves the preview
-   * inside the shell instead of replacing this region.
+   * `ChatInputAttachmentPreview` is set — that override occupies the same slot.
    */
   ChatAttachmentsPreview: ComponentType<FileAttachmentsPreviewProps> | null;
 
