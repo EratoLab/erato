@@ -12,7 +12,7 @@ import { useTeamsChatPicker } from "../providers/TeamsChatPickerProvider";
 import { buildTeamsAttachmentGroups } from "../utils/teamsAttachmentGroups";
 
 import type {
-  FileAttachmentsPreviewProps,
+  ChatInputAttachmentPreviewProps,
   FileResource,
   TeamsTranscriptIndexAsset,
   TeamsTranscriptIndexMessage,
@@ -30,7 +30,9 @@ import type {
  * transcript whose index block cannot be read — keeps the ordinary flat chips
  * underneath.
  */
-export function TeamsAttachmentsPreview(props: FileAttachmentsPreviewProps) {
+export function TeamsAttachmentsPreview(
+  props: ChatInputAttachmentPreviewProps,
+) {
   const { attachedTranscript } = useTeamsChatPicker();
   const { index, isReading } = useTeamsTranscriptIndex(attachedTranscript);
   const { attachedFiles, onFilePreview } = props;
@@ -126,7 +128,6 @@ export function TeamsAttachmentsPreview(props: FileAttachmentsPreviewProps) {
           onRemoveFile={props.onRemoveFile}
           disabled={props.disabled}
           showFileTypes={props.showFileTypes}
-          showFileSizes={props.showFileSizes}
           defaultVisibleItems={10}
           stickyGroupHeaders={true}
         />

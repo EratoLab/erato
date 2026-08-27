@@ -28,12 +28,11 @@ import type { ChatHistoryListProps } from "@/components/ui/Chat/ChatHistoryList"
 import type { ChatMessageProps } from "@/components/ui/Chat/ChatMessage";
 import type { ChatTopLeftAccessoryProps } from "@/components/ui/Chat/ChatTopLeftAccessory";
 import type { StarterPromptsRendererProps } from "@/components/ui/Chat/StarterPromptsSection";
-import type { FileAttachmentsPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
+import type { ChatInputAttachmentPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
 import type { FileSourceSelectorProps } from "@/components/ui/FileUpload/FileSourceSelector";
 import type { GroupedFileAttachmentsPreviewProps } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 import type { TeamsConversationViewProps } from "@/components/ui/Teams/TeamsConversationView";
 import type { WelcomeScreenProps } from "@/components/ui/WelcomeScreen";
-import type { ChatInputAttachmentPreviewProps } from "@/types/chat-input-attachment-preview";
 import type { MessageControlsProps } from "@/types/message-controls";
 import type { ComponentType } from "react";
 
@@ -136,21 +135,14 @@ export interface ComponentRegistry {
   ChatAddMenuExtraContent: ComponentType<ChatAddMenuExtraContentProps> | null;
 
   /**
-   * Override for the inline attachment preview shown in the chat composer.
-   * Used to render custom attachment chips/thumbnails inside the chat input shell.
-   */
-  ChatInputAttachmentPreview: ComponentType<ChatInputAttachmentPreviewProps> | null;
-
-  /**
    * Override for the staged-attachments region, which the composer renders
    * inside the chat input shell, above the textarea. It receives exactly the
    * props the default preview gets, so a replacement can render its own layout
-   * (e.g. grouped cards) and still handle removal and preview.
+   * (grouped cards, custom chips) and still handle removal and preview.
    *
-   * When null, the default `FileAttachmentsPreview` renders. Ignored while
-   * `ChatInputAttachmentPreview` is set — that override occupies the same slot.
+   * When null, the default `FileAttachmentsPreview` renders.
    */
-  ChatAttachmentsPreview: ComponentType<FileAttachmentsPreviewProps> | null;
+  ChatInputAttachmentPreview: ComponentType<ChatInputAttachmentPreviewProps> | null;
 
   /**
    * Override for the renderer that shows an attached Teams transcript as a
@@ -297,7 +289,6 @@ const emptyComponentRegistry = (): ComponentRegistry => ({
   ChatFileSourceSelector: null,
   ChatAddMenuExtraContent: null,
   ChatInputAttachmentPreview: null,
-  ChatAttachmentsPreview: null,
   TeamsConversationView: null,
   ChatGroupedAttachmentsPreview: null,
   ChatHistoryList: null,

@@ -465,7 +465,6 @@ export type {
   MessageControlsContext,
 } from "@/types/message-controls";
 export type { ChatInputControlsHandle } from "@/components/ui/Chat/ChatInputControlsContext";
-export type { ChatInputAttachmentPreviewProps } from "@/types/chat-input-attachment-preview";
 export type { AssistantMention } from "@/utils/chat/assistantMentions";
 export type { DelegationRunMode } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 export type {
@@ -481,6 +480,7 @@ export type {
 export { FileTypeUtil, type FileType } from "@/utils/fileTypes";
 export type { LocalFilePreviewItem } from "@/components/ui/FileUpload/FilePreviewBase";
 export { FileAttachmentsPreview } from "@/components/ui/FileUpload/FileAttachmentsPreview";
+export type { ChatInputAttachmentPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
 export type { FileAttachmentsPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
 export type {
   FileAttachmentGroup,
