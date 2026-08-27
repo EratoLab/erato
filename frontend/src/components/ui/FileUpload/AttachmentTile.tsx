@@ -7,6 +7,7 @@ import { FILE_TYPES, getFileTypeIcon } from "@/utils/fileTypes";
 
 import {
   getFileName,
+  getFileSize,
   getFileType,
   splitFilenameForDisplay,
   type FileResource,
@@ -48,6 +49,12 @@ export interface AttachmentTileProps {
   onRemove?: () => void;
   /** Presence makes the tile activatable — typically opening the file preview. */
   onActivate?: () => void;
+  /**
+   * Verb for the activation label. Defaults to previewing the file; an item
+   * whose activation goes somewhere else (the conversation behind a Teams
+   * transcript, say) should say so instead.
+   */
+  activateLabel?: string;
   /** Overrides the type label under the filename, e.g. labelling an `.html` synthetic file as "Email". */
   labelOverride?: string;
   /** Filename under a media tile. Document tiles always carry their name inline. */
@@ -95,6 +102,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
   size = "compact",
   onRemove,
   onActivate,
+  activateLabel,
   labelOverride,
   showCaption = false,
   disabled = false,
@@ -123,6 +131,12 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
       ? extension.slice(1).toUpperCase()
       : FILE_TYPES[fileType].displayName || t`File`;
   }, [labelOverride, filename, fileType]);
+  // Only locally staged files carry a size — the API type has no such field —
+  // so the separator has to survive its absence.
+  const metaLabel = useMemo(() => {
+    const fileSize = getFileSize(file);
+    return fileSize ? `${typeLabel} · ${fileSize}` : typeLabel;
+  }, [file, typeLabel]);
   const geometry = TILE_GEOMETRY[size];
   // Every upload carries a `preview_url`, including PDFs and spreadsheets —
   // it proxies the raw bytes, not a rendered thumbnail. Only an image can be
@@ -172,7 +186,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
           {filename}
         </span>
         <span className="block truncate text-xs text-[var(--theme-fg-muted)]">
-          {typeLabel}
+          {metaLabel}
         </span>
       </span>
     </div>
@@ -197,7 +211,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
           type="button"
           onClick={onActivate}
           title={filename}
-          aria-label={`${t`Preview attachment`} ${filename}, ${typeLabel}`}
+          aria-label={`${activateLabel ?? t`Preview attachment`} ${filename}, ${metaLabel}`}
           className={clsx(
             "block w-full cursor-pointer rounded-[var(--theme-radius-base)] text-left",
             "focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus focus-visible:ring-offset-2",
