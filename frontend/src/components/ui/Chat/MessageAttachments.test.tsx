@@ -186,6 +186,63 @@ describe("MessageAttachments", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("gathers a Teams conversation and its shared files into one group", async () => {
+    const files = [
+      file("t1", "teams-Product_sync.md"),
+      file("f1", "teams-file-abcd1234-Q3_report.pdf"),
+      file("o1", "holiday.pdf"),
+    ];
+
+    await renderWithProviders(
+      <MessageAttachments
+        fileIds={["t1", "f1", "o1"]}
+        filesById={byId(...files)}
+        relatedFiles={files}
+        onFilePreview={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Teams conversation")).toBeInTheDocument();
+    expect(screen.getByText("1 shared file")).toBeInTheDocument();
+    // The shared file is named, not hashed; the unrelated one stays outside.
+    expect(screen.getByText("Q3_report.pdf")).toBeInTheDocument();
+    expect(screen.getByText("holiday.pdf")).toBeInTheDocument();
+  });
+
+  it("offers no removal on a grouped sent message", async () => {
+    const files = [
+      file("t1", "teams-Product_sync.md"),
+      file("f1", "teams-file-abcd1234-Q3_report.pdf"),
+    ];
+
+    await renderWithProviders(
+      <MessageAttachments
+        fileIds={["t1", "f1"]}
+        filesById={byId(...files)}
+        relatedFiles={files}
+        onFilePreview={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: /^Remove/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("leaves an ordinary message ungrouped", async () => {
+    const files = [file("1", "spec.pdf"), file("2", "notes.txt")];
+
+    await renderWithProviders(
+      <MessageAttachments
+        fileIds={["1", "2"]}
+        filesById={byId(...files)}
+        relatedFiles={files}
+      />,
+    );
+
+    expect(screen.queryByText("Teams conversation")).not.toBeInTheDocument();
+  });
+
   it("skips ids it cannot resolve rather than rendering a broken tile", async () => {
     const files = [file("1", "spec.pdf")];
 

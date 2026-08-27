@@ -2,8 +2,10 @@ import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import { AttachmentTileList } from "@/components/ui/FileUpload/AttachmentTileList";
+import { GroupedFileAttachmentsPreview } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 import { getFileQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
+import { groupTeamsSentAttachments } from "@/utils/teams/teamsSentAttachmentGroups";
 import { teamsUploadDisplayName } from "@/utils/teams/teamsUploadName";
 
 import type { AttachmentTileItem } from "@/components/ui/FileUpload/AttachmentTileList";
@@ -93,8 +95,47 @@ export const MessageAttachments: React.FC<MessageAttachmentsProps> = ({
     [fileIds, resolvedById],
   );
 
+  // A Teams conversation arrives as a transcript plus the files shared inside
+  // it. Ungrouped they read as unrelated siblings.
+  const teamsGrouping = useMemo(
+    () =>
+      groupTeamsSentAttachments(
+        items.map((item) => item.file as FileUploadItem),
+      ),
+    [items],
+  );
+
   if (items.length === 0) {
     return null;
+  }
+
+  if (teamsGrouping) {
+    const ungrouped = items.filter(
+      (item) => !teamsGrouping.claimedFileIds.has(item.id),
+    );
+
+    return (
+      <div className="mt-2 flex flex-col gap-2">
+        <GroupedFileAttachmentsPreview
+          groups={teamsGrouping.groups}
+          onFilePreview={(file) =>
+            onFilePreview?.(file as FileUploadItem, relatedFiles)
+          }
+        />
+        {ungrouped.length > 0 && (
+          <AttachmentTileList
+            items={ungrouped}
+            size="medium"
+            onActivate={
+              onFilePreview
+                ? (item) =>
+                    onFilePreview(item.file as FileUploadItem, relatedFiles)
+                : undefined
+            }
+          />
+        )}
+      </div>
+    );
   }
 
   return (

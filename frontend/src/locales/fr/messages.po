@@ -4053,6 +4053,10 @@ msgstr "{fileName} : {filePercentage}%"
 msgid "{itemCount} items"
 msgstr "{itemCount} éléments"
 
+#: src/utils/teams/teamsSentAttachmentGroups.ts
+msgid "{sharedCount} shared files"
+msgstr ""
+
 #: src/components/ui/Teams/TeamsConversationView.tsx
 msgid "{skipped} messages could not be loaded."
 msgstr ""
@@ -4119,6 +4123,10 @@ msgstr "1 élément"
 #: src/components/ui/Teams/TeamsConversationView.tsx
 msgid "1 message could not be loaded."
 msgstr "1 message n'a pas pu être chargé."
+
+#: src/utils/teams/teamsSentAttachmentGroups.ts
+msgid "1 shared file"
+msgstr ""
 
 #: src/components/ui/Trace/SidecarLocalTraceView.tsx
 #~ msgid "1 step"
@@ -5450,6 +5458,10 @@ msgstr "Le prompt système doit contenir moins de {maxSystemPromptLength} caract
 #: src/components/ui/Controls/UserProfileDropdown.tsx
 #~ msgid "System theme"
 #~ msgstr "Thème système"
+
+#: src/utils/teams/teamsSentAttachmentGroups.ts
+msgid "Teams conversation"
+msgstr ""
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Test Locale Changes:"

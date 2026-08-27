@@ -143,7 +143,11 @@ export interface FileAttachmentGroup {
 
 export interface GroupedFileAttachmentsPreviewProps {
   groups: FileAttachmentGroup[];
-  onRemoveFile: (fileId: string) => void;
+  /**
+   * Presence makes the items removable. A sent message passes nothing: there
+   * is no longer anything to remove, and an inert control reads as broken.
+   */
+  onRemoveFile?: (fileId: string) => void;
   onFilePreview?: (file: FileResource) => void;
   disabled?: boolean;
   showFileTypes?: boolean;
@@ -172,6 +176,19 @@ function getFileKey(item: ItemWithFile): string {
   }
 
   return `${item.id}:${item.file.name}`;
+}
+
+/**
+ * A stored upload can be shown as a thumbnail; a file that has not been
+ * uploaded yet has no URL to point at and stays an icon tile.
+ */
+function getItemPreviewUrl(item: ItemWithFile): string | undefined {
+  if (!("preview_url" in item.file)) {
+    return undefined;
+  }
+  return typeof item.file.preview_url === "string"
+    ? item.file.preview_url
+    : undefined;
 }
 
 function getFileId(item: ItemWithFile): string {
@@ -713,10 +730,11 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
                     <AttachmentTile
                       key={getFileKey(item)}
                       file={item.file}
+                      previewUrl={getItemPreviewUrl(item)}
                       labelOverride={item.labelOverride}
                       disabled={disabled}
                       onRemove={
-                        item.kind === "context"
+                        item.kind === "context" || !onRemoveFile
                           ? undefined
                           : () => onRemoveFile(getFileId(item))
                       }

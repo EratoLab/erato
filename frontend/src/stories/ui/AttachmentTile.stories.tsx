@@ -342,3 +342,49 @@ export const RecipeInSentMessage: Story = {
     );
   },
 };
+
+/**
+ * Recipe: a sent Teams message. The transcript and the files shared inside it
+ * are gathered from the names the picker minted — no transcript download — so
+ * they read as one conversation rather than as loose siblings.
+ */
+export const RecipeTeamsConversation: Story = {
+  args: { items: [] },
+  render: () => {
+    const files = [
+      uploaded("t1", "teams-Product_sync.md"),
+      uploaded("f1", "teams-file-abcd1234-Q3_report.pdf"),
+      uploaded(
+        "i1",
+        "teams-img-0123456789abcdef.png",
+        photo("#8ec5fc", "#e0c3fc"),
+      ),
+      uploaded("o1", "unrelated-notes.docx"),
+    ];
+
+    return (
+      <ChatMessage
+        message={{
+          id: "msg-teams",
+          role: "user",
+          sender: "user",
+          authorId: "user_1",
+          createdAt: new Date(2026, 7, 27, 9, 0).toISOString(),
+          content: [
+            { content_type: "text", text: "What did we agree in this chat?" },
+          ],
+          input_files_ids: files.map((entry) => entry.id),
+        }}
+        showAvatar
+        controlsContext={{
+          currentUserId: "user_1",
+          dialogOwnerId: "user_1",
+          isSharedDialog: false,
+        }}
+        onMessageAction={async () => true}
+        onFilePreview={action("file preview")}
+        allFilesById={Object.fromEntries(files.map((f) => [f.id, f]))}
+      />
+    );
+  },
+};
