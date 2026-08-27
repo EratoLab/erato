@@ -4,8 +4,10 @@ import { useDropzone } from "react-dropzone";
 import { ErrorBoundary } from "react-error-boundary";
 
 import { UploadTooLargeError, type UploadError } from "@/hooks/files/errors";
+import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useUploadFeature } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
+import { oversizedRejectionNames } from "@/utils/validateFileSizes";
 
 import { Button } from "../Controls";
 import { PlusIcon } from "../icons";
@@ -45,9 +47,11 @@ export interface FileUploadButtonProps {
   /** Any error that occurred during file upload */
   uploadError?: Error | null;
   /**
-   * Called when file selection results in a validation error (e.g. file-too-large).
-   * If omitted, size errors are silently ignored at the dropzone layer and will
-   * instead be caught by the preflight inside the supplied `performFileUpload`.
+   * Overrides where a selection-time validation error (e.g. file-too-large) is
+   * reported. Defaults to the shared upload store that the composer's alert
+   * renders. `maxSize` keeps rejected files out of `acceptedFiles`, so
+   * `performFileUpload` never sees them and cannot report them — without a sink
+   * here the file would vanish with no feedback at all.
    */
   onError?: (error: UploadError) => void;
 }
@@ -70,6 +74,8 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
     onError,
   }) => {
     const { maxSizeBytes, maxSizeFormatted } = useUploadFeature();
+    const setStoreError = useFileUploadStore((state) => state.setError);
+    const reportError = onError ?? setStoreError;
 
     // Setup react-dropzone
     const { getRootProps, getInputProps, open } = useDropzone({
@@ -77,11 +83,9 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
         // Surface file-too-large rejections immediately so the parent error
         // state is updated even before the upload hook's own preflight runs.
         if (rejectedFiles.length > 0) {
-          const hasSizeError = rejectedFiles.some((r) =>
-            r.errors.some((e) => e.code === "file-too-large"),
-          );
-          if (hasSizeError) {
-            onError?.(new UploadTooLargeError(maxSizeFormatted));
+          const oversized = oversizedRejectionNames(rejectedFiles);
+          if (oversized.length > 0) {
+            reportError(new UploadTooLargeError(maxSizeFormatted, oversized));
             return;
           }
         }

@@ -3995,6 +3995,11 @@ msgstr "Datei ist zu groß. Maximale Größe: {maxSize}."
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts
+msgid "upload.error.tooLargeNamed"
+msgstr "Datei(en) zu groß: {filenames}. Maximale Größe: {maxSize}."
+
+#. js-lingui-explicit-id
+#: src/hooks/files/errors.ts
 msgid "upload.error.unknown"
 msgstr "Unbekannter Fehler beim Hochladen"
 

@@ -19,6 +19,7 @@ import {
 } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
 import { DEFAULT_MAX_ASSISTANT_FILES } from "@/utils/fileUploadLimits";
+import { oversizedRejectionNames } from "@/utils/validateFileSizes";
 
 import { CloudFilePickerModal } from "./CloudFilePickerModal";
 import { FileSourceSelector } from "./FileSourceSelector";
@@ -115,13 +116,14 @@ export const AssistantFileUploadSelector: React.FC<
     getInputProps,
   } = useDropzone({
     onDrop: (acceptedFiles, rejectedFiles) => {
-      // Surface file-too-large rejections before the upload hook's preflight.
+      // Surface file-too-large rejections here: `maxSize` keeps them out of
+      // `acceptedFiles`, so the upload hook's preflight never sees them.
       if (rejectedFiles.length > 0) {
-        const hasSizeError = rejectedFiles.some((r) =>
-          r.errors.some((e) => e.code === "file-too-large"),
-        );
-        if (hasSizeError) {
-          setCloudLinkError(new UploadTooLargeError(maxSizeFormatted));
+        const oversized = oversizedRejectionNames(rejectedFiles);
+        if (oversized.length > 0) {
+          setCloudLinkError(
+            new UploadTooLargeError(maxSizeFormatted, oversized),
+          );
           return;
         }
       }
@@ -298,6 +300,9 @@ export const AssistantFileUploadSelector: React.FC<
           performFileUpload={uploadFiles}
           isUploading={isProcessing}
           uploadError={null}
+          // This selector renders `combinedError`, not the shared upload store,
+          // so the button's default store sink would land where nothing reads it.
+          onError={setCloudLinkError}
           onFilesUploaded={onFilesUploaded}
         />
       )}

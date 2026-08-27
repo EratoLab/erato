@@ -2,7 +2,9 @@ import { useCallback, useMemo } from "react";
 import { useDropzone } from "react-dropzone";
 
 import { UploadTooLargeError, type UploadError } from "@/hooks/files/errors";
+import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { FileTypeUtil } from "@/utils/fileTypes";
+import { oversizedRejectionNames } from "@/utils/validateFileSizes";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
@@ -65,17 +67,18 @@ export function useConversationDropzone({
   maxSizeFormatted,
   onError,
 }: UseConversationDropzoneOptions): ConversationDropzoneBindings {
+  const setStoreError = useFileUploadStore((state) => state.setError);
+  const reportError = onError ?? setStoreError;
   const handleDrop = useCallback(
     (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
-      // Surface file-too-large rejections immediately via the onError callback
-      // so the owning component can update its error state before the upload
-      // hook's own preflight fires.
-      if (rejectedFiles.length > 0 && onError != null) {
-        const hasSizeError = rejectedFiles.some((r) =>
-          r.errors.some((e) => e.code === "file-too-large"),
-        );
-        if (hasSizeError) {
-          onError(new UploadTooLargeError(maxSizeFormatted));
+      // Surface file-too-large rejections immediately so the owning component
+      // updates its error state before the upload hook's own preflight fires.
+      // `maxSize` keeps these files out of `acceptedFiles`, so the preflight
+      // never sees them — reporting here is the only chance to tell the user.
+      if (rejectedFiles.length > 0) {
+        const oversized = oversizedRejectionNames(rejectedFiles);
+        if (oversized.length > 0) {
+          reportError(new UploadTooLargeError(maxSizeFormatted, oversized));
           return;
         }
       }
@@ -89,7 +92,7 @@ export function useConversationDropzone({
         }
       });
     },
-    [onUploaded, uploadFiles, onError, maxSizeFormatted],
+    [onUploaded, uploadFiles, reportError, maxSizeFormatted],
   );
 
   const accept = useMemo(() => {
