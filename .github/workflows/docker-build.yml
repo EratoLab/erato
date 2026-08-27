@@ -167,6 +167,11 @@ jobs:
         if: success() || failure()
         run: node scripts/generate-served-routes.mjs --check
 
+      - name: "Component-kit shared surface is up-to-date"
+        working-directory: ./frontend
+        if: success() || failure()
+        run: pnpm run check:component-registry-shared
+
       # Lint run section
       # Every step here should be conditional on "success() || failure()",
       # in order to prevent failing fast, so that we can run all linting steps in one run.
