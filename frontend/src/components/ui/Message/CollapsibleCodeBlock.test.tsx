@@ -78,6 +78,28 @@ describe("CollapsibleCodeBlock", () => {
     restore();
   });
 
+  it("paints the surface on the element that clips", async () => {
+    // Rounded corners only survive the cut if the same element owns the radius
+    // and the clip.
+    const restore = stubHeights({ content: 900, clip: 384 });
+    const { container } = await renderBlock(
+      <CollapsibleCodeBlock
+        lineCount={120}
+        surfaceStyle={{ borderRadius: "0.3em", background: "#1e1e1e" }}
+      >
+        {LONG}
+      </CollapsibleCodeBlock>,
+    );
+
+    const clipper = container.querySelector<HTMLElement>("[style*=max-height]");
+    expect(clipper).toHaveClass("overflow-hidden");
+    expect(clipper).toHaveStyle({
+      borderRadius: "0.3em",
+      background: "#1e1e1e",
+    });
+    restore();
+  });
+
   it("does not clamp while the block is still streaming", async () => {
     // The height changes on every chunk, so a cap would fight the content.
     const restore = stubHeights({ content: 900, clip: 384 });

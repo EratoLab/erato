@@ -24,7 +24,10 @@ import { EratoEmailSuggestion } from "./EratoEmailSuggestion";
 import { ImageContentDisplay } from "./ImageContentDisplay";
 import { McpToolApprovalCard } from "./McpToolApprovalCard";
 import { MermaidBlock } from "./MermaidBlock";
-import { SyntaxHighlightedCode } from "./SyntaxHighlightedCode";
+import {
+  SyntaxHighlightedCode,
+  useCodeBlockSurfaceStyle,
+} from "./SyntaxHighlightedCode";
 
 import type { ToolApprovalStatus } from "../Trace/Trace";
 import type {
@@ -221,6 +224,7 @@ function MarkdownPre({
   const artifact = React.useContext(OutlookArtifactContext);
   const { isStreaming } = React.useContext(BlockCodeContext);
   const [copied, setCopied] = React.useState(false);
+  const surfaceStyle = useCodeBlockSurfaceStyle();
 
   // Extract the raw code text from the child <code> element so the copy button
   // can access it without needing a separate context or ref strategy.
@@ -266,6 +270,7 @@ function MarkdownPre({
       <CollapsibleCodeBlock
         lineCount={codeContent === "" ? 0 : codeContent.split("\n").length}
         disabled={isStreaming}
+        surfaceStyle={surfaceStyle}
       >
         <pre
           className={["message-content-code-block", className]
@@ -331,7 +336,13 @@ function MarkdownCode({
   }
 
   if (isBlockCode) {
-    return <SyntaxHighlightedCode code={codeContent} language={language} />;
+    return (
+      <SyntaxHighlightedCode
+        code={codeContent}
+        language={language}
+        surface="hoisted"
+      />
+    );
   }
 
   return (

@@ -46,6 +46,8 @@ import {
   ZoomOut,
   ArrowSeparate,
   ArrowUnion,
+  ArrowSeparateVertical,
+  ArrowUnionVertical,
   Folder,
   ShareIos,
   GridXmark,
@@ -313,6 +315,15 @@ export const ExpandDiagonalIcon = ({ className, ...props }: IconProps) => (
 
 export const CollapseDiagonalIcon = ({ className, ...props }: IconProps) => (
   <ArrowUnion className={clsx("-rotate-45", className)} {...props} />
+);
+
+/** Vertical expand/collapse pair, for content that only grows in height. */
+export const ExpandVerticalIcon = ({ className, ...props }: IconProps) => (
+  <ArrowSeparateVertical className={className} {...props} />
+);
+
+export const CollapseVerticalIcon = ({ className, ...props }: IconProps) => (
+  <ArrowUnionVertical className={className} {...props} />
 );
 
 export const RotateClockwiseIcon = ({ className, ...props }: IconProps) => (

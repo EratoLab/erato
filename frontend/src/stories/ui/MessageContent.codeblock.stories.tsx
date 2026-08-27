@@ -12,6 +12,12 @@ const longCode = Array.from(
     `const line${index} = compute(${index}); // a reasonably long line of code`,
 ).join("\n");
 
+const wideCode = Array.from(
+  { length: 120 },
+  (_, index) =>
+    `const line${index} = compute(${index}, "a line long enough that the block has to scroll sideways before it can show all of it");`,
+).join("\n");
+
 const meta = {
   title: "UI/MessageContent/CodeBlock",
   component: MessageContent,
@@ -41,5 +47,12 @@ export const ShortCode: Story = {
 export const LongCodeClamped: Story = {
   args: {
     content: [{ content_type: "text", text: "```ts\n" + longCode + "\n```" }],
+  },
+};
+
+/** Both axes overflow: the corners must stay rounded on all four sides. */
+export const LongAndWideCode: Story = {
+  args: {
+    content: [{ content_type: "text", text: "```ts\n" + wideCode + "\n```" }],
   },
 };

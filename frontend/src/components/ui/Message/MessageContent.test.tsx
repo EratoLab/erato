@@ -176,18 +176,20 @@ describe("MessageContent", () => {
       />,
     );
 
+    const scroller = container.querySelector("pre.message-content-code-block");
     const themedBlock = container.querySelector(
       "pre.message-content-code-block > div",
     );
 
-    expect(
-      container.querySelector("pre.message-content-code-block"),
-    ).toBeInTheDocument();
+    expect(scroller).toBeInTheDocument();
     expect(container.querySelectorAll("pre")).toHaveLength(1);
     expect(container.querySelector("pre pre")).toBeNull();
-    expect(themedBlock).toHaveAttribute(
+    // The preset's box is painted by the element that clips, one above the one
+    // that scrolls — a box sized to the code would round its right corners
+    // somewhere off past the visible edge.
+    expect(scroller?.parentElement).toHaveAttribute(
       "style",
-      expect.stringContaining("background-color: white;"),
+      expect.stringContaining("background: white;"),
     );
     expect(themedBlock).toHaveAttribute(
       "style",
@@ -254,7 +256,7 @@ describe("MessageContent", () => {
     );
 
     expect(
-      container.querySelector("pre.message-content-code-block > div"),
+      container.querySelector("pre.message-content-code-block")?.parentElement,
     ).toHaveAttribute(
       "style",
       expect.stringContaining("background: rgb(30, 30, 30);"),
