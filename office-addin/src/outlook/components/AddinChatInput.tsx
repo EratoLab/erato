@@ -5,6 +5,7 @@ import {
   fetchUploadFile,
   getIdToken,
   isUploadTooLarge,
+  useFileUploadStore,
   useUploadFeature,
   validateFileSizes,
   type ChatInputControlsHandle,
@@ -274,7 +275,10 @@ export const AddinChatInput = forwardRef<
   } = useOutlookEmailSource();
   const { maxSizeBytes: globalMaxSizeBytes, maxSizeFormatted } =
     useUploadFeature();
-  const [emailUploadError, setEmailUploadError] = useState<Error | null>(null);
+  // The shared upload store, not local state: the composer's alert already
+  // renders it and dismissal clears it. A local copy merged into `uploadError`
+  // would outlive its own banner and mask every later upload error.
+  const setUploadStoreError = useFileUploadStore((state) => state.setError);
   // Drop-staged emails are always user-driven, so they bypass the
   // `showSuggestedEmailSource` gate (which is for the auto-suggest of the
   // currently-open email when the chat is still fresh). Without this the
@@ -791,6 +795,9 @@ export const AddinChatInput = forwardRef<
           nowIso: toLocalOffsetIso(new Date().toISOString()),
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         });
+      // Kept so a blocked send can put it back: the marker means "already sent
+      // this draft", which is false if we bail before dispatching.
+      const previousDraftFingerprint = lastSentDraftFingerprintRef.current;
       if (sentDraftFingerprint !== null) {
         // Remember what we sent so an unchanged follow-up de-dupes (#4).
         lastSentDraftFingerprintRef.current = sentDraftFingerprint;
@@ -827,7 +834,7 @@ export const AddinChatInput = forwardRef<
       }
 
       setIsUploadingEmail(true);
-      setEmailUploadError(null);
+      setUploadStoreError(null);
       let resolvedFileIds: string[] = [];
       let uploadFailed = false;
 
@@ -854,42 +861,48 @@ export const AddinChatInput = forwardRef<
           return;
         }
 
-        // Preflight: reject any batch containing an oversized file before
-        // constructing FormData or making any network request.
+        // Preflight: block the send outright when a staged file is oversized.
+        // Unlike a post-hoc 413 (bytes already spent), this is knowable before
+        // dispatch — sending anyway would answer from context the model never
+        // received. The chips stay so the user can dismiss the offender and
+        // retry, and the draft marker is rolled back so the retry is not
+        // de-duped as an already-sent draft.
         if (globalMaxSizeBytes > 0) {
           const sizeValidation = validateFileSizes(
             filesToUpload,
             globalMaxSizeBytes,
           );
           if (!sizeValidation.valid) {
-            setEmailUploadError(new UploadTooLargeError(maxSizeFormatted));
-            uploadFailed = true;
-            // Fall through: message is sent without the file IDs. The chips
-            // remain so the user can dismiss the oversized file and retry.
+            setUploadStoreError(
+              new UploadTooLargeError(
+                maxSizeFormatted,
+                sizeValidation.oversizedFiles.map((file) => file.name),
+              ),
+            );
+            lastSentDraftFingerprintRef.current = previousDraftFingerprint;
+            return;
           }
         }
 
-        if (!uploadFailed) {
-          const formData = new FormData();
-          filesToUpload.forEach((file) => {
-            formData.append("file", file, file.name);
-          });
+        const formData = new FormData();
+        filesToUpload.forEach((file) => {
+          formData.append("file", file, file.name);
+        });
 
-          const idToken = getIdToken();
-          const result = await fetchUploadFile({
-            queryParams: chatId ? { chat_id: chatId } : {},
-            body: formData as never,
-            headers: {
-              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-            },
-          });
+        const idToken = getIdToken();
+        const result = await fetchUploadFile({
+          queryParams: chatId ? { chat_id: chatId } : {},
+          body: formData as never,
+          headers: {
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+        });
 
-          resolvedFileIds = result.files.map((file) => file.id);
-        }
+        resolvedFileIds = result.files.map((file) => file.id);
       } catch (error) {
         uploadFailed = true;
         if (isUploadTooLarge(error)) {
-          setEmailUploadError(new UploadTooLargeError(maxSizeFormatted));
+          setUploadStoreError(new UploadTooLargeError(maxSizeFormatted));
         } else {
           console.warn(
             "Failed to upload Outlook email source files, sending without them:",
@@ -941,6 +954,7 @@ export const AddinChatInput = forwardRef<
       replyFromReadAvailable,
       resolveSelectedFilesForSend,
       scheduleFacetAvailable,
+      setUploadStoreError,
       shouldUseSuggestedEmailSource,
       stagedEmails,
     ],
@@ -1067,7 +1081,6 @@ export const AddinChatInput = forwardRef<
         ref={ref}
         chatId={chatId}
         {...chatInputProps}
-        uploadError={emailUploadError ?? chatInputProps.uploadError}
         onSendMessage={(
           message,
           inputFileIds,
