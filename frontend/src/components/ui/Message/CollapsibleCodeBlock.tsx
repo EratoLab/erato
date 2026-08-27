@@ -1,7 +1,8 @@
 import { t } from "@lingui/core/macro";
 import { useLayoutEffect, useRef, useState } from "react";
 
-import { DisclosureChevron } from "../Controls/DisclosureChevron";
+import { Button } from "../Controls/Button";
+import { CollapseVerticalIcon, ExpandVerticalIcon } from "../icons";
 
 import type React from "react";
 
@@ -14,6 +15,11 @@ export interface CollapsibleCodeBlockProps {
    * settling it.
    */
   disabled?: boolean;
+  /**
+   * Box styling — background, border, radius — hoisted off the code so this
+   * element paints it. See `useCodeBlockSurfaceStyle`.
+   */
+  surfaceStyle?: React.CSSProperties;
   children: React.ReactNode;
 }
 
@@ -25,14 +31,15 @@ export interface CollapsibleCodeBlockProps {
  * hidden against fully shown, whereas this clamps to a readable height and
  * keeps the first lines visible.
  *
- * There is no gradient fade: the block's background comes from the Prism
- * theme, so a fade would have to guess at a colour it does not own. The footer
- * states the hidden line count instead, which also says how much is missing
- * rather than merely that something is.
+ * The clip and the block's surface are the same element, so the corners stay
+ * rounded whether or not the content is cut. That also puts the toggle inside
+ * the box rather than under it, where a footer would have squared off the
+ * bottom two corners.
  */
 export const CollapsibleCodeBlock: React.FC<CollapsibleCodeBlockProps> = ({
   lineCount,
   disabled = false,
+  surfaceStyle,
   children,
 }) => {
   const clipperRef = useRef<HTMLDivElement>(null);
@@ -69,32 +76,38 @@ export const CollapsibleCodeBlock: React.FC<CollapsibleCodeBlockProps> = ({
   const clamped = !expanded && !disabled;
 
   return (
-    <>
+    <div className="relative">
       <div
         ref={clipperRef}
-        className={clamped ? "overflow-hidden" : undefined}
-        style={
-          clamped
+        className="overflow-hidden"
+        style={{
+          ...surfaceStyle,
+          ...(clamped
             ? {
                 maxHeight:
                   "var(--theme-layout-code-block-collapsed-max-height)",
               }
-            : undefined
-        }
+            : null),
+        }}
       >
         {children}
       </div>
       {overflows && (
-        <button
-          type="button"
+        <Button
           onClick={() => setExpanded((value) => !value)}
           aria-expanded={expanded}
-          className="flex w-full items-center justify-center gap-1 border-t border-theme-border py-1.5 text-xs text-theme-fg-muted hover:text-theme-fg-primary"
+          icon={
+            expanded ? (
+              <CollapseVerticalIcon className="size-4" />
+            ) : (
+              <ExpandVerticalIcon className="size-4" />
+            )
+          }
+          className="absolute bottom-2 left-1/2 z-10 -translate-x-1/2 shadow-sm"
         >
-          <DisclosureChevron open={expanded} />
           {expanded ? t`Show less` : t`Show all ${lineCount} lines`}
-        </button>
+        </Button>
       )}
-    </>
+    </div>
   );
 };
