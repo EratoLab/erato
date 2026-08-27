@@ -147,6 +147,11 @@ vi.mock("@/providers/FeatureConfigProvider", () => ({
   usePinnedChatsFeature: () => ({ enabled: false, maxItems: 5 }),
   useSidebarFeature: () => ({ chatHistoryShowMetadata: false }),
   useAssistantsFeature: () => ({ enabled: true, delegationEnabled: true }),
+  useUploadFeature: () => ({
+    enabled: true,
+    maxSizeBytes: 50 * 1024 * 1024,
+    maxSizeFormatted: "50 MB",
+  }),
 }));
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
