@@ -1729,6 +1729,16 @@ msgid "chat.message.code.copy"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/CollapsibleCodeBlock.tsx
+#~ msgid "chat.message.code.showAll"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/CollapsibleCodeBlock.tsx
+#~ msgid "chat.message.code.showLess"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/EratoEmailSuggestion.tsx
 msgid "chat.message.email.copied"
 msgstr ""
@@ -5283,11 +5293,16 @@ msgstr "{hiddenCount} weitere Elemente anzeigen"
 msgid "Show 1 more item"
 msgstr "1 weiteres Element anzeigen"
 
+#: src/components/ui/Message/CollapsibleCodeBlock.tsx
+msgid "Show all {lineCount} lines"
+msgstr ""
+
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Show details"
 msgstr "Details anzeigen"
 
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+#: src/components/ui/Message/CollapsibleCodeBlock.tsx
 msgid "Show less"
 msgstr "Weniger anzeigen"
 
