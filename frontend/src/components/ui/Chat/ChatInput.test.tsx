@@ -18,7 +18,6 @@ import { ChatInput } from "./ChatInput";
 import { useToastStore } from "../Toast/toastStore";
 
 import type { AddMenuSection } from "./ChatInputAddMenu";
-import type { FileAttachmentsPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatContextValue } from "@/providers/ChatProvider";
 import type { I18n, Messages } from "@lingui/core";
@@ -234,7 +233,6 @@ describe("ChatInput", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     componentRegistry.ChatInputAttachmentPreview = null;
-    componentRegistry.ChatAttachmentsPreview = null;
     componentRegistry.ChatTopLeftAccessory = null;
     vi.stubGlobal("localStorage", {
       getItem: vi.fn(() => null),
@@ -892,86 +890,6 @@ describe("ChatInput", () => {
     ).toBeNull();
   });
 
-  it("renders a registered attachments preview override instead of the flat preview", async () => {
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false },
-        mutations: { retry: false },
-      },
-    });
-    const removeFile = vi.fn();
-    const attachedFiles = [
-      {
-        id: "file-1",
-        filename: "report.pdf",
-        download_url: "/files/report.pdf",
-        preview_url: undefined,
-        file_contents_unavailable_missing_permissions: false,
-        file_capability: {
-          extensions: ["pdf"],
-          id: "pdf",
-          mime_types: ["application/pdf"],
-          operations: ["extract_text"],
-        },
-      },
-    ] as unknown as FileUploadItem[];
-
-    mockUseChatInputHandlers.mockReturnValue({
-      attachedFiles,
-      fileError: null,
-      setFileError: vi.fn(),
-      handleFilesUploaded: vi.fn(),
-      handleRemoveFile: removeFile,
-      handleRemoveAllFiles: vi.fn(),
-      setAttachedFiles: vi.fn(),
-      createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
-    });
-
-    const MockGroupedPreview = ({
-      attachedFiles: files,
-      onRemoveFile,
-    }: FileAttachmentsPreviewProps) => (
-      <div data-testid="grouped-attachments-preview">
-        <span>{files.length}</span>
-        <button
-          type="button"
-          onClick={() => onRemoveFile(files[0].id)}
-          data-testid="grouped-remove-file"
-        >
-          remove
-        </button>
-      </div>
-    );
-    MockGroupedPreview.displayName = "MockGroupedPreview";
-    componentRegistry.ChatAttachmentsPreview = MockGroupedPreview;
-
-    const onSendMessage = vi.fn();
-    const { i18n } = await import("@lingui/core");
-    const { container } = render(
-      <QueryClientProvider client={queryClient}>
-        <I18nProvider i18n={i18n}>
-          <ChatInput onSendMessage={onSendMessage} />
-        </I18nProvider>
-      </QueryClientProvider>,
-    );
-
-    expect(screen.queryByTestId("attachments-preview")).toBeNull();
-    expect(screen.getByTestId("grouped-attachments-preview")).toHaveTextContent(
-      "1",
-    );
-
-    fireEvent.click(screen.getByTestId("grouped-remove-file"));
-    expect(removeFile).toHaveBeenCalledWith("file-1");
-
-    // Staged attachments are part of what is about to be sent, so the override
-    // renders inside the shell alongside the default preview rather than as a
-    // separate card floating above it.
-    const shell = container.querySelector('[data-ui="chat-input-shell"]');
-    expect(
-      shell?.querySelector('[data-testid="grouped-attachments-preview"]'),
-    ).not.toBeNull();
-  });
-
   it("renders the attachment preview override inline inside the input shell and suppresses the external preview", async () => {
     const queryClient = new QueryClient({
       defaultOptions: {
@@ -979,6 +897,7 @@ describe("ChatInput", () => {
         mutations: { retry: false },
       },
     });
+    const removeFile = vi.fn();
     const attachedFiles = [
       {
         id: "file-1",
@@ -1000,7 +919,7 @@ describe("ChatInput", () => {
       fileError: null,
       setFileError: vi.fn(),
       handleFilesUploaded: vi.fn(),
-      handleRemoveFile: vi.fn(),
+      handleRemoveFile: removeFile,
       handleRemoveAllFiles: vi.fn(),
       setAttachedFiles: vi.fn(),
       createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
@@ -1008,9 +927,22 @@ describe("ChatInput", () => {
 
     const MockAttachmentPreview = ({
       attachedFiles: files,
+      onRemoveFile,
     }: {
-      attachedFiles: unknown[];
-    }) => <div data-testid="inline-attachment-preview">{files.length}</div>;
+      attachedFiles: { id: string }[];
+      onRemoveFile: (fileId: string) => void;
+    }) => (
+      <div data-testid="inline-attachment-preview">
+        {files.length}
+        <button
+          type="button"
+          onClick={() => onRemoveFile(files[0].id)}
+          data-testid="inline-remove-file"
+        >
+          remove
+        </button>
+      </div>
+    );
     MockAttachmentPreview.displayName = "MockAttachmentPreview";
     componentRegistry.ChatInputAttachmentPreview = MockAttachmentPreview;
 
@@ -1037,6 +969,10 @@ describe("ChatInput", () => {
 
     expect(shell?.firstElementChild).toBe(inlinePreview);
     expect(inlinePreview?.nextElementSibling).toContainElement(textarea);
+
+    // The override drives removal through the same handler the default uses.
+    fireEvent.click(screen.getByTestId("inline-remove-file"));
+    expect(removeFile).toHaveBeenCalledWith("file-1");
   });
 
   // Guard against the prop chain silently breaking. The Outlook add-in

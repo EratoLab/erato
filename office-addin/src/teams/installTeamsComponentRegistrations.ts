@@ -6,5 +6,5 @@ import { TeamsChatAddMenuExtraContent } from "./components/TeamsChatAddMenuExtra
 /** Install Teams-only registry contributions before the first chat render. */
 export function installTeamsComponentRegistrations() {
   componentRegistry.ChatAddMenuExtraContent = TeamsChatAddMenuExtraContent;
-  componentRegistry.ChatAttachmentsPreview = TeamsAttachmentsPreview;
+  componentRegistry.ChatInputAttachmentPreview = TeamsAttachmentsPreview;
 }
