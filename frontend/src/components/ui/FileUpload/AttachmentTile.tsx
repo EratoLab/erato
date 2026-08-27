@@ -12,7 +12,12 @@ import {
   splitFilenameForDisplay,
   type FileResource,
 } from "./FilePreviewBase";
-import { CloseIcon, ResolvedIcon, ZoomInIcon, ZoomOutIcon } from "../icons";
+import {
+  CloseIcon,
+  CollapseDiagonalIcon,
+  ExpandDiagonalIcon,
+  ResolvedIcon,
+} from "../icons";
 
 import type React from "react";
 
@@ -265,9 +270,9 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
           )}
         >
           {expanded ? (
-            <ZoomOutIcon className="size-3" />
+            <CollapseDiagonalIcon className="size-3" />
           ) : (
-            <ZoomInIcon className="size-3" />
+            <ExpandDiagonalIcon className="size-3" />
           )}
         </button>
       )}
