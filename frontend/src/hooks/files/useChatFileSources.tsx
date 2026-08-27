@@ -21,7 +21,7 @@ import {
 } from "react";
 import { useDropzone } from "react-dropzone";
 
-import { UploadTooLargeError } from "@/hooks/files/errors";
+import { CloudLinkError, UploadTooLargeError } from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useFileUploadWithTokenCheck } from "@/hooks/files/useFileUploadWithTokenCheck";
 import {
@@ -57,7 +57,6 @@ export interface UseChatFileSourcesParams {
   onFilesUploaded?: (files: FileUploadItem[]) => void;
   onTokenLimitExceeded?: (isExceeded: boolean) => void;
   performFileUpload?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
-  uploadError?: Error | null;
   acceptedFileTypes?: FileType[];
   multiple?: boolean;
   maxFiles?: number;
@@ -74,8 +73,6 @@ export interface UseChatFileSourcesResult {
   isProcessing: boolean;
   /** The disk upload path, resolving the external override when supplied. */
   performDiskUpload: (files: File[]) => Promise<FileUploadItem[] | undefined>;
-  /** Aggregated upload error (external, cloud-link, or disk). */
-  resolvedUploadError: Error | null;
   /** Open the OS disk file picker. */
   onSelectDisk: () => void;
   /** Begin selecting from a cloud provider (opens the cloud modal). */
@@ -101,7 +98,6 @@ export function useChatFileSources({
   onFilesUploaded,
   onTokenLimitExceeded,
   performFileUpload: externalPerformFileUpload,
-  uploadError: externalUploadError = null,
   acceptedFileTypes = [],
   multiple = false,
   maxFiles = DEFAULT_MAX_FILES_PER_MESSAGE,
@@ -115,7 +111,6 @@ export function useChatFileSources({
 
   const [selectedCloudProvider, setSelectedCloudProvider] =
     useState<CloudProvider | null>(null);
-  const [cloudLinkError, setCloudLinkError] = useState<Error | null>(null);
   // Linking runs as a React 19 Action: `isLinkingFiles` is the transition's
   // pending flag, so there is no manual setIsLinkingFiles bookkeeping. The
   // cloud picker's open state is derived from it (see cloudPickerProps below).
@@ -125,29 +120,20 @@ export function useChatFileSources({
   const createChatMutation = useCreateChat();
   const linkFileMutation = useLinkFile();
 
-  const {
-    uploadFiles,
-    isUploading,
-    isEstimating,
-    uploadError,
-    exceedsTokenLimit,
-  } = useFileUploadWithTokenCheck({
-    message,
-    chatId,
-    assistantId,
-    previousMessageId,
-    chatProviderId,
-    acceptedFileTypes,
-    multiple,
-    maxFiles,
-    disabled,
-  });
+  const { uploadFiles, isUploading, isEstimating, exceedsTokenLimit } =
+    useFileUploadWithTokenCheck({
+      message,
+      chatId,
+      assistantId,
+      previousMessageId,
+      chatProviderId,
+      acceptedFileTypes,
+      multiple,
+      maxFiles,
+      disabled,
+    });
 
   const performDiskUpload = externalPerformFileUpload ?? uploadFiles;
-  const resolvedUploadError =
-    externalUploadError ??
-    cloudLinkError ??
-    (uploadError instanceof Error ? uploadError : null);
 
   const handleSelectedFiles = useCallback(
     async (files: File[]) => {
@@ -219,7 +205,7 @@ export function useChatFileSources({
       }
 
       const provider = selectedCloudProvider;
-      setCloudLinkError(null);
+      setError(null);
 
       startLinkTransition(async () => {
         const allLinkedFiles: FileUploadItem[] = [];
@@ -278,11 +264,7 @@ export function useChatFileSources({
           }
         } catch (error) {
           console.error("Error linking cloud files:", error);
-          setCloudLinkError(
-            error instanceof Error
-              ? error
-              : new Error("Failed to link selected cloud files."),
-          );
+          setError(new CloudLinkError());
         } finally {
           setSelectedCloudProvider(null);
         }
@@ -297,6 +279,7 @@ export function useChatFileSources({
       createChatMutation,
       linkFileMutation,
       setSilentChatId,
+      setError,
     ],
   );
 
@@ -365,7 +348,6 @@ export function useChatFileSources({
     availableProviders,
     isProcessing,
     performDiskUpload,
-    resolvedUploadError,
     onSelectDisk: handleSelectDisk,
     onSelectCloud: handleSelectCloud,
     onSelectFiles: handleSelectedFiles,

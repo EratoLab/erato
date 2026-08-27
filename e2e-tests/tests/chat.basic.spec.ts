@@ -141,15 +141,17 @@ test.describe("Can submit a message and get a response with slow routes", () => 
 });
 
 test(
-  "Uploading a file that is too large shows an error",
+  "A too-large file shows a dismissable error and leaves the upload button usable",
   { tag: TAG_CI },
   async ({ page }) => {
     await page.goto("/");
     await chatIsReadyToChat(page);
 
+    const uploadButton = page.getByRole("button", { name: "Upload Files" });
+
     // Start waiting for file chooser before clicking the button
     const fileChooserPromise = page.waitForEvent("filechooser");
-    await page.getByRole("button", { name: "Upload Files" }).click();
+    await uploadButton.click();
     const fileChooser = await fileChooserPromise;
 
     const filePath = "test-files/big-file-60mb.pdf";
@@ -166,6 +168,23 @@ test(
       "File is too large",
       { timeout: 30000 },
     );
+
+    await page
+      .getByTestId("file-upload-error")
+      .getByRole("button", { name: "Dismiss" })
+      .click();
+    await expect(page.getByTestId("file-upload-error")).toHaveCount(0);
+
+    await expect(uploadButton).toBeEnabled();
+    const retryChooserPromise = page.waitForEvent("filechooser");
+    await uploadButton.click();
+    const retryChooser = await retryChooserPromise;
+    await retryChooser.setFiles("test-files/sample-report-compressed.pdf");
+
+    await expect(
+      page.getByText(/sample-report-compressed\.pdf/i),
+    ).toBeVisible();
+    await expect(page.getByTestId("file-upload-error")).toHaveCount(0);
   },
 );
 

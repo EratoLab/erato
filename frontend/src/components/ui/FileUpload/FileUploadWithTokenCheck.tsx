@@ -34,8 +34,6 @@ interface FileUploadWithTokenCheckProps {
   onTokenLimitExceeded?: (isExceeded: boolean) => void;
   /** Optional upload function supplied by a parent so drag/drop and buttons share one path */
   performFileUpload?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
-  /** Optional upload error supplied by a parent */
-  uploadError?: Error | null;
   /** Array of accepted file types */
   acceptedFileTypes?: FileType[];
   /** Whether multiple files can be selected */
@@ -67,7 +65,6 @@ export function FileUploadWithTokenCheck({
   onFilesUploaded,
   onTokenLimitExceeded,
   performFileUpload: externalPerformFileUpload,
-  uploadError: externalUploadError = null,
   acceptedFileTypes = [],
   multiple = false,
   label = t({ id: "fileUpload.uploadFiles", message: "Upload Files" }),
@@ -84,7 +81,6 @@ export function FileUploadWithTokenCheck({
     hasCloudProviders,
     isProcessing,
     performDiskUpload,
-    resolvedUploadError,
     onSelectDisk,
     onSelectCloud,
     onSelectFiles,
@@ -100,7 +96,6 @@ export function FileUploadWithTokenCheck({
     onFilesUploaded,
     onTokenLimitExceeded,
     performFileUpload: externalPerformFileUpload,
-    uploadError: externalUploadError,
     acceptedFileTypes,
     multiple,
     maxFiles,
@@ -152,6 +147,8 @@ export function FileUploadWithTokenCheck({
           )}
         </>
       ) : (
+        // No `uploadError` here on purpose: the composer's dismissible alert owns
+        // upload errors, and the button's error state would swallow its picker.
         <FileUploadButton
           acceptedFileTypes={acceptedFileTypes}
           multiple={multiple}
@@ -161,7 +158,6 @@ export function FileUploadWithTokenCheck({
           disabled={disabled || isProcessing}
           performFileUpload={performDiskUpload}
           isUploading={isProcessing}
-          uploadError={resolvedUploadError}
         />
       )}
 

@@ -451,6 +451,7 @@ export const ChatInput = ({
   const silentChatId = useFileUploadStore((state) => state.silentChatId);
   const uploadedFiles = useFileUploadStore((state) => state.uploadedFiles);
   const setSilentChatId = useFileUploadStore((state) => state.setSilentChatId);
+  const setUploadStoreError = useFileUploadStore((state) => state.setError);
   const sendErrorText = useMemo(
     () => resolveChatSendErrorMessage(messagingError),
     [messagingError],
@@ -2369,6 +2370,13 @@ export const ChatInput = ({
     return fileError;
   }, [externalUploadError, fileError]);
 
+  // The banner mirrors the upload store, so dismissing has to clear both — the
+  // local copy alone leaves the store error to outlive its own message.
+  const handleDismissFileError = useCallback(() => {
+    setFileError(null);
+    setUploadStoreError(null);
+  }, [setFileError, setUploadStoreError]);
+
   const ChatInputAttachmentPreview =
     componentRegistry.ChatInputAttachmentPreview;
   const hasTopLeftAccessoryOverride =
@@ -2491,7 +2499,7 @@ export const ChatInput = ({
             type="error"
             geometryVariant="message"
             dismissible
-            onDismiss={() => setFileError(null)}
+            onDismiss={handleDismissFileError}
             className="mb-2"
             data-testid="file-upload-error"
           >
@@ -2768,10 +2776,6 @@ export const ChatInput = ({
                       onFilesUploaded: handleFilesUploaded,
                       onTokenLimitExceeded: handleFileTokenLimitExceeded,
                       performFileUpload: uploadFiles,
-                      uploadError:
-                        externalUploadError instanceof Error
-                          ? externalUploadError
-                          : null,
                       onProcessingChange: handleFileButtonProcessingChange,
                       acceptedFileTypes,
                       multiple: maxFiles > 1,
@@ -2798,12 +2802,6 @@ export const ChatInput = ({
                         onFilesUploaded={handleFilesUploaded}
                         onTokenLimitExceeded={handleFileTokenLimitExceeded}
                         performFileUpload={uploadFiles}
-                        uploadError={
-                          externalUploadError instanceof Error
-                            ? externalUploadError
-                            : null
-                        }
-                        // Pass the callback for processing state
                         onProcessingChange={handleFileButtonProcessingChange}
                         acceptedFileTypes={acceptedFileTypes}
                         multiple={maxFiles > 1}
