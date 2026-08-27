@@ -12,7 +12,12 @@ import {
   splitFilenameForDisplay,
   type FileResource,
 } from "./FilePreviewBase";
-import { CloseIcon, ResolvedIcon } from "../icons";
+import {
+  CloseIcon,
+  CollapseDiagonalIcon,
+  ExpandDiagonalIcon,
+  ResolvedIcon,
+} from "../icons";
 
 import type React from "react";
 
@@ -62,6 +67,12 @@ export interface AttachmentTileProps {
   labelOverride?: string;
   /** Filename under a media tile. Document tiles always carry their name inline. */
   showCaption?: boolean;
+  /**
+   * Offers a middle tier between the tile and the full preview: an image grows
+   * in place, capped at the chat image bounds. Only meaningful for media —
+   * a document tile has nothing larger to show without loading a renderer.
+   */
+  expandable?: boolean;
   disabled?: boolean;
   className?: string;
 }
@@ -108,11 +119,13 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
   activateLabel,
   labelOverride,
   showCaption = false,
+  expandable = false,
   disabled = false,
   className,
 }) => {
   const { iconMappings } = useTheme();
   const [imageFailed, setImageFailed] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const filename = useMemo(() => getFileName(file), [file]);
   const fileType = useMemo(() => getFileType(filename), [filename]);
@@ -156,8 +169,20 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
       src={previewUrl ?? undefined}
       alt={onActivate ? "" : filename}
       onError={() => setImageFailed(true)}
-      style={{ width: geometry.mediaSize, height: geometry.mediaSize }}
-      className="rounded-[var(--theme-radius-base)] border object-cover [border-color:var(--theme-border-media)]"
+      style={
+        expanded
+          ? {
+              maxWidth: "var(--theme-layout-chat-image-preview-max-width)",
+              maxHeight: "var(--theme-layout-chat-image-preview-max-height)",
+            }
+          : { width: geometry.mediaSize, height: geometry.mediaSize }
+      }
+      className={clsx(
+        "rounded-[var(--theme-radius-base)] border [border-color:var(--theme-border-media)]",
+        // Cropping is right for a thumbnail standing in for the file, wrong
+        // once the point is seeing what the image actually contains.
+        expanded ? "w-full object-contain" : "object-cover",
+      )}
     />
   ) : (
     <div
@@ -200,7 +225,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
         // Media keeps its square; a document pill sizes to its name but never
         // grows to fill the row — that stretch is what makes today's chips
         // read as list rows rather than tiles.
-        isMedia ? "shrink-0" : "min-w-0",
+        isMedia ? (expanded ? "w-full" : "shrink-0") : "min-w-0",
         className,
       )}
       style={isMedia ? undefined : { maxWidth: geometry.docMaxWidth }}
@@ -226,6 +251,30 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
         // Not interactive, so it cannot hold focus — the title serves hover and
         // the image's alt text serves assistive tech.
         <div title={filename}>{face}</div>
+      )}
+
+      {expandable && isMedia && (
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          aria-expanded={expanded}
+          aria-label={
+            expanded ? `${t`Collapse`} ${filename}` : `${t`Expand`} ${filename}`
+          }
+          className={clsx(
+            "absolute -left-1 -top-1 z-10 inline-flex size-5 items-center justify-center rounded-full",
+            "border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] text-[var(--theme-fg-muted)] shadow-sm",
+            "hover:text-[var(--theme-fg-primary)]",
+            "opacity-0 transition-opacity focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100",
+            "[@media(hover:none)]:opacity-100",
+          )}
+        >
+          {expanded ? (
+            <CollapseDiagonalIcon className="size-3" />
+          ) : (
+            <ExpandDiagonalIcon className="size-3" />
+          )}
+        </button>
       )}
 
       {onRemove && (

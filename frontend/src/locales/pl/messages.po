@@ -4434,6 +4434,10 @@ msgstr "Zamknij okno"
 msgid "Close modal overlay"
 msgstr "Zamknij nakładkę okna"
 
+#: src/components/ui/FileUpload/AttachmentTile.tsx
+msgid "Collapse"
+msgstr ""
+
 #: src/components/ui/Chat/SidebarCollapsibleSection.tsx
 msgid "Collapse {title}"
 msgstr ""
@@ -4721,6 +4725,10 @@ msgstr "Szacowanie użycia tokenów..."
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Exit audio mode"
+msgstr ""
+
+#: src/components/ui/FileUpload/AttachmentTile.tsx
+msgid "Expand"
 msgstr ""
 
 #: src/components/ui/Chat/SidebarCollapsibleSection.tsx

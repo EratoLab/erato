@@ -4434,6 +4434,10 @@ msgstr "Close modal"
 msgid "Close modal overlay"
 msgstr "Close modal overlay"
 
+#: src/components/ui/FileUpload/AttachmentTile.tsx
+msgid "Collapse"
+msgstr "Collapse"
+
 #: src/components/ui/Chat/SidebarCollapsibleSection.tsx
 msgid "Collapse {title}"
 msgstr "Collapse {title}"
@@ -4722,6 +4726,10 @@ msgstr "Estimating token usage..."
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Exit audio mode"
 msgstr "Exit audio mode"
+
+#: src/components/ui/FileUpload/AttachmentTile.tsx
+msgid "Expand"
+msgstr "Expand"
 
 #: src/components/ui/Chat/SidebarCollapsibleSection.tsx
 msgid "Expand {title}"
