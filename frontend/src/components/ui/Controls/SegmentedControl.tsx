@@ -1,5 +1,7 @@
 import clsx from "clsx";
-import { memo, useId } from "react";
+import { memo, useId, useRef } from "react";
+
+import type { KeyboardEvent } from "react";
 
 export interface SegmentedControlAttention {
   /** Read out after the label; the dot carries no meaning on its own. */
@@ -44,6 +46,32 @@ export interface SegmentedControlProps<T extends string> {
 }
 
 /**
+ * Walk `delta` steps at a time from `from`, wrapping at both ends, until an
+ * option that can actually be selected turns up. Disabled segments are stepped
+ * over rather than landed on, so an arrow key never parks focus on something
+ * that cannot be activated. Returns -1 when no option is selectable.
+ *
+ * `from` is allowed to sit outside the array so a single walk serves all four
+ * keys: Home enters at -1 going forward, End at `length` going backward.
+ */
+function nextEnabledIndex<T extends string>(
+  options: SegmentedControlOption<T>[],
+  from: number,
+  delta: number,
+): number {
+  const { length } = options;
+
+  for (let step = 1; step <= length; step++) {
+    const index = (((from + delta * step) % length) + length) % length;
+    if (!options[index].disabled) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+/**
  * SegmentedControl component for toggling between a small set of options
  *
  * Use this for switching between 2-4 mutually exclusive views or filters.
@@ -59,10 +87,50 @@ function SegmentedControlInner<T extends string>({
   "aria-label": ariaLabel,
 }: SegmentedControlProps<T>) {
   const groupId = useId();
+  const segmentRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const sizeStyles = {
     sm: "px-3 py-1.5 text-sm",
     md: "px-4 py-2 text-base",
+  };
+
+  /**
+   * Automatic activation: selection and focus move together, which is the
+   * promise the roving `tabIndex` already makes. Without this the selected
+   * segment is the only tab stop in the group and a keyboard user cannot
+   * reach the others at all.
+   */
+  const handleKeyDown = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    index: number,
+  ) => {
+    let nextIndex: number;
+
+    switch (event.key) {
+      case "ArrowRight":
+        nextIndex = nextEnabledIndex(options, index, 1);
+        break;
+      case "ArrowLeft":
+        nextIndex = nextEnabledIndex(options, index, -1);
+        break;
+      case "Home":
+        nextIndex = nextEnabledIndex(options, -1, 1);
+        break;
+      case "End":
+        nextIndex = nextEnabledIndex(options, options.length, -1);
+        break;
+      default:
+        return;
+    }
+
+    event.preventDefault();
+
+    if (nextIndex < 0) {
+      return;
+    }
+
+    onChange(options[nextIndex].value);
+    segmentRefs.current[nextIndex]?.focus();
   };
 
   return (
@@ -88,10 +156,12 @@ function SegmentedControlInner<T extends string>({
           <button
             key={option.value}
             id={`${groupId}-tab-${index}`}
+            ref={(element) => {
+              segmentRefs.current[index] = element;
+            }}
             type="button"
             role="tab"
             aria-selected={isSelected ? "true" : "false"}
-            aria-controls={`${groupId}-panel-${index}`}
             tabIndex={isSelected ? 0 : -1}
             disabled={isDisabled}
             onClick={() => {
@@ -99,6 +169,7 @@ function SegmentedControlInner<T extends string>({
                 onChange(option.value);
               }
             }}
+            onKeyDown={(event) => handleKeyDown(event, index)}
             className={clsx(
               "theme-transition flex items-center gap-1.5 rounded-[calc(var(--theme-radius-control)_-_0.125rem)] font-medium",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus",
