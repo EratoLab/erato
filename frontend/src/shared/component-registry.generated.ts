@@ -35,6 +35,9 @@ export type { ButtonVariant } from "@/components/ui/Controls/Button";
 export { COLLAPSE_DURATION_MS } from "@/components/ui/Controls/Collapse";
 export { Collapse } from "@/components/ui/Controls/Collapse";
 export type { CollapseProps } from "@/components/ui/Controls/Collapse";
+export { DisclosureChevron } from "@/components/ui/Controls/DisclosureChevron";
+export type { DisclosureChevronProps } from "@/components/ui/Controls/DisclosureChevron";
+export type { DisclosureChevronSize } from "@/components/ui/Controls/DisclosureChevron";
 export { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
 export type { DropdownMenuItem } from "@/components/ui/Controls/DropdownMenu";
 export type { DropdownMenuProps } from "@/components/ui/Controls/DropdownMenu";
@@ -191,6 +194,8 @@ export { ActionConfirmationCard } from "@/components/ui/Message/ActionConfirmati
 export type { ActionConfirmationStatus } from "@/components/ui/Message/ActionConfirmationCard";
 export { ACTION_FACET_ARG_KEYS } from "@/components/ui/Message/ActionFacetContext";
 export { ActionFacetContext } from "@/components/ui/Message/ActionFacetContext";
+export { CollapsibleCodeBlock } from "@/components/ui/Message/CollapsibleCodeBlock";
+export type { CollapsibleCodeBlockProps } from "@/components/ui/Message/CollapsibleCodeBlock";
 export { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageControls";
 export { DefaultEratoAppointmentCodeBlock } from "@/components/ui/Message/EratoAppointmentBlock";
 export { EratoAppointmentBlock } from "@/components/ui/Message/EratoAppointmentBlock";

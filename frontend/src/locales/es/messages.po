@@ -1343,6 +1343,11 @@ msgid "chat.ai_usage_advisory"
 msgstr "Está interactuando con un chatbot de IA. Las respuestas generadas pueden contener errores fácticos y deben verificarse antes de usarse."
 
 #. js-lingui-explicit-id
+#: src/utils/teams/teamsUploadName.ts
+msgid "chat.attachment.teamsImage"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 msgid "chat.conversation.aria"
 msgstr "Conversación de chat"

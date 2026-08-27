@@ -20,8 +20,15 @@ describe("teamsUploadDisplayName", () => {
     );
   });
 
-  it("says nothing for a pasted image, which never had a name", () => {
-    expect(teamsUploadDisplayName("teams-img-0123456789abcdef.png")).toBeNull();
+  it("calls a pasted image an image, since it never had a name", () => {
+    // The content hash is a join key, not something to read. The extension is
+    // kept so the tile's type and size line still resolves.
+    expect(teamsUploadDisplayName("teams-img-0123456789abcdef.png")).toBe(
+      "Image.png",
+    );
+    expect(teamsUploadDisplayName("teams-img-0123456789abcdef.jpg")).toBe(
+      "Image.jpg",
+    );
   });
 
   it("leaves anything it did not mint alone", () => {
