@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import { UploadTooLargeError } from "@/hooks/files/errors";
+import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { makeFileWithSize } from "@/test/fileFixtures";
 
 import { FileUploadButton } from "../FileUploadButton";
@@ -45,6 +46,7 @@ vi.mock("react-dropzone", () => ({
 describe("FileUploadButton", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useFileUploadStore.getState().reset();
     capturedOnDrop = () => {};
     capturedMaxSize = undefined;
   });
@@ -140,6 +142,37 @@ describe("FileUploadButton", () => {
       capturedOnDrop([], []);
 
       expect(onError).not.toHaveBeenCalled();
+    });
+
+    it("falls back to the shared upload store when no onError is supplied", () => {
+      // `maxSize` keeps the file out of `acceptedFiles`, so `performFileUpload`
+      // can never report it. Without a default sink the rejection is invisible:
+      // no upload, no error, nothing — which is what the composer's attach
+      // button and the assistant picker used to do.
+      const performFileUpload = vi.fn();
+      render(
+        <FileUploadButton
+          label="Attach"
+          iconOnly
+          performFileUpload={performFileUpload}
+        />,
+      );
+
+      capturedOnDrop(
+        [],
+        [
+          {
+            file: makeFileWithSize("huge.bin", DEFAULT_LIMIT + 1),
+            errors: [{ code: "file-too-large", message: "File is too large" }],
+          },
+        ],
+      );
+
+      const storeError = useFileUploadStore.getState().error;
+      expect(storeError).toBeInstanceOf(UploadTooLargeError);
+      expect(storeError?.message).toContain("20 MB");
+      expect(storeError?.message).toContain("huge.bin");
+      expect(performFileUpload).not.toHaveBeenCalled();
     });
   });
 });
