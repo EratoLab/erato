@@ -203,6 +203,10 @@ const getThemeVariableEntries = (theme: Theme): Array<[string, string]> => {
       theme.layout.chat.imagePreviewMaxHeight,
     ],
     [
+      "--theme-layout-code-block-collapsed-max-height",
+      theme.layout.codeBlock.collapsedMaxHeight,
+    ],
+    [
       "--theme-layout-attachment-tile-compact-media-size",
       theme.layout.attachmentTile.compactMediaSize,
     ],

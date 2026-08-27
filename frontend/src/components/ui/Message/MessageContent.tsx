@@ -18,6 +18,7 @@ import { useTraceFeature } from "@/providers/FeatureConfigProvider";
 import { findMentionRanges } from "@/utils/chat/assistantMentions";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
+import { CollapsibleCodeBlock } from "./CollapsibleCodeBlock";
 import { EratoAppointmentBlock } from "./EratoAppointmentBlock";
 import { EratoEmailSuggestion } from "./EratoEmailSuggestion";
 import { ImageContentDisplay } from "./ImageContentDisplay";
@@ -262,16 +263,21 @@ function MarkdownPre({
 
   return (
     <div className="group relative my-4">
-      <pre
-        className={["message-content-code-block", className]
-          .filter(Boolean)
-          .join(" ")}
-        {...props}
+      <CollapsibleCodeBlock
+        lineCount={codeContent === "" ? 0 : codeContent.split("\n").length}
+        disabled={isStreaming}
       >
-        <BlockCodeContext.Provider value={{ isBlockCode: true, isStreaming }}>
-          {children}
-        </BlockCodeContext.Provider>
-      </pre>
+        <pre
+          className={["message-content-code-block", className]
+            .filter(Boolean)
+            .join(" ")}
+          {...props}
+        >
+          <BlockCodeContext.Provider value={{ isBlockCode: true, isStreaming }}>
+            {children}
+          </BlockCodeContext.Provider>
+        </pre>
+      </CollapsibleCodeBlock>
       <button
         type="button"
         onClick={handleCopy}

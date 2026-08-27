@@ -250,6 +250,10 @@ export type ThemeLayout = {
     imagePreviewMaxWidth: string;
     imagePreviewMaxHeight: string;
   };
+  /** Height a long code block clamps to before offering to reveal the rest. */
+  codeBlock: {
+    collapsedMaxHeight: string;
+  };
   /** Attachment tiles: compact stages in the composer, medium carries the transcript. */
   attachmentTile: {
     compactMediaSize: string;
@@ -561,6 +565,9 @@ export const defaultTheme: Theme = {
       inputMaxWidth: "56rem",
       imagePreviewMaxWidth: "24rem",
       imagePreviewMaxHeight: "24rem",
+    },
+    codeBlock: {
+      collapsedMaxHeight: "24rem",
     },
     attachmentTile: {
       compactMediaSize: "3.5rem",
