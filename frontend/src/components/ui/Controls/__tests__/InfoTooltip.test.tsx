@@ -105,7 +105,7 @@ describe("InfoTooltip", () => {
     expect(svg).toHaveClass("h-4", "w-4");
   });
 
-  it("should have cursor-help class for accessibility indication", () => {
+  it("should have cursor-help class as the hover affordance", () => {
     // Add a test translation
     i18n.load("en", {
       ...(enMessages as unknown as Messages),

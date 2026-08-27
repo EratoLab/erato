@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import type { ReactNode } from "react";
@@ -17,7 +17,7 @@ interface TooltipProps {
 }
 
 /**
- * A simple tooltip component that shows on hover
+ * A simple tooltip that shows on hover or when the trigger receives focus.
  */
 export const Tooltip: React.FC<TooltipProps> = ({
   content,
@@ -30,9 +30,21 @@ export const Tooltip: React.FC<TooltipProps> = ({
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
+  const tooltipId = useId();
 
-  // Handle mouse enter to show tooltip
-  const handleMouseEnter = () => {
+  // Drop a pending show-timer if the trigger unmounts while it is queued.
+  useEffect(
+    () => () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    },
+    [],
+  );
+
+  // Queue the tooltip. Used for both pointer hover and keyboard focus, so the
+  // help text is reachable without a mouse.
+  const showTooltip = () => {
     // Clear any existing timeout
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
@@ -73,13 +85,35 @@ export const Tooltip: React.FC<TooltipProps> = ({
     }, delay);
   };
 
-  // Handle mouse leave to hide tooltip
-  const handleMouseLeave = () => {
+  // Hide the tooltip and drop any timer that has not fired yet.
+  const hideTooltip = () => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
     setIsVisible(false);
   };
+
+  // WCAG 1.4.13: a tooltip must be dismissable without moving the pointer or
+  // focus. A document listener (not an onKeyDown on the wrapper) is required
+  // because a hover-shown tooltip leaves focus somewhere else entirely.
+  // Capture phase + stopPropagation so the Escape that dismisses the tooltip
+  // does not also reach ModalBase/AnchoredPopover and close the surrounding
+  // dialog. Registered only while visible, so Escape is untouched otherwise.
+  useEffect(() => {
+    if (!isVisible) {
+      return;
+    }
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        setIsVisible(false);
+      }
+    };
+
+    document.addEventListener("keydown", handleEscape, true);
+    return () => document.removeEventListener("keydown", handleEscape, true);
+  }, [isVisible]);
 
   // Position classes based on position prop
   const positionClasses = {
@@ -93,20 +127,29 @@ export const Tooltip: React.FC<TooltipProps> = ({
   const positionClass = positionClasses[position];
 
   return (
+    // React focus events bubble, so the wrapper sees focus/blur from whatever
+    // the child renders without any per-child wiring.
     <div
       ref={triggerRef}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
+      onMouseEnter={showTooltip}
+      onMouseLeave={hideTooltip}
+      onFocus={showTooltip}
+      onBlur={hideTooltip}
       className="relative inline-flex"
     >
-      {/* Clone the child element */}
-      {React.cloneElement(children)}
+      {/* Point the trigger at the tooltip while it is showing. */}
+      {React.cloneElement(
+        children as React.ReactElement<{ "aria-describedby"?: string }>,
+        { "aria-describedby": isVisible ? tooltipId : undefined },
+      )}
 
       {/* Render tooltip using portal if visible */}
       {isVisible &&
         typeof document !== "undefined" &&
         createPortal(
           <div
+            id={tooltipId}
+            role="tooltip"
             className={`pointer-events-none fixed z-50 ${positionClass} ${className}`}
             style={{
               top: `${tooltipPosition.top}px`,
