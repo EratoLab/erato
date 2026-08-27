@@ -17,6 +17,13 @@ const outputPath = path.join(
   "component-registry.generated.ts",
 );
 const watchMode = process.argv.includes("--watch");
+// The build regenerates this file anyway, so a stale commit never reaches a
+// deployed surface. It does two other kinds of harm: local type-checking
+// disagrees with the build, and — the reason this exists — a component
+// silently *leaving* the surface never appears in a diff. A kit is one flat
+// named import, so a dropped export is a load-time failure that takes the
+// whole kit down.
+const checkMode = process.argv.includes("--check");
 const sourceExtensions = [".ts", ".tsx"];
 
 const isWithin = (parentPath, childPath) => {
@@ -375,20 +382,56 @@ const generatedSource = () => {
   ].join("\n");
 };
 
+/**
+ * Names what changed rather than telling the reader to go diff it. Removals
+ * lead: they are the ones that break a kit at load time.
+ */
+const reportDrift = (currentSource, nextSource) => {
+  const exportsOf = (source) =>
+    new Set(
+      source === null
+        ? []
+        : [...source.matchAll(/^export (?:type )?\{ (\w+)/gm)].map((m) => m[1]),
+    );
+  const before = exportsOf(currentSource);
+  const after = exportsOf(nextSource);
+  const removed = [...before].filter((name) => !after.has(name));
+  const added = [...after].filter((name) => !before.has(name));
+
+  return [
+    removed.length > 0 ? `  removed: ${removed.join(", ")}` : null,
+    added.length > 0 ? `  added:   ${added.join(", ")}` : null,
+    removed.length === 0 && added.length === 0
+      ? "  the exported names are unchanged; only their order or source paths moved"
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+};
+
 const generate = () => {
   const nextSource = generatedSource();
   const currentSource = fs.existsSync(outputPath)
     ? fs.readFileSync(outputPath, "utf8")
     : null;
+  const relativeOutput = path.relative(rootDir, outputPath);
 
   if (currentSource === nextSource) {
+    if (checkMode) {
+      console.log(`✓ ${relativeOutput} is up-to-date`);
+    }
     return;
   }
 
+  if (checkMode) {
+    console.error(`✖ ${relativeOutput} is out of date.`);
+    console.error(reportDrift(currentSource, nextSource));
+    console.error("Run `pnpm generate:component-registry-shared` to update.");
+    process.exit(1);
+  }
+
   fs.writeFileSync(outputPath, nextSource);
-  console.log(
-    `[component-registry-shared] wrote ${path.relative(rootDir, outputPath)}`,
-  );
+  console.log(`[component-registry-shared] wrote ${relativeOutput}`);
 };
 
 generate();

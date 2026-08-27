@@ -41,6 +41,8 @@ export type { DisclosureChevronSize } from "@/components/ui/Controls/DisclosureC
 export { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
 export type { DropdownMenuItem } from "@/components/ui/Controls/DropdownMenu";
 export type { DropdownMenuProps } from "@/components/ui/Controls/DropdownMenu";
+export { ExpandMediaButton } from "@/components/ui/Controls/ExpandMediaButton";
+export type { ExpandMediaButtonProps } from "@/components/ui/Controls/ExpandMediaButton";
 export { SegmentedControl } from "@/components/ui/Controls/SegmentedControl";
 export type { SegmentedControlAttention } from "@/components/ui/Controls/SegmentedControl";
 export type { SegmentedControlOption } from "@/components/ui/Controls/SegmentedControl";
