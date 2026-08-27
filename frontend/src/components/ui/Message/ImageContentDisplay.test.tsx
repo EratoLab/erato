@@ -43,7 +43,10 @@ describe("ImageContentDisplay", () => {
       <ImageContentDisplay images={images} onImageClick={onImageClick} />,
     );
 
-    const imageButton = screen.getByRole("button");
+    // The frame now also carries a growth toggle, so target the image itself.
+    const imageButton = screen.getByRole("button", {
+      name: "Message attachment",
+    });
     fireEvent.click(imageButton);
 
     expect(imageButton.tagName).toBe("BUTTON");
@@ -59,6 +62,36 @@ describe("ImageContentDisplay", () => {
     expect(screen.queryByRole("button")).toBeNull();
     expect(image).not.toHaveClass("cursor-pointer");
     expect(image).not.toHaveClass("hover:scale-105");
+  });
+
+  it("offers in-place growth on an interactive preview, and re-collapses", () => {
+    renderWithTheme(
+      <ImageContentDisplay images={images} onImageClick={vi.fn()} />,
+    );
+
+    const toggle = screen.getByRole("button", { name: /Expand/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(toggle);
+    const collapse = screen.getByRole("button", { name: /Collapse/ });
+    expect(collapse).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.click(collapse);
+    expect(screen.getByRole("button", { name: /Expand/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
+
+  it("does not open the full preview when growing in place", () => {
+    const onImageClick = vi.fn();
+    renderWithTheme(
+      <ImageContentDisplay images={images} onImageClick={onImageClick} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Expand/ }));
+
+    expect(onImageClick).not.toHaveBeenCalled();
   });
 
   it("uses the same theme height hook for the error fallback", () => {

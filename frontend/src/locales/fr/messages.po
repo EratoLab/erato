@@ -4434,7 +4434,7 @@ msgstr "Fermer la modal"
 msgid "Close modal overlay"
 msgstr "Fermer le fond de modal"
 
-#: src/components/ui/FileUpload/AttachmentTile.tsx
+#: src/components/ui/Controls/ExpandMediaButton.tsx
 msgid "Collapse"
 msgstr ""
 
@@ -4727,7 +4727,7 @@ msgstr "Estimation de l'utilisation des tokens..."
 msgid "Exit audio mode"
 msgstr ""
 
-#: src/components/ui/FileUpload/AttachmentTile.tsx
+#: src/components/ui/Controls/ExpandMediaButton.tsx
 msgid "Expand"
 msgstr ""
 

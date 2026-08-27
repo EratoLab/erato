@@ -2,6 +2,7 @@ import { t, msg } from "@lingui/core/macro";
 import { useState, memo } from "react";
 
 import { InteractiveContainer } from "@/components/ui/Container/InteractiveContainer";
+import { ExpandMediaButton } from "@/components/ui/Controls/ExpandMediaButton";
 
 import type { UiImagePart } from "@/utils/adapters/contentPartAdapter";
 
@@ -35,6 +36,17 @@ const STATIC_IMAGE_CLASS_NAME = "w-full object-contain";
 export const ImageContentDisplay = memo<ImageContentDisplayProps>(
   ({ images, onImageClick, className = "" }) => {
     const [loadErrors, setLoadErrors] = useState<Set<string>>(new Set());
+    // Independent per image: growing one says nothing about the others.
+    const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+    const toggleExpanded = (imageId: string) =>
+      setExpandedIds((previous) => {
+        const next = new Set(previous);
+        if (!next.delete(imageId)) {
+          next.add(imageId);
+        }
+        return next;
+      });
 
     if (images.length === 0) return null;
 
@@ -55,6 +67,21 @@ export const ImageContentDisplay = memo<ImageContentDisplayProps>(
       <div className={`my-4 flex flex-wrap gap-2 ${className}`}>
         {images.map((image) => {
           const hasError = loadErrors.has(image.id);
+          const expanded = expandedIds.has(image.id);
+          const imageLabel = t(
+            msg({
+              id: "ui.image.messageAttachment",
+              message: "Message attachment",
+            }),
+          );
+          // Collapsed sits at the chat image bounds; expanded gives the image
+          // the full message width, which is the point — a generated chart at
+          // 24rem is often too small to read, and the lightbox is a heavier
+          // interaction than the question deserves.
+          const frameStyle = expanded
+            ? { maxWidth: "100%" }
+            : IMAGE_PREVIEW_CONTAINER_STYLE;
+          const pictureStyle = expanded ? undefined : IMAGE_PREVIEW_STYLE;
           const imageElement = hasError ? (
             <div
               className="flex w-full items-center justify-center bg-theme-bg-tertiary p-4 text-center"
@@ -83,18 +110,21 @@ export const ImageContentDisplay = memo<ImageContentDisplayProps>(
                   ? INTERACTIVE_IMAGE_CLASS_NAME
                   : STATIC_IMAGE_CLASS_NAME
               }
-              style={IMAGE_PREVIEW_STYLE}
+              style={pictureStyle}
               onError={(e) => handleImageError(image.id, e)}
               loading="lazy"
             />
           );
 
+          // A static preview stays wholly non-interactive by contract, so it
+          // gets no growth affordance either — only the already-clickable
+          // variant below offers the middle tier.
           if (!onImageClick) {
             return (
               <div
                 key={image.id}
-                className={IMAGE_PREVIEW_FRAME_CLASS_NAME}
-                style={IMAGE_PREVIEW_CONTAINER_STYLE}
+                className={`group ${IMAGE_PREVIEW_FRAME_CLASS_NAME}`}
+                style={frameStyle}
               >
                 {imageElement}
               </div>
@@ -102,15 +132,22 @@ export const ImageContentDisplay = memo<ImageContentDisplayProps>(
           }
 
           return (
-            <InteractiveContainer
-              key={image.id}
-              onClick={() => onImageClick(image)}
-              fullWidth={false}
-              className={IMAGE_PREVIEW_FRAME_CLASS_NAME}
-              style={IMAGE_PREVIEW_CONTAINER_STYLE}
-            >
-              {imageElement}
-            </InteractiveContainer>
+            <div key={image.id} className="group relative" style={frameStyle}>
+              <InteractiveContainer
+                onClick={() => onImageClick(image)}
+                fullWidth={false}
+                className={IMAGE_PREVIEW_FRAME_CLASS_NAME}
+              >
+                {imageElement}
+              </InteractiveContainer>
+              {!hasError && (
+                <ExpandMediaButton
+                  expanded={expanded}
+                  onToggle={() => toggleExpanded(image.id)}
+                  label={imageLabel}
+                />
+              )}
+            </div>
           );
         })}
       </div>
