@@ -228,7 +228,7 @@ export const FileUpload = memo<FileUploadProps>(
                   variant="ghost"
                   size="sm"
                   onClick={handleClearFiles}
-                  className="text-[var(--theme-fg-muted)] hover:text-[var(--theme-fg)]"
+                  className="text-[var(--theme-fg-muted)] hover:text-[var(--theme-fg-primary)]"
                 >
                   {t`Clear All`}
                 </Button>

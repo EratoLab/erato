@@ -7,6 +7,7 @@ import docxWasmUrl from "@extend-ai/react-docx/docx_wasm_bg.wasm?url";
 import { t } from "@lingui/core/macro";
 import { useEffect, useState } from "react";
 
+import { useTheme } from "@/components/providers/ThemeProvider";
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoading";
@@ -28,7 +29,11 @@ setWasmSource(docxWasmUrl);
 
 export const DocxPreview: React.FC<DocxPreviewProps> = ({ url }) => {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
-  const [docxTheme, setDocxTheme] = useState<DocxTheme>("light");
+  // Opens in whichever mode the app is resolved to, then the toggle below owns
+  // it — reading a dark document in a light app stays possible, but the
+  // preview no longer forces a white page into a dark app.
+  const { effectiveTheme } = useTheme();
+  const [docxTheme, setDocxTheme] = useState<DocxTheme>(effectiveTheme);
   const { model, isLoading, error } = useDocxModel(
     state.kind === "ready" ? state.buffer : undefined,
   );
@@ -98,7 +103,7 @@ export const DocxPreview: React.FC<DocxPreviewProps> = ({ url }) => {
 
   return (
     <div
-      className="docx-preview-theme relative h-[75vh] overflow-hidden rounded-md border border-[var(--theme-border-muted)]"
+      className="docx-preview-theme relative h-[75vh] overflow-hidden rounded-md border border-[var(--theme-border-subtle)]"
       data-docx-theme={docxTheme}
       data-testid="file-preview-docx"
     >

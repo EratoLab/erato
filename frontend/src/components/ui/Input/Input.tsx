@@ -106,9 +106,13 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
               : "border-[var(--theme-border-field)] focus:border-[var(--theme-border-field-focus)] focus:ring-theme-focus",
             // Focus styles
             "focus:outline-none focus:ring-2",
-            // Disabled styles
-            disabled &&
-              "cursor-not-allowed bg-theme-bg-primary text-theme-fg-muted opacity-50",
+            // Disabled styles. These are `disabled:` variants, not a
+            // `disabled && "..."` branch: there is no tailwind-merge in this
+            // repo, so a conditional `bg-theme-bg-primary` would race the base
+            // `bg-theme-bg-secondary` on generated-stylesheet position and lose.
+            // The variant compiles to `.disabled\:bg-…:disabled` — specificity
+            // (0,2,0) vs (0,1,0) — so it wins regardless of source order.
+            "disabled:cursor-not-allowed disabled:bg-theme-bg-primary disabled:text-theme-fg-muted disabled:opacity-50",
             // Custom classes
             className,
           )}

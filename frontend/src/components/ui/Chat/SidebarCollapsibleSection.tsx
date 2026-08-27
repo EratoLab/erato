@@ -84,8 +84,13 @@ export const SidebarCollapsibleSection = memo<{
                 "group-hover/toggle:text-theme-fg-primary group-focus-visible/toggle:text-theme-fg-primary",
                 "opacity-0 group-hover:opacity-100 group-focus-visible/toggle:opacity-100",
                 // Touch devices get no hover reveal, so the non-default
-                // collapsed state must stay visible on its own.
-                !isExpanded && "opacity-100",
+                // collapsed state must stay visible on its own. Keyed off the
+                // button's own `aria-expanded` rather than a `!isExpanded && …`
+                // branch: without tailwind-merge a conditional `opacity-100`
+                // only beats the base `opacity-0` if it happens to sit later in
+                // the generated stylesheet. The variant carries the group's
+                // attribute selector, so it wins on specificity instead.
+                "group-aria-[expanded=false]/toggle:opacity-100",
               )}
             />
           </button>

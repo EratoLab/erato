@@ -118,6 +118,51 @@ const withBorderRadiusCompatibility = (
   };
 };
 
+/**
+ * Back-fills the font-family aliases the way `globals.css` declares them:
+ *
+ *   --theme-font-heading:      var(--theme-font-body);
+ *   --theme-font-semibold:     var(--theme-font-body);
+ *   --theme-font-heading-bold: var(--theme-font-heading);
+ *
+ * ThemeProvider emits every one of those custom properties explicitly, which
+ * flattens the alias chain. Without this back-fill a pack that sets only
+ * `typography.fontFamily.body` keeps the default font for headings, semibold
+ * text and bold headings. Keys the override sets explicitly always win.
+ */
+const withTypographyCompatibility = (
+  theme: Theme,
+  override?: ThemeOverride,
+): Theme => {
+  const fontFamilyOverride = override?.typography?.fontFamily;
+  const typography = theme.typography;
+  if (!fontFamilyOverride || !typography) return theme;
+
+  const fontFamily = { ...typography.fontFamily };
+
+  if (fontFamilyOverride.body) {
+    if (!fontFamilyOverride.heading) {
+      fontFamily.heading = typography.fontFamily.body;
+    }
+    if (!fontFamilyOverride.semibold) {
+      fontFamily.semibold = typography.fontFamily.body;
+    }
+  }
+
+  // headingBold aliases the *resolved* heading, which may itself come from body.
+  if (
+    (fontFamilyOverride.body || fontFamilyOverride.heading) &&
+    !fontFamilyOverride.headingBold
+  ) {
+    fontFamily.headingBold = fontFamily.heading;
+  }
+
+  return {
+    ...theme,
+    typography: { ...typography, fontFamily },
+  };
+};
+
 const withLegacyColorCompatibility = (
   theme: Theme,
   override?: ThemeOverride,
@@ -242,8 +287,11 @@ export function mergeThemeWithOverrides(
 ): Theme {
   const mergedTheme = deepMerge(baseTheme, override as Partial<Theme>);
 
-  return withLegacyColorCompatibility(
-    withBorderRadiusCompatibility(mergedTheme, override),
+  return withTypographyCompatibility(
+    withLegacyColorCompatibility(
+      withBorderRadiusCompatibility(mergedTheme, override),
+      override,
+    ),
     override,
   );
 }

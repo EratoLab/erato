@@ -849,17 +849,23 @@ body {
   max-width: calc(100vw - 16px);
 }
 
+/* The chrome (`control-*`) aliases `--theme-*` exactly as `.pdf-preview-theme`
+   below does, so it follows the app theme and stays reachable from theme.json.
+   The document surface (`surface-*`, `page-*`) stays literal on purpose: it is
+   owned by this preview's own light/dark toggle, which is independent of the
+   app theme — a dark page in a light app is a supported state, so those cannot
+   be app tokens. */
 .docx-preview-theme {
   --docx-preview-surface-bg: #f3f4f6;
   --docx-preview-page-bg: #ffffff;
   --docx-preview-page-fg: #111827;
   --docx-preview-page-border: #d4d4d4;
   --docx-preview-page-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
-  --docx-preview-control-bg: rgba(255, 255, 255, 0.94);
-  --docx-preview-control-fg: #111827;
-  --docx-preview-control-border: rgba(17, 24, 39, 0.16);
-  --docx-preview-control-hover-bg: #ffffff;
-  --docx-preview-control-hover-fg: #111827;
+  --docx-preview-control-bg: var(--theme-bg-primary);
+  --docx-preview-control-fg: var(--theme-fg-primary);
+  --docx-preview-control-border: var(--theme-border-subtle);
+  --docx-preview-control-hover-bg: var(--theme-bg-hover);
+  --docx-preview-control-hover-fg: var(--theme-fg-primary);
   background: var(--docx-preview-surface-bg);
   color: var(--docx-preview-page-fg);
 }
@@ -870,11 +876,6 @@ body {
   --docx-preview-page-fg: #f8fafc;
   --docx-preview-page-border: #334155;
   --docx-preview-page-shadow: 0 10px 28px rgba(0, 0, 0, 0.32);
-  --docx-preview-control-bg: rgba(15, 23, 42, 0.94);
-  --docx-preview-control-fg: #f8fafc;
-  --docx-preview-control-border: rgba(226, 232, 240, 0.22);
-  --docx-preview-control-hover-bg: #1e293b;
-  --docx-preview-control-hover-fg: #ffffff;
 }
 
 .docx-preview-theme [data-testid="react-docx-viewer"] {
@@ -888,23 +889,20 @@ body {
   color: var(--docx-preview-page-fg) !important;
 }
 
+/* Same split as `.docx-preview-theme` above: the toolbar chrome aliases
+   `--theme-*`, the sheet surface behind the grid stays literal because the
+   preview's own light/dark toggle owns it. */
 .xlsx-preview-theme {
-  --xlsx-preview-control-bg: #f8fafc;
-  --xlsx-preview-button-bg: rgba(255, 255, 255, 0.94);
-  --xlsx-preview-control-fg: #111827;
-  --xlsx-preview-control-border: rgba(17, 24, 39, 0.14);
-  --xlsx-preview-control-hover-bg: #ffffff;
-  --xlsx-preview-control-hover-fg: #111827;
+  --xlsx-preview-control-bg: var(--theme-bg-primary);
+  --xlsx-preview-button-bg: var(--theme-bg-tertiary);
+  --xlsx-preview-control-fg: var(--theme-fg-primary);
+  --xlsx-preview-control-border: var(--theme-border-subtle);
+  --xlsx-preview-control-hover-bg: var(--theme-bg-hover);
+  --xlsx-preview-control-hover-fg: var(--theme-fg-primary);
   background: #ffffff;
 }
 
 .xlsx-preview-theme[data-xlsx-theme="dark"] {
-  --xlsx-preview-control-bg: #111827;
-  --xlsx-preview-button-bg: rgba(15, 23, 42, 0.94);
-  --xlsx-preview-control-fg: #f8fafc;
-  --xlsx-preview-control-border: rgba(226, 232, 240, 0.22);
-  --xlsx-preview-control-hover-bg: #1e293b;
-  --xlsx-preview-control-hover-fg: #ffffff;
   background: #0f172a;
 }
 

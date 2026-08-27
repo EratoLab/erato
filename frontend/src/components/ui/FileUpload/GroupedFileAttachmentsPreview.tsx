@@ -450,10 +450,19 @@ const StatusRow: React.FC<{
   const isError = tone === "error";
   const Icon = isError ? ErrorIcon : InfoIcon;
   return (
+    // `data-tone` carries the error state into CSS so the overrides below can
+    // be `data-[tone=error]:` variants. `FILE_PREVIEW_STYLES` is shared with
+    // FilePreviewBase/FilePreviewLoading and already sets a border colour and a
+    // filename colour; without tailwind-merge an `isError && "…"` branch raced
+    // those on generated-stylesheet position, and the filename override lost —
+    // an error filename rendered in the ordinary foreground colour. The variant
+    // compiles to `.data-\[tone\=error\]\:…[data-tone="error"]`, specificity
+    // (0,2,0) against the shared constant's (0,1,0), so it wins by rule.
     <div
+      data-tone={tone}
       className={clsx(
         FILE_PREVIEW_STYLES.container,
-        isError && "border-[var(--theme-error-border)]",
+        "data-[tone=error]:border-[var(--theme-error-border)]",
       )}
       role={isError ? "alert" : "status"}
       aria-live={isError ? undefined : "polite"}
@@ -470,9 +479,10 @@ const StatusRow: React.FC<{
       </div>
       <div className="min-w-0 flex-1">
         <div
+          data-tone={tone}
           className={clsx(
             FILE_PREVIEW_STYLES.name,
-            isError && "text-[var(--theme-error-fg)]",
+            "data-[tone=error]:text-[var(--theme-error-fg)]",
           )}
           title={label}
         >

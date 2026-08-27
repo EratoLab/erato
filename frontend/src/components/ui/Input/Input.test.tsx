@@ -89,6 +89,47 @@ describe("Input tokens", () => {
     expect(textarea.className).not.toContain("focus:ring-red-500/20");
   });
 
+  // There is no tailwind-merge in this repo, so `clsx("bg-a", disabled && "bg-b")`
+  // is decided by position in the generated stylesheet, not by argument order —
+  // and `bg-theme-bg-secondary` is emitted after `bg-theme-bg-primary`, so the
+  // disabled branch used to lose. `disabled:` variants compile to a compound
+  // selector (0,2,0) that beats the base utility (0,1,0) whatever the order.
+  it.each([
+    ["Input", () => <Input aria-label="Disabled field" disabled />],
+    ["Textarea", () => <Textarea aria-label="Disabled field" disabled />],
+  ])(
+    "expresses %s's disabled styling as disabled: variants",
+    (_name, renderField) => {
+      render(renderField());
+
+      const field = screen.getByRole("textbox", { name: "Disabled field" });
+
+      for (const cls of [
+        "disabled:bg-theme-bg-primary",
+        "disabled:text-theme-fg-muted",
+        "disabled:cursor-not-allowed",
+        "disabled:opacity-50",
+      ]) {
+        expect(field.className).toContain(cls);
+      }
+
+      // The bare forms would lose to the base utilities on stylesheet position.
+      const tokens = field.className.split(/\s+/);
+      for (const cls of [
+        "bg-theme-bg-primary",
+        "text-theme-fg-muted",
+        "cursor-not-allowed",
+        "opacity-50",
+      ]) {
+        expect(tokens).not.toContain(cls);
+      }
+
+      // The enabled-state base utilities are still present and unconditional.
+      expect(tokens).toContain("bg-theme-bg-secondary");
+      expect(tokens).toContain("text-theme-fg-primary");
+    },
+  );
+
   it("sizes textarea auto-resize from rendered row metrics", () => {
     let mockScrollHeight = 40;
 

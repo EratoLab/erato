@@ -490,7 +490,14 @@ export function ChatHistoryFilterMenu({
       onPointerLeave={handleSubmenuHoverAway}
       className={clsx(
         rowClassName,
-        openSubmenu === row.key && "bg-theme-bg-hover text-theme-fg-primary",
+        // Keyed off the `aria-expanded` already on this button rather than a
+        // `openSubmenu === row.key && "…"` branch: without tailwind-merge the
+        // conditional `text-theme-fg-primary` raced `rowClassName`'s
+        // `text-theme-fg-secondary` on stylesheet position and lost, so an open
+        // row never brightened. `aria-expanded:` compiles to
+        // `.aria-expanded\:text-…[aria-expanded="true"]` — (0,2,0) beats
+        // (0,1,0) — and applies only while this row's submenu is open.
+        "aria-expanded:bg-theme-bg-hover aria-expanded:text-theme-fg-primary",
       )}
     >
       <span className="min-w-0 flex-1 truncate">{row.label}</span>
