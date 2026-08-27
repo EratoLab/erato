@@ -1,3 +1,4 @@
+import clsx from "clsx";
 import {
   AtSign,
   Copy,
@@ -43,6 +44,8 @@ import {
   RotateCameraRight,
   ZoomIn,
   ZoomOut,
+  ArrowSeparate,
+  ArrowUnion,
   Folder,
   ShareIos,
   GridXmark,
@@ -297,6 +300,19 @@ export const ZoomInIcon = ({ className, ...props }: IconProps) => (
 
 export const ZoomOutIcon = ({ className, ...props }: IconProps) => (
   <ZoomOut className={className} {...props} />
+);
+
+/**
+ * Diagonal expand/collapse pair. Iconoir draws these arrows horizontally, so
+ * the rotation is what makes them read as "grow to the corner" rather than
+ * "widen" — the two are otherwise the same glyph.
+ */
+export const ExpandDiagonalIcon = ({ className, ...props }: IconProps) => (
+  <ArrowSeparate className={clsx("-rotate-45", className)} {...props} />
+);
+
+export const CollapseDiagonalIcon = ({ className, ...props }: IconProps) => (
+  <ArrowUnion className={clsx("-rotate-45", className)} {...props} />
 );
 
 export const RotateClockwiseIcon = ({ className, ...props }: IconProps) => (
