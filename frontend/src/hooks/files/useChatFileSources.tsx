@@ -34,7 +34,10 @@ import {
 } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
 import { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
-import { validateFileSizes } from "@/utils/validateFileSizes";
+import {
+  oversizedRejectionNames,
+  validateFileSizes,
+} from "@/utils/validateFileSizes";
 
 import type { AddMenuActionItem } from "@/components/ui/Chat/ChatInputAddMenu";
 import type { CloudFilePickerModalProps } from "@/components/ui/FileUpload/CloudFilePickerModal";
@@ -147,7 +150,12 @@ export function useChatFileSources({
       // host/custom components that supply already-resolved File objects.
       const sizeValidation = validateFileSizes(files, maxSizeBytes);
       if (!sizeValidation.valid) {
-        setError(new UploadTooLargeError(maxSizeFormatted));
+        setError(
+          new UploadTooLargeError(
+            maxSizeFormatted,
+            sizeValidation.oversizedFiles.map((file) => file.name),
+          ),
+        );
         return;
       }
 
@@ -177,12 +185,10 @@ export function useChatFileSources({
   } = useDropzone({
     onDrop: (acceptedFiles, rejectedFiles) => {
       if (rejectedFiles.length > 0) {
-        const hasSizeError = rejectedFiles.some((rejection) =>
-          rejection.errors.some((e) => e.code === "file-too-large"),
-        );
+        const oversized = oversizedRejectionNames(rejectedFiles);
 
-        if (hasSizeError) {
-          setError(new UploadTooLargeError(maxSizeFormatted));
+        if (oversized.length > 0) {
+          setError(new UploadTooLargeError(maxSizeFormatted, oversized));
           return;
         }
       }

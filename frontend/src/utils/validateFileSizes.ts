@@ -36,3 +36,25 @@ export function validateFileSizes(
   }
   return { valid: false, oversizedFiles };
 }
+
+/** Structural shape of a react-dropzone rejection, kept local so this stays dependency-free. */
+interface SizeRejection {
+  file: { name: string };
+  errors: readonly { code: string }[];
+}
+
+/**
+ * Names of the dropzone rejections that failed the size rule specifically.
+ *
+ * react-dropzone rejects for several reasons at once; only the size ones belong
+ * in an `UploadTooLargeError`.
+ */
+export function oversizedRejectionNames(
+  rejections: readonly SizeRejection[],
+): string[] {
+  return rejections
+    .filter((rejection) =>
+      rejection.errors.some((error) => error.code === "file-too-large"),
+    )
+    .map((rejection) => rejection.file.name);
+}

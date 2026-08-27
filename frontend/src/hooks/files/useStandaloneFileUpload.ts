@@ -65,7 +65,12 @@ export function useStandaloneFileUpload(): UseStandaloneFileUploadResult {
       // per-file limit before constructing FormData or making any network request.
       const sizeValidation = validateFileSizes(files, maxSizeBytes);
       if (!sizeValidation.valid) {
-        setError(new UploadTooLargeError(maxSizeFormatted));
+        setError(
+          new UploadTooLargeError(
+            maxSizeFormatted,
+            sizeValidation.oversizedFiles.map((file) => file.name),
+          ),
+        );
         return undefined;
       }
 

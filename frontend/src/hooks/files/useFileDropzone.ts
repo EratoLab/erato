@@ -16,7 +16,10 @@ import { createLogger } from "@/utils/debugLogger";
 import { validateFiles } from "@/utils/fileCapabilities";
 import { FileTypeUtil } from "@/utils/fileTypes";
 import { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
-import { validateFileSizes } from "@/utils/validateFileSizes";
+import {
+  oversizedRejectionNames,
+  validateFileSizes,
+} from "@/utils/validateFileSizes";
 
 import {
   UploadTooLargeError,
@@ -236,7 +239,12 @@ export function useFileDropzone({
       // oversized files never reach the backend.
       const sizeValidation = validateFileSizes(files, maxSizeBytes);
       if (!sizeValidation.valid) {
-        setError(new UploadTooLargeError(maxSizeFormatted));
+        setError(
+          new UploadTooLargeError(
+            maxSizeFormatted,
+            sizeValidation.oversizedFiles.map((file) => file.name),
+          ),
+        );
         return;
       }
 
@@ -374,12 +382,10 @@ export function useFileDropzone({
       // Handle rejections first
       if (rejectedFiles.length > 0) {
         // Check if any rejection is due to file size
-        const hasSizeError = rejectedFiles.some((rejection) =>
-          rejection.errors.some((e) => e.code === "file-too-large"),
-        );
+        const oversized = oversizedRejectionNames(rejectedFiles);
 
-        if (hasSizeError) {
-          setError(new UploadTooLargeError(maxSizeFormatted));
+        if (oversized.length > 0) {
+          setError(new UploadTooLargeError(maxSizeFormatted, oversized));
           return;
         }
 
