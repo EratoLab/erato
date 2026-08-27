@@ -1343,6 +1343,11 @@ msgid "chat.ai_usage_advisory"
 msgstr "Wchodzisz w interakcję z chatbotem AI. Wygenerowane odpowiedzi mogą zawierać błędy merytoryczne i powinny zostać zweryfikowane przed użyciem."
 
 #. js-lingui-explicit-id
+#: src/utils/teams/teamsUploadName.ts
+msgid "chat.attachment.teamsImage"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 msgid "chat.conversation.aria"
 msgstr "Rozmowa czatu"
@@ -4048,6 +4053,10 @@ msgstr "{fileName}: {filePercentage}%"
 msgid "{itemCount} items"
 msgstr "{itemCount} elementów"
 
+#: src/utils/teams/teamsSentAttachmentGroups.ts
+msgid "{sharedCount} shared files"
+msgstr ""
+
 #: src/components/ui/Teams/TeamsConversationView.tsx
 msgid "{skipped} messages could not be loaded."
 msgstr ""
@@ -4114,6 +4123,10 @@ msgstr "1 element"
 #: src/components/ui/Teams/TeamsConversationView.tsx
 msgid "1 message could not be loaded."
 msgstr "Nie udało się wczytać 1 wiadomości."
+
+#: src/utils/teams/teamsSentAttachmentGroups.ts
+msgid "1 shared file"
+msgstr ""
 
 #: src/components/ui/Trace/SidecarLocalTraceView.tsx
 #~ msgid "1 step"
@@ -5445,6 +5458,10 @@ msgstr "Prompt systemowy musi mieć mniej niż {maxSystemPromptLength} znaków"
 #: src/components/ui/Controls/UserProfileDropdown.tsx
 #~ msgid "System theme"
 #~ msgstr "Motyw systemowy"
+
+#: src/utils/teams/teamsSentAttachmentGroups.ts
+msgid "Teams conversation"
+msgstr ""
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Test Locale Changes:"

@@ -16,19 +16,25 @@ export const ExampleGroupedAttachmentsPreview = ({
         <div className="erato-component-kit-example-files">
           {group.items.map((item) => {
             if ("file" in item) {
-              return (
+              // Removal is offered only where the host supplied a handler:
+              // a sent message has nothing to remove, and a control that
+              // cannot act reads as broken.
+              const removable =
+                onRemoveFile !== undefined && item.kind === "attachment";
+
+              return removable ? (
                 <button
                   key={item.id}
                   type="button"
-                  disabled={disabled || item.kind === "context"}
-                  onClick={() => {
-                    if (item.kind === "attachment") {
-                      onRemoveFile(item.id);
-                    }
-                  }}
+                  disabled={disabled}
+                  onClick={() => onRemoveFile(item.id)}
                 >
                   {item.labelOverride ?? fileName(item.file)}
                 </button>
+              ) : (
+                <span key={item.id}>
+                  {item.labelOverride ?? fileName(item.file)}
+                </span>
               );
             }
 
