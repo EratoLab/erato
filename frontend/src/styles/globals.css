@@ -263,6 +263,11 @@
   --theme-layout-chat-input-max-width: 56rem;
   --theme-layout-chat-image-preview-max-width: 24rem;
   --theme-layout-chat-image-preview-max-height: 24rem;
+  --theme-layout-attachment-tile-compact-media-size: 3.5rem;
+  --theme-layout-attachment-tile-compact-doc-max-width: 15rem;
+  --theme-layout-attachment-tile-medium-media-size: 7rem;
+  --theme-layout-attachment-tile-medium-doc-max-width: 18rem;
+  --theme-layout-attachment-tile-staged-max-height: 12rem;
   --theme-layout-sidebar-width: 17.5rem;
   --theme-layout-sidebar-slim-width: 4rem;
   --theme-layout-dropdown-min-width: 12rem;

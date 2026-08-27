@@ -202,6 +202,26 @@ const getThemeVariableEntries = (theme: Theme): Array<[string, string]> => {
       "--theme-layout-chat-image-preview-max-height",
       theme.layout.chat.imagePreviewMaxHeight,
     ],
+    [
+      "--theme-layout-attachment-tile-compact-media-size",
+      theme.layout.attachmentTile.compactMediaSize,
+    ],
+    [
+      "--theme-layout-attachment-tile-compact-doc-max-width",
+      theme.layout.attachmentTile.compactDocMaxWidth,
+    ],
+    [
+      "--theme-layout-attachment-tile-medium-media-size",
+      theme.layout.attachmentTile.mediumMediaSize,
+    ],
+    [
+      "--theme-layout-attachment-tile-medium-doc-max-width",
+      theme.layout.attachmentTile.mediumDocMaxWidth,
+    ],
+    [
+      "--theme-layout-attachment-tile-staged-max-height",
+      theme.layout.attachmentTile.stagedMaxHeight,
+    ],
     ["--theme-layout-sidebar-width", theme.layout.sidebar.width],
     ["--theme-layout-sidebar-slim-width", theme.layout.sidebar.slimWidth],
     ["--theme-layout-dropdown-min-width", theme.layout.dropdown.minWidth],
