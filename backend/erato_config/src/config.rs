@@ -4054,8 +4054,9 @@ impl MsOfficeAddinConfig {
                 ));
             }
 
-            // Outlook binds one handler per event type, so a repeated `event`
-            // would render a manifest it rejects.
+            // Neither the manifest schema nor the Microsoft validators reject a
+            // repeated `Type`, and Outlook's behavior for duplicate handlers is
+            // undocumented, so this check is the only guard.
             if declared_events.contains(&launch_event.event) {
                 return Err(eyre!(
                     "Microsoft Office add-in launch event `integrations.ms_office.addin.launch_events[{index}].event` is already declared. Declare each event at most once."

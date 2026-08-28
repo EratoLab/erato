@@ -2624,9 +2624,9 @@ Outlook launch events the add-in subscribes to. Launch events let the add-in run
 
 Each `[[integrations.ms_office.addin.launch_events]]` entry declares an `event` and the `function_name` that the runtime registers for it. The supported event is `OnNewMessageCompose`. Function names must be JavaScript identifiers, matching `[A-Za-z_$][A-Za-z0-9_$]*`. The events are rendered into the add-in manifest in the configured order.
 
-`[integrations.ms_office.addin.launch_event_runtime]` declares where the handlers live and is required as soon as at least one launch event is configured. `page_path` is the HTML runtime page used by Outlook on the web, new Outlook, and Outlook on Mac; `script_path` is the JavaScript-only override used by classic Outlook on Windows. Both paths are resolved against the deployment base URL, so they have to start with `/` and must not contain `..`.
+`[integrations.ms_office.addin.launch_event_runtime]` declares where the handlers live and is required as soon as at least one launch event is configured. Declaring the runtime without any launch events is rejected as well; the two settings are only valid together. `page_path` is the HTML runtime page used by Outlook on the web, new Outlook, and Outlook on Mac; `script_path` is the JavaScript-only override used by classic Outlook on Windows. Both paths are resolved against the deployment base URL, so they have to start with `/` and must not contain `..`.
 
-The runtime files are served by the deployment, for example from a component kit. Launch events are only rendered into the default `manifest.xml`; the Exchange Server manifest variant cannot express them.
+The runtime files are served by the deployment; Erato does not ship them. The example below assumes a component kit named `example` that provides both files — without them the manifest still renders, but Outlook fails to load the handlers. Launch events are only rendered into the default `manifest.xml`; the Exchange Server manifest variant cannot express them.
 
 **Type:** `object`
 

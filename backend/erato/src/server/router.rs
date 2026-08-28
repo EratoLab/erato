@@ -929,7 +929,8 @@ mod tests {
             .launch_event_runtime
             .as_mut()
             .expect("launch event runtime should be configured")
-            .page_path = "/public/component-kits/example/commands.html?tenant=a&b".to_string();
+            .page_path =
+            r#"/public/component-kits/example/commands.html?tenant=a&b"<c>"#.to_string();
 
         let rendered = render_office_addin_manifest(
             &stock_manifest_template(OFFICE_ADDIN_MANIFEST_FILE_NAME),
@@ -940,7 +941,7 @@ mod tests {
         );
 
         assert!(rendered.contains(
-            r#"<bt:Url id="launchEventPageUrl" DefaultValue="https://app.example.com/base/public/component-kits/example/commands.html?tenant=a&amp;b"/>"#
+            r#"<bt:Url id="launchEventPageUrl" DefaultValue="https://app.example.com/base/public/component-kits/example/commands.html?tenant=a&amp;b&quot;&lt;c&gt;"/>"#
         ));
         // The generated markup itself stays markup.
         assert!(rendered.contains(r#"<ExtensionPoint xsi:type="LaunchEvent">"#));
