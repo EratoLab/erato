@@ -39,6 +39,7 @@ export { Alert } from "@/components/ui/Feedback/Alert";
 export { Avatar } from "@/components/ui/Feedback/Avatar";
 export { CopyErrorButton } from "@/components/ui/Feedback/CopyErrorButton";
 export { LoadingIndicator } from "@/components/ui/Feedback/LoadingIndicator";
+export { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
 export { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoading";
 export { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageControls";
 export { ImageLightbox } from "@/components/ui/Message/ImageLightbox";
