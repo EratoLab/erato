@@ -68,6 +68,10 @@ export { messageStyles } from "@/components/ui/styles/chatMessageStyles";
 export { Tooltip } from "@/components/ui/Controls/Tooltip";
 // The resolved result, not the stores behind it — kits read status, never write it.
 export { useChatHistoryRowPresentation } from "@/components/ui/Chat/ChatHistoryList";
+// Pinned alongside the hook that feeds it: only two registry-reachable
+// importers keep it on the generated surface, and a kit rendering its own
+// rows needs both halves or neither.
+export { ChatAttentionStatusDot } from "@/components/ui/Chat/ChatAttentionStatusDot";
 
 export {
   useGetFile,
