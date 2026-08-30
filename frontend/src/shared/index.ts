@@ -65,6 +65,8 @@ export {
 } from "@/components/ui/icons/index";
 export { messageStyles } from "@/components/ui/styles/chatMessageStyles";
 export { Tooltip } from "@/components/ui/Controls/Tooltip";
+// The resolved result, not the stores behind it — kits read status, never write it.
+export { useChatHistoryRowPresentation } from "@/components/ui/Chat/ChatHistoryList";
 
 export {
   useGetFile,
