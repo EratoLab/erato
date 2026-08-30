@@ -39,6 +39,7 @@ export { Alert } from "@/components/ui/Feedback/Alert";
 export { Avatar } from "@/components/ui/Feedback/Avatar";
 export { CopyErrorButton } from "@/components/ui/Feedback/CopyErrorButton";
 export { LoadingIndicator } from "@/components/ui/Feedback/LoadingIndicator";
+export { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
 export { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoading";
 export { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageControls";
 export { ImageLightbox } from "@/components/ui/Message/ImageLightbox";
@@ -67,6 +68,10 @@ export { messageStyles } from "@/components/ui/styles/chatMessageStyles";
 export { Tooltip } from "@/components/ui/Controls/Tooltip";
 // The resolved result, not the stores behind it — kits read status, never write it.
 export { useChatHistoryRowPresentation } from "@/components/ui/Chat/ChatHistoryList";
+// Pinned alongside the hook that feeds it: only two registry-reachable
+// importers keep it on the generated surface, and a kit rendering its own
+// rows needs both halves or neither.
+export { ChatAttentionStatusDot } from "@/components/ui/Chat/ChatAttentionStatusDot";
 
 export {
   useGetFile,
