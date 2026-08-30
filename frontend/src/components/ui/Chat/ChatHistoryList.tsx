@@ -81,6 +81,35 @@ const useRowStatus = (session: ChatSession): ChatAttentionStatus | null => {
   return resolveSessionRowStatus(session, storeStatus, hasPendingConfirmation);
 };
 
+/**
+ * Row title, attention status and composed aria label — the shape a component
+ * kit needs when it overrides this list. Exposed as the resolved result rather
+ * than its ingredients so kits cannot reimplement `resolveSessionRowStatus`
+ * and end up with a dot that disagrees with the session's group.
+ *
+ * `extraLabels` is folded into `ariaLabel`.
+ */
+export const useChatHistoryRowPresentation = (
+  session: ChatSession,
+  extraLabels: (string | null | undefined)[] = [],
+): {
+  title: string;
+  status: ChatAttentionStatus | null;
+  statusLabel: string | null;
+  ariaLabel: string;
+} => {
+  const title = useRowTitle(session);
+  const status = useRowStatus(session);
+  const statusLabel = status ? chatAttentionStatusLabel(status) : null;
+
+  return {
+    title,
+    status,
+    statusLabel,
+    ariaLabel: [title, ...extraLabels, statusLabel].filter(Boolean).join(", "),
+  };
+};
+
 export interface ChatHistoryListProps {
   sessions: ChatSession[];
   currentSessionId: string | null;
@@ -153,11 +182,14 @@ const ChatHistoryListItem = memo<{
     showTimestamps = true,
     disableRowLinks = false,
   }) => {
-    const generationStatus = useRowStatus(session);
-    const rowTitle = useRowTitle(session);
     // Present only for delegated runs, so it doubles as the "this row is a
     // run" test — the rows only a widened filter puts in this list.
     const runOrigin = delegatedRunOrigin(session);
+    const {
+      title: rowTitle,
+      status: generationStatus,
+      ariaLabel: rowAriaLabel,
+    } = useChatHistoryRowPresentation(session, [runOrigin?.label]);
     // A stable Date instance: an inline `new Date(...)` would defeat
     // MessageTimestamp's shallow memo on every list render.
     const updatedAtDate = useMemo(
@@ -179,13 +211,6 @@ const ChatHistoryListItem = memo<{
             id: "chat.history.menu.pin",
             message: "Pin",
           });
-    const rowAriaLabel = [
-      rowTitle,
-      runOrigin?.label,
-      generationStatus ? chatAttentionStatusLabel(generationStatus) : null,
-    ]
-      .filter(Boolean)
-      .join(", ");
     const rowBody = (
       <InteractiveContainer
         useDiv={true}
