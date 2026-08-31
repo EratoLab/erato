@@ -65,9 +65,45 @@ describe("mergeThemeWithOverrides", () => {
     expect(mergedTheme.colors.border.divider).toBe("#ea580c");
     expect(mergedTheme.colors.border.field).toBe("#ea580c");
     expect(mergedTheme.colors.border.chatInput).toBe("#ea580c");
-    expect(mergedTheme.colors.border.dropdown).toBe("#d1d5db");
-    expect(mergedTheme.colors.border.media).toBe("#d1d5db");
+    // These two alias divider/primary, which follow border.default, so they
+    // land on the override like every other border. They previously read the
+    // pre-merge theme and kept the built-in grey.
+    expect(mergedTheme.colors.border.dropdown).toBe("#ea580c");
+    expect(mergedTheme.colors.border.media).toBe("#ea580c");
     expect(mergedTheme.colors.border.attachment).toBe("#ea580c");
+  });
+
+  it("still lets an explicit dropdown or media border win over the alias", () => {
+    const mergedTheme = mergeThemeWithOverrides(defaultTheme, {
+      colors: {
+        border: {
+          default: "#ea580c",
+          dropdown: "#123456",
+          media: "#654321",
+        },
+      },
+    });
+
+    expect(mergedTheme.colors.border.dropdown).toBe("#123456");
+    expect(mergedTheme.colors.border.media).toBe("#654321");
+    expect(mergedTheme.colors.border.divider).toBe("#ea580c");
+  });
+
+  it("resolves dropdown and media through an explicitly overridden alias source", () => {
+    const mergedTheme = mergeThemeWithOverrides(defaultTheme, {
+      colors: {
+        border: {
+          default: "#ea580c",
+          divider: "#00ff00",
+          primary: "#0000ff",
+        },
+      },
+    });
+
+    // dropdown aliases divider and media aliases primary, so an explicit value
+    // for those sources has to carry through rather than being bypassed.
+    expect(mergedTheme.colors.border.dropdown).toBe("#00ff00");
+    expect(mergedTheme.colors.border.media).toBe("#0000ff");
   });
 
   it("preserves explicit new token overrides over legacy-derived values", () => {
@@ -108,8 +144,8 @@ describe("mergeThemeWithOverrides", () => {
 
     expect(mergedTheme.colors.border.field).toBe("#94a3b8");
     expect(mergedTheme.colors.border.chatInput).toBe("#94a3b8");
-    expect(mergedTheme.colors.border.dropdown).toBe("#d1d5db");
-    expect(mergedTheme.colors.border.media).toBe("#d1d5db");
+    expect(mergedTheme.colors.border.dropdown).toBe("#94a3b8");
+    expect(mergedTheme.colors.border.media).toBe("#94a3b8");
     expect(mergedTheme.colors.border.attachment).toBe("#94a3b8");
     expect(mergedTheme.colors.border.fieldFocus).toBe("#64748b");
     expect(mergedTheme.colors.border.chatInputFocus).toBe("#64748b");

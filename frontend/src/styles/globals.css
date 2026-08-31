@@ -134,6 +134,15 @@
   }
 }
 
+/* ThemeProvider emits a `<style data-theme-vars>` into <head> after this file
+   and writes every token it knows about as a literal value. For those tokens
+   the declarations below are the pre-hydration fallback only — a `var()` alias
+   here does NOT survive into a running app, and a custom theme changing the
+   source will not move the alias. Anything derived has to be re-derived in
+   `themeUtils.ts`; that is what the `with*Compatibility` helpers are for.
+
+   A token the provider does not emit keeps its alias live — see
+   `--theme-bg-hover-strong` below, which is why it still tracks its source. */
 :root {
   /* Base theme - Light Mode */
 
@@ -164,6 +173,10 @@
   /* Border colors */
   --theme-border: #d1d5db;
   --theme-border-primary: var(--theme-border);
+  /* Fallback only, and deliberately NOT what runtime does: the provider
+     derives subtle from `border.default`, not from the accent background.
+     Re-pointing this at the accent would tint every subtle border with the
+     pack's brand colour — several packs set a saturated `background.accent`. */
   --theme-border-subtle: var(--theme-bg-accent);
   --theme-border-strong: #9ca3af;
   --theme-border-divider: var(--theme-border);
@@ -180,6 +193,9 @@
   --theme-shell-app: var(--theme-bg-primary);
   --theme-shell-page: var(--theme-bg-secondary);
   --theme-shell-sidebar: var(--theme-bg-sidebar);
+  /* Overridden at runtime: the provider emits a static value here, so this
+     mix does not track a custom sidebar/chat-body colour. Packs that want a
+     matching hover set `background.hover` (or `shell.sidebarHover`) today. */
   --theme-shell-sidebar-hover: color-mix(
     in srgb,
     var(--theme-shell-sidebar),
@@ -194,6 +210,9 @@
   --theme-overlay-modal: rgba(17, 24, 39, 0.6);
   --theme-message-user: var(--theme-bg-primary);
   --theme-message-assistant: var(--theme-bg-secondary);
+  /* Overridden at runtime: the provider emits a static value here, so this
+     mix does not track a custom sidebar/chat-body colour. Packs that want a
+     matching hover set `background.hover` (or `shell.sidebarHover`) today. */
   --theme-message-hover: color-mix(
     in srgb,
     var(--theme-shell-chat-body),
@@ -374,6 +393,10 @@
     /* Border colors */
     --theme-border: #4b5563;
     --theme-border-primary: var(--theme-border);
+    /* Fallback only, and deliberately NOT what runtime does: the provider
+     derives subtle from `border.default`, not from the accent background.
+     Re-pointing this at the accent would tint every subtle border with the
+     pack's brand colour — several packs set a saturated `background.accent`. */
     --theme-border-subtle: var(--theme-bg-accent);
     --theme-border-strong: #6b7280;
     --theme-border-divider: var(--theme-border);
@@ -390,6 +413,9 @@
     --theme-shell-app: var(--theme-bg-primary);
     --theme-shell-page: var(--theme-bg-secondary);
     --theme-shell-sidebar: var(--theme-bg-sidebar);
+    /* Overridden at runtime: the provider emits a static value here, so this
+     mix does not track a custom sidebar/chat-body colour. Packs that want a
+     matching hover set `background.hover` (or `shell.sidebarHover`) today. */
     --theme-shell-sidebar-hover: color-mix(
       in srgb,
       var(--theme-shell-sidebar),
@@ -404,6 +430,9 @@
     --theme-overlay-modal: rgba(0, 0, 0, 0.7);
     --theme-message-user: var(--theme-bg-primary);
     --theme-message-assistant: var(--theme-bg-secondary);
+    /* Overridden at runtime: the provider emits a static value here, so this
+     mix does not track a custom sidebar/chat-body colour. Packs that want a
+     matching hover set `background.hover` (or `shell.sidebarHover`) today. */
     --theme-message-hover: color-mix(
       in srgb,
       var(--theme-shell-chat-body),

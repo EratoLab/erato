@@ -258,11 +258,16 @@ const withLegacyColorCompatibility = (
     if (!colorsOverride.border.chatInput) {
       nextTheme.colors.border.chatInput = theme.colors.border.default;
     }
+    // These two alias a token that this same block may have just re-pointed,
+    // so they read `nextTheme` where the others read `theme`: globals.css has
+    // them aliasing divider/primary, and those follow `border.default`. Reading
+    // the pre-merge value left them on the built-in grey while every other
+    // border followed the pack.
     if (!colorsOverride.border.dropdown) {
-      nextTheme.colors.border.dropdown = theme.colors.border.divider;
+      nextTheme.colors.border.dropdown = nextTheme.colors.border.divider;
     }
     if (!colorsOverride.border.media) {
-      nextTheme.colors.border.media = theme.colors.border.primary;
+      nextTheme.colors.border.media = nextTheme.colors.border.primary;
     }
     if (!colorsOverride.border.attachment) {
       nextTheme.colors.border.attachment = theme.colors.border.default;
