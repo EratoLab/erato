@@ -29,6 +29,8 @@ pub enum Relation {
         on_delete = "Cascade"
     )]
     Assistants,
+    #[sea_orm(has_many = "super::user_preferences::Entity")]
+    UserPreferences,
     #[sea_orm(
         belongs_to = "super::users::Entity",
         from = "Column::OwnerUserId",
@@ -54,6 +56,12 @@ impl Related<super::assistant_hub_reviews::Entity> for Entity {
 impl Related<super::assistants::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Assistants.def()
+    }
+}
+
+impl Related<super::user_preferences::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::UserPreferences.def()
     }
 }
 

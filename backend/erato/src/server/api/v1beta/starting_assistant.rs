@@ -13,6 +13,13 @@
 //! audience, a stale or revoked pin, an infrastructure error — degrades to an
 //! absent `starting_assistant` field, so a pin can never turn into an error
 //! page for the very users it targets.
+//!
+//! The user's own tri-state override layers on top of the audience pin, and the
+//! endpoint returns one decided answer: cleared > own pick > audience pin >
+//! welcome screen. Unlike `default_chat_provider`, which composes preference
+//! and config client-side in `useActiveModelSelection`, this precedence is
+//! resolved here — the audience-pin leg needs the policy document and
+//! authoritative group membership, neither of which the client can evaluate.
 
 use crate::distribution::experience_policy::{
     AudienceSubject, ExperienceAudience, ExperiencePolicyDocument,
@@ -27,6 +34,16 @@ use axum::{Extension, Json};
 use serde::Serialize;
 use utoipa::ToSchema;
 
+/// Where a resolved starting assistant came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum StartingAssistantSource {
+    /// The user's own start-screen pick (their preference override).
+    UserPick,
+    /// An admin's audience pin from the experience policy document.
+    AudiencePin,
+}
+
 /// The resolved starting assistant for the calling user.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct StartingAssistantInfo {
@@ -34,10 +51,15 @@ pub struct StartingAssistantInfo {
     /// read time from the pinned hub id, so it is always the id a client can
     /// open a chat with — even right after a republish minted a fresh clone.
     pub assistant_id: String,
-    /// The stable `assistant_hub_assistants.id` the admin pinned.
+    /// The stable `assistant_hub_assistants.id` the pick or pin stores.
     pub assistant_hub_assistant_id: String,
+    /// Whether the user's own pick or an admin's audience pin won.
+    pub source: StartingAssistantSource,
     /// The name of the audience (policy key) whose pin won for this user.
-    pub audience: String,
+    /// Present only when `source` is `audience_pin`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub audience: Option<String>,
 }
 
 /// Response for `GET /me/starting-assistant`.
@@ -155,15 +177,43 @@ pub async fn starting_assistant(
         }))
     };
 
-    // Clone out of the read guard so a slow DB await below never holds the
-    // reload lock.
+    // An explicit clear must stick: it suppresses the audience pin outright,
+    // which is why "cleared" is persisted distinctly from "never set".
+    if me_user.preference_starting_assistant_cleared {
+        return no_pin();
+    }
+
+    if !app_state.config.assistant_hub.enabled {
+        return no_pin();
+    }
+
+    // The own pick is resolved before the policy document is consulted at all,
+    // so it keeps working in a deployment with no policy loaded.
+    if let Some(raw_pick) = me_user.preference_starting_hub_assistant_id.as_deref() {
+        match raw_pick.parse::<sqlx::types::Uuid>() {
+            Ok(pick) => {
+                return Ok(Json(resolve_user_pick(&app_state, &me_user, pick).await));
+            }
+            Err(error) => {
+                // The value comes from a uuid column, so this is corruption,
+                // not user input.
+                tracing::warn!(
+                    user_id = %me_user.id,
+                    raw_pick,
+                    error = %error,
+                    "Stored starting-assistant pick is not a uuid; serving welcome screen"
+                );
+                return no_pin();
+            }
+        }
+    }
+
+    // No override either way: fall back to the admin's audience pin. Clone out
+    // of the read guard so a slow DB await below never holds the reload lock.
     let policy = { app_state.reloadable.read().await.experience_policy.clone() };
     let Some(policy) = policy else {
         return no_pin();
     };
-    if !app_state.config.assistant_hub.enabled {
-        return no_pin();
-    }
 
     // Exactly one winner: if its pin fails to resolve below we degrade to the
     // welcome screen rather than falling through to the next matching audience.
@@ -259,9 +309,52 @@ pub async fn starting_assistant(
         starting_assistant: Some(StartingAssistantInfo {
             assistant_id,
             assistant_hub_assistant_id: audience.pinned_assistant_hub_assistant_id.to_string(),
-            audience: audience_name.to_string(),
+            source: StartingAssistantSource::AudiencePin,
+            audience: Some(audience_name.to_string()),
         }),
     }))
+}
+
+/// Resolve the user's own start-screen pick to the current published clone's
+/// live `assistants.id`.
+///
+/// A pick that no longer resolves (withdrawn, unpublished, access lost)
+/// degrades to the welcome screen rather than falling through to an audience
+/// pin: a user who overrode their start screen should not be silently
+/// re-steered by policy when their choice disappears.
+async fn resolve_user_pick(
+    app_state: &AppState,
+    me_user: &MeProfile,
+    pick: sqlx::types::Uuid,
+) -> StartingAssistantResponse {
+    match assistant_hub::get_published_current_version(
+        &app_state.db,
+        &app_state.config.assistant_hub,
+        &me_user.to_subject(),
+        pick,
+    )
+    .await
+    {
+        Ok(record) => StartingAssistantResponse {
+            starting_assistant: Some(StartingAssistantInfo {
+                assistant_id: record.assistant.id.to_string(),
+                assistant_hub_assistant_id: pick.to_string(),
+                source: StartingAssistantSource::UserPick,
+                audience: None,
+            }),
+        },
+        Err(report) => {
+            tracing::warn!(
+                user_id = %me_user.id,
+                hub_assistant_id = %pick,
+                error = ?report,
+                "User's own starting-assistant pick did not resolve; serving welcome screen"
+            );
+            StartingAssistantResponse {
+                starting_assistant: None,
+            }
+        }
+    }
 }
 
 #[cfg(test)]

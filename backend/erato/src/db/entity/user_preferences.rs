@@ -15,13 +15,24 @@ pub struct Model {
     pub assistant_custom_instructions: Option<String>,
     #[sea_orm(column_type = "Text", nullable)]
     pub assistant_additional_information: Option<String>,
-    pub default_chat_provider: Option<String>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub default_chat_provider: Option<String>,
+    pub starting_hub_assistant_id: Option<Uuid>,
+    pub starting_assistant_cleared: bool,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
+    #[sea_orm(
+        belongs_to = "super::assistant_hub_assistants::Entity",
+        from = "Column::StartingHubAssistantId",
+        to = "super::assistant_hub_assistants::Column::Id",
+        on_update = "NoAction",
+        on_delete = "SetNull"
+    )]
+    AssistantHubAssistants,
     #[sea_orm(
         belongs_to = "super::users::Entity",
         from = "Column::UserId",
@@ -30,6 +41,12 @@ pub enum Relation {
         on_delete = "Cascade"
     )]
     Users,
+}
+
+impl Related<super::assistant_hub_assistants::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::AssistantHubAssistants.def()
+    }
 }
 
 impl Related<super::users::Entity> for Entity {
