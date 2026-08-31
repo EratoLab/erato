@@ -15,6 +15,7 @@ pub mod policy_engine_middleware;
 pub mod share_grants;
 pub mod share_links;
 pub mod sharepoint;
+pub mod starting_assistant;
 pub mod token_usage;
 pub mod user_tool_approval_settings;
 
@@ -140,6 +141,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/profile/preferences", put(update_profile_preferences))
         .route("/facets", get(facets))
         .route("/starter-prompts", get(starter_prompts))
+        .route(
+            "/starting-assistant",
+            get(starting_assistant::starting_assistant),
+        )
         .route("/messages/submitstream", post(message_submit_sse))
         .route("/messages/regeneratestream", post(regenerate_message_sse))
         .route("/messages/editstream", post(edit_message_sse))
@@ -443,7 +448,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         sharepoint::get_drive_item,
         sharepoint::get_drive_item_children,
         entra_id::list_organization_users,
-        entra_id::list_organization_groups
+        entra_id::list_organization_groups,
+        starting_assistant::starting_assistant
     ),
     components(schemas(
         Message,
@@ -556,7 +562,9 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         entra_id::OrganizationUser,
         entra_id::OrganizationUsersResponse,
         entra_id::OrganizationGroup,
-        entra_id::OrganizationGroupsResponse
+        entra_id::OrganizationGroupsResponse,
+        starting_assistant::StartingAssistantResponse,
+        starting_assistant::StartingAssistantInfo
     ))
 )]
 pub struct ApiV1ApiDoc;

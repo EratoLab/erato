@@ -2347,6 +2347,33 @@ export type StarterPromptsResponse = {
   starter_prompts: StarterPromptInfo[];
 };
 
+/**
+ * The resolved starting assistant for the calling user.
+ */
+export type StartingAssistantInfo = {
+  /**
+   * The stable `assistant_hub_assistants.id` the admin pinned.
+   */
+  assistant_hub_assistant_id: string;
+  /**
+   * The live `assistants.id` of the current published version. Resolved at
+   * read time from the pinned hub id, so it is always the id a client can
+   * open a chat with — even right after a republish minted a fresh clone.
+   */
+  assistant_id: string;
+  /**
+   * The name of the audience (policy key) whose pin won for this user.
+   */
+  audience: string;
+};
+
+/**
+ * Response for `GET /me/starting-assistant`.
+ */
+export type StartingAssistantResponse = {
+  starting_assistant?: StartingAssistantInfo;
+};
+
 export type TokenUsageFileInput = {
   /**
    * File upload IDs to include in estimation.

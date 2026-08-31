@@ -2921,6 +2921,34 @@
         ]
       }
     },
+    "/api/v1beta/me/starting-assistant": {
+      "get": {
+        "tags": [
+          "starting_assistant"
+        ],
+        "operationId": "starting_assistant",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartingAssistantResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/messages": {
       "get": {
         "tags": [],
@@ -8271,6 +8299,39 @@
             "items": {
               "$ref": "#/components/schemas/StarterPromptInfo"
             }
+          }
+        }
+      },
+      "StartingAssistantInfo": {
+        "type": "object",
+        "description": "The resolved starting assistant for the calling user.",
+        "required": [
+          "assistant_id",
+          "assistant_hub_assistant_id",
+          "audience"
+        ],
+        "properties": {
+          "assistant_hub_assistant_id": {
+            "type": "string",
+            "description": "The stable `assistant_hub_assistants.id` the admin pinned."
+          },
+          "assistant_id": {
+            "type": "string",
+            "description": "The live `assistants.id` of the current published version. Resolved at\nread time from the pinned hub id, so it is always the id a client can\nopen a chat with — even right after a republish minted a fresh clone."
+          },
+          "audience": {
+            "type": "string",
+            "description": "The name of the audience (policy key) whose pin won for this user."
+          }
+        }
+      },
+      "StartingAssistantResponse": {
+        "type": "object",
+        "description": "Response for `GET /me/starting-assistant`.",
+        "properties": {
+          "starting_assistant": {
+            "$ref": "#/components/schemas/StartingAssistantInfo",
+            "description": "Absent when no pin applies to the calling user; the client shows the\nordinary welcome screen."
           }
         }
       },
