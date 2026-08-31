@@ -564,7 +564,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         entra_id::OrganizationGroup,
         entra_id::OrganizationGroupsResponse,
         starting_assistant::StartingAssistantResponse,
-        starting_assistant::StartingAssistantInfo
+        starting_assistant::StartingAssistantInfo,
+        starting_assistant::StartingAssistantSource
     ))
 )]
 pub struct ApiV1ApiDoc;
@@ -783,6 +784,20 @@ pub struct UpdateProfilePreferencesRequest {
     #[serde(default, deserialize_with = "deserialize_patch_optional_string")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub preference_default_chat_provider: Option<Option<String>>,
+    /// The user's own start-screen pick as an `assistant_hub_assistants.id`
+    /// (NOT an `assistants.id` — those go stale on every hub republish).
+    /// Explicit `null` removes the pick and returns to inheriting any
+    /// audience pin.
+    #[serde(default, deserialize_with = "deserialize_patch_optional_string")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preference_starting_hub_assistant_id: Option<Option<String>>,
+    /// Set `true` to explicitly clear the start screen (welcome screen even
+    /// though an audience pin exists), `false` to inherit again. Clearing
+    /// also removes any own pick; picking also un-clears.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub preference_starting_assistant_cleared: Option<bool>,
 }
 
 fn deserialize_patch_optional_string<'de, D>(
@@ -813,6 +828,16 @@ pub async fn update_profile_preferences(
 ) -> Result<Json<UserProfile>, StatusCode> {
     let user_id = Uuid::parse_str(&me_user.id).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    // The pick arrives as a string patch; reject a non-uuid rather than
+    // silently storing nothing.
+    let starting_hub_assistant_id = match request.preference_starting_hub_assistant_id {
+        None => None,
+        Some(None) => Some(None),
+        Some(Some(raw)) => Some(Some(
+            Uuid::parse_str(&raw).map_err(|_| StatusCode::UNPROCESSABLE_ENTITY)?,
+        )),
+    };
+
     let updated_prefs = models::user_preference::upsert_user_preferences(
         &app_state.db,
         &user_id,
@@ -822,6 +847,8 @@ pub async fn update_profile_preferences(
             assistant_custom_instructions: request.preference_assistant_custom_instructions,
             assistant_additional_information: request.preference_assistant_additional_information,
             default_chat_provider: request.preference_default_chat_provider,
+            starting_hub_assistant_id,
+            starting_assistant_cleared: request.preference_starting_assistant_cleared,
         },
     )
     .await
@@ -834,6 +861,10 @@ pub async fn update_profile_preferences(
     profile.preference_assistant_additional_information =
         updated_prefs.assistant_additional_information;
     profile.preference_default_chat_provider = updated_prefs.default_chat_provider;
+    profile.preference_starting_hub_assistant_id = updated_prefs
+        .starting_hub_assistant_id
+        .map(|id| id.to_string());
+    profile.preference_starting_assistant_cleared = updated_prefs.starting_assistant_cleared;
 
     Ok(Json(profile))
 }

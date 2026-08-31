@@ -2352,7 +2352,7 @@ export type StarterPromptsResponse = {
  */
 export type StartingAssistantInfo = {
   /**
-   * The stable `assistant_hub_assistants.id` the admin pinned.
+   * The stable `assistant_hub_assistants.id` the pick or pin stores.
    */
   assistant_hub_assistant_id: string;
   /**
@@ -2363,8 +2363,10 @@ export type StartingAssistantInfo = {
   assistant_id: string;
   /**
    * The name of the audience (policy key) whose pin won for this user.
+   * Present only when `source` is `audience_pin`.
    */
-  audience: string;
+  audience?: string;
+  source: StartingAssistantSource;
 };
 
 /**
@@ -2373,6 +2375,11 @@ export type StartingAssistantInfo = {
 export type StartingAssistantResponse = {
   starting_assistant?: StartingAssistantInfo;
 };
+
+/**
+ * Where a resolved starting assistant came from.
+ */
+export type StartingAssistantSource = "user_pick" | "audience_pin";
 
 export type TokenUsageFileInput = {
   /**
@@ -2733,6 +2740,19 @@ export type UpdateProfilePreferencesRequest = {
    * Preferred name to address the user with.
    */
   preference_nickname?: null | undefined;
+  /**
+   * Set `true` to explicitly clear the start screen (welcome screen even
+   * though an audience pin exists), `false` to inherit again. Clearing
+   * also removes any own pick; picking also un-clears.
+   */
+  preference_starting_assistant_cleared?: boolean;
+  /**
+   * The user's own start-screen pick as an `assistant_hub_assistants.id`
+   * (NOT an `assistants.id` — those go stale on every hub republish).
+   * Explicit `null` removes the pick and returns to inheriting any
+   * audience pin.
+   */
+  preference_starting_hub_assistant_id?: null | undefined;
 };
 
 export type UserProfile = {
@@ -2790,6 +2810,19 @@ export type UserProfile = {
    * Preferred name to address the user with.
    */
   preference_nickname?: string;
+  /**
+   * True when the user explicitly cleared their start screen. This is
+   * deliberately distinct from "never set": a clear must keep suppressing
+   * an admin's audience pin, while "never set" inherits it.
+   */
+  preference_starting_assistant_cleared?: boolean;
+  /**
+   * The user's own start-screen pick, stored as an
+   * `assistant_hub_assistants.id` — stable across hub republishes, unlike
+   * the clone's `assistants.id`. The LIVE assistant id it points at is
+   * resolved per request by `GET /me/starting-assistant`.
+   */
+  preference_starting_hub_assistant_id?: string;
   /**
    * The user's preferred language.
    *

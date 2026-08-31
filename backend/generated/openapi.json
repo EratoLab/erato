@@ -8308,12 +8308,12 @@
         "required": [
           "assistant_id",
           "assistant_hub_assistant_id",
-          "audience"
+          "source"
         ],
         "properties": {
           "assistant_hub_assistant_id": {
             "type": "string",
-            "description": "The stable `assistant_hub_assistants.id` the admin pinned."
+            "description": "The stable `assistant_hub_assistants.id` the pick or pin stores."
           },
           "assistant_id": {
             "type": "string",
@@ -8321,7 +8321,11 @@
           },
           "audience": {
             "type": "string",
-            "description": "The name of the audience (policy key) whose pin won for this user."
+            "description": "The name of the audience (policy key) whose pin won for this user.\nPresent only when `source` is `audience_pin`."
+          },
+          "source": {
+            "$ref": "#/components/schemas/StartingAssistantSource",
+            "description": "Whether the user's own pick or an admin's audience pin won."
           }
         }
       },
@@ -8334,6 +8338,14 @@
             "description": "Absent when no pin applies to the calling user; the client shows the\nordinary welcome screen."
           }
         }
+      },
+      "StartingAssistantSource": {
+        "type": "string",
+        "description": "Where a resolved starting assistant came from.",
+        "enum": [
+          "user_pick",
+          "audience_pin"
+        ]
       },
       "TokenUsageFileInput": {
         "type": "object",
@@ -8879,6 +8891,17 @@
               "null"
             ],
             "description": "Preferred name to address the user with."
+          },
+          "preference_starting_assistant_cleared": {
+            "type": "boolean",
+            "description": "Set `true` to explicitly clear the start screen (welcome screen even\nthough an audience pin exists), `false` to inherit again. Clearing\nalso removes any own pick; picking also un-clears."
+          },
+          "preference_starting_hub_assistant_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The user's own start-screen pick as an `assistant_hub_assistants.id`\n(NOT an `assistants.id` — those go stale on every hub republish).\nExplicit `null` removes the pick and returns to inheriting any\naudience pin."
           }
         }
       },
@@ -8943,6 +8966,14 @@
           "preference_nickname": {
             "type": "string",
             "description": "Preferred name to address the user with."
+          },
+          "preference_starting_assistant_cleared": {
+            "type": "boolean",
+            "description": "True when the user explicitly cleared their start screen. This is\ndeliberately distinct from \"never set\": a clear must keep suppressing\nan admin's audience pin, while \"never set\" inherits it."
+          },
+          "preference_starting_hub_assistant_id": {
+            "type": "string",
+            "description": "The user's own start-screen pick, stored as an\n`assistant_hub_assistants.id` — stable across hub republishes, unlike\nthe clone's `assistants.id`. The LIVE assistant id it points at is\nresolved per request by `GET /me/starting-assistant`."
           },
           "preferred_language": {
             "type": "string",
