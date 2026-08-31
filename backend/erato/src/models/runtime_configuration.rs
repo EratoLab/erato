@@ -11,6 +11,7 @@ use sea_orm::{
 pub const ERATO_BACKEND_SOURCE_SERVICE: &str = "erato_backend";
 pub const ERATO_TOML_SOURCE_TYPE: &str = "erato_toml";
 pub const TRANSLATION_PO_SOURCE_TYPE: &str = "translation_po";
+pub const EXPERIENCE_POLICY_SOURCE_TYPE: &str = "experience_policy";
 
 // ASCII "erato-rc", used only to serialize replacement transactions.
 const RUNTIME_CONFIGURATION_ADVISORY_LOCK_KEY: i64 = 7_310_012_297_885_086_307;

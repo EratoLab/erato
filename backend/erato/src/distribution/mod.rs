@@ -10,6 +10,7 @@ use crate::config::AppConfig;
 
 pub mod component_kits;
 pub mod desktop_sidecar;
+pub mod experience_policy;
 pub mod frontend_bundles;
 pub mod runtime;
 pub mod translations;
