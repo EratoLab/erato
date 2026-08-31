@@ -154,11 +154,25 @@ export const ChatMessage = memo(function ChatMessage({
     return null;
   }
 
+  const attachments =
+    message.input_files_ids && message.input_files_ids.length > 0 ? (
+      <MessageAttachments
+        fileIds={message.input_files_ids}
+        filesById={filesById}
+        relatedFiles={siblingFiles}
+        onFilePreview={onFilePreview}
+      />
+    ) : null;
+
   return (
     <div
       className={clsx(
         "chat-message-skin group relative flex",
         "w-full min-w-[280px] shrink-0",
+        // A user message stacks: attachments above, body below. An assistant
+        // message has only the body, so the direction is immaterial there and
+        // the row default is left alone.
+        isUser && "flex-col",
         messageStyles.hover,
         messageStyles.container[role],
         className,
@@ -171,7 +185,20 @@ export const ChatMessage = memo(function ChatMessage({
       data-ui="chat-message"
       data-role={role}
     >
-      <div className="flex w-full" style={messageContentRowStyle}>
+      {/* You attach the files, then you write the prompt — so for a user
+          message the attachments sit above the body rather than under it.
+          Hoisting them out of the body is also what lets a theme tint the
+          body alone: the attachments are a sibling of the tinted surface,
+          not a descendant of it. Assistant attachments stay inline below. */}
+      {isUser && attachments && (
+        <div data-ui="message-attachments">{attachments}</div>
+      )}
+
+      <div
+        className="flex w-full"
+        style={messageContentRowStyle}
+        data-ui="message-body"
+      >
         {showAvatar && (
           <Avatar userProfile={userProfile} userOrAssistant={!!isUser} />
         )}
@@ -277,15 +304,9 @@ export const ChatMessage = memo(function ChatMessage({
               />
             )}
 
-          {/* Display attached files if any */}
-          {message.input_files_ids && message.input_files_ids.length > 0 && (
-            <MessageAttachments
-              fileIds={message.input_files_ids}
-              filesById={filesById}
-              relatedFiles={siblingFiles}
-              onFilePreview={onFilePreview}
-            />
-          )}
+          {/* Display attached files if any — user messages render these
+              above the body instead, see the hoisted slot. */}
+          {!isUser && attachments}
 
           {message.loading && message.content.length === 0 && (
             <div className="mt-2">
