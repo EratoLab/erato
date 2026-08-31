@@ -190,8 +190,14 @@ export const ChatMessage = memo(function ChatMessage({
           Hoisting them out of the body is also what lets a theme tint the
           body alone: the attachments are a sibling of the tinted surface,
           not a descendant of it. Assistant attachments stay inline below. */}
+      {/* `empty:hidden` because the element above is truthy as soon as the
+          message names a file, while MessageAttachments renders null until
+          those ids resolve — without it a theme styling this hook paints a
+          bare box while the fetch is in flight. */}
       {isUser && attachments && (
-        <div data-ui="message-attachments">{attachments}</div>
+        <div className="mb-2 empty:hidden" data-ui="message-attachments">
+          {attachments}
+        </div>
       )}
 
       <div

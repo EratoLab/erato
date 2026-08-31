@@ -165,12 +165,16 @@ For shell-level overrides in `theme.css`, prefer the app-owned `data-ui` and `da
 - `data-ui="chat-input-shell"`
 - `data-ui="chat-input-controls"`
 - `data-ui="chat-message"`
+- `data-ui="message-body"`
+- `data-ui="message-attachments"`
 - `data-ui="message-controls"`
 - `data-ui="modal-overlay"`
 - `data-ui="modal-shell"`
 - `data-ui="dropdown-panel"`
 
 Messages also expose `data-role="user"` and `data-role="assistant"` on the message shell.
+
+`message-body` wraps the avatar and the message content. On a user message carrying files, `message-attachments` is a sibling rendered above it, so a fill applied to `message-body` covers the text without covering the attachments; on an assistant message the attachments stay inside `message-body` and the hook is absent. Themes that need to work against both shapes can branch on `:has([data-ui="message-body"])`.
 
 ## Custom Logos
 
