@@ -809,6 +809,22 @@ where
     Ok(Some(Option::<String>::deserialize(deserializer)?))
 }
 
+/// Whether a preferences-upsert failure means the caller named a hub assistant
+/// that does not exist. Matching on the constraint name leaves every other
+/// foreign-key failure classified as a server error.
+fn is_starting_assistant_fk_violation(report: &Report) -> bool {
+    report
+        .downcast_ref::<sea_orm::DbErr>()
+        .and_then(sea_orm::DbErr::sql_err)
+        .is_some_and(|sql_err| {
+            matches!(
+                sql_err,
+                sea_orm::SqlErr::ForeignKeyConstraintViolation(ref message)
+                    if message.contains("starting_hub_assistant_id")
+            )
+        })
+}
+
 #[utoipa::path(
     put,
     path = "/me/profile/preferences",
@@ -852,7 +868,18 @@ pub async fn update_profile_preferences(
         },
     )
     .await
-    .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .map_err(|report| {
+        // A uuid naming a hub assistant that does not exist is the picker's
+        // list-then-save race, and the same class of bad input as a malformed
+        // uuid above. Catching it at the write rather than with a pre-flight
+        // SELECT leaves no TOCTOU window.
+        if is_starting_assistant_fk_violation(&report) {
+            StatusCode::UNPROCESSABLE_ENTITY
+        } else {
+            tracing::error!("Failed to upsert user preferences: {report}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    })?;
 
     let mut profile = me_user.profile.clone();
     profile.preference_nickname = updated_prefs.nickname;
