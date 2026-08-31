@@ -4,7 +4,8 @@ use crate::test_utils::hermetic_app_config;
 use crate::{MIGRATOR, test_app_state};
 use erato_config::config::{
     AppConfig, FileTypeDetectionMode, GenerationConfig, ModelReasoningEffort, ModelVerbosity,
-    PromptSourceSpecification, RuntimeConfigurationConfig, ServerConfig, SharepointAllDrivesSource,
+    MsOfficeAddinLaunchEventType, PromptSourceSpecification, RuntimeConfigurationConfig,
+    ServerConfig, SharepointAllDrivesSource,
 };
 use sqlx::Pool;
 use sqlx::postgres::Postgres;
@@ -400,6 +401,328 @@ msal_client_id = "00000000-0000-0000-0000-000000000000"
         .try_deserialize::<AppConfig>()
         .expect("Failed to deserialize config")
         .migrate();
+}
+
+/// Loads an `[integrations.ms_office.addin]` configuration from a temporary
+/// TOML file, applying the same validation the application performs at startup.
+fn ms_office_addin_config_from_toml(config_content: &str) -> AppConfig {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    builder
+        .build()
+        .expect("Failed to build config schema")
+        .try_deserialize::<AppConfig>()
+        .expect("Failed to deserialize config")
+        .migrate()
+}
+
+#[test]
+fn test_config_with_ms_office_addin_launch_events() {
+    let config = ms_office_addin_config_from_toml(
+        r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+
+[integrations.ms_office.addin]
+enabled = true
+
+[integrations.ms_office.addin.launch_event_runtime]
+page_path = "/public/component-kits/example/commands.html"
+script_path = "/public/component-kits/example/launchevent.js"
+
+[[integrations.ms_office.addin.launch_events]]
+event = "OnNewMessageCompose"
+function_name = "$onNewMessageComposeHandler"
+"#,
+    );
+
+    let runtime = config
+        .integrations
+        .ms_office
+        .addin
+        .launch_event_runtime
+        .expect("Launch event runtime should be configured");
+    assert_eq!(
+        runtime.page_path,
+        "/public/component-kits/example/commands.html"
+    );
+    assert_eq!(
+        runtime.script_path,
+        "/public/component-kits/example/launchevent.js"
+    );
+
+    let launch_events = config.integrations.ms_office.addin.launch_events;
+    assert_eq!(launch_events.len(), 1);
+    assert_eq!(
+        launch_events[0].event,
+        MsOfficeAddinLaunchEventType::OnNewMessageCompose
+    );
+    assert_eq!(
+        launch_events[0].function_name,
+        "$onNewMessageComposeHandler"
+    );
+}
+
+#[test]
+fn test_config_without_ms_office_addin_launch_events_leaves_them_unset() {
+    let config = ms_office_addin_config_from_toml(
+        r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+
+[integrations.ms_office.addin]
+enabled = true
+"#,
+    );
+
+    assert!(
+        config
+            .integrations
+            .ms_office
+            .addin
+            .launch_event_runtime
+            .is_none()
+    );
+    assert!(config.integrations.ms_office.addin.launch_events.is_empty());
+}
+
+#[test]
+#[should_panic(
+    expected = "Microsoft Office add-in launch events require `integrations.ms_office.addin.launch_event_runtime` with `page_path` and `script_path`."
+)]
+fn test_config_with_ms_office_addin_launch_events_without_runtime_is_invalid() {
+    ms_office_addin_config_from_toml(
+        r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+
+[integrations.ms_office.addin]
+enabled = true
+
+[[integrations.ms_office.addin.launch_events]]
+event = "OnNewMessageCompose"
+function_name = "onNewMessageComposeHandler"
+"#,
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "Microsoft Office add-in `launch_event_runtime` is only used by launch events."
+)]
+fn test_config_with_ms_office_addin_launch_event_runtime_without_events_is_invalid() {
+    ms_office_addin_config_from_toml(
+        r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+
+[integrations.ms_office.addin]
+enabled = true
+
+[integrations.ms_office.addin.launch_event_runtime]
+page_path = "/public/component-kits/example/commands.html"
+script_path = "/public/component-kits/example/launchevent.js"
+"#,
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "`integrations.ms_office.addin.launch_events[1].event` is already declared. Declare each event at most once."
+)]
+fn test_config_with_duplicate_ms_office_addin_launch_event_is_invalid() {
+    ms_office_addin_config_from_toml(
+        r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+
+[integrations.ms_office.addin]
+enabled = true
+
+[integrations.ms_office.addin.launch_event_runtime]
+page_path = "/public/component-kits/example/commands.html"
+script_path = "/public/component-kits/example/launchevent.js"
+
+[[integrations.ms_office.addin.launch_events]]
+event = "OnNewMessageCompose"
+function_name = "onNewMessageComposeHandler"
+
+[[integrations.ms_office.addin.launch_events]]
+event = "OnNewMessageCompose"
+function_name = "auditNewMessage"
+"#,
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "`integrations.ms_office.addin.launch_events[0].function_name` is `2ndHandler` but must match [A-Za-z_$][A-Za-z0-9_$]*."
+)]
+fn test_config_with_invalid_ms_office_addin_launch_event_function_name_is_invalid() {
+    ms_office_addin_config_from_toml(
+        r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+
+[integrations.ms_office.addin]
+enabled = true
+
+[integrations.ms_office.addin.launch_event_runtime]
+page_path = "/public/component-kits/example/commands.html"
+script_path = "/public/component-kits/example/launchevent.js"
+
+[[integrations.ms_office.addin.launch_events]]
+event = "OnNewMessageCompose"
+function_name = "2ndHandler"
+"#,
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "Microsoft Office add-in launch event runtime `page_path` is `public/component-kits/example/commands.html` but must start with `/`"
+)]
+fn test_config_with_relative_ms_office_addin_launch_event_runtime_path_is_invalid() {
+    ms_office_addin_config_from_toml(
+        r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+
+[integrations.ms_office.addin]
+enabled = true
+
+[integrations.ms_office.addin.launch_event_runtime]
+page_path = "public/component-kits/example/commands.html"
+script_path = "/public/component-kits/example/launchevent.js"
+
+[[integrations.ms_office.addin.launch_events]]
+event = "OnNewMessageCompose"
+function_name = "onNewMessageComposeHandler"
+"#,
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "Microsoft Office add-in launch event runtime `script_path` is `/public/component-kits/example/../../launchevent.js` but must not contain `..`."
+)]
+fn test_config_with_traversing_ms_office_addin_launch_event_runtime_path_is_invalid() {
+    ms_office_addin_config_from_toml(
+        r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+
+[integrations.ms_office.addin]
+enabled = true
+
+[integrations.ms_office.addin.launch_event_runtime]
+page_path = "/public/component-kits/example/commands.html"
+script_path = "/public/component-kits/example/../../launchevent.js"
+
+[[integrations.ms_office.addin.launch_events]]
+event = "OnNewMessageCompose"
+function_name = "onNewMessageComposeHandler"
+"#,
+    );
+}
+
+#[test]
+fn test_config_rejects_unknown_ms_office_addin_launch_event() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    temp_file
+        .write_all(
+            br#"
+[integrations.ms_office.addin.launch_event_runtime]
+page_path = "/public/component-kits/example/commands.html"
+script_path = "/public/component-kits/example/launchevent.js"
+
+[[integrations.ms_office.addin.launch_events]]
+event = "OnUnsupportedOutlookEvent"
+function_name = "onNewMessageComposeHandler"
+
+[file_storage_providers]
+"#,
+        )
+        .expect("Failed to write launch event configuration");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let mut builder = AppConfig::config_schema_builder(
+        Some(vec![temp_file.path().to_string_lossy().into_owned()]),
+        false,
+    )
+    .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let error = builder
+        .build()
+        .expect("Failed to build config schema")
+        .try_deserialize::<AppConfig>()
+        .expect_err("Unknown Office add-in launch event should be rejected");
+
+    assert!(
+        error
+            .to_string()
+            .contains("integrations.ms_office.addin.launch_events")
+    );
 }
 
 #[test]

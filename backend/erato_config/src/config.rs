@@ -3981,6 +3981,16 @@ pub struct MsOfficeAddinConfig {
     pub frontend_bundle_path: String,
     #[serde(default)]
     pub manifest: MsOfficeAddinManifestConfig,
+
+    // Runtime that hosts the launch event handlers. Required exactly when
+    // `launch_events` declares at least one event.
+    #[serde(default)]
+    pub launch_event_runtime: Option<MsOfficeAddinLaunchEventRuntimeConfig>,
+
+    // Outlook launch events the add-in subscribes to. Rendered into the add-in
+    // manifest in the configured order.
+    #[serde(default)]
+    pub launch_events: Vec<MsOfficeAddinLaunchEventConfig>,
 }
 
 impl Default for MsOfficeAddinConfig {
@@ -3993,6 +4003,8 @@ impl Default for MsOfficeAddinConfig {
             serve_bundle_legacy_path: default_ms_office_addin_serve_bundle_legacy_path(),
             frontend_bundle_path: default_ms_office_addin_frontend_bundle_path(),
             manifest: MsOfficeAddinManifestConfig::default(),
+            launch_event_runtime: None,
+            launch_events: Vec::new(),
         }
     }
 }
@@ -4006,6 +4018,52 @@ impl MsOfficeAddinConfig {
         }
 
         self.manifest.validate()?;
+        self.validate_launch_events()?;
+
+        Ok(())
+    }
+
+    /// Validates the optional launch event configuration. The launch event
+    /// runtime is required exactly when at least one launch event is declared.
+    fn validate_launch_events(&self) -> Result<(), Report> {
+        match (&self.launch_event_runtime, self.launch_events.is_empty()) {
+            (None, false) => {
+                return Err(eyre!(
+                    "Microsoft Office add-in launch events require `integrations.ms_office.addin.launch_event_runtime` with `page_path` and `script_path`."
+                ));
+            }
+            (Some(_), true) => {
+                return Err(eyre!(
+                    "Microsoft Office add-in `launch_event_runtime` is only used by launch events. Declare at least one `[[integrations.ms_office.addin.launch_events]]` entry or remove the runtime."
+                ));
+            }
+            (Some(runtime), false) => {
+                validate_ms_office_addin_launch_event_path("page_path", &runtime.page_path)?;
+                validate_ms_office_addin_launch_event_path("script_path", &runtime.script_path)?;
+            }
+            (None, true) => {}
+        }
+
+        let mut declared_events: Vec<MsOfficeAddinLaunchEventType> =
+            Vec::with_capacity(self.launch_events.len());
+        for (index, launch_event) in self.launch_events.iter().enumerate() {
+            if !is_ms_office_addin_launch_event_function_name(&launch_event.function_name) {
+                return Err(eyre!(
+                    "Microsoft Office add-in launch event `integrations.ms_office.addin.launch_events[{index}].function_name` is `{}` but must match [A-Za-z_$][A-Za-z0-9_$]*.",
+                    launch_event.function_name
+                ));
+            }
+
+            // Neither the manifest schema nor the Microsoft validators reject a
+            // repeated `Type`, and Outlook's behavior for duplicate handlers is
+            // undocumented, so this check is the only guard.
+            if declared_events.contains(&launch_event.event) {
+                return Err(eyre!(
+                    "Microsoft Office add-in launch event `integrations.ms_office.addin.launch_events[{index}].event` is already declared. Declare each event at most once."
+                ));
+            }
+            declared_events.push(launch_event.event);
+        }
 
         Ok(())
     }
@@ -4172,6 +4230,81 @@ fn default_ms_office_addin_manifest_icon_32_path() -> String {
 
 fn default_ms_office_addin_manifest_icon_80_path() -> String {
     "assets/ribbon-icon-80.png".to_string()
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct MsOfficeAddinLaunchEventRuntimeConfig {
+    // Path of the HTML runtime page that hosts the launch event handlers in
+    // Outlook on the web, new Outlook, and Outlook on Mac. The path is relative
+    // to the deployment base URL, for example
+    // "/public/component-kits/example/commands.html".
+    pub page_path: String,
+
+    // Path of the JavaScript-only runtime override used by classic Outlook on
+    // Windows, for example "/public/component-kits/example/launchevent.js".
+    pub script_path: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct MsOfficeAddinLaunchEventConfig {
+    // Outlook launch event that invokes the handler.
+    pub event: MsOfficeAddinLaunchEventType,
+
+    // Name of the JavaScript function registered for the event by the runtime.
+    pub function_name: String,
+}
+
+/// Outlook launch events an Office add-in can subscribe to.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Facet)]
+#[repr(C)]
+pub enum MsOfficeAddinLaunchEventType {
+    /// Raised when the user starts composing a new message.
+    OnNewMessageCompose,
+}
+
+impl MsOfficeAddinLaunchEventType {
+    /// The wire value for this event: what deployments write in configuration
+    /// and what Outlook expects in the add-in manifest.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::OnNewMessageCompose => "OnNewMessageCompose",
+        }
+    }
+}
+
+/// Validates a launch event runtime path. Paths are resolved against the
+/// deployment base URL, so they have to be root-relative and cannot escape it.
+fn validate_ms_office_addin_launch_event_path(key: &str, path: &str) -> Result<(), Report> {
+    if !path.starts_with('/') {
+        return Err(eyre!(
+            "Microsoft Office add-in launch event runtime `{key}` is `{path}` but must start with `/` because it is resolved against the deployment base URL."
+        ));
+    }
+
+    if path.contains("..") {
+        return Err(eyre!(
+            "Microsoft Office add-in launch event runtime `{key}` is `{path}` but must not contain `..`."
+        ));
+    }
+
+    Ok(())
+}
+
+/// Returns whether a launch event handler name is a JavaScript identifier that
+/// the add-in manifest accepts, i.e. matches `[A-Za-z_$][A-Za-z0-9_$]*`.
+fn is_ms_office_addin_launch_event_function_name(function_name: &str) -> bool {
+    let mut characters = function_name.chars();
+    let Some(first_character) = characters.next() else {
+        return false;
+    };
+
+    if !(first_character.is_ascii_alphabetic() || first_character == '_' || first_character == '$')
+    {
+        return false;
+    }
+
+    characters
+        .all(|character| character.is_ascii_alphanumeric() || character == '_' || character == '$')
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
