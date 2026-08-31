@@ -172,6 +172,30 @@ const schemaStringFieldFixes = [
     from: "  chat_id?: null | undefined;",
     to: "  chat_id?: string | null | undefined;",
   },
+  // Full field names on purpose: `preference_default_chat_provider` above is
+  // covered only because it happens to contain the shorter
+  // `default_chat_provider` entry as a substring. No such accident covers
+  // these fields, and relying on one would break silently.
+  {
+    from: "preference_starting_hub_assistant_id?: null | undefined;",
+    to: "preference_starting_hub_assistant_id?: string | null | undefined;",
+  },
+  {
+    from: "preference_nickname?: null | undefined;",
+    to: "preference_nickname?: string | null | undefined;",
+  },
+  {
+    from: "preference_job_title?: null | undefined;",
+    to: "preference_job_title?: string | null | undefined;",
+  },
+  {
+    from: "preference_assistant_custom_instructions?: null | undefined;",
+    to: "preference_assistant_custom_instructions?: string | null | undefined;",
+  },
+  {
+    from: "preference_assistant_additional_information?: null | undefined;",
+    to: "preference_assistant_additional_information?: string | null | undefined;",
+  },
 ];
 
 async function patchVoidTypes(filePath) {
