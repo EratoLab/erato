@@ -954,3 +954,31 @@ async fn test_starting_assistant_pick_rejects_invalid_uuid(pool: Pool<Postgres>)
         http::StatusCode::UNPROCESSABLE_ENTITY
     );
 }
+
+/// A well-formed uuid naming a hub assistant that does not exist — what the
+/// picker's list-then-save race produces — must get the same 422 as a
+/// malformed uuid, not a foreign key violation swallowed into a 500.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_starting_assistant_pick_rejects_nonexistent_hub_assistant(pool: Pool<Postgres>) {
+    let app_state = test_app_state(starting_assistant_app_config(), pool).await;
+    let server = create_test_server(app_state.clone());
+
+    let token = JwtTokenBuilder::new()
+        .subject("starting-assistant-nonexistent-pick")
+        .email("starting-assistant-nonexistent-pick@example.com")
+        .build();
+
+    let response = server
+        .put("/api/v1beta/me/profile/preferences")
+        .json(&json!({ "preference_starting_hub_assistant_id": Uuid::new_v4().to_string() }))
+        .with_bearer_token(&token)
+        .await;
+    assert_eq!(
+        response.status_code(),
+        http::StatusCode::UNPROCESSABLE_ENTITY
+    );
+}
