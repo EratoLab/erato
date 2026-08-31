@@ -394,3 +394,39 @@ pub async fn get_resources_shared_with_subject_and_groups(
 
     Ok(grants)
 }
+
+/// Whether a resource is shared with a specific organization group. An
+/// organization-wide grant counts, since it covers every group.
+///
+/// This asks about the GROUP's access, not any particular user's — a caller
+/// may hold a direct grant to a resource its group cannot see.
+pub async fn is_resource_shared_with_organization_group(
+    conn: &DatabaseConnection,
+    resource_type: &str,
+    resource_id: &str,
+    organization_group_id: &str,
+) -> Result<bool, Report> {
+    let condition = Condition::any()
+        .add(
+            Condition::all()
+                .add(share_grants::Column::SubjectType.eq("organization_group"))
+                .add(share_grants::Column::SubjectIdType.eq("organization_group_id"))
+                .add(share_grants::Column::SubjectId.eq(organization_group_id))
+                .add(share_grants::Column::ResourceType.eq(resource_type))
+                .add(share_grants::Column::ResourceId.eq(resource_id)),
+        )
+        .add(
+            Condition::all()
+                .add(share_grants::Column::SubjectType.eq(ORGANIZATION_SUBJECT_TYPE))
+                .add(share_grants::Column::SubjectIdType.eq(ORGANIZATION_SUBJECT_ID_TYPE))
+                .add(share_grants::Column::SubjectId.eq(ORGANIZATION_SUBJECT_ID))
+                .add(share_grants::Column::ResourceType.eq(resource_type))
+                .add(share_grants::Column::ResourceId.eq(resource_id)),
+        );
+
+    Ok(ShareGrants::find()
+        .filter(condition)
+        .one(conn)
+        .await?
+        .is_some())
+}

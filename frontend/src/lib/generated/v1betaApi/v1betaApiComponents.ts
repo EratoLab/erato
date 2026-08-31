@@ -5600,6 +5600,115 @@ export const useStarterPrompts = <TData = Schemas.StarterPromptsResponse,>(
   });
 };
 
+export type StartingAssistantError = Fetcher.ErrorWrapper<undefined>;
+
+export type StartingAssistantVariables = V1betaApiContext["fetcherOptions"];
+
+export const fetchStartingAssistant = (
+  variables: StartingAssistantVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.StartingAssistantResponse,
+    StartingAssistantError,
+    undefined,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/starting-assistant",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function startingAssistantQuery(variables: StartingAssistantVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (
+    options: QueryFnOptions,
+  ) => Promise<Schemas.StartingAssistantResponse>;
+};
+
+export function startingAssistantQuery(
+  variables: StartingAssistantVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.StartingAssistantResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function startingAssistantQuery(
+  variables: StartingAssistantVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/starting-assistant",
+      operationId: "startingAssistant",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchStartingAssistant(variables, signal),
+  };
+}
+
+export const useSuspenseStartingAssistant = <
+  TData = Schemas.StartingAssistantResponse,
+>(
+  variables: StartingAssistantVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.StartingAssistantResponse,
+      StartingAssistantError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.StartingAssistantResponse,
+    StartingAssistantError,
+    TData
+  >({
+    ...startingAssistantQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useStartingAssistant = <
+  TData = Schemas.StartingAssistantResponse,
+>(
+  variables: StartingAssistantVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.StartingAssistantResponse,
+      StartingAssistantError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.StartingAssistantResponse,
+    StartingAssistantError,
+    TData
+  >({
+    ...startingAssistantQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type MessagesError = Fetcher.ErrorWrapper<undefined>;
 
 export type MessagesResponse = Schemas.Message[];
@@ -6966,6 +7075,11 @@ export type QueryOperation =
       path: "/api/v1beta/me/starter-prompts";
       operationId: "starterPrompts";
       variables: StarterPromptsVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/starting-assistant";
+      operationId: "startingAssistant";
+      variables: StartingAssistantVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/messages";

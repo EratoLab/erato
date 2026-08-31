@@ -15,3 +15,4 @@ pub mod messages;
 pub mod sharepoint;
 pub mod sharing;
 pub mod starter_prompts;
+pub mod starting_assistant;
