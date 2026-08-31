@@ -53,7 +53,12 @@ export const LoadMoreButton = memo(
         className={clsx(
           "flex w-full justify-center p-2",
           {
-            "sticky top-0 z-10 bg-theme-bg": isSticky,
+            // The bar floats over the scrolling message list, which is painted
+            // `--theme-shell-chat-body` (.chat-body-skin), so it has to be
+            // opaque in exactly that colour. `bg-theme-bg` was a dead class —
+            // tailwind.config declares no DEFAULT under `theme.bg`, so no such
+            // utility was ever generated and the bar stayed transparent.
+            "sticky top-0 z-10 bg-[var(--theme-shell-chat-body)]": isSticky,
           },
           className,
         )}

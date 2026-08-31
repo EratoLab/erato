@@ -2,6 +2,7 @@ import { XlsxViewer } from "@extend-ai/react-xlsx";
 import { t } from "@lingui/core/macro";
 import { useState } from "react";
 
+import { useTheme } from "@/components/providers/ThemeProvider";
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoading";
@@ -17,7 +18,10 @@ interface XlsxPreviewProps {
 }
 
 export const XlsxPreview: React.FC<XlsxPreviewProps> = ({ filename, url }) => {
-  const [xlsxTheme, setXlsxTheme] = useState<XlsxTheme>("light");
+  // Opens in whichever mode the app is resolved to; the toggle below then owns
+  // it, so a light sheet inside a dark app stays reachable.
+  const { effectiveTheme } = useTheme();
+  const [xlsxTheme, setXlsxTheme] = useState<XlsxTheme>(effectiveTheme);
   const isDarkXlsxTheme = xlsxTheme === "dark";
   const toggleXlsxThemeLabel = isDarkXlsxTheme
     ? t({
@@ -31,7 +35,7 @@ export const XlsxPreview: React.FC<XlsxPreviewProps> = ({ filename, url }) => {
 
   return (
     <div
-      className="xlsx-preview-theme flex h-[75vh] flex-col overflow-hidden rounded-md border border-[var(--theme-border-muted)]"
+      className="xlsx-preview-theme flex h-[75vh] flex-col overflow-hidden rounded-md border border-[var(--theme-border-subtle)]"
       data-testid="file-preview-xlsx"
       data-xlsx-theme={xlsxTheme}
     >

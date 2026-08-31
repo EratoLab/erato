@@ -2752,7 +2752,7 @@ export const ChatInput = ({
                   "text-base",
                   "scrollbar-auto-hide",
                   isAnyTokenLimitExceeded &&
-                    "border-[var(--theme-error)] placeholder:text-[var(--theme-error-fg)]",
+                    "border-[var(--theme-error-border)] placeholder:text-[var(--theme-error-fg)]",
                 )}
               />
             </div>

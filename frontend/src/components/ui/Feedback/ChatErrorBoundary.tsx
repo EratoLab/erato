@@ -28,7 +28,7 @@ const ChatErrorFallback = ({ error, resetErrorBoundary }: FallbackProps) => {
       <div className="flex size-12 items-center justify-center rounded-full bg-[var(--theme-error-bg)]">
         <ErrorIcon className="size-6 text-[var(--theme-error-fg)]" />
       </div>
-      <h3 className="text-lg font-medium text-[var(--theme-fg-strong)]">
+      <h3 className="text-lg font-medium text-[var(--theme-fg-primary)]">
         {t`Chat Error`}
       </h3>
       <p className="max-w-md text-center text-sm text-[var(--theme-fg-muted)]">

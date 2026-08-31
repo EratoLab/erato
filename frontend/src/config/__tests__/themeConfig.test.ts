@@ -511,6 +511,7 @@ describe("themeConfig", () => {
       global.fetch = vi.fn();
       mockDebugLog.mockClear();
       vi.spyOn(console, "log").mockImplementation(() => {});
+      vi.spyOn(console, "warn").mockImplementation(() => {});
       vi.spyOn(console, "error").mockImplementation(() => {});
     });
 
@@ -537,7 +538,7 @@ describe("themeConfig", () => {
       expect(global.fetch).toHaveBeenCalledWith("/custom/theme.json");
       expect(global.fetch).toHaveBeenCalledTimes(1);
       expect(console.log).toHaveBeenCalledWith(
-        "Custom theme loaded: Test Theme from /custom/theme.json",
+        'Custom theme loaded: Test Theme from /custom/theme.json (requested: themeConfigPath "/custom/theme.json", themePath "/themes/company")',
       );
     });
 
@@ -586,7 +587,7 @@ describe("themeConfig", () => {
       expect(global.fetch).toHaveBeenCalledWith("/themes/company/theme.json");
       expect(global.fetch).toHaveBeenCalledTimes(2);
       expect(console.log).toHaveBeenCalledWith(
-        "Custom theme loaded: Test Theme from /themes/company/theme.json",
+        'Custom theme loaded: Test Theme from /themes/company/theme.json (requested: themeConfigPath "/custom/theme.json", themePath "/themes/company")',
       );
     });
 
@@ -707,6 +708,103 @@ describe("themeConfig", () => {
 
       expect(result).toEqual(mockTheme);
       expect(global.fetch).toHaveBeenCalledWith("/custom-config/theme.json");
+    });
+
+    it("should warn when a requested customer theme falls through to the generic theme", async () => {
+      mockEnv.mockReturnValue(
+        createMockEnv({ themeCustomerName: "unknown-customer" }),
+      );
+
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ ok: false, status: 404 })
+        .mockResolvedValueOnce({ ok: true, json: async () => mockTheme });
+
+      const result = await loadResolvedThemeConfig();
+
+      expect(result?.themeConfigPath).toBe(
+        "/public/common/custom-theme/theme.json",
+      );
+      expect(console.warn).toHaveBeenCalledWith(
+        'Requested theme (customer name "unknown-customer") was not found. Loaded "Test Theme" from the fallback location /public/common/custom-theme/theme.json instead. Check the theme configuration and that the theme pack is deployed.',
+      );
+      expect(mockDebugLog).toHaveBeenCalledWith(
+        "UI",
+        "Theme not found at /public/common/custom-theme/unknown-customer/theme.json (HTTP 404), trying next location",
+      );
+    });
+
+    it("should not warn when the requested customer theme is the one that loaded", async () => {
+      mockEnv.mockReturnValue(createMockEnv({ themeCustomerName: "acme" }));
+
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockTheme,
+      });
+
+      const result = await loadResolvedThemeConfig();
+
+      expect(result?.themeConfigPath).toBe(
+        "/public/common/custom-theme/acme/theme.json",
+      );
+      expect(console.warn).not.toHaveBeenCalled();
+      expect(console.log).toHaveBeenCalledWith(
+        'Custom theme loaded: Test Theme from /public/common/custom-theme/acme/theme.json (requested: customer name "acme")',
+      );
+    });
+
+    it("should not warn when no theme was requested at all", async () => {
+      mockEnv.mockReturnValue(createMockEnv());
+
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockTheme,
+      });
+
+      const result = await loadResolvedThemeConfig();
+
+      expect(result?.themeConfigPath).toBe(
+        "/public/common/custom-theme/theme.json",
+      );
+      expect(console.warn).not.toHaveBeenCalled();
+      expect(console.log).toHaveBeenCalledWith(
+        "Custom theme loaded: Test Theme from /public/common/custom-theme/theme.json (requested: none)",
+      );
+    });
+
+    it("should not warn when a lower-priority request is honoured", async () => {
+      mockEnv.mockReturnValue(
+        createMockEnv({
+          themeConfigPath: "/missing/theme.json",
+          themeCustomerName: "acme",
+        }),
+      );
+
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ ok: false, status: 404 })
+        .mockResolvedValueOnce({ ok: true, json: async () => mockTheme });
+
+      const result = await loadResolvedThemeConfig();
+
+      expect(result?.themeConfigPath).toBe(
+        "/public/common/custom-theme/acme/theme.json",
+      );
+      expect(console.warn).not.toHaveBeenCalled();
+    });
+
+    it("should warn when a requested theme is not found anywhere", async () => {
+      mockEnv.mockReturnValue(createMockEnv({ themeCustomerName: "acme" }));
+
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: false,
+        status: 404,
+      });
+
+      const result = await loadResolvedThemeConfig();
+
+      expect(result).toBeNull();
+      expect(console.warn).toHaveBeenCalledWith(
+        'Requested theme (customer name "acme") was not found at any location; falling back to the built-in default theme. Tried: /public/common/custom-theme/acme/theme.json, /public/common/custom-theme/theme.json',
+      );
     });
   });
 

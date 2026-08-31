@@ -87,22 +87,11 @@ export const MessageEditor = ({
 
   return (
     <div className="w-full" data-testid="message-editor">
-      <textarea
-        ref={textareaRef}
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={handleKeyDown}
-        aria-label={t({
-          id: "chat.messageEditor.ariaLabel",
-          message: "Edit your message",
-        })}
-        data-testid="message-editor-input"
-        className="w-full resize-none rounded-md border border-theme-border bg-theme-bg-primary p-2 text-theme-fg-primary focus:outline-none focus:ring-2 focus:ring-theme-focus"
-        rows={1}
-      />
-
+      {/* Above the textarea, matching both the composer and the sent message.
+          Below it, switching into edit mode would move the tiles from one side
+          of the text to the other and back again on cancel. */}
       {attachedFiles.length > 0 && (
-        <div className="mt-2">
+        <div className="mb-2">
           <FileAttachmentsPreview
             attachedFiles={attachedFiles}
             maxFiles={attachedFiles.length}
@@ -116,6 +105,20 @@ export const MessageEditor = ({
           />
         </div>
       )}
+
+      <textarea
+        ref={textareaRef}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={handleKeyDown}
+        aria-label={t({
+          id: "chat.messageEditor.ariaLabel",
+          message: "Edit your message",
+        })}
+        data-testid="message-editor-input"
+        className="w-full resize-none rounded-md border border-theme-border bg-theme-bg-primary p-2 text-theme-fg-primary focus:outline-none focus:ring-2 focus:ring-theme-focus"
+        rows={1}
+      />
 
       {renderTokenUsage?.(draft)}
 

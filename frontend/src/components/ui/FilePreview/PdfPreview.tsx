@@ -424,7 +424,7 @@ export const PdfPreview: React.FC<PdfPreviewProps> = ({ url }) => {
 
   return (
     <div
-      className="pdf-preview-theme flex h-[75vh] flex-col overflow-hidden rounded-md border border-[var(--theme-border-muted)]"
+      className="pdf-preview-theme flex h-[75vh] flex-col overflow-hidden rounded-md border border-[var(--theme-border-subtle)]"
       data-testid="file-preview-pdf"
     >
       <EmbedPDF engine={engine} plugins={PDF_PLUGINS}>

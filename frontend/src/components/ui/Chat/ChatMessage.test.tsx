@@ -59,9 +59,19 @@ vi.mock("../Message/ImageLightbox", () => ({
   ImageLightbox: () => null,
 }));
 
+// Stubbed so placement can be asserted without a query client. `null` is the
+// real component's behaviour while the file ids are still resolving.
+const attachmentsRenderMock = vi.hoisted(() => vi.fn());
+vi.mock("./MessageAttachments", () => ({
+  MessageAttachments: () => attachmentsRenderMock(),
+}));
+
 describe("ChatMessage", () => {
   beforeEach(() => {
     messageContentMock.mockClear();
+    attachmentsRenderMock.mockReturnValue(
+      <div data-testid="attachments-stub" />,
+    );
     showVerboseAssistantErrorsMock.mockReturnValue(false);
     showCopyErrorReportMock.mockReturnValue(true);
     Object.assign(navigator, {
@@ -113,7 +123,9 @@ describe("ChatMessage", () => {
     expect(messageShell.className).toContain(
       "hover:bg-[var(--theme-message-hover)]",
     );
-    expect(messageShell.firstElementChild).toHaveStyle({
+    // Located by hook, not by position: a user message carrying files puts the
+    // attachments wrapper first, so `firstElementChild` is not the body there.
+    expect(messageShell.querySelector('[data-ui="message-body"]')).toHaveStyle({
       gap: "var(--theme-spacing-message-gap)",
     });
     expect(messageContentMock).toHaveBeenCalledWith(
@@ -157,6 +169,101 @@ describe("ChatMessage", () => {
     expect(messageContentMock).toHaveBeenCalledWith(
       expect.objectContaining({ preserveSoftLineBreaks: true }),
     );
+  });
+
+  it.each([
+    ["user", ["message-attachments", "message-body"]],
+    ["assistant", ["message-body"]],
+  ] as const)(
+    "places %s attachments relative to the message body",
+    async (role, expectedHooks) => {
+      const message: UiChatMessage = {
+        id: `msg_files_${role}`,
+        content: [{ content_type: "text", text: "See attached" }],
+        role,
+        sender: role,
+        authorId: `${role}_1`,
+        createdAt: new Date("2025-01-01T12:00:00Z").toISOString(),
+        status: "complete",
+        input_files_ids: ["file_1"],
+      };
+
+      const { i18n } = await import("@lingui/core");
+      i18n.load("en", enMessages as unknown as Messages);
+      i18n.activate("en");
+
+      render(
+        <I18nProvider i18n={i18n}>
+          <ChatMessage
+            message={message}
+            controls={() => null}
+            controlsContext={{
+              currentUserId: "user_1",
+              dialogOwnerId: "user_1",
+              isSharedDialog: false,
+            }}
+            onMessageAction={async () => true}
+          />
+        </I18nProvider>,
+      );
+
+      const messageShell = screen.getByTestId(`message-${role}`);
+      expect(
+        Array.from(messageShell.children).map((child) =>
+          child.getAttribute("data-ui"),
+        ),
+      ).toEqual(expectedHooks);
+
+      // A user message tints the body alone, so the attachments have to sit
+      // outside it; an assistant message keeps them inline.
+      const body = messageShell.querySelector('[data-ui="message-body"]');
+      expect(body?.contains(screen.getByTestId("attachments-stub"))).toBe(
+        role === "assistant",
+      );
+    },
+  );
+
+  it("keeps the attachments hook out of the layout until files resolve", async () => {
+    attachmentsRenderMock.mockReturnValue(null);
+
+    const message: UiChatMessage = {
+      id: "msg_files_pending",
+      content: [{ content_type: "text", text: "See attached" }],
+      role: "user",
+      sender: "user",
+      authorId: "user_1",
+      createdAt: new Date("2025-01-01T12:00:00Z").toISOString(),
+      status: "complete",
+      input_files_ids: ["file_1"],
+    };
+
+    const { i18n } = await import("@lingui/core");
+    i18n.load("en", enMessages as unknown as Messages);
+    i18n.activate("en");
+
+    render(
+      <I18nProvider i18n={i18n}>
+        <ChatMessage
+          message={message}
+          controls={() => null}
+          controlsContext={{
+            currentUserId: "user_1",
+            dialogOwnerId: "user_1",
+            isSharedDialog: false,
+          }}
+          onMessageAction={async () => true}
+        />
+      </I18nProvider>,
+    );
+
+    // The wrapper is keyed off the file ids, which are known before the files
+    // are, so it renders empty for a beat. `empty:hidden` keeps a theme from
+    // painting a bare box in that window.
+    const wrapper = screen
+      .getByTestId("message-user")
+      .querySelector('[data-ui="message-attachments"]');
+    expect(wrapper).toBeEmptyDOMElement();
+    expect(wrapper).toHaveClass("empty:hidden");
   });
 
   it("hides verbose assistant error details by default", async () => {

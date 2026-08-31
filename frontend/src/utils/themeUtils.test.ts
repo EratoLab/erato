@@ -132,4 +132,81 @@ describe("mergeThemeWithOverrides", () => {
       fontFamily: '"IBM Plex Mono", monospace',
     });
   });
+
+  // globals.css declares --theme-font-heading/--theme-font-semibold as aliases of
+  // --theme-font-body, and --theme-font-heading-bold as an alias of
+  // --theme-font-heading. ThemeProvider emits all of them explicitly, so the merge
+  // has to reproduce that alias chain or a brand font only half-applies.
+  it("back-fills heading, semibold and headingBold from a body-only font override", () => {
+    const mergedTheme = mergeThemeWithOverrides(defaultTheme, {
+      typography: { fontFamily: { body: "Brand Sans" } },
+    });
+
+    expect(mergedTheme.typography?.fontFamily).toMatchObject({
+      body: "Brand Sans",
+      heading: "Brand Sans",
+      semibold: "Brand Sans",
+      headingBold: "Brand Sans",
+      // mono has no alias in globals.css, so it must keep the default
+      mono: defaultTheme.typography?.fontFamily.mono,
+    });
+  });
+
+  it("resolves headingBold from an explicit heading rather than from body", () => {
+    const mergedTheme = mergeThemeWithOverrides(defaultTheme, {
+      typography: {
+        fontFamily: { body: "Brand Sans", heading: "Brand Display" },
+      },
+    });
+
+    expect(mergedTheme.typography?.fontFamily).toMatchObject({
+      body: "Brand Sans",
+      heading: "Brand Display",
+      semibold: "Brand Sans",
+      headingBold: "Brand Display",
+    });
+  });
+
+  it("back-fills headingBold from heading even when body is not overridden", () => {
+    const mergedTheme = mergeThemeWithOverrides(defaultTheme, {
+      typography: { fontFamily: { heading: "Brand Display" } },
+    });
+
+    expect(mergedTheme.typography?.fontFamily).toMatchObject({
+      body: defaultTheme.typography?.fontFamily.body,
+      heading: "Brand Display",
+      semibold: defaultTheme.typography?.fontFamily.semibold,
+      headingBold: "Brand Display",
+    });
+  });
+
+  it("preserves explicitly overridden font families over the back-filled ones", () => {
+    const mergedTheme = mergeThemeWithOverrides(defaultTheme, {
+      typography: {
+        fontFamily: {
+          body: "Brand Sans",
+          semibold: "Brand Sans Semibold",
+          headingBold: "Brand Display Bold",
+        },
+      },
+    });
+
+    expect(mergedTheme.typography?.fontFamily).toMatchObject({
+      body: "Brand Sans",
+      heading: "Brand Sans",
+      semibold: "Brand Sans Semibold",
+      headingBold: "Brand Display Bold",
+    });
+  });
+
+  it("leaves font families untouched when the override sets no font family", () => {
+    const mergedTheme = mergeThemeWithOverrides(defaultTheme, {
+      typography: { fontSize: { base: "1.125rem" } },
+    });
+
+    expect(mergedTheme.typography?.fontSize.base).toBe("1.125rem");
+    expect(mergedTheme.typography?.fontFamily).toEqual(
+      defaultTheme.typography?.fontFamily,
+    );
+  });
 });

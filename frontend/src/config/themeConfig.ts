@@ -374,10 +374,55 @@ export interface LoadedThemeConfig {
   themeConfigPath: string;
 }
 
+/**
+ * A theme the environment explicitly asked for, plus a predicate that says
+ * whether a resolved theme.json path actually satisfies that request.
+ *
+ * `getThemePaths()` always ends with generic fall-back locations, so a
+ * misconfigured request resolves to *some* theme rather than failing. These
+ * descriptors let us tell "the requested theme loaded" apart from "we silently
+ * loaded a different one".
+ */
+interface RequestedTheme {
+  label: string;
+  matches: (path: string) => boolean;
+}
+
+const describeRequestedThemes = (): RequestedTheme[] => {
+  const { themeConfigPath, themeCustomerName, themePath } = env();
+  const requests: RequestedTheme[] = [];
+
+  if (themeConfigPath) {
+    requests.push({
+      label: `themeConfigPath "${themeConfigPath}"`,
+      matches: (path) => path === themeConfigPath,
+    });
+  }
+  if (themePath) {
+    requests.push({
+      label: `themePath "${themePath}"`,
+      matches: (path) => path === `${themePath}/theme.json`,
+    });
+  }
+  if (themeCustomerName) {
+    requests.push({
+      label: `customer name "${themeCustomerName}"`,
+      matches: (path) =>
+        path.endsWith(`/custom-theme/${themeCustomerName}/theme.json`),
+    });
+  }
+
+  return requests;
+};
+
 export async function loadResolvedThemeConfig(
   config: ThemeLocationConfig = defaultThemeConfig,
 ): Promise<LoadedThemeConfig | null> {
   try {
+    const requests = describeRequestedThemes();
+    const requestedLabel = requests.length
+      ? requests.map((request) => request.label).join(", ")
+      : "none";
     const pathsToTry = config.getThemePaths().filter(Boolean) as string[];
 
     for (const path of pathsToTry) {
@@ -385,18 +430,37 @@ export async function loadResolvedThemeConfig(
         const response = await fetch(path);
         if (response.ok) {
           const themeConfig = (await response.json()) as CustomThemeConfig;
-          console.log(`Custom theme loaded: ${themeConfig.name} from ${path}`);
+          console.log(
+            `Custom theme loaded: ${themeConfig.name} from ${path} (requested: ${requestedLabel})`,
+          );
+          if (
+            requests.length > 0 &&
+            !requests.some((request) => request.matches(path))
+          ) {
+            console.warn(
+              `Requested theme (${requestedLabel}) was not found. Loaded "${themeConfig.name}" from the fallback location ${path} instead. Check the theme configuration and that the theme pack is deployed.`,
+            );
+          }
           return {
             themeConfig,
             themeConfigPath: path,
           };
         }
+        debugLog(
+          "UI",
+          `Theme not found at ${path} (HTTP ${response.status}), trying next location`,
+        );
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
       } catch (error) {
         debugLog("UI", `Theme not found at ${path}, trying next location`);
       }
     }
 
+    if (requests.length > 0) {
+      console.warn(
+        `Requested theme (${requestedLabel}) was not found at any location; falling back to the built-in default theme. Tried: ${pathsToTry.join(", ")}`,
+      );
+    }
     debugLog("UI", "No custom theme found, using default theme");
     return null;
   } catch (error) {
