@@ -452,8 +452,7 @@ export function UserPreferencesDialog({
     setSaveError(null);
     setIsSaving(true);
     try {
-      // The generated schema currently drops the string branch for these optional patch fields.
-      const requestBody = {
+      const requestBody: UpdateProfilePreferencesRequest = {
         preference_nickname: toNullableValue(nickname),
         preference_job_title: toNullableValue(jobTitle),
         preference_assistant_custom_instructions:
@@ -469,7 +468,7 @@ export function UserPreferencesDialog({
         // clear needs its own boolean.
         preference_starting_hub_assistant_id: resolvedStartingHubAssistantId,
         preference_starting_assistant_cleared: resolvedStartingAssistantCleared,
-      } as unknown as UpdateProfilePreferencesRequest;
+      };
 
       await fetchUpdateProfilePreferences({
         body: requestBody,

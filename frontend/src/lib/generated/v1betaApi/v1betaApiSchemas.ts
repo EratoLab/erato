@@ -2723,11 +2723,11 @@ export type UpdateProfilePreferencesRequest = {
   /**
    * Additional contextual information about the user for the assistant.
    */
-  preference_assistant_additional_information?: null | undefined;
+  preference_assistant_additional_information?: string | null | undefined;
   /**
    * Additional behaviour/style/tone preferences for the assistant.
    */
-  preference_assistant_custom_instructions?: null | undefined;
+  preference_assistant_custom_instructions?: string | null | undefined;
   /**
    * Preferred default chat provider/model ID for new chats.
    */
@@ -2735,11 +2735,11 @@ export type UpdateProfilePreferencesRequest = {
   /**
    * User's job title.
    */
-  preference_job_title?: null | undefined;
+  preference_job_title?: string | null | undefined;
   /**
    * Preferred name to address the user with.
    */
-  preference_nickname?: null | undefined;
+  preference_nickname?: string | null | undefined;
   /**
    * Set `true` to explicitly clear the start screen (welcome screen even
    * though an audience pin exists), `false` to inherit again. Clearing
@@ -2752,7 +2752,7 @@ export type UpdateProfilePreferencesRequest = {
    * Explicit `null` removes the pick and returns to inheriting any
    * audience pin.
    */
-  preference_starting_hub_assistant_id?: null | undefined;
+  preference_starting_hub_assistant_id?: string | null | undefined;
 };
 
 export type UserProfile = {
