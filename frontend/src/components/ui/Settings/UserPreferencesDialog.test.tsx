@@ -734,6 +734,10 @@ describe("UserPreferencesDialog", () => {
         preference_assistant_additional_information:
           "I work with enterprise customers in regulated industries.",
         preference_default_chat_provider: null,
+        // Always sent explicitly, even while the start-screen section is
+        // hidden: omitting either would let any save wipe the stored state.
+        preference_starting_hub_assistant_id: null,
+        preference_starting_assistant_cleared: false,
       });
       expect(invalidateQueries).toHaveBeenCalledWith({
         queryKey: profileQuery({}).queryKey,
@@ -776,6 +780,160 @@ describe("UserPreferencesDialog", () => {
           preference_default_chat_provider: "model-two",
         }),
       );
+    });
+  });
+
+  describe("start screen preference", () => {
+    // Only the fields the setting actually reads; the response is raw JSON
+    // as far as the component is concerned.
+    const hubAssistantVersions = [
+      {
+        hub_assistant_id: "hub-1",
+        assistant: {
+          name: "Docs Helper",
+          description: "Answers documentation questions",
+        },
+      },
+      {
+        hub_assistant_id: "hub-2",
+        assistant: { name: "Sales Coach" },
+      },
+    ];
+
+    const mockFetchWithHub = () =>
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.includes("/me/models")) {
+          return createJsonResponse([]);
+        }
+        if (url.includes("/assistant-hub/config")) {
+          return createJsonResponse({
+            enabled: true,
+            can_review: false,
+            categories: [],
+            default_share_with_whole_organization: false,
+            rating_mode: "stars",
+          });
+        }
+        if (url.includes("/assistant-hub/assistants")) {
+          return createJsonResponse({ versions: hubAssistantVersions });
+        }
+        return createJsonResponse(userProfile);
+      });
+
+    const findPreferencesPut = (
+      fetchMock: ReturnType<typeof mockFetchWithHub>,
+    ) =>
+      fetchMock.mock.calls.find(
+        ([url]) => url === "/api/v1beta/me/profile/preferences",
+      );
+
+    it("saves an explicitly picked starting assistant by its hub id", async () => {
+      const fetchMock = mockFetchWithHub();
+
+      renderDialog();
+
+      fireEvent.click(
+        await screen.findByRole("radio", { name: /A specific assistant/ }),
+      );
+      fireEvent.click(await screen.findByTitle("Choose an assistant"));
+      fireEvent.click(
+        await screen.findByRole("menuitem", { name: /Docs Helper/ }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() => {
+        const requestCall = findPreferencesPut(fetchMock);
+        expect(requestCall).toBeDefined();
+        expect(JSON.parse(String(requestCall?.[1]?.body))).toEqual(
+          expect.objectContaining({
+            preference_starting_hub_assistant_id: "hub-1",
+            preference_starting_assistant_cleared: false,
+          }),
+        );
+      });
+    });
+
+    it("saves an explicit clear (welcome screen) instead of just a null pick", async () => {
+      const fetchMock = mockFetchWithHub();
+
+      renderDialog({
+        profile: {
+          ...userProfile,
+          preference_starting_hub_assistant_id: "hub-1",
+        },
+      });
+
+      fireEvent.click(
+        await screen.findByRole("radio", {
+          name: /Always start on the welcome screen/,
+        }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() => {
+        const requestCall = findPreferencesPut(fetchMock);
+        expect(requestCall).toBeDefined();
+        expect(JSON.parse(String(requestCall?.[1]?.body))).toEqual(
+          expect.objectContaining({
+            preference_starting_hub_assistant_id: null,
+            preference_starting_assistant_cleared: true,
+          }),
+        );
+      });
+    });
+
+    it("returns from cleared to inherit with an explicit cleared=false", async () => {
+      const fetchMock = mockFetchWithHub();
+
+      renderDialog({
+        profile: {
+          ...userProfile,
+          preference_starting_assistant_cleared: true,
+        },
+      });
+
+      fireEvent.click(await screen.findByRole("radio", { name: /Automatic/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() => {
+        const requestCall = findPreferencesPut(fetchMock);
+        expect(requestCall).toBeDefined();
+        expect(JSON.parse(String(requestCall?.[1]?.body))).toEqual(
+          expect.objectContaining({
+            preference_starting_hub_assistant_id: null,
+            preference_starting_assistant_cleared: false,
+          }),
+        );
+      });
+    });
+
+    it("preserves a stored pick when an unrelated preference is saved", async () => {
+      const fetchMock = mockFetchWithHub();
+
+      renderDialog({
+        profile: {
+          ...userProfile,
+          preference_starting_hub_assistant_id: "hub-1",
+        },
+      });
+
+      fireEvent.change(screen.getByLabelText("Nickname"), {
+        target: { value: "Maximilian" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() => {
+        const requestCall = findPreferencesPut(fetchMock);
+        expect(requestCall).toBeDefined();
+        expect(JSON.parse(String(requestCall?.[1]?.body))).toEqual(
+          expect.objectContaining({
+            preference_nickname: "Maximilian",
+            preference_starting_hub_assistant_id: "hub-1",
+            preference_starting_assistant_cleared: false,
+          }),
+        );
+      });
     });
   });
 

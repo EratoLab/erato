@@ -9,8 +9,11 @@ import {
   fetchUpdateProfilePreferences,
   profileQuery,
   recentChatsQuery,
+  startingAssistantQuery,
   useArchiveAllChatsEndpoint,
+  useAssistantHubConfig,
   useDisconnectMcpServerOauth,
+  useListAssistantHubAssistants,
   useListMcpServers,
   useStartMcpServerOauth,
   useAvailableModels,
@@ -36,6 +39,10 @@ import {
 import { AppearanceTabContent } from "./AppearanceTabContent";
 import { AudioInputTabContent } from "./AudioInputTabContent";
 import { ServersToolsPane } from "./ServersToolsPane";
+import {
+  StartingAssistantSetting,
+  type StartScreenChoice,
+} from "./StartingAssistantSetting";
 
 import type {
   ChatModel,
@@ -94,6 +101,13 @@ export function UserPreferencesDialog({
   const [customInstructions, setCustomInstructions] = useState("");
   const [additionalInformation, setAdditionalInformation] = useState("");
   const [defaultModel, setDefaultModel] = useState<ChatModel | null>(null);
+  // The choice and the pick are separate state, so toggling away from
+  // "assistant" and back does not lose an already-picked assistant.
+  const [startScreenChoice, setStartScreenChoice] =
+    useState<StartScreenChoice>("inherit");
+  const [startingHubAssistantId, setStartingHubAssistantId] = useState<
+    string | null
+  >(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [mcpError, setMcpError] = useState<string | null>(null);
@@ -118,6 +132,22 @@ export function UserPreferencesDialog({
     () =>
       Array.isArray(availableModelsResponse) ? availableModelsResponse : [],
     [availableModelsResponse],
+  );
+  // The start-screen setting only exists where the assistant hub does: both a
+  // pick and an audience pin resolve through it.
+  const { data: assistantHubConfig } = useAssistantHubConfig(
+    isOpen && personalizationEnabled ? {} : skipToken,
+  );
+  const startScreenSettingEnabled = assistantHubConfig?.enabled === true;
+  // The only listing that carries the stable `hub_assistant_id` the
+  // preference stores.
+  const { data: hubAssistantsResponse, isLoading: isLoadingHubAssistants } =
+    useListAssistantHubAssistants(
+      isOpen && startScreenSettingEnabled ? {} : skipToken,
+    );
+  const hubVersions = useMemo(
+    () => hubAssistantsResponse?.versions ?? [],
+    [hubAssistantsResponse?.versions],
   );
   // The pane owns rendering the server list; this instance shares its query
   // key and exists so the OAuth callback/disconnect flows can refetch.
@@ -186,6 +216,17 @@ export function UserPreferencesDialog({
       userProfile?.preference_assistant_additional_information ?? "",
     );
     setDefaultModel(null);
+    // Cleared beats pick beats inherit; a stored row is never both.
+    setStartScreenChoice(
+      userProfile?.preference_starting_assistant_cleared
+        ? "welcome"
+        : userProfile?.preference_starting_hub_assistant_id
+          ? "assistant"
+          : "inherit",
+    );
+    setStartingHubAssistantId(
+      userProfile?.preference_starting_hub_assistant_id ?? null,
+    );
   }, [isOpen, requestedDefaultTab, userProfile]);
 
   useEffect(() => {
@@ -283,6 +324,13 @@ export function UserPreferencesDialog({
     refetchMcpServers,
   ]);
 
+  // What the UI resolves to on save. "assistant" without a pick yet resolves
+  // to the same wire values as "inherit", keeping Save disabled until an
+  // assistant is chosen.
+  const resolvedStartingHubAssistantId =
+    startScreenChoice === "assistant" ? startingHubAssistantId : null;
+  const resolvedStartingAssistantCleared = startScreenChoice === "welcome";
+
   const hasChanges = useMemo(
     () =>
       nickname !== (userProfile?.preference_nickname ?? "") ||
@@ -292,13 +340,19 @@ export function UserPreferencesDialog({
       additionalInformation !==
         (userProfile?.preference_assistant_additional_information ?? "") ||
       defaultModel?.chat_provider_id !==
-        (userProfile?.preference_default_chat_provider ?? null),
+        (userProfile?.preference_default_chat_provider ?? null) ||
+      resolvedStartingHubAssistantId !==
+        (userProfile?.preference_starting_hub_assistant_id ?? null) ||
+      resolvedStartingAssistantCleared !==
+        (userProfile?.preference_starting_assistant_cleared ?? false),
     [
       additionalInformation,
       defaultModel,
       customInstructions,
       jobTitle,
       nickname,
+      resolvedStartingAssistantCleared,
+      resolvedStartingHubAssistantId,
       userProfile,
     ],
   );
@@ -409,6 +463,12 @@ export function UserPreferencesDialog({
         ),
         preference_default_chat_provider:
           defaultModel?.chat_provider_id ?? null,
+        // Both fields go out explicitly on every save: this PUT carries all
+        // preference fields, so omitting them would let an unrelated edit wipe
+        // the start-screen state. A null id alone means "inherit", so the
+        // clear needs its own boolean.
+        preference_starting_hub_assistant_id: resolvedStartingHubAssistantId,
+        preference_starting_assistant_cleared: resolvedStartingAssistantCleared,
       } as unknown as UpdateProfilePreferencesRequest;
 
       await fetchUpdateProfilePreferences({
@@ -416,6 +476,11 @@ export function UserPreferencesDialog({
       });
       await queryClient.invalidateQueries({
         queryKey: profileQuery({}).queryKey,
+      });
+      // The landing redirect reads the server-resolved answer, so refresh it
+      // too.
+      await queryClient.invalidateQueries({
+        queryKey: startingAssistantQuery({}).queryKey,
       });
       onClose();
     } catch {
@@ -589,6 +654,17 @@ export function UserPreferencesDialog({
                       align="left"
                     />
                   </FormField>
+                ) : null}
+
+                {startScreenSettingEnabled ? (
+                  <StartingAssistantSetting
+                    choice={startScreenChoice}
+                    onChoiceChange={setStartScreenChoice}
+                    selectedHubAssistantId={startingHubAssistantId}
+                    onSelectHubAssistant={setStartingHubAssistantId}
+                    hubVersions={hubVersions}
+                    isLoadingHubVersions={isLoadingHubAssistants}
+                  />
                 ) : null}
 
                 <FormField

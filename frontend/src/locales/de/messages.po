@@ -3537,6 +3537,66 @@ msgid "preferences.dialog.serversTools.scope.thisDevice"
 msgstr "{status} · dieses Gerät"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.assistant.helper"
+msgstr "Öffne immer einen Chat mit dem Assistenten, den du auswählst."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.assistant.label"
+msgstr "Ein bestimmter Assistent"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.description"
+msgstr "Wähle aus, wohin dich Erato beim Öffnen bringt."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.inherit.helper"
+msgstr "Verwende den Standard deiner Organisation, falls einer festgelegt ist, sonst den Willkommensbildschirm."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.inherit.label"
+msgstr "Automatisch"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.label"
+msgstr "Startbildschirm"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.picker.empty"
+msgstr "Es stehen noch keine Assistenten zur Auswahl."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.picker.loading"
+msgstr "Assistenten werden geladen..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.picker.placeholder"
+msgstr "Assistenten auswählen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.picker.unavailable"
+msgstr "Ein Assistent, auf den du keinen Zugriff mehr hast"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.welcome.helper"
+msgstr "Überspringe jeden Standard, den deine Organisation festgelegt hat."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.welcome.label"
+msgstr "Immer mit dem Willkommensbildschirm starten"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.tabs.appearance"
 msgstr "Darstellung"
