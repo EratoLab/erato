@@ -9,15 +9,6 @@ import { FilePreviewModal } from "./FilePreviewModal";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
 
-const useDocxModelMock = vi.hoisted(() =>
-  vi.fn((file?: ArrayBuffer) => ({
-    model: file ? { type: "mock-docx-model" } : undefined,
-    isLoading: false,
-    error: undefined,
-  })),
-);
-const setWasmSourceMock = vi.hoisted(() => vi.fn());
-
 // PDFium needs a worker and WebAssembly, neither of which jsdom provides.
 vi.mock("@/components/ui/FilePreview/PdfPreview", () => ({
   PdfPreview: ({ url }: { url: string }) => (
@@ -25,30 +16,32 @@ vi.mock("@/components/ui/FilePreview/PdfPreview", () => ({
   ),
 }));
 
-vi.mock("@extend-ai/react-docx", () => ({
-  ReactDocxViewer: ({ model }: { model?: unknown }) => (
-    <div data-testid="mock-react-docx-viewer">
-      {model ? "DOCX rendered" : "DOCX empty"}
-    </div>
+vi.mock("@/components/ui/FilePreview/DocxPreview", async () => {
+  const { useEffect, useState } = await import("react");
+  return {
+    DocxPreview: ({ url }: { url: string }) => {
+      const [loaded, setLoaded] = useState(false);
+      useEffect(() => {
+        const controller = new AbortController();
+        void fetch(url, { signal: controller.signal }).then(() =>
+          setLoaded(true),
+        );
+        return () => controller.abort();
+      }, [url]);
+      return loaded ? <div data-testid="mock-react-docx-viewer" /> : null;
+    },
+  };
+});
+
+vi.mock("@/components/ui/FilePreview/PptxPreview", () => ({
+  PptxPreview: ({ url }: { url: string }) => (
+    <div data-source={url} data-testid="mock-react-pptx-viewer" />
   ),
-  setWasmSource: setWasmSourceMock,
-  useDocxModel: useDocxModelMock,
 }));
 
-vi.mock("@extend-ai/react-pptx", () => ({
-  ReactPptxViewer: ({ source }: { source?: string }) => (
-    <div data-source={source} data-testid="mock-react-pptx-viewer">
-      PPTX rendered
-    </div>
-  ),
-  setWasmSource: setWasmSourceMock,
-}));
-
-vi.mock("@extend-ai/react-xlsx", () => ({
-  XlsxViewer: ({ src }: { src?: string }) => (
-    <div data-src={src} data-testid="mock-react-xlsx-viewer">
-      XLSX rendered
-    </div>
+vi.mock("@/components/ui/FilePreview/XlsxPreview", () => ({
+  XlsxPreview: ({ url }: { url: string }) => (
+    <div data-src={url} data-testid="mock-react-xlsx-viewer" />
   ),
 }));
 
@@ -178,7 +171,7 @@ describe("FilePreviewModal", () => {
     );
   });
 
-  it("previews XLSX files from the preview URL", () => {
+  it("previews XLSX files from the preview URL", async () => {
     renderWithTheme(
       <FilePreviewModal
         isOpen={true}
@@ -192,13 +185,13 @@ describe("FilePreviewModal", () => {
       />,
     );
 
-    expect(screen.getByTestId("mock-react-xlsx-viewer")).toHaveAttribute(
+    expect(await screen.findByTestId("mock-react-xlsx-viewer")).toHaveAttribute(
       "data-src",
       "https://files.example.com/preview/budget.xlsx",
     );
   });
 
-  it("previews PPTX files from the preview URL", () => {
+  it("previews PPTX files from the preview URL", async () => {
     renderWithTheme(
       <FilePreviewModal
         isOpen={true}
@@ -213,13 +206,13 @@ describe("FilePreviewModal", () => {
       />,
     );
 
-    expect(screen.getByTestId("mock-react-pptx-viewer")).toHaveAttribute(
+    expect(await screen.findByTestId("mock-react-pptx-viewer")).toHaveAttribute(
       "data-source",
       "https://files.example.com/preview/roadmap.pptx",
     );
   });
 
-  it("previews presentation files when the MIME type identifies them", () => {
+  it("previews presentation files when the MIME type identifies them", async () => {
     renderWithTheme(
       <FilePreviewModal
         isOpen={true}
@@ -237,13 +230,13 @@ describe("FilePreviewModal", () => {
       />,
     );
 
-    expect(screen.getByTestId("mock-react-pptx-viewer")).toHaveAttribute(
+    expect(await screen.findByTestId("mock-react-pptx-viewer")).toHaveAttribute(
       "data-source",
       "https://files.example.com/preview/roadmap",
     );
   });
 
-  it("previews XLSX files when the MIME type identifies a spreadsheet", () => {
+  it("previews XLSX files when the MIME type identifies a spreadsheet", async () => {
     renderWithTheme(
       <FilePreviewModal
         isOpen={true}
@@ -261,7 +254,7 @@ describe("FilePreviewModal", () => {
       />,
     );
 
-    expect(screen.getByTestId("mock-react-xlsx-viewer")).toHaveAttribute(
+    expect(await screen.findByTestId("mock-react-xlsx-viewer")).toHaveAttribute(
       "data-src",
       "https://files.example.com/preview/budget",
     );

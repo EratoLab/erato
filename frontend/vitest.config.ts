@@ -1,6 +1,9 @@
-import { defineConfig } from "vitest/config";
+import { resolve } from "node:path";
+
 import react from "@vitejs/plugin-react";
-import { resolve } from "path";
+import { defineConfig } from "vitest/config";
+
+import { iconCatalogPlugin } from "./vite.icon-catalogs";
 
 export default defineConfig({
   plugins: [
@@ -9,6 +12,7 @@ export default defineConfig({
         plugins: ["@lingui/babel-plugin-lingui-macro"],
       },
     }),
+    iconCatalogPlugin({ rootDir: __dirname }),
   ],
   test: {
     environment: "jsdom",

@@ -7,15 +7,6 @@ import { FilePreviewContent } from "./FilePreviewContent";
 
 import type React from "react";
 
-const useDocxModelMock = vi.hoisted(() =>
-  vi.fn((file?: ArrayBuffer) => ({
-    model: file ? { type: "mock-docx-model" } : undefined,
-    isLoading: false,
-    error: undefined,
-  })),
-);
-const setWasmSourceMock = vi.hoisted(() => vi.fn());
-
 // PDFium needs a worker and WebAssembly, neither of which jsdom provides.
 vi.mock("./PdfPreview", () => ({
   PdfPreview: ({ url }: { url: string }) => (
@@ -23,70 +14,93 @@ vi.mock("./PdfPreview", () => ({
   ),
 }));
 
-vi.mock("@extend-ai/react-docx", () => ({
-  ReactDocxViewer: ({ model }: { model?: unknown }) => (
-    <div data-testid="mock-react-docx-viewer">
-      {model ? "DOCX rendered" : "DOCX empty"}
-    </div>
-  ),
-  setWasmSource: setWasmSourceMock,
-  useDocxModel: useDocxModelMock,
-}));
+vi.mock("./DocxPreview", async () => {
+  const { useEffect, useState } = await import("react");
+  return {
+    DocxPreview: ({ url }: { url: string }) => {
+      const [loaded, setLoaded] = useState(false);
+      const [isDark, setIsDark] = useState(false);
 
-vi.mock("@extend-ai/react-pptx", () => ({
-  ReactPptxViewer: ({
-    height,
-    mode,
-    showThumbnails,
-    showToolbar,
-    source,
-  }: {
-    height?: number | string;
-    mode?: string;
-    showThumbnails?: boolean;
-    showToolbar?: boolean;
-    source?: string;
-  }) => (
+      useEffect(() => {
+        const controller = new AbortController();
+        void fetch(url, { signal: controller.signal }).then(() =>
+          setLoaded(true),
+        );
+        return () => controller.abort();
+      }, [url]);
+
+      return (
+        <div
+          data-docx-theme={isDark ? "dark" : "light"}
+          data-testid="file-preview-docx"
+        >
+          <button
+            type="button"
+            aria-label={
+              isDark ? "Use light document theme" : "Use dark document theme"
+            }
+            aria-pressed={isDark}
+            onClick={() => setIsDark((current) => !current)}
+          />
+          {loaded && (
+            <div data-testid="mock-react-docx-viewer">DOCX rendered</div>
+          )}
+        </div>
+      );
+    },
+  };
+});
+
+vi.mock("./PptxPreview", () => ({
+  PptxPreview: ({ url }: { url: string }) => (
     <div
-      data-height={height}
-      data-mode={mode}
-      data-show-thumbnails={showThumbnails ? "true" : "false"}
-      data-show-toolbar={showToolbar ? "true" : "false"}
-      data-source={source}
+      data-height="100%"
+      data-mode="slide"
+      data-show-thumbnails="true"
+      data-show-toolbar="true"
+      data-source={url}
       data-testid="mock-react-pptx-viewer"
     >
       PPTX rendered
     </div>
   ),
-  setWasmSource: setWasmSourceMock,
 }));
 
-vi.mock("@extend-ai/react-xlsx", () => ({
-  XlsxViewer: ({
-    fileName,
-    isDark,
-    readOnly,
-    src,
-    useWorker,
-  }: {
-    fileName?: string;
-    isDark?: boolean;
-    readOnly?: boolean;
-    src?: string;
-    useWorker?: boolean;
-  }) => (
-    <div
-      data-filename={fileName}
-      data-is-dark={isDark ? "true" : "false"}
-      data-read-only={readOnly ? "true" : "false"}
-      data-src={src}
-      data-testid="mock-react-xlsx-viewer"
-      data-use-worker={useWorker ? "true" : "false"}
-    >
-      XLSX rendered
-    </div>
-  ),
-}));
+vi.mock("./XlsxPreview", async () => {
+  const { useState } = await import("react");
+  return {
+    XlsxPreview: ({ filename, url }: { filename: string; url: string }) => {
+      const [isDark, setIsDark] = useState(false);
+      return (
+        <div
+          data-testid="file-preview-xlsx"
+          data-xlsx-theme={isDark ? "dark" : "light"}
+        >
+          <button
+            type="button"
+            aria-label={
+              isDark
+                ? "Use light spreadsheet theme"
+                : "Use dark spreadsheet theme"
+            }
+            aria-pressed={isDark}
+            onClick={() => setIsDark((current) => !current)}
+          />
+          <div
+            data-filename={filename}
+            data-is-dark={isDark ? "true" : "false"}
+            data-read-only="true"
+            data-src={url}
+            data-testid="mock-react-xlsx-viewer"
+            data-use-worker="false"
+          >
+            XLSX rendered
+          </div>
+        </div>
+      );
+    },
+  };
+});
 
 const renderWithTheme = (ui: React.ReactElement) =>
   render(<ThemeProvider>{ui}</ThemeProvider>);
@@ -193,7 +207,7 @@ describe("FilePreviewContent", () => {
     ).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("renders PPTX files through the presentation viewer", () => {
+  it("renders PPTX files through the presentation viewer", async () => {
     renderWithTheme(
       <FilePreviewContent
         filename="roadmap.pptx"
@@ -201,29 +215,18 @@ describe("FilePreviewContent", () => {
       />,
     );
 
-    expect(screen.getByTestId("mock-react-pptx-viewer")).toHaveAttribute(
+    const preview = await screen.findByTestId("mock-react-pptx-viewer");
+    expect(preview).toHaveAttribute(
       "data-source",
       "https://files.example.com/download/roadmap.pptx",
     );
-    expect(screen.getByTestId("mock-react-pptx-viewer")).toHaveAttribute(
-      "data-mode",
-      "slide",
-    );
-    expect(screen.getByTestId("mock-react-pptx-viewer")).toHaveAttribute(
-      "data-height",
-      "100%",
-    );
-    expect(screen.getByTestId("mock-react-pptx-viewer")).toHaveAttribute(
-      "data-show-toolbar",
-      "true",
-    );
-    expect(screen.getByTestId("mock-react-pptx-viewer")).toHaveAttribute(
-      "data-show-thumbnails",
-      "true",
-    );
+    expect(preview).toHaveAttribute("data-mode", "slide");
+    expect(preview).toHaveAttribute("data-height", "100%");
+    expect(preview).toHaveAttribute("data-show-toolbar", "true");
+    expect(preview).toHaveAttribute("data-show-thumbnails", "true");
   });
 
-  it("uses the presentation viewer for PPT MIME types and legacy PPT files", () => {
+  it("uses the presentation viewer for PPT MIME types and legacy PPT files", async () => {
     const { rerender } = renderWithTheme(
       <FilePreviewContent
         filename="download"
@@ -232,7 +235,9 @@ describe("FilePreviewContent", () => {
       />,
     );
 
-    expect(screen.getByTestId("mock-react-pptx-viewer")).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("mock-react-pptx-viewer"),
+    ).toBeInTheDocument();
 
     rerender(
       <ThemeProvider>
@@ -243,13 +248,15 @@ describe("FilePreviewContent", () => {
       </ThemeProvider>,
     );
 
-    expect(screen.getByTestId("mock-react-pptx-viewer")).toHaveAttribute(
-      "data-source",
-      "https://files.example.com/download/legacy-slides.ppt",
+    await waitFor(() =>
+      expect(screen.getByTestId("mock-react-pptx-viewer")).toHaveAttribute(
+        "data-source",
+        "https://files.example.com/download/legacy-slides.ppt",
+      ),
     );
   });
 
-  it("renders XLSX files through the XLSX viewer", () => {
+  it("renders XLSX files through the XLSX viewer", async () => {
     renderWithTheme(
       <FilePreviewContent
         filename="budget.xlsx"
@@ -257,25 +264,17 @@ describe("FilePreviewContent", () => {
       />,
     );
 
-    expect(screen.getByTestId("mock-react-xlsx-viewer")).toHaveAttribute(
+    const preview = await screen.findByTestId("mock-react-xlsx-viewer");
+    expect(preview).toHaveAttribute(
       "data-src",
       "https://files.example.com/download/budget.xlsx",
     );
-    expect(screen.getByTestId("mock-react-xlsx-viewer")).toHaveAttribute(
-      "data-filename",
-      "budget.xlsx",
-    );
-    expect(screen.getByTestId("mock-react-xlsx-viewer")).toHaveAttribute(
-      "data-read-only",
-      "true",
-    );
-    expect(screen.getByTestId("mock-react-xlsx-viewer")).toHaveAttribute(
-      "data-use-worker",
-      "false",
-    );
+    expect(preview).toHaveAttribute("data-filename", "budget.xlsx");
+    expect(preview).toHaveAttribute("data-read-only", "true");
+    expect(preview).toHaveAttribute("data-use-worker", "false");
   });
 
-  it("uses the XLSX viewer when the MIME type identifies a spreadsheet", () => {
+  it("uses the XLSX viewer when the MIME type identifies a spreadsheet", async () => {
     renderWithTheme(
       <FilePreviewContent
         filename="download"
@@ -284,10 +283,12 @@ describe("FilePreviewContent", () => {
       />,
     );
 
-    expect(screen.getByTestId("mock-react-xlsx-viewer")).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("mock-react-xlsx-viewer"),
+    ).toBeInTheDocument();
   });
 
-  it("lets the XLSX preview theme toggle independently", () => {
+  it("lets the XLSX preview theme toggle independently", async () => {
     renderWithTheme(
       <FilePreviewContent
         filename="budget.xlsx"
@@ -295,7 +296,7 @@ describe("FilePreviewContent", () => {
       />,
     );
 
-    const preview = screen.getByTestId("file-preview-xlsx");
+    const preview = await screen.findByTestId("file-preview-xlsx");
     expect(preview).toHaveAttribute("data-xlsx-theme", "light");
     expect(screen.getByTestId("mock-react-xlsx-viewer")).toHaveAttribute(
       "data-is-dark",

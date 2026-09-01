@@ -1,7 +1,35 @@
-import * as Icons from "iconoir-react";
-import { Tools } from "iconoir-react";
+import {
+  Archive,
+  Check,
+  CheckCircle,
+  Code,
+  Copy,
+  EditPencil,
+  Folder,
+  Globe,
+  GridXmark,
+  InfoCircle,
+  LightBulb,
+  Mail,
+  MediaImage,
+  MediaVideo,
+  MultiplePages,
+  MusicNote,
+  Page,
+  Plus,
+  Refresh,
+  Search,
+  ShareAndroid,
+  Tools,
+  Trash,
+  WarningCircle,
+  Xmark,
+} from "iconoir-react";
 import { useState, useEffect, useRef } from "react";
-import * as SimpleIcons from "simple-icons";
+import {
+  loadIconoirIconBucket,
+  loadSimpleIconBucket,
+} from "virtual:erato-icon-catalogs";
 
 import type { IconProps } from ".";
 import type { FC } from "react";
@@ -40,7 +68,7 @@ function normalizeSimpleIconToken(value: string): string {
   return value
     .trim()
     .replace(/^simpleicons[-_/:]/i, "")
-    .replace(/^si(?=[A-Z])/, "")
+    .replace(/^si(?=[A-Z0-9])/, "")
     .replace(/[^a-zA-Z0-9]/g, "")
     .toLowerCase();
 }
@@ -55,27 +83,41 @@ function toPascalCase(value: string): string {
     .join("");
 }
 
-const iconExports = Icons as Record<string, unknown>;
-const simpleIconExports = SimpleIcons as Record<string, unknown>;
-const iconKeyByNormalizedName: Record<string, string> = Object.keys(
-  iconExports,
-).reduce<Record<string, string>>((acc, exportKey) => {
+const commonIconExports: Record<string, FC<IconProps>> = {
+  Archive,
+  Check,
+  CheckCircle,
+  Code,
+  Copy,
+  EditPencil,
+  Folder,
+  Globe,
+  GridXmark,
+  InfoCircle,
+  LightBulb,
+  Mail,
+  MediaImage,
+  MediaVideo,
+  MultiplePages,
+  MusicNote,
+  Page,
+  Plus,
+  Refresh,
+  Search,
+  ShareAndroid,
+  Tools,
+  Trash,
+  WarningCircle,
+  Xmark,
+};
+const commonIconKeyByNormalizedName = Object.keys(commonIconExports).reduce<
+  Record<string, string>
+>((acc, exportKey) => {
   if (exportKey === "IconoirProvider" || exportKey === "IconoirContext") {
     return acc;
   }
 
   acc[normalizeIconToken(exportKey)] = exportKey;
-  return acc;
-}, {});
-
-const simpleIconKeyByNormalizedName: Record<string, string> = Object.keys(
-  simpleIconExports,
-).reduce<Record<string, string>>((acc, exportKey) => {
-  if (!exportKey.startsWith("si")) {
-    return acc;
-  }
-
-  acc[normalizeSimpleIconToken(exportKey)] = exportKey;
   return acc;
 }, {});
 
@@ -86,46 +128,54 @@ function resolveIconComponent(
     return null;
   }
 
-  const directMatch = iconExports[toPascalCase(iconId)];
+  const directMatch = commonIconExports[toPascalCase(iconId)];
   if (typeof directMatch !== "undefined") {
-    return directMatch as FC<IconProps>;
+    return directMatch;
   }
 
   const normalizedMatchKey =
-    iconKeyByNormalizedName[normalizeIconToken(iconId)];
+    commonIconKeyByNormalizedName[normalizeIconToken(iconId)];
   if (!normalizedMatchKey) {
     return null;
   }
 
-  const normalizedMatch = iconExports[normalizedMatchKey];
+  const normalizedMatch = commonIconExports[normalizedMatchKey];
   if (typeof normalizedMatch !== "undefined") {
-    return normalizedMatch as FC<IconProps>;
+    return normalizedMatch;
   }
 
   return null;
 }
 
-function resolveSimpleIcon(iconId: string | undefined): SimpleIcon | null {
-  if (!iconId) {
+const bucketForToken = (token: string): string => token.charAt(0) || "other";
+
+const isIconComponent = (value: unknown): boolean =>
+  typeof value === "function" ||
+  (typeof value === "object" && value !== null && "$$typeof" in value);
+
+async function resolveIconoirComponent(
+  iconId: string,
+): Promise<FC<IconProps> | null> {
+  const token = normalizeIconToken(iconId);
+  if (!token) {
     return null;
   }
 
-  const normalizedMatchKey =
-    simpleIconKeyByNormalizedName[normalizeSimpleIconToken(iconId)];
-  if (!normalizedMatchKey) {
+  const registry = await loadIconoirIconBucket(bucketForToken(token));
+  const icon = registry[token];
+  return isIconComponent(icon) ? (icon as FC<IconProps>) : null;
+}
+
+async function resolveSimpleIcon(
+  iconId: string,
+): Promise<Pick<SimpleIcon, "path" | "title"> | null> {
+  const token = normalizeSimpleIconToken(iconId);
+  if (!token) {
     return null;
   }
 
-  const normalizedMatch = simpleIconExports[normalizedMatchKey];
-  if (
-    typeof normalizedMatch === "object" &&
-    normalizedMatch !== null &&
-    "path" in normalizedMatch
-  ) {
-    return normalizedMatch as SimpleIcon;
-  }
-
-  return null;
+  const registry = await loadSimpleIconBucket(bucketForToken(token));
+  return registry[token] ?? null;
 }
 
 const DefaultFallbackIcon: FC<IconProps> = ({ className, ...props }) => (
@@ -242,6 +292,58 @@ export const ResolvedIcon = ({
   ...props
 }: ResolvedIconProps) => {
   const builtInIcon = iconId ? builtInIcons[iconId] : undefined;
+  const iconComponent = resolveIconComponent(iconId);
+  const [loadedIcon, setLoadedIcon] = useState<
+    | { iconId: string; type: "iconoir"; icon: FC<IconProps> }
+    | {
+        iconId: string;
+        type: "simple";
+        icon: Pick<SimpleIcon, "path" | "title">;
+      }
+    | null
+  >(null);
+
+  useEffect(() => {
+    if (!iconId || builtInIcon || iconId.startsWith("/") || iconComponent) {
+      return;
+    }
+
+    const requestedIconId = iconId;
+    let active = true;
+    const resolveDeferredIcon = async () => {
+      const explicitlySimple = /^simpleicons[-_/:]/i.test(requestedIconId);
+      const explicitlyIconoir = /^iconoir[-_/:]/i.test(requestedIconId);
+      const [simpleIcon, iconoirIcon] = await Promise.all([
+        explicitlyIconoir ? null : resolveSimpleIcon(requestedIconId),
+        explicitlySimple ? null : resolveIconoirComponent(requestedIconId),
+      ]);
+
+      // Preserve the previous resolver priority for ambiguous, unprefixed IDs.
+      if (active && simpleIcon) {
+        setLoadedIcon({
+          iconId: requestedIconId,
+          type: "simple",
+          icon: simpleIcon,
+        });
+        return;
+      }
+
+      if (active && iconoirIcon) {
+        setLoadedIcon({
+          iconId: requestedIconId,
+          type: "iconoir",
+          icon: iconoirIcon,
+        });
+      }
+    };
+    void resolveDeferredIcon().catch(() => {
+      // Keep rendering the supplied fallback when a deferred chunk fails.
+    });
+    return () => {
+      active = false;
+    };
+  }, [builtInIcon, iconComponent, iconId]);
+
   if (builtInIcon) {
     return (
       <SimpleIconComponent
@@ -264,14 +366,26 @@ export const ResolvedIcon = ({
     );
   }
 
-  const simpleIcon = resolveSimpleIcon(iconId);
-  if (simpleIcon) {
+  if (iconComponent) {
+    const IconComponent = iconComponent;
+    return <IconComponent className={className} {...props} />;
+  }
+
+  const deferredIcon = loadedIcon?.iconId === iconId ? loadedIcon : null;
+  if (deferredIcon?.type === "iconoir") {
+    const IconComponent = deferredIcon.icon;
+    return <IconComponent className={className} {...props} />;
+  }
+
+  if (deferredIcon?.type === "simple") {
     return (
-      <SimpleIconComponent icon={simpleIcon} className={className} {...props} />
+      <SimpleIconComponent
+        icon={deferredIcon.icon}
+        className={className}
+        {...props}
+      />
     );
   }
 
-  // Otherwise, resolve from iconoir-react
-  const IconComponent = resolveIconComponent(iconId) ?? FallbackIcon;
-  return <IconComponent className={className} {...props} />;
+  return <FallbackIcon className={className} {...props} />;
 };

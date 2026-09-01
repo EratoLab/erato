@@ -10,6 +10,10 @@ import {
   SHARED_MODULES,
 } from "./shared-modules.config";
 import { browserOnlyBuildPlugin } from "./vite.browser-only-build";
+import {
+  iconCatalogManualChunk,
+  iconCatalogPlugin,
+} from "./vite.icon-catalogs";
 
 const componentKitHostManifestPlugin = (): Plugin => ({
   name: "component-kit-host-manifest",
@@ -62,6 +66,7 @@ export default defineConfig({
       },
     }),
     lingui(),
+    iconCatalogPlugin({ rootDir: __dirname }),
     browserOnlyBuildPlugin(),
     componentKitHostManifestPlugin(),
     libraryBuildStatusPlugin({
@@ -97,6 +102,8 @@ export default defineConfig({
         entryFileNames: "[name].mjs",
         chunkFileNames: "chunks/[name]-[hash].mjs",
         assetFileNames: "assets/[name]-[hash][extname]",
+        onlyExplicitManualChunks: true,
+        manualChunks: iconCatalogManualChunk,
       },
     },
   },

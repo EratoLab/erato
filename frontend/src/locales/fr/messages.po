@@ -2357,6 +2357,7 @@ msgid "common.close"
 msgstr "Fermer"
 
 #. js-lingui-explicit-id
+#: src/App.tsx
 #: src/pages/assistantHubUtils.tsx
 msgid "common.loadingEllipsis"
 msgstr "Chargement..."
@@ -2665,6 +2666,7 @@ msgstr "L'aperçu du document est vide."
 
 #. js-lingui-explicit-id
 #: src/components/ui/FilePreview/DocxPreview.tsx
+#: src/components/ui/FilePreview/FilePreviewContent.tsx
 msgid "filePreview.docxLoading"
 msgstr "Chargement de l'aperçu du document..."
 
@@ -2731,6 +2733,7 @@ msgid "filePreview.pptxEmpty"
 msgstr "L’aperçu de la présentation est vide."
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/FilePreviewContent.tsx
 #: src/components/ui/FilePreview/PptxPreview.tsx
 msgid "filePreview.pptxLoading"
 msgstr "Chargement de l’aperçu de la présentation..."
@@ -2741,11 +2744,17 @@ msgid "filePreview.pptxPreviewUnavailable"
 msgstr "Aperçu indisponible : cette présentation n’a pas pu être chargée."
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/FilePreviewContent.tsx
+msgid "filePreview.previewUnavailable"
+msgstr "Aperçu indisponible : la visionneuse de fichiers n’a pas pu être chargée."
+
+#. js-lingui-explicit-id
 #: src/components/ui/FilePreview/XlsxPreview.tsx
 msgid "filePreview.xlsxEmpty"
 msgstr "L'aperçu de la feuille de calcul est vide."
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/FilePreviewContent.tsx
 #: src/components/ui/FilePreview/XlsxPreview.tsx
 msgid "filePreview.xlsxLoading"
 msgstr "Chargement de l'aperçu de la feuille de calcul..."
