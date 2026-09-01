@@ -29,7 +29,10 @@ import {
   type OrganizationMember,
 } from "@/types/sharing";
 
-import { AssistantHubDiff } from "./assistantHubUtils";
+import {
+  ASSISTANT_HUB_CATEGORY_IDS_DIFF_FIELD,
+  AssistantHubDiff,
+} from "./assistantHubUtils";
 
 import type {
   AssistantHubAudienceGrantInput,
@@ -388,7 +391,7 @@ export default function AssistantHubSubmitPage() {
         message: "Add a version number before submitting.",
       });
     }
-    if (categoryIds.length === 0) {
+    if (config?.enable_categories && categoryIds.length === 0) {
       return t({
         id: "assistantHub.submit.validation.category",
         message: "Select at least one hub category.",
@@ -588,32 +591,34 @@ export default function AssistantHubSubmitPage() {
                   </FormField>
                 </div>
 
-                <div>
-                  <div className="mb-2 text-base font-semibold text-theme-fg-primary">
-                    {t({
-                      id: "assistantHub.submit.categories",
-                      message: "Categories",
-                    })}
-                    <span className="ml-1 text-theme-error-fg">*</span>
+                {config.enable_categories && (
+                  <div>
+                    <div className="mb-2 text-base font-semibold text-theme-fg-primary">
+                      {t({
+                        id: "assistantHub.submit.categories",
+                        message: "Categories",
+                      })}
+                      <span className="ml-1 text-theme-error-fg">*</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {config.categories.map((category) => (
+                        <button
+                          key={category.id}
+                          type="button"
+                          className={clsx(
+                            "focus-ring theme-transition rounded border px-3 py-2 text-sm",
+                            categoryIds.includes(category.id)
+                              ? "border-theme-border-focus bg-theme-bg-selected text-theme-fg-primary"
+                              : "border-theme-border bg-theme-bg-secondary text-theme-fg-secondary hover:bg-theme-bg-hover",
+                          )}
+                          onClick={() => toggleCategory(category.id)}
+                        >
+                          {category.display_name}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {config.categories.map((category) => (
-                      <button
-                        key={category.id}
-                        type="button"
-                        className={clsx(
-                          "focus-ring theme-transition rounded border px-3 py-2 text-sm",
-                          categoryIds.includes(category.id)
-                            ? "border-theme-border-focus bg-theme-bg-selected text-theme-fg-primary"
-                            : "border-theme-border bg-theme-bg-secondary text-theme-fg-secondary hover:bg-theme-bg-hover",
-                        )}
-                        onClick={() => toggleCategory(category.id)}
-                      >
-                        {category.display_name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                )}
 
                 <FormField
                   label={t({
@@ -719,6 +724,11 @@ export default function AssistantHubSubmitPage() {
                 {previewDiff.data ? (
                   <AssistantHubDiff
                     diffSummary={previewDiff.data.diff_summary}
+                    hiddenFields={
+                      config.enable_categories
+                        ? []
+                        : [ASSISTANT_HUB_CATEGORY_IDS_DIFF_FIELD]
+                    }
                   />
                 ) : (
                   <p className="text-sm text-theme-fg-secondary">
