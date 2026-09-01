@@ -3,6 +3,7 @@
 //! on every reload. This is the policy document only; resolving it for a user
 //! happens in `server::api::v1beta::starting_assistant`.
 
+use chrono::{DateTime, Utc};
 use eyre::{Report, eyre};
 use serde::Deserialize;
 use sqlx::types::Uuid;
@@ -125,6 +126,25 @@ pub struct ExperienceAudience {
     /// republish, so a stored one goes stale silently. Resolved to the live
     /// id at read time via `get_published_current_version`.
     pub pinned_assistant_hub_assistant_id: Uuid,
+    /// When this audience stops applying. Absent means it never expires.
+    ///
+    /// Per-audience, not per-setting — the fork is noted in ERMAIN-706 §10 and
+    /// deliberately not re-argued while one setting exists. Evaluated at read
+    /// time only, never filtered at parse or load: an expired audience stays in
+    /// `audiences` and `priority_order` so the admin panel can show it inert
+    /// rather than gone. Parsing checks well-formedness only — a past value
+    /// must parse. Mirrored by the admin panel in `model/audiencePolicy.ts`.
+    #[serde(default)]
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+impl ExperienceAudience {
+    /// Active iff `now < expires_at`: at the expiry instant itself the audience
+    /// is already inert. The panel mirror transliterates exactly this rule.
+    #[must_use]
+    pub fn is_active_at(&self, now: DateTime<Utc>) -> bool {
+        self.expires_at.is_none_or(|expires_at| now < expires_at)
+    }
 }
 
 /// Parse and structurally validate an experience policy document.
@@ -284,6 +304,103 @@ mod tests {
             document.audiences["everyone"].subjects,
             vec![AudienceSubject::Organization]
         );
+
+        // Documents written before expiry existed deserialise to "never
+        // expires".
+        assert_eq!(engineering.expires_at, None);
+    }
+
+    #[test]
+    fn expires_at_offsets_normalise_to_one_utc_instant() {
+        // chrono accepts any RFC 3339 offset on ingest; erato compares
+        // instants, so these two spellings must parse equal.
+        let mut parsed = ["2026-09-08T00:00:00Z", "2026-09-08T02:00:00+02:00"]
+            .into_iter()
+            .map(|timestamp| {
+                let document = parse_experience_policy(&format!(
+                    r#"{{
+                        "audiences": {{
+                            "announcement": {{
+                                "subjects": [{{"subject_type": "organization"}}],
+                                "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01",
+                                "expires_at": "{timestamp}"
+                            }}
+                        }},
+                        "priority_order": ["announcement"]
+                    }}"#
+                ))
+                .unwrap();
+                document.audiences["announcement"].expires_at.unwrap()
+            });
+        let (zulu, offset) = (parsed.next().unwrap(), parsed.next().unwrap());
+        assert_eq!(zulu, offset);
+        assert_eq!(
+            zulu,
+            "2026-09-08T00:00:00Z".parse::<DateTime<Utc>>().unwrap()
+        );
+    }
+
+    #[test]
+    fn a_past_expires_at_parses_with_the_audience_still_present() {
+        // Expiry is evaluated at read time; parsing an expired audience out of
+        // the document would make it invisible to the panel instead of inert.
+        let document = parse_experience_policy(
+            r#"{
+                "audiences": {
+                    "announcement": {
+                        "subjects": [{"subject_type": "organization"}],
+                        "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01",
+                        "expires_at": "1999-01-01T00:00:00Z"
+                    }
+                },
+                "priority_order": ["announcement"]
+            }"#,
+        )
+        .unwrap();
+        assert!(document.audiences.contains_key("announcement"));
+        assert_eq!(document.priority_order, vec!["announcement"]);
+    }
+
+    #[test]
+    fn rejects_a_malformed_expires_at() {
+        // Whole-document reject (keep-previous + error log upstream): the
+        // panel BFF validates every write with this parser, so only a
+        // hand-written row can hit this, and it should fail loudly.
+        for timestamp in ["next tuesday", "2026-09-08", "2026-09-08T00:00:00"] {
+            assert!(
+                parse_experience_policy(&format!(
+                    r#"{{
+                        "audiences": {{
+                            "announcement": {{
+                                "subjects": [{{"subject_type": "organization"}}],
+                                "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01",
+                                "expires_at": "{timestamp}"
+                            }}
+                        }}
+                    }}"#
+                ))
+                .is_err(),
+                "expected {timestamp:?} to reject the document"
+            );
+        }
+    }
+
+    #[test]
+    fn is_active_at_boundary_is_exact() {
+        let expires_at = "2026-09-08T00:00:00Z".parse::<DateTime<Utc>>().unwrap();
+        let audience = ExperienceAudience {
+            subjects: vec![AudienceSubject::Organization],
+            pinned_assistant_hub_assistant_id: Uuid::new_v4(),
+            expires_at: Some(expires_at),
+        };
+        assert!(audience.is_active_at(expires_at - chrono::Duration::seconds(1)));
+        assert!(!audience.is_active_at(expires_at));
+
+        let never_expires = ExperienceAudience {
+            expires_at: None,
+            ..audience
+        };
+        assert!(never_expires.is_active_at("9999-12-31T23:59:59Z".parse().unwrap()));
     }
 
     #[test]
