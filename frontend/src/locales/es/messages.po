@@ -2357,6 +2357,7 @@ msgid "common.close"
 msgstr "Cerrar"
 
 #. js-lingui-explicit-id
+#: src/App.tsx
 #: src/pages/assistantHubUtils.tsx
 msgid "common.loadingEllipsis"
 msgstr "Cargando..."
@@ -2665,6 +2666,7 @@ msgstr "La vista previa del documento está vacía."
 
 #. js-lingui-explicit-id
 #: src/components/ui/FilePreview/DocxPreview.tsx
+#: src/components/ui/FilePreview/FilePreviewContent.tsx
 msgid "filePreview.docxLoading"
 msgstr "Cargando vista previa del documento..."
 
@@ -2731,6 +2733,7 @@ msgid "filePreview.pptxEmpty"
 msgstr "La vista previa de la presentación está vacía."
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/FilePreviewContent.tsx
 #: src/components/ui/FilePreview/PptxPreview.tsx
 msgid "filePreview.pptxLoading"
 msgstr "Cargando vista previa de la presentación..."
@@ -2741,11 +2744,17 @@ msgid "filePreview.pptxPreviewUnavailable"
 msgstr "Vista previa no disponible: no se pudo cargar esta presentación."
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/FilePreviewContent.tsx
+msgid "filePreview.previewUnavailable"
+msgstr "Vista previa no disponible: no se pudo cargar el visor de archivos."
+
+#. js-lingui-explicit-id
 #: src/components/ui/FilePreview/XlsxPreview.tsx
 msgid "filePreview.xlsxEmpty"
 msgstr "La vista previa de la hoja de cálculo está vacía."
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/FilePreviewContent.tsx
 #: src/components/ui/FilePreview/XlsxPreview.tsx
 msgid "filePreview.xlsxLoading"
 msgstr "Cargando vista previa de la hoja de cálculo..."

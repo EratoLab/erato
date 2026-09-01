@@ -1,29 +1,40 @@
 /* eslint-disable lingui/no-unlocalized-strings */
 import { Trans } from "@lingui/react/macro";
+import { lazy, Suspense } from "react";
 import { Routes, Route, Link, Outlet, Navigate } from "react-router-dom";
 
 import { ClientProviders } from "./components/providers/ClientProviders";
-// Page Imports
-import AssistantChatLayout from "./layouts/AssistantChatLayout";
-import AssistantsLayout from "./layouts/AssistantsLayout";
-import ChatLayout from "./layouts/ChatLayout";
-import SearchLayout from "./layouts/SearchLayout";
-import AssistantChatSpacePage from "./pages/AssistantChatSpacePage";
-import AssistantCreatePage from "./pages/AssistantCreatePage";
-import AssistantEditPage from "./pages/AssistantEditPage";
-import AssistantHubDetailPage from "./pages/AssistantHubDetailPage";
-import AssistantHubMyPage from "./pages/AssistantHubMyPage";
-import AssistantHubReviewPage from "./pages/AssistantHubReviewPage";
-import AssistantHubSubmitPage from "./pages/AssistantHubSubmitPage";
-import AssistantsPage from "./pages/AssistantsPage";
+// These logic-only route sentinels must not suspend while a newly created chat
+// switches from /chat/new to /chat/:id; doing so hides the optimistic messages.
 import ChatDetailPage from "./pages/ChatDetailPage";
-import DesktopSidecarSetupPage from "./pages/DesktopSidecarSetupPage";
 import HomePage from "./pages/HomePage";
 import NewChatPage from "./pages/NewChatPage";
-import SearchPage from "./pages/SearchPage";
-import SharedChatPage from "./pages/SharedChatPage";
 
-// Layout Imports
+const AssistantChatLayout = lazy(() => import("./layouts/AssistantChatLayout"));
+const AssistantsLayout = lazy(() => import("./layouts/AssistantsLayout"));
+const ChatLayout = lazy(() => import("./layouts/ChatLayout"));
+const SearchLayout = lazy(() => import("./layouts/SearchLayout"));
+const AssistantChatSpacePage = lazy(
+  () => import("./pages/AssistantChatSpacePage"),
+);
+const AssistantCreatePage = lazy(() => import("./pages/AssistantCreatePage"));
+const AssistantEditPage = lazy(() => import("./pages/AssistantEditPage"));
+const AssistantHubDetailPage = lazy(
+  () => import("./pages/AssistantHubDetailPage"),
+);
+const AssistantHubMyPage = lazy(() => import("./pages/AssistantHubMyPage"));
+const AssistantHubReviewPage = lazy(
+  () => import("./pages/AssistantHubReviewPage"),
+);
+const AssistantHubSubmitPage = lazy(
+  () => import("./pages/AssistantHubSubmitPage"),
+);
+const AssistantsPage = lazy(() => import("./pages/AssistantsPage"));
+const DesktopSidecarSetupPage = lazy(
+  () => import("./pages/DesktopSidecarSetupPage"),
+);
+const SearchPage = lazy(() => import("./pages/SearchPage"));
+const SharedChatPage = lazy(() => import("./pages/SharedChatPage"));
 
 // Placeholder for other actual pages/components if needed
 const AboutPage = () => (
@@ -54,7 +65,21 @@ const NotFoundPage = () => (
 function App() {
   return (
     <ClientProviders>
-      <Outlet />
+      <Suspense
+        fallback={
+          <div
+            className="flex min-h-screen items-center justify-center"
+            role="status"
+          >
+            <span className="size-6 animate-spin rounded-full border-2 border-theme-border border-t-theme-fg-primary" />
+            <span className="sr-only">
+              <Trans id="common.loadingEllipsis">Loading...</Trans>
+            </span>
+          </div>
+        }
+      >
+        <Outlet />
+      </Suspense>
     </ClientProviders>
   );
 }
