@@ -5,7 +5,9 @@ use crate::test_utils::hermetic_app_config;
 use crate::{MIGRATOR, test_app_state};
 use erato::db::entity::prelude::RuntimeConfiguration;
 use erato::db::entity::runtime_configuration;
-use erato::distribution::experience_policy::{ExperienceAudience, ExperiencePolicyDocument};
+use erato::distribution::experience_policy::{
+    AudienceSubject, ExperienceAudience, ExperiencePolicyDocument,
+};
 use erato::distribution::runtime::{ADMIN_PANEL_SOURCE_SERVICE, ReloadableAppState};
 use erato::models::runtime_configuration::{
     EXPERIENCE_POLICY_SOURCE_TYPE, TRANSLATION_PO_SOURCE_TYPE,
@@ -20,7 +22,10 @@ const TEST_ENCRYPTION_KEY: &str = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
 const VALID_POLICY_JSON: &str = r#"{
     "audiences": {
         "engineering": {
-            "entra_group_id": "8f7cb1f3-5c92-4e0f-9c39-89f65a852101",
+            "subjects": [
+                {"subject_type": "organization_group", "group_id": "8f7cb1f3-5c92-4e0f-9c39-89f65a852101"},
+                {"subject_type": "user", "organization_user_id": "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a"}
+            ],
             "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01"
         }
     },
@@ -38,7 +43,14 @@ fn expected_policy_document() -> ExperiencePolicyDocument {
         audiences: HashMap::from([(
             "engineering".to_string(),
             ExperienceAudience {
-                entra_group_id: "8f7cb1f3-5c92-4e0f-9c39-89f65a852101".to_string(),
+                subjects: vec![
+                    AudienceSubject::OrganizationGroup {
+                        group_id: "8f7cb1f3-5c92-4e0f-9c39-89f65a852101".to_string(),
+                    },
+                    AudienceSubject::User {
+                        organization_user_id: "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a".to_string(),
+                    },
+                ],
                 pinned_assistant_hub_assistant_id: "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01"
                     .parse::<Uuid>()
                     .unwrap(),
