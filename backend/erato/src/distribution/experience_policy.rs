@@ -30,13 +30,96 @@ pub struct ExperiencePolicyDocument {
     pub priority_order: Vec<String>,
 }
 
-/// One audience an admin can pin a starting assistant for.
+/// One subject an audience is composed of, in the same vocabulary a
+/// `share_grants` row uses for `subject_type` / `subject_id_type` /
+/// `subject_id` (see [`crate::models::share_grant`]).
+///
+/// Deliberately identity-provider agnostic: nothing on this path interprets an
+/// id, it only compares it to what the token carried. Turning an id into a
+/// human-readable name is the only Entra-specific step, and it happens in the
+/// admin panel against MS Graph — the last possible moment.
+///
+/// The `subject_id_type` half of the share-grant triple is not on the wire
+/// because each variant admits exactly one, so encoding it would only create
+/// illegal states to validate:
+///
+/// | variant              | share-grant `subject_type` | `subject_id_type`       |
+/// | -------------------- | -------------------------- | ----------------------- |
+/// | `organization`       | `organization`             | `organization_id`       |
+/// | `organization_group` | `organization_group`       | `organization_group_id` |
+/// | `user`               | `user`                     | `organization_user_id`  |
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-pub struct ExperienceAudience {
+#[serde(tag = "subject_type", rename_all = "snake_case")]
+pub enum AudienceSubject {
+    /// Everyone who is authenticated — the org-wide audience. Mirrors a share
+    /// grant whose subject is
+    /// [`ORGANIZATION_SUBJECT_TYPE`](crate::models::share_grant::ORGANIZATION_SUBJECT_TYPE)
+    /// and carries no per-user identifier.
+    ///
+    /// This says "this applies to everyone", which is not the same as "everyone
+    /// not matched above": placed first in `priority_order` it shadows every
+    /// audience below it, placed last it is a catch-all default.
+    Organization,
+    /// A directory group the caller is a member of.
+    ///
     /// Matched against `MeProfile.groups` (rego `input.groups`), not the
     /// `Subject`'s `organization_group_ids` — the wrong one silently matches
     /// nothing.
-    pub entra_group_id: String,
+    OrganizationGroup {
+        /// The group's id as the identity provider writes it into the token's
+        /// `groups` claim.
+        group_id: String,
+    },
+    /// One named person, so an audience can pick up a handful of individuals
+    /// without an IT department minting a group for three people.
+    User {
+        /// The caller's directory user id — the `oid` claim, surfaced as
+        /// `MeProfile.organization_user_id`, and the id
+        /// `GET /me/organization/users` hands a people-picker.
+        ///
+        /// Not the internal `users.id`: that row only exists once the person
+        /// has logged in at least once, and an audience has to be able to name
+        /// someone before their first login.
+        organization_user_id: String,
+    },
+}
+
+impl AudienceSubject {
+    /// The wire tag for this variant, for error and log messages.
+    #[must_use]
+    pub fn subject_type(&self) -> &'static str {
+        match self {
+            Self::Organization => "organization",
+            Self::OrganizationGroup { .. } => "organization_group",
+            Self::User { .. } => "user",
+        }
+    }
+
+    /// The id this subject names, or `None` for the org-wide subject, which
+    /// names no one in particular.
+    #[must_use]
+    pub fn subject_id(&self) -> Option<&str> {
+        match self {
+            Self::Organization => None,
+            Self::OrganizationGroup { group_id } => Some(group_id),
+            Self::User {
+                organization_user_id,
+            } => Some(organization_user_id),
+        }
+    }
+}
+
+/// One audience an admin can pin a starting assistant for.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct ExperienceAudience {
+    /// The subjects this audience is composed of. A person is in the audience
+    /// if **any** subject matches them, so groups, named individuals and the
+    /// whole organization compose freely — the same way a resource can be
+    /// shared with several subjects at once.
+    ///
+    /// Required and non-empty: an audience that matches nobody is a mistake
+    /// worth failing the whole document over, not a silently inert entry.
+    pub subjects: Vec<AudienceSubject>,
     /// An `assistant_hub_assistants.id`, never an `assistants.id`:
     /// `clone_source_assistant` mints a fresh `assistants.id` on every
     /// republish, so a stored one goes stale silently. Resolved to the live
@@ -48,6 +131,11 @@ pub struct ExperienceAudience {
 ///
 /// A typo'd audience name in `priority_order` would otherwise silently never
 /// match. Audiences absent from `priority_order` are allowed (staged rollout).
+///
+/// An unknown `subject_type` and a subject missing its id are rejected by the
+/// derived `Deserialize` for [`AudienceSubject`]; what is left for this
+/// function is the structure serde cannot express — an audience matching
+/// nobody, and an id that is present but blank.
 pub fn parse_experience_policy(contents: &str) -> Result<ExperiencePolicyDocument, Report> {
     let document: ExperiencePolicyDocument = serde_json::from_str(contents)?;
 
@@ -64,8 +152,16 @@ pub fn parse_experience_policy(contents: &str) -> Result<ExperiencePolicyDocumen
     }
 
     for (name, audience) in &document.audiences {
-        if audience.entra_group_id.trim().is_empty() {
-            return Err(eyre!("audience \"{name}\" has an empty entra_group_id"));
+        if audience.subjects.is_empty() {
+            return Err(eyre!("audience \"{name}\" has no subjects"));
+        }
+        for subject in &audience.subjects {
+            if subject.subject_id().is_some_and(|id| id.trim().is_empty()) {
+                return Err(eyre!(
+                    "audience \"{name}\" has a {} subject with an empty id",
+                    subject.subject_type()
+                ));
+            }
         }
     }
 
@@ -142,31 +238,51 @@ mod tests {
             r#"{
                 "audiences": {
                     "engineering": {
-                        "entra_group_id": "8f7cb1f3-5c92-4e0f-9c39-89f65a852101",
+                        "subjects": [
+                            {"subject_type": "organization_group", "group_id": "8f7cb1f3-5c92-4e0f-9c39-89f65a852101"},
+                            {"subject_type": "organization_group", "group_id": "2c4e6a80-1111-4222-8333-444455556666"},
+                            {"subject_type": "user", "organization_user_id": "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a"}
+                        ],
                         "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01"
                     },
-                    "sales": {
-                        "entra_group_id": "1f2e3d4c-5b6a-4978-8899-aabbccddeeff",
+                    "everyone": {
+                        "subjects": [{"subject_type": "organization"}],
                         "pinned_assistant_hub_assistant_id": "0b1c2d3e-4f50-4161-8273-8495a6b7c8d9"
                     }
                 },
-                "priority_order": ["sales", "engineering"]
+                "priority_order": ["engineering", "everyone"]
             }"#,
         )
         .unwrap();
 
-        assert_eq!(document.priority_order, vec!["sales", "engineering"]);
+        assert_eq!(document.priority_order, vec!["engineering", "everyone"]);
         assert_eq!(document.audiences.len(), 2);
+
         let engineering = &document.audiences["engineering"];
         assert_eq!(
-            engineering.entra_group_id,
-            "8f7cb1f3-5c92-4e0f-9c39-89f65a852101"
+            engineering.subjects,
+            vec![
+                AudienceSubject::OrganizationGroup {
+                    group_id: "8f7cb1f3-5c92-4e0f-9c39-89f65a852101".to_string(),
+                },
+                AudienceSubject::OrganizationGroup {
+                    group_id: "2c4e6a80-1111-4222-8333-444455556666".to_string(),
+                },
+                AudienceSubject::User {
+                    organization_user_id: "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a".to_string(),
+                },
+            ]
         );
         assert_eq!(
             engineering.pinned_assistant_hub_assistant_id,
             "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01"
                 .parse::<Uuid>()
                 .unwrap()
+        );
+
+        assert_eq!(
+            document.audiences["everyone"].subjects,
+            vec![AudienceSubject::Organization]
         );
     }
 
@@ -176,7 +292,7 @@ mod tests {
             r#"{
                 "audiences": {
                     "engineering": {
-                        "entra_group_id": "8f7cb1f3-5c92-4e0f-9c39-89f65a852101",
+                        "subjects": [{"subject_type": "organization_group", "group_id": "8f7cb1f3-5c92-4e0f-9c39-89f65a852101"}],
                         "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01"
                     }
                 },
@@ -193,7 +309,7 @@ mod tests {
             r#"{
                 "audiences": {
                     "engineering": {
-                        "entra_group_id": "8f7cb1f3-5c92-4e0f-9c39-89f65a852101",
+                        "subjects": [{"subject_type": "organization_group", "group_id": "8f7cb1f3-5c92-4e0f-9c39-89f65a852101"}],
                         "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01"
                     }
                 },
@@ -205,19 +321,98 @@ mod tests {
     }
 
     #[test]
-    fn rejects_an_empty_entra_group_id() {
+    fn rejects_an_audience_with_no_subjects() {
         let error = parse_experience_policy(
             r#"{
                 "audiences": {
                     "engineering": {
-                        "entra_group_id": "   ",
+                        "subjects": [],
                         "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01"
                     }
                 }
             }"#,
         )
         .unwrap_err();
-        assert!(error.to_string().contains("empty entra_group_id"));
+        assert!(error.to_string().contains("has no subjects"));
+    }
+
+    #[test]
+    fn rejects_a_subject_with_a_blank_id() {
+        for (subject, expected) in [
+            (
+                r#"{"subject_type": "organization_group", "group_id": "   "}"#,
+                "organization_group subject with an empty id",
+            ),
+            (
+                r#"{"subject_type": "user", "organization_user_id": ""}"#,
+                "user subject with an empty id",
+            ),
+        ] {
+            let error = parse_experience_policy(&format!(
+                r#"{{
+                    "audiences": {{
+                        "engineering": {{
+                            "subjects": [{subject}],
+                            "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01"
+                        }}
+                    }}
+                }}"#
+            ))
+            .unwrap_err();
+            assert!(
+                error.to_string().contains(expected),
+                "expected {expected:?} in {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_an_unknown_or_malformed_subject() {
+        // An unknown `subject_type`, and a known one missing its id, are both
+        // rejected by the derived Deserialize rather than reaching the
+        // resolver as a subject that can never match.
+        for subject in [
+            r#"{"subject_type": "entra_group", "group_id": "g"}"#,
+            r#"{"subject_type": "organization_group"}"#,
+            r#"{"subject_type": "user", "group_id": "g"}"#,
+            r#"{"group_id": "g"}"#,
+        ] {
+            assert!(
+                parse_experience_policy(&format!(
+                    r#"{{
+                        "audiences": {{
+                            "engineering": {{
+                                "subjects": [{subject}],
+                                "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01"
+                            }}
+                        }}
+                    }}"#
+                ))
+                .is_err(),
+                "expected {subject} to be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_the_superseded_single_group_audience_shape() {
+        // The pre-review shape carried one `entra_group_id` per audience. It is
+        // a clean break, not an alias: `subjects` is required, so a stale
+        // document fails loudly in `ReloadableAppState::load` (which keeps the
+        // previous policy and logs) rather than silently matching nobody.
+        let error = parse_experience_policy(
+            r#"{
+                "audiences": {
+                    "engineering": {
+                        "entra_group_id": "8f7cb1f3-5c92-4e0f-9c39-89f65a852101",
+                        "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01"
+                    }
+                },
+                "priority_order": ["engineering"]
+            }"#,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("subjects"));
     }
 
     #[test]
@@ -226,7 +421,11 @@ mod tests {
             r#"{
                 "audiences": {
                     "engineering": {
-                        "entra_group_id": "8f7cb1f3-5c92-4e0f-9c39-89f65a852101",
+                        "subjects": [{
+                            "subject_type": "organization_group",
+                            "group_id": "8f7cb1f3-5c92-4e0f-9c39-89f65a852101",
+                            "future_subject_field": "display name"
+                        }],
                         "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01",
                         "future_audience_field": true
                     }
