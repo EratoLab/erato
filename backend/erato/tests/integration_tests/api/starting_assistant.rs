@@ -7,7 +7,9 @@ use erato::config::{
 };
 use erato::db::entity::prelude::ShareGrants;
 use erato::db::entity::share_grants;
-use erato::distribution::experience_policy::{ExperienceAudience, ExperiencePolicyDocument};
+use erato::distribution::experience_policy::{
+    AudienceSubject, ExperienceAudience, ExperiencePolicyDocument,
+};
 use erato::policy::engine::PolicyEngine;
 use erato::state::AppState;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
@@ -49,21 +51,47 @@ fn starting_assistant_app_config() -> erato::config::AppConfig {
     app_config
 }
 
+fn group_subject(group_id: &str) -> AudienceSubject {
+    AudienceSubject::OrganizationGroup {
+        group_id: group_id.to_string(),
+    }
+}
+
+fn user_subject(organization_user_id: &str) -> AudienceSubject {
+    AudienceSubject::User {
+        organization_user_id: organization_user_id.to_string(),
+    }
+}
+
 /// Install an experience policy on the running app state, replacing any
-/// previous one. Entries are `(audience_name, entra_group_id, pinned_hub_id)`;
-/// their order controls `HashMap` insertion order, deliberately independent of
-/// `priority_order`.
+/// previous one. Entries are `(audience_name, group_id, pinned_hub_id)` — the
+/// single-group audience, still the common case. Their order controls `HashMap`
+/// insertion order, deliberately independent of `priority_order`.
 async fn install_policy(
     app_state: &AppState,
     entries: Vec<(&str, &str, Uuid)>,
     priority_order: Vec<&str>,
 ) {
+    let entries = entries
+        .into_iter()
+        .map(|(name, group_id, hub_id)| (name, vec![group_subject(group_id)], hub_id))
+        .collect();
+    install_policy_with_subjects(app_state, entries, priority_order).await;
+}
+
+/// [`install_policy`] for audiences composed of several subjects — groups,
+/// named individuals, the whole organization, in any mix.
+async fn install_policy_with_subjects(
+    app_state: &AppState,
+    entries: Vec<(&str, Vec<AudienceSubject>, Uuid)>,
+    priority_order: Vec<&str>,
+) {
     let mut audiences = HashMap::new();
-    for (name, entra_group_id, pinned_assistant_hub_assistant_id) in entries {
+    for (name, subjects, pinned_assistant_hub_assistant_id) in entries {
         audiences.insert(
             name.to_string(),
             ExperienceAudience {
-                entra_group_id: entra_group_id.to_string(),
+                subjects,
                 pinned_assistant_hub_assistant_id,
             },
         );
@@ -96,6 +124,26 @@ async fn create_source_assistant(
     .expect("failed to create source assistant")
 }
 
+/// A viewer `audience_grants` entry for a directory group.
+fn group_grant(group_id: &str) -> Value {
+    json!({
+        "subject_type": "organization_group",
+        "subject_id_type": "organization_group_id",
+        "subject_id": group_id,
+        "role": "viewer"
+    })
+}
+
+/// A viewer `audience_grants` entry covering the whole organization.
+fn organization_grant() -> Value {
+    json!({
+        "subject_type": "organization",
+        "subject_id_type": "organization_id",
+        "subject_id": "__organization__",
+        "role": "viewer"
+    })
+}
+
 /// Submit, review-accept, publish and mark current a hub version for the
 /// given source assistant, granting the audience group viewer access. Returns
 /// the submitted version JSON (including `hub_assistant_id` and the clone
@@ -108,6 +156,28 @@ async fn publish_hub_version(
     version_number: &str,
     audience_group_id: &str,
 ) -> Value {
+    publish_hub_version_with_grants(
+        server,
+        owner_token,
+        reviewer_token,
+        source_assistant_id,
+        version_number,
+        vec![group_grant(audience_group_id)],
+    )
+    .await
+}
+
+/// [`publish_hub_version`] with arbitrary audience grants, so a published
+/// assistant can be reachable by a group, a named person, or the whole
+/// organization — whatever the audience being tested is composed of.
+async fn publish_hub_version_with_grants(
+    server: &TestServer,
+    owner_token: &str,
+    reviewer_token: &str,
+    source_assistant_id: &str,
+    version_number: &str,
+    audience_grants: Vec<Value>,
+) -> Value {
     let submission_response = server
         .post(&format!(
             "/api/v1beta/assistant-hub/assistants/{source_assistant_id}/versions"
@@ -119,12 +189,7 @@ async fn publish_hub_version(
             "version_number": version_number,
             "version_comment": "Submission for starting-assistant tests",
             "creator_review_comment": "Ready for review",
-            "audience_grants": [{
-                "subject_type": "organization_group",
-                "subject_id_type": "organization_group_id",
-                "subject_id": audience_group_id,
-                "role": "viewer"
-            }]
+            "audience_grants": audience_grants
         }))
         .with_bearer_token(owner_token)
         .await;
@@ -591,6 +656,258 @@ async fn test_starting_assistant_absent_without_policy_or_membership(pool: Pool<
     .await;
     let body = get_starting_assistant(&server, &outsider_token).await;
     assert!(body.get("starting_assistant").is_none());
+}
+
+/// An audience whose only subject is the whole organization applies to every
+/// authenticated caller, including one carrying no `groups` claim at all —
+/// "this applies to everyone", not "everyone not matched above".
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_starting_assistant_organization_audience_matches_a_user_with_no_groups(
+    pool: Pool<Postgres>,
+) {
+    let app_state = test_app_state(starting_assistant_app_config(), pool).await;
+    let server = create_test_server(app_state.clone());
+
+    let owner_token = JwtTokenBuilder::new()
+        .subject("org-audience-owner")
+        .email("org-audience-owner@example.com")
+        .build();
+    let reviewer_token = JwtTokenBuilder::new()
+        .subject("org-audience-reviewer")
+        .email("org-audience-reviewer@example.com")
+        .groups(vec![REVIEWER_GROUP_ID.to_string()])
+        .build();
+    // No `.groups(..)` at all: the claim is absent, not merely empty.
+    let grouplessviewer_token = JwtTokenBuilder::new()
+        .subject("org-audience-groupless")
+        .email("org-audience-groupless@example.com")
+        .build();
+
+    let owner = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        "org-audience-owner",
+        Some("org-audience-owner@example.com"),
+    )
+    .await
+    .expect("failed to create owner");
+    let source_assistant =
+        create_source_assistant(&app_state, &owner.id.to_string(), "Org Wide Assistant").await;
+
+    let version = publish_hub_version_with_grants(
+        &server,
+        &owner_token,
+        &reviewer_token,
+        &source_assistant.id.to_string(),
+        "1.0.0",
+        vec![organization_grant()],
+    )
+    .await;
+    let hub_assistant_id: Uuid = version["hub_assistant_id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let assistant_id = version["assistant_id"].as_str().unwrap().to_string();
+
+    install_policy_with_subjects(
+        &app_state,
+        vec![(
+            "everyone",
+            vec![AudienceSubject::Organization],
+            hub_assistant_id,
+        )],
+        vec!["everyone"],
+    )
+    .await;
+
+    let body = get_starting_assistant(&server, &grouplessviewer_token).await;
+    let pinned = body["starting_assistant"]
+        .as_object()
+        .expect("an organization audience should reach a caller with no groups");
+    assert_eq!(pinned["audience"], "everyone");
+    assert_eq!(pinned["assistant_id"], assistant_id.as_str());
+}
+
+/// A `user` subject names exactly one person, by the directory id the token
+/// carries in `oid` — so a colleague with no matching claim gets nothing, and
+/// no group has to be created for a one-person audience.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_starting_assistant_user_subject_matches_only_that_user(pool: Pool<Postgres>) {
+    let app_state = test_app_state(starting_assistant_app_config(), pool).await;
+    let server = create_test_server(app_state.clone());
+
+    const ALICE_OID: &str = "5f0b6a7c-1111-4222-8333-alice0000001";
+    const BOB_OID: &str = "5f0b6a7c-1111-4222-8333-bob000000002";
+
+    let owner_token = JwtTokenBuilder::new()
+        .subject("user-subject-owner")
+        .email("user-subject-owner@example.com")
+        .build();
+    let reviewer_token = JwtTokenBuilder::new()
+        .subject("user-subject-reviewer")
+        .email("user-subject-reviewer@example.com")
+        .groups(vec![REVIEWER_GROUP_ID.to_string()])
+        .build();
+    let alice_token = JwtTokenBuilder::new()
+        .subject("user-subject-alice")
+        .email("user-subject-alice@example.com")
+        .organization_user_id(ALICE_OID)
+        .build();
+    let bob_token = JwtTokenBuilder::new()
+        .subject("user-subject-bob")
+        .email("user-subject-bob@example.com")
+        .organization_user_id(BOB_OID)
+        .build();
+
+    let owner = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        "user-subject-owner",
+        Some("user-subject-owner@example.com"),
+    )
+    .await
+    .expect("failed to create owner");
+    let source_assistant =
+        create_source_assistant(&app_state, &owner.id.to_string(), "Named Person Assistant").await;
+
+    // Granted org-wide, so reachability is identical for both callers and the
+    // only thing under test is whether the audience matched them.
+    let version = publish_hub_version_with_grants(
+        &server,
+        &owner_token,
+        &reviewer_token,
+        &source_assistant.id.to_string(),
+        "1.0.0",
+        vec![organization_grant()],
+    )
+    .await;
+    let hub_assistant_id: Uuid = version["hub_assistant_id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+
+    install_policy_with_subjects(
+        &app_state,
+        vec![(
+            "alice-only",
+            vec![user_subject(ALICE_OID)],
+            hub_assistant_id,
+        )],
+        vec!["alice-only"],
+    )
+    .await;
+
+    let body = get_starting_assistant(&server, &alice_token).await;
+    assert_eq!(
+        body["starting_assistant"]["audience"], "alice-only",
+        "the named person should get the pin"
+    );
+
+    let body = get_starting_assistant(&server, &bob_token).await;
+    assert!(
+        body.get("starting_assistant").is_none(),
+        "a user subject must not spill over to anyone else"
+    );
+}
+
+/// An audience spanning several groups reaches a member of any of them, and the
+/// eligibility check follows the subject that actually matched: being in a
+/// second group of the same audience is no help when that group was never
+/// granted the assistant.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_starting_assistant_multi_group_audience_checks_the_matched_subject(
+    pool: Pool<Postgres>,
+) {
+    let app_state = test_app_state(starting_assistant_app_config(), pool).await;
+    let server = create_test_server(app_state.clone());
+
+    let owner_token = JwtTokenBuilder::new()
+        .subject("multi-subject-owner")
+        .email("multi-subject-owner@example.com")
+        .build();
+    let reviewer_token = JwtTokenBuilder::new()
+        .subject("multi-subject-reviewer")
+        .email("multi-subject-reviewer@example.com")
+        .groups(vec![REVIEWER_GROUP_ID.to_string()])
+        .build();
+    let granted_member_token = JwtTokenBuilder::new()
+        .subject("multi-subject-granted")
+        .email("multi-subject-granted@example.com")
+        .groups(vec![AUDIENCE_GROUP_ID.to_string()])
+        .build();
+    let ungranted_member_token = JwtTokenBuilder::new()
+        .subject("multi-subject-ungranted")
+        .email("multi-subject-ungranted@example.com")
+        .groups(vec![SECOND_AUDIENCE_GROUP_ID.to_string()])
+        .build();
+
+    let owner = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        "multi-subject-owner",
+        Some("multi-subject-owner@example.com"),
+    )
+    .await
+    .expect("failed to create owner");
+    let source_assistant =
+        create_source_assistant(&app_state, &owner.id.to_string(), "Multi Group Assistant").await;
+
+    // Only the FIRST group is granted the assistant, though both are in the
+    // audience.
+    let version = publish_hub_version(
+        &server,
+        &owner_token,
+        &reviewer_token,
+        &source_assistant.id.to_string(),
+        "1.0.0",
+        AUDIENCE_GROUP_ID,
+    )
+    .await;
+    let hub_assistant_id: Uuid = version["hub_assistant_id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+
+    install_policy_with_subjects(
+        &app_state,
+        vec![(
+            "rollout",
+            vec![
+                group_subject(AUDIENCE_GROUP_ID),
+                group_subject(SECOND_AUDIENCE_GROUP_ID),
+            ],
+            hub_assistant_id,
+        )],
+        vec!["rollout"],
+    )
+    .await;
+
+    let body = get_starting_assistant(&server, &granted_member_token).await;
+    assert_eq!(
+        body["starting_assistant"]["audience"], "rollout",
+        "a member of the granted group should get the pin"
+    );
+
+    let body = get_starting_assistant(&server, &ungranted_member_token).await;
+    assert!(
+        body.get("starting_assistant").is_none(),
+        "matching the audience through a group that cannot see the assistant must not pin it"
+    );
 }
 
 /// The endpoint sits behind the `/me` authentication middleware.
