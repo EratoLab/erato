@@ -175,7 +175,7 @@ function SegmentedControlInner<T extends string>({
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus",
               sizeStyles[size],
               isSelected
-                ? "bg-theme-bg-primary text-theme-fg-primary shadow-sm"
+                ? "bg-theme-bg-selected text-theme-fg-primary shadow-sm"
                 : "text-theme-fg-secondary hover:text-theme-fg-primary",
               isDisabled && "cursor-not-allowed",
             )}
