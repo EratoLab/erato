@@ -315,11 +315,16 @@ function HubLandingView({
     error,
   } = useListAssistantHubAssistants({});
 
-  const selectedCategory = useMemo(
-    () => config.categories.find((category) => category.id === categoryId),
-    [categoryId, config.categories],
+  const categories = useMemo(
+    () => (config.enable_categories ? config.categories : []),
+    [config.categories, config.enable_categories],
   );
-  const isCategoryPage = categoryId != null;
+
+  const selectedCategory = useMemo(
+    () => categories.find((category) => category.id === categoryId),
+    [categories, categoryId],
+  );
+  const isCategoryPage = config.enable_categories && categoryId != null;
   const versions = useMemo(() => data?.versions ?? [], [data?.versions]);
   const sortedVersions = useMemo(() => sortHubVersions(versions), [versions]);
   const featuredVersions = useMemo(
@@ -328,26 +333,25 @@ function HubLandingView({
   );
   const categoryTiles = useMemo(
     () =>
-      config.categories.map((category) => ({
+      categories.map((category) => ({
         category,
         count: versions.filter((version) =>
           version.category_ids.includes(category.id),
         ).length,
       })),
-    [config.categories, versions],
+    [categories, versions],
   );
   const filteredVersions = useMemo(() => {
-    const categoryFilteredVersions =
-      categoryId == null
-        ? sortedVersions
-        : sortedVersions.filter((version) =>
-            version.category_ids.includes(categoryId),
-          );
+    const categoryFilteredVersions = !isCategoryPage
+      ? sortedVersions
+      : sortedVersions.filter((version) =>
+          version.category_ids.includes(categoryId),
+        );
 
     return categoryFilteredVersions.filter((version) =>
-      versionMatchesSearch(version, config.categories, searchQuery),
+      versionMatchesSearch(version, categories, searchQuery),
     );
-  }, [categoryId, config.categories, searchQuery, sortedVersions]);
+  }, [categories, categoryId, isCategoryPage, searchQuery, sortedVersions]);
 
   const showSearchResults = !isCategoryPage && searchQuery.trim().length > 0;
   const visibleAllVersions = sortedVersions.slice(0, visibleAssistantCount);
@@ -516,7 +520,7 @@ function HubLandingView({
                     <AssistantHubVersionCard
                       key={version.version_id}
                       version={version}
-                      categories={config.categories}
+                      categories={categories}
                       ratingMode={config.rating_mode}
                       onOpen={() =>
                         navigate(`/assistant-hub/${version.hub_assistant_id}`)
@@ -534,7 +538,7 @@ function HubLandingView({
               )}
             </section>
 
-            {config.categories.length > 0 && (
+            {categories.length > 0 && (
               <section>
                 <div className="mb-4">
                   <h2 className="text-lg font-semibold text-theme-fg-primary">
@@ -573,7 +577,7 @@ function HubLandingView({
                   <AssistantHubVersionCard
                     key={version.version_id}
                     version={version}
-                    categories={config.categories}
+                    categories={categories}
                     ratingMode={config.rating_mode}
                     onOpen={() =>
                       navigate(`/assistant-hub/${version.hub_assistant_id}`)
@@ -618,7 +622,7 @@ function HubLandingView({
                 <AssistantHubVersionCard
                   key={version.version_id}
                   version={version}
-                  categories={config.categories}
+                  categories={categories}
                   ratingMode={config.rating_mode}
                   onOpen={() =>
                     navigate(`/assistant-hub/${version.hub_assistant_id}`)

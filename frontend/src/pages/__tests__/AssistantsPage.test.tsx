@@ -15,6 +15,7 @@ import type {
 import type { Messages } from "@lingui/core";
 
 let assistantHubEnabled = true;
+let assistantHubCategoriesEnabled = true;
 let assistantHubConfigLoading = false;
 let assistants: Assistant[] = [];
 let publishedHubVersions: AssistantHubVersion[] = [];
@@ -61,8 +62,15 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
       ? undefined
       : {
           enabled: assistantHubEnabled,
+          enable_categories: assistantHubCategoriesEnabled,
           can_review: true,
-          categories: [],
+          categories: [
+            {
+              id: "productivity",
+              display_name: "Productivity",
+              icon: "Sparkles",
+            },
+          ],
         },
     isLoading: assistantHubConfigLoading,
     error: null,
@@ -185,6 +193,7 @@ describe("AssistantsPage", () => {
 
   beforeEach(() => {
     assistantHubEnabled = true;
+    assistantHubCategoriesEnabled = true;
     assistantHubConfigLoading = false;
     assistants = [];
     publishedHubVersions = [];
@@ -296,6 +305,41 @@ describe("AssistantsPage", () => {
     expect(screen.getByTestId("location")).toHaveTextContent(
       "/assistant-hub/featured-hub-assistant",
     );
+  });
+
+  it("hides categories on the hub landing page when they are disabled", () => {
+    assistantHubCategoriesEnabled = false;
+    publishedHubVersions = [
+      {
+        ...createHubVersion({
+          sourceAssistantId: "uncategorized",
+          status: "review_accepted",
+          isPublished: true,
+        }),
+        assistant: {
+          created_at: "2026-01-01T00:00:00Z",
+          enforce_facet_settings: false,
+          id: "uncategorized-snapshot",
+          name: "Uncategorized assistant",
+          prompt: "Assistant prompt",
+          updated_at: "2026-01-02T00:00:00Z",
+        },
+        category_ids: ["productivity"],
+        featured: false,
+        hub_assistant_id: "uncategorized-hub-assistant",
+        updated_at: "2026-01-02T00:00:00Z",
+        version_id: "uncategorized-version",
+      },
+    ];
+
+    renderRoutes("/assistant-hub");
+
+    expect(
+      screen.queryByRole("heading", { name: "Categories" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "All assistants" }),
+    ).toBeInTheDocument();
   });
 
   it("shows all assistants in endlessly scrolling pages of 18", () => {

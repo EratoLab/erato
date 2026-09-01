@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
 import {
+  AssistantHubDiff,
   AssistantHubVersionCard,
   AssistantHubVersionOverviewSection,
   getAssistantHubDisplayScore,
@@ -58,6 +59,42 @@ const categories = [
     id: "marketing",
   },
 ];
+
+describe("AssistantHubDiff", () => {
+  beforeEach(() => {
+    i18n.load("en", enMessages as unknown as Messages);
+    i18n.activate("en");
+  });
+
+  it("omits hidden fields", () => {
+    render(
+      <I18nProvider i18n={i18n}>
+        <AssistantHubDiff
+          diffSummary={{
+            changes: [
+              {
+                field: "category_ids",
+                before: ["marketing"],
+                after: [],
+                changed: true,
+              },
+              {
+                field: "keywords",
+                before: [],
+                after: ["writing"],
+                changed: true,
+              },
+            ],
+          }}
+          hiddenFields={["category_ids"]}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.queryByText("Category ids")).not.toBeInTheDocument();
+    expect(screen.getByText("Keywords")).toBeInTheDocument();
+  });
+});
 
 const renderCard = (
   showStatusBadge = false,

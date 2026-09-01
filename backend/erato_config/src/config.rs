@@ -3002,6 +3002,11 @@ pub struct AssistantHubConfig {
     #[serde(default)]
     pub enabled: bool,
 
+    // Whether categories are shown and can be selected in the Assistant Hub.
+    // Defaults to `true`.
+    #[serde(default = "default_true")]
+    pub enable_categories: bool,
+
     // Rating scale shown in the Assistant Hub. Scores are always persisted on
     // the 10-point scale; the frontend converts them for display and input.
     // Defaults to `10_stars`.
@@ -3037,12 +3042,36 @@ impl Default for AssistantHubConfig {
     fn default() -> Self {
         Self {
             enabled: false,
+            enable_categories: true,
             rating_mode: default_assistant_hub_rating_mode(),
             default_share_with_whole_organization:
                 default_assistant_hub_share_with_whole_organization(),
             reviewers: AssistantHubReviewerPermissionsConfig::default(),
             categories: HashMap::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod assistant_hub_config_tests {
+    use super::AssistantHubConfig;
+
+    #[test]
+    fn categories_are_enabled_by_default() {
+        let config: AssistantHubConfig =
+            serde_json::from_value(serde_json::json!({})).expect("config should deserialize");
+
+        assert!(config.enable_categories);
+    }
+
+    #[test]
+    fn categories_can_be_disabled() {
+        let config: AssistantHubConfig = serde_json::from_value(serde_json::json!({
+            "enable_categories": false
+        }))
+        .expect("config should deserialize");
+
+        assert!(!config.enable_categories);
     }
 }
 
