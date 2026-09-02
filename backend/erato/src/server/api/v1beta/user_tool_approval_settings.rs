@@ -79,17 +79,14 @@ pub async fn create_user_tool_approval_setting(
     Extension(me_user): Extension<MeProfile>,
     Json(request): Json<CreateUserToolApprovalSettingRequest>,
 ) -> Result<Json<UserToolApprovalSetting>, (axum::http::StatusCode, String)> {
-    if !app_state.config.mcp_servers_global.approval.allow_always {
+    let mcp = app_state.mcp_state().await;
+    if !mcp.config.mcp_servers_global.approval.allow_always {
         return Err((
             axum::http::StatusCode::BAD_REQUEST,
             "Always allow is disabled by MCP approval policy".to_string(),
         ));
     }
-    if !app_state
-        .config
-        .mcp_servers
-        .contains_key(&request.mcp_server_id)
-    {
+    if !mcp.config.mcp_servers.contains_key(&request.mcp_server_id) {
         return Err((
             axum::http::StatusCode::BAD_REQUEST,
             "Unknown MCP server".to_string(),

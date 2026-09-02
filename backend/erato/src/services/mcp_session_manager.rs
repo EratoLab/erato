@@ -1,5 +1,6 @@
 use crate::config::{
-    AppConfig, McpServerAuthenticationConfig, McpServerConfig, McpServerForwardedCredential,
+    AppConfig, McpRuntimeConfig, McpServerAuthenticationConfig, McpServerConfig,
+    McpServerForwardedCredential,
 };
 use crate::metrics::report_mcp_active_sessions_for_server;
 use crate::services::mcp_manager::{McpRequestAuthContext, ToolDiscoveryResult};
@@ -203,14 +204,38 @@ pub struct McpSessionManager {
     /// Map of (chat_id, server_id) to active sessions
     sessions: Arc<RwLock<HashMap<SessionKey, McpSession>>>,
     /// Server configurations from the app config
-    server_configs: HashMap<String, McpServerConfig>,
-    /// Global default max idle time for MCP sessions (seconds)
-    default_max_idle_seconds: u64,
+    configuration: Arc<RwLock<McpSessionManagerConfig>>,
     /// Handle to the background cleanup task
     _cleanup_task: JoinHandle<()>,
 }
 
+#[derive(Debug)]
+struct McpSessionManagerConfig {
+    server_configs: HashMap<String, McpServerConfig>,
+    default_max_idle_seconds: u64,
+}
+
 impl McpSessionManager {
+    async fn configured_server_ids(&self) -> Vec<String> {
+        self.configuration
+            .read()
+            .await
+            .server_configs
+            .keys()
+            .cloned()
+            .collect()
+    }
+
+    async fn server_config(&self, server_id: &str) -> Result<McpServerConfig, Report> {
+        self.configuration
+            .read()
+            .await
+            .server_configs
+            .get(server_id)
+            .cloned()
+            .ok_or_else(|| eyre!("MCP server '{}' not found in configuration", server_id))
+    }
+
     async fn session_auth_key(
         server_id: &str,
         config: &McpServerConfig,
@@ -254,23 +279,68 @@ impl McpSessionManager {
             .max_session_idle_seconds
             .unwrap_or(60 * 60);
         let sessions = Arc::new(RwLock::new(HashMap::new()));
-        let configured_server_ids: Vec<String> = server_configs.keys().cloned().collect();
+        let configuration = Arc::new(RwLock::new(McpSessionManagerConfig {
+            server_configs,
+            default_max_idle_seconds,
+        }));
 
         // Spawn background cleanup task
         let cleanup_task = {
             let sessions = Arc::clone(&sessions);
-            let configured_server_ids = configured_server_ids.clone();
+            let configuration = Arc::clone(&configuration);
             tokio::spawn(async move {
-                Self::run_cleanup_task(sessions, configured_server_ids).await;
+                Self::run_cleanup_task(sessions, configuration).await;
             })
         };
 
         Self {
             sessions,
-            server_configs,
-            default_max_idle_seconds,
+            configuration,
             _cleanup_task: cleanup_task,
         }
+    }
+
+    /// Replace the evaluated MCP configuration while preserving sessions for
+    /// servers whose effective configuration did not change.
+    pub async fn reconfigure(&self, config: &McpRuntimeConfig) -> Vec<String> {
+        let next_default_max_idle_seconds = config
+            .mcp_servers_global
+            .max_session_idle_seconds
+            .unwrap_or(60 * 60);
+        let mut configuration = self.configuration.write().await;
+        let mut changed_server_ids: HashSet<String> = configuration
+            .server_configs
+            .keys()
+            .chain(config.mcp_servers.keys())
+            .filter(|server_id| {
+                let previous = configuration.server_configs.get(*server_id);
+                let next = config.mcp_servers.get(*server_id);
+                previous != next
+                    || previous.is_some_and(|server| {
+                        server
+                            .max_session_idle_seconds
+                            .unwrap_or(configuration.default_max_idle_seconds)
+                            != next
+                                .and_then(|server| server.max_session_idle_seconds)
+                                .unwrap_or(next_default_max_idle_seconds)
+                    })
+            })
+            .cloned()
+            .collect();
+
+        configuration.server_configs.clone_from(&config.mcp_servers);
+        configuration.default_max_idle_seconds = next_default_max_idle_seconds;
+
+        let mut sessions = self.sessions.write().await;
+        sessions.retain(|(_, server_id, _), _| !changed_server_ids.contains(server_id));
+        Self::update_active_session_metrics(
+            &sessions,
+            configuration.server_configs.keys().cloned(),
+        );
+
+        let mut changed_server_ids = changed_server_ids.drain().collect::<Vec<_>>();
+        changed_server_ids.sort();
+        changed_server_ids
     }
 
     fn update_active_session_metrics(
@@ -297,12 +367,20 @@ impl McpSessionManager {
     /// Background task that periodically cleans up inactive sessions
     async fn run_cleanup_task(
         sessions: Arc<RwLock<HashMap<SessionKey, McpSession>>>,
-        configured_server_ids: Vec<String>,
+        configuration: Arc<RwLock<McpSessionManagerConfig>>,
     ) {
         let mut interval = tokio::time::interval(Duration::from_secs(60)); // Run every 60 seconds
 
         loop {
             interval.tick().await;
+
+            let configured_server_ids = configuration
+                .read()
+                .await
+                .server_configs
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>();
 
             let mut sessions_guard = sessions.write().await;
             let initial_count = sessions_guard.len();
@@ -324,7 +402,7 @@ impl McpSessionManager {
             if removed_count > 0 {
                 Self::update_active_session_metrics(
                     &sessions_guard,
-                    configured_server_ids.iter().cloned(),
+                    configured_server_ids.into_iter(),
                 );
                 info!(
                     "Cleaned up {} inactive MCP sessions, {} remaining",
@@ -342,7 +420,8 @@ impl McpSessionManager {
         server_id: &str,
         auth_context: &McpRequestAuthContext<'_>,
     ) -> Result<SessionKey, Report> {
-        let config = self
+        let configuration = self.configuration.read().await;
+        let config = configuration
             .server_configs
             .get(server_id)
             .ok_or_else(|| eyre!("MCP server '{}' not found in configuration", server_id))?;
@@ -370,13 +449,16 @@ impl McpSessionManager {
             server_id.to_string(),
             config,
             auth_context,
-            self.default_max_idle_seconds,
+            configuration.default_max_idle_seconds,
         )
         .await?;
 
         let mut sessions_guard = self.sessions.write().await;
         sessions_guard.insert(key.clone(), session);
-        Self::update_active_session_metrics(&sessions_guard, self.server_configs.keys().cloned());
+        Self::update_active_session_metrics(
+            &sessions_guard,
+            configuration.server_configs.keys().cloned(),
+        );
 
         info!(
             chat_id = %chat_id,
@@ -389,12 +471,10 @@ impl McpSessionManager {
 
     /// Remove a session from the cache (used when a session becomes invalid)
     async fn invalidate_session(&self, key: &SessionKey) {
+        let configured_server_ids = self.configured_server_ids().await;
         let mut sessions_guard = self.sessions.write().await;
         if sessions_guard.remove(key).is_some() {
-            Self::update_active_session_metrics(
-                &sessions_guard,
-                self.server_configs.keys().cloned(),
-            );
+            Self::update_active_session_metrics(&sessions_guard, configured_server_ids.into_iter());
             info!(
                 chat_id = %key.0,
                 server_id = %key.1,
@@ -405,6 +485,7 @@ impl McpSessionManager {
 
     pub async fn invalidate_oauth_sessions_for_token(&self, server_id: &str, access_token: &str) {
         let session_auth_key = format!("oauth2:{access_token}");
+        let configured_server_ids = self.configured_server_ids().await;
         let mut sessions_guard = self.sessions.write().await;
         let initial_count = sessions_guard.len();
 
@@ -414,10 +495,7 @@ impl McpSessionManager {
         });
 
         if sessions_guard.len() != initial_count {
-            Self::update_active_session_metrics(
-                &sessions_guard,
-                self.server_configs.keys().cloned(),
-            );
+            Self::update_active_session_metrics(&sessions_guard, configured_server_ids.into_iter());
             info!(
                 server_id = %server_id,
                 "Invalidated cached OAuth-backed MCP sessions for disconnected user"
@@ -466,6 +544,9 @@ impl McpSessionManager {
         let mut unavailable_server_ids = Vec::new();
         let mut needing_auth_server_ids = Vec::new();
         let server_ids: Vec<String> = self
+            .configuration
+            .read()
+            .await
             .server_configs
             .keys()
             .filter(|server_id| {
@@ -604,13 +685,11 @@ impl McpSessionManager {
         {
             Ok(result) => Ok(result),
             Err(e) if Self::is_session_invalid_error(&e) => {
-                let config = self.server_configs.get(server_id).ok_or_else(|| {
-                    eyre!("MCP server '{}' not found in configuration", server_id)
-                })?;
+                let config = self.server_config(server_id).await?;
                 let key = (
                     chat_id,
                     server_id.to_string(),
-                    Self::session_auth_key(server_id, config, auth_context).await?,
+                    Self::session_auth_key(server_id, &config, auth_context).await?,
                 );
                 warn!(
                     chat_id = %chat_id,
@@ -667,13 +746,11 @@ impl McpSessionManager {
         {
             Ok(()) => Ok(()),
             Err(e) if Self::is_session_invalid_error(&e) => {
-                let config = self.server_configs.get(server_id).ok_or_else(|| {
-                    eyre!("MCP server '{}' not found in configuration", server_id)
-                })?;
+                let config = self.server_config(server_id).await?;
                 let key = (
                     chat_id,
                     server_id.to_string(),
-                    Self::session_auth_key(server_id, config, auth_context).await?,
+                    Self::session_auth_key(server_id, &config, auth_context).await?,
                 );
                 warn!(
                     chat_id = %chat_id,
@@ -700,18 +777,15 @@ impl McpSessionManager {
         server_id: &str,
         auth_context: &McpRequestAuthContext<'_>,
     ) -> Result<(), Report> {
-        let config = self
-            .server_configs
-            .get(server_id)
-            .ok_or_else(|| eyre!("MCP server '{}' not found in configuration", server_id))?;
         let key = self
             .get_or_create_session(chat_id, server_id, auth_context)
             .await?;
+        let config = self.server_config(server_id).await?;
 
         let mut sessions_guard = self.sessions.write().await;
 
         if let Some(session) = sessions_guard.get_mut(&key) {
-            session.refresh_tools(config).await?;
+            session.refresh_tools(&config).await?;
         }
 
         Ok(())
@@ -721,17 +795,18 @@ impl McpSessionManager {
     /// This is called during startup to verify server availability
     /// Failures are logged but not fatal
     pub async fn check_connectivity(&self) {
-        if self.server_configs.is_empty() {
+        let server_configs = self.configuration.read().await.server_configs.clone();
+        if server_configs.is_empty() {
             info!("No MCP servers configured");
             return;
         }
 
         info!(
             "Checking connectivity to {} MCP server(s)...",
-            self.server_configs.len()
+            server_configs.len()
         );
 
-        for (server_id, config) in &self.server_configs {
+        for (server_id, config) in &server_configs {
             if matches!(
                 config.authentication,
                 McpServerAuthenticationConfig::Forwarded { .. }
@@ -798,7 +873,7 @@ impl McpSessionManager {
         server_id: &str,
         auth_context: &McpRequestAuthContext<'_>,
     ) -> McpServerConnectionStatus {
-        let Some(config) = self.server_configs.get(server_id) else {
+        let Ok(config) = self.server_config(server_id).await else {
             return McpServerConnectionStatus::Failure;
         };
 
@@ -807,7 +882,7 @@ impl McpSessionManager {
             .get_or_create_session(probe_chat_id, server_id, auth_context)
             .await;
 
-        let session_auth_key = Self::session_auth_key(server_id, config, auth_context)
+        let session_auth_key = Self::session_auth_key(server_id, &config, auth_context)
             .await
             .ok();
         if let Some(session_auth_key) = session_auth_key {
@@ -841,10 +916,12 @@ pub struct ManagedTool {
 #[cfg(test)]
 mod tests {
     use super::{
-        filter_tools_by_server_config, is_tool_allowed_by_server_config, is_tool_allowed_to_wait,
-        wildcard_matches,
+        McpSessionManager, filter_tools_by_server_config, is_tool_allowed_by_server_config,
+        is_tool_allowed_to_wait, wildcard_matches,
     };
-    use crate::config::{McpServerAuthenticationConfig, McpServerConfig};
+    use crate::config::{
+        AppConfig, McpRuntimeConfig, McpServerAuthenticationConfig, McpServerConfig,
+    };
     use rmcp::model::Tool;
 
     fn server_config(allow_tools: Option<Vec<&str>>, exclude_tools: Vec<&str>) -> McpServerConfig {
@@ -937,5 +1014,31 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(filtered_names, vec!["get_page", "list_pages"]);
+    }
+
+    #[tokio::test]
+    async fn reconfigure_reports_only_servers_with_effective_session_changes() {
+        let mut app_config = AppConfig::default();
+        let mut unchanged = server_config(None, vec![]);
+        unchanged.max_session_idle_seconds = Some(30);
+        app_config
+            .mcp_servers
+            .insert("unchanged".to_string(), unchanged.clone());
+        app_config
+            .mcp_servers
+            .insert("changed".to_string(), server_config(None, vec![]));
+        let manager = McpSessionManager::new(&app_config);
+
+        let mut next = McpRuntimeConfig::from_app_config(&app_config);
+        next.mcp_servers_global.max_session_idle_seconds = Some(120);
+        next.mcp_servers.get_mut("changed").unwrap().url = "http://localhost/changed".to_string();
+
+        assert_eq!(manager.reconfigure(&next).await, vec!["changed"]);
+        assert!(manager.reconfigure(&next).await.is_empty());
+
+        next.mcp_servers.remove("changed");
+        next.mcp_servers
+            .insert("added".to_string(), server_config(None, vec![]));
+        assert_eq!(manager.reconfigure(&next).await, vec!["added", "changed"]);
     }
 }

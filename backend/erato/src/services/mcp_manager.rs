@@ -1,4 +1,4 @@
-use crate::config::AppConfig;
+use crate::config::{AppConfig, McpRuntimeConfig};
 use crate::db::entity::prelude::FileUploads;
 use crate::services::file_storage::SharepointContext;
 use crate::services::mcp_session_manager::{ManagedTool, McpSessionManager};
@@ -71,6 +71,12 @@ impl McpServers {
     /// This should be called during application startup
     pub async fn check_connectivity(&self) {
         self.session_manager.check_connectivity().await;
+    }
+
+    /// Apply a new evaluated configuration and drop cached sessions only for
+    /// servers whose effective connection settings changed.
+    pub async fn reconfigure(&self, config: &McpRuntimeConfig) -> Vec<String> {
+        self.session_manager.reconfigure(config).await
     }
 
     pub async fn probe_connection(

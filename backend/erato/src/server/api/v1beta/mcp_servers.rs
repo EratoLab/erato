@@ -1,4 +1,5 @@
 use crate::config::{McpServerAuthenticationConfig, McpServerConfig};
+use crate::distribution::runtime::McpAppState;
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::services::mcp_manager::McpRequestAuthContext;
@@ -72,17 +73,18 @@ pub async fn list_mcp_servers(
     Extension(me_user): Extension<MeProfile>,
     Extension(policy): Extension<PolicyEngine>,
 ) -> Result<Json<ListMcpServersResponse>, StatusCode> {
+    let mcp = app_state.mcp_state().await;
     let user_id = parse_user_id(&me_user)?;
     let auth_context = auth_context(&app_state, &me_user, user_id);
-    let server_ids = authorized_server_ids(&app_state, &me_user, &policy).await?;
+    let server_ids = authorized_server_ids(&mcp, &me_user, &policy).await?;
 
     let mut servers = Vec::with_capacity(server_ids.len());
     for server_id in server_ids {
-        let Some(config) = app_state.config.mcp_servers.get(&server_id) else {
+        let Some(config) = mcp.config.mcp_servers.get(&server_id) else {
             continue;
         };
-        let connection_status = app_state
-            .mcp_servers
+        let connection_status = mcp
+            .servers
             .probe_connection(&server_id, &auth_context)
             .await;
         servers.push(McpServerStatus {
@@ -118,8 +120,9 @@ pub async fn start_mcp_server_oauth(
     Extension(me_user): Extension<MeProfile>,
     Extension(policy): Extension<PolicyEngine>,
 ) -> Result<Json<StartMcpServerOauthResponse>, StatusCode> {
+    let mcp = app_state.mcp_state().await;
     let user_id = parse_user_id(&me_user)?;
-    let config = authorized_oauth_server_config(&app_state, &me_user, &policy, &server_id).await?;
+    let config = authorized_oauth_server_config(&mcp, &me_user, &policy, &server_id).await?;
     let McpServerAuthenticationConfig::Oauth2 { oauth2 } = &config.authentication else {
         return Err(StatusCode::BAD_REQUEST);
     };
@@ -129,7 +132,7 @@ pub async fn start_mcp_server_oauth(
         &app_state,
         user_id,
         &server_id,
-        config,
+        &config,
         oauth2,
         &redirect_uri,
     )
@@ -165,8 +168,9 @@ pub async fn complete_mcp_server_oauth(
     Extension(me_user): Extension<MeProfile>,
     Extension(policy): Extension<PolicyEngine>,
 ) -> Result<Json<CompleteMcpServerOauthResponse>, StatusCode> {
+    let mcp = app_state.mcp_state().await;
     let user_id = parse_user_id(&me_user)?;
-    let config = authorized_oauth_server_config(&app_state, &me_user, &policy, &server_id).await?;
+    let config = authorized_oauth_server_config(&mcp, &me_user, &policy, &server_id).await?;
     let McpServerAuthenticationConfig::Oauth2 { oauth2 } = &config.authentication else {
         return Err(StatusCode::BAD_REQUEST);
     };
@@ -176,7 +180,7 @@ pub async fn complete_mcp_server_oauth(
         app_state: &app_state,
         user_id,
         mcp_server_id: &server_id,
-        config,
+        config: &config,
         oauth2,
         redirect_uri: &redirect_uri,
         code: &query.code,
@@ -185,8 +189,8 @@ pub async fn complete_mcp_server_oauth(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let connection_status = app_state
-        .mcp_servers
+    let connection_status = mcp
+        .servers
         .probe_connection(&server_id, &auth_context(&app_state, &me_user, user_id))
         .await;
 
@@ -217,8 +221,9 @@ pub async fn disconnect_mcp_server_oauth(
     Extension(me_user): Extension<MeProfile>,
     Extension(policy): Extension<PolicyEngine>,
 ) -> Result<Json<DisconnectMcpServerOauthResponse>, StatusCode> {
+    let mcp = app_state.mcp_state().await;
     let user_id = parse_user_id(&me_user)?;
-    let config = authorized_oauth_server_config(&app_state, &me_user, &policy, &server_id).await?;
+    let config = authorized_oauth_server_config(&mcp, &me_user, &policy, &server_id).await?;
     let McpServerAuthenticationConfig::Oauth2 { .. } = &config.authentication else {
         return Err(StatusCode::BAD_REQUEST);
     };
@@ -226,7 +231,7 @@ pub async fn disconnect_mcp_server_oauth(
     let active_oauth_token =
         if let McpServerAuthenticationConfig::Oauth2 { oauth2 } = &config.authentication {
             crate::services::mcp_oauth::resolve_oauth_access_token(
-                &app_state, user_id, &server_id, config, oauth2,
+                &app_state, user_id, &server_id, &config, oauth2,
             )
             .await
             .ok()
@@ -239,14 +244,13 @@ pub async fn disconnect_mcp_server_oauth(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     if let Some(access_token) = active_oauth_token.as_deref() {
-        app_state
-            .mcp_servers
+        mcp.servers
             .invalidate_oauth_sessions_for_token(&server_id, access_token)
             .await;
     }
 
-    let connection_status = app_state
-        .mcp_servers
+    let connection_status = mcp
+        .servers
         .probe_connection(&server_id, &auth_context(&app_state, &me_user, user_id))
         .await;
 
@@ -273,7 +277,7 @@ fn parse_user_id(me_user: &MeProfile) -> Result<Uuid, StatusCode> {
 }
 
 async fn authorized_server_ids(
-    app_state: &AppState,
+    mcp: &McpAppState,
     me_user: &MeProfile,
     policy: &PolicyEngine,
 ) -> Result<Vec<String>, StatusCode> {
@@ -281,12 +285,7 @@ async fn authorized_server_ids(
         .filter_authorized_mcp_server_ids(
             &me_user.to_subject(),
             &me_user.groups,
-            &app_state
-                .config
-                .mcp_servers
-                .keys()
-                .cloned()
-                .collect::<Vec<_>>(),
+            &mcp.config.mcp_servers.keys().cloned().collect::<Vec<_>>(),
         )
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -294,20 +293,20 @@ async fn authorized_server_ids(
     Ok(server_ids)
 }
 
-async fn authorized_oauth_server_config<'a>(
-    app_state: &'a AppState,
+async fn authorized_oauth_server_config(
+    mcp: &McpAppState,
     me_user: &MeProfile,
     policy: &PolicyEngine,
     server_id: &str,
-) -> Result<&'a McpServerConfig, StatusCode> {
-    let authorized_ids = authorized_server_ids(app_state, me_user, policy).await?;
+) -> Result<McpServerConfig, StatusCode> {
+    let authorized_ids = authorized_server_ids(mcp, me_user, policy).await?;
     if !authorized_ids.iter().any(|id| id == server_id) {
         return Err(StatusCode::FORBIDDEN);
     }
-    app_state
-        .config
+    mcp.config
         .mcp_servers
         .get(server_id)
+        .cloned()
         .ok_or(StatusCode::NOT_FOUND)
 }
 

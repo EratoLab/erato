@@ -175,12 +175,13 @@ async fn test_app_state_internal(
             .then_some(app_config.assistants.delegation.run_timeout_seconds),
     );
     let distribution = Arc::new(erato::distribution::Distribution::load(&app_config));
+    let mcp_servers = McpServers::new(&app_config);
+    let reloadable = ReloadableAppState::new(&app_config, mcp_servers);
 
     let app_state = AppState {
         db: db.clone(),
         default_file_storage_provider: None,
         file_storage_providers,
-        mcp_servers: Arc::new(McpServers::new(&app_config)),
         config: app_config,
         actor_manager,
         langfuse_client,
@@ -190,7 +191,7 @@ async fn test_app_state_internal(
             erato::services::template_rendering::consumers::system_prompt::SystemPromptRenderer::new(
             ),
         distribution,
-        reloadable: Arc::new(RwLock::new(ReloadableAppState::default())),
+        reloadable: Arc::new(RwLock::new(reloadable)),
         genai_client_override: None,
         file_bytes_cache,
         file_contents_cache,
