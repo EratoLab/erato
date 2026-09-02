@@ -2,4 +2,5 @@
 
 pub mod migrations;
 pub mod runtime_configuration;
+pub mod runtime_distribution;
 pub mod users;

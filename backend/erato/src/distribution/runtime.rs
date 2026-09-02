@@ -3,13 +3,16 @@
 use crate::config::{AppConfig, ConfigSourceFile, McpRuntimeConfig};
 use crate::db::entity::prelude::RuntimeConfiguration;
 use crate::db::entity::runtime_configuration;
-use crate::models::runtime_configuration::{ERATO_BACKEND_SOURCE_SERVICE, ERATO_TOML_SOURCE_TYPE};
+use crate::distribution::experience_policy;
+use crate::models::runtime_configuration::{
+    ERATO_BACKEND_SOURCE_SERVICE, ERATO_TOML_SOURCE_TYPE, EXPERIENCE_POLICY_SOURCE_TYPE,
+};
 use crate::services::mcp_manager::McpServers;
 use crate::state::AppState;
 use eyre::{Report, eyre};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 
-const ADMIN_PANEL_SOURCE_SERVICE: &str = "erato_admin_panel";
+pub const ADMIN_PANEL_SOURCE_SERVICE: &str = "erato_admin_panel";
 const TRANSLATION_PO_SOURCE_TYPE: &str = "translation_po";
 
 /// A file that is made available by a runtime distribution producer.
@@ -53,6 +56,10 @@ impl DistributionBundle {
 #[derive(Clone, Debug)]
 pub struct ReloadableAppState {
     pub distribution_bundle: DistributionBundle,
+    /// `None` means no policy row exists — a valid complete state, distinct
+    /// from a failed load, which keeps the previous policy. Kept out of the
+    /// bundle above, whose files are served unauthenticated.
+    pub experience_policy: Option<experience_policy::ExperiencePolicyDocument>,
     pub mcp: McpAppState,
 }
 
@@ -61,6 +68,7 @@ impl ReloadableAppState {
     pub fn new(config: &AppConfig, mcp_servers: McpServers) -> Self {
         Self {
             distribution_bundle: DistributionBundle::default(),
+            experience_policy: None,
             mcp: McpAppState {
                 config: McpRuntimeConfig::from_app_config(config),
                 servers: mcp_servers,
@@ -71,6 +79,13 @@ impl ReloadableAppState {
 
 impl ReloadableAppState {
     pub async fn load(app_state: &AppState) -> Result<Self, Report> {
+        // Scoped so the read guard drops here: callers assign the result into
+        // a `write()` on the same lock.
+        let (previous_policy, previous_mcp) = {
+            let previous = app_state.reloadable.read().await;
+            (previous.experience_policy.clone(), previous.mcp.clone())
+        };
+
         let translation_rows = RuntimeConfiguration::find()
             .filter(runtime_configuration::Column::SourceService.eq(ADMIN_PANEL_SOURCE_SERVICE))
             .filter(runtime_configuration::Column::SourceType.eq(TRANSLATION_PO_SOURCE_TYPE))
@@ -95,11 +110,21 @@ impl ReloadableAppState {
             });
         }
 
+        // A malformed policy must not take the translation bundle down: carry
+        // the previous policy forward so the swap stays one complete write. On
+        // a cold start that previous policy is `None`.
+        let experience_policy = match load_experience_policy(app_state).await {
+            Ok(policy) => policy,
+            Err(error) => {
+                tracing::error!(%error, "Failed to load experience policy; keeping the previous policy");
+                previous_policy
+            }
+        };
+
         let mut config_sources = load_toml_sources(app_state, ERATO_BACKEND_SOURCE_SERVICE).await?;
         config_sources.extend(load_toml_sources(app_state, ADMIN_PANEL_SOURCE_SERVICE).await?);
         let mcp_config = McpRuntimeConfig::from_toml_sources(&config_sources)?;
 
-        let previous_mcp = app_state.reloadable.read().await.mcp.clone();
         let changed_server_ids = if previous_mcp.config == mcp_config {
             Vec::new()
         } else {
@@ -114,12 +139,63 @@ impl ReloadableAppState {
 
         Ok(Self {
             distribution_bundle: DistributionBundle { files },
+            experience_policy,
             mcp: McpAppState {
                 config: mcp_config,
                 servers: previous_mcp.servers,
             },
         })
     }
+}
+
+/// Load the org-wide experience policy from the runtime configuration table.
+///
+/// Zero rows is `Ok(None)`: the admin panel unpins by deleting the row, so
+/// absence must clear the policy rather than trigger keep-previous. Rows that
+/// exist but none named for the live slug is an `Err`, so a defective write
+/// keeps the previous policy instead of silently unpinning the whole org.
+async fn load_experience_policy(
+    app_state: &AppState,
+) -> Result<Option<experience_policy::ExperiencePolicyDocument>, Report> {
+    let rows = RuntimeConfiguration::find()
+        .filter(runtime_configuration::Column::SourceService.eq(ADMIN_PANEL_SOURCE_SERVICE))
+        .filter(runtime_configuration::Column::SourceType.eq(EXPERIENCE_POLICY_SOURCE_TYPE))
+        .order_by_asc(runtime_configuration::Column::SourceFilename)
+        .all(&app_state.db)
+        .await?;
+
+    if rows.is_empty() {
+        return Ok(None);
+    }
+
+    let live_filename =
+        experience_policy::experience_policy_filename(experience_policy::EXPERIENCE_POLICY_SLUG)?;
+    let mut matching = rows
+        .iter()
+        .filter(|row| row.source_filename.as_deref() == Some(live_filename.as_str()));
+    let Some(row) = matching.next() else {
+        let seen = rows
+            .iter()
+            .map(|row| row.source_filename.as_deref().unwrap_or("<none>"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Err(eyre!(
+            "experience policy rows exist but none is named {live_filename}; saw: {seen}"
+        ));
+    };
+    // The table has no uniqueness on (source_service, source_type,
+    // source_filename), so first-match keeps the load deterministic — but a
+    // duplicate points at a buggy writer.
+    if matching.next().is_some() {
+        tracing::warn!(
+            source_filename = %live_filename,
+            "Multiple experience policy rows share the live filename; using the first"
+        );
+    }
+
+    let contents = app_state.decrypt(&row.config)?;
+    let document = experience_policy::parse_experience_policy(&contents)?;
+    Ok(Some(document))
 }
 
 async fn load_toml_sources(
