@@ -40,12 +40,15 @@ spec:
           imagePullPolicy: {{ .Values.oauth2Proxy.image.pullPolicy }}
           args:
             - --config=/etc/oauth2-proxy/oauth2-proxy.cfg
-          {{- if or .Values.oauth2Proxy.extraEnvVars .Values.backend.loadBalancer.enabled }}
+          {{- $configureUpstreams := .Values.oauth2Proxy.upstreams.enabled }}
+          {{- if or .Values.oauth2Proxy.extraEnvVars $configureUpstreams .Values.backend.loadBalancer.enabled }}
           env:
-            {{- if .Values.backend.loadBalancer.enabled }}
-            # Route authenticated traffic through the optional client-affine layer.
+            {{- if $configureUpstreams }}
+            # Route authenticated traffic to path-aware upstreams before the backend fallback.
             - name: OAUTH2_PROXY_UPSTREAMS
-              value: http://{{ include "erato.backendUpstreamName" . }}:{{ .Values.backend.loadBalancer.service.port }}
+              value: {{ include "erato.oauth2ProxyUpstreams" . | quote }}
+            {{- end }}
+            {{- if .Values.backend.loadBalancer.enabled }}
             # Preserve the ingress-provided client address for the intermediate load balancer.
             - name: OAUTH2_PROXY_REVERSE_PROXY
               value: "true"

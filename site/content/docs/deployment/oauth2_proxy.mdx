@@ -8,10 +8,29 @@ It sits in front of the application and handles OIDC authentication flows with y
 The configuration for OAuth2 Proxy is provided via the `oauth2Proxy.config` value in the Helm chart.
 This value corresponds to the content of the `oauth2-proxy.cfg` file.
 
-When `backend.loadBalancer.enabled` is true, the chart injects the upstream and
-reverse-proxy settings through environment variables so authenticated requests
-automatically pass through the intermediate load balancer. The load balancer
-uses the original `X-Forwarded-For` client address for consistent routing.
+When `backend.loadBalancer.enabled` is true, the chart injects path-aware
+upstreams and reverse-proxy settings through environment variables. The load
+balancer uses the original `X-Forwarded-For` client address for consistent
+routing.
+
+An admin-panel service can be routed before the intermediate load balancer:
+
+```yaml
+oauth2Proxy:
+  upstreams:
+    adminPanelUrl: http://erato-admin-panel:3131
+```
+
+This generates routes for both `/admin` and `/admin/` (including nested static
+assets and API paths), followed by the backend load balancer as the catch-all
+fallback. `oauth2Proxy.upstreams.backendUrl` overrides that fallback; when it is
+empty, the chart selects the load balancer if enabled or the direct Erato
+backend Service otherwise. Authentication and configured group restrictions
+are evaluated by OAuth2 Proxy before either upstream is selected.
+
+Set `oauth2Proxy.upstreams.enabled` to `false` to stop automatic
+`OAUTH2_PROXY_UPSTREAMS` injection and manage the upstream list through
+`oauth2Proxy.config` or externally supplied environment variables.
 
 ### Recommended Configuration
 
@@ -21,10 +40,9 @@ Below is a commented version of a recommended configuration file.
 # Listening address
 http_address = "0.0.0.0:4180"
 
-# The upstream application to proxy to (Erato backend)
-# In the default Helm chart setup, this matches the backend service
-# Adjust the service name if necessary (e.g. <release-name>-erato-backend)
-upstreams = ["http://erato-backend:8080"]
+# Upstreams are injected by the Helm chart through OAUTH2_PROXY_UPSTREAMS.
+# Set oauth2Proxy.upstreams.enabled=false before defining them in this file.
+# upstreams = ["http://erato-backend:3130"]
 
 # Email domains to allow authentication for
 # Use "*" to allow any email domain (access control is handled by the application)

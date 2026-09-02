@@ -77,6 +77,14 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --config=/etc/oauth2-proxy/oauth2-proxy.cfg
 
+  - it: should route through the direct backend service by default
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OAUTH2_PROXY_UPSTREAMS
+            value: http://RELEASE-NAME-erato-app:3130/#/
+
   - it: should route through the intermediate load balancer when enabled
     set:
       backend.loadBalancer.enabled: true
@@ -85,7 +93,7 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: OAUTH2_PROXY_UPSTREAMS
-            value: http://RELEASE-NAME-erato-backend-load-balancer:8080
+            value: http://RELEASE-NAME-erato-backend-load-balancer:8080/#/
       - contains:
           path: spec.template.spec.containers[0].env
           content:
@@ -96,6 +104,77 @@ tests:
           content:
             name: OAUTH2_PROXY_REAL_CLIENT_IP_HEADER
             value: X-Forwarded-For
+
+  - it: should route both admin path variants and nested routes before the load balancer fallback
+    set:
+      backend.loadBalancer.enabled: true
+      oauth2Proxy.upstreams.adminPanelUrl: http://admin-panel:3131
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env
+          value:
+            - name: OAUTH2_PROXY_UPSTREAMS
+              value: http://admin-panel:3131/admin#/admin,http://admin-panel:3131/admin/#/admin/,http://RELEASE-NAME-erato-backend-load-balancer:8080/#/
+            - name: OAUTH2_PROXY_REVERSE_PROXY
+              value: "true"
+            - name: OAUTH2_PROXY_REAL_CLIENT_IP_HEADER
+              value: X-Forwarded-For
+
+  - it: should use an explicit backend URL and normalize trailing slashes
+    set:
+      oauth2Proxy.upstreams.backendUrl: http://custom-backend:8080/
+      oauth2Proxy.upstreams.adminPanelUrl: http://admin-panel:3131/
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OAUTH2_PROXY_UPSTREAMS
+            value: http://admin-panel:3131/admin#/admin,http://admin-panel:3131/admin/#/admin/,http://custom-backend:8080/#/
+
+  - it: should use the direct backend service as the fallback when only an admin URL is configured
+    set:
+      oauth2Proxy.upstreams.adminPanelUrl: http://admin-panel:3131
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OAUTH2_PROXY_UPSTREAMS
+            value: http://admin-panel:3131/admin#/admin,http://admin-panel:3131/admin/#/admin/,http://RELEASE-NAME-erato-app:3130/#/
+
+  - it: should allow automatic upstream injection to be disabled with the load balancer enabled
+    set:
+      backend.loadBalancer.enabled: true
+      oauth2Proxy.upstreams.enabled: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OAUTH2_PROXY_UPSTREAMS
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OAUTH2_PROXY_REVERSE_PROXY
+            value: "true"
+
+  - it: should allow a manually supplied upstream when automatic injection is disabled
+    set:
+      backend.loadBalancer.enabled: true
+      oauth2Proxy.upstreams.enabled: false
+      oauth2Proxy.extraEnvVars:
+        - name: OAUTH2_PROXY_UPSTREAMS
+          value: http://manual-upstream:8080
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0]
+          value:
+            name: OAUTH2_PROXY_REVERSE_PROXY
+            value: "true"
+      - equal:
+          path: spec.template.spec.containers[0].env[2]
+          value:
+            name: OAUTH2_PROXY_UPSTREAMS
+            value: http://manual-upstream:8080
 
   - it: should set environment variables when specified
     set:

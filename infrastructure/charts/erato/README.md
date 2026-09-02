@@ -218,10 +218,13 @@ oauth2Proxy:
   replicaCount: 2
   config: |
     http_address = "0.0.0.0:4180"
-    upstreams = ["http://localhost:8080"]
     email_domains = ["example.com"]
     cookie_secret = "your-secret-here"
 ```
+
+The chart injects `OAUTH2_PROXY_UPSTREAMS` by default and automatically selects
+the direct Erato backend Service. Configure `oauth2Proxy.upstreams` to customize
+this routing, or disable it to define `upstreams` in the configuration file.
 
 Set `oauth2Proxy.replicaCount` to scale the authentication proxy. The default is
 `1` for backwards compatibility. When the chart-managed Redis is enabled, all
@@ -260,6 +263,22 @@ Traefik `IngressRoute` CRD to be installed in the cluster. The chart deploys a
 namespaced Traefik instance, configures its HRW strategy, and automatically
 points oauth2-proxy at the generated load-balancer Service. oauth2-proxy is
 configured to preserve the ingress-provided `X-Forwarded-For` header.
+
+To route an admin panel before the intermediate load balancer, configure its
+base URL. The chart generates exact and prefix upstreams for `/admin` and
+`/admin/`, followed by the load balancer as the catch-all fallback:
+
+```yaml
+oauth2Proxy:
+  upstreams:
+    adminPanelUrl: http://erato-admin-panel:3131
+```
+
+Set `oauth2Proxy.upstreams.backendUrl` to override the automatically selected
+backend fallback. When the load balancer is enabled it is selected by default;
+otherwise the chart selects the Erato backend Service. To define upstreams in
+`oauth2Proxy.config` or through externally supplied environment variables, set
+`oauth2Proxy.upstreams.enabled` to `false`.
 
 The default `forwardedHeaders.insecure` setting is suitable only when the
 load-balancer Service is reachable exclusively by trusted in-cluster clients.
@@ -496,6 +515,9 @@ chart.
 | oauth2Proxy.resources.limits.memory | string | `"256Mi"` | The memory limit for oauth2-proxy |
 | oauth2Proxy.resources.requests.cpu | string | `"100m"` | The requested CPU for oauth2-proxy |
 | oauth2Proxy.resources.requests.memory | string | `"128Mi"` | The requested memory for oauth2-proxy |
+| oauth2Proxy.upstreams.adminPanelUrl | string | `""` | Base URL for the admin-panel service. When set, both /admin and /admin/ (including nested assets and API routes) are routed to this service before the backend fallback. |
+| oauth2Proxy.upstreams.backendUrl | string | `""` | Base URL for non-admin routes. Defaults to the intermediate backend load balancer when enabled, otherwise to the Erato backend Service. |
+| oauth2Proxy.upstreams.enabled | bool | `true` | Automatically inject OAUTH2_PROXY_UPSTREAMS. Disable this to manage upstreams through oauth2Proxy.config or external environment variables. |
 | postgresql.enabled | bool | `false` | Deprecated - has no effect. Support for postgresql sub-chart has been removed. |
 | postgresql.external.connectionString | object | `{"value":"postgresql://postgres:postgres@localhost:5432/postgres"}` | PostgreSQL connection string (plain value) |
 
