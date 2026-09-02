@@ -48,6 +48,14 @@ function Harness({
 const tab = (name: string) => screen.getByRole("tab", { name });
 
 describe("SegmentedControl", () => {
+  it("uses the standard selected-item background for the active segment", () => {
+    render(<Harness initialValue="grid" />);
+
+    expect(tab("Grid")).toHaveClass("bg-theme-bg-selected");
+    expect(tab("List")).not.toHaveClass("bg-theme-bg-selected");
+    expect(tab("Table")).not.toHaveClass("bg-theme-bg-selected");
+  });
+
   it("moves selection and focus rightwards, wrapping past the last segment", () => {
     render(<Harness />);
 

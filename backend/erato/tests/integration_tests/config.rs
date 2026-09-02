@@ -3,9 +3,9 @@
 use crate::test_utils::hermetic_app_config;
 use crate::{MIGRATOR, test_app_state};
 use erato_config::config::{
-    AppConfig, FileTypeDetectionMode, GenerationConfig, ModelReasoningEffort, ModelVerbosity,
-    MsOfficeAddinLaunchEventType, PromptSourceSpecification, RuntimeConfigurationConfig,
-    ServerConfig, SharepointAllDrivesSource,
+    AppConfig, ConfigSourceFile, FileTypeDetectionMode, GenerationConfig, McpRuntimeConfig,
+    ModelReasoningEffort, ModelVerbosity, MsOfficeAddinLaunchEventType, PromptSourceSpecification,
+    RuntimeConfigurationConfig, ServerConfig, SharepointAllDrivesSource,
 };
 use sqlx::Pool;
 use sqlx::postgres::Postgres;
@@ -4537,4 +4537,52 @@ model_name = "gpt-4o"
 [file_storage_providers]
 "#,
     );
+}
+
+#[test]
+fn runtime_mcp_configuration_merges_admin_overrides_after_file_sources() {
+    let sources = vec![
+        ConfigSourceFile {
+            source_filename: "erato.toml".to_string(),
+            contents: r#"
+[mcp_servers.docs]
+transport_type = "streamable_http"
+url = "https://files.example.test/mcp"
+
+[mcp_servers_global]
+show_frontend_tab = false
+
+[mcp_server_permissions.rules.docs]
+rule_type = "allow-all"
+mcp_server_ids = ["docs"]
+"#
+            .to_string(),
+        },
+        ConfigSourceFile {
+            source_filename: "admin-panel.toml".to_string(),
+            contents: r#"
+[mcp_servers.docs]
+url = "https://admin.example.test/mcp"
+
+[mcp_servers.search]
+transport_type = "sse"
+url = "https://search.example.test/sse"
+
+[mcp_servers_global]
+show_frontend_tab = true
+"#
+            .to_string(),
+        },
+    ];
+
+    let config = McpRuntimeConfig::from_toml_sources(&sources).unwrap();
+
+    assert_eq!(
+        config.mcp_servers["docs"].url,
+        "https://admin.example.test/mcp"
+    );
+    assert_eq!(config.mcp_servers["docs"].transport_type, "streamable_http");
+    assert!(config.mcp_servers.contains_key("search"));
+    assert!(config.mcp_servers_global.show_frontend_tab);
+    assert!(config.mcp_server_permissions.rules.contains_key("docs"));
 }

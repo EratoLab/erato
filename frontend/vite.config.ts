@@ -26,6 +26,10 @@ import {
   sharedModulesImportMapPlugin,
   walkFiles,
 } from "./component-kit-host.plugins";
+import {
+  iconCatalogManualChunk,
+  iconCatalogPlugin,
+} from "./vite.icon-catalogs";
 
 // Custom plugin to copy index.html as 404.html for SPA routing
 const copy404Plugin = ({ silent = false }: { silent?: boolean } = {}) => {
@@ -238,6 +242,7 @@ export default defineConfig(({ mode }) => {
         },
       }),
       lingui(),
+      iconCatalogPlugin({ rootDir: __dirname }),
       i18nKeysManifestPlugin(),
       stagePublicLayoutPlugin(),
       // Dev map points at the `/src/shared/*.ts` expose files — vite
@@ -293,6 +298,21 @@ export default defineConfig(({ mode }) => {
           ),
         },
         output: {
+          // componentRegistry.ts is a tiny runtime store shared by the app and
+          // the component-kit entry. Without an explicit boundary Rollup can
+          // coalesce it with the kit's generated component export graph, which
+          // makes index.html preload several megabytes of components that the
+          // current route has not requested.
+          onlyExplicitManualChunks: true,
+          manualChunks: (moduleId) => {
+            const iconCatalogChunk = iconCatalogManualChunk(moduleId);
+            if (iconCatalogChunk) {
+              return iconCatalogChunk;
+            }
+            return moduleId.endsWith("/src/config/componentRegistry.ts")
+              ? "component-registry-runtime"
+              : undefined;
+          },
           // The app imports generated exports from this runtime, so both files
           // must be cache-busted together to avoid cross-deployment mismatches.
           entryFileNames: (chunkInfo) =>

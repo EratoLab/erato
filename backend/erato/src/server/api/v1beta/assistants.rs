@@ -360,6 +360,7 @@ async fn validate_assistant_config_permissions(
     }
 
     if let Some(server_ids) = mcp_server_ids {
+        let mcp = app_state.mcp_state().await;
         let requested_ids: Vec<String> = server_ids.to_vec();
         let allowed: HashSet<String> = policy
             .filter_authorized_mcp_server_ids(&subject, &me_user.groups, &requested_ids)
@@ -372,7 +373,7 @@ async fn validate_assistant_config_permissions(
             .any(|server_id| !allowed.contains(server_id))
             || requested_ids
                 .iter()
-                .any(|server_id| !app_state.config.mcp_servers.contains_key(server_id))
+                .any(|server_id| !mcp.config.mcp_servers.contains_key(server_id))
         {
             return Err(StatusCode::BAD_REQUEST);
         }

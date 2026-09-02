@@ -474,8 +474,8 @@ describe("ThemeProvider", () => {
     expect(varsCss).toContain("--theme-border-subtle: #cfddd1;");
     expect(varsCss).toContain("--theme-border-field: #cfddd1;");
     expect(varsCss).toContain("--theme-border-chat-input: #cfddd1;");
-    expect(varsCss).toContain("--theme-border-dropdown: #d1d5db;");
-    expect(varsCss).toContain("--theme-border-media: #d1d5db;");
+    expect(varsCss).toContain("--theme-border-dropdown: #cfddd1;");
+    expect(varsCss).toContain("--theme-border-media: #cfddd1;");
     expect(varsCss).toContain("--theme-border-attachment: #cfddd1;");
     expect(varsCss).toContain("--theme-border-field-focus: #6b7280;");
     expect(varsCss).toContain("--theme-border-chat-input-focus: #6b7280;");

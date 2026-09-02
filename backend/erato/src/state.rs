@@ -1,7 +1,7 @@
 use crate::actors::manager::ActorManager;
 use crate::config::{AppConfig, ChatProviderConfig, PromptSourceSpecification, SummaryConfig};
 use crate::distribution::Distribution;
-use crate::distribution::runtime::ReloadableAppState;
+use crate::distribution::runtime::{McpAppState, ReloadableAppState};
 use crate::policy::engine::{PolicyEngine, PolicyRebuildContext};
 use crate::policy::types::{Action, ResourceKind, Subject};
 use crate::query_metrics::install_postgres_query_metrics;
@@ -127,7 +127,6 @@ pub struct AppState {
     pub db: DatabaseConnection,
     pub default_file_storage_provider: Option<String>,
     pub file_storage_providers: HashMap<String, FileStorage>,
-    pub mcp_servers: Arc<McpServers>,
     pub config: AppConfig,
     pub actor_manager: ActorManager,
     pub langfuse_client: LangfuseClient,
@@ -182,7 +181,6 @@ impl std::fmt::Debug for AppState {
                 "file_storage_providers",
                 &self.file_storage_providers.keys(),
             )
-            .field("mcp_servers", &self.mcp_servers)
             .field("config", &self.config)
             .field("actor_manager", &self.actor_manager)
             .field("langfuse_client", &self.langfuse_client)
@@ -219,7 +217,11 @@ impl AppState {
             &config.integrations.ms_office.addin,
             &distribution.frontend_bundles.office_addin,
         )?;
-        let reloadable = Arc::new(RwLock::new(ReloadableAppState::default()));
+        let mcp_servers = McpServers::new(&config);
+        let reloadable = Arc::new(RwLock::new(ReloadableAppState::new(
+            &config,
+            mcp_servers.clone(),
+        )));
 
         let db_connect_options = ConnectOptions::new(config.database_url.expose_secret());
         // TODO: Change level to Debug, but that also seems to deactivate some other logging (e.g. Errors during request?)
@@ -229,8 +231,6 @@ impl AppState {
             install_postgres_query_metrics(&mut db);
         }
         let file_storage_providers = Self::build_file_storage_providers(&config)?;
-        let mcp_servers = Arc::new(McpServers::new(&config));
-
         // Perform connectivity checks for MCP servers
         // Failures are logged but not fatal
         mcp_servers.check_connectivity().await;
@@ -305,7 +305,6 @@ impl AppState {
             db,
             default_file_storage_provider: config.default_file_storage_provider.clone(),
             file_storage_providers,
-            mcp_servers,
             config,
             actor_manager,
             langfuse_client,
@@ -323,6 +322,23 @@ impl AppState {
             file_processor,
             file_type_detector,
         })
+    }
+
+    /// Return a consistent snapshot of the currently evaluated MCP state.
+    pub async fn mcp_state(&self) -> McpAppState {
+        self.reloadable.read().await.mcp.clone()
+    }
+
+    /// Clone the startup config with the reloadable MCP sections applied.
+    pub async fn effective_config(&self) -> AppConfig {
+        let mut config = self.config.clone();
+        self.reloadable
+            .read()
+            .await
+            .mcp
+            .config
+            .apply_to(&mut config);
+        config
     }
 
     pub fn encrypt(&self, value: &str) -> Result<String, Report> {

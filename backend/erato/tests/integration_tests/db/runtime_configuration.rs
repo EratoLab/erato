@@ -3,6 +3,7 @@ use crate::{MIGRATOR, test_app_state};
 use erato::config::ConfigSourceFile;
 use erato::db::entity::prelude::RuntimeConfiguration;
 use erato::db::entity::runtime_configuration;
+use erato::distribution::runtime::ReloadableAppState;
 use erato::models::runtime_configuration::{
     ERATO_BACKEND_SOURCE_SERVICE, ERATO_TOML_SOURCE_TYPE, TRANSLATION_PO_SOURCE_TYPE,
     mirror_erato_backend_sources, mirror_erato_backend_sources_with_translation_pos,
@@ -264,5 +265,65 @@ async fn concurrent_mirrors_leave_one_complete_source_set(pool: Pool<Postgres>) 
     assert!(
         filenames == vec!["first-a.toml", "first-b.toml"]
             || filenames == vec!["second-a.toml", "second-b.toml"]
+    );
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn reloadable_state_applies_admin_mcp_overrides_after_backend_sources(pool: Pool<Postgres>) {
+    let app_state = app_state_with_encryption(pool).await;
+    let backend_config = app_state
+        .encrypt(
+            r#"
+[mcp_servers.docs]
+transport_type = "streamable_http"
+url = "https://backend.example.test/mcp"
+
+[mcp_server_permissions.rules.docs]
+rule_type = "allow-all"
+mcp_server_ids = ["docs"]
+"#,
+        )
+        .unwrap();
+    let admin_config = app_state
+        .encrypt(
+            r#"
+[mcp_servers.docs]
+url = "https://admin.example.test/mcp"
+"#,
+        )
+        .unwrap();
+    RuntimeConfiguration::insert_many([
+        runtime_configuration::ActiveModel {
+            source_service: Set(ERATO_BACKEND_SOURCE_SERVICE.to_string()),
+            source_type: Set(ERATO_TOML_SOURCE_TYPE.to_string()),
+            source_filename: Set(Some("erato.toml".to_string())),
+            config: Set(backend_config),
+            ..Default::default()
+        },
+        runtime_configuration::ActiveModel {
+            source_service: Set("erato_admin_panel".to_string()),
+            source_type: Set(ERATO_TOML_SOURCE_TYPE.to_string()),
+            source_filename: Set(Some("mcp-overrides.toml".to_string())),
+            config: Set(admin_config),
+            ..Default::default()
+        },
+    ])
+    .exec(&app_state.db)
+    .await
+    .unwrap();
+
+    let reloaded = ReloadableAppState::load(&app_state).await.unwrap();
+
+    assert_eq!(
+        reloaded.mcp.config.mcp_servers["docs"].url,
+        "https://admin.example.test/mcp"
+    );
+    assert!(
+        reloaded
+            .mcp
+            .config
+            .mcp_server_permissions
+            .rules
+            .contains_key("docs")
     );
 }

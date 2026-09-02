@@ -31,6 +31,7 @@ pub struct AssistantHubCategory {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct AssistantHubConfigResponse {
     pub enabled: bool,
+    pub enable_categories: bool,
     pub can_review: bool,
     pub rating_mode: String,
     pub default_share_with_whole_organization: bool,
@@ -583,6 +584,7 @@ pub async fn assistant_hub_config(
 
     Ok(Json(AssistantHubConfigResponse {
         enabled: app_state.config.assistant_hub.enabled,
+        enable_categories: app_state.config.assistant_hub.enable_categories,
         can_review: app_state.config.assistant_hub.can_review(&me_user.groups),
         rating_mode: app_state.config.assistant_hub.rating_mode.clone(),
         default_share_with_whole_organization: app_state

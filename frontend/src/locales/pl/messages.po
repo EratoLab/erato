@@ -2357,6 +2357,7 @@ msgid "common.close"
 msgstr "Zamknij"
 
 #. js-lingui-explicit-id
+#: src/App.tsx
 #: src/pages/assistantHubUtils.tsx
 msgid "common.loadingEllipsis"
 msgstr "Ładowanie..."
@@ -2665,6 +2666,7 @@ msgstr "Podgląd dokumentu jest pusty."
 
 #. js-lingui-explicit-id
 #: src/components/ui/FilePreview/DocxPreview.tsx
+#: src/components/ui/FilePreview/FilePreviewContent.tsx
 msgid "filePreview.docxLoading"
 msgstr "Ładowanie podglądu dokumentu..."
 
@@ -2731,6 +2733,7 @@ msgid "filePreview.pptxEmpty"
 msgstr "Podgląd prezentacji jest pusty."
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/FilePreviewContent.tsx
 #: src/components/ui/FilePreview/PptxPreview.tsx
 msgid "filePreview.pptxLoading"
 msgstr "Ładowanie podglądu prezentacji..."
@@ -2741,11 +2744,17 @@ msgid "filePreview.pptxPreviewUnavailable"
 msgstr "Podgląd niedostępny: nie udało się wczytać tej prezentacji."
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/FilePreviewContent.tsx
+msgid "filePreview.previewUnavailable"
+msgstr "Podgląd jest niedostępny: nie udało się załadować przeglądarki plików."
+
+#. js-lingui-explicit-id
 #: src/components/ui/FilePreview/XlsxPreview.tsx
 msgid "filePreview.xlsxEmpty"
 msgstr "Podgląd arkusza kalkulacyjnego jest pusty."
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/FilePreviewContent.tsx
 #: src/components/ui/FilePreview/XlsxPreview.tsx
 msgid "filePreview.xlsxLoading"
 msgstr "Wczytywanie podglądu arkusza kalkulacyjnego..."

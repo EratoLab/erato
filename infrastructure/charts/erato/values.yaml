@@ -97,6 +97,13 @@ oauth2Proxy:
     # cookie_secret = ""
     # cookie_secure = true
     # skip_auth_regex = ["^/health", "^/metrics"]
+  upstreams:
+    # -- Automatically inject OAUTH2_PROXY_UPSTREAMS. Disable this to manage upstreams through oauth2Proxy.config or external environment variables.
+    enabled: true
+    # -- Base URL for non-admin routes. Defaults to the intermediate backend load balancer when enabled, otherwise to the Erato backend Service.
+    backendUrl: ""
+    # -- Base URL for the admin-panel service. When set, both /admin and /admin/ (including nested assets and API routes) are routed to this service before the backend fallback.
+    adminPanelUrl: ""
   # -- Annotations to add to the oauth2-proxy deployment
   deploymentAnnotations: {}
   # -- Optional deployment strategy for oauth2-proxy (e.g., RollingUpdate/Recreate).
