@@ -394,3 +394,107 @@ pub async fn get_resources_shared_with_subject_and_groups(
 
     Ok(grants)
 }
+
+/// A share-grant subject to test a resource against: the
+/// `(subject_type, subject_id_type, subject_id)` triple a `share_grants` row
+/// stores, borrowed rather than owned so callers can build one per candidate
+/// without allocating.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShareSubject<'a> {
+    pub subject_type: &'a str,
+    pub subject_id_type: &'a str,
+    pub subject_id: &'a str,
+}
+
+impl<'a> ShareSubject<'a> {
+    /// The organization-wide subject, which every authenticated user is part of.
+    #[must_use]
+    pub fn organization() -> Self {
+        Self {
+            subject_type: ORGANIZATION_SUBJECT_TYPE,
+            subject_id_type: ORGANIZATION_SUBJECT_ID_TYPE,
+            subject_id: ORGANIZATION_SUBJECT_ID,
+        }
+    }
+
+    /// A directory group, by the id the identity provider puts in the token.
+    #[must_use]
+    pub fn organization_group(organization_group_id: &'a str) -> Self {
+        Self {
+            subject_type: "organization_group",
+            subject_id_type: "organization_group_id",
+            subject_id: organization_group_id,
+        }
+    }
+
+    /// One person by their directory user id (the `oid` claim).
+    #[must_use]
+    pub fn organization_user(organization_user_id: &'a str) -> Self {
+        Self {
+            subject_type: "user",
+            subject_id_type: "organization_user_id",
+            subject_id: organization_user_id,
+        }
+    }
+
+    /// One person by their internal `users.id`.
+    #[must_use]
+    pub fn user(user_id: &'a str) -> Self {
+        Self {
+            subject_type: "user",
+            subject_id_type: "id",
+            subject_id: user_id,
+        }
+    }
+}
+
+/// Whether a resource is shared with ANY of `subjects`. An organization-wide
+/// grant always counts, since it covers every subject.
+///
+/// This asks about the given SUBJECTS' access, not the caller's — a caller may
+/// hold a direct grant to a resource the audience it matched cannot see, and
+/// an audience pin must not survive on that.
+///
+/// NOTE (see PR #1072 review): this is grant interpretation living in Rust,
+/// duplicating what `backend.rego` already knows about `share_grants`, and the
+/// two can drift. The intended destination is the `PolicyEngine` — but the
+/// question "does subject S reach resource R" cannot be asked of it today:
+/// `SubjectKind` has only `User`, and every rego rule gates on
+/// `input.subject_kind == subject_kind_user`, so a group or organization
+/// subject has no way in. Closing that means either a `group` subject kind or
+/// a dedicated non-`allow` query entrypoint. Deliberately not built here; do
+/// not add a second predicate of this shape without doing it.
+pub async fn is_resource_shared_with_any_subject(
+    conn: &DatabaseConnection,
+    resource_type: &str,
+    resource_id: &str,
+    subjects: &[ShareSubject<'_>],
+) -> Result<bool, Report> {
+    let mut condition = Condition::any().add(subject_condition(
+        resource_type,
+        resource_id,
+        ShareSubject::organization(),
+    ));
+    for subject in subjects {
+        condition = condition.add(subject_condition(resource_type, resource_id, *subject));
+    }
+
+    Ok(ShareGrants::find()
+        .filter(condition)
+        .one(conn)
+        .await?
+        .is_some())
+}
+
+fn subject_condition(
+    resource_type: &str,
+    resource_id: &str,
+    subject: ShareSubject<'_>,
+) -> Condition {
+    Condition::all()
+        .add(share_grants::Column::SubjectType.eq(subject.subject_type))
+        .add(share_grants::Column::SubjectIdType.eq(subject.subject_id_type))
+        .add(share_grants::Column::SubjectId.eq(subject.subject_id))
+        .add(share_grants::Column::ResourceType.eq(resource_type))
+        .add(share_grants::Column::ResourceId.eq(resource_id))
+}
