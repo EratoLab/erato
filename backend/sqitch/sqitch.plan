@@ -39,3 +39,4 @@
 0036_add_chat_provenance 2026-08-17T00:00:00Z Codex <codex@openai.com> # Add chat provenance generated column and delegation indexes
 0037_normalize_empty_assistant_id_lists 2026-08-20T00:00:00Z Codex <codex@openai.com> # Normalize empty assistant id lists to NULL
 0038_add_default_chat_provider_to_user_preferences 2026-08-25T00:00:00Z Codex <codex@openai.com> # Add per-user default chat provider preference
+0039_add_starting_assistant_to_user_preferences 2026-08-31T00:00:00Z bdart <dfiebig@bdart.de> # Add starting assistant to user preferences

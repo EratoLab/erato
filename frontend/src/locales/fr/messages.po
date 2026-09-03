@@ -3546,6 +3546,76 @@ msgid "preferences.dialog.serversTools.scope.thisDevice"
 msgstr "{status} · cet appareil"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.assistant.helper"
+msgstr "Toujours ouvrir une conversation avec l’assistant de votre choix."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.assistant.label"
+msgstr "Un assistant spécifique"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.description"
+msgstr "Choisissez où Erato vous amène à l’ouverture."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.inherit.helper"
+msgstr "Utiliser la valeur par défaut de votre organisation si elle existe, sinon l’écran d’accueil."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.inherit.label"
+msgstr "Automatique"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.label"
+msgstr "Écran de démarrage"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.picker.empty"
+msgstr "Aucun assistant n’est encore disponible."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.picker.loading"
+msgstr "Chargement des assistants..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.picker.placeholder"
+msgstr "Choisir un assistant"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.picker.section.hub"
+msgstr "Depuis le hub d'assistants"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.picker.section.own"
+msgstr "Vos assistants"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.picker.unavailable"
+msgstr "Un assistant auquel vous n’avez plus accès"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.welcome.helper"
+msgstr "Ignorer toute valeur par défaut définie par votre organisation."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.welcome.label"
+msgstr "Toujours démarrer sur l’écran d’accueil"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.tabs.appearance"
 msgstr "Apparence"

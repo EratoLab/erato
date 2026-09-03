@@ -79,6 +79,24 @@ pub struct UserProfile {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub preference_default_chat_provider: Option<String>,
+    /// The user's own start-screen pick when it is a hub assistant, stored as
+    /// an `assistant_hub_assistants.id` — stable across hub republishes, unlike
+    /// the clone's `assistants.id`. The LIVE assistant id it points at is
+    /// resolved per request by `GET /me/starting-assistant`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub preference_starting_hub_assistant_id: Option<String>,
+    /// The user's own start-screen pick when it is an assistant that was never
+    /// published to the hub, stored as an `assistants.id`. At most one of the
+    /// two pick fields is ever set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub preference_starting_assistant_id: Option<String>,
+    /// True when the user explicitly cleared their start screen. This is
+    /// deliberately distinct from "never set": a clear must keep suppressing
+    /// an admin's audience pin, while "never set" inherits it.
+    #[serde(default)]
+    pub preference_starting_assistant_cleared: bool,
 }
 
 impl UserProfile {
@@ -98,6 +116,9 @@ impl UserProfile {
             preference_assistant_custom_instructions: None,
             preference_assistant_additional_information: None,
             preference_default_chat_provider: None,
+            preference_starting_hub_assistant_id: None,
+            preference_starting_assistant_id: None,
+            preference_starting_assistant_cleared: false,
         }
     }
 
@@ -152,6 +173,11 @@ impl UserProfile {
             self.preference_assistant_additional_information =
                 prefs.assistant_additional_information;
             self.preference_default_chat_provider = prefs.default_chat_provider;
+            self.preference_starting_hub_assistant_id =
+                prefs.starting_hub_assistant_id.map(|id| id.to_string());
+            self.preference_starting_assistant_id =
+                prefs.starting_assistant_id.map(|id| id.to_string());
+            self.preference_starting_assistant_cleared = prefs.starting_assistant_cleared;
         }
     }
 }

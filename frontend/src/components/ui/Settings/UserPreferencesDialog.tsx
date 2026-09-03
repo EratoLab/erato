@@ -9,13 +9,18 @@ import {
   fetchUpdateProfilePreferences,
   profileQuery,
   recentChatsQuery,
+  startingAssistantQuery,
   useArchiveAllChatsEndpoint,
+  useAssistantHubConfig,
   useDisconnectMcpServerOauth,
+  useListAssistantHubAssistants,
+  useListAssistants,
   useListMcpServers,
   useStartMcpServerOauth,
   useAvailableModels,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import {
+  useAssistantsFeature,
   useAudioDictationFeature,
   useAudioTranscriptionFeature,
   useUserPreferencesFeature,
@@ -36,6 +41,12 @@ import {
 import { AppearanceTabContent } from "./AppearanceTabContent";
 import { AudioInputTabContent } from "./AudioInputTabContent";
 import { ServersToolsPane } from "./ServersToolsPane";
+import {
+  StartingAssistantSetting,
+  type StartingAssistantOption,
+  type StartingAssistantPick,
+  type StartScreenChoice,
+} from "./StartingAssistantSetting";
 
 import type {
   ChatModel,
@@ -94,6 +105,12 @@ export function UserPreferencesDialog({
   const [customInstructions, setCustomInstructions] = useState("");
   const [additionalInformation, setAdditionalInformation] = useState("");
   const [defaultModel, setDefaultModel] = useState<ChatModel | null>(null);
+  // The choice and the pick are separate state, so toggling away from
+  // "assistant" and back does not lose an already-picked assistant.
+  const [startScreenChoice, setStartScreenChoice] =
+    useState<StartScreenChoice>("inherit");
+  const [startingAssistantPick, setStartingAssistantPick] =
+    useState<StartingAssistantPick | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [mcpError, setMcpError] = useState<string | null>(null);
@@ -119,6 +136,55 @@ export function UserPreferencesDialog({
       Array.isArray(availableModelsResponse) ? availableModelsResponse : [],
     [availableModelsResponse],
   );
+  // The start-screen setting needs somewhere to send people: an audience pin
+  // or a hub pick needs the hub, a pick of one's own assistant needs only
+  // assistants. Either is enough for the setting to be worth showing.
+  const { enabled: assistantsEnabled } = useAssistantsFeature();
+  const { data: assistantHubConfig } = useAssistantHubConfig(
+    isOpen && personalizationEnabled ? {} : skipToken,
+  );
+  const assistantHubEnabled = assistantHubConfig?.enabled === true;
+  const startScreenSettingEnabled = assistantsEnabled || assistantHubEnabled;
+  // The only listing that carries the stable `hub_assistant_id` a hub pick
+  // stores.
+  const { data: hubAssistantsResponse, isLoading: isLoadingHubAssistants } =
+    useListAssistantHubAssistants(
+      isOpen && assistantHubEnabled ? {} : skipToken,
+    );
+  const { data: assistantsResponse, isLoading: isLoadingAssistants } =
+    useListAssistants(
+      isOpen && personalizationEnabled && assistantsEnabled
+        ? { queryParams: { sharing_relation: "all" } }
+        : skipToken,
+    );
+  const hubOptions: StartingAssistantOption[] = useMemo(
+    () =>
+      (hubAssistantsResponse?.versions ?? []).map((version) => ({
+        kind: "hub",
+        id: version.hub_assistant_id,
+        name: version.assistant.name,
+        description: version.assistant.description,
+      })),
+    [hubAssistantsResponse?.versions],
+  );
+  const assistantOptions: StartingAssistantOption[] = useMemo(() => {
+    // A published hub assistant reaches its audience as a share grant on the
+    // clone, so it is in this listing too. Offering it twice would also offer
+    // the id that a republish strands, so the hub entry wins.
+    const hubClonedAssistantIds = new Set(
+      (hubAssistantsResponse?.versions ?? []).map(
+        (version) => version.assistant_id,
+      ),
+    );
+    return (assistantsResponse ?? [])
+      .filter((assistant) => !hubClonedAssistantIds.has(assistant.id))
+      .map((assistant) => ({
+        kind: "assistant",
+        id: assistant.id,
+        name: assistant.name,
+        description: assistant.description,
+      }));
+  }, [assistantsResponse, hubAssistantsResponse?.versions]);
   // The pane owns rendering the server list; this instance shares its query
   // key and exists so the OAuth callback/disconnect flows can refetch.
   const { refetch: refetchMcpServers } = useListMcpServers(
@@ -186,6 +252,25 @@ export function UserPreferencesDialog({
       userProfile?.preference_assistant_additional_information ?? "",
     );
     setDefaultModel(null);
+    // Cleared beats pick beats inherit; a stored row is never more than one of
+    // these, and never carries both pick kinds.
+    const storedPick: StartingAssistantPick | null =
+      userProfile?.preference_starting_hub_assistant_id
+        ? { kind: "hub", id: userProfile.preference_starting_hub_assistant_id }
+        : userProfile?.preference_starting_assistant_id
+          ? {
+              kind: "assistant",
+              id: userProfile.preference_starting_assistant_id,
+            }
+          : null;
+    setStartScreenChoice(
+      userProfile?.preference_starting_assistant_cleared
+        ? "welcome"
+        : storedPick
+          ? "assistant"
+          : "inherit",
+    );
+    setStartingAssistantPick(storedPick);
   }, [isOpen, requestedDefaultTab, userProfile]);
 
   useEffect(() => {
@@ -283,6 +368,21 @@ export function UserPreferencesDialog({
     refetchMcpServers,
   ]);
 
+  // What the UI resolves to on save. The two id fields are alternatives, and
+  // both go on the wire so the save states which kind was chosen.
+  const resolvedPick =
+    startScreenChoice === "assistant" ? startingAssistantPick : null;
+  const resolvedStartingHubAssistantId =
+    resolvedPick?.kind === "hub" ? resolvedPick.id : null;
+  const resolvedStartingAssistantId =
+    resolvedPick?.kind === "assistant" ? resolvedPick.id : null;
+  const resolvedStartingAssistantCleared = startScreenChoice === "welcome";
+  // "A specific assistant" with nothing chosen is not a state to save: it
+  // resolves to the same wire values as "Automatic", so saving it would
+  // silently undo a stored clear.
+  const startScreenIsIncomplete =
+    startScreenChoice === "assistant" && startingAssistantPick === null;
+
   const hasChanges = useMemo(
     () =>
       nickname !== (userProfile?.preference_nickname ?? "") ||
@@ -292,13 +392,22 @@ export function UserPreferencesDialog({
       additionalInformation !==
         (userProfile?.preference_assistant_additional_information ?? "") ||
       defaultModel?.chat_provider_id !==
-        (userProfile?.preference_default_chat_provider ?? null),
+        (userProfile?.preference_default_chat_provider ?? null) ||
+      resolvedStartingHubAssistantId !==
+        (userProfile?.preference_starting_hub_assistant_id ?? null) ||
+      resolvedStartingAssistantId !==
+        (userProfile?.preference_starting_assistant_id ?? null) ||
+      resolvedStartingAssistantCleared !==
+        (userProfile?.preference_starting_assistant_cleared ?? false),
     [
       additionalInformation,
       defaultModel,
       customInstructions,
       jobTitle,
       nickname,
+      resolvedStartingAssistantCleared,
+      resolvedStartingAssistantId,
+      resolvedStartingHubAssistantId,
       userProfile,
     ],
   );
@@ -398,8 +507,7 @@ export function UserPreferencesDialog({
     setSaveError(null);
     setIsSaving(true);
     try {
-      // The generated schema currently drops the string branch for these optional patch fields.
-      const requestBody = {
+      const requestBody: UpdateProfilePreferencesRequest = {
         preference_nickname: toNullableValue(nickname),
         preference_job_title: toNullableValue(jobTitle),
         preference_assistant_custom_instructions:
@@ -409,13 +517,25 @@ export function UserPreferencesDialog({
         ),
         preference_default_chat_provider:
           defaultModel?.chat_provider_id ?? null,
-      } as unknown as UpdateProfilePreferencesRequest;
+        // All three fields go out explicitly on every save: this PUT carries
+        // all preference fields, so omitting them would let an unrelated edit
+        // wipe the start-screen state. Null ids alone mean "inherit", so the
+        // clear needs its own boolean.
+        preference_starting_hub_assistant_id: resolvedStartingHubAssistantId,
+        preference_starting_assistant_id: resolvedStartingAssistantId,
+        preference_starting_assistant_cleared: resolvedStartingAssistantCleared,
+      };
 
       await fetchUpdateProfilePreferences({
         body: requestBody,
       });
       await queryClient.invalidateQueries({
         queryKey: profileQuery({}).queryKey,
+      });
+      // The landing redirect reads the server-resolved answer, so refresh it
+      // too.
+      await queryClient.invalidateQueries({
+        queryKey: startingAssistantQuery({}).queryKey,
       });
       onClose();
     } catch {
@@ -589,6 +709,20 @@ export function UserPreferencesDialog({
                       align="left"
                     />
                   </FormField>
+                ) : null}
+
+                {startScreenSettingEnabled ? (
+                  <StartingAssistantSetting
+                    choice={startScreenChoice}
+                    onChoiceChange={setStartScreenChoice}
+                    selectedPick={startingAssistantPick}
+                    onSelectPick={setStartingAssistantPick}
+                    hubOptions={hubOptions}
+                    assistantOptions={assistantOptions}
+                    isLoadingOptions={
+                      isLoadingHubAssistants || isLoadingAssistants
+                    }
+                  />
                 ) : null}
 
                 <FormField
@@ -845,7 +979,7 @@ export function UserPreferencesDialog({
                 onClick={() => {
                   void handleSave();
                 }}
-                disabled={isSaving || !hasChanges}
+                disabled={isSaving || !hasChanges || startScreenIsIncomplete}
                 type="button"
               >
                 {isSaving

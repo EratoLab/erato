@@ -3546,6 +3546,76 @@ msgid "preferences.dialog.serversTools.scope.thisDevice"
 msgstr "{status} · to urządzenie"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.assistant.helper"
+msgstr "Zawsze otwieraj czat z wybranym przez Ciebie asystentem."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.assistant.label"
+msgstr "Konkretny asystent"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.description"
+msgstr "Wybierz, dokąd Erato przeniesie Cię po otwarciu."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.inherit.helper"
+msgstr "Użyj ustawienia domyślnego Twojej organizacji, jeśli istnieje; w przeciwnym razie ekranu powitalnego."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.inherit.label"
+msgstr "Automatycznie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.label"
+msgstr "Ekran startowy"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.picker.empty"
+msgstr "Nie ma jeszcze asystentów do wyboru."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.picker.loading"
+msgstr "Ładowanie asystentów..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.picker.placeholder"
+msgstr "Wybierz asystenta"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.picker.section.hub"
+msgstr "Z centrum asystentów"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.picker.section.own"
+msgstr "Twoi asystenci"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.picker.unavailable"
+msgstr "Asystent, do którego nie masz już dostępu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.welcome.helper"
+msgstr "Pomiń domyślne ustawienie określone przez Twoją organizację."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.welcome.label"
+msgstr "Zawsze zaczynaj od ekranu powitalnego"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.tabs.appearance"
 msgstr "Wygląd"

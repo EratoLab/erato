@@ -2353,19 +2353,23 @@ export type StarterPromptsResponse = {
  */
 export type StartingAssistantInfo = {
   /**
-   * The stable `assistant_hub_assistants.id` the admin pinned.
+   * The stable `assistant_hub_assistants.id` the pick or pin stores. Absent
+   * when the user picked an assistant that was never published to the hub,
+   * which has no hub row.
    */
-  assistant_hub_assistant_id: string;
+  assistant_hub_assistant_id?: string;
   /**
-   * The live `assistants.id` of the current published version. Resolved at
-   * read time from the pinned hub id, so it is always the id a client can
-   * open a chat with — even right after a republish minted a fresh clone.
+   * The live `assistants.id` a client can open a chat with. For a hub
+   * assistant it is resolved at read time from the stable hub id, so it is
+   * right even after a republish minted a fresh clone.
    */
   assistant_id: string;
   /**
    * The name of the audience (policy key) whose pin won for this user.
+   * Present only when `source` is `audience_pin`.
    */
-  audience: string;
+  audience?: string;
+  source: StartingAssistantSource;
 };
 
 /**
@@ -2374,6 +2378,11 @@ export type StartingAssistantInfo = {
 export type StartingAssistantResponse = {
   starting_assistant?: StartingAssistantInfo;
 };
+
+/**
+ * Where a resolved starting assistant came from.
+ */
+export type StartingAssistantSource = "user_pick" | "audience_pin";
 
 export type TokenUsageFileInput = {
   /**
@@ -2717,11 +2726,11 @@ export type UpdateProfilePreferencesRequest = {
   /**
    * Additional contextual information about the user for the assistant.
    */
-  preference_assistant_additional_information?: null | undefined;
+  preference_assistant_additional_information?: string | null | undefined;
   /**
    * Additional behaviour/style/tone preferences for the assistant.
    */
-  preference_assistant_custom_instructions?: null | undefined;
+  preference_assistant_custom_instructions?: string | null | undefined;
   /**
    * Preferred default chat provider/model ID for new chats.
    */
@@ -2729,11 +2738,30 @@ export type UpdateProfilePreferencesRequest = {
   /**
    * User's job title.
    */
-  preference_job_title?: null | undefined;
+  preference_job_title?: string | null | undefined;
   /**
    * Preferred name to address the user with.
    */
-  preference_nickname?: null | undefined;
+  preference_nickname?: string | null | undefined;
+  /**
+   * Set `true` to explicitly clear the start screen (welcome screen even
+   * though an audience pin exists), `false` to inherit again. Clearing
+   * also removes any own pick; picking also un-clears.
+   */
+  preference_starting_assistant_cleared?: boolean;
+  /**
+   * The user's own start-screen pick when it is an assistant that was never
+   * published to the hub, as an `assistants.id`. Setting either pick field
+   * removes the other.
+   */
+  preference_starting_assistant_id?: string | null | undefined;
+  /**
+   * The user's own start-screen pick when it is a hub assistant, as an
+   * `assistant_hub_assistants.id` (NOT the clone's `assistants.id` — those
+   * go stale on every hub republish). Explicit `null` removes the pick and
+   * returns to inheriting any audience pin.
+   */
+  preference_starting_hub_assistant_id?: string | null | undefined;
 };
 
 export type UserProfile = {
@@ -2791,6 +2819,25 @@ export type UserProfile = {
    * Preferred name to address the user with.
    */
   preference_nickname?: string;
+  /**
+   * True when the user explicitly cleared their start screen. This is
+   * deliberately distinct from "never set": a clear must keep suppressing
+   * an admin's audience pin, while "never set" inherits it.
+   */
+  preference_starting_assistant_cleared?: boolean;
+  /**
+   * The user's own start-screen pick when it is an assistant that was never
+   * published to the hub, stored as an `assistants.id`. At most one of the
+   * two pick fields is ever set.
+   */
+  preference_starting_assistant_id?: string;
+  /**
+   * The user's own start-screen pick when it is a hub assistant, stored as
+   * an `assistant_hub_assistants.id` — stable across hub republishes, unlike
+   * the clone's `assistants.id`. The LIVE assistant id it points at is
+   * resolved per request by `GET /me/starting-assistant`.
+   */
+  preference_starting_hub_assistant_id?: string;
   /**
    * The user's preferred language.
    *

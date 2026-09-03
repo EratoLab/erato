@@ -515,9 +515,14 @@ CREATE TABLE public.user_preferences (
     job_title text,
     assistant_custom_instructions text,
     assistant_additional_information text,
-    default_chat_provider text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    default_chat_provider text,
+    starting_hub_assistant_id uuid,
+    starting_assistant_id uuid,
+    starting_assistant_cleared boolean DEFAULT false NOT NULL,
+    CONSTRAINT user_preferences_starting_assistant_single_pick_check CHECK (((starting_hub_assistant_id IS NULL) OR (starting_assistant_id IS NULL))),
+    CONSTRAINT user_preferences_starting_assistant_state_check CHECK ((NOT (starting_assistant_cleared AND ((starting_hub_assistant_id IS NOT NULL) OR (starting_assistant_id IS NOT NULL)))))
 );
 
 
@@ -1416,6 +1421,22 @@ ALTER TABLE ONLY public.temp_chat_generations
 
 
 --
+-- Name: user_preferences user_preferences_starting_assistant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_preferences
+    ADD CONSTRAINT user_preferences_starting_assistant_id_fkey FOREIGN KEY (starting_assistant_id) REFERENCES public.assistants(id) ON DELETE SET NULL;
+
+
+--
+-- Name: user_preferences user_preferences_starting_hub_assistant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_preferences
+    ADD CONSTRAINT user_preferences_starting_hub_assistant_id_fkey FOREIGN KEY (starting_hub_assistant_id) REFERENCES public.assistant_hub_assistants(id) ON DELETE SET NULL;
+
+
+--
 -- Name: user_preferences user_preferences_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1436,3 +1457,4 @@ ALTER TABLE ONLY public.user_tool_approval_settings
 --
 
 \unrestrict OM7cNXdBdyBvLZvgpYZtJmnVfBbiARdfWSfbAR86ERODzDTyXhtRLbkmz7CSgJk
+

@@ -564,7 +564,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         entra_id::OrganizationGroup,
         entra_id::OrganizationGroupsResponse,
         starting_assistant::StartingAssistantResponse,
-        starting_assistant::StartingAssistantInfo
+        starting_assistant::StartingAssistantInfo,
+        starting_assistant::StartingAssistantSource
     ))
 )]
 pub struct ApiV1ApiDoc;
@@ -783,6 +784,26 @@ pub struct UpdateProfilePreferencesRequest {
     #[serde(default, deserialize_with = "deserialize_patch_optional_string")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub preference_default_chat_provider: Option<Option<String>>,
+    /// The user's own start-screen pick when it is a hub assistant, as an
+    /// `assistant_hub_assistants.id` (NOT the clone's `assistants.id` — those
+    /// go stale on every hub republish). Explicit `null` removes the pick and
+    /// returns to inheriting any audience pin.
+    #[serde(default, deserialize_with = "deserialize_patch_optional_string")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preference_starting_hub_assistant_id: Option<Option<String>>,
+    /// The user's own start-screen pick when it is an assistant that was never
+    /// published to the hub, as an `assistants.id`. Setting either pick field
+    /// removes the other.
+    #[serde(default, deserialize_with = "deserialize_patch_optional_string")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preference_starting_assistant_id: Option<Option<String>>,
+    /// Set `true` to explicitly clear the start screen (welcome screen even
+    /// though an audience pin exists), `false` to inherit again. Clearing
+    /// also removes any own pick; picking also un-clears.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub preference_starting_assistant_cleared: Option<bool>,
 }
 
 fn deserialize_patch_optional_string<'de, D>(
@@ -792,6 +813,23 @@ where
     D: Deserializer<'de>,
 {
     Ok(Some(Option::<String>::deserialize(deserializer)?))
+}
+
+/// Whether a preferences-upsert failure means the caller named a hub assistant
+/// or an assistant that does not exist. Matching on the constraint name leaves
+/// every other foreign-key failure classified as a server error.
+fn is_starting_assistant_fk_violation(report: &Report) -> bool {
+    report
+        .downcast_ref::<sea_orm::DbErr>()
+        .and_then(sea_orm::DbErr::sql_err)
+        .is_some_and(|sql_err| {
+            matches!(
+                sql_err,
+                sea_orm::SqlErr::ForeignKeyConstraintViolation(ref message)
+                    if message.contains("starting_hub_assistant_id")
+                        || message.contains("starting_assistant_id")
+            )
+        })
 }
 
 #[utoipa::path(
@@ -813,6 +851,18 @@ pub async fn update_profile_preferences(
 ) -> Result<Json<UserProfile>, StatusCode> {
     let user_id = Uuid::parse_str(&me_user.id).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    // The picks arrive as string patches; reject a non-uuid rather than
+    // silently storing nothing.
+    let parse_pick = |patch: Option<Option<String>>| match patch {
+        None => Ok(None),
+        Some(None) => Ok(Some(None)),
+        Some(Some(raw)) => Uuid::parse_str(&raw)
+            .map(|id| Some(Some(id)))
+            .map_err(|_| StatusCode::UNPROCESSABLE_ENTITY),
+    };
+    let starting_hub_assistant_id = parse_pick(request.preference_starting_hub_assistant_id)?;
+    let starting_assistant_id = parse_pick(request.preference_starting_assistant_id)?;
+
     let updated_prefs = models::user_preference::upsert_user_preferences(
         &app_state.db,
         &user_id,
@@ -822,10 +872,24 @@ pub async fn update_profile_preferences(
             assistant_custom_instructions: request.preference_assistant_custom_instructions,
             assistant_additional_information: request.preference_assistant_additional_information,
             default_chat_provider: request.preference_default_chat_provider,
+            starting_hub_assistant_id,
+            starting_assistant_id,
+            starting_assistant_cleared: request.preference_starting_assistant_cleared,
         },
     )
     .await
-    .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .map_err(|report| {
+        // A uuid naming a hub assistant that does not exist is the picker's
+        // list-then-save race, and the same class of bad input as a malformed
+        // uuid above. Catching it at the write rather than with a pre-flight
+        // SELECT leaves no TOCTOU window.
+        if is_starting_assistant_fk_violation(&report) {
+            StatusCode::UNPROCESSABLE_ENTITY
+        } else {
+            tracing::error!("Failed to upsert user preferences: {report}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    })?;
 
     let mut profile = me_user.profile.clone();
     profile.preference_nickname = updated_prefs.nickname;
@@ -834,6 +898,12 @@ pub async fn update_profile_preferences(
     profile.preference_assistant_additional_information =
         updated_prefs.assistant_additional_information;
     profile.preference_default_chat_provider = updated_prefs.default_chat_provider;
+    profile.preference_starting_hub_assistant_id = updated_prefs
+        .starting_hub_assistant_id
+        .map(|id| id.to_string());
+    profile.preference_starting_assistant_id =
+        updated_prefs.starting_assistant_id.map(|id| id.to_string());
+    profile.preference_starting_assistant_cleared = updated_prefs.starting_assistant_cleared;
 
     Ok(Json(profile))
 }
