@@ -793,7 +793,10 @@ mod tests {
         .unwrap();
         assert_eq!(document.audiences["engineering"].id, None);
         assert!(document.setting_orders.is_empty());
-        assert_eq!(order_names(&document, STARTING_ASSISTANT_SETTING), ["engineering"]);
+        assert_eq!(
+            order_names(&document, STARTING_ASSISTANT_SETTING),
+            ["engineering"]
+        );
     }
 
     #[test]
@@ -811,7 +814,10 @@ mod tests {
                 }}"#
             ))
             .unwrap_err();
-            assert!(error.to_string().contains("blank id"), "for {id:?}: {error}");
+            assert!(
+                error.to_string().contains("blank id"),
+                "for {id:?}: {error}"
+            );
         }
     }
 
@@ -885,7 +891,10 @@ mod tests {
         // an empty new key) is a disagreement, not a partial write.
         for (priority_order, setting_orders) in [
             // Length mismatch.
-            (r#"["sales", "hr"]"#, r#"{"starting_assistant": ["aud-sales"]}"#),
+            (
+                r#"["sales", "hr"]"#,
+                r#"{"starting_assistant": ["aud-sales"]}"#,
+            ),
             // Same length, positions swapped.
             (
                 r#"["sales", "hr"]"#,
@@ -893,14 +902,16 @@ mod tests {
             ),
             // The new key alone: invisible to an old reader, decisive to a new
             // one.
-            (r#"[]"#, r#"{"starting_assistant": ["aud-sales", "aud-hr"]}"#),
+            (
+                r#"[]"#,
+                r#"{"starting_assistant": ["aud-sales", "aud-hr"]}"#,
+            ),
             // Present but empty beside a non-empty legacy list: an old reader
             // resolves, a new one never would.
             (r#"["sales", "hr"]"#, r#"{"starting_assistant": []}"#),
         ] {
-            let error =
-                parse_experience_policy(&sales_hr_document(priority_order, setting_orders))
-                    .unwrap_err();
+            let error = parse_experience_policy(&sales_hr_document(priority_order, setting_orders))
+                .unwrap_err();
             assert!(
                 error.to_string().contains("disagree"),
                 "for {setting_orders}: {error}"
