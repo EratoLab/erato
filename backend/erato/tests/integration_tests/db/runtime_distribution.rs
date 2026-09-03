@@ -43,6 +43,7 @@ fn expected_policy_document() -> ExperiencePolicyDocument {
         audiences: HashMap::from([(
             "engineering".to_string(),
             ExperienceAudience {
+                id: None,
                 subjects: vec![
                     AudienceSubject::OrganizationGroup {
                         group_id: "8f7cb1f3-5c92-4e0f-9c39-89f65a852101".to_string(),
@@ -58,6 +59,7 @@ fn expected_policy_document() -> ExperiencePolicyDocument {
             },
         )]),
         priority_order: vec!["engineering".to_string()],
+        setting_orders: HashMap::new(),
     }
 }
 

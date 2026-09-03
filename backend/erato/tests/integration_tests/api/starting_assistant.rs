@@ -91,6 +91,7 @@ async fn install_policy_with_subjects(
         audiences.insert(
             name.to_string(),
             ExperienceAudience {
+                id: None,
                 subjects,
                 pinned_assistant_hub_assistant_id,
                 expires_at: None,
@@ -100,6 +101,7 @@ async fn install_policy_with_subjects(
     let document = ExperiencePolicyDocument {
         audiences,
         priority_order: priority_order.into_iter().map(String::from).collect(),
+        setting_orders: HashMap::new(),
     };
     app_state.reloadable.write().await.experience_policy = Some(document);
 }
