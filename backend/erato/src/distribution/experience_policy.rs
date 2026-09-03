@@ -13,6 +13,11 @@ use std::collections::{HashMap, HashSet};
 /// for future drafts and are deliberately not loaded.
 pub const EXPERIENCE_POLICY_SLUG: &str = "policy";
 
+/// The `setting_orders` key of the one live setting. Also the only setting
+/// `priority_order` ever encoded, which is why it alone has a legacy fallback
+/// in [`resolution_order_for`].
+pub const STARTING_ASSISTANT_SETTING: &str = "starting_assistant";
+
 /// The org-wide experience policy: which audiences exist and in which order
 /// they are resolved for a user.
 ///
@@ -27,8 +32,29 @@ pub struct ExperiencePolicyDocument {
     /// `chat_providers.priority_order` and `language_detection_priority` —
     /// never in the map above, whose `HashMap` iteration order is arbitrary.
     /// An audience absent from here can never win.
+    ///
+    /// Since `setting_orders` arrived this is the LEGACY spelling of the
+    /// starting-assistant order: dual-written by every new save and required
+    /// at parse to agree with `setting_orders["starting_assistant"]`, because
+    /// a pre-`setting_orders` erato resolves exclusively from here and a
+    /// mixed-version deployment must not change any winner. It may be dropped
+    /// only when the DEPLOYED-erato reader floor reads `setting_orders` — a
+    /// floor on what the org runs, not on any Cargo pin.
     #[serde(default)]
     pub priority_order: Vec<String>,
+    /// One TOTAL first-match-wins order per setting, in audience ids — the
+    /// per-setting successor to `priority_order` (ERMAIN-706 §10 item 5:
+    /// order is a property of a setting, not of the audience list). An
+    /// audience absent from a setting's order can never win that setting
+    /// (staged), mirroring `priority_order`'s absence rule.
+    ///
+    /// Unknown setting KEYS parse — the same mixed-version stance as unknown
+    /// fields — but every VALUE is validated uniformly, so a typo'd id fails
+    /// loudly instead of silently never matching. The flat `Vec<String>`
+    /// value type is a contract: a richer per-setting shape gets a NEW
+    /// top-level field, never a reshaped value here.
+    #[serde(default)]
+    pub setting_orders: HashMap<String, Vec<String>>,
 }
 
 /// One subject an audience is composed of, in the same vocabulary a
@@ -113,6 +139,15 @@ impl AudienceSubject {
 /// One audience an admin can pin a starting assistant for.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct ExperienceAudience {
+    /// A stable identity for this audience, minted by the admin panel. The
+    /// `audiences` map key is the display name and changes on rename, so
+    /// anything that must survive a rename — detail-page URLs, the
+    /// `setting_orders` entries — keys on this instead. Opaque and
+    /// uninterpreted, like subject ids: erato only ever compares it. Absent
+    /// on documents written before ids existed, which must keep resolving
+    /// without anyone re-saving them.
+    #[serde(default)]
+    pub id: Option<String>,
     /// The subjects this audience is composed of. A person is in the audience
     /// if **any** subject matches them, so groups, named individuals and the
     /// whole organization compose freely — the same way a resource can be
@@ -155,7 +190,17 @@ impl ExperienceAudience {
 /// An unknown `subject_type` and a subject missing its id are rejected by the
 /// derived `Deserialize` for [`AudienceSubject`]; what is left for this
 /// function is the structure serde cannot express — an audience matching
-/// nobody, and an id that is present but blank.
+/// nobody, an id that is present but blank or duplicated, a `setting_orders`
+/// entry naming no audience, and the starting-assistant agreement invariant.
+///
+/// The AGREEMENT INVARIANT: whenever `setting_orders` carries the
+/// `starting_assistant` key, that order and `priority_order` must be the same
+/// order — same length, and the id at each position belongs to the audience
+/// named at that position. A pre-`setting_orders` erato resolves exclusively
+/// from `priority_order`, so any document where the two could disagree —
+/// including one carrying only the new key — would resolve differently on old
+/// and new readers; rejecting it whole (keep-previous + log upstream) means
+/// no parseable document can make reader precedence matter.
 pub fn parse_experience_policy(contents: &str) -> Result<ExperiencePolicyDocument, Report> {
     let document: ExperiencePolicyDocument = serde_json::from_str(contents)?;
 
@@ -171,6 +216,7 @@ pub fn parse_experience_policy(contents: &str) -> Result<ExperiencePolicyDocumen
         }
     }
 
+    let mut audience_ids = HashSet::new();
     for (name, audience) in &document.audiences {
         if audience.subjects.is_empty() {
             return Err(eyre!("audience \"{name}\" has no subjects"));
@@ -183,9 +229,97 @@ pub fn parse_experience_policy(contents: &str) -> Result<ExperiencePolicyDocumen
                 ));
             }
         }
+        if let Some(id) = audience.id.as_deref() {
+            if id.trim().is_empty() {
+                return Err(eyre!("audience \"{name}\" has a blank id"));
+            }
+            if !audience_ids.insert(id) {
+                return Err(eyre!("audience id \"{id}\" is used more than once"));
+            }
+        }
+    }
+
+    for (setting, order) in &document.setting_orders {
+        let mut seen_ids = HashSet::new();
+        for id in order {
+            if !audience_ids.contains(id.as_str()) {
+                return Err(eyre!(
+                    "setting_orders[\"{setting}\"] names unknown audience id \"{id}\""
+                ));
+            }
+            if !seen_ids.insert(id.as_str()) {
+                return Err(eyre!(
+                    "setting_orders[\"{setting}\"] lists audience id \"{id}\" more than once"
+                ));
+            }
+        }
+    }
+
+    if let Some(starting_order) = document.setting_orders.get(STARTING_ASSISTANT_SETTING) {
+        if starting_order.len() != document.priority_order.len() {
+            return Err(eyre!(
+                "setting_orders[\"{STARTING_ASSISTANT_SETTING}\"] and priority_order disagree: \
+                 {} ids versus {} names",
+                starting_order.len(),
+                document.priority_order.len()
+            ));
+        }
+        for (position, (id, name)) in starting_order
+            .iter()
+            .zip(&document.priority_order)
+            .enumerate()
+        {
+            let named_id = document
+                .audiences
+                .get(name)
+                .and_then(|audience| audience.id.as_deref());
+            if named_id != Some(id.as_str()) {
+                return Err(eyre!(
+                    "setting_orders[\"{STARTING_ASSISTANT_SETTING}\"] and priority_order disagree \
+                     at position {position}: id \"{id}\" does not belong to audience \"{name}\""
+                ));
+            }
+        }
     }
 
     Ok(document)
+}
+
+/// The audiences to try for `setting`, first-match-wins — the ONE home for
+/// reader precedence: the setting's `setting_orders` entry when the key is
+/// present (even empty; the agreement invariant guarantees a parseable
+/// document cannot diverge from the legacy list), else the legacy
+/// `priority_order` for the starting assistant — the only setting that list
+/// ever encoded, so no other setting gets a fallback. Entries naming an
+/// unknown id or name are skipped so resolution stays total even over a
+/// document the parser would reject (the `skips_unknown_priority_order_entries`
+/// precedent).
+#[must_use]
+pub fn resolution_order_for<'a>(
+    policy: &'a ExperiencePolicyDocument,
+    setting: &str,
+) -> Vec<(&'a str, &'a ExperienceAudience)> {
+    if let Some(order) = policy.setting_orders.get(setting) {
+        return order
+            .iter()
+            .filter_map(|id| {
+                policy
+                    .audiences
+                    .iter()
+                    .find(|(_, audience)| audience.id.as_deref() == Some(id.as_str()))
+            })
+            .map(|(name, audience)| (name.as_str(), audience))
+            .collect();
+    }
+    if setting != STARTING_ASSISTANT_SETTING {
+        return Vec::new();
+    }
+    policy
+        .priority_order
+        .iter()
+        .filter_map(|name| policy.audiences.get_key_value(name))
+        .map(|(name, audience)| (name.as_str(), audience))
+        .collect()
 }
 
 /// Return the slug encoded by an admin-panel experience policy filename.
@@ -389,6 +523,7 @@ mod tests {
     fn is_active_at_boundary_is_exact() {
         let expires_at = "2026-09-08T00:00:00Z".parse::<DateTime<Utc>>().unwrap();
         let audience = ExperienceAudience {
+            id: None,
             subjects: vec![AudienceSubject::Organization],
             pinned_assistant_hub_assistant_id: Uuid::new_v4(),
             expires_at: Some(expires_at),
@@ -559,5 +694,332 @@ mod tests {
     fn parses_an_empty_document_to_defaults() {
         let document = parse_experience_policy("{}").unwrap();
         assert_eq!(document, ExperiencePolicyDocument::default());
+    }
+
+    /// A two-audience dual-write document varying only its two order keys, so
+    /// each agreement-invariant test states just the disagreement it is about.
+    fn sales_hr_document(priority_order: &str, setting_orders: &str) -> String {
+        format!(
+            r#"{{
+                "audiences": {{
+                    "sales": {{
+                        "id": "aud-sales",
+                        "subjects": [{{"subject_type": "organization_group", "group_id": "sales-group-id"}}],
+                        "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01"
+                    }},
+                    "hr": {{
+                        "id": "aud-hr",
+                        "subjects": [{{"subject_type": "organization_group", "group_id": "hr-group-id"}}],
+                        "pinned_assistant_hub_assistant_id": "0b1c2d3e-4f50-4161-8273-8495a6b7c8d9"
+                    }}
+                }},
+                "priority_order": {priority_order},
+                "setting_orders": {setting_orders}
+            }}"#
+        )
+    }
+
+    fn identified(id: &str, group_id: &str) -> ExperienceAudience {
+        ExperienceAudience {
+            id: Some(id.to_string()),
+            subjects: vec![AudienceSubject::OrganizationGroup {
+                group_id: group_id.to_string(),
+            }],
+            pinned_assistant_hub_assistant_id: Uuid::new_v4(),
+            expires_at: None,
+        }
+    }
+
+    fn document_of(
+        entries: Vec<(&str, ExperienceAudience)>,
+        priority_order: Vec<&str>,
+        setting_orders: Vec<(&str, Vec<&str>)>,
+    ) -> ExperiencePolicyDocument {
+        ExperiencePolicyDocument {
+            audiences: entries
+                .into_iter()
+                .map(|(name, audience)| (name.to_string(), audience))
+                .collect(),
+            priority_order: priority_order.into_iter().map(str::to_string).collect(),
+            setting_orders: setting_orders
+                .into_iter()
+                .map(|(setting, ids)| {
+                    (
+                        setting.to_string(),
+                        ids.into_iter().map(str::to_string).collect(),
+                    )
+                })
+                .collect(),
+        }
+    }
+
+    fn order_names(policy: &ExperiencePolicyDocument, setting: &str) -> Vec<String> {
+        resolution_order_for(policy, setting)
+            .into_iter()
+            .map(|(name, _)| name.to_string())
+            .collect()
+    }
+
+    #[test]
+    fn parses_audience_ids_and_setting_orders() {
+        let document = parse_experience_policy(&sales_hr_document(
+            r#"["sales", "hr"]"#,
+            r#"{"starting_assistant": ["aud-sales", "aud-hr"]}"#,
+        ))
+        .unwrap();
+        assert_eq!(document.audiences["sales"].id.as_deref(), Some("aud-sales"));
+        assert_eq!(document.audiences["hr"].id.as_deref(), Some("aud-hr"));
+        assert_eq!(
+            document.setting_orders[STARTING_ASSISTANT_SETTING],
+            vec!["aud-sales", "aud-hr"]
+        );
+    }
+
+    #[test]
+    fn legacy_documents_default_the_new_fields() {
+        // S9d's enabler: a document written before ids existed keeps loading
+        // and resolving with nobody re-saving it.
+        let document = parse_experience_policy(
+            r#"{
+                "audiences": {
+                    "engineering": {
+                        "subjects": [{"subject_type": "organization_group", "group_id": "8f7cb1f3-5c92-4e0f-9c39-89f65a852101"}],
+                        "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01"
+                    }
+                },
+                "priority_order": ["engineering"]
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(document.audiences["engineering"].id, None);
+        assert!(document.setting_orders.is_empty());
+        assert_eq!(order_names(&document, STARTING_ASSISTANT_SETTING), ["engineering"]);
+    }
+
+    #[test]
+    fn rejects_a_blank_audience_id() {
+        for id in ["", "   "] {
+            let error = parse_experience_policy(&format!(
+                r#"{{
+                    "audiences": {{
+                        "engineering": {{
+                            "id": "{id}",
+                            "subjects": [{{"subject_type": "organization"}}],
+                            "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01"
+                        }}
+                    }}
+                }}"#
+            ))
+            .unwrap_err();
+            assert!(error.to_string().contains("blank id"), "for {id:?}: {error}");
+        }
+    }
+
+    #[test]
+    fn rejects_duplicate_audience_ids() {
+        let error = parse_experience_policy(
+            r#"{
+                "audiences": {
+                    "sales": {
+                        "id": "aud-1",
+                        "subjects": [{"subject_type": "organization_group", "group_id": "sales-group-id"}],
+                        "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01"
+                    },
+                    "hr": {
+                        "id": "aud-1",
+                        "subjects": [{"subject_type": "organization_group", "group_id": "hr-group-id"}],
+                        "pinned_assistant_hub_assistant_id": "0b1c2d3e-4f50-4161-8273-8495a6b7c8d9"
+                    }
+                }
+            }"#,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("more than once"));
+    }
+
+    #[test]
+    fn rejects_a_setting_order_naming_an_unknown_id() {
+        let error = parse_experience_policy(&sales_hr_document(
+            r#"["sales", "hr"]"#,
+            r#"{"welcome_banner": ["ghost"]}"#,
+        ))
+        .unwrap_err();
+        assert!(error.to_string().contains("unknown audience id"));
+    }
+
+    #[test]
+    fn rejects_duplicate_ids_within_one_setting_order() {
+        let error = parse_experience_policy(&sales_hr_document(
+            r#"["sales", "hr"]"#,
+            r#"{"welcome_banner": ["aud-sales", "aud-sales"]}"#,
+        ))
+        .unwrap_err();
+        assert!(error.to_string().contains("more than once"));
+    }
+
+    #[test]
+    fn accepts_unknown_setting_keys_with_valid_values() {
+        // Unknown KEYS are the mixed-version stance; the VALUES are still held
+        // to the uniform id rules, which the two rejection tests above pin.
+        let document = parse_experience_policy(&sales_hr_document(
+            r#"["sales", "hr"]"#,
+            r#"{"future_setting": ["aud-hr"], "another_future_setting": []}"#,
+        ))
+        .unwrap();
+        assert_eq!(document.setting_orders["future_setting"], vec!["aud-hr"]);
+        assert!(document.setting_orders["another_future_setting"].is_empty());
+
+        // Empty agrees with empty: the smallest parseable dual document.
+        let document =
+            parse_experience_policy(&sales_hr_document(r#"[]"#, r#"{"starting_assistant": []}"#))
+                .unwrap();
+        assert!(document.setting_orders[STARTING_ASSISTANT_SETTING].is_empty());
+    }
+
+    #[test]
+    fn rejects_a_starting_assistant_order_disagreeing_with_the_legacy_list() {
+        // Every shape here would resolve differently on a pre-setting_orders
+        // reader, which is the S10c bug the agreement invariant exists to make
+        // unrepresentable. Note the key's PRESENCE triggers the check: a
+        // document carrying only the new key (or only the legacy list beside
+        // an empty new key) is a disagreement, not a partial write.
+        for (priority_order, setting_orders) in [
+            // Length mismatch.
+            (r#"["sales", "hr"]"#, r#"{"starting_assistant": ["aud-sales"]}"#),
+            // Same length, positions swapped.
+            (
+                r#"["sales", "hr"]"#,
+                r#"{"starting_assistant": ["aud-hr", "aud-sales"]}"#,
+            ),
+            // The new key alone: invisible to an old reader, decisive to a new
+            // one.
+            (r#"[]"#, r#"{"starting_assistant": ["aud-sales", "aud-hr"]}"#),
+            // Present but empty beside a non-empty legacy list: an old reader
+            // resolves, a new one never would.
+            (r#"["sales", "hr"]"#, r#"{"starting_assistant": []}"#),
+        ] {
+            let error =
+                parse_experience_policy(&sales_hr_document(priority_order, setting_orders))
+                    .unwrap_err();
+            assert!(
+                error.to_string().contains("disagree"),
+                "for {setting_orders}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_a_starting_assistant_order_over_an_audience_with_no_id() {
+        // Position-wise agreement means the id at i must BELONG to the
+        // audience named at i — an id-less audience there cannot agree with
+        // anything, even another audience's valid id.
+        let error = parse_experience_policy(
+            r#"{
+                "audiences": {
+                    "sales": {
+                        "subjects": [{"subject_type": "organization_group", "group_id": "sales-group-id"}],
+                        "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01"
+                    },
+                    "hr": {
+                        "id": "aud-hr",
+                        "subjects": [{"subject_type": "organization_group", "group_id": "hr-group-id"}],
+                        "pinned_assistant_hub_assistant_id": "0b1c2d3e-4f50-4161-8273-8495a6b7c8d9"
+                    },
+                    "engineering": {
+                        "id": "aud-eng",
+                        "subjects": [{"subject_type": "organization_group", "group_id": "eng-group-id"}],
+                        "pinned_assistant_hub_assistant_id": "0b1c2d3e-4f50-4161-8273-8495a6b7c8d8"
+                    }
+                },
+                "priority_order": ["sales", "hr"],
+                "setting_orders": {"starting_assistant": ["aud-eng", "aud-hr"]}
+            }"#,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("position 0"));
+    }
+
+    #[test]
+    fn resolution_order_prefers_a_present_setting_orders_key() {
+        // Constructed directly: the parser rejects any disagreeing document,
+        // so a struct the wire cannot carry is the only way to observe which
+        // path the reader takes.
+        let entries = || {
+            vec![
+                ("sales", identified("aud-sales", "sales-group-id")),
+                ("hr", identified("aud-hr", "hr-group-id")),
+            ]
+        };
+        let policy = document_of(
+            entries(),
+            vec!["sales", "hr"],
+            vec![(STARTING_ASSISTANT_SETTING, vec!["aud-hr"])],
+        );
+        assert_eq!(order_names(&policy, STARTING_ASSISTANT_SETTING), ["hr"]);
+
+        // Present but empty is still the per-setting path — nobody can win —
+        // not a fallback to the legacy list.
+        let policy = document_of(
+            entries(),
+            vec!["sales", "hr"],
+            vec![(STARTING_ASSISTANT_SETTING, vec![])],
+        );
+        assert!(resolution_order_for(&policy, STARTING_ASSISTANT_SETTING).is_empty());
+    }
+
+    #[test]
+    fn resolution_order_falls_back_to_the_legacy_list_only_for_the_starting_assistant() {
+        // Another setting's arrival must not perturb the fallback: the legacy
+        // list only ever encoded the starting-assistant order, so no other
+        // setting may inherit it.
+        let policy = document_of(
+            vec![
+                ("sales", identified("aud-sales", "sales-group-id")),
+                ("hr", identified("aud-hr", "hr-group-id")),
+            ],
+            vec!["hr", "sales"],
+            vec![("welcome_banner", vec!["aud-sales"])],
+        );
+        assert_eq!(
+            order_names(&policy, STARTING_ASSISTANT_SETTING),
+            ["hr", "sales"]
+        );
+        assert_eq!(order_names(&policy, "welcome_banner"), ["sales"]);
+        assert!(resolution_order_for(&policy, "unordered_setting").is_empty());
+    }
+
+    #[test]
+    fn resolution_order_skips_unknown_ids() {
+        // The parser rejects these, but the resolver must stay total anyway —
+        // the `skips_unknown_priority_order_entries` precedent, on the id path.
+        let policy = document_of(
+            vec![("sales", identified("aud-sales", "sales-group-id"))],
+            vec!["sales"],
+            vec![(STARTING_ASSISTANT_SETTING, vec!["ghost", "aud-sales"])],
+        );
+        assert_eq!(order_names(&policy, STARTING_ASSISTANT_SETTING), ["sales"]);
+    }
+
+    #[test]
+    fn resolution_order_expresses_divergent_orders_per_setting() {
+        // S10e: "Sales above HR for setting X, below for setting Y" is
+        // representable today even though nothing exercises it yet — the
+        // property the whole migration exists to buy.
+        let policy = document_of(
+            vec![
+                ("sales", identified("aud-sales", "sales-group-id")),
+                ("hr", identified("aud-hr", "hr-group-id")),
+            ],
+            vec!["sales", "hr"],
+            vec![
+                (STARTING_ASSISTANT_SETTING, vec!["aud-sales", "aud-hr"]),
+                ("welcome_banner", vec!["aud-hr", "aud-sales"]),
+            ],
+        );
+        assert_eq!(
+            order_names(&policy, STARTING_ASSISTANT_SETTING),
+            ["sales", "hr"]
+        );
+        assert_eq!(order_names(&policy, "welcome_banner"), ["hr", "sales"]);
     }
 }
