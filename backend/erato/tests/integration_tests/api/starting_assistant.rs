@@ -8,7 +8,7 @@ use erato::config::{
 use erato::db::entity::prelude::ShareGrants;
 use erato::db::entity::share_grants;
 use erato::distribution::experience_policy::{
-    AudienceSubject, ExperienceAudience, ExperiencePolicyDocument,
+    AudienceSubject, ExperienceAudience, ExperiencePolicyDocument, STARTING_ASSISTANT_SETTING,
 };
 use erato::policy::engine::PolicyEngine;
 use erato::state::AppState;
@@ -86,12 +86,29 @@ async fn install_policy_with_subjects(
     entries: Vec<(&str, Vec<AudienceSubject>, Uuid)>,
     priority_order: Vec<&str>,
 ) {
+    let entries = entries
+        .into_iter()
+        .map(|(name, subjects, hub_id)| (name, None, subjects, hub_id))
+        .collect();
+    install_policy_with_ids(app_state, entries, priority_order, vec![]).await;
+}
+
+/// [`install_policy_with_subjects`] for a document whose audiences carry a
+/// stable id and whose per-setting orders are keyed on those ids. Entries are
+/// `(audience_name, audience_id, subjects, pinned_hub_id)`; `setting_orders`
+/// pairs a setting with its order of audience ids.
+async fn install_policy_with_ids(
+    app_state: &AppState,
+    entries: Vec<(&str, Option<&str>, Vec<AudienceSubject>, Uuid)>,
+    priority_order: Vec<&str>,
+    setting_orders: Vec<(&str, Vec<&str>)>,
+) {
     let mut audiences = HashMap::new();
-    for (name, subjects, pinned_assistant_hub_assistant_id) in entries {
+    for (name, id, subjects, pinned_assistant_hub_assistant_id) in entries {
         audiences.insert(
             name.to_string(),
             ExperienceAudience {
-                id: None,
+                id: id.map(String::from),
                 subjects,
                 pinned_assistant_hub_assistant_id,
                 expires_at: None,
@@ -101,7 +118,15 @@ async fn install_policy_with_subjects(
     let document = ExperiencePolicyDocument {
         audiences,
         priority_order: priority_order.into_iter().map(String::from).collect(),
-        setting_orders: HashMap::new(),
+        setting_orders: setting_orders
+            .into_iter()
+            .map(|(setting, order)| {
+                (
+                    setting.to_string(),
+                    order.into_iter().map(String::from).collect(),
+                )
+            })
+            .collect(),
     };
     app_state.reloadable.write().await.experience_policy = Some(document);
 }
@@ -910,6 +935,97 @@ async fn test_starting_assistant_multi_group_audience_checks_the_matched_subject
     assert!(
         body.get("starting_assistant").is_none(),
         "matching the audience through a group that cannot see the assistant must not pin it"
+    );
+}
+
+/// A document carrying audience ids and a `setting_orders` entry beside
+/// `priority_order` pins the audience member by the audience's name, and pins
+/// nobody outside the audience.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_starting_assistant_dual_document_pins_only_the_matching_identity(
+    pool: Pool<Postgres>,
+) {
+    let app_state = test_app_state(starting_assistant_app_config(), pool).await;
+    let server = create_test_server(app_state.clone());
+
+    let owner_token = JwtTokenBuilder::new()
+        .subject("starting-assistant-dual-owner")
+        .email("starting-assistant-dual-owner@example.com")
+        .build();
+    let reviewer_token = JwtTokenBuilder::new()
+        .subject("starting-assistant-dual-reviewer")
+        .email("starting-assistant-dual-reviewer@example.com")
+        .groups(vec![REVIEWER_GROUP_ID.to_string()])
+        .build();
+    let viewer_token = JwtTokenBuilder::new()
+        .subject("starting-assistant-dual-viewer")
+        .email("starting-assistant-dual-viewer@example.com")
+        .groups(vec![AUDIENCE_GROUP_ID.to_string()])
+        .build();
+    let outsider_token = JwtTokenBuilder::new()
+        .subject("starting-assistant-dual-outsider")
+        .email("starting-assistant-dual-outsider@example.com")
+        .groups(vec!["some-unrelated-group".to_string()])
+        .build();
+
+    let owner = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        "starting-assistant-dual-owner",
+        Some("starting-assistant-dual-owner@example.com"),
+    )
+    .await
+    .expect("failed to create owner");
+    let source_assistant = create_source_assistant(
+        &app_state,
+        &owner.id.to_string(),
+        "Dual Document Starting Assistant",
+    )
+    .await;
+    let version = publish_hub_version(
+        &server,
+        &owner_token,
+        &reviewer_token,
+        &source_assistant.id.to_string(),
+        "1.0.0",
+        AUDIENCE_GROUP_ID,
+    )
+    .await;
+    let hub_assistant_id = version["hub_assistant_id"]
+        .as_str()
+        .expect("version should include hub_assistant_id")
+        .to_string();
+    let assistant_id = version["assistant_id"].as_str().unwrap().to_string();
+
+    install_policy_with_ids(
+        &app_state,
+        vec![(
+            "pilot",
+            Some("aud-pilot"),
+            vec![group_subject(AUDIENCE_GROUP_ID)],
+            hub_assistant_id.parse().unwrap(),
+        )],
+        vec!["pilot"],
+        vec![(STARTING_ASSISTANT_SETTING, vec!["aud-pilot"])],
+    )
+    .await;
+
+    let body = get_starting_assistant(&server, &viewer_token).await;
+    let pinned = body["starting_assistant"]
+        .as_object()
+        .expect("starting_assistant should be present for the audience member");
+    assert_eq!(pinned["assistant_id"], assistant_id.as_str());
+    assert_eq!(pinned["assistant_hub_assistant_id"], hub_assistant_id);
+    assert_eq!(pinned["audience"], "pilot");
+
+    let body = get_starting_assistant(&server, &outsider_token).await;
+    assert!(
+        body.get("starting_assistant").is_none(),
+        "a caller outside the audience must get no pin"
     );
 }
 
