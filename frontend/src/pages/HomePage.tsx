@@ -16,10 +16,7 @@ export default function HomePage() {
   const navigate = useNavigate();
   // The backend returns one decided answer; `retry: false` keeps the error
   // path well inside the fallback timeout below.
-  const { data, error, isLoading } = useStartingAssistant(
-    {},
-    { retry: false },
-  );
+  const { data, error, isLoading } = useStartingAssistant({}, { retry: false });
   const [timedOut, setTimedOut] = useState(false);
   const hasNavigated = useRef(false);
 
