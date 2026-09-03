@@ -264,11 +264,7 @@ async fn foreign_filenames_never_silently_unpin(pool: Pool<Postgres>) {
     )
     .await;
 
-    let previous = ReloadableAppState {
-        experience_policy: Some(expected_policy_document()),
-        ..Default::default()
-    };
-    *app_state.reloadable.write().await = previous;
+    app_state.reloadable.write().await.experience_policy = Some(expected_policy_document());
 
     // Rows exist but none carries the live filename: a defective or
     // newer-admin-panel write must keep the previous policy, never silently

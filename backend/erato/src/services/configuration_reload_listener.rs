@@ -82,7 +82,12 @@ async fn listen_for_configuration_changes(
 
         match ReloadableAppState::load(app_state).await {
             Ok(next_state) => {
+                let mcp_config_changed =
+                    app_state.reloadable.read().await.mcp.config != next_state.mcp.config;
                 *app_state.reloadable.write().await = next_state;
+                if mcp_config_changed {
+                    app_state.global_policy_engine.invalidate_data().await;
+                }
                 tracing::info!("Reloaded runtime distribution");
             }
             Err(error) => {

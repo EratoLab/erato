@@ -2230,6 +2230,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     file_resolver: &impl FileResolver,
     prompt_provider: &impl PromptProvider,
 ) -> Result<PreparedChatRequest, Report> {
+    let mcp = app_state.mcp_state().await;
     let effective_selected_facet_ids = resolve_effective_selected_facet_ids(
         &app_state.config.experimental_facets,
         &user_input.selected_facet_ids,
@@ -2303,12 +2304,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         .filter_authorized_mcp_server_ids(
             &me_profile_input.subject,
             me_profile_input.user_groups,
-            &app_state
-                .config
-                .mcp_servers
-                .keys()
-                .cloned()
-                .collect::<Vec<_>>(),
+            &mcp.config.mcp_servers.keys().cloned().collect::<Vec<_>>(),
         )
         .await?
         .into_iter()
@@ -2340,8 +2336,8 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     };
 
     // Only discover tools for servers potentially needed in this request.
-    let tool_discovery = app_state
-        .mcp_servers
+    let tool_discovery = mcp
+        .servers
         .discover_tools_for_server_ids(chat.id, effective_server_filter.as_ref(), &mcp_auth_context)
         .await;
     let all_mcp_server_tools = tool_discovery.tools;
@@ -2595,10 +2591,9 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     // continuation. The tool is only useful alongside MCP tools, and MCP wins
     // if a server already exposes the reserved name.
     let wait_tool_enabled = !generation_mcp_tools.is_empty()
-        && (app_state.config.mcp_servers_global.enable_wait
+        && (mcp.config.mcp_servers_global.enable_wait
             || generation_mcp_tools.iter().any(|managed_tool| {
-                app_state
-                    .config
+                mcp.config
                     .mcp_servers
                     .get(&managed_tool.server_id)
                     .is_some_and(|config| is_tool_allowed_to_wait(&managed_tool.tool.name, config))
@@ -2614,7 +2609,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
             );
         } else {
             chat_request_tools.push(crate::services::mcp_wait::build_wait_tool(
-                app_state.config.mcp_servers_global.max_wait_seconds,
+                mcp.config.mcp_servers_global.max_wait_seconds,
                 effective_model_settings.compat_omit_strict,
             ));
         }
@@ -2931,6 +2926,7 @@ async fn stream_generate_chat_completion<
     is_delegated_run: bool,
     delegation: Option<DelegationDispatchContext<'_>>,
 ) -> Result<(Vec<ContentPart>, Option<GenerationMetadata>), Report> {
+    let mcp = app_state.mcp_state().await;
     // Record the real assistant message id on the streaming task. `start_task`
     // only had a placeholder id; client-tool results are routed to a task by
     // message_id (the id the client receives in `client_tool_call`), so it must
@@ -3276,7 +3272,7 @@ async fn stream_generate_chat_completion<
                     tool_call_parent_observation_ids.remove(&unfinished_tool_call.call_id);
                 match crate::services::mcp_wait::parse_wait_seconds(
                     &unfinished_tool_call.fn_arguments,
-                    app_state.config.mcp_servers_global.max_wait_seconds,
+                    mcp.config.mcp_servers_global.max_wait_seconds,
                 ) {
                     Ok(seconds) => pending_waits.push(PendingWait {
                         tool_call: unfinished_tool_call,
@@ -3865,27 +3861,27 @@ async fn stream_generate_chat_completion<
             // the request in the assistant message and let `continuestream`
             // rehydrate this point after a user decision.
             if let Some(approval_request) = mcp_tool_approval_request(
-                &app_state.config.mcp_servers_global.approval,
+                &mcp.config.mcp_servers_global.approval,
                 &managed_tool_call.server_id,
                 &managed_tool_call.tool,
                 &unfinished_tool_call,
             ) {
-                let has_active_always_allow =
-                    if app_state.config.mcp_servers_global.approval.allow_always {
-                        match Uuid::parse_str(&user_id) {
-                            Ok(user_id) => crate::models::user_tool_approval_setting::find_active(
-                                &app_state.db,
-                                user_id,
-                                &approval_request.mcp_server_id,
-                                &approval_request.tool_name,
-                            )
-                            .await?
-                            .is_some(),
-                            Err(_) => false,
-                        }
-                    } else {
-                        false
-                    };
+                let has_active_always_allow = if mcp.config.mcp_servers_global.approval.allow_always
+                {
+                    match Uuid::parse_str(&user_id) {
+                        Ok(user_id) => crate::models::user_tool_approval_setting::find_active(
+                            &app_state.db,
+                            user_id,
+                            &approval_request.mcp_server_id,
+                            &approval_request.tool_name,
+                        )
+                        .await?
+                        .is_some(),
+                        Err(_) => false,
+                    }
+                } else {
+                    false
+                };
 
                 if !has_active_always_allow && is_delegated_run {
                     // A delegated child run must never park on approval — the
@@ -3941,8 +3937,8 @@ async fn stream_generate_chat_completion<
             };
             let tool_call_parent_observation_id =
                 tool_call_parent_observation_ids.remove(&unfinished_tool_call.call_id);
-            let tool_call_result = app_state
-                .mcp_servers
+            let tool_call_result = mcp
+                .servers
                 .call_tool(chat_id, managed_tool_call, &mcp_auth_context)
                 .await;
             let tool_call_end_time = if langfuse_enabled {
@@ -9735,6 +9731,7 @@ pub async fn continue_message_sse(
     Extension(me_user): Extension<MeProfile>,
     Json(request): Json<ContinueStreamRequest>,
 ) -> Result<Sse<SseEventStreamWithKeepAlive>, (axum::http::StatusCode, String)> {
+    let mcp = app_state.mcp_state().await;
     // Check ownership and fail before opening an SSE response. The worker reads
     // the message again so the approval transition is based on current state.
     let message = get_message_by_id(
@@ -9757,7 +9754,7 @@ pub async fn continue_message_sse(
         ));
     }
     if matches!(request.decision, ToolApprovalDecision::ApproveAlways)
-        && !app_state.config.mcp_servers_global.approval.allow_always
+        && !mcp.config.mcp_servers_global.approval.allow_always
     {
         return Err((
             axum::http::StatusCode::BAD_REQUEST,
@@ -9821,6 +9818,7 @@ async fn run_continue_message_task(
     request: ContinueStreamRequest,
     task: &Arc<StreamingTask>,
 ) -> Result<(), Report> {
+    let mcp = app_state.mcp_state().await;
     let message = get_message_by_id(
         &app_state.db,
         policy,
@@ -9893,8 +9891,8 @@ async fn run_continue_message_task(
     // an unrelated MCP server that is temporarily unavailable; that must not
     // prevent a previously approved tool from continuing. The strict
     // `list_tools` helper turns any such server into a generation failure.
-    let mcp_tool_discovery = app_state
-        .mcp_servers
+    let mcp_tool_discovery = mcp
+        .servers
         .discover_tools_for_server_ids(chat.id, None, &mcp_auth_context)
         .await;
     let available_mcp_tools = mcp_tool_discovery.tools;
@@ -9915,8 +9913,8 @@ async fn run_continue_message_task(
             fn_arguments: approval_request.input.clone(),
             thought_signatures: None,
         };
-        let result = app_state
-            .mcp_servers
+        let result = mcp
+            .servers
             .call_tool(
                 chat.id,
                 crate::services::mcp_manager::ManagedToolCall {
@@ -9990,10 +9988,9 @@ async fn run_continue_message_task(
     let mut continuation_tools =
         convert_mcp_tools_to_genai_tools(available_mcp_tools.clone(), false);
     let wait_tool_enabled = !available_mcp_tools.is_empty()
-        && (app_state.config.mcp_servers_global.enable_wait
+        && (mcp.config.mcp_servers_global.enable_wait
             || available_mcp_tools.iter().any(|managed_tool| {
-                app_state
-                    .config
+                mcp.config
                     .mcp_servers
                     .get(&managed_tool.server_id)
                     .is_some_and(|config| is_tool_allowed_to_wait(&managed_tool.tool.name, config))
@@ -10004,7 +10001,7 @@ async fn run_continue_message_task(
             .any(|tool| tool.tool.name == crate::services::mcp_wait::WAIT_TOOL_NAME)
     {
         continuation_tools.push(crate::services::mcp_wait::build_wait_tool(
-            app_state.config.mcp_servers_global.max_wait_seconds,
+            mcp.config.mcp_servers_global.max_wait_seconds,
             false,
         ));
     }

@@ -5,11 +5,8 @@ import { ErrorBoundary } from "react-error-boundary";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoading";
 
-import { DocxPreview } from "./DocxPreview";
 import { EmlPreview } from "./EmlPreview";
-import { PptxPreview } from "./PptxPreview";
 import { TeamsTranscriptPreview } from "./TeamsTranscriptPreview";
-import { XlsxPreview } from "./XlsxPreview";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
@@ -21,6 +18,18 @@ const PdfPreview = lazy(async () => ({
   // eslint-disable-next-line lingui/no-unlocalized-strings
   default: (await import("./PdfPreview")).PdfPreview,
 }));
+const DocxPreview = lazy(async () => ({
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  default: (await import("./DocxPreview")).DocxPreview,
+}));
+const PptxPreview = lazy(async () => ({
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  default: (await import("./PptxPreview")).PptxPreview,
+}));
+const XlsxPreview = lazy(async () => ({
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  default: (await import("./XlsxPreview")).XlsxPreview,
+}));
 
 const PdfPreviewUnavailable: React.FC = () => (
   <div className="p-4 text-center" data-testid="file-preview-pdf-error">
@@ -31,6 +40,36 @@ const PdfPreviewUnavailable: React.FC = () => (
       })}
     </Alert>
   </div>
+);
+
+const LazyPreview: React.FC<{
+  children: React.ReactNode;
+  errorTestId: string;
+  loadingLabel: string;
+}> = ({ children, errorTestId, loadingLabel }) => (
+  <ErrorBoundary
+    fallback={
+      <div className="p-4 text-center" data-testid={errorTestId}>
+        <Alert type="warning" className="mb-4">
+          {t({
+            id: "filePreview.previewUnavailable",
+            message:
+              "Preview unavailable: this file viewer could not be loaded.",
+          })}
+        </Alert>
+      </div>
+    }
+  >
+    <Suspense
+      fallback={
+        <div className="flex min-h-[50vh] items-center justify-center">
+          <FilePreviewLoading label={loadingLabel} description="" />
+        </div>
+      }
+    >
+      {children}
+    </Suspense>
+  </ErrorBoundary>
 );
 
 const IMAGE_EXTENSIONS = [
@@ -191,15 +230,45 @@ export const FilePreviewContent: React.FC<FilePreviewContentProps> = ({
   }
 
   if (kind === "docx") {
-    return <DocxPreview url={url} />;
+    return (
+      <LazyPreview
+        errorTestId="file-preview-docx-chunk-error"
+        loadingLabel={t({
+          id: "filePreview.docxLoading",
+          message: "Loading document preview...",
+        })}
+      >
+        <DocxPreview url={url} />
+      </LazyPreview>
+    );
   }
 
   if (kind === "pptx") {
-    return <PptxPreview url={url} />;
+    return (
+      <LazyPreview
+        errorTestId="file-preview-pptx-chunk-error"
+        loadingLabel={t({
+          id: "filePreview.pptxLoading",
+          message: "Loading presentation preview...",
+        })}
+      >
+        <PptxPreview url={url} />
+      </LazyPreview>
+    );
   }
 
   if (kind === "xlsx") {
-    return <XlsxPreview filename={filename} url={url} />;
+    return (
+      <LazyPreview
+        errorTestId="file-preview-xlsx-chunk-error"
+        loadingLabel={t({
+          id: "filePreview.xlsxLoading",
+          message: "Loading spreadsheet preview...",
+        })}
+      >
+        <XlsxPreview filename={filename} url={url} />
+      </LazyPreview>
+    );
   }
 
   if (kind === "markdown") {

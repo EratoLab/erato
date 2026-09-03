@@ -226,6 +226,9 @@ type NormalizedDiffChange = {
   changed: boolean;
 };
 
+// eslint-disable-next-line lingui/no-unlocalized-strings -- Internal API field identifier, not user-facing text.
+export const ASSISTANT_HUB_CATEGORY_IDS_DIFF_FIELD = "category_ids";
+
 const normalizeDiffChanges = (
   diffSummary: Record<string, unknown>,
 ): NormalizedDiffChange[] => {
@@ -280,10 +283,14 @@ const normalizeDiffChanges = (
 
 export function AssistantHubDiff({
   diffSummary,
+  hiddenFields = [],
 }: {
   diffSummary: Record<string, unknown>;
+  hiddenFields?: string[];
 }) {
-  const changes = normalizeDiffChanges(diffSummary);
+  const changes = normalizeDiffChanges(diffSummary).filter(
+    (change) => !hiddenFields.includes(change.field),
+  );
 
   if (changes.length === 0) {
     return (

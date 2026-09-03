@@ -21,6 +21,7 @@ import {
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import {
+  ASSISTANT_HUB_CATEGORY_IDS_DIFF_FIELD,
   AssistantHubBreadcrumb,
   AssistantHubDiff,
   AssistantHubVersionCard,
@@ -300,7 +301,7 @@ export default function AssistantHubReviewPage() {
             <div className="space-y-6">
               <AssistantHubVersionOverviewSection
                 version={selectedVersion}
-                categories={config.categories}
+                categories={config.enable_categories ? config.categories : []}
                 ratingMode={config.rating_mode}
                 onStartChat={() =>
                   navigate(`/a/${selectedVersion.assistant_id}`)
@@ -386,6 +387,11 @@ export default function AssistantHubReviewPage() {
                     <div className="mt-4">
                       <AssistantHubDiff
                         diffSummary={selectedVersion.diff_summary}
+                        hiddenFields={
+                          config.enable_categories
+                            ? []
+                            : [ASSISTANT_HUB_CATEGORY_IDS_DIFF_FIELD]
+                        }
                       />
                     </div>
                   </details>
@@ -473,7 +479,7 @@ export default function AssistantHubReviewPage() {
               <AssistantHubVersionCard
                 key={version.version_id}
                 version={version}
-                categories={config.categories}
+                categories={config.enable_categories ? config.categories : []}
                 ratingMode={config.rating_mode}
                 showStatusBadge
                 onOpen={() =>

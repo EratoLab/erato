@@ -418,7 +418,7 @@ export default function AssistantHubDetailPage() {
             <>
               <AssistantHubVersionOverviewSection
                 version={version}
-                categories={config?.categories ?? []}
+                categories={config?.enable_categories ? config.categories : []}
                 ratingMode={config?.rating_mode}
                 onStartChat={() => navigate(`/a/${version.assistant_id}`)}
               />

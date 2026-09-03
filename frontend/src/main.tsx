@@ -11,22 +11,28 @@ import "./styles/globals.css"; // Corrected path to global stylesheet
 import "non.geist"; // Imports Geist Sans Variable
 import "non.geist/mono"; // Imports Geist Mono Variable
 
-// Kit scripts have executed by now (document order); pick up their
-// registrations, which land after the registry module evaluates.
-applyComponentKitRegistrations();
+const startApp = async (): Promise<void> => {
+  // Kit scripts have executed by now (document order); pick up their
+  // registrations, which land after the registry module evaluates.
+  applyComponentKitRegistrations();
 
-// Apply E2E / dev example overrides (no-op in production)
-initE2EOverrides();
+  // The example implementations are imported only when an E2E run requests
+  // them. Production previously paid for their full dependency graph despite
+  // this function being a no-op there.
+  await initE2EOverrides();
 
-const rootElement = document.getElementById("root");
-if (!rootElement) {
-  throw new Error("Could not find root element with id 'root'");
-}
+  const rootElement = document.getElementById("root");
+  if (!rootElement) {
+    throw new Error("Could not find root element with id 'root'");
+  }
 
-ReactDOM.createRoot(rootElement).render(
-  <React.StrictMode>
-    <BrowserRouter>
-      <AppRoutes />
-    </BrowserRouter>
-  </React.StrictMode>,
-);
+  ReactDOM.createRoot(rootElement).render(
+    <React.StrictMode>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </React.StrictMode>,
+  );
+};
+
+void startApp();

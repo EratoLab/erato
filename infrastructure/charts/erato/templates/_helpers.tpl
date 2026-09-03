@@ -212,6 +212,33 @@ Return the Service name used by oauth2-proxy for the backend upstream.
 {{- end -}}
 
 {{/*
+Return the base URL used by oauth2-proxy for non-admin routes.
+*/}}
+{{- define "erato.oauth2ProxyBackendUrl" -}}
+{{- if .Values.oauth2Proxy.upstreams.backendUrl -}}
+{{- .Values.oauth2Proxy.upstreams.backendUrl | trimSuffix "/" -}}
+{{- else if .Values.backend.loadBalancer.enabled -}}
+{{- printf "http://%s:%v" (include "erato.backendUpstreamName" .) .Values.backend.loadBalancer.service.port -}}
+{{- else -}}
+{{- printf "http://%s-erato-app:3130" .Release.Name -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Compose the path-aware oauth2-proxy upstream list. The fragments are the
+incoming route paths; keeping the same URL paths preserves the request path.
+*/}}
+{{- define "erato.oauth2ProxyUpstreams" -}}
+{{- $backendUrl := include "erato.oauth2ProxyBackendUrl" . -}}
+{{- if .Values.oauth2Proxy.upstreams.adminPanelUrl -}}
+{{- $adminPanelUrl := .Values.oauth2Proxy.upstreams.adminPanelUrl | trimSuffix "/" -}}
+{{- printf "%s/admin#/admin,%s/admin/#/admin/,%s/#/" $adminPanelUrl $adminPanelUrl $backendUrl -}}
+{{- else -}}
+{{- printf "%s/#/" $backendUrl -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Return the ServiceAccount name used by the intermediate load balancer.
 */}}
 {{- define "erato.loadBalancerServiceAccountName" -}}

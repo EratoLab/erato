@@ -5,6 +5,10 @@ import path from "node:path";
 
 import { libraryBuildStatusPlugin } from "./library-build-status";
 import { browserOnlyBuildPlugin } from "./vite.browser-only-build";
+import {
+  iconCatalogManualChunk,
+  iconCatalogPlugin,
+} from "./vite.icon-catalogs";
 import { createVoiceRuntimePackageAssetsPlugin } from "./vite.voice-runtime-assets";
 
 const DIST_LIBRARY_DIR = path.resolve(__dirname, "dist-library");
@@ -21,6 +25,7 @@ export default defineConfig(({ mode }) => {
         },
       }),
       lingui(),
+      iconCatalogPlugin({ rootDir: __dirname }),
       createVoiceRuntimePackageAssetsPlugin({
         rootDir: __dirname,
         outputBasePath: "voice-runtime",
@@ -89,6 +94,8 @@ export default defineConfig(({ mode }) => {
         // module instances both entries reference.
         output: {
           chunkFileNames: "chunks/[name]-[hash].mjs",
+          onlyExplicitManualChunks: true,
+          manualChunks: iconCatalogManualChunk,
         },
         preserveEntrySignatures: "allow-extension" as const,
       },

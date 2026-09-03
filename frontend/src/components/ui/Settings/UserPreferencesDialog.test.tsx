@@ -450,7 +450,7 @@ describe("UserPreferencesDialog", () => {
       screen.getByRole("button", { name: "Authorize" }),
     ).toBeInTheDocument();
     expect(
-      screen.getAllByTitle("Model Context Protocol").length,
+      (await screen.findAllByTitle("Model Context Protocol")).length,
     ).toBeGreaterThan(0);
     // The status word is visible text on the row's caption line.
     expect(screen.getByText("Connected")).toBeInTheDocument();

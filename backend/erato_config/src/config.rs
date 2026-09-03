@@ -2,7 +2,7 @@
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use config::builder::DefaultState;
-use config::{Config, ConfigBuilder, ConfigError, Environment};
+use config::{Config, ConfigBuilder, ConfigError, Environment, File, FileFormat};
 use eyre::{OptionExt, Report, eyre};
 use facet::Facet;
 use regex::Regex;
@@ -169,6 +169,73 @@ impl fmt::Debug for ConfigSourceFile {
 pub struct LoadedAppConfig {
     pub config: AppConfig,
     pub source_files: Vec<ConfigSourceFile>,
+}
+
+/// The subset of application configuration that can be replaced at runtime.
+///
+/// Keeping this as a separately deserializable value lets the backend evaluate
+/// the original TOML sources together with admin-panel overrides without
+/// attempting to reconstruct unrelated (and potentially redacted) settings.
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]
+pub struct McpRuntimeConfig {
+    #[serde(default)]
+    pub mcp_servers: HashMap<String, McpServerConfig>,
+    #[serde(default)]
+    pub mcp_servers_global: McpServersGlobalConfig,
+    #[serde(default)]
+    pub mcp_server_permissions: McpServerPermissionsConfig,
+}
+
+impl McpRuntimeConfig {
+    #[must_use]
+    pub fn from_app_config(config: &AppConfig) -> Self {
+        Self {
+            mcp_servers: config.mcp_servers.clone(),
+            mcp_servers_global: config.mcp_servers_global.clone(),
+            mcp_server_permissions: config.mcp_server_permissions.clone(),
+        }
+    }
+
+    pub fn from_toml_sources(sources: &[ConfigSourceFile]) -> Result<Self, Report> {
+        let mut builder = Config::builder();
+        for source in sources {
+            builder = builder.add_source(File::from_str(&source.contents, FileFormat::Toml));
+        }
+        // Environment variables have the same final precedence as they do for
+        // the startup configuration.
+        builder = builder.add_source(app_environment_source());
+
+        let config: Self = builder.build()?.try_deserialize()?;
+        config.mcp_server_permissions.validate()?;
+        config.mcp_servers_global.validate()?;
+        Ok(config)
+    }
+
+    pub fn apply_to(&self, config: &mut AppConfig) {
+        config.mcp_servers.clone_from(&self.mcp_servers);
+        config
+            .mcp_servers_global
+            .clone_from(&self.mcp_servers_global);
+        config
+            .mcp_server_permissions
+            .clone_from(&self.mcp_server_permissions);
+    }
+}
+
+fn app_environment_source() -> Environment {
+    Environment::default()
+        .try_parsing(true)
+        .separator("__")
+        .list_separator(" ")
+        .with_list_parse_key("chat_provider.additional_request_parameters")
+        .with_list_parse_key("chat_provider.additional_request_headers")
+        .with_list_parse_key("chat_providers.priority_order")
+        .with_list_parse_key("experimental_facets.priority_order")
+        .with_list_parse_key("experimental_facets.tool_call_allowlist")
+        .with_list_parse_key("experimental_facets.default_selected_facets")
+        .with_list_parse_key("frontend.extra_frame_ancestors")
+        .with_list_parse_key("i18n.language.language_detection_priority")
+        .with_list_parse_key("integrations.experimental_sharepoint.all_drives_sources")
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Facet)]
@@ -716,21 +783,7 @@ impl AppConfig {
             builder = builder.add_source(config::File::with_name(path).required(false));
         }
 
-        builder = builder.add_source(
-            Environment::default()
-                .try_parsing(true)
-                .separator("__")
-                .list_separator(" ")
-                .with_list_parse_key("chat_provider.additional_request_parameters")
-                .with_list_parse_key("chat_provider.additional_request_headers")
-                .with_list_parse_key("chat_providers.priority_order")
-                .with_list_parse_key("experimental_facets.priority_order")
-                .with_list_parse_key("experimental_facets.tool_call_allowlist")
-                .with_list_parse_key("experimental_facets.default_selected_facets")
-                .with_list_parse_key("frontend.extra_frame_ancestors")
-                .with_list_parse_key("i18n.language.language_detection_priority")
-                .with_list_parse_key("integrations.experimental_sharepoint.all_drives_sources"),
-        );
+        builder = builder.add_source(app_environment_source());
         Ok(builder)
     }
 
@@ -3002,6 +3055,11 @@ pub struct AssistantHubConfig {
     #[serde(default)]
     pub enabled: bool,
 
+    // Whether categories are shown and can be selected in the Assistant Hub.
+    // Defaults to `true`.
+    #[serde(default = "default_true")]
+    pub enable_categories: bool,
+
     // Rating scale shown in the Assistant Hub. Scores are always persisted on
     // the 10-point scale; the frontend converts them for display and input.
     // Defaults to `10_stars`.
@@ -3037,12 +3095,36 @@ impl Default for AssistantHubConfig {
     fn default() -> Self {
         Self {
             enabled: false,
+            enable_categories: true,
             rating_mode: default_assistant_hub_rating_mode(),
             default_share_with_whole_organization:
                 default_assistant_hub_share_with_whole_organization(),
             reviewers: AssistantHubReviewerPermissionsConfig::default(),
             categories: HashMap::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod assistant_hub_config_tests {
+    use super::AssistantHubConfig;
+
+    #[test]
+    fn categories_are_enabled_by_default() {
+        let config: AssistantHubConfig =
+            serde_json::from_value(serde_json::json!({})).expect("config should deserialize");
+
+        assert!(config.enable_categories);
+    }
+
+    #[test]
+    fn categories_can_be_disabled() {
+        let config: AssistantHubConfig = serde_json::from_value(serde_json::json!({
+            "enable_categories": false
+        }))
+        .expect("config should deserialize");
+
+        assert!(!config.enable_categories);
     }
 }
 

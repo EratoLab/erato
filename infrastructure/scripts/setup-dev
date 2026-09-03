@@ -248,7 +248,7 @@ def add_helm_repos():
     """Add required Helm repositories."""
     repos = [
         ("bitnami", "https://charts.bitnami.com/bitnami"),
-        ("cnpg", "https://cloudnative-pg.github.io/charts"),
+        ("cnpg", "https://raw.githubusercontent.com/cloudnative-pg/charts/gh-pages"),
         ("datawire", "https://app.getambassador.io"),
         ("seaweedfs", "https://seaweedfs.github.io/seaweedfs/helm"),
     ]

@@ -372,17 +372,22 @@ export {
   type AddinSessionPolicy,
   type AddinSessionActionInput,
 } from "@/lib/addinSession";
+// The generated client is part of the public library surface. Keep the
+// complete operation set available to consumers, including the low-level
+// fetch functions, query builders, and React Query hooks.
+export * from "@/lib/generated/v1betaApi/v1betaApiComponents";
+export { Chat } from "@/components/ui/Chat";
+export type * from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 export {
-  chatMessagesQuery,
-  fetchUpdateProfilePreferences,
-  fetchUploadFile,
-  profileQuery,
-  recentChatsQuery,
-  useArchiveChatEndpoint,
-  useFacets,
-  useRecentChats,
-  useUpdateChat,
-} from "@/lib/generated/v1betaApi/v1betaApiComponents";
+  v1betaApiFetch,
+  type ErrorWrapper,
+  type V1betaApiFetcherOptions,
+} from "@/lib/generated/v1betaApi/v1betaApiFetcher";
+export {
+  queryKeyFn,
+  useV1betaApiContext,
+  type V1betaApiContext,
+} from "@/lib/generated/v1betaApi/v1betaApiContext";
 export {
   FeatureConfigProvider,
   StaticFeatureConfigProvider,

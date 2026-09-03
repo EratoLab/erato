@@ -490,7 +490,7 @@ export default function AssistantHubMyPage() {
             <div className="space-y-6">
               <AssistantHubVersionOverviewSection
                 version={selectedVersion}
-                categories={config?.categories ?? []}
+                categories={config?.enable_categories ? config.categories : []}
                 ratingMode={config?.rating_mode}
                 onStartChat={() =>
                   navigate(`/a/${selectedVersion.assistant_id}`)
@@ -685,7 +685,9 @@ export default function AssistantHubMyPage() {
                       <AssistantHubVersionCard
                         key={version.version_id}
                         version={version}
-                        categories={config?.categories ?? []}
+                        categories={
+                          config?.enable_categories ? config.categories : []
+                        }
                         ratingMode={config?.rating_mode}
                         showStatusBadge
                         showCurrentPublishedIndicator

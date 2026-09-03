@@ -2357,6 +2357,7 @@ msgid "common.close"
 msgstr "Close"
 
 #. js-lingui-explicit-id
+#: src/App.tsx
 #: src/pages/assistantHubUtils.tsx
 msgid "common.loadingEllipsis"
 msgstr "Loading..."
@@ -2665,6 +2666,7 @@ msgstr "Document preview is empty."
 
 #. js-lingui-explicit-id
 #: src/components/ui/FilePreview/DocxPreview.tsx
+#: src/components/ui/FilePreview/FilePreviewContent.tsx
 msgid "filePreview.docxLoading"
 msgstr "Loading document preview..."
 
@@ -2731,6 +2733,7 @@ msgid "filePreview.pptxEmpty"
 msgstr "Presentation preview is empty."
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/FilePreviewContent.tsx
 #: src/components/ui/FilePreview/PptxPreview.tsx
 msgid "filePreview.pptxLoading"
 msgstr "Loading presentation preview..."
@@ -2741,11 +2744,17 @@ msgid "filePreview.pptxPreviewUnavailable"
 msgstr "Preview unavailable: this presentation could not be loaded."
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/FilePreviewContent.tsx
+msgid "filePreview.previewUnavailable"
+msgstr "Preview unavailable: this file viewer could not be loaded."
+
+#. js-lingui-explicit-id
 #: src/components/ui/FilePreview/XlsxPreview.tsx
 msgid "filePreview.xlsxEmpty"
 msgstr "Spreadsheet preview is empty."
 
 #. js-lingui-explicit-id
+#: src/components/ui/FilePreview/FilePreviewContent.tsx
 #: src/components/ui/FilePreview/XlsxPreview.tsx
 msgid "filePreview.xlsxLoading"
 msgstr "Loading spreadsheet preview..."

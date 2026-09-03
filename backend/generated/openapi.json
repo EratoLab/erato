@@ -4064,6 +4064,7 @@
         "type": "object",
         "required": [
           "enabled",
+          "enable_categories",
           "can_review",
           "rating_mode",
           "default_share_with_whole_organization",
@@ -4080,6 +4081,9 @@
             }
           },
           "default_share_with_whole_organization": {
+            "type": "boolean"
+          },
+          "enable_categories": {
             "type": "boolean"
           },
           "enabled": {
