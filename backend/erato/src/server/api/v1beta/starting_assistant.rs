@@ -40,6 +40,7 @@ use crate::state::AppState;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::{Extension, Json};
+use chrono::{DateTime, Utc};
 use serde::Serialize;
 use utoipa::ToSchema;
 
@@ -130,6 +131,10 @@ pub fn subject_matches(subject: &AudienceSubject, identity: AudienceIdentity<'_>
 /// The subjects of `audience` that match the caller — usually one, but a person
 /// can be in two of an audience's groups at once, and each match is a separate
 /// reason the pin might still be granted.
+///
+/// Deliberately does not check expiry: it is only ever called on the winner
+/// [`match_winning_audience`] already found active. A new caller must gate on
+/// that function, not this one.
 #[must_use]
 pub fn matching_subjects<'a>(
     audience: &'a ExperienceAudience,
@@ -143,7 +148,8 @@ pub fn matching_subjects<'a>(
 }
 
 /// Pick the winning audience for a user: the first entry of `priority_order`
-/// naming an audience any of whose subjects matches the caller.
+/// naming an audience that is still active at `now` and any of whose subjects
+/// matches the caller.
 ///
 /// Precedence comes from `priority_order` alone, as `determine_chat_provider`
 /// does for `chat_providers.priority_order`; the `audiences` map's iteration
@@ -151,19 +157,26 @@ pub fn matching_subjects<'a>(
 /// subjects include the whole organization therefore shadows everything below
 /// it and defaults everything above it, depending only on where the admin put
 /// it in the order.
+///
+/// An expired audience is skipped exactly as if no subject matched, so the
+/// next entry wins — a time-boxed announcement on top hands back to the
+/// audiences it shadowed, rather than degrading everyone to the welcome
+/// screen.
 pub fn match_winning_audience<'a>(
     policy: &'a ExperiencePolicyDocument,
     identity: AudienceIdentity<'_>,
+    now: DateTime<Utc>,
 ) -> Option<(&'a str, &'a ExperienceAudience)> {
     policy.priority_order.iter().find_map(|audience_name| {
         policy
             .audiences
             .get_key_value(audience_name)
             .filter(|(_, audience)| {
-                audience
-                    .subjects
-                    .iter()
-                    .any(|subject| subject_matches(subject, identity))
+                audience.is_active_at(now)
+                    && audience
+                        .subjects
+                        .iter()
+                        .any(|subject| subject_matches(subject, identity))
             })
             .map(|(name, audience)| (name.as_str(), audience))
     })
@@ -232,8 +245,11 @@ pub async fn starting_assistant(
 
     // Exactly one winner: if its pin fails to resolve below we degrade to the
     // welcome screen rather than falling through to the next matching audience.
+    // The clock is read once so every audience in the order is judged against
+    // the same instant.
     let identity = AudienceIdentity::from_profile(&me_user);
-    let Some((audience_name, audience)) = match_winning_audience(&experience_policy, identity)
+    let now = Utc::now();
+    let Some((audience_name, audience)) = match_winning_audience(&experience_policy, identity, now)
     else {
         return no_pin();
     };
@@ -453,7 +469,17 @@ mod tests {
         ExperienceAudience {
             subjects,
             pinned_assistant_hub_assistant_id: Uuid::new_v4(),
+            expires_at: None,
         }
+    }
+
+    fn expiring(mut audience: ExperienceAudience, expires_at: &str) -> ExperienceAudience {
+        audience.expires_at = Some(at(expires_at));
+        audience
+    }
+
+    fn at(timestamp: &str) -> DateTime<Utc> {
+        timestamp.parse().unwrap()
     }
 
     /// The common single-group audience, still the shape most audiences take.
@@ -508,14 +534,14 @@ mod tests {
             ],
         ] {
             let policy = policy_with(entries.clone(), vec!["beta", "alpha"]);
-            let (winner, matched) = match_winning_audience(&policy, identity).unwrap();
+            let (winner, matched) = match_winning_audience(&policy, identity, Utc::now()).unwrap();
             assert_eq!(winner, "beta");
             assert_eq!(matched.subjects, vec![group("group-b")]);
 
             // Reversing priority_order must flip the winner: the ordered key
             // is load-bearing.
             let policy = policy_with(entries, vec!["alpha", "beta"]);
-            let (winner, matched) = match_winning_audience(&policy, identity).unwrap();
+            let (winner, matched) = match_winning_audience(&policy, identity, Utc::now()).unwrap();
             assert_eq!(winner, "alpha");
             assert_eq!(matched.subjects, vec![group("group-a")]);
         }
@@ -531,7 +557,8 @@ mod tests {
             vec!["alpha", "beta"],
         );
         let user_groups = member_of(&["group-b"]);
-        let (winner, _) = match_winning_audience(&policy, identity_of(&user_groups)).unwrap();
+        let (winner, _) =
+            match_winning_audience(&policy, identity_of(&user_groups), Utc::now()).unwrap();
         assert_eq!(winner, "beta");
     }
 
@@ -540,7 +567,8 @@ mod tests {
         // The parser rejects these, but the resolver must stay total anyway.
         let policy = policy_with(vec![("beta", audience("group-b"))], vec!["ghost", "beta"]);
         let user_groups = member_of(&["group-b"]);
-        let (winner, _) = match_winning_audience(&policy, identity_of(&user_groups)).unwrap();
+        let (winner, _) =
+            match_winning_audience(&policy, identity_of(&user_groups), Utc::now()).unwrap();
         assert_eq!(winner, "beta");
     }
 
@@ -548,17 +576,17 @@ mod tests {
     fn audience_absent_from_priority_order_never_wins() {
         let policy = policy_with(vec![("alpha", audience("group-a"))], vec![]);
         let user_groups = member_of(&["group-a"]);
-        assert!(match_winning_audience(&policy, identity_of(&user_groups)).is_none());
+        assert!(match_winning_audience(&policy, identity_of(&user_groups), Utc::now()).is_none());
     }
 
     #[test]
     fn no_winner_for_empty_groups_or_empty_policy() {
         let policy = policy_with(vec![("alpha", audience("group-a"))], vec!["alpha"]);
-        assert!(match_winning_audience(&policy, identity_of(&[])).is_none());
+        assert!(match_winning_audience(&policy, identity_of(&[]), Utc::now()).is_none());
 
         let empty = ExperiencePolicyDocument::default();
         let user_groups = member_of(&["group-a"]);
-        assert!(match_winning_audience(&empty, identity_of(&user_groups)).is_none());
+        assert!(match_winning_audience(&empty, identity_of(&user_groups), Utc::now()).is_none());
     }
 
     #[test]
@@ -578,7 +606,8 @@ mod tests {
         );
 
         for groups in [member_of(&["group-a"]), member_of(&["group-b"])] {
-            let (winner, _) = match_winning_audience(&policy, identity_of(&groups)).unwrap();
+            let (winner, _) =
+                match_winning_audience(&policy, identity_of(&groups), Utc::now()).unwrap();
             assert_eq!(winner, "rollout");
         }
 
@@ -586,14 +615,14 @@ mod tests {
             groups: &[],
             organization_user_id: Some("oid-carol"),
         };
-        let (winner, _) = match_winning_audience(&policy, carol).unwrap();
+        let (winner, _) = match_winning_audience(&policy, carol, Utc::now()).unwrap();
         assert_eq!(winner, "rollout");
 
         let stranger = AudienceIdentity {
             groups: &member_of(&["group-z"]),
             organization_user_id: Some("oid-dave"),
         };
-        assert!(match_winning_audience(&policy, stranger).is_none());
+        assert!(match_winning_audience(&policy, stranger, Utc::now()).is_none());
     }
 
     #[test]
@@ -608,7 +637,7 @@ mod tests {
             organization_user_id: Some("oid-alice"),
         };
         assert_eq!(
-            match_winning_audience(&policy, alice).map(|(name, _)| name),
+            match_winning_audience(&policy, alice, Utc::now()).map(|(name, _)| name),
             Some("named")
         );
 
@@ -616,12 +645,12 @@ mod tests {
             groups: &[],
             organization_user_id: Some("oid-bob"),
         };
-        assert!(match_winning_audience(&policy, bob).is_none());
+        assert!(match_winning_audience(&policy, bob, Utc::now()).is_none());
 
         // An identity provider that issues no `oid` cannot match a user
         // subject — the id it would be compared against was never asserted.
         let groups = member_of(&["oid-alice"]);
-        assert!(match_winning_audience(&policy, identity_of(&groups)).is_none());
+        assert!(match_winning_audience(&policy, identity_of(&groups), Utc::now()).is_none());
     }
 
     #[test]
@@ -631,7 +660,7 @@ mod tests {
             vec!["everyone"],
         );
 
-        let (winner, _) = match_winning_audience(&policy, identity_of(&[])).unwrap();
+        let (winner, _) = match_winning_audience(&policy, identity_of(&[]), Utc::now()).unwrap();
         assert_eq!(winner, "everyone");
     }
 
@@ -647,11 +676,12 @@ mod tests {
         // the people it names, and everyone else falls through to it.
         let policy = policy_with(entries.clone(), vec!["engineering", "everyone"]);
         assert_eq!(
-            match_winning_audience(&policy, identity_of(&engineer)).map(|(name, _)| name),
+            match_winning_audience(&policy, identity_of(&engineer), Utc::now())
+                .map(|(name, _)| name),
             Some("engineering")
         );
         assert_eq!(
-            match_winning_audience(&policy, identity_of(&[])).map(|(name, _)| name),
+            match_winning_audience(&policy, identity_of(&[]), Utc::now()).map(|(name, _)| name),
             Some("everyone")
         );
 
@@ -659,7 +689,8 @@ mod tests {
         // deliberately, and visibly, from one ordered key.
         let policy = policy_with(entries, vec!["everyone", "engineering"]);
         assert_eq!(
-            match_winning_audience(&policy, identity_of(&engineer)).map(|(name, _)| name),
+            match_winning_audience(&policy, identity_of(&engineer), Utc::now())
+                .map(|(name, _)| name),
             Some("everyone")
         );
     }
@@ -686,5 +717,143 @@ mod tests {
         );
 
         assert!(matching_subjects(&audience, identity_of(&[])).is_empty());
+    }
+
+    #[test]
+    fn an_expired_audience_falls_through_to_the_next_priority_entry() {
+        // Fall-through, not degrade-to-welcome: the expired entry is skipped
+        // exactly as if no subject matched.
+        let policy = policy_with(
+            vec![
+                (
+                    "announcement",
+                    expiring(
+                        audience_of(vec![AudienceSubject::Organization]),
+                        "2026-09-01T00:00:00Z",
+                    ),
+                ),
+                ("engineering", audience("group-a")),
+            ],
+            vec!["announcement", "engineering"],
+        );
+        let engineer = member_of(&["group-a"]);
+        let (winner, _) =
+            match_winning_audience(&policy, identity_of(&engineer), at("2026-09-02T00:00:00Z"))
+                .unwrap();
+        assert_eq!(winner, "engineering");
+    }
+
+    #[test]
+    fn expiry_boundary_is_active_iff_now_strictly_before_expires_at() {
+        let expires_at = at("2026-09-08T00:00:00Z");
+        let policy = policy_with(
+            vec![(
+                "announcement",
+                expiring(
+                    audience_of(vec![AudienceSubject::Organization]),
+                    "2026-09-08T00:00:00Z",
+                ),
+            )],
+            vec!["announcement"],
+        );
+        let identity = identity_of(&[]);
+
+        let one_second_earlier = expires_at - chrono::Duration::seconds(1);
+        assert!(match_winning_audience(&policy, identity, one_second_earlier).is_some());
+        // At the instant itself the audience is already inert.
+        assert!(match_winning_audience(&policy, identity, expires_at).is_none());
+    }
+
+    #[test]
+    fn absent_expires_at_never_expires() {
+        let policy = policy_with(vec![("alpha", audience("group-a"))], vec!["alpha"]);
+        let groups = member_of(&["group-a"]);
+        let (winner, _) =
+            match_winning_audience(&policy, identity_of(&groups), at("9999-12-31T23:59:59Z"))
+                .unwrap();
+        assert_eq!(winner, "alpha");
+    }
+
+    #[test]
+    fn all_audiences_expired_yields_no_winner() {
+        let policy = policy_with(
+            vec![
+                (
+                    "announcement",
+                    expiring(
+                        audience_of(vec![AudienceSubject::Organization]),
+                        "2026-09-01T00:00:00Z",
+                    ),
+                ),
+                (
+                    "engineering",
+                    expiring(audience("group-a"), "2026-09-02T00:00:00Z"),
+                ),
+            ],
+            vec!["announcement", "engineering"],
+        );
+        let engineer = member_of(&["group-a"]);
+        assert!(
+            match_winning_audience(&policy, identity_of(&engineer), at("2026-09-03T00:00:00Z"))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn the_announcement_scenario_before_and_after_expiry() {
+        // ERMAIN-706 §4: [Everyone (A-announce, expires Sep 8), Sales
+        // (A-pipeline), HR (A-onboarding)]. Sam is in Sales, Dana in both,
+        // Otto in neither group.
+        let a_announce = Uuid::from_u128(1);
+        let a_pipeline = Uuid::from_u128(2);
+        let a_onboarding = Uuid::from_u128(3);
+        let pinned = |pin, subjects| ExperienceAudience {
+            subjects,
+            pinned_assistant_hub_assistant_id: pin,
+            expires_at: None,
+        };
+        let policy = policy_with(
+            vec![
+                (
+                    "everyone",
+                    expiring(
+                        pinned(a_announce, vec![AudienceSubject::Organization]),
+                        "2026-09-08T00:00:00Z",
+                    ),
+                ),
+                ("sales", pinned(a_pipeline, vec![group("sales-group-id")])),
+                ("hr", pinned(a_onboarding, vec![group("hr-group-id")])),
+            ],
+            vec!["everyone", "sales", "hr"],
+        );
+
+        let sam_groups = member_of(&["sales-group-id"]);
+        let dana_groups = member_of(&["sales-group-id", "hr-group-id"]);
+        let sam = identity_of(&sam_groups);
+        let dana = identity_of(&dana_groups);
+        let otto = identity_of(&[]);
+
+        // Before expiry the announcement shadows everything for everybody.
+        let before = at("2026-09-07T23:59:59Z");
+        for identity in [sam, dana, otto] {
+            let (winner, audience) = match_winning_audience(&policy, identity, before).unwrap();
+            assert_eq!(winner, "everyone");
+            assert_eq!(audience.pinned_assistant_hub_assistant_id, a_announce);
+        }
+
+        // From the expiry instant on, the shadowed audiences take over. Dana
+        // lands on sales, not hr: priority_order still decides below the
+        // expired entry. Otto matched only the announcement, so with it inert
+        // nothing matches him.
+        for now in [at("2026-09-08T00:00:00Z"), at("2026-09-09T00:00:00Z")] {
+            for (identity, expected_winner, expected_pin) in
+                [(sam, "sales", a_pipeline), (dana, "sales", a_pipeline)]
+            {
+                let (winner, audience) = match_winning_audience(&policy, identity, now).unwrap();
+                assert_eq!(winner, expected_winner);
+                assert_eq!(audience.pinned_assistant_hub_assistant_id, expected_pin);
+            }
+            assert!(match_winning_audience(&policy, otto, now).is_none());
+        }
     }
 }

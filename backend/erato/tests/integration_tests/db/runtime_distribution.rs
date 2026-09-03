@@ -54,6 +54,7 @@ fn expected_policy_document() -> ExperiencePolicyDocument {
                 pinned_assistant_hub_assistant_id: "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01"
                     .parse::<Uuid>()
                     .unwrap(),
+                expires_at: None,
             },
         )]),
         priority_order: vec!["engineering".to_string()],
