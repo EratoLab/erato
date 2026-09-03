@@ -20,12 +20,21 @@
 //! and config client-side in `useActiveModelSelection`, this precedence is
 //! resolved here — the audience-pin leg needs the policy document and
 //! authoritative group membership, neither of which the client can evaluate.
+//!
+//! An own pick is one of two kinds. A hub assistant is picked by its stable
+//! `assistant_hub_assistants.id` and resolved through the hub, because the
+//! clone's `assistants.id` is minted fresh on every republish. An assistant
+//! that was never published to the hub — the private one a person tuned for
+//! themselves — has no hub row, so it is picked by `assistants.id` directly and
+//! resolved through the ordinary assistant read path, which does not require
+//! the hub to be enabled at all.
 
 use crate::distribution::experience_policy::{
     AudienceSubject, ExperienceAudience, ExperiencePolicyDocument,
 };
 use crate::models::share_grant::ShareSubject;
-use crate::models::{assistant_hub, share_grant};
+use crate::models::{assistant, assistant_hub, share_grant};
+use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::state::AppState;
 use axum::extract::State;
@@ -47,12 +56,16 @@ pub enum StartingAssistantSource {
 /// The resolved starting assistant for the calling user.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct StartingAssistantInfo {
-    /// The live `assistants.id` of the current published version. Resolved at
-    /// read time from the pinned hub id, so it is always the id a client can
-    /// open a chat with — even right after a republish minted a fresh clone.
+    /// The live `assistants.id` a client can open a chat with. For a hub
+    /// assistant it is resolved at read time from the stable hub id, so it is
+    /// right even after a republish minted a fresh clone.
     pub assistant_id: String,
-    /// The stable `assistant_hub_assistants.id` the pick or pin stores.
-    pub assistant_hub_assistant_id: String,
+    /// The stable `assistant_hub_assistants.id` the pick or pin stores. Absent
+    /// when the user picked an assistant that was never published to the hub,
+    /// which has no hub row.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub assistant_hub_assistant_id: Option<String>,
     /// Whether the user's own pick or an admin's audience pin won.
     pub source: StartingAssistantSource,
     /// The name of the audience (policy key) whose pin won for this user.
@@ -170,6 +183,7 @@ pub fn match_winning_audience<'a>(
 pub async fn starting_assistant(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
 ) -> Result<Json<StartingAssistantResponse>, StatusCode> {
     let no_pin = || {
         Ok(Json(StartingAssistantResponse {
@@ -183,42 +197,44 @@ pub async fn starting_assistant(
         return no_pin();
     }
 
+    // Both own-pick legs are resolved before the policy document is consulted
+    // at all, so a pick keeps working in a deployment with no policy loaded.
+    //
+    // The plain-assistant leg comes first and is deliberately NOT behind the
+    // hub gate: an assistant the user made for themselves has nothing to do
+    // with the hub, and turning the hub off must not silently re-steer them.
+    if let Some(raw_pick) = me_user.preference_starting_assistant_id.as_deref() {
+        return match parse_stored_pick(&me_user, raw_pick) {
+            Some(pick) => Ok(Json(
+                resolve_assistant_pick(&app_state, &policy, &me_user, pick).await,
+            )),
+            None => no_pin(),
+        };
+    }
+
     if !app_state.config.assistant_hub.enabled {
         return no_pin();
     }
 
-    // The own pick is resolved before the policy document is consulted at all,
-    // so it keeps working in a deployment with no policy loaded.
     if let Some(raw_pick) = me_user.preference_starting_hub_assistant_id.as_deref() {
-        match raw_pick.parse::<sqlx::types::Uuid>() {
-            Ok(pick) => {
-                return Ok(Json(resolve_user_pick(&app_state, &me_user, pick).await));
-            }
-            Err(error) => {
-                // The value comes from a uuid column, so this is corruption,
-                // not user input.
-                tracing::warn!(
-                    user_id = %me_user.id,
-                    raw_pick,
-                    error = %error,
-                    "Stored starting-assistant pick is not a uuid; serving welcome screen"
-                );
-                return no_pin();
-            }
-        }
+        return match parse_stored_pick(&me_user, raw_pick) {
+            Some(pick) => Ok(Json(resolve_hub_pick(&app_state, &me_user, pick).await)),
+            None => no_pin(),
+        };
     }
 
     // No override either way: fall back to the admin's audience pin. Clone out
     // of the read guard so a slow DB await below never holds the reload lock.
-    let policy = { app_state.reloadable.read().await.experience_policy.clone() };
-    let Some(policy) = policy else {
+    let experience_policy = { app_state.reloadable.read().await.experience_policy.clone() };
+    let Some(experience_policy) = experience_policy else {
         return no_pin();
     };
 
     // Exactly one winner: if its pin fails to resolve below we degrade to the
     // welcome screen rather than falling through to the next matching audience.
     let identity = AudienceIdentity::from_profile(&me_user);
-    let Some((audience_name, audience)) = match_winning_audience(&policy, identity) else {
+    let Some((audience_name, audience)) = match_winning_audience(&experience_policy, identity)
+    else {
         return no_pin();
     };
 
@@ -308,21 +324,40 @@ pub async fn starting_assistant(
     Ok(Json(StartingAssistantResponse {
         starting_assistant: Some(StartingAssistantInfo {
             assistant_id,
-            assistant_hub_assistant_id: audience.pinned_assistant_hub_assistant_id.to_string(),
+            assistant_hub_assistant_id: Some(
+                audience.pinned_assistant_hub_assistant_id.to_string(),
+            ),
             source: StartingAssistantSource::AudiencePin,
             audience: Some(audience_name.to_string()),
         }),
     }))
 }
 
-/// Resolve the user's own start-screen pick to the current published clone's
-/// live `assistants.id`.
+/// Parse an id read back out of a uuid column. `None` means the value was
+/// corrupt — it cannot be bad user input, because the column would not have
+/// accepted it.
+fn parse_stored_pick(me_user: &MeProfile, raw_pick: &str) -> Option<sqlx::types::Uuid> {
+    match raw_pick.parse::<sqlx::types::Uuid>() {
+        Ok(pick) => Some(pick),
+        Err(error) => {
+            tracing::warn!(
+                user_id = %me_user.id,
+                raw_pick,
+                error = %error,
+                "Stored starting-assistant pick is not a uuid; serving welcome screen"
+            );
+            None
+        }
+    }
+}
+
+/// Resolve a hub pick to the current published clone's live `assistants.id`.
 ///
 /// A pick that no longer resolves (withdrawn, unpublished, access lost)
 /// degrades to the welcome screen rather than falling through to an audience
 /// pin: a user who overrode their start screen should not be silently
 /// re-steered by policy when their choice disappears.
-async fn resolve_user_pick(
+async fn resolve_hub_pick(
     app_state: &AppState,
     me_user: &MeProfile,
     pick: sqlx::types::Uuid,
@@ -338,7 +373,7 @@ async fn resolve_user_pick(
         Ok(record) => StartingAssistantResponse {
             starting_assistant: Some(StartingAssistantInfo {
                 assistant_id: record.assistant.id.to_string(),
-                assistant_hub_assistant_id: pick.to_string(),
+                assistant_hub_assistant_id: Some(pick.to_string()),
                 source: StartingAssistantSource::UserPick,
                 audience: None,
             }),
@@ -347,6 +382,45 @@ async fn resolve_user_pick(
             tracing::warn!(
                 user_id = %me_user.id,
                 hub_assistant_id = %pick,
+                error = ?report,
+                "User's own starting-assistant pick did not resolve; serving welcome screen"
+            );
+            StartingAssistantResponse {
+                starting_assistant: None,
+            }
+        }
+    }
+}
+
+/// Resolve a pick of an assistant that was never published to the hub.
+///
+/// The id is already the live one, so this is purely an access check, and it
+/// uses the same read path as `GET /assistants/{id}`: owner or a viewer/editor
+/// share grant, archived excluded. That path also refuses hub-version clones,
+/// so a clone id stored here — which a republish would strand — can never
+/// resolve; hub assistants have to come through [`resolve_hub_pick`].
+///
+/// Degrades to the welcome screen on any failure, for the same reason a hub
+/// pick does.
+async fn resolve_assistant_pick(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    pick: sqlx::types::Uuid,
+) -> StartingAssistantResponse {
+    match assistant::get_assistant_by_id(&app_state.db, policy, &me_user.to_subject(), pick).await {
+        Ok(record) => StartingAssistantResponse {
+            starting_assistant: Some(StartingAssistantInfo {
+                assistant_id: record.id.to_string(),
+                assistant_hub_assistant_id: None,
+                source: StartingAssistantSource::UserPick,
+                audience: None,
+            }),
+        },
+        Err(report) => {
+            tracing::warn!(
+                user_id = %me_user.id,
+                assistant_id = %pick,
                 error = ?report,
                 "User's own starting-assistant pick did not resolve; serving welcome screen"
             );

@@ -6,12 +6,11 @@ import { RadioCard } from "../Controls/RadioCard";
 import { ChevronDownIcon } from "../icons";
 
 import type { DropdownMenuItem } from "../Controls/DropdownMenu";
-import type { AssistantHubVersion } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
  * The user's tri-state start-screen override:
  * - `"inherit"`: follow an admin's audience pin when one applies.
- * - `"assistant"`: always open one specific hub assistant.
+ * - `"assistant"`: always open one specific assistant.
  * - `"welcome"`: always the welcome screen, even when a pin applies.
  *
  * `"inherit"` and `"welcome"` must stay distinguishable end to end; they save
@@ -19,15 +18,41 @@ import type { AssistantHubVersion } from "@/lib/generated/v1betaApi/v1betaApiSch
  */
 export type StartScreenChoice = "inherit" | "assistant" | "welcome";
 
+/**
+ * Which id kind the preference stores for a pick. A hub assistant is stored by
+ * its stable `assistant_hub_assistants.id`, because the clone's `assistants.id`
+ * is minted fresh on every republish; an assistant that was never published to
+ * the hub has no hub row and is stored by `assistants.id`.
+ */
+export type StartingAssistantKind = "hub" | "assistant";
+
+export interface StartingAssistantPick {
+  kind: StartingAssistantKind;
+  id: string;
+}
+
+export interface StartingAssistantOption extends StartingAssistantPick {
+  name: string;
+  description?: string | null;
+}
+
 interface StartingAssistantSettingProps {
   choice: StartScreenChoice;
   onChoiceChange: (choice: StartScreenChoice) => void;
-  /** The pick as an `assistant_hub_assistants.id`. */
-  selectedHubAssistantId: string | null;
-  onSelectHubAssistant: (hubAssistantId: string) => void;
-  /** Published hub assistants the calling user can access. */
-  hubVersions: AssistantHubVersion[];
-  isLoadingHubVersions: boolean;
+  selectedPick: StartingAssistantPick | null;
+  onSelectPick: (pick: StartingAssistantPick) => void;
+  /** Hub assistants the calling user can access. */
+  hubOptions: StartingAssistantOption[];
+  /** The user's own and directly shared assistants. */
+  assistantOptions: StartingAssistantOption[];
+  isLoadingOptions: boolean;
+}
+
+function samePick(
+  left: StartingAssistantPick | null,
+  right: StartingAssistantPick,
+): boolean {
+  return left !== null && left.kind === right.kind && left.id === right.id;
 }
 
 /**
@@ -38,57 +63,98 @@ interface StartingAssistantSettingProps {
 export function StartingAssistantSetting({
   choice,
   onChoiceChange,
-  selectedHubAssistantId,
-  onSelectHubAssistant,
-  hubVersions,
-  isLoadingHubVersions,
+  selectedPick,
+  onSelectPick,
+  hubOptions,
+  assistantOptions,
+  isLoadingOptions,
 }: StartingAssistantSettingProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-  const selectedVersion = useMemo(
+  const hubSectionHeader = t({
+    id: "preferences.dialog.startScreen.picker.section.hub",
+    message: "From the assistant hub",
+  });
+  const ownSectionHeader = t({
+    id: "preferences.dialog.startScreen.picker.section.own",
+    message: "Your assistants",
+  });
+
+  const selectedOption = useMemo(
     () =>
-      hubVersions.find(
-        (version) => version.hub_assistant_id === selectedHubAssistantId,
+      [...hubOptions, ...assistantOptions].find((option) =>
+        samePick(selectedPick, option),
       ) ?? null,
-    [hubVersions, selectedHubAssistantId],
+    [assistantOptions, hubOptions, selectedPick],
   );
 
-  const dropdownItems: DropdownMenuItem[] = useMemo(
-    () =>
-      hubVersions.map((version) => ({
-        label: (
-          <span className="block min-w-0 max-w-[22rem]">
-            <span
-              className="block truncate text-sm font-medium text-theme-fg-primary"
-              title={version.assistant.name}
-            >
-              {version.assistant.name}
-            </span>
-            {version.assistant.description ? (
-              <span
-                className="block truncate text-xs font-normal text-theme-fg-muted"
-                title={version.assistant.description}
-              >
-                {version.assistant.description}
-              </span>
-            ) : null}
+  const dropdownItems: DropdownMenuItem[] = useMemo(() => {
+    // Headers only earn their space when both kinds are on offer; with one
+    // list they would label the whole menu.
+    const showSectionHeaders =
+      hubOptions.length > 0 && assistantOptions.length > 0;
+
+    const toItem = (
+      option: StartingAssistantOption,
+      sectionHeader?: string,
+    ): DropdownMenuItem => ({
+      id: `${option.kind}:${option.id}`,
+      sectionHeader,
+      label: (
+        <span className="block min-w-0 max-w-[22rem]">
+          <span
+            className="block truncate text-sm font-medium text-theme-fg-primary"
+            title={option.name}
+          >
+            {option.name}
           </span>
+          {option.description ? (
+            <span
+              className="block truncate text-xs font-normal text-theme-fg-muted"
+              title={option.description}
+            >
+              {option.description}
+            </span>
+          ) : null}
+        </span>
+      ),
+      onClick: () => onSelectPick({ kind: option.kind, id: option.id }),
+      checked: samePick(selectedPick, option),
+    });
+
+    return [
+      ...hubOptions.map((option, index) =>
+        toItem(
+          option,
+          showSectionHeaders && index === 0 ? hubSectionHeader : undefined,
         ),
-        onClick: () => onSelectHubAssistant(version.hub_assistant_id),
-        checked: version.hub_assistant_id === selectedHubAssistantId,
-      })),
-    [hubVersions, onSelectHubAssistant, selectedHubAssistantId],
-  );
+      ),
+      ...assistantOptions.map((option, index) =>
+        toItem(
+          option,
+          showSectionHeaders && index === 0 ? ownSectionHeader : undefined,
+        ),
+      ),
+    ];
+  }, [
+    assistantOptions,
+    hubOptions,
+    hubSectionHeader,
+    onSelectPick,
+    ownSectionHeader,
+    selectedPick,
+  ]);
 
   const placeholderLabel = t({
     id: "preferences.dialog.startScreen.picker.placeholder",
     message: "Choose an assistant",
   });
-  // A stored pick can name an assistant since unpublished or unshared. Keep
-  // the id — saving must not silently destroy the pick — but say so.
+  // A stored pick can name an assistant since unpublished, unshared or
+  // archived. Keep the id — saving must not silently destroy the pick — but
+  // say so.
   const triggerLabel =
-    selectedVersion?.assistant.name ??
-    (selectedHubAssistantId !== null
+    selectedOption?.name ??
+    (selectedPick !== null
       ? t({
           id: "preferences.dialog.startScreen.picker.unavailable",
           message: "An assistant you can no longer access",
@@ -142,14 +208,14 @@ export function StartingAssistantSetting({
           })}
         >
           <div className="p-3">
-            {isLoadingHubVersions ? (
+            {isLoadingOptions ? (
               <p className="text-sm text-theme-fg-muted">
                 {t({
                   id: "preferences.dialog.startScreen.picker.loading",
                   message: "Loading assistants...",
                 })}
               </p>
-            ) : hubVersions.length === 0 && selectedHubAssistantId === null ? (
+            ) : dropdownItems.length === 0 && selectedPick === null ? (
               <p className="text-sm text-theme-fg-muted">
                 {t({
                   id: "preferences.dialog.startScreen.picker.empty",

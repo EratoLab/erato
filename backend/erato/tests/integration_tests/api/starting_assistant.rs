@@ -1299,3 +1299,272 @@ async fn test_starting_assistant_pick_rejects_nonexistent_hub_assistant(pool: Po
         http::StatusCode::UNPROCESSABLE_ENTITY
     );
 }
+
+/// A private assistant — one its owner never published to the hub — can be the
+/// start screen, and resolving it must not depend on the assistant hub being
+/// enabled at all.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_starting_assistant_private_pick_resolves_with_the_hub_disabled(pool: Pool<Postgres>) {
+    let mut app_config = hermetic_app_config(None, None);
+    app_config.assistant_hub.enabled = false;
+    let app_state = test_app_state(app_config, pool).await;
+    let server = create_test_server(app_state.clone());
+
+    let token = JwtTokenBuilder::new()
+        .subject("starting-assistant-private-owner")
+        .email("starting-assistant-private-owner@example.com")
+        .build();
+    let user = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        "starting-assistant-private-owner",
+        Some("starting-assistant-private-owner@example.com"),
+    )
+    .await
+    .expect("failed to create user");
+    let private_assistant =
+        create_source_assistant(&app_state, &user.id.to_string(), "My Own Assistant").await;
+
+    let profile = put_preferences(
+        &server,
+        &token,
+        json!({
+            "preference_starting_assistant_id": private_assistant.id.to_string()
+        }),
+    )
+    .await;
+    assert_eq!(
+        profile["preference_starting_assistant_id"],
+        private_assistant.id.to_string()
+    );
+
+    let body = get_starting_assistant(&server, &token).await;
+    let resolved = &body["starting_assistant"];
+    assert_eq!(resolved["source"], "user_pick");
+    assert_eq!(resolved["assistant_id"], private_assistant.id.to_string());
+    assert!(
+        resolved.get("assistant_hub_assistant_id").is_none(),
+        "an assistant that was never published to the hub has no hub id to report"
+    );
+}
+
+/// The two pick kinds are alternatives: setting one must remove the other, in
+/// both directions, and a clear must remove whichever is stored.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_starting_assistant_pick_kinds_replace_each_other(pool: Pool<Postgres>) {
+    let app_state = test_app_state(starting_assistant_app_config(), pool).await;
+    let server = create_test_server(app_state.clone());
+
+    let owner_token = JwtTokenBuilder::new()
+        .subject("starting-assistant-swap-owner")
+        .email("starting-assistant-swap-owner@example.com")
+        .build();
+    let reviewer_token = JwtTokenBuilder::new()
+        .subject("starting-assistant-swap-reviewer")
+        .email("starting-assistant-swap-reviewer@example.com")
+        .groups(vec![REVIEWER_GROUP_ID.to_string()])
+        .build();
+    let viewer_token = JwtTokenBuilder::new()
+        .subject("starting-assistant-swap-viewer")
+        .email("starting-assistant-swap-viewer@example.com")
+        .groups(vec![AUDIENCE_GROUP_ID.to_string()])
+        .build();
+
+    let owner = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        "starting-assistant-swap-owner",
+        Some("starting-assistant-swap-owner@example.com"),
+    )
+    .await
+    .expect("failed to create owner");
+    let viewer = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        "starting-assistant-swap-viewer",
+        Some("starting-assistant-swap-viewer@example.com"),
+    )
+    .await
+    .expect("failed to create viewer");
+
+    let source_assistant = create_source_assistant(
+        &app_state,
+        &owner.id.to_string(),
+        "Published Swap Assistant",
+    )
+    .await;
+    let version = publish_hub_version(
+        &server,
+        &owner_token,
+        &reviewer_token,
+        &source_assistant.id.to_string(),
+        "1.0.0",
+        AUDIENCE_GROUP_ID,
+    )
+    .await;
+    let hub_id = version["hub_assistant_id"].as_str().unwrap().to_string();
+    let private_assistant =
+        create_source_assistant(&app_state, &viewer.id.to_string(), "Private Swap Assistant").await;
+
+    // The dialog sends both id fields on every save, so each step below carries
+    // an explicit null for the kind it is not choosing.
+    let profile = put_preferences(
+        &server,
+        &viewer_token,
+        json!({
+            "preference_starting_hub_assistant_id": hub_id,
+            "preference_starting_assistant_id": null
+        }),
+    )
+    .await;
+    assert_eq!(profile["preference_starting_hub_assistant_id"], hub_id);
+    assert!(profile.get("preference_starting_assistant_id").is_none());
+    assert_eq!(
+        get_starting_assistant(&server, &viewer_token).await["starting_assistant"]["assistant_hub_assistant_id"],
+        hub_id
+    );
+
+    let profile = put_preferences(
+        &server,
+        &viewer_token,
+        json!({
+            "preference_starting_hub_assistant_id": null,
+            "preference_starting_assistant_id": private_assistant.id.to_string()
+        }),
+    )
+    .await;
+    assert!(
+        profile
+            .get("preference_starting_hub_assistant_id")
+            .is_none()
+    );
+    assert_eq!(
+        profile["preference_starting_assistant_id"],
+        private_assistant.id.to_string()
+    );
+    let body = get_starting_assistant(&server, &viewer_token).await;
+    assert_eq!(
+        body["starting_assistant"]["assistant_id"],
+        private_assistant.id.to_string()
+    );
+
+    // And back, so neither direction leaves a stale companion behind.
+    let profile = put_preferences(
+        &server,
+        &viewer_token,
+        json!({
+            "preference_starting_hub_assistant_id": hub_id,
+            "preference_starting_assistant_id": null
+        }),
+    )
+    .await;
+    assert_eq!(profile["preference_starting_hub_assistant_id"], hub_id);
+    assert!(profile.get("preference_starting_assistant_id").is_none());
+
+    let profile = put_preferences(
+        &server,
+        &viewer_token,
+        json!({
+            "preference_starting_assistant_cleared": true
+        }),
+    )
+    .await;
+    assert_eq!(profile["preference_starting_assistant_cleared"], true);
+    assert!(
+        profile
+            .get("preference_starting_hub_assistant_id")
+            .is_none()
+    );
+    assert!(profile.get("preference_starting_assistant_id").is_none());
+    assert!(
+        get_starting_assistant(&server, &viewer_token)
+            .await
+            .get("starting_assistant")
+            .is_none()
+    );
+}
+
+/// A private pick is an access check, not a lookup: naming somebody else's
+/// unshared assistant stores fine (the row exists) but must degrade to the
+/// welcome screen rather than handing over an assistant the caller cannot see.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_starting_assistant_private_pick_requires_access(pool: Pool<Postgres>) {
+    let app_state = test_app_state(starting_assistant_app_config(), pool).await;
+    let server = create_test_server(app_state.clone());
+
+    let stranger_token = JwtTokenBuilder::new()
+        .subject("starting-assistant-stranger")
+        .email("starting-assistant-stranger@example.com")
+        .build();
+    let owner = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        "starting-assistant-foreign-owner",
+        Some("starting-assistant-foreign-owner@example.com"),
+    )
+    .await
+    .expect("failed to create owner");
+    let foreign_assistant = create_source_assistant(
+        &app_state,
+        &owner.id.to_string(),
+        "Somebody Else's Assistant",
+    )
+    .await;
+
+    put_preferences(
+        &server,
+        &stranger_token,
+        json!({
+            "preference_starting_assistant_id": foreign_assistant.id.to_string()
+        }),
+    )
+    .await;
+
+    assert!(
+        get_starting_assistant(&server, &stranger_token)
+            .await
+            .get("starting_assistant")
+            .is_none(),
+        "a pick the caller cannot access must degrade to the welcome screen"
+    );
+}
+
+/// A well-formed uuid naming an assistant that does not exist gets the same
+/// 422 as the hub-id equivalent, not a foreign key violation swallowed into a
+/// 500.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_starting_assistant_private_pick_rejects_nonexistent_assistant(pool: Pool<Postgres>) {
+    let app_state = test_app_state(starting_assistant_app_config(), pool).await;
+    let server = create_test_server(app_state.clone());
+
+    let token = JwtTokenBuilder::new()
+        .subject("starting-assistant-nonexistent-private-pick")
+        .email("starting-assistant-nonexistent-private-pick@example.com")
+        .build();
+
+    let response = server
+        .put("/api/v1beta/me/profile/preferences")
+        .json(&json!({ "preference_starting_assistant_id": Uuid::new_v4().to_string() }))
+        .with_bearer_token(&token)
+        .await;
+    assert_eq!(
+        response.status_code(),
+        http::StatusCode::UNPROCESSABLE_ENTITY
+    );
+}

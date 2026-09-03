@@ -8311,17 +8311,16 @@
         "description": "The resolved starting assistant for the calling user.",
         "required": [
           "assistant_id",
-          "assistant_hub_assistant_id",
           "source"
         ],
         "properties": {
           "assistant_hub_assistant_id": {
             "type": "string",
-            "description": "The stable `assistant_hub_assistants.id` the pick or pin stores."
+            "description": "The stable `assistant_hub_assistants.id` the pick or pin stores. Absent\nwhen the user picked an assistant that was never published to the hub,\nwhich has no hub row."
           },
           "assistant_id": {
             "type": "string",
-            "description": "The live `assistants.id` of the current published version. Resolved at\nread time from the pinned hub id, so it is always the id a client can\nopen a chat with — even right after a republish minted a fresh clone."
+            "description": "The live `assistants.id` a client can open a chat with. For a hub\nassistant it is resolved at read time from the stable hub id, so it is\nright even after a republish minted a fresh clone."
           },
           "audience": {
             "type": "string",
@@ -8900,12 +8899,19 @@
             "type": "boolean",
             "description": "Set `true` to explicitly clear the start screen (welcome screen even\nthough an audience pin exists), `false` to inherit again. Clearing\nalso removes any own pick; picking also un-clears."
           },
+          "preference_starting_assistant_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The user's own start-screen pick when it is an assistant that was never\npublished to the hub, as an `assistants.id`. Setting either pick field\nremoves the other."
+          },
           "preference_starting_hub_assistant_id": {
             "type": [
               "string",
               "null"
             ],
-            "description": "The user's own start-screen pick as an `assistant_hub_assistants.id`\n(NOT an `assistants.id` — those go stale on every hub republish).\nExplicit `null` removes the pick and returns to inheriting any\naudience pin."
+            "description": "The user's own start-screen pick when it is a hub assistant, as an\n`assistant_hub_assistants.id` (NOT the clone's `assistants.id` — those\ngo stale on every hub republish). Explicit `null` removes the pick and\nreturns to inheriting any audience pin."
           }
         }
       },
@@ -8975,9 +8981,13 @@
             "type": "boolean",
             "description": "True when the user explicitly cleared their start screen. This is\ndeliberately distinct from \"never set\": a clear must keep suppressing\nan admin's audience pin, while \"never set\" inherits it."
           },
+          "preference_starting_assistant_id": {
+            "type": "string",
+            "description": "The user's own start-screen pick when it is an assistant that was never\npublished to the hub, stored as an `assistants.id`. At most one of the\ntwo pick fields is ever set."
+          },
           "preference_starting_hub_assistant_id": {
             "type": "string",
-            "description": "The user's own start-screen pick, stored as an\n`assistant_hub_assistants.id` — stable across hub republishes, unlike\nthe clone's `assistants.id`. The LIVE assistant id it points at is\nresolved per request by `GET /me/starting-assistant`."
+            "description": "The user's own start-screen pick when it is a hub assistant, stored as\nan `assistant_hub_assistants.id` — stable across hub republishes, unlike\nthe clone's `assistants.id`. The LIVE assistant id it points at is\nresolved per request by `GET /me/starting-assistant`."
           },
           "preferred_language": {
             "type": "string",

@@ -356,6 +356,9 @@ test(
       preference_assistant_custom_instructions: customInstructions,
       preference_assistant_additional_information: additionalInformation,
       preference_default_chat_provider: null,
+      preference_starting_hub_assistant_id: null,
+      preference_starting_assistant_id: null,
+      preference_starting_assistant_cleared: false,
     });
 
     await page

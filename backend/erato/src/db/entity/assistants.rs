@@ -34,6 +34,8 @@ pub enum Relation {
     AssistantHubAssistants,
     #[sea_orm(has_many = "super::chats::Entity")]
     Chats,
+    #[sea_orm(has_many = "super::user_preferences::Entity")]
+    UserPreferences,
     #[sea_orm(
         belongs_to = "super::users::Entity",
         from = "Column::OwnerUserId",
@@ -65,6 +67,12 @@ impl Related<super::assistant_hub_assistants::Entity> for Entity {
 impl Related<super::chats::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Chats.def()
+    }
+}
+
+impl Related<super::user_preferences::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::UserPreferences.def()
     }
 }
 

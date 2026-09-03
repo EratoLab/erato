@@ -20,6 +20,7 @@ pub struct Model {
     #[sea_orm(column_type = "Text", nullable)]
     pub default_chat_provider: Option<String>,
     pub starting_hub_assistant_id: Option<Uuid>,
+    pub starting_assistant_id: Option<Uuid>,
     pub starting_assistant_cleared: bool,
 }
 
@@ -34,6 +35,14 @@ pub enum Relation {
     )]
     AssistantHubAssistants,
     #[sea_orm(
+        belongs_to = "super::assistants::Entity",
+        from = "Column::StartingAssistantId",
+        to = "super::assistants::Column::Id",
+        on_update = "NoAction",
+        on_delete = "SetNull"
+    )]
+    Assistants,
+    #[sea_orm(
         belongs_to = "super::users::Entity",
         from = "Column::UserId",
         to = "super::users::Column::Id",
@@ -46,6 +55,12 @@ pub enum Relation {
 impl Related<super::assistant_hub_assistants::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::AssistantHubAssistants.def()
+    }
+}
+
+impl Related<super::assistants::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Assistants.def()
     }
 }
 

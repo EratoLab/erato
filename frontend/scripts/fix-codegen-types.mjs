@@ -181,6 +181,10 @@ const schemaStringFieldFixes = [
     to: "preference_starting_hub_assistant_id?: string | null | undefined;",
   },
   {
+    from: "preference_starting_assistant_id?: null | undefined;",
+    to: "preference_starting_assistant_id?: string | null | undefined;",
+  },
+  {
     from: "preference_nickname?: null | undefined;",
     to: "preference_nickname?: string | null | undefined;",
   },

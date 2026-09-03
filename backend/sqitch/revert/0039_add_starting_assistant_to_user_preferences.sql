@@ -4,6 +4,7 @@ BEGIN;
 
 ALTER TABLE public.user_preferences
     DROP COLUMN starting_hub_assistant_id,
+    DROP COLUMN starting_assistant_id,
     DROP COLUMN starting_assistant_cleared;
 
 COMMIT;

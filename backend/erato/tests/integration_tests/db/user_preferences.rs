@@ -255,3 +255,117 @@ async fn test_unrelated_patches_and_conflicting_request(pool: Pool<Postgres>) {
     assert_eq!(prefs.starting_hub_assistant_id, None);
     assert!(prefs.starting_assistant_cleared);
 }
+
+/// Insert an `assistants` row a private pick can point at.
+async fn create_plain_assistant(conn: &DatabaseConnection, owner_id: Uuid) -> Uuid {
+    create_assistant(
+        conn,
+        &PolicyEngine::new(),
+        &Subject::User(owner_id.to_string()),
+        "Private fixture assistant".to_string(),
+        None,
+        "You are a private user-preferences test fixture.".to_string(),
+        None,
+        None,
+        None,
+        false,
+    )
+    .await
+    .expect("failed to create private assistant")
+    .id
+}
+
+/// The two pick kinds are alternatives, and the exclusion has to hold against
+/// the real `..._single_pick_check` constraint — on the insert path as well as
+/// the update path, and in both swap directions.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_the_two_pick_kinds_are_mutually_exclusive(pool: Pool<Postgres>) {
+    let conn = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+
+    let user_id = create_user(&conn, "two-kinds-swapper").await;
+    let hub_id = create_hub_assistant(&conn, user_id).await;
+    let assistant_id = create_plain_assistant(&conn, user_id).await;
+
+    // Insert path with both kinds at once: the hub pick wins, and the write
+    // must not trip the constraint.
+    upsert_user_preferences(
+        &conn,
+        &user_id,
+        UpdateUserPreferencesInput {
+            starting_hub_assistant_id: Some(Some(hub_id)),
+            starting_assistant_id: Some(Some(assistant_id)),
+            ..Default::default()
+        },
+    )
+    .await
+    .expect("conflicting picks should not violate the CHECK constraint");
+
+    let prefs = get_user_preferences(&conn, &user_id)
+        .await
+        .unwrap()
+        .expect("row should exist");
+    assert_eq!(prefs.starting_hub_assistant_id, Some(hub_id));
+    assert_eq!(prefs.starting_assistant_id, None);
+
+    // Update path: the private pick replaces the hub pick.
+    upsert_user_preferences(
+        &conn,
+        &user_id,
+        UpdateUserPreferencesInput {
+            starting_assistant_id: Some(Some(assistant_id)),
+            ..Default::default()
+        },
+    )
+    .await
+    .expect("failed to swap to the private pick");
+
+    let prefs = get_user_preferences(&conn, &user_id)
+        .await
+        .unwrap()
+        .expect("row should exist");
+    assert_eq!(prefs.starting_hub_assistant_id, None);
+    assert_eq!(prefs.starting_assistant_id, Some(assistant_id));
+    assert!(!prefs.starting_assistant_cleared);
+
+    // And back.
+    upsert_user_preferences(
+        &conn,
+        &user_id,
+        UpdateUserPreferencesInput {
+            starting_hub_assistant_id: Some(Some(hub_id)),
+            ..Default::default()
+        },
+    )
+    .await
+    .expect("failed to swap back to the hub pick");
+
+    let prefs = get_user_preferences(&conn, &user_id)
+        .await
+        .unwrap()
+        .expect("row should exist");
+    assert_eq!(prefs.starting_hub_assistant_id, Some(hub_id));
+    assert_eq!(prefs.starting_assistant_id, None);
+
+    // A clear removes whichever kind is stored.
+    upsert_user_preferences(
+        &conn,
+        &user_id,
+        UpdateUserPreferencesInput {
+            starting_assistant_cleared: Some(true),
+            ..Default::default()
+        },
+    )
+    .await
+    .expect("failed to clear");
+
+    let prefs = get_user_preferences(&conn, &user_id)
+        .await
+        .unwrap()
+        .expect("row should exist");
+    assert_eq!(prefs.starting_hub_assistant_id, None);
+    assert_eq!(prefs.starting_assistant_id, None);
+    assert!(prefs.starting_assistant_cleared);
+}

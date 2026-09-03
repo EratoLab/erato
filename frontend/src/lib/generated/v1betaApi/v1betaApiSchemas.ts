@@ -2353,13 +2353,15 @@ export type StarterPromptsResponse = {
  */
 export type StartingAssistantInfo = {
   /**
-   * The stable `assistant_hub_assistants.id` the pick or pin stores.
+   * The stable `assistant_hub_assistants.id` the pick or pin stores. Absent
+   * when the user picked an assistant that was never published to the hub,
+   * which has no hub row.
    */
-  assistant_hub_assistant_id: string;
+  assistant_hub_assistant_id?: string;
   /**
-   * The live `assistants.id` of the current published version. Resolved at
-   * read time from the pinned hub id, so it is always the id a client can
-   * open a chat with — even right after a republish minted a fresh clone.
+   * The live `assistants.id` a client can open a chat with. For a hub
+   * assistant it is resolved at read time from the stable hub id, so it is
+   * right even after a republish minted a fresh clone.
    */
   assistant_id: string;
   /**
@@ -2748,10 +2750,16 @@ export type UpdateProfilePreferencesRequest = {
    */
   preference_starting_assistant_cleared?: boolean;
   /**
-   * The user's own start-screen pick as an `assistant_hub_assistants.id`
-   * (NOT an `assistants.id` — those go stale on every hub republish).
-   * Explicit `null` removes the pick and returns to inheriting any
-   * audience pin.
+   * The user's own start-screen pick when it is an assistant that was never
+   * published to the hub, as an `assistants.id`. Setting either pick field
+   * removes the other.
+   */
+  preference_starting_assistant_id?: string | null | undefined;
+  /**
+   * The user's own start-screen pick when it is a hub assistant, as an
+   * `assistant_hub_assistants.id` (NOT the clone's `assistants.id` — those
+   * go stale on every hub republish). Explicit `null` removes the pick and
+   * returns to inheriting any audience pin.
    */
   preference_starting_hub_assistant_id?: string | null | undefined;
 };
@@ -2818,8 +2826,14 @@ export type UserProfile = {
    */
   preference_starting_assistant_cleared?: boolean;
   /**
-   * The user's own start-screen pick, stored as an
-   * `assistant_hub_assistants.id` — stable across hub republishes, unlike
+   * The user's own start-screen pick when it is an assistant that was never
+   * published to the hub, stored as an `assistants.id`. At most one of the
+   * two pick fields is ever set.
+   */
+  preference_starting_assistant_id?: string;
+  /**
+   * The user's own start-screen pick when it is a hub assistant, stored as
+   * an `assistant_hub_assistants.id` — stable across hub republishes, unlike
    * the clone's `assistants.id`. The LIVE assistant id it points at is
    * resolved per request by `GET /me/starting-assistant`.
    */

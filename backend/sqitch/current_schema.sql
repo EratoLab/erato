@@ -519,8 +519,10 @@ CREATE TABLE public.user_preferences (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     default_chat_provider text,
     starting_hub_assistant_id uuid,
+    starting_assistant_id uuid,
     starting_assistant_cleared boolean DEFAULT false NOT NULL,
-    CONSTRAINT user_preferences_starting_assistant_state_check CHECK ((NOT (starting_assistant_cleared AND (starting_hub_assistant_id IS NOT NULL))))
+    CONSTRAINT user_preferences_starting_assistant_single_pick_check CHECK (((starting_hub_assistant_id IS NULL) OR (starting_assistant_id IS NULL))),
+    CONSTRAINT user_preferences_starting_assistant_state_check CHECK ((NOT (starting_assistant_cleared AND ((starting_hub_assistant_id IS NOT NULL) OR (starting_assistant_id IS NOT NULL)))))
 );
 
 
@@ -1416,6 +1418,14 @@ ALTER TABLE ONLY public.temp_chat_generation_events
 
 ALTER TABLE ONLY public.temp_chat_generations
     ADD CONSTRAINT temp_chat_generations_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES public.chats(id) ON DELETE CASCADE;
+
+
+--
+-- Name: user_preferences user_preferences_starting_assistant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_preferences
+    ADD CONSTRAINT user_preferences_starting_assistant_id_fkey FOREIGN KEY (starting_assistant_id) REFERENCES public.assistants(id) ON DELETE SET NULL;
 
 
 --

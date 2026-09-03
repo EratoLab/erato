@@ -99,6 +99,7 @@ function renderDialog({
   desktopSidecarTabEnabled = false,
   dataTabEnabled = true,
   audioTranscriptionEnabled = false,
+  assistantsEnabled = false,
   onMcpOauthCallbackHandled,
   pendingMcpOauthCallback = null,
   queryClient = new QueryClient({
@@ -122,6 +123,7 @@ function renderDialog({
   desktopSidecarTabEnabled?: boolean;
   dataTabEnabled?: boolean;
   audioTranscriptionEnabled?: boolean;
+  assistantsEnabled?: boolean;
   onMcpOauthCallbackHandled?: () => void;
   pendingMcpOauthCallback?: {
     code: string;
@@ -148,6 +150,7 @@ function renderDialog({
             enabled: audioTranscriptionEnabled,
             maxRecordingDurationSeconds: 1200,
           },
+          assistants: { enabled: assistantsEnabled },
         }}
       >
         <ThemeProvider
@@ -735,8 +738,9 @@ describe("UserPreferencesDialog", () => {
           "I work with enterprise customers in regulated industries.",
         preference_default_chat_provider: null,
         // Always sent explicitly, even while the start-screen section is
-        // hidden: omitting either would let any save wipe the stored state.
+        // hidden: omitting any of them would let a save wipe the stored state.
         preference_starting_hub_assistant_id: null,
+        preference_starting_assistant_id: null,
         preference_starting_assistant_cleared: false,
       });
       expect(invalidateQueries).toHaveBeenCalledWith({
@@ -789,6 +793,9 @@ describe("UserPreferencesDialog", () => {
     const hubAssistantVersions = [
       {
         hub_assistant_id: "hub-1",
+        // The published clone, which also reaches the caller through
+        // `GET /assistants` and must not be offered twice.
+        assistant_id: "assistant-clone-1",
         assistant: {
           name: "Docs Helper",
           description: "Answers documentation questions",
@@ -796,8 +803,14 @@ describe("UserPreferencesDialog", () => {
       },
       {
         hub_assistant_id: "hub-2",
+        assistant_id: "assistant-clone-2",
         assistant: { name: "Sales Coach" },
       },
+    ];
+
+    const assistants = [
+      { id: "assistant-1", name: "My Tuned Assistant", description: "Private" },
+      { id: "assistant-clone-1", name: "Docs Helper", description: null },
     ];
 
     const mockFetchWithHub = () =>
@@ -817,6 +830,9 @@ describe("UserPreferencesDialog", () => {
         }
         if (url.includes("/assistant-hub/assistants")) {
           return createJsonResponse({ versions: hubAssistantVersions });
+        }
+        if (url.includes("/api/v1beta/assistants")) {
+          return createJsonResponse(assistants);
         }
         return createJsonResponse(userProfile);
       });
@@ -848,10 +864,84 @@ describe("UserPreferencesDialog", () => {
         expect(JSON.parse(String(requestCall?.[1]?.body))).toEqual(
           expect.objectContaining({
             preference_starting_hub_assistant_id: "hub-1",
+            preference_starting_assistant_id: null,
             preference_starting_assistant_cleared: false,
           }),
         );
       });
+    });
+
+    it("saves a pick of an assistant that was never published to the hub", async () => {
+      const fetchMock = mockFetchWithHub();
+
+      renderDialog({ assistantsEnabled: true });
+
+      fireEvent.click(
+        await screen.findByRole("radio", { name: /A specific assistant/ }),
+      );
+      fireEvent.click(await screen.findByTitle("Choose an assistant"));
+      fireEvent.click(
+        await screen.findByRole("menuitem", { name: /My Tuned Assistant/ }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() => {
+        const requestCall = findPreferencesPut(fetchMock);
+        expect(requestCall).toBeDefined();
+        expect(JSON.parse(String(requestCall?.[1]?.body))).toEqual(
+          expect.objectContaining({
+            preference_starting_hub_assistant_id: null,
+            preference_starting_assistant_id: "assistant-1",
+            preference_starting_assistant_cleared: false,
+          }),
+        );
+      });
+    });
+
+    it("offers a published hub assistant once, under its hub id", async () => {
+      mockFetchWithHub();
+
+      renderDialog({ assistantsEnabled: true });
+
+      fireEvent.click(
+        await screen.findByRole("radio", { name: /A specific assistant/ }),
+      );
+      fireEvent.click(await screen.findByTitle("Choose an assistant"));
+
+      // "Docs Helper" is both a hub entry and the clone in `GET /assistants`.
+      expect(
+        await screen.findAllByRole("menuitem", { name: /Docs Helper/ }),
+      ).toHaveLength(1);
+      expect(
+        screen.getByRole("menuitem", { name: /My Tuned Assistant/ }),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps Save disabled until an assistant is actually chosen", async () => {
+      mockFetchWithHub();
+
+      renderDialog({
+        assistantsEnabled: true,
+        profile: {
+          ...userProfile,
+          preference_starting_assistant_cleared: true,
+        },
+      });
+
+      fireEvent.click(
+        await screen.findByRole("radio", { name: /A specific assistant/ }),
+      );
+
+      // Without this, saving would send the same wire values as "Automatic"
+      // and silently undo the stored clear.
+      expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+
+      fireEvent.click(await screen.findByTitle("Choose an assistant"));
+      fireEvent.click(
+        await screen.findByRole("menuitem", { name: /My Tuned Assistant/ }),
+      );
+
+      expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
     });
 
     it("saves an explicit clear (welcome screen) instead of just a null pick", async () => {

@@ -2,7 +2,7 @@
 
 BEGIN;
 
-SELECT starting_hub_assistant_id, starting_assistant_cleared
+SELECT starting_hub_assistant_id, starting_assistant_id, starting_assistant_cleared
 FROM public.user_preferences
 WHERE FALSE;
 

@@ -3592,6 +3592,16 @@ msgstr "Choisir un assistant"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.picker.section.hub"
+msgstr "Depuis le hub d'assistants"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
+msgid "preferences.dialog.startScreen.picker.section.own"
+msgstr "Vos assistants"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/StartingAssistantSetting.tsx
 msgid "preferences.dialog.startScreen.picker.unavailable"
 msgstr "Un assistant auquel vous n’avez plus accès"
 
