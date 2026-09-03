@@ -168,15 +168,13 @@ pub fn match_winning_audience<'a>(
     identity: AudienceIdentity<'_>,
     now: DateTime<Utc>,
 ) -> Option<(&'a str, &'a ExperienceAudience)> {
-    resolution_order_for(policy, STARTING_ASSISTANT_SETTING)
-        .into_iter()
-        .find(|(_, audience)| {
-            audience.is_active_at(now)
-                && audience
-                    .subjects
-                    .iter()
-                    .any(|subject| subject_matches(subject, identity))
-        })
+    resolution_order_for(policy, STARTING_ASSISTANT_SETTING).find(|(_, audience)| {
+        audience.is_active_at(now)
+            && audience
+                .subjects
+                .iter()
+                .any(|subject| subject_matches(subject, identity))
+    })
 }
 
 #[utoipa::path(
@@ -447,7 +445,9 @@ async fn resolve_assistant_pick(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::distribution::experience_policy::parse_experience_policy;
+    use crate::distribution::experience_policy::{
+        EXPERIENCE_POLICY_RESOLUTION_CONTRACT, parse_experience_policy,
+    };
     use sqlx::types::Uuid;
     use std::collections::HashMap;
 
@@ -862,70 +862,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn a_dual_document_resolves_like_its_setting_orders_stripped_twin() {
-        // S10c without running the old binary: stripping `setting_orders`
-        // reduces the document to exactly what a pre-setting_orders reader
-        // resolves from (`accepts_unknown_fields_from_newer_writers` proves
-        // that reader parses the dual document at all), so equal winners here
-        // mean a mixed-version deployment cannot change anyone's start screen.
-        let dual = r#"{
-            "audiences": {
-                "everyone": {
-                    "id": "aud-everyone",
-                    "subjects": [{"subject_type": "organization"}],
-                    "pinned_assistant_hub_assistant_id": "11111111-1111-4111-8111-111111111111",
-                    "expires_at": "2026-09-08T00:00:00Z"
-                },
-                "sales": {
-                    "id": "aud-sales",
-                    "subjects": [{"subject_type": "organization_group", "group_id": "sales-group-id"}],
-                    "pinned_assistant_hub_assistant_id": "22222222-2222-4222-8222-222222222222"
-                },
-                "hr": {
-                    "id": "aud-hr",
-                    "subjects": [{"subject_type": "organization_group", "group_id": "hr-group-id"}],
-                    "pinned_assistant_hub_assistant_id": "33333333-3333-4333-8333-333333333333"
-                }
-            },
-            "priority_order": ["everyone", "sales", "hr"],
-            "setting_orders": {"starting_assistant": ["aud-everyone", "aud-sales", "aud-hr"]}
-        }"#;
-        let mut stripped: serde_json::Value = serde_json::from_str(dual).unwrap();
-        stripped
-            .as_object_mut()
-            .and_then(|document| document.remove("setting_orders"))
-            .unwrap();
-
-        let dual = parse_experience_policy(dual).unwrap();
-        let stripped = parse_experience_policy(&stripped.to_string()).unwrap();
-
-        let sam_groups = member_of(&["sales-group-id"]);
-        let dana_groups = member_of(&["sales-group-id", "hr-group-id"]);
-        let hana_groups = member_of(&["hr-group-id"]);
-        let cast = [
-            ("sam", identity_of(&sam_groups)),
-            ("dana", identity_of(&dana_groups)),
-            ("hana", identity_of(&hana_groups)),
-            ("otto", identity_of(&[])),
-        ];
-        // Both sides of the expiry boundary, so the comparison crosses a
-        // change of winner rather than holding one constant answer equal.
-        for now in [
-            at("2026-09-07T23:59:59Z"),
-            at("2026-09-08T00:00:00Z"),
-            at("2026-09-09T00:00:00Z"),
-        ] {
-            for (person, identity) in cast {
-                assert_eq!(
-                    match_winning_audience(&dual, identity, now).map(|(name, _)| name),
-                    match_winning_audience(&stripped, identity, now).map(|(name, _)| name),
-                    "{person} at {now}"
-                );
-            }
-        }
-    }
-
     #[derive(serde::Deserialize)]
     struct ContractFixture {
         identities: HashMap<String, ContractIdentity>,
@@ -939,10 +875,20 @@ mod tests {
     }
 
     #[derive(serde::Deserialize)]
+    #[serde(rename_all = "snake_case")]
+    enum ContractKind {
+        LegacyOnly,
+        Dual,
+    }
+
+    #[derive(serde::Deserialize)]
     struct ContractCase {
         name: String,
-        kind: String,
-        document: serde_json::Value,
+        kind: ContractKind,
+        /// The fixture's own bytes, not a `Value` round trip: the production
+        /// reader parses the stored text as-is, and a `Value` collapses
+        /// duplicate keys last-wins where that parser rejects them.
+        document: Box<serde_json::value::RawValue>,
         checks: Vec<ContractCheck>,
     }
 
@@ -950,29 +896,52 @@ mod tests {
     struct ContractCheck {
         identity: String,
         now: String,
+        // The harness requires the key: an omitted `winner` is malformed, not "no winner".
+        #[serde(deserialize_with = "Option::<String>::deserialize")]
         winner: Option<String>,
+    }
+
+    /// The document as a pre-`setting_orders` reader sees it.
+    fn without_setting_orders(document: &str) -> String {
+        let mut stripped: serde_json::Value = serde_json::from_str(document).unwrap();
+        stripped
+            .as_object_mut()
+            .and_then(|document| document.remove("setting_orders"))
+            .expect("a dual case must carry setting_orders");
+        stripped.to_string()
     }
 
     #[test]
     fn the_shared_resolution_contract_fixture_holds_in_rust() {
-        // One fixture, two resolvers: the admin panel runs the same file
-        // against its resolver mirror, so a divergence between erato and the
-        // panel preview shows up as a failing row on one side or the other
-        // instead of as an admin being lied to.
-        let fixture: ContractFixture = serde_json::from_str(include_str!(
-            "../../../distribution/experience_policy_resolution_contract.json"
-        ))
-        .unwrap();
+        // One fixture, two resolvers: the admin panel keeps a byte-for-byte
+        // copy of this file and asserts it equal to
+        // `EXPERIENCE_POLICY_RESOLUTION_CONTRACT`, so a divergence between
+        // erato and the panel preview shows up as a failing row on one side
+        // or the other instead of as an admin being lied to.
+        //
+        // The stripped variant is S10c without running the old binary:
+        // stripping `setting_orders` reduces a dual document to exactly what
+        // a pre-setting_orders reader resolves from
+        // (`accepts_unknown_fields_from_newer_writers` proves that reader
+        // parses the dual document at all), so the same explicit winners on
+        // both variants mean a mixed-version deployment cannot change
+        // anyone's start screen.
+        let fixture: ContractFixture =
+            serde_json::from_str(EXPERIENCE_POLICY_RESOLUTION_CONTRACT).unwrap();
 
         for case in &fixture.cases {
-            let mut documents = vec![("verbatim", case.document.to_string())];
-            if case.kind == "dual" {
-                let mut stripped = case.document.clone();
-                stripped
-                    .as_object_mut()
-                    .and_then(|document| document.remove("setting_orders"))
-                    .expect("a dual case must carry setting_orders");
-                documents.push(("stripped", stripped.to_string()));
+            let raw = case.document.get();
+            let mut documents = vec![("verbatim", raw.to_owned())];
+            match case.kind {
+                ContractKind::LegacyOnly => {
+                    let document: serde_json::Value = serde_json::from_str(raw).unwrap();
+                    assert!(
+                        document.get("setting_orders").is_none(),
+                        "{}: a legacy_only case must not carry setting_orders",
+                        case.name
+                    );
+                }
+                ContractKind::Dual => documents.push(("stripped", without_setting_orders(raw))),
             }
             for (variant, contents) in &documents {
                 let policy = parse_experience_policy(contents).unwrap();

@@ -18,6 +18,13 @@ pub const EXPERIENCE_POLICY_SLUG: &str = "policy";
 /// in [`resolution_order_for`].
 pub const STARTING_ASSISTANT_SETTING: &str = "starting_assistant";
 
+/// The shared resolution-contract fixture: the cases every resolver of this
+/// document must agree on. Downstream consumers keep a copy (the admin panel
+/// does) and assert it against this one byte for byte; the
+/// `starting_assistant` harness in this crate runs it.
+pub const EXPERIENCE_POLICY_RESOLUTION_CONTRACT: &str =
+    include_str!("experience_policy_resolution_contract.json");
+
 /// The org-wide experience policy: which audiences exist and in which order
 /// they are resolved for a user.
 ///
@@ -35,18 +42,27 @@ pub struct ExperiencePolicyDocument {
     ///
     /// Since `setting_orders` arrived this is the LEGACY spelling of the
     /// starting-assistant order: dual-written by every new save and required
-    /// at parse to agree with `setting_orders["starting_assistant"]`, because
-    /// a pre-`setting_orders` erato resolves exclusively from here and a
-    /// mixed-version deployment must not change any winner. It may be dropped
-    /// only when the DEPLOYED-erato reader floor reads `setting_orders` — a
-    /// floor on what the org runs, not on any Cargo pin.
+    /// by [`parse_experience_policy`] to agree with
+    /// `setting_orders["starting_assistant"]`, because a pre-`setting_orders`
+    /// erato resolves exclusively from here and a mixed-version deployment
+    /// must not change any winner. That agreement check also rejects a
+    /// document whose legacy list is absent or empty beside a non-empty
+    /// starting-assistant order, so this list cannot be dropped while any
+    /// replica runs an erato with the check: it may go only once every
+    /// replica runs an erato whose parser no longer requires the two orders
+    /// to agree, and then only from a writer pinned to that erato — a floor
+    /// on what the org runs, not on any Cargo pin.
     #[serde(default)]
     pub priority_order: Vec<String>,
     /// One TOTAL first-match-wins order per setting, in audience ids — the
     /// per-setting successor to `priority_order` (ERMAIN-706 §10 item 5:
     /// order is a property of a setting, not of the audience list). An
     /// audience absent from a setting's order can never win that setting
-    /// (staged), mirroring `priority_order`'s absence rule.
+    /// (staged), mirroring `priority_order`'s absence rule — while the setting
+    /// has an entry here. When the `starting_assistant` key is absent,
+    /// [`resolution_order_for`] falls back to `priority_order` for that one
+    /// setting (the test
+    /// `resolution_order_falls_back_to_the_legacy_list_only_for_the_starting_assistant`).
     ///
     /// Unknown setting KEYS parse — the same mixed-version stance as unknown
     /// fields — but every VALUE is validated uniformly, so a typo'd id fails
@@ -84,8 +100,9 @@ pub enum AudienceSubject {
     /// and carries no per-user identifier.
     ///
     /// This says "this applies to everyone", which is not the same as "everyone
-    /// not matched above": placed first in `priority_order` it shadows every
-    /// audience below it, placed last it is a catch-all default.
+    /// not matched above": placed first in `priority_order` (or in a setting's
+    /// `setting_orders` entry) it shadows every audience below it, placed last
+    /// it is a catch-all default.
     Organization,
     /// A directory group the caller is a member of.
     ///
@@ -166,9 +183,10 @@ pub struct ExperienceAudience {
     /// Per-audience, not per-setting — the fork is noted in ERMAIN-706 §10 and
     /// deliberately not re-argued while one setting exists. Evaluated at read
     /// time only, never filtered at parse or load: an expired audience stays in
-    /// `audiences` and `priority_order` so the admin panel can show it inert
-    /// rather than gone. Parsing checks well-formedness only — a past value
-    /// must parse. Mirrored by the admin panel in `model/audiencePolicy.ts`.
+    /// `audiences`, `priority_order` and every `setting_orders` entry so the
+    /// admin panel can show it inert rather than gone. Parsing checks
+    /// well-formedness only — a past value must parse. Mirrored by the admin
+    /// panel in `model/audiencePolicy.ts`.
     #[serde(default)]
     pub expires_at: Option<DateTime<Utc>>,
 }
@@ -201,6 +219,15 @@ impl ExperienceAudience {
 /// including one carrying only the new key — would resolve differently on old
 /// and new readers; rejecting it whole (keep-previous + log upstream) means
 /// no parseable document can make reader precedence matter.
+///
+/// The same-length half of that check is what pins the lifecycle of
+/// [`ExperiencePolicyDocument::priority_order`]: N ids beside an absent or
+/// empty legacy list is a disagreement, so that list may stop being written
+/// only once every replica runs an erato without this check, and then only
+/// from a writer pinned to that erato.
+///
+/// Both maps are walked in sorted key order so that a document with more
+/// than one defect reports the same one on every parse.
 pub fn parse_experience_policy(contents: &str) -> Result<ExperiencePolicyDocument, Report> {
     let document: ExperiencePolicyDocument = serde_json::from_str(contents)?;
 
@@ -217,7 +244,9 @@ pub fn parse_experience_policy(contents: &str) -> Result<ExperiencePolicyDocumen
     }
 
     let mut audience_ids = HashSet::new();
-    for (name, audience) in &document.audiences {
+    let mut audiences: Vec<_> = document.audiences.iter().collect();
+    audiences.sort_by_key(|(name, _)| *name);
+    for (name, audience) in audiences {
         if audience.subjects.is_empty() {
             return Err(eyre!("audience \"{name}\" has no subjects"));
         }
@@ -239,7 +268,9 @@ pub fn parse_experience_policy(contents: &str) -> Result<ExperiencePolicyDocumen
         }
     }
 
-    for (setting, order) in &document.setting_orders {
+    let mut setting_orders: Vec<_> = document.setting_orders.iter().collect();
+    setting_orders.sort_by_key(|(setting, _)| *setting);
+    for (setting, order) in setting_orders {
         let mut seen_ids = HashSet::new();
         for id in order {
             if !audience_ids.contains(id.as_str()) {
@@ -294,32 +325,38 @@ pub fn parse_experience_policy(contents: &str) -> Result<ExperiencePolicyDocumen
 /// unknown id or name are skipped so resolution stays total even over a
 /// document the parser would reject (the `skips_unknown_priority_order_entries`
 /// precedent).
-#[must_use]
+///
+/// Deterministic for every document, including ones the parser rejects: when
+/// two audiences share an id, the one with the smaller name resolves for that
+/// id, never whichever the `audiences` map happens to yield first.
 pub fn resolution_order_for<'a>(
     policy: &'a ExperiencePolicyDocument,
     setting: &str,
-) -> Vec<(&'a str, &'a ExperienceAudience)> {
-    if let Some(order) = policy.setting_orders.get(setting) {
-        return order
-            .iter()
-            .filter_map(|id| {
-                policy
-                    .audiences
-                    .iter()
-                    .find(|(_, audience)| audience.id.as_deref() == Some(id.as_str()))
-            })
-            .map(|(name, audience)| (name.as_str(), audience))
-            .collect();
+) -> impl Iterator<Item = (&'a str, &'a ExperienceAudience)> + use<'a> {
+    let mut index: HashMap<&'a str, (&'a str, &'a ExperienceAudience)> = HashMap::new();
+    for (name, audience) in &policy.audiences {
+        if let Some(id) = audience.id.as_deref() {
+            let held = index.entry(id).or_insert((name.as_str(), audience));
+            if name.as_str() < held.0 {
+                *held = (name.as_str(), audience);
+            }
+        }
     }
-    if setting != STARTING_ASSISTANT_SETTING {
-        return Vec::new();
-    }
-    policy
-        .priority_order
-        .iter()
-        .filter_map(|name| policy.audiences.get_key_value(name))
-        .map(|(name, audience)| (name.as_str(), audience))
-        .collect()
+
+    let by_id = policy.setting_orders.get(setting);
+    let legacy = (by_id.is_none() && setting == STARTING_ASSISTANT_SETTING)
+        .then_some(&policy.priority_order);
+    by_id
+        .into_iter()
+        .flatten()
+        .filter_map(move |id| index.get(id.as_str()).copied())
+        .chain(
+            legacy
+                .into_iter()
+                .flatten()
+                .filter_map(move |name| policy.audiences.get_key_value(name))
+                .map(|(name, audience)| (name.as_str(), audience)),
+        )
 }
 
 /// Return the slug encoded by an admin-panel experience policy filename.
@@ -755,7 +792,6 @@ mod tests {
 
     fn order_names(policy: &ExperiencePolicyDocument, setting: &str) -> Vec<String> {
         resolution_order_for(policy, setting)
-            .into_iter()
             .map(|(name, _)| name.to_string())
             .collect()
     }
@@ -822,6 +858,31 @@ mod tests {
     }
 
     #[test]
+    fn reports_the_same_defective_audience_on_every_parse() {
+        // Two audiences with blank ids: every parse builds a fresh `HashMap`
+        // with its own hash seed, so only a sorted walk can name the same
+        // audience (the smaller key) each time.
+        let contents = r#"{
+            "audiences": {
+                "beta": {
+                    "id": "",
+                    "subjects": [{"subject_type": "organization"}],
+                    "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01"
+                },
+                "alpha": {
+                    "id": "",
+                    "subjects": [{"subject_type": "organization"}],
+                    "pinned_assistant_hub_assistant_id": "0b1c2d3e-4f50-4161-8273-8495a6b7c8d9"
+                }
+            }
+        }"#;
+        for _ in 0..50 {
+            let error = parse_experience_policy(contents).unwrap_err();
+            assert_eq!(error.to_string(), "audience \"alpha\" has a blank id");
+        }
+    }
+
+    #[test]
     fn rejects_duplicate_audience_ids() {
         let error = parse_experience_policy(
             r#"{
@@ -851,6 +912,23 @@ mod tests {
         ))
         .unwrap_err();
         assert!(error.to_string().contains("unknown audience id"));
+    }
+
+    #[test]
+    fn reports_the_same_defective_setting_order_on_every_parse() {
+        // Two setting keys each naming an unknown id: the smaller key is the
+        // one reported, regardless of the fresh hash seed each parse gets.
+        for _ in 0..50 {
+            let error = parse_experience_policy(&sales_hr_document(
+                r#"["sales", "hr"]"#,
+                r#"{"beta": ["ghost"], "alpha": ["ghost"]}"#,
+            ))
+            .unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                "setting_orders[\"alpha\"] names unknown audience id \"ghost\""
+            );
+        }
     }
 
     #[test]
@@ -951,6 +1029,61 @@ mod tests {
     }
 
     #[test]
+    fn rejects_a_starting_assistant_order_disagreeing_past_position_zero() {
+        // Positions 0 agree and position 1 does not, so a parser comparing
+        // only the heads of the two orders would wrongly accept this. Three
+        // audiences are needed: with two, any order agreeing at 0 and
+        // diverging at 1 fails the per-setting id checks first.
+        let error = parse_experience_policy(
+            r#"{
+                "audiences": {
+                    "sales": {
+                        "id": "aud-sales",
+                        "subjects": [{"subject_type": "organization_group", "group_id": "sales-group-id"}],
+                        "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01"
+                    },
+                    "hr": {
+                        "id": "aud-hr",
+                        "subjects": [{"subject_type": "organization_group", "group_id": "hr-group-id"}],
+                        "pinned_assistant_hub_assistant_id": "0b1c2d3e-4f50-4161-8273-8495a6b7c8d9"
+                    },
+                    "engineering": {
+                        "id": "aud-eng",
+                        "subjects": [{"subject_type": "organization_group", "group_id": "eng-group-id"}],
+                        "pinned_assistant_hub_assistant_id": "0b1c2d3e-4f50-4161-8273-8495a6b7c8d8"
+                    }
+                },
+                "priority_order": ["sales", "hr", "engineering"],
+                "setting_orders": {"starting_assistant": ["aud-sales", "aud-eng", "aud-hr"]}
+            }"#,
+        )
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("at position 1: id \"aud-eng\" does not belong to audience \"hr\""),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn accepts_a_setting_order_that_is_not_a_subset_of_the_legacy_list() {
+        // The agreement invariant binds only the starting-assistant order to
+        // the legacy list; another setting may order audiences the legacy
+        // list never mentions.
+        let document = parse_experience_policy(&sales_hr_document(
+            r#"["sales"]"#,
+            r#"{"starting_assistant": ["aud-sales"], "welcome_banner": ["aud-hr", "aud-sales"]}"#,
+        ))
+        .unwrap();
+        assert_eq!(
+            order_names(&document, STARTING_ASSISTANT_SETTING),
+            ["sales"]
+        );
+        assert_eq!(order_names(&document, "welcome_banner"), ["hr", "sales"]);
+    }
+
+    #[test]
     fn resolution_order_prefers_a_present_setting_orders_key() {
         // Constructed directly: the parser rejects any disagreeing document,
         // so a struct the wire cannot carry is the only way to observe which
@@ -975,7 +1108,11 @@ mod tests {
             vec!["sales", "hr"],
             vec![(STARTING_ASSISTANT_SETTING, vec![])],
         );
-        assert!(resolution_order_for(&policy, STARTING_ASSISTANT_SETTING).is_empty());
+        assert!(
+            resolution_order_for(&policy, STARTING_ASSISTANT_SETTING)
+                .next()
+                .is_none()
+        );
     }
 
     #[test]
@@ -996,7 +1133,11 @@ mod tests {
             ["hr", "sales"]
         );
         assert_eq!(order_names(&policy, "welcome_banner"), ["sales"]);
-        assert!(resolution_order_for(&policy, "unordered_setting").is_empty());
+        assert!(
+            resolution_order_for(&policy, "unordered_setting")
+                .next()
+                .is_none()
+        );
     }
 
     #[test]
@@ -1009,6 +1150,25 @@ mod tests {
             vec![(STARTING_ASSISTANT_SETTING, vec!["ghost", "aud-sales"])],
         );
         assert_eq!(order_names(&policy, STARTING_ASSISTANT_SETTING), ["sales"]);
+    }
+
+    #[test]
+    fn resolution_order_resolves_a_shared_id_to_the_smaller_name() {
+        // The parser rejects a shared id, but a struct-built document can
+        // carry one, and the resolver must then pick the same audience for it
+        // every time — the smaller name — never whichever entry the fresh
+        // `audiences` map of each document happens to yield first.
+        for _ in 0..50 {
+            let policy = document_of(
+                vec![
+                    ("zulu", identified("x", "zulu-group-id")),
+                    ("alpha", identified("x", "alpha-group-id")),
+                ],
+                vec![],
+                vec![(STARTING_ASSISTANT_SETTING, vec!["x"])],
+            );
+            assert_eq!(order_names(&policy, STARTING_ASSISTANT_SETTING), ["alpha"]);
+        }
     }
 
     #[test]
