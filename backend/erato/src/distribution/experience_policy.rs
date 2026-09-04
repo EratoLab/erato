@@ -1443,6 +1443,56 @@ mod tests {
         };
         assert_eq!(resolved(&parsed), resolved(&stripped));
 
+        // The order is not the whole resolver: the winner match is where a
+        // future "skip stale snapshots" patch would read provenance, so the
+        // pin runs it too — the fixture harness's comparison point, with
+        // explicit winners so twin agreement cannot pass vacuously. Dana's
+        // winner is the snapshot itself, dangling record and all.
+        use crate::server::api::v1beta::starting_assistant::{
+            AudienceIdentity, match_winning_audience,
+        };
+        let now = "2026-09-05T00:00:00Z".parse::<DateTime<Utc>>().unwrap();
+        let sales_groups = ["sales-group-id".to_string()];
+        let hr_groups = ["hr-group-id".to_string()];
+        let checks: [(AudienceIdentity<'_>, Option<&str>); 4] = [
+            (
+                AudienceIdentity {
+                    groups: &[],
+                    organization_user_id: Some("oid-dana"),
+                },
+                Some("overlap"),
+            ),
+            (
+                AudienceIdentity {
+                    groups: &sales_groups,
+                    organization_user_id: Some("oid-sam"),
+                },
+                Some("sales"),
+            ),
+            (
+                AudienceIdentity {
+                    groups: &hr_groups,
+                    organization_user_id: Some("oid-hana"),
+                },
+                Some("hr"),
+            ),
+            (
+                AudienceIdentity {
+                    groups: &[],
+                    organization_user_id: Some("oid-otto"),
+                },
+                None,
+            ),
+        ];
+        for (identity, winner) in checks {
+            for policy in [&parsed, &stripped] {
+                assert_eq!(
+                    match_winning_audience(policy, identity, now).map(|(name, _)| name),
+                    winner
+                );
+            }
+        }
+
         // The twins differ in nothing else: clearing provenance from the full
         // parse yields exactly the stripped parse, so the resolution
         // comparison above spans the whole document rather than a lucky
