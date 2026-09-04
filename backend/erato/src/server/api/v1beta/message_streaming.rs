@@ -563,7 +563,30 @@ async fn send_generation_event(
     message: &impl SendAsSseEvent,
     tx: Sender<Result<Event, Report>>,
 ) -> Result<(), Report> {
-    message.send_event_report(tx).await
+    let json = message
+        .data_json()
+        .wrap_err_with(|| format!("Failed to serialize {} event", message.tag()))?;
+    tracing::trace!(
+        tag = message.tag(),
+        data_json = json.as_str(),
+        "Sending response event"
+    );
+
+    // Generation is also delivered through StreamingTask's broadcast/history
+    // path. The request-scoped SSE receiver can disappear when a client
+    // navigates away or reconnects; that must not cancel the generation or
+    // turn a successfully persisted tool call into a generation failure.
+    if let Err(error) = tx
+        .send(Ok(Event::default().event(message.tag()).data(json)))
+        .await
+    {
+        tracing::debug!(
+            tag = message.tag(),
+            error = ?error,
+            "Client SSE channel closed while forwarding generation event"
+        );
+    }
+    Ok(())
 }
 
 async fn forward_error_report(tx: &Sender<Result<Event, Report>>, error: &Report) {
@@ -8218,6 +8241,26 @@ mod generation_failure_diagnostic_tests {
         assert!(error_description.contains("Failed during chat completion generation"));
         assert!(error_description.contains("Failed to read the chat completion stream"));
         assert!(error_description.contains("provider connection closed"));
+    }
+
+    #[tokio::test]
+    async fn closed_sse_channel_does_not_abort_generation_event_delivery() {
+        let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(1);
+        drop(rx);
+
+        let event = MessageSubmitStreamingResponseMessage::ToolCallProposed(
+            MessageSubmitStreamingResponseToolCallProposed {
+                message_id: Uuid::new_v4(),
+                content_index: 0,
+                tool_call_id: "call-1".to_string(),
+                tool_name: "read_file".to_string(),
+                input: Some(serde_json::json!({"path": "README.md"})),
+            },
+        );
+
+        send_generation_event(&event, tx)
+            .await
+            .expect("a disconnected SSE client must not fail generation");
     }
 }
 
