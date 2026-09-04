@@ -74,6 +74,7 @@ fn expected_policy_document() -> ExperiencePolicyDocument {
                     .parse::<Uuid>()
                     .unwrap(),
                 expires_at: None,
+                provenance: None,
             },
         )]),
         priority_order: vec!["engineering".to_string()],
