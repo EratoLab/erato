@@ -1,0 +1,33 @@
+default:
+    just --list
+
+# Install or update the project environment.
+setup:
+    uv sync
+
+# Start the FastAPI service.
+run:
+    uv run erato-chaos-creator serve
+
+# Run chaos actions through interactive choice menus.
+interactive:
+    uv run erato-chaos-creator interactive
+
+# Purge one oauth2-proxy session by its exact Redis key.
+purge-session session_key:
+    uv run erato-chaos-creator purge-session '{{session_key}}'
+
+# Purge one oauth2-proxy session using a complete cookie or raw ticket.
+purge-cookie cookie:
+    uv run erato-chaos-creator purge-cookie '{{cookie}}'
+
+# Run the test suite.
+test:
+    uv run pytest
+
+# Run static checks.
+lint:
+    uv run ruff check .
+
+# Run all local checks.
+check: test lint
