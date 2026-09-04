@@ -6,7 +6,8 @@ use crate::{MIGRATOR, test_app_state};
 use erato::db::entity::prelude::RuntimeConfiguration;
 use erato::db::entity::runtime_configuration;
 use erato::distribution::experience_policy::{
-    AudienceSubject, ExperienceAudience, ExperiencePolicyDocument,
+    AudienceSubject, ExperienceAudience, ExperiencePolicyDocument, STARTING_ASSISTANT_SETTING,
+    resolution_order_for,
 };
 use erato::distribution::runtime::{ADMIN_PANEL_SOURCE_SERVICE, ReloadableAppState};
 use erato::models::runtime_configuration::{
@@ -32,6 +33,23 @@ const VALID_POLICY_JSON: &str = r#"{
     "priority_order": ["engineering"]
 }"#;
 
+/// [`VALID_POLICY_JSON`] carrying a stable audience id and the per-setting
+/// resolution order keyed on it, beside the name-keyed `priority_order`.
+const DUAL_POLICY_JSON: &str = r#"{
+    "audiences": {
+        "engineering": {
+            "id": "aud-engineering",
+            "subjects": [
+                {"subject_type": "organization_group", "group_id": "8f7cb1f3-5c92-4e0f-9c39-89f65a852101"},
+                {"subject_type": "user", "organization_user_id": "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a"}
+            ],
+            "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01"
+        }
+    },
+    "priority_order": ["engineering"],
+    "setting_orders": {"starting_assistant": ["aud-engineering"]}
+}"#;
+
 async fn app_state_with_encryption(pool: Pool<Postgres>) -> erato::state::AppState {
     let mut app_config = hermetic_app_config(None, None);
     app_config.server.encryption_key = Some(TEST_ENCRYPTION_KEY.into());
@@ -43,6 +61,7 @@ fn expected_policy_document() -> ExperiencePolicyDocument {
         audiences: HashMap::from([(
             "engineering".to_string(),
             ExperienceAudience {
+                id: None,
                 subjects: vec![
                     AudienceSubject::OrganizationGroup {
                         group_id: "8f7cb1f3-5c92-4e0f-9c39-89f65a852101".to_string(),
@@ -58,7 +77,22 @@ fn expected_policy_document() -> ExperiencePolicyDocument {
             },
         )]),
         priority_order: vec!["engineering".to_string()],
+        setting_orders: HashMap::new(),
     }
+}
+
+fn expected_dual_policy_document() -> ExperiencePolicyDocument {
+    let mut document = expected_policy_document();
+    document
+        .audiences
+        .get_mut("engineering")
+        .expect("the engineering audience is the fixture's only audience")
+        .id = Some("aud-engineering".to_string());
+    document.setting_orders = HashMap::from([(
+        STARTING_ASSISTANT_SETTING.to_string(),
+        vec!["aud-engineering".to_string()],
+    )]);
+    document
 }
 
 fn admin_panel_row(
@@ -144,6 +178,34 @@ async fn load_includes_experience_policy_beside_translations(pool: Pool<Postgres
             .distribution_bundle
             .file("overrides/de.po")
             .is_some()
+    );
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn load_carries_audience_ids_and_setting_orders(pool: Pool<Postgres>) {
+    let app_state = app_state_with_encryption(pool).await;
+    insert_rows(
+        &app_state,
+        [admin_panel_row(
+            EXPERIENCE_POLICY_SOURCE_TYPE,
+            Some("experience/policy.json"),
+            app_state.encrypt(DUAL_POLICY_JSON).unwrap(),
+        )],
+    )
+    .await;
+
+    let loaded = ReloadableAppState::load(&app_state).await.unwrap();
+    let expected = expected_dual_policy_document();
+    assert_eq!(loaded.experience_policy, Some(expected.clone()));
+
+    let policy = loaded
+        .experience_policy
+        .as_ref()
+        .expect("the dual document should load");
+    let order: Vec<_> = resolution_order_for(policy, STARTING_ASSISTANT_SETTING).collect();
+    assert_eq!(
+        order,
+        vec![("engineering", &expected.audiences["engineering"])]
     );
 }
 

@@ -30,7 +30,8 @@
 //! the hub to be enabled at all.
 
 use crate::distribution::experience_policy::{
-    AudienceSubject, ExperienceAudience, ExperiencePolicyDocument,
+    AudienceSubject, ExperienceAudience, ExperiencePolicyDocument, STARTING_ASSISTANT_SETTING,
+    resolution_order_for,
 };
 use crate::models::share_grant::ShareSubject;
 use crate::models::{assistant, assistant_hub, share_grant};
@@ -147,16 +148,16 @@ pub fn matching_subjects<'a>(
         .collect()
 }
 
-/// Pick the winning audience for a user: the first entry of `priority_order`
-/// naming an audience that is still active at `now` and any of whose subjects
-/// matches the caller.
+/// Pick the winning audience for a user: the first audience in the
+/// starting-assistant resolution order that is still active at `now` and any
+/// of whose subjects matches the caller.
 ///
-/// Precedence comes from `priority_order` alone, as `determine_chat_provider`
-/// does for `chat_providers.priority_order`; the `audiences` map's iteration
-/// order is arbitrary and must never decide the winner. An audience whose
-/// subjects include the whole organization therefore shadows everything below
-/// it and defaults everything above it, depending only on where the admin put
-/// it in the order.
+/// Iteration order is delegated to [`resolution_order_for`], the one home for
+/// the `setting_orders`-versus-`priority_order` precedence; the `audiences`
+/// map's iteration order is arbitrary and must never decide the winner. An
+/// audience whose subjects include the whole organization therefore shadows
+/// everything below it and defaults everything above it, depending only on
+/// where the admin put it in the order.
 ///
 /// An expired audience is skipped exactly as if no subject matched, so the
 /// next entry wins — a time-boxed announcement on top hands back to the
@@ -167,18 +168,12 @@ pub fn match_winning_audience<'a>(
     identity: AudienceIdentity<'_>,
     now: DateTime<Utc>,
 ) -> Option<(&'a str, &'a ExperienceAudience)> {
-    policy.priority_order.iter().find_map(|audience_name| {
-        policy
-            .audiences
-            .get_key_value(audience_name)
-            .filter(|(_, audience)| {
-                audience.is_active_at(now)
-                    && audience
-                        .subjects
-                        .iter()
-                        .any(|subject| subject_matches(subject, identity))
-            })
-            .map(|(name, audience)| (name.as_str(), audience))
+    resolution_order_for(policy, STARTING_ASSISTANT_SETTING).find(|(_, audience)| {
+        audience.is_active_at(now)
+            && audience
+                .subjects
+                .iter()
+                .any(|subject| subject_matches(subject, identity))
     })
 }
 
@@ -450,6 +445,9 @@ async fn resolve_assistant_pick(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::distribution::experience_policy::{
+        EXPERIENCE_POLICY_RESOLUTION_CONTRACT, parse_experience_policy,
+    };
     use sqlx::types::Uuid;
     use std::collections::HashMap;
 
@@ -467,6 +465,7 @@ mod tests {
 
     fn audience_of(subjects: Vec<AudienceSubject>) -> ExperienceAudience {
         ExperienceAudience {
+            id: None,
             subjects,
             pinned_assistant_hub_assistant_id: Uuid::new_v4(),
             expires_at: None,
@@ -513,6 +512,7 @@ mod tests {
                 .into_iter()
                 .map(|name| name.to_string())
                 .collect(),
+            setting_orders: HashMap::new(),
         }
     }
 
@@ -803,11 +803,12 @@ mod tests {
     fn the_announcement_scenario_before_and_after_expiry() {
         // ERMAIN-706 §4: [Everyone (A-announce, expires Sep 8), Sales
         // (A-pipeline), HR (A-onboarding)]. Sam is in Sales, Dana in both,
-        // Otto in neither group.
+        // Hana in HR only, Otto in neither group.
         let a_announce = Uuid::from_u128(1);
         let a_pipeline = Uuid::from_u128(2);
         let a_onboarding = Uuid::from_u128(3);
         let pinned = |pin, subjects| ExperienceAudience {
+            id: None,
             subjects,
             pinned_assistant_hub_assistant_id: pin,
             expires_at: None,
@@ -829,13 +830,15 @@ mod tests {
 
         let sam_groups = member_of(&["sales-group-id"]);
         let dana_groups = member_of(&["sales-group-id", "hr-group-id"]);
+        let hana_groups = member_of(&["hr-group-id"]);
         let sam = identity_of(&sam_groups);
         let dana = identity_of(&dana_groups);
+        let hana = identity_of(&hana_groups);
         let otto = identity_of(&[]);
 
         // Before expiry the announcement shadows everything for everybody.
         let before = at("2026-09-07T23:59:59Z");
-        for identity in [sam, dana, otto] {
+        for identity in [sam, dana, hana, otto] {
             let (winner, audience) = match_winning_audience(&policy, identity, before).unwrap();
             assert_eq!(winner, "everyone");
             assert_eq!(audience.pinned_assistant_hub_assistant_id, a_announce);
@@ -843,17 +846,122 @@ mod tests {
 
         // From the expiry instant on, the shadowed audiences take over. Dana
         // lands on sales, not hr: priority_order still decides below the
-        // expired entry. Otto matched only the announcement, so with it inert
-        // nothing matches him.
+        // expired entry, while Hana falls through to hr. Otto matched only the
+        // announcement, so with it inert nothing matches him.
         for now in [at("2026-09-08T00:00:00Z"), at("2026-09-09T00:00:00Z")] {
-            for (identity, expected_winner, expected_pin) in
-                [(sam, "sales", a_pipeline), (dana, "sales", a_pipeline)]
-            {
+            for (identity, expected_winner, expected_pin) in [
+                (sam, "sales", a_pipeline),
+                (dana, "sales", a_pipeline),
+                (hana, "hr", a_onboarding),
+            ] {
                 let (winner, audience) = match_winning_audience(&policy, identity, now).unwrap();
                 assert_eq!(winner, expected_winner);
                 assert_eq!(audience.pinned_assistant_hub_assistant_id, expected_pin);
             }
             assert!(match_winning_audience(&policy, otto, now).is_none());
+        }
+    }
+
+    #[derive(serde::Deserialize)]
+    struct ContractFixture {
+        identities: HashMap<String, ContractIdentity>,
+        cases: Vec<ContractCase>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct ContractIdentity {
+        groups: Vec<String>,
+        organization_user_id: Option<String>,
+    }
+
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "snake_case")]
+    enum ContractKind {
+        LegacyOnly,
+        Dual,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct ContractCase {
+        name: String,
+        kind: ContractKind,
+        /// The fixture's own bytes, not a `Value` round trip: the production
+        /// reader parses the stored text as-is, and a `Value` collapses
+        /// duplicate keys last-wins where that parser rejects them.
+        document: Box<serde_json::value::RawValue>,
+        checks: Vec<ContractCheck>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct ContractCheck {
+        identity: String,
+        now: String,
+        // The harness requires the key: an omitted `winner` is malformed, not "no winner".
+        #[serde(deserialize_with = "Option::<String>::deserialize")]
+        winner: Option<String>,
+    }
+
+    /// The document as a pre-`setting_orders` reader sees it.
+    fn without_setting_orders(document: &str) -> String {
+        let mut stripped: serde_json::Value = serde_json::from_str(document).unwrap();
+        stripped
+            .as_object_mut()
+            .and_then(|document| document.remove("setting_orders"))
+            .expect("a dual case must carry setting_orders");
+        stripped.to_string()
+    }
+
+    #[test]
+    fn the_shared_resolution_contract_fixture_holds_in_rust() {
+        // One fixture, two resolvers: the admin panel keeps a byte-for-byte
+        // copy of this file and asserts it equal to
+        // `EXPERIENCE_POLICY_RESOLUTION_CONTRACT`, so a divergence between
+        // erato and the panel preview shows up as a failing row on one side
+        // or the other instead of as an admin being lied to.
+        //
+        // The stripped variant is S10c without running the old binary:
+        // stripping `setting_orders` reduces a dual document to exactly what
+        // a pre-setting_orders reader resolves from
+        // (`accepts_unknown_fields_from_newer_writers` proves that reader
+        // parses the dual document at all), so the same explicit winners on
+        // both variants mean a mixed-version deployment cannot change
+        // anyone's start screen.
+        let fixture: ContractFixture =
+            serde_json::from_str(EXPERIENCE_POLICY_RESOLUTION_CONTRACT).unwrap();
+
+        for case in &fixture.cases {
+            let raw = case.document.get();
+            let mut documents = vec![("verbatim", raw.to_owned())];
+            match case.kind {
+                ContractKind::LegacyOnly => {
+                    let document: serde_json::Value = serde_json::from_str(raw).unwrap();
+                    assert!(
+                        document.get("setting_orders").is_none(),
+                        "{}: a legacy_only case must not carry setting_orders",
+                        case.name
+                    );
+                }
+                ContractKind::Dual => documents.push(("stripped", without_setting_orders(raw))),
+            }
+            for (variant, contents) in &documents {
+                let policy = parse_experience_policy(contents).unwrap();
+                for check in &case.checks {
+                    let spec = &fixture.identities[&check.identity];
+                    let identity = AudienceIdentity {
+                        groups: &spec.groups,
+                        organization_user_id: spec.organization_user_id.as_deref(),
+                    };
+                    assert_eq!(
+                        match_winning_audience(&policy, identity, at(&check.now))
+                            .map(|(name, _)| name),
+                        check.winner.as_deref(),
+                        "{} / {variant} / {} at {}",
+                        case.name,
+                        check.identity,
+                        check.now
+                    );
+                }
+            }
         }
     }
 }

@@ -1,0 +1,166 @@
+{
+  "harness": "For every case: parse `document` with the experience-policy parser, then for each check resolve the winning starting-assistant audience for the named identity at instant `now` and expect the audiences-map key in `winner` (null = no winner, the welcome-screen fall-through). `kind` is 'legacy_only' when the document has no top-level `setting_orders` key, and 'dual' when the document carries a `setting_orders` map, whether or not that map names `starting_assistant` (dual_second_setting_key_does_not_perturb_the_fallback carries only `welcome_banner`). Every check spells `winner` explicitly, null meaning no winner; a check without the key is malformed and a runner must fail it, not treat it as no-winner. For every case of kind 'dual': ALSO delete the top-level `setting_orders` key from `document`, re-serialize, and run every check again expecting the same winners — the stripped document is what a pre-setting_orders reader sees (scenario S10c). Because every parseable document's `setting_orders[\"starting_assistant\"]` agrees position-wise with `priority_order`, this file cannot detect a runner that ignores `setting_orders` or reads the wrong key; each side unit-tests path selection separately (erato: resolution_order_prefers_a_present_setting_orders_key; the panel: its own precedence tests). The admin panel keeps a byte-for-byte copy of this file and asserts it equal to erato's EXPERIENCE_POLICY_RESOLUTION_CONTRACT; the erato harness runs in starting_assistant.rs.",
+  "identities": {
+    "sam": { "groups": ["sales-group-id"], "organization_user_id": null },
+    "dana": { "groups": ["sales-group-id", "hr-group-id"], "organization_user_id": null },
+    "hana": { "groups": ["hr-group-id"], "organization_user_id": null },
+    "otto": { "groups": [], "organization_user_id": null }
+  },
+  "cases": [
+    {
+      "name": "legacy_only_announcement_s2_s8",
+      "kind": "legacy_only",
+      "document": {
+        "audiences": {
+          "everyone": {
+            "subjects": [{ "subject_type": "organization" }],
+            "pinned_assistant_hub_assistant_id": "11111111-1111-4111-8111-111111111111",
+            "expires_at": "2026-09-08T00:00:00Z"
+          },
+          "sales": {
+            "subjects": [{ "subject_type": "organization_group", "group_id": "sales-group-id" }],
+            "pinned_assistant_hub_assistant_id": "22222222-2222-4222-8222-222222222222"
+          },
+          "hr": {
+            "subjects": [{ "subject_type": "organization_group", "group_id": "hr-group-id" }],
+            "pinned_assistant_hub_assistant_id": "33333333-3333-4333-8333-333333333333"
+          }
+        },
+        "priority_order": ["everyone", "sales", "hr"]
+      },
+      "checks": [
+        { "identity": "sam", "now": "2026-09-07T23:59:59Z", "winner": "everyone" },
+        { "identity": "dana", "now": "2026-09-07T23:59:59Z", "winner": "everyone" },
+        { "identity": "hana", "now": "2026-09-07T23:59:59Z", "winner": "everyone" },
+        { "identity": "otto", "now": "2026-09-07T23:59:59Z", "winner": "everyone" },
+        { "identity": "sam", "now": "2026-09-08T00:00:00Z", "winner": "sales" },
+        { "identity": "dana", "now": "2026-09-08T00:00:00Z", "winner": "sales" },
+        { "identity": "hana", "now": "2026-09-08T00:00:00Z", "winner": "hr" },
+        { "identity": "otto", "now": "2026-09-08T00:00:00Z", "winner": null },
+        { "identity": "sam", "now": "2026-09-09T00:00:00Z", "winner": "sales" },
+        { "identity": "dana", "now": "2026-09-09T00:00:00Z", "winner": "sales" },
+        { "identity": "hana", "now": "2026-09-09T00:00:00Z", "winner": "hr" },
+        { "identity": "otto", "now": "2026-09-09T00:00:00Z", "winner": null }
+      ]
+    },
+    {
+      "name": "dual_announcement_s2_s8",
+      "kind": "dual",
+      "document": {
+        "audiences": {
+          "everyone": {
+            "id": "aud-everyone",
+            "subjects": [{ "subject_type": "organization" }],
+            "pinned_assistant_hub_assistant_id": "11111111-1111-4111-8111-111111111111",
+            "expires_at": "2026-09-08T00:00:00Z"
+          },
+          "sales": {
+            "id": "aud-sales",
+            "subjects": [{ "subject_type": "organization_group", "group_id": "sales-group-id" }],
+            "pinned_assistant_hub_assistant_id": "22222222-2222-4222-8222-222222222222"
+          },
+          "hr": {
+            "id": "aud-hr",
+            "subjects": [{ "subject_type": "organization_group", "group_id": "hr-group-id" }],
+            "pinned_assistant_hub_assistant_id": "33333333-3333-4333-8333-333333333333"
+          }
+        },
+        "priority_order": ["everyone", "sales", "hr"],
+        "setting_orders": { "starting_assistant": ["aud-everyone", "aud-sales", "aud-hr"] }
+      },
+      "checks": [
+        { "identity": "sam", "now": "2026-09-07T23:59:59Z", "winner": "everyone" },
+        { "identity": "dana", "now": "2026-09-07T23:59:59Z", "winner": "everyone" },
+        { "identity": "hana", "now": "2026-09-07T23:59:59Z", "winner": "everyone" },
+        { "identity": "otto", "now": "2026-09-07T23:59:59Z", "winner": "everyone" },
+        { "identity": "sam", "now": "2026-09-08T00:00:00Z", "winner": "sales" },
+        { "identity": "dana", "now": "2026-09-08T00:00:00Z", "winner": "sales" },
+        { "identity": "hana", "now": "2026-09-08T00:00:00Z", "winner": "hr" },
+        { "identity": "otto", "now": "2026-09-08T00:00:00Z", "winner": null },
+        { "identity": "sam", "now": "2026-09-09T00:00:00Z", "winner": "sales" },
+        { "identity": "dana", "now": "2026-09-09T00:00:00Z", "winner": "sales" },
+        { "identity": "hana", "now": "2026-09-09T00:00:00Z", "winner": "hr" },
+        { "identity": "otto", "now": "2026-09-09T00:00:00Z", "winner": null }
+      ]
+    },
+    {
+      "name": "dual_sales_above_hr_s1a",
+      "kind": "dual",
+      "document": {
+        "audiences": {
+          "sales": {
+            "id": "aud-sales",
+            "subjects": [{ "subject_type": "organization_group", "group_id": "sales-group-id" }],
+            "pinned_assistant_hub_assistant_id": "22222222-2222-4222-8222-222222222222"
+          },
+          "hr": {
+            "id": "aud-hr",
+            "subjects": [{ "subject_type": "organization_group", "group_id": "hr-group-id" }],
+            "pinned_assistant_hub_assistant_id": "33333333-3333-4333-8333-333333333333"
+          }
+        },
+        "priority_order": ["sales", "hr"],
+        "setting_orders": { "starting_assistant": ["aud-sales", "aud-hr"] }
+      },
+      "checks": [
+        { "identity": "sam", "now": "2026-09-01T00:00:00Z", "winner": "sales" },
+        { "identity": "dana", "now": "2026-09-01T00:00:00Z", "winner": "sales" },
+        { "identity": "hana", "now": "2026-09-01T00:00:00Z", "winner": "hr" },
+        { "identity": "otto", "now": "2026-09-01T00:00:00Z", "winner": null },
+        { "identity": "dana", "now": "9999-01-01T00:00:00Z", "winner": "sales" }
+      ]
+    },
+    {
+      "name": "dual_staged_audience_never_wins",
+      "kind": "dual",
+      "document": {
+        "audiences": {
+          "sales": {
+            "id": "aud-sales",
+            "subjects": [{ "subject_type": "organization_group", "group_id": "sales-group-id" }],
+            "pinned_assistant_hub_assistant_id": "22222222-2222-4222-8222-222222222222"
+          },
+          "hr": {
+            "id": "aud-hr",
+            "subjects": [{ "subject_type": "organization_group", "group_id": "hr-group-id" }],
+            "pinned_assistant_hub_assistant_id": "33333333-3333-4333-8333-333333333333"
+          }
+        },
+        "priority_order": ["sales"],
+        "setting_orders": { "starting_assistant": ["aud-sales"] }
+      },
+      "checks": [
+        { "identity": "sam", "now": "2026-09-01T00:00:00Z", "winner": "sales" },
+        { "identity": "dana", "now": "2026-09-01T00:00:00Z", "winner": "sales" },
+        { "identity": "hana", "now": "2026-09-01T00:00:00Z", "winner": null },
+        { "identity": "otto", "now": "2026-09-01T00:00:00Z", "winner": null }
+      ]
+    },
+    {
+      "name": "dual_second_setting_key_does_not_perturb_the_fallback",
+      "kind": "dual",
+      "document": {
+        "audiences": {
+          "sales": {
+            "id": "aud-sales",
+            "subjects": [{ "subject_type": "organization_group", "group_id": "sales-group-id" }],
+            "pinned_assistant_hub_assistant_id": "22222222-2222-4222-8222-222222222222"
+          },
+          "hr": {
+            "id": "aud-hr",
+            "subjects": [{ "subject_type": "organization_group", "group_id": "hr-group-id" }],
+            "pinned_assistant_hub_assistant_id": "33333333-3333-4333-8333-333333333333"
+          }
+        },
+        "priority_order": ["hr", "sales"],
+        "setting_orders": { "welcome_banner": ["aud-sales", "aud-hr"] }
+      },
+      "checks": [
+        { "identity": "sam", "now": "2026-09-01T00:00:00Z", "winner": "sales" },
+        { "identity": "dana", "now": "2026-09-01T00:00:00Z", "winner": "hr" },
+        { "identity": "hana", "now": "2026-09-01T00:00:00Z", "winner": "hr" },
+        { "identity": "otto", "now": "2026-09-01T00:00:00Z", "winner": null }
+      ]
+    }
+  ]
+}
