@@ -13,6 +13,7 @@ This directory contains the Kubernetes infrastructure configuration for the Erat
 
 ```
 infrastructure/
+├── erato-chaos-creator/ # local FastAPI/CLI failure-injection service
 ├── charts/             # Helm charts
 │   └── erato/         # Main application chart
 ├── k3d/                # k3d configuration for running a local k3d cluster with erato deployed
