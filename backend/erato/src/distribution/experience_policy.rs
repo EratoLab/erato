@@ -33,6 +33,26 @@ pub const EXPERIENCE_POLICY_RESOLUTION_CONTRACT: &str =
 /// a mixed-version deployment.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
 pub struct ExperiencePolicyDocument {
+    /// Keyed by DISPLAY NAME, which moves on rename — the reason
+    /// [`ExperienceAudience::id`] exists. ERMAIN-706 §10 item 5 recorded when
+    /// `priority_order` may be dropped (below), but re-keying this map by id
+    /// is the bigger break, because the name-spelled key is coupled four
+    /// ways: legacy `priority_order` names audiences by it; parse validation
+    /// and the agreement invariant join on it (`priority_order`'s
+    /// unknown-name check, and the id-belongs-to-the-name-at-this-position
+    /// walk); it is externally visible as `audience` on
+    /// `GET /me/starting-assistant`; and three tracing events in
+    /// `starting_assistant` tag it. Only `resolution_order_for`'s id path
+    /// already ignores it.
+    ///
+    /// A one-time re-key may therefore happen only after, in order: a
+    /// value-held `name` field is dual-written into every audience → every
+    /// replica reports and tags from the value-held name, never the key →
+    /// `priority_order` is already dropped (its gate below is strictly
+    /// contained by this one: a name-spelled order cannot outlive the
+    /// name-spelled key) → the writer is pinned last. A floor on what the
+    /// org runs, not a Cargo pin. Recorded only — nothing is dropped or
+    /// re-keyed here.
     #[serde(default)]
     pub audiences: HashMap<String, ExperienceAudience>,
     /// Precedence lives in this separate ordered key, like
@@ -189,6 +209,13 @@ pub struct ExperienceAudience {
     /// panel in `model/audiencePolicy.ts`.
     #[serde(default)]
     pub expires_at: Option<DateTime<Utc>>,
+    /// Where a snapshot audience came from — see [`AudienceProvenance`] for
+    /// what it may never be used for. Absent means the document predates
+    /// provenance or the audience was not minted from an overlap, and absent
+    /// stays absent: erato never writes this document, so a legacy row is
+    /// never rewritten with the key (the S14f stance).
+    #[serde(default)]
+    pub provenance: Option<AudienceProvenance>,
 }
 
 impl ExperienceAudience {
@@ -198,6 +225,50 @@ impl ExperienceAudience {
     pub fn is_active_at(&self, now: DateTime<Utc>) -> bool {
         self.expires_at.is_none_or(|expires_at| now < expires_at)
     }
+}
+
+/// The origin of a snapshot audience: which pair it was promoted from and
+/// when the overlap was read (ERMAIN-706 §5, scenario S14).
+///
+/// A record of ORIGIN, never an input to matching. The subjects are the
+/// policy; provenance only says where they came from and what a drift check
+/// would compare against. No resolution path may read it — an audience with
+/// provenance must resolve byte-identically to its provenance-stripped twin
+/// (`a_document_resolves_identically_to_its_provenance_stripped_twin`), which
+/// is also why a dangling source reference is harmless: nothing joins on it.
+///
+/// Deserialize-only by design: the admin panel is the sole writer of this
+/// document, so erato can never be the one to invent or rewrite provenance.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct AudienceProvenance {
+    /// What kind of origin this records. Uninterpreted and deliberately not a
+    /// closed enum: a newer panel minting a new kind must not wedge an older
+    /// erato into keep-previous.
+    pub kind: String,
+    pub source_a: AudienceProvenanceSource,
+    pub source_b: AudienceProvenanceSource,
+    /// When the overlap was read from the directory — the "as of" a drift
+    /// check reports against. Malformed rejects the whole document, the
+    /// `rejects_a_malformed_expires_at` stance: only a hand-written row can
+    /// carry one, and it should fail loudly.
+    pub taken_at: DateTime<Utc>,
+}
+
+/// One side of the pair a snapshot audience was promoted from.
+///
+/// Both ids are frozen copies, not live references: the source audience can
+/// be renamed, re-grouped or deleted after the snapshot without touching this
+/// record, and [`parse_experience_policy`] deliberately never checks them
+/// against the rest of the document (S14g).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct AudienceProvenanceSource {
+    pub audience_id: String,
+    /// The display name at snapshot time — the map key then, which a rename
+    /// moves; kept so the origin stays legible after the source is gone.
+    pub audience_name: String,
+    /// The source's group subject ids at snapshot time, for a future drift
+    /// check to re-ask the directory about.
+    pub group_ids: Vec<String>,
 }
 
 /// Parse and structurally validate an experience policy document.
@@ -210,6 +281,11 @@ impl ExperienceAudience {
 /// function is the structure serde cannot express — an audience matching
 /// nobody, an id that is present but blank or duplicated, a `setting_orders`
 /// entry naming no audience, and the starting-assistant agreement invariant.
+///
+/// [`AudienceProvenance`] gets type-level validation ONLY — no structural or
+/// cross-reference checks here, by decision (S14g): nothing joins on
+/// provenance, so a reference check would let a deleted source audience kill
+/// the whole document instead of leaving a harmless dangling record.
 ///
 /// The AGREEMENT INVARIANT: whenever `setting_orders` carries the
 /// `starting_assistant` key, that order and `priority_order` must be the same
@@ -564,6 +640,7 @@ mod tests {
             subjects: vec![AudienceSubject::Organization],
             pinned_assistant_hub_assistant_id: Uuid::new_v4(),
             expires_at: Some(expires_at),
+            provenance: None,
         };
         assert!(audience.is_active_at(expires_at - chrono::Duration::seconds(1)));
         assert!(!audience.is_active_at(expires_at));
@@ -764,6 +841,7 @@ mod tests {
             }],
             pinned_assistant_hub_assistant_id: Uuid::new_v4(),
             expires_at: None,
+            provenance: None,
         }
     }
 
@@ -829,6 +907,9 @@ mod tests {
         .unwrap();
         assert_eq!(document.audiences["engineering"].id, None);
         assert!(document.setting_orders.is_empty());
+        // S14f's erato half: absent provenance stays absent — and since this
+        // side is Deserialize-only, it can never be the one to add it.
+        assert_eq!(document.audiences["engineering"].provenance, None);
         assert_eq!(
             order_names(&document, STARTING_ASSISTANT_SETTING),
             ["engineering"]
@@ -1169,6 +1250,208 @@ mod tests {
             );
             assert_eq!(order_names(&policy, STARTING_ASSISTANT_SETTING), ["alpha"]);
         }
+    }
+
+    /// A snapshot audience minted from the Sales/HR overlap, with the
+    /// `provenance` value injectable so each provenance test states only the
+    /// record it is about.
+    fn snapshot_document(provenance: &str) -> String {
+        format!(
+            r#"{{
+                "audiences": {{
+                    "sales": {{
+                        "id": "aud-sales",
+                        "subjects": [{{"subject_type": "organization_group", "group_id": "sales-group-id"}}],
+                        "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01"
+                    }},
+                    "hr": {{
+                        "id": "aud-hr",
+                        "subjects": [{{"subject_type": "organization_group", "group_id": "hr-group-id"}}],
+                        "pinned_assistant_hub_assistant_id": "0b1c2d3e-4f50-4161-8273-8495a6b7c8d9"
+                    }},
+                    "overlap": {{
+                        "id": "aud-snap",
+                        "subjects": [{{"subject_type": "user", "organization_user_id": "oid-dana"}}],
+                        "pinned_assistant_hub_assistant_id": "3c2b1a09-8d7e-4f6a-b5c4-d3e2f1a0b9c8",
+                        "provenance": {provenance}
+                    }}
+                }},
+                "priority_order": ["overlap", "sales", "hr"],
+                "setting_orders": {{"starting_assistant": ["aud-snap", "aud-sales", "aud-hr"]}}
+            }}"#
+        )
+    }
+
+    #[test]
+    fn parses_snapshot_provenance() {
+        // S14a: a promote records the pair and both group id lists, so a
+        // drift check can later re-ask the directory what the overlap looks
+        // like now — without ever treating the answer as membership.
+        let document = parse_experience_policy(&snapshot_document(
+            r#"{
+                "kind": "overlap_promotion",
+                "source_a": {"audience_id": "aud-sales", "audience_name": "sales", "group_ids": ["sales-group-id"]},
+                "source_b": {"audience_id": "aud-hr", "audience_name": "hr", "group_ids": ["hr-group-id", "hr-emea-group-id"]},
+                "taken_at": "2026-09-04T12:00:00Z"
+            }"#,
+        ))
+        .unwrap();
+
+        let provenance = document.audiences["overlap"].provenance.as_ref().unwrap();
+        assert_eq!(provenance.kind, "overlap_promotion");
+        assert_eq!(provenance.source_a.audience_id, "aud-sales");
+        assert_eq!(provenance.source_a.audience_name, "sales");
+        assert_eq!(provenance.source_a.group_ids, vec!["sales-group-id"]);
+        assert_eq!(provenance.source_b.audience_id, "aud-hr");
+        assert_eq!(
+            provenance.source_b.group_ids,
+            vec!["hr-group-id", "hr-emea-group-id"]
+        );
+        assert_eq!(
+            provenance.taken_at,
+            "2026-09-04T12:00:00Z".parse::<DateTime<Utc>>().unwrap()
+        );
+        assert_eq!(document.audiences["sales"].provenance, None);
+    }
+
+    #[test]
+    fn dangling_provenance_source_ids_parse() {
+        // S14g, by decision rather than omission: provenance is a record of
+        // origin, not a live dependency, and nothing joins on it — so a
+        // cross-reference check would let deleting a source audience kill the
+        // whole document, turning a harmless dangling record into a policy
+        // outage.
+        let document = parse_experience_policy(&snapshot_document(
+            r#"{
+                "kind": "overlap_promotion",
+                "source_a": {"audience_id": "aud-deleted", "audience_name": "a name the map no longer holds", "group_ids": ["group-nobody-remembers"]},
+                "source_b": {"audience_id": "aud-also-deleted", "audience_name": "gone too", "group_ids": []},
+                "taken_at": "2026-09-04T12:00:00Z"
+            }"#,
+        ))
+        .unwrap();
+        assert!(document.audiences["overlap"].provenance.is_some());
+    }
+
+    #[test]
+    fn unknown_provenance_kinds_parse() {
+        // Uninterpreted String, not a closed enum: a newer panel minting a
+        // new kind must not wedge this reader into keep-previous.
+        let document = parse_experience_policy(&snapshot_document(
+            r#"{
+                "kind": "a_kind_this_reader_has_never_heard_of",
+                "source_a": {"audience_id": "aud-sales", "audience_name": "sales", "group_ids": []},
+                "source_b": {"audience_id": "aud-hr", "audience_name": "hr", "group_ids": []},
+                "taken_at": "2026-09-04T12:00:00Z"
+            }"#,
+        ))
+        .unwrap();
+        assert_eq!(
+            document.audiences["overlap"]
+                .provenance
+                .as_ref()
+                .unwrap()
+                .kind,
+            "a_kind_this_reader_has_never_heard_of"
+        );
+    }
+
+    #[test]
+    fn rejects_a_malformed_provenance_taken_at() {
+        // The `rejects_a_malformed_expires_at` stance: the panel BFF
+        // validates every write with this parser, so only a hand-written row
+        // can carry one, and it should fail the whole document loudly.
+        for timestamp in ["next tuesday", "2026-09-08", "2026-09-08T00:00:00"] {
+            assert!(
+                parse_experience_policy(&snapshot_document(&format!(
+                    r#"{{
+                        "kind": "overlap_promotion",
+                        "source_a": {{"audience_id": "aud-sales", "audience_name": "sales", "group_ids": []}},
+                        "source_b": {{"audience_id": "aud-hr", "audience_name": "hr", "group_ids": []}},
+                        "taken_at": "{timestamp}"
+                    }}"#
+                )))
+                .is_err(),
+                "expected {timestamp:?} to reject the document"
+            );
+        }
+
+        // Absent entirely is also a reject: a snapshot without its "as of"
+        // records nothing a drift check could ever compare against.
+        assert!(
+            parse_experience_policy(&snapshot_document(
+                r#"{
+                    "kind": "overlap_promotion",
+                    "source_a": {"audience_id": "aud-sales", "audience_name": "sales", "group_ids": []},
+                    "source_b": {"audience_id": "aud-hr", "audience_name": "hr", "group_ids": []}
+                }"#,
+            ))
+            .is_err()
+        );
+    }
+
+    /// The document as it would look had the snapshot never recorded its
+    /// origin.
+    fn without_provenance(document: &str) -> String {
+        let mut stripped: serde_json::Value = serde_json::from_str(document).unwrap();
+        let removed = stripped["audiences"]
+            .as_object_mut()
+            .unwrap()
+            .values_mut()
+            .filter_map(|audience| {
+                audience
+                    .as_object_mut()
+                    .and_then(|audience| audience.remove("provenance"))
+            })
+            .count();
+        assert!(removed > 0, "the twin fixture must carry provenance");
+        stripped.to_string()
+    }
+
+    #[test]
+    fn a_document_resolves_identically_to_its_provenance_stripped_twin() {
+        // The S10c pattern aimed at the S14 trap: provenance is a record of
+        // origin, never an input to matching — the subjects are the policy.
+        // The sources here DANGLE on purpose, so a resolution path that
+        // dereferenced provenance could not behave identically across the two
+        // variants by luck.
+        let with_provenance = snapshot_document(
+            r#"{
+                "kind": "overlap_promotion",
+                "source_a": {"audience_id": "aud-deleted", "audience_name": "deleted", "group_ids": ["group-deleted"]},
+                "source_b": {"audience_id": "aud-hr", "audience_name": "hr", "group_ids": ["hr-group-id"]},
+                "taken_at": "2026-09-04T12:00:00Z"
+            }"#,
+        );
+        let parsed = parse_experience_policy(&with_provenance).unwrap();
+        // Guard against a vacuous pass: a misspelled key would deserialize to
+        // None and make every comparison below trivially true.
+        assert!(parsed.audiences["overlap"].provenance.is_some());
+        let stripped = parse_experience_policy(&without_provenance(&with_provenance)).unwrap();
+
+        let resolved = |policy: &ExperiencePolicyDocument| {
+            resolution_order_for(policy, STARTING_ASSISTANT_SETTING)
+                .map(|(name, audience)| {
+                    (
+                        name.to_string(),
+                        audience.pinned_assistant_hub_assistant_id,
+                        audience.expires_at,
+                        audience.subjects.clone(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(resolved(&parsed), resolved(&stripped));
+
+        // The twins differ in nothing else: clearing provenance from the full
+        // parse yields exactly the stripped parse, so the resolution
+        // comparison above spans the whole document rather than a lucky
+        // corner of it.
+        let mut cleared = parsed.clone();
+        for audience in cleared.audiences.values_mut() {
+            audience.provenance = None;
+        }
+        assert_eq!(cleared, stripped);
     }
 
     #[test]

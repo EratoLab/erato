@@ -469,6 +469,7 @@ mod tests {
             subjects,
             pinned_assistant_hub_assistant_id: Uuid::new_v4(),
             expires_at: None,
+            provenance: None,
         }
     }
 
@@ -812,6 +813,7 @@ mod tests {
             subjects,
             pinned_assistant_hub_assistant_id: pin,
             expires_at: None,
+            provenance: None,
         };
         let policy = policy_with(
             vec![
