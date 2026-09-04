@@ -4074,6 +4074,11 @@ msgstr "Le fichier est trop volumineux. Taille maximale : {maxSize}."
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts
+msgid "upload.error.tooLargeNamed"
+msgstr "Fichier(s) trop volumineux : {filenames}. Taille maximale : {maxSize}."
+
+#. js-lingui-explicit-id
+#: src/hooks/files/errors.ts
 msgid "upload.error.unknown"
 msgstr ""
 

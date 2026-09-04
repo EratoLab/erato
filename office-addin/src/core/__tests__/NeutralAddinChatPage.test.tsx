@@ -127,8 +127,14 @@ vi.mock("@erato/frontend/library", async () => {
       clearFiles: vi.fn(),
     }),
     useFileUploadStore: (
-      selector: (state: { silentChatId: string | null }) => unknown,
-    ) => selector({ silentChatId: null }),
+      selector?: (state: {
+        silentChatId: string | null;
+        setError: (error: unknown) => void;
+      }) => unknown,
+    ) => {
+      const state = { silentChatId: null, setError: vi.fn() };
+      return selector ? selector(state) : state;
+    },
     useGenerationStatusStore: Object.assign(vi.fn(), {
       getState: () => ({
         setCurrentChatId: spies.setGenerationCurrentChatId,
@@ -256,6 +262,11 @@ vi.mock("@erato/frontend/library", async () => {
       uploadFiles: vi.fn(async () => []),
       uploadError: null,
       isUploading: false,
+    }),
+    useUploadFeature: () => ({
+      enabled: true,
+      maxSizeBytes: 20 * 1024 * 1024,
+      maxSizeFormatted: "20 MB",
     }),
     useMessageFeedback: () => ({
       feedbackDialogState: { isOpen: false },

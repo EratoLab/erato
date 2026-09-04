@@ -3,7 +3,11 @@ import { memo, Suspense } from "react";
 import { useDropzone } from "react-dropzone";
 import { ErrorBoundary } from "react-error-boundary";
 
+import { UploadTooLargeError, type UploadError } from "@/hooks/files/errors";
+import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
+import { useUploadFeature } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
+import { oversizedRejectionNames } from "@/utils/validateFileSizes";
 
 import { Button } from "../Controls";
 import { PlusIcon } from "../icons";
@@ -42,6 +46,14 @@ export interface FileUploadButtonProps {
   isUploading?: boolean;
   /** Any error that occurred during file upload */
   uploadError?: Error | null;
+  /**
+   * Overrides where a selection-time validation error (e.g. file-too-large) is
+   * reported. Defaults to the shared upload store that the composer's alert
+   * renders. `maxSize` keeps rejected files out of `acceptedFiles`, so
+   * `performFileUpload` never sees them and cannot report them — without a sink
+   * here the file would vanish with no feedback at all.
+   */
+  onError?: (error: UploadError) => void;
 }
 
 /**
@@ -59,10 +71,25 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
     performFileUpload,
     isUploading = false,
     uploadError = null,
+    onError,
   }) => {
+    const { maxSizeBytes, maxSizeFormatted } = useUploadFeature();
+    const setStoreError = useFileUploadStore((state) => state.setError);
+    const reportError = onError ?? setStoreError;
+
     // Setup react-dropzone
     const { getRootProps, getInputProps, open } = useDropzone({
-      onDrop: (acceptedFiles) => {
+      onDrop: (acceptedFiles, rejectedFiles) => {
+        // Surface file-too-large rejections immediately so the parent error
+        // state is updated even before the upload hook's own preflight runs.
+        if (rejectedFiles.length > 0) {
+          const oversized = oversizedRejectionNames(rejectedFiles);
+          if (oversized.length > 0) {
+            reportError(new UploadTooLargeError(maxSizeFormatted, oversized));
+            return;
+          }
+        }
+
         if (acceptedFiles.length > 0 && performFileUpload) {
           // Call the provided upload function
           void performFileUpload(acceptedFiles).then((files) => {
@@ -78,6 +105,7 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
           : undefined,
       multiple,
       disabled: disabled || isUploading,
+      maxSize: maxSizeBytes,
       noClick: true, // We'll manually open the file dialog
       noKeyboard: true,
     });

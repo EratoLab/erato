@@ -1,9 +1,13 @@
 import {
   FileTypeUtil,
   GroupedFileAttachmentsPreview,
+  UploadTooLargeError,
   fetchUploadFile,
   getIdToken,
+  isUploadTooLarge,
+  useFileUploadStore,
   useUploadFeature,
+  validateFileSizes,
   type ChatInputControlsHandle,
   type ChatModel,
   type FileAttachmentGroup,
@@ -271,6 +275,10 @@ export const AddinChatInput = forwardRef<
   } = useOutlookEmailSource();
   const { maxSizeBytes: globalMaxSizeBytes, maxSizeFormatted } =
     useUploadFeature();
+  // The shared upload store, not local state: the composer's alert already
+  // renders it and dismissal clears it. A local copy merged into `uploadError`
+  // would outlive its own banner and mask every later upload error.
+  const setUploadStoreError = useFileUploadStore((state) => state.setError);
   // Drop-staged emails are always user-driven, so they bypass the
   // `showSuggestedEmailSource` gate (which is for the auto-suggest of the
   // currently-open email when the chat is still fresh). Without this the
@@ -787,6 +795,9 @@ export const AddinChatInput = forwardRef<
           nowIso: toLocalOffsetIso(new Date().toISOString()),
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         });
+      // Kept so a blocked send can put it back: the marker means "already sent
+      // this draft", which is false if we bail before dispatching.
+      const previousDraftFingerprint = lastSentDraftFingerprintRef.current;
       if (sentDraftFingerprint !== null) {
         // Remember what we sent so an unchanged follow-up de-dupes (#4).
         lastSentDraftFingerprintRef.current = sentDraftFingerprint;
@@ -823,6 +834,7 @@ export const AddinChatInput = forwardRef<
       }
 
       setIsUploadingEmail(true);
+      setUploadStoreError(null);
       let resolvedFileIds: string[] = [];
       let uploadFailed = false;
 
@@ -849,6 +861,29 @@ export const AddinChatInput = forwardRef<
           return;
         }
 
+        // Preflight: block the send outright when a staged file is oversized.
+        // Unlike a post-hoc 413 (bytes already spent), this is knowable before
+        // dispatch — sending anyway would answer from context the model never
+        // received. The chips stay so the user can dismiss the offender and
+        // retry, and the draft marker is rolled back so the retry is not
+        // de-duped as an already-sent draft.
+        if (globalMaxSizeBytes > 0) {
+          const sizeValidation = validateFileSizes(
+            filesToUpload,
+            globalMaxSizeBytes,
+          );
+          if (!sizeValidation.valid) {
+            setUploadStoreError(
+              new UploadTooLargeError(
+                maxSizeFormatted,
+                sizeValidation.oversizedFiles.map((file) => file.name),
+              ),
+            );
+            lastSentDraftFingerprintRef.current = previousDraftFingerprint;
+            return;
+          }
+        }
+
         const formData = new FormData();
         filesToUpload.forEach((file) => {
           formData.append("file", file, file.name);
@@ -866,10 +901,14 @@ export const AddinChatInput = forwardRef<
         resolvedFileIds = result.files.map((file) => file.id);
       } catch (error) {
         uploadFailed = true;
-        console.warn(
-          "Failed to upload Outlook email source files, sending without them:",
-          error,
-        );
+        if (isUploadTooLarge(error)) {
+          setUploadStoreError(new UploadTooLargeError(maxSizeFormatted));
+        } else {
+          console.warn(
+            "Failed to upload Outlook email source files, sending without them:",
+            error,
+          );
+        }
       } finally {
         setIsUploadingEmail(false);
       }
@@ -903,16 +942,19 @@ export const AddinChatInput = forwardRef<
       composeSelection.data,
       composeSelection.sourceProperty,
       draftBodyText,
+      globalMaxSizeBytes,
       hasActiveSelection,
       isAppointmentCompose,
       isDraftContextIncluded,
       itemIdentity,
       lastSchedulingSignalAt,
       mailItem,
+      maxSizeFormatted,
       onEmailSourceDropsSent,
       replyFromReadAvailable,
       resolveSelectedFilesForSend,
       scheduleFacetAvailable,
+      setUploadStoreError,
       shouldUseSuggestedEmailSource,
       stagedEmails,
     ],

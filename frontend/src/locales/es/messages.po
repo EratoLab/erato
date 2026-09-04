@@ -4074,6 +4074,11 @@ msgstr "El archivo es demasiado grande. Tamaño máximo: {maxSize}."
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts
+msgid "upload.error.tooLargeNamed"
+msgstr "Archivo(s) demasiado grande(s): {filenames}. Tamaño máximo: {maxSize}."
+
+#. js-lingui-explicit-id
+#: src/hooks/files/errors.ts
 msgid "upload.error.unknown"
 msgstr ""
 

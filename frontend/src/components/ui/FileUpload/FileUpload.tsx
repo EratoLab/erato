@@ -86,6 +86,7 @@ export const FileUpload = memo<FileUploadProps>(
       isUploading,
       uploadedFiles,
       error: uploadError,
+      setError: setUploadError,
       clearFiles,
       getRootProps,
       getInputProps,
@@ -178,6 +179,7 @@ export const FileUpload = memo<FileUploadProps>(
             }}
             isUploading={isUploading}
             uploadError={uploadError instanceof Error ? uploadError : null}
+            onError={setUploadError}
           />
         ) : (
           <div {...getRootProps({ className: containerClasses })}>
