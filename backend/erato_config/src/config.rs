@@ -4064,6 +4064,9 @@ pub struct MsOfficeAddinConfig {
     #[serde(default)]
     pub manifest: MsOfficeAddinManifestConfig,
 
+    #[serde(default)]
+    pub default_settings: MsOfficeAddinDefaultSettings,
+
     // Runtime that hosts the launch event handlers. Required exactly when
     // `launch_events` declares at least one event.
     #[serde(default)]
@@ -4073,6 +4076,36 @@ pub struct MsOfficeAddinConfig {
     // manifest in the configured order.
     #[serde(default)]
     pub launch_events: Vec<MsOfficeAddinLaunchEventConfig>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct MsOfficeAddinDefaultSettings {
+    /// Default response when switching to another Outlook item.
+    #[serde(default)]
+    pub mode: MsOfficeAddinSessionMode,
+    /// Whether replies and forwards inherit the current read-mail chat.
+    #[serde(default = "default_ms_office_addin_compose_inherits_from_read")]
+    pub compose_inherits_from_read: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[serde(rename_all = "snake_case")]
+#[facet(rename_all = "snake_case")]
+#[repr(C)]
+pub enum MsOfficeAddinSessionMode {
+    #[default]
+    Resume,
+    Ask,
+    New,
+}
+
+impl Default for MsOfficeAddinDefaultSettings {
+    fn default() -> Self {
+        Self {
+            mode: MsOfficeAddinSessionMode::default(),
+            compose_inherits_from_read: default_ms_office_addin_compose_inherits_from_read(),
+        }
+    }
 }
 
 impl Default for MsOfficeAddinConfig {
@@ -4085,6 +4118,7 @@ impl Default for MsOfficeAddinConfig {
             serve_bundle_legacy_path: default_ms_office_addin_serve_bundle_legacy_path(),
             frontend_bundle_path: default_ms_office_addin_frontend_bundle_path(),
             manifest: MsOfficeAddinManifestConfig::default(),
+            default_settings: MsOfficeAddinDefaultSettings::default(),
             launch_event_runtime: None,
             launch_events: Vec::new(),
         }
@@ -4264,6 +4298,10 @@ fn default_ms_office_addin_serve_bundle_legacy_path() -> bool {
 
 fn default_ms_office_addin_frontend_bundle_path() -> String {
     "./public/platform-office-addin".to_string()
+}
+
+fn default_ms_office_addin_compose_inherits_from_read() -> bool {
+    true
 }
 
 fn default_ms_office_addin_manifest_provider_name() -> String {

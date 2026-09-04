@@ -86,6 +86,7 @@ const FRONTEND_ENV_KEY_MSAL_AUTHORITY: &str = "MSAL_AUTHORITY";
 const FRONTEND_ENV_KEY_MASK_REASONING_TRACE_TEXT: &str = "MASK_REASONING_TRACE_TEXT";
 const FRONTEND_ENV_KEY_DESKTOP_SIDECAR_SHOW_SETTINGS_TAB: &str =
     "DESKTOP_SIDECAR_SHOW_SETTINGS_TAB";
+const FRONTEND_ENV_KEY_MS_OFFICE_ADDIN_DEFAULT_SETTINGS: &str = "MS_OFFICE_ADDIN_DEFAULT_SETTINGS";
 // Frontend bundles built before ERMAIN-460 used this stable runtime path.
 const LEGACY_COMPONENT_KIT_REACT_RUNTIME_SCRIPT_PATH: &str =
     "/public/common/assets/component-kit-react-runtime.js";
@@ -547,6 +548,18 @@ fn build_frontend_environment(
         env.additional_environment.insert(
             FRONTEND_ENV_KEY_MSAL_AUTHORITY.to_string(),
             Value::String(config.integrations.ms_office.addin.msal_authority.clone()),
+        );
+        env.additional_environment.insert(
+            FRONTEND_ENV_KEY_MS_OFFICE_ADDIN_DEFAULT_SETTINGS.to_string(),
+            serde_json::json!({
+                "mode": config.integrations.ms_office.addin.default_settings.mode,
+                "compose_inherits_from_read": config
+                    .integrations
+                    .ms_office
+                    .addin
+                    .default_settings
+                    .compose_inherits_from_read,
+            }),
         );
     }
 
