@@ -38,3 +38,16 @@ export const DEFAULT_OUTLOOK_SESSION_PREFERENCES: OutlookSessionPreferences = {
   mode: "resume",
   composeInheritsFromRead: true,
 };
+
+export function getDefaultOutlookSessionPreferences(): OutlookSessionPreferences {
+  const configured = window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS;
+  return {
+    mode:
+      configured?.mode === "ask" || configured?.mode === "new"
+        ? configured.mode
+        : "resume",
+    composeInheritsFromRead:
+      configured?.compose_inherits_from_read ??
+      DEFAULT_OUTLOOK_SESSION_PREFERENCES.composeInheritsFromRead,
+  };
+}

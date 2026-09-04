@@ -2560,6 +2560,22 @@ The path must contain the Office add-in frontend artifacts including `manifest.x
 
 **Type:** `string`
 
+##### `integrations.ms_office.addin.default_settings`
+
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.mode */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.compose_inherits_from_read */}
+
+Default switching behavior for the Office add-in. These values apply only
+until a user chooses their own preferences in the add-in.
+
+`mode` controls what happens when switching to another Outlook item. Supported
+values are `resume`, `ask`, and `new`. `compose_inherits_from_read` controls
+whether replies and forwards inherit the current read-mail chat.
+
+**Default value:** `{ mode = "resume", compose_inherits_from_read = true }`
+
+**Type:** `object`
+
 ##### `integrations.ms_office.addin.manifest`
 
 {/* erato_toml_config_key: integrations.ms_office.addin.manifest.provider_name */}

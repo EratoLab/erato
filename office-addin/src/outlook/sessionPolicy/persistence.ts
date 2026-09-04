@@ -1,5 +1,5 @@
 import {
-  DEFAULT_OUTLOOK_SESSION_PREFERENCES,
+  getDefaultOutlookSessionPreferences,
   type OutlookSessionAnchor,
   type OutlookSessionPreferences,
 } from "./types";
@@ -70,6 +70,9 @@ export const outlookSessionPreferencesPersistedOptions: PersistedStateOptions<Ou
     },
   };
 
+export const DEFAULT_OUTLOOK_SESSION_PREFERENCES =
+  getDefaultOutlookSessionPreferences();
+
 /**
  * One-shot migration of the legacy `erato-office-addin-current-chat-id` key
  * (a bare string) into the new shape. Idempotent — safe to call on every
@@ -98,5 +101,3 @@ export const DEFAULT_OUTLOOK_SESSION: OutlookSessionStorageValue = {
   chatId: null,
   anchor: null,
 };
-
-export { DEFAULT_OUTLOOK_SESSION_PREFERENCES };
