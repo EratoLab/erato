@@ -64,7 +64,10 @@ export default function ChatPageStructure({
         layout="default"
         topContent={delegatedRunHeader}
         composerDisabled={composerLocked}
-        emptyStateComponent={<ChatEmptyState variant="chat" />}
+        emptyStateComponent={<ChatEmptyState variant="chat" part="upper" />}
+        emptyStateBelowComponent={
+          <ChatEmptyState variant="chat" part="lower" />
+        }
         onMessageAction={async (action: MessageAction) => {
           logger.log("Handling message action in ChatPageStructure:", action);
           if (action.type === "copy") {

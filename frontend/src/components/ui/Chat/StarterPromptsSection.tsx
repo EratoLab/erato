@@ -9,6 +9,7 @@ import {
   useStarterPromptsData,
   type ResolvedStarterPromptInfo,
 } from "@/hooks/chat/useStarterPrompts";
+import { usePageAlignment } from "@/hooks/ui/usePageAlignment";
 
 import { ResolvedIcon } from "../icons";
 
@@ -27,10 +28,13 @@ export function DefaultStarterPromptsSection({
   starterPrompts,
   onStarterPromptSelect,
 }: StarterPromptsRendererProps) {
+  const { justifyAlignment } = usePageAlignment("headers");
+
   return (
     <div
       className={clsx(
-        "grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-3",
+        "flex w-full flex-wrap gap-2",
+        justifyAlignment,
         className,
       )}
       data-testid="starter-prompts-section"
@@ -40,27 +44,22 @@ export function DefaultStarterPromptsSection({
           key={starterPrompt.id}
           type="button"
           onClick={() => onStarterPromptSelect(starterPrompt)}
+          title={starterPrompt.resolvedSubtitle}
           className={clsx(
-            "group rounded-2xl border p-4 text-center",
+            "inline-flex min-h-9 items-center gap-2 rounded-[var(--theme-radius-control)] border px-3 py-2 text-sm font-medium",
             "[background:var(--theme-starter-prompt-bg)] [border-color:var(--theme-starter-prompt-border)]",
             "transition-colors hover:[background:var(--theme-starter-prompt-hover-bg)] hover:[border-color:var(--theme-starter-prompt-hover-border)]",
             "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-starter-prompt-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--theme-starter-prompt-focus-offset)]",
           )}
           data-testid={`starter-prompt-${starterPrompt.id}`}
         >
-          <div className="mb-3 flex flex-col items-center gap-3">
-            <div className="rounded-full p-3 [background:var(--theme-starter-prompt-icon-bg)] [color:var(--theme-starter-prompt-icon-fg)]">
-              <ResolvedIcon iconId={starterPrompt.icon} className="size-7" />
-            </div>
-            <div className="min-w-0">
-              <div className="font-extrabold [color:var(--theme-starter-prompt-title-fg)]">
-                {starterPrompt.resolvedTitle}
-              </div>
-              <div className="mt-1 text-sm [color:var(--theme-starter-prompt-subtitle-fg)]">
-                {starterPrompt.resolvedSubtitle}
-              </div>
-            </div>
-          </div>
+          <ResolvedIcon
+            iconId={starterPrompt.icon}
+            className="size-4 shrink-0 [color:var(--theme-starter-prompt-icon-fg)]"
+          />
+          <span className="[color:var(--theme-starter-prompt-title-fg)]">
+            {starterPrompt.resolvedTitle}
+          </span>
         </button>
       ))}
     </div>

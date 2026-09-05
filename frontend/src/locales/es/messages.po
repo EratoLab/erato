@@ -5451,8 +5451,8 @@ msgid "Start dictation"
 msgstr "Iniciar dictado"
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
-msgid "Start typing below to begin a new conversation"
-msgstr "Empiece a escribir abajo para iniciar una nueva conversación"
+#~ msgid "Start typing below to begin a new conversation"
+#~ msgstr "Empiece a escribir abajo para iniciar una nueva conversación"
 
 #: src/components/ui/Chat/StarterPromptsSection.tsx
 #: src/hooks/chat/useStarterPrompts.ts
