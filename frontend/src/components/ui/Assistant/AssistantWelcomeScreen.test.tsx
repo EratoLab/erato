@@ -9,7 +9,11 @@ import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusSto
 import { messages as enMessages } from "@/locales/en/messages.json";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
-import { AssistantWelcomeScreen } from "./AssistantWelcomeScreen";
+import {
+  AssistantWelcomeLower,
+  AssistantWelcomeScreen,
+  AssistantWelcomeUpper,
+} from "./AssistantWelcomeScreen";
 
 import type { AssistantWithFiles } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
@@ -189,6 +193,105 @@ describe("AssistantWelcomeScreen", () => {
     expect(
       screen.getByRole("link", { name: "owner@example.com" }),
     ).toHaveAttribute("href", "mailto:owner@example.com");
+  });
+
+  describe("split parts", () => {
+    const assistant: AssistantWithFiles = {
+      id: "assistant-1",
+      name: "Budget Assistant",
+      description: "Helps with finance questions",
+      prompt: "Use the supplied policy docs to answer questions.",
+      created_at: "2026-03-23T08:00:00.000Z",
+      facet_ids: [],
+      enforce_facet_settings: false,
+      mcp_server_ids: [],
+      updated_at: "2026-03-23T09:00:00.000Z",
+      files: [],
+      can_edit: false,
+    };
+    const pastChats: ChatSession[] = [
+      {
+        id: "chat-1",
+        title: "chat-1",
+        updatedAt: "2026-03-23T09:00:00.000Z",
+        messages: [],
+      },
+    ];
+
+    it("keeps identity above and the conversations block below", () => {
+      render(
+        <ThemeProvider>
+          <I18nProvider i18n={i18n}>
+            <MemoryRouter>
+              <AssistantWelcomeScreen
+                assistant={assistant}
+                pastChats={pastChats}
+              />
+            </MemoryRouter>
+          </I18nProvider>
+        </ThemeProvider>,
+      );
+
+      const upper = screen.getByTestId("assistant-welcome-screen-default");
+      const lower = screen.getByTestId("assistant-welcome-screen-lower");
+      expect(upper).toContainElement(
+        screen.getByTestId("assistant-welcome-avatar-button"),
+      );
+      expect(upper).toContainElement(
+        screen.getByText("Helps with finance questions"),
+      );
+      expect(lower).toContainElement(
+        screen.getByRole("heading", {
+          level: 2,
+          name: "Your conversations with this assistant",
+        }),
+      );
+      expect(lower).toContainElement(screen.getByText("chat-1"));
+      expect(lower).toHaveClass(
+        "max-w-[var(--theme-layout-chat-input-max-width)]",
+      );
+      expect(
+        upper.compareDocumentPosition(lower) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it("opens the configuration from the upper part on its own", () => {
+      render(
+        <ThemeProvider>
+          <I18nProvider i18n={i18n}>
+            <MemoryRouter>
+              <AssistantWelcomeUpper assistant={assistant} />
+            </MemoryRouter>
+          </I18nProvider>
+        </ThemeProvider>,
+      );
+
+      expect(screen.queryByTestId("assistant-welcome-screen-lower")).toBeNull();
+      fireEvent.click(screen.getByTestId("assistant-welcome-avatar-button"));
+
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(screen.getByText("System Prompt")).toBeInTheDocument();
+    });
+
+    it("renders the loading spinner in the lower part", () => {
+      const { container } = render(
+        <ThemeProvider>
+          <I18nProvider i18n={i18n}>
+            <MemoryRouter>
+              <AssistantWelcomeLower assistant={assistant} isLoadingChats />
+            </MemoryRouter>
+          </I18nProvider>
+        </ThemeProvider>,
+      );
+
+      expect(
+        screen.queryByTestId("assistant-welcome-screen-default"),
+      ).toBeNull();
+      expect(
+        screen.queryByText("Your conversations with this assistant"),
+      ).toBeNull();
+      expect(container.querySelector(".animate-spin")).not.toBeNull();
+    });
   });
 
   it("keeps the conversations heading on the theme's page alignment", () => {
