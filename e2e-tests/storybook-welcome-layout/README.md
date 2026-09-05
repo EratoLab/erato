@@ -2,7 +2,9 @@
 
 Measures the `Chat/EmptyStateLayout` stories in a real browser: composer
 shell on the pane midline, independent scrolling of the upper and lower
-halves, composer growth, and the bottom-aligned variant.
+halves, composer growth, the welcome split around the shell (compact starter
+prompts, assistant conversations, legacy whole-welcome override), and the
+bottom-aligned variant.
 
 Start Storybook from `frontend/`:
 
