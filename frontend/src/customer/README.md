@@ -60,10 +60,15 @@ In a customer fork:
 
 ## Available Override Points
 
-| Registry Key                  | Location       | Description                            |
-| ----------------------------- | -------------- | -------------------------------------- |
-| `AssistantFileSourceSelector` | Assistant form | File source selector for default files |
-| `ChatFileSourceSelector`      | Chat input     | File source selector for chat uploads  |
-| `ChatWelcomeScreen`           | Chat           | Default chat empty state component     |
-| `StarterPrompts`              | Chat           | Prompt suggestions inside chat welcome |
-| `AssistantWelcomeScreen`      | Assistant chat | Assistant chat empty state component   |
+| Registry Key                  | Location       | Description                                                 |
+| ----------------------------- | -------------- | ----------------------------------------------------------- |
+| `AssistantFileSourceSelector` | Assistant form | File source selector for default files                      |
+| `ChatFileSourceSelector`      | Chat input     | File source selector for chat uploads                       |
+| `ChatWelcomeScreen`           | Chat           | Default chat empty state component                          |
+| `StarterPrompts`              | Chat           | Prompt suggestions beneath the composer in the chat welcome |
+| `AssistantWelcomeScreen`      | Assistant chat | Assistant chat empty state component                        |
+
+`ChatWelcomeScreen` and `AssistantWelcomeScreen` overrides render whole, above
+the composer, and suppress the default content beneath it (subtitle,
+description, starter prompts, past conversations). A `StarterPrompts` override
+only applies to the built-in welcome, where it renders beneath the composer.
