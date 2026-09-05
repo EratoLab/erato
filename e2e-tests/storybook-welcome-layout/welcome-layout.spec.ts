@@ -5,7 +5,9 @@ const PANE = '[data-ui="story-pane"]';
 const ABOVE = '[data-ui="welcome-above"]';
 const BELOW = '[data-ui="welcome-below"]';
 const ADVISORY = '[data-ui="chat-usage-advisory"]';
+const WELCOME_UPPER = '[data-testid="welcome-screen-default"]';
 const WELCOME_LOWER = '[data-testid="welcome-screen-lower"]';
+const ASSISTANT_LOWER = '[data-testid="assistant-welcome-screen-lower"]';
 const STARTER_PROMPTS = '[data-testid^="starter-prompt-"]';
 const WELCOME_HEADING = "Welcome to AI Assistant";
 const CONVERSATIONS_HEADING = "Your conversations with this assistant";
@@ -16,6 +18,7 @@ const STARTER_SUBTITLES: Record<string, string> = {
   "starter-prompt-summarize_notes": "Turn raw notes into a short summary",
 };
 const COMPOSER_MAX_WIDTH = 896;
+const MIN_LOWER_GAP = 16;
 
 const storyUrl = (story: string) =>
   `/iframe.html?id=chat-emptystatelayout--${story}&viewMode=story`;
@@ -109,12 +112,12 @@ test.describe("centered layout", () => {
     const advisory = await box(page.locator(ADVISORY));
     const lower = await box(page.locator(WELCOME_LOWER));
     console.log(
-      `advisory bottom ${advisory.bottom.toFixed(1)}, lower top ${lower.y.toFixed(1)}, lower width ${lower.width.toFixed(1)}`,
+      `advisory bottom ${advisory.bottom.toFixed(1)}, lower top ${lower.y.toFixed(1)}, gap ${(lower.y - advisory.bottom).toFixed(1)}px, lower width ${lower.width.toFixed(1)}`,
     );
-    expect(lower.y).toBeGreaterThanOrEqual(advisory.bottom);
+    expect(lower.y - advisory.bottom).toBeGreaterThanOrEqual(MIN_LOWER_GAP);
     expect(lower.width).toBeLessThanOrEqual(COMPOSER_MAX_WIDTH);
-    expect(page.locator(BELOW).locator(WELCOME_LOWER)).toHaveCount(1);
-    expect(page.locator(ABOVE).locator(WELCOME_LOWER)).toHaveCount(0);
+    await expect(page.locator(BELOW).locator(WELCOME_LOWER)).toHaveCount(1);
+    await expect(page.locator(ABOVE).locator(WELCOME_LOWER)).toHaveCount(0);
   });
 
   test("starter prompts are compact buttons on the control radius with the subtitle as title", async ({
@@ -153,6 +156,12 @@ test.describe("centered layout", () => {
     await expect(
       page.getByRole("heading", { level: 1, name: WELCOME_HEADING }),
     ).toBeInViewport();
+    const advisory = await box(page.locator(ADVISORY));
+    const lower = await box(page.locator(WELCOME_LOWER));
+    console.log(
+      `centered-default 390x700: advisory bottom ${advisory.bottom.toFixed(1)}, lower top ${lower.y.toFixed(1)}, gap ${(lower.y - advisory.bottom).toFixed(1)}px`,
+    );
+    expect(lower.y - advisory.bottom).toBeGreaterThanOrEqual(MIN_LOWER_GAP);
   });
 
   test("each half scrolls on its own without moving the shell", async ({
@@ -248,11 +257,14 @@ test.describe("assistant welcome", () => {
     const conversations = await box(
       page.getByRole("heading", { level: 2, name: CONVERSATIONS_HEADING }),
     );
+    const advisory = await box(page.locator(ADVISORY));
+    const lower = await box(page.locator(ASSISTANT_LOWER));
     console.log(
-      `assistant name bottom ${name.bottom.toFixed(1)}, shell ${shell.y.toFixed(1)}..${shell.bottom.toFixed(1)}, conversations top ${conversations.y.toFixed(1)}`,
+      `assistant name bottom ${name.bottom.toFixed(1)}, shell ${shell.y.toFixed(1)}..${shell.bottom.toFixed(1)}, advisory bottom ${advisory.bottom.toFixed(1)}, lower top ${lower.y.toFixed(1)}, gap ${(lower.y - advisory.bottom).toFixed(1)}px, conversations top ${conversations.y.toFixed(1)}`,
     );
     expect(name.bottom).toBeLessThanOrEqual(shell.y);
     expect(conversations.y).toBeGreaterThanOrEqual(shell.bottom);
+    expect(lower.y - advisory.bottom).toBeGreaterThanOrEqual(MIN_LOWER_GAP);
     await expect(
       page.getByRole("tab", { name: "Delegated runs" }),
     ).toBeVisible();
@@ -311,10 +323,12 @@ test.describe("bottom layout", () => {
     const headingBox = await box(heading);
     expect(headingBox.bottom).toBeLessThanOrEqual(shell.y);
 
+    const upper = await box(page.locator(ABOVE).locator(WELCOME_UPPER));
     const lower = await box(page.locator(ABOVE).locator(WELCOME_LOWER));
     console.log(
-      `bottom-default: lower part ${lower.y.toFixed(1)}..${lower.bottom.toFixed(1)}, shell top ${shell.y.toFixed(1)}`,
+      `bottom-default: upper bottom ${upper.bottom.toFixed(1)}, lower part ${lower.y.toFixed(1)}..${lower.bottom.toFixed(1)}, gap ${(lower.y - upper.bottom).toFixed(1)}px, shell top ${shell.y.toFixed(1)}`,
     );
+    expect(lower.y - upper.bottom).toBeGreaterThanOrEqual(MIN_LOWER_GAP);
     expect(lower.bottom).toBeLessThanOrEqual(shell.y);
     await expect(page.locator(BELOW).locator(WELCOME_LOWER)).toHaveCount(0);
     await expect(page.locator(STARTER_PROMPTS)).toHaveCount(3);
