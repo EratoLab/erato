@@ -1180,6 +1180,28 @@ mod tests {
     }
 
     #[test]
+    fn chat_input_empty_state_layout_is_exposed_to_the_frontend() {
+        let default_environment =
+            build_frontend_environment(&AppConfig::default(), FrontendKind::Web);
+        assert_eq!(
+            default_environment
+                .additional_environment
+                .get(FRONTEND_ENV_KEY_CHAT_INPUT_EMPTY_STATE_LAYOUT),
+            Some(&Value::String("centered".to_string()))
+        );
+
+        let mut config = AppConfig::default();
+        config.frontend.chat_input_empty_state_layout = "bottom".to_string();
+        let environment = build_frontend_environment(&config, FrontendKind::Web);
+        assert_eq!(
+            environment
+                .additional_environment
+                .get(FRONTEND_ENV_KEY_CHAT_INPUT_EMPTY_STATE_LAYOUT),
+            Some(&Value::String("bottom".to_string()))
+        );
+    }
+
+    #[test]
     fn assistants_delegation_enabled_is_injected_for_both_frontends() {
         let mut config = AppConfig::default();
         config.assistants.enabled = true;

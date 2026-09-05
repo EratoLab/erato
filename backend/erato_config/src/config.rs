@@ -2572,8 +2572,8 @@ pub struct FrontendConfig {
     #[serde(default)]
     pub disable_chat_input_autofocus: bool,
 
-    // Layout of the chat input before a conversation has started: "bottom" (default)
-    // or "centered".
+    // Layout of the chat input before a conversation has started: "centered" (default)
+    // or "bottom".
     #[serde(default = "default_chat_input_empty_state_layout")]
     pub chat_input_empty_state_layout: String,
 
@@ -2673,6 +2673,33 @@ impl Default for FrontendConfig {
             extra_frame_ancestors: Vec::new(),
             allow_any_frame_ancestor: false,
         }
+    }
+}
+
+#[cfg(test)]
+mod frontend_config_tests {
+    use super::FrontendConfig;
+
+    #[test]
+    fn chat_input_empty_state_layout_defaults_to_centered() {
+        let config: FrontendConfig =
+            serde_json::from_value(serde_json::json!({})).expect("config should deserialize");
+
+        assert_eq!(config.chat_input_empty_state_layout, "centered");
+        assert_eq!(
+            FrontendConfig::default().chat_input_empty_state_layout,
+            "centered"
+        );
+    }
+
+    #[test]
+    fn chat_input_empty_state_layout_can_be_set_to_bottom() {
+        let config: FrontendConfig = serde_json::from_value(serde_json::json!({
+            "chat_input_empty_state_layout": "bottom"
+        }))
+        .expect("config should deserialize");
+
+        assert_eq!(config.chat_input_empty_state_layout, "bottom");
     }
 }
 
@@ -2781,7 +2808,7 @@ fn default_web_frontend_bundle_path() -> String {
 }
 
 fn default_chat_input_empty_state_layout() -> String {
-    "bottom".to_string()
+    "centered".to_string()
 }
 
 fn default_sidebar_chat_history_show_metadata() -> bool {
