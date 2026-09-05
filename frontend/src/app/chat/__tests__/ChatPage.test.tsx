@@ -192,6 +192,10 @@ vi.mock("@/components/ui/Chat/ChatInput", () => ({
 
 vi.mock("@/components/ui/WelcomeScreen", () => ({
   WelcomeScreen: () => <div data-testid="welcome-screen">Welcome</div>,
+  WelcomeScreenUpper: () => <div data-testid="welcome-screen">Welcome</div>,
+  WelcomeScreenLower: () => (
+    <div data-testid="welcome-screen-lower">Welcome details</div>
+  ),
 }));
 
 vi.mock("@/components/ui/Feedback/ChatErrorBoundary", () => ({
