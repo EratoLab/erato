@@ -1,15 +1,7 @@
 import { t } from "@lingui/core/macro";
 import { useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import {
-  cloneElement,
-  isValidElement,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
 import {
@@ -40,6 +32,7 @@ import { isPromptInjectionFilterDetails } from "@/types/chat";
 import { mapRecentChatToSession } from "@/utils/chat/recentChatSession";
 import { createLogger } from "@/utils/debugLogger";
 
+import { ChatEmptyStateLayout } from "./ChatEmptyStateLayout";
 import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import { ChatInput } from "./ChatInput";
 import {
@@ -48,6 +41,7 @@ import {
 } from "./ChatInputControlsContext";
 import { ChatMessage as ChatMessageComponent } from "./ChatMessage";
 import { ChatShareDialog } from "./ChatShareDialog";
+import { ChatUsageAdvisory } from "./ChatUsageAdvisory";
 import { DelegatedRunsSection } from "./DelegatedRunsSection";
 import { EditChatTitleDialog } from "./EditChatTitleDialog";
 import { Button } from "../Controls/Button";
@@ -122,6 +116,8 @@ export interface ChatProps {
   customSessionSelect?: (sessionId: string) => void;
   /** Optional custom component to show when there are no messages */
   emptyStateComponent?: React.ReactNode;
+  /** Optional supplementary empty-state content rendered on the composer's far side from `emptyStateComponent` */
+  emptyStateBelowComponent?: React.ReactNode;
   /** Force the centered empty-state layout regardless of feature config */
   forceCenteredEmptyState?: boolean;
   /** Optional content rendered at the top of the conversation area */
@@ -174,6 +170,7 @@ export const Chat = ({
   acceptedFileTypes,
   customSessionSelect,
   emptyStateComponent,
+  emptyStateBelowComponent,
   forceCenteredEmptyState = false,
   topContent,
   composerDisabled = false,
@@ -492,9 +489,8 @@ export const Chat = ({
     null,
   );
   const [isUpdatingChatTitle, setIsUpdatingChatTitle] = useState(false);
-  // ChatInput's audio-mode lives here so it survives the empty-state ↔
-  // messages layout flip below, which renders ChatInput in two different
-  // JSX positions and would otherwise unmount it on the first send.
+  // ChatInput's audio-mode is hoisted so it survives the empty-state ↔
+  // messages layout flip below.
   const [isAudioMode, setIsAudioMode] = useState(false);
 
   const handleEditTitleSession = useCallback((sessionId: string) => {
@@ -650,24 +646,21 @@ export const Chat = ({
     );
   }
 
-  const shouldRenderCenteredEmptyState =
-    (forceCenteredEmptyState || emptyStateLayout === "centered") &&
+  const showEmptyState =
     !!emptyStateComponent &&
     messageOrder.length === 0 &&
     !chatLoading &&
     !isPendingResponse &&
     editingMessageId === null;
-
-  const centeredEmptyStateContent =
-    shouldRenderCenteredEmptyState &&
-    isValidElement<{ className?: string }>(emptyStateComponent)
-      ? cloneElement(emptyStateComponent, {
-          className: clsx(
-            emptyStateComponent.props.className,
-            "!translate-y-0",
-          ),
-        })
-      : emptyStateComponent;
+  const centeredEmpty =
+    (forceCenteredEmptyState || emptyStateLayout === "centered") &&
+    showEmptyState;
+  const bottomEmpty = !centeredEmpty && showEmptyState;
+  const layoutMode = centeredEmpty
+    ? "centered"
+    : bottomEmpty
+      ? "bottom"
+      : "conversation";
   const canShareCurrentChat =
     chatSharingEnabled &&
     !!currentChatId &&
@@ -711,7 +704,93 @@ export const Chat = ({
       uploadError={uploadError}
       controlledIsAudioMode={isAudioMode}
       onControlledIsAudioModeChange={setIsAudioMode}
+      renderUsageAdvisory={false}
     />
+  );
+
+  const aboveComposerContent = (
+    <>
+      {!centeredEmpty && topContent ? (
+        <div
+          className={clsx(
+            "relative z-10 shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3 sm:px-4",
+            // The share button floats over this strip's corner.
+            canShareCurrentChat && "pr-28 sm:pr-32",
+          )}
+        >
+          {topContent}
+        </div>
+      ) : null}
+      {!centeredEmpty && canShareCurrentChat ? (
+        <div className="absolute right-3 top-3 z-10 sm:right-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<ShareIcon className="size-4" />}
+            onClick={() => {
+              handleOpenShareDialog(currentChatId);
+            }}
+          >
+            {currentShareButtonLabel}
+          </Button>
+        </div>
+      ) : null}
+      {showEmptyState ? (
+        <>
+          {emptyStateComponent}
+          {bottomEmpty ? emptyStateBelowComponent : null}
+        </>
+      ) : (
+        <MessageEditProvider value={messageEditValue}>
+          <MessageList
+            messages={messages}
+            messageOrder={messageOrder}
+            loadOlderMessages={loadOlderMessages}
+            hasOlderMessages={hasOlderMessages}
+            isPending={chatLoading}
+            currentSessionId={currentChatId ?? ""}
+            pageSize={6}
+            maxWidth={maxWidth}
+            showTimestamps={showTimestamps}
+            showAvatars={showAvatars}
+            userProfile={userMessageProfile ?? profile}
+            userDisplayNameOverride={userMessageDisplayName}
+            controls={resolvedMessageControls}
+            messageRenderer={resolvedMessageRenderer}
+            controlsContext={{
+              ...controlsContext,
+              canEdit: canEditForCurrentChat,
+            }}
+            onMessageAction={standardMessageActionHandler}
+            className={clsx(layout, canShareCurrentChat && "pt-12 sm:pt-14")}
+            useVirtualization={messageOrder.length > 30}
+            virtualizationThreshold={30}
+            onScrollToBottomRef={handleMessageListRef}
+            onFilePreview={openPreviewModal}
+            onViewFeedback={openFeedbackViewDialog}
+            assistantFiles={assistantFiles}
+            modelSwitches={modelSwitches}
+          />
+        </MessageEditProvider>
+      )}
+    </>
+  );
+
+  // Background runs launched from this chat sit right above the composer —
+  // in view even on small screens, where the sidebar is hidden. Renders
+  // nothing while the chat has none.
+  const composerContent = readOnly ? null : (
+    <>
+      <DelegatedRunsSection chatId={currentChatId} />
+      {chatInputElement}
+    </>
+  );
+
+  const belowComposerContent = readOnly ? null : (
+    <>
+      <ChatUsageAdvisory />
+      {centeredEmpty ? emptyStateBelowComponent : null}
+    </>
   );
 
   return (
@@ -813,89 +892,12 @@ export const Chat = ({
                 isModelSelectionReady={isSelectionReady}
               />
             ) : null}
-            {shouldRenderCenteredEmptyState ? (
-              <div
-                className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-2 py-4 sm:px-4 sm:py-6"
-                data-ui="chat-empty-state-centered-shell"
-              >
-                <div className="flex w-full flex-col items-center justify-center gap-4">
-                  {centeredEmptyStateContent}
-                </div>
-              </div>
-            ) : (
-              <>
-                {topContent ? (
-                  <div
-                    className={clsx(
-                      "relative z-10 shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3 sm:px-4",
-                      // The share button floats over this strip's corner.
-                      canShareCurrentChat && "pr-28 sm:pr-32",
-                    )}
-                  >
-                    {topContent}
-                  </div>
-                ) : null}
-                {canShareCurrentChat ? (
-                  <div className="absolute right-3 top-3 z-10 sm:right-4">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      icon={<ShareIcon className="size-4" />}
-                      onClick={() => {
-                        handleOpenShareDialog(currentChatId);
-                      }}
-                    >
-                      {currentShareButtonLabel}
-                    </Button>
-                  </div>
-                ) : null}
-                {/* Use the MessageList component */}
-                <MessageEditProvider value={messageEditValue}>
-                  <MessageList
-                    messages={messages}
-                    messageOrder={messageOrder}
-                    loadOlderMessages={loadOlderMessages}
-                    hasOlderMessages={hasOlderMessages}
-                    isPending={chatLoading}
-                    currentSessionId={currentChatId ?? ""}
-                    pageSize={6}
-                    maxWidth={maxWidth}
-                    showTimestamps={showTimestamps}
-                    showAvatars={showAvatars}
-                    userProfile={userMessageProfile ?? profile}
-                    userDisplayNameOverride={userMessageDisplayName}
-                    controls={resolvedMessageControls}
-                    messageRenderer={resolvedMessageRenderer}
-                    controlsContext={{
-                      ...controlsContext,
-                      canEdit: canEditForCurrentChat,
-                    }}
-                    onMessageAction={standardMessageActionHandler}
-                    className={clsx(
-                      layout,
-                      canShareCurrentChat && "pt-12 sm:pt-14",
-                    )}
-                    useVirtualization={messageOrder.length > 30}
-                    virtualizationThreshold={30}
-                    onScrollToBottomRef={handleMessageListRef}
-                    onFilePreview={openPreviewModal}
-                    onViewFeedback={openFeedbackViewDialog}
-                    emptyStateComponent={emptyStateComponent}
-                    assistantFiles={assistantFiles}
-                    modelSwitches={modelSwitches}
-                  />
-                </MessageEditProvider>
-              </>
-            )}
-            {/* Background runs launched from this chat sit right above the
-                composer — in view even on small screens, where the sidebar
-                is hidden. Renders nothing while the chat has none. */}
-            {!readOnly ? <DelegatedRunsSection chatId={currentChatId} /> : null}
-            {/* ChatInput lives in a stable JSX position so React doesn't
-                unmount it during the empty-state ↔ messages layout flip.
-                Anything previously hoisted to survive that unmount (audio
-                mode, voice-session refs) can stay where it naturally lives. */}
-            {!readOnly ? chatInputElement : null}
+            <ChatEmptyStateLayout
+              mode={layoutMode}
+              above={aboveComposerContent}
+              composer={composerContent}
+              below={belowComposerContent}
+            />
           </div>
         </ChatErrorBoundary>
 
