@@ -1,10 +1,12 @@
 import { action } from "@storybook/addon-actions";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { ChatEmptyStateLayout } from "../../components/ui/Chat/ChatEmptyStateLayout";
 import { ChatInput } from "../../components/ui/Chat/ChatInput";
 import { ChatInputControlsProvider } from "../../components/ui/Chat/ChatInputControlsContext";
 import { ChatUsageAdvisory } from "../../components/ui/Chat/ChatUsageAdvisory";
 import { WelcomeScreen } from "../../components/ui/WelcomeScreen";
+import { facetsQuery } from "../../lib/generated/v1betaApi/v1betaApiComponents";
 import { StaticFeatureConfigProvider } from "../../providers/FeatureConfigProvider";
 
 import type { ChatInputControls } from "../../components/ui/Chat/ChatInputControlsContext";
@@ -18,6 +20,22 @@ const stubControls: ChatInputControls = {
   toggleFacetId: action("toggleFacetId"),
   addUploadedFiles: action("addUploadedFiles"),
   clearQueuedMessage: action("clearQueuedMessage"),
+};
+
+// Storybook has no backend; a seeded cache keeps the composer's tools menu
+// from showing its load-error banner.
+const makeQueryClient = () => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+  });
+  queryClient.setQueryData(facetsQuery({}).queryKey, {
+    facets: [],
+    global_facet_settings: {
+      only_single_facet: false,
+      show_facet_indicator_with_display_name: false,
+    },
+  });
+  return queryClient;
 };
 
 const meta: Meta<typeof ChatEmptyStateLayout> = {
@@ -34,21 +52,23 @@ const meta: Meta<typeof ChatEmptyStateLayout> = {
   },
   decorators: [
     (Story) => (
-      <StaticFeatureConfigProvider
-        config={{
-          chatInput: { autofocus: false },
-          starterPrompts: { enabled: false },
-        }}
-      >
-        <ChatInputControlsProvider value={stubControls}>
-          <div
-            className="flex h-screen w-full flex-col bg-theme-bg-primary"
-            data-ui="story-pane"
-          >
-            <Story />
-          </div>
-        </ChatInputControlsProvider>
-      </StaticFeatureConfigProvider>
+      <QueryClientProvider client={makeQueryClient()}>
+        <StaticFeatureConfigProvider
+          config={{
+            chatInput: { autofocus: false },
+            starterPrompts: { enabled: false },
+          }}
+        >
+          <ChatInputControlsProvider value={stubControls}>
+            <div
+              className="flex h-screen w-full flex-col bg-theme-bg-primary"
+              data-ui="story-pane"
+            >
+              <Story />
+            </div>
+          </ChatInputControlsProvider>
+        </StaticFeatureConfigProvider>
+      </QueryClientProvider>
     ),
   ],
 };

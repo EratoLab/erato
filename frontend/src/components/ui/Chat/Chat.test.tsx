@@ -47,11 +47,13 @@ vi.mock("./ChatInput", () => ({
   ChatInput: (props: {
     disabled?: boolean;
     initialSelectedFacetIds?: string[];
+    renderUsageAdvisory?: boolean;
   }) => (
     <textarea
       data-testid="chat-input-stub"
       data-disabled={String(Boolean(props.disabled))}
       data-facets={JSON.stringify(props.initialSelectedFacetIds)}
+      data-render-advisory={String(props.renderUsageAdvisory ?? true)}
     />
   ),
 }));
@@ -517,11 +519,11 @@ describe("Chat empty-state shell", () => {
       );
       expect(advisories).toHaveLength(1);
       expect(advisories[0].closest('[data-ui="welcome-below"]')).not.toBeNull();
+      const composerStub = screen.getByTestId("chat-input-stub");
       expect(
-        screen
-          .getByTestId("chat-input-stub")
-          .closest('[data-ui="composer-cluster"]'),
+        composerStub.closest('[data-ui="composer-cluster"]'),
       ).not.toBeNull();
+      expect(composerStub).toHaveAttribute("data-render-advisory", "false");
     },
   );
 

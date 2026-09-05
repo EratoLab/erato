@@ -52,9 +52,8 @@ export function ChatEmptyStateLayout({
         data-ui="welcome-above"
       >
         {centered ? (
-          // `mt-auto` bottom-aligns short content but collapses to zero once
-          // the content overflows, so the row still scrolls from its top;
-          // `justify-end` would push the overflow above the scrollable area.
+          // `mt-auto`, not `justify-end`: overflowing content must scroll from
+          // its top instead of being pushed above the scrollable area.
           <div className="mt-auto flex w-full flex-col items-center pb-6">
             {above}
           </div>
