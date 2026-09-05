@@ -92,8 +92,10 @@ export {
   type ServersToolsMcpConfig,
 } from "@/components/ui/Settings/ServersToolsPane";
 export {
+  AssistantWelcomeLower,
   AssistantWelcomeScreen,
   type AssistantWelcomeScreenProps,
+  AssistantWelcomeUpper,
 } from "@/components/ui/Assistant/AssistantWelcomeScreen";
 export {
   ChatHistoryList,
@@ -132,7 +134,9 @@ export {
 } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 export {
   WelcomeScreen,
+  WelcomeScreenLower,
   type WelcomeScreenProps,
+  WelcomeScreenUpper,
 } from "@/components/ui/WelcomeScreen";
 export { AnchoredPopover } from "@/components/ui/Controls/AnchoredPopover";
 export {
