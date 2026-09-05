@@ -237,6 +237,30 @@ export default function AssistantChatSpacePage() {
     );
   }
 
+  const emptyStateFor = (part: "upper" | "lower") =>
+    assistant ? (
+      <ChatEmptyState
+        variant="assistant"
+        part={part}
+        assistant={assistant}
+        pastChats={assistantChats}
+        delegatedRuns={delegatedRuns}
+        delegationEnabled={delegationEnabled}
+        isLoadingChats={isLoadingChats}
+        onChatPin={
+          pinnedChatsEnabled
+            ? (chatId, isPinned) => {
+                void pinChat(chatId, isPinned);
+              }
+            : undefined
+        }
+        pinnedChatsCount={pinnedChats.length}
+        pinnedChatsLimit={pinnedChatsLimit}
+      />
+    ) : (
+      <ChatEmptyState variant="chat" part={part} />
+    );
+
   // Render chat interface with assistant welcome screen
   return (
     <div className="flex size-full flex-col">
@@ -255,29 +279,8 @@ export default function AssistantChatSpacePage() {
         layout="default"
         topContent={delegatedRunHeader}
         composerDisabled={composerLocked}
-        emptyStateComponent={
-          assistant ? (
-            <ChatEmptyState
-              variant="assistant"
-              assistant={assistant}
-              pastChats={assistantChats}
-              delegatedRuns={delegatedRuns}
-              delegationEnabled={delegationEnabled}
-              isLoadingChats={isLoadingChats}
-              onChatPin={
-                pinnedChatsEnabled
-                  ? (chatId, isPinned) => {
-                      void pinChat(chatId, isPinned);
-                    }
-                  : undefined
-              }
-              pinnedChatsCount={pinnedChats.length}
-              pinnedChatsLimit={pinnedChatsLimit}
-            />
-          ) : (
-            <ChatEmptyState variant="chat" />
-          )
-        }
+        emptyStateComponent={emptyStateFor("upper")}
+        emptyStateBelowComponent={emptyStateFor("lower")}
         onMessageAction={handleMessageAction}
         // Only pass assistantId when creating a NEW chat (no chatId in URL)
         // For existing chats, the assistant context is already stored in the chat
