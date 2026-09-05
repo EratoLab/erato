@@ -62,8 +62,8 @@ describe("AssistantWelcomeScreen", () => {
       screen.queryByTestId("starter-prompts-section"),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByText("Start typing below to begin a new conversation"),
-    ).toBeInTheDocument();
+      screen.queryByText("Start typing below to begin a new conversation"),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByTestId("assistant-welcome-screen-default").className,
     ).toContain("w-full");

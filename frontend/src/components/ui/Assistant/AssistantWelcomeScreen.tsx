@@ -98,62 +98,24 @@ const rowTitle = ({ title, titleResolved }: ChatSession): string => {
     : t({ id: "chat.newChat.title", message: "New Chat" });
 };
 
-/**
- * AssistantWelcomeScreen component
- *
- * Displayed when viewing an assistant's chat space with no active conversation.
- * Shows assistant information and past conversations with this assistant.
- *
- * @example
- * ```tsx
- * <AssistantWelcomeScreen
- *   assistant={assistantData}
- *   pastChats={filteredChats}
- * />
- * ```
- */
-export function AssistantWelcomeScreen({
+type AssistantWelcomeUpperProps = Pick<
+  AssistantWelcomeScreenProps,
+  "assistant" | "className"
+>;
+
+/** Avatar, name and description, each opening the configuration modal; sits above the composer. */
+export function AssistantWelcomeUpper({
   assistant,
-  pastChats = [],
-  delegatedRuns = [],
-  delegationEnabled = false,
-  isLoadingChats = false,
-  onChatPin,
-  pinnedChatsCount = 0,
-  pinnedChatsLimit = 5,
   className = "",
-}: AssistantWelcomeScreenProps) {
+}: AssistantWelcomeUpperProps) {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
   const [isConfigurationOpen, setIsConfigurationOpen] = useState(false);
-  const selectedSegment: AssistantChatSegment =
-    searchParams.get(SEGMENT_SEARCH_PARAM) === "delegated"
-      ? "delegated"
-      : "chats";
-  const selectSegment = (next: AssistantChatSegment) => {
-    const nextParams = new URLSearchParams(searchParams);
-    if (next === "delegated") {
-      nextParams.set(SEGMENT_SEARCH_PARAM, next);
-    } else {
-      nextParams.delete(SEGMENT_SEARCH_PARAM);
-    }
-    setSearchParams(nextParams, { replace: true });
-  };
-  const {
-    containerClasses: contentContainerClasses,
-    textAlignment: contentTextAlignment,
-    justifyAlignment: contentJustifyAlignment,
-    horizontalPadding: contentHorizontalPadding,
-  } = usePageAlignment("assistants");
+  const { horizontalPadding } = usePageAlignment("assistants");
   const {
     containerClasses: headerContainerClasses,
     textAlignment: headerTextAlignment,
     justifyAlignment: headerJustifyAlignment,
   } = usePageAlignment("headers");
-
-  const handleChatSelect = (chatId: string) => {
-    navigate(getChatUrl(chatId, assistant.id));
-  };
 
   const handleEditAssistant = () => {
     navigate(`/assistants/${assistant.id}/edit`);
@@ -172,6 +134,177 @@ export function AssistantWelcomeScreen({
     id: "assistant.welcome.configuration.open",
     message: "View assistant configuration",
   });
+
+  return (
+    <div
+      className={clsx("w-full", horizontalPadding, className)}
+      data-testid="assistant-welcome-screen-default"
+    >
+      <div className={clsx("w-full", headerContainerClasses)}>
+        <div className={clsx("mb-4 flex", headerJustifyAlignment)}>
+          <button
+            type="button"
+            onClick={openConfiguration}
+            className="focus-ring flex size-20 items-center justify-center rounded-full bg-theme-avatar-assistant-bg text-3xl font-semibold text-theme-avatar-assistant-fg transition-transform hover:scale-105"
+            aria-label={configurationLabel}
+            data-testid="assistant-welcome-avatar-button"
+          >
+            <span data-testid="assistant-welcome-avatar-initial">
+              {assistantInitial}
+            </span>
+          </button>
+        </div>
+
+        <h1 className={clsx("mb-2", headerTextAlignment)}>
+          <button
+            type="button"
+            onClick={openConfiguration}
+            className={clsx(
+              // Control radius, not shell: this is a bare text affordance
+              // with no padding or fill, so the radius only shapes the focus
+              // ring. A card radius made that ring capsule-ish on one line
+              // of text.
+              "focus-ring-tight rounded-[var(--theme-radius-control)] text-2xl font-bold text-theme-fg-primary hover:text-theme-fg-accent",
+              headerTextAlignment,
+            )}
+            title={configurationLabel}
+          >
+            {assistant.name}
+          </button>
+        </h1>
+
+        {assistant.description && (
+          <p
+            className={clsx(
+              "text-lg text-theme-fg-secondary",
+              headerTextAlignment,
+            )}
+          >
+            {assistant.description}
+          </p>
+        )}
+      </div>
+
+      <ModalBase
+        isOpen={isConfigurationOpen}
+        onClose={closeConfiguration}
+        title={t`Configuration`}
+        contentClassName="max-w-2xl"
+      >
+        <div className="space-y-5 text-left" data-ui="assistant-detail-card">
+          {inaccessibleFiles.length > 0 ? (
+            <Alert type="warning">
+              {assistant.owner_email ? (
+                <>
+                  {t({
+                    id: "assistant.welcome.files.inaccessible",
+                    message:
+                      "Some default files are inaccessible due to missing permissions.",
+                  })}{" "}
+                  {t({
+                    id: "assistant.welcome.files.inaccessible.contact",
+                    message:
+                      "Contact this creator and ask them to share the files:",
+                  })}{" "}
+                  <a
+                    href={`mailto:${assistant.owner_email}`}
+                    className="font-medium text-theme-fg-accent underline"
+                  >
+                    {assistant.owner_email}
+                  </a>
+                </>
+              ) : (
+                t({
+                  id: "assistant.welcome.files.inaccessible",
+                  message:
+                    "Some default files are inaccessible due to missing permissions.",
+                })
+              )}
+            </Alert>
+          ) : null}
+
+          <div>
+            <h3 className="mb-2 text-sm font-medium text-theme-fg-secondary">
+              {t`System Prompt`}
+            </h3>
+            <div className="max-h-48 overflow-y-auto rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3">
+              <p className="whitespace-pre-wrap font-mono text-xs text-theme-fg-primary">
+                {assistant.prompt.length > 500
+                  ? `${assistant.prompt.slice(0, 500)}...`
+                  : assistant.prompt}
+              </p>
+            </div>
+          </div>
+
+          {assistant.files.length > 0 && (
+            <div>
+              <h3 className="mb-2 text-sm font-medium text-theme-fg-secondary">
+                {t`Default Files`} ({assistant.files.length})
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {assistant.files.map((file) => (
+                  <span
+                    key={file.id}
+                    className="rounded-[var(--theme-radius-pill)] bg-theme-bg-accent px-2 py-1 text-xs text-theme-fg-secondary"
+                  >
+                    {file.filename}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {assistant.can_edit && (
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<EditIcon />}
+              onClick={handleEditAssistant}
+            >
+              {t`Edit Assistant Settings`}
+            </Button>
+          )}
+        </div>
+      </ModalBase>
+    </div>
+  );
+}
+
+/** Past conversations and delegated runs with this assistant; sits below the composer. */
+export function AssistantWelcomeLower({
+  assistant,
+  pastChats = [],
+  delegatedRuns = [],
+  delegationEnabled = false,
+  isLoadingChats = false,
+  onChatPin,
+  pinnedChatsCount = 0,
+  pinnedChatsLimit = 5,
+  className = "",
+}: AssistantWelcomeScreenProps) {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedSegment: AssistantChatSegment =
+    searchParams.get(SEGMENT_SEARCH_PARAM) === "delegated"
+      ? "delegated"
+      : "chats";
+  const selectSegment = (next: AssistantChatSegment) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (next === "delegated") {
+      nextParams.set(SEGMENT_SEARCH_PARAM, next);
+    } else {
+      nextParams.delete(SEGMENT_SEARCH_PARAM);
+    }
+    setSearchParams(nextParams, { replace: true });
+  };
+  const {
+    textAlignment: contentTextAlignment,
+    justifyAlignment: contentJustifyAlignment,
+  } = usePageAlignment("assistants");
+
+  const handleChatSelect = (chatId: string) => {
+    navigate(getChatUrl(chatId, assistant.id));
+  };
 
   const delegatedAttention = useSessionsAttentionStatus(delegatedRuns);
   // An empty second segment is noise unless delegation can still fill it.
@@ -204,310 +337,184 @@ export function AssistantWelcomeScreen({
   return (
     <div
       className={clsx(
-        "w-full py-8 sm:py-12",
-        contentHorizontalPadding,
+        "mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] px-4",
         className,
       )}
-      data-testid="assistant-welcome-screen-default"
+      data-testid="assistant-welcome-screen-lower"
     >
-      <div className={clsx("flex w-full flex-col", contentContainerClasses)}>
-        <div className={clsx("mb-8 w-full", headerContainerClasses)}>
-          {/* Assistant Icon/Badge */}
-          <div className={clsx("mb-6 flex", headerJustifyAlignment)}>
-            <button
-              type="button"
-              onClick={openConfiguration}
-              className="focus-ring flex size-20 items-center justify-center rounded-full bg-theme-avatar-assistant-bg text-3xl font-semibold text-theme-avatar-assistant-fg transition-transform hover:scale-105"
-              aria-label={configurationLabel}
-              data-testid="assistant-welcome-avatar-button"
-            >
-              <span data-testid="assistant-welcome-avatar-initial">
-                {assistantInitial}
-              </span>
-            </button>
-          </div>
-
-          {/* Assistant Name */}
-          <h1 className={clsx("mb-2", headerTextAlignment)}>
-            <button
-              type="button"
-              onClick={openConfiguration}
-              className={clsx(
-                // Control radius, not shell: this is a bare text affordance
-                // with no padding or fill, so the radius only shapes the focus
-                // ring. A card radius made that ring capsule-ish on one line
-                // of text.
-                "focus-ring-tight rounded-[var(--theme-radius-control)] text-2xl font-bold text-theme-fg-primary hover:text-theme-fg-accent",
-                headerTextAlignment,
-              )}
-              title={configurationLabel}
-            >
-              {assistant.name}
-            </button>
-          </h1>
-
-          {/* Assistant Description */}
-          {assistant.description && (
-            <p
-              className={clsx(
-                "text-lg text-theme-fg-secondary",
-                headerTextAlignment,
-              )}
-            >
-              {assistant.description}
-            </p>
-          )}
-        </div>
-
-        <ModalBase
-          isOpen={isConfigurationOpen}
-          onClose={closeConfiguration}
-          title={t`Configuration`}
-          contentClassName="max-w-2xl"
-        >
-          <div className="space-y-5 text-left" data-ui="assistant-detail-card">
-            {inaccessibleFiles.length > 0 ? (
-              <Alert type="warning">
-                {assistant.owner_email ? (
-                  <>
-                    {t({
-                      id: "assistant.welcome.files.inaccessible",
-                      message:
-                        "Some default files are inaccessible due to missing permissions.",
-                    })}{" "}
-                    {t({
-                      id: "assistant.welcome.files.inaccessible.contact",
-                      message:
-                        "Contact this creator and ask them to share the files:",
-                    })}{" "}
-                    <a
-                      href={`mailto:${assistant.owner_email}`}
-                      className="font-medium text-theme-fg-accent underline"
-                    >
-                      {assistant.owner_email}
-                    </a>
-                  </>
-                ) : (
-                  t({
-                    id: "assistant.welcome.files.inaccessible",
-                    message:
-                      "Some default files are inaccessible due to missing permissions.",
-                  })
-                )}
-              </Alert>
-            ) : null}
-
-            {/* System Prompt Preview */}
-            <div>
-              <h3 className="mb-2 text-sm font-medium text-theme-fg-secondary">
-                {t`System Prompt`}
-              </h3>
-              <div className="max-h-48 overflow-y-auto rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3">
-                <p className="whitespace-pre-wrap font-mono text-xs text-theme-fg-primary">
-                  {assistant.prompt.length > 500
-                    ? `${assistant.prompt.slice(0, 500)}...`
-                    : assistant.prompt}
-                </p>
-              </div>
-            </div>
-
-            {/* Files */}
-            {assistant.files.length > 0 && (
-              <div>
-                <h3 className="mb-2 text-sm font-medium text-theme-fg-secondary">
-                  {t`Default Files`} ({assistant.files.length})
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {assistant.files.map((file) => (
-                    <span
-                      key={file.id}
-                      className="rounded-[var(--theme-radius-pill)] bg-theme-bg-accent px-2 py-1 text-xs text-theme-fg-secondary"
-                    >
-                      {file.filename}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Edit Assistant Button - only show if user can edit */}
-            {assistant.can_edit && (
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={<EditIcon />}
-                onClick={handleEditAssistant}
-              >
-                {t`Edit Assistant Settings`}
-              </Button>
-            )}
-          </div>
-        </ModalBase>
-
-        {/* Past Conversations Section */}
-        {!isLoadingChats &&
-          (pastChats.length > 0 || delegatedRuns.length > 0) && (
-            <div className="w-full">
-              <div
-                className={clsx(
-                  "mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4",
-                  contentJustifyAlignment,
-                )}
-              >
-                <h2
-                  className={clsx(
-                    "text-lg font-semibold text-theme-fg-primary",
-                    contentTextAlignment,
-                  )}
-                >
-                  {t`Your conversations with this assistant`}
-                </h2>
-                {showSegments && (
-                  <SegmentedControl
-                    options={segmentOptions}
-                    value={segment}
-                    onChange={selectSegment}
-                    aria-label={t({
-                      id: "assistant.welcome.segment.aria",
-                      message: "Filter conversations",
-                    })}
-                  />
-                )}
-              </div>
-              {visibleChats.length === 0 && (
-                <p
-                  className={clsx(
-                    "text-sm text-theme-fg-muted",
-                    contentTextAlignment,
-                  )}
-                >
-                  {segment === "delegated"
-                    ? t({
-                        id: "assistant.welcome.delegated.empty",
-                        message: "No delegated runs yet.",
-                      })
-                    : t({
-                        id: "assistant.welcome.chats.empty",
-                        message: "No direct conversations yet.",
-                      })}
-                </p>
-              )}
-              {visibleChats.length > 0 && (
-                <div className="space-y-2">
-                  {visibleChats
-                    .slice(0, PAST_CHAT_PREVIEW_COUNT)
-                    .map((chat) => {
-                      const origin = originLabel(chat);
-                      return (
-                        <a
-                          key={chat.id}
-                          href={getChatUrl(chat.id, assistant.id)}
-                          onClick={(e) => {
-                            if (e.metaKey || e.ctrlKey) return;
-                            e.preventDefault();
-                            handleChatSelect(chat.id);
-                          }}
-                          data-ui="assistant-past-chat-card"
-                          className="block rounded-[var(--theme-radius-shell)] bg-theme-bg-primary p-4 text-left transition-all hover:bg-theme-bg-hover"
-                        >
-                          <div className="flex items-center justify-between gap-4">
-                            <h3 className="flex-1 truncate font-medium text-theme-fg-primary">
-                              {rowTitle(chat)}
-                            </h3>
-                            <div className="shrink-0 text-xs text-theme-fg-muted">
-                              {chat.updatedAt && (
-                                <MessageTimestamp
-                                  createdAt={new Date(chat.updatedAt)}
-                                />
-                              )}
-                            </div>
-                            {onChatPin && (
-                              // eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent anchor navigation from menu clicks
-                              <div
-                                className="shrink-0"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                }}
-                              >
-                                <DropdownMenu
-                                  items={[
-                                    {
-                                      label: chat.isPinned
-                                        ? t({
-                                            id: "chat.history.menu.unpin",
-                                            message: "Unpin",
-                                          })
-                                        : pinnedChatsCount >= pinnedChatsLimit
-                                          ? t({
-                                              id: "chat.history.menu.pinLimitReached",
-                                              message: "Pin limit reached",
-                                            })
-                                          : t({
-                                              id: "chat.history.menu.pin",
-                                              message: "Pin",
-                                            }),
-                                      icon: chat.isPinned ? (
-                                        <PinSlashIcon className="size-4" />
-                                      ) : (
-                                        <PinIcon className="size-4" />
-                                      ),
-                                      onClick: () =>
-                                        onChatPin(chat.id, !chat.isPinned),
-                                      disabled:
-                                        !chat.canEdit ||
-                                        (!chat.isPinned &&
-                                          pinnedChatsCount >= pinnedChatsLimit),
-                                    },
-                                  ]}
-                                />
-                              </div>
-                            )}
-                          </div>
-                          {origin && (
-                            <p
-                              className="mt-1 truncate text-xs text-theme-fg-muted"
-                              data-ui="assistant-delegated-run-origin"
-                            >
-                              {origin}
-                            </p>
-                          )}
-                        </a>
-                      );
-                    })}
-                </div>
-              )}
-
-              {visibleChats.length > PAST_CHAT_PREVIEW_COUNT && (
-                <p
-                  className={clsx(
-                    "mt-4 text-sm text-theme-fg-muted",
-                    contentTextAlignment,
-                  )}
-                >
-                  {t`And`} {visibleChats.length - PAST_CHAT_PREVIEW_COUNT}{" "}
-                  {t`more conversations...`}
-                </p>
-              )}
-            </div>
-          )}
-
-        {/* Loading State */}
-        {isLoadingChats && (
+      {!isLoadingChats &&
+        (pastChats.length > 0 || delegatedRuns.length > 0) && (
           <div className="w-full">
-            <div className={clsx("flex py-4", headerJustifyAlignment)}>
-              <div className="size-6 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
+            <div
+              className={clsx(
+                "mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4",
+                contentJustifyAlignment,
+              )}
+            >
+              <h2
+                className={clsx(
+                  "text-lg font-semibold text-theme-fg-primary",
+                  contentTextAlignment,
+                )}
+              >
+                {t`Your conversations with this assistant`}
+              </h2>
+              {showSegments && (
+                <SegmentedControl
+                  options={segmentOptions}
+                  value={segment}
+                  onChange={selectSegment}
+                  aria-label={t({
+                    id: "assistant.welcome.segment.aria",
+                    message: "Filter conversations",
+                  })}
+                />
+              )}
             </div>
+            {visibleChats.length === 0 && (
+              <p
+                className={clsx(
+                  "text-sm text-theme-fg-muted",
+                  contentTextAlignment,
+                )}
+              >
+                {segment === "delegated"
+                  ? t({
+                      id: "assistant.welcome.delegated.empty",
+                      message: "No delegated runs yet.",
+                    })
+                  : t({
+                      id: "assistant.welcome.chats.empty",
+                      message: "No direct conversations yet.",
+                    })}
+              </p>
+            )}
+            {visibleChats.length > 0 && (
+              <div className="space-y-2">
+                {visibleChats.slice(0, PAST_CHAT_PREVIEW_COUNT).map((chat) => {
+                  const origin = originLabel(chat);
+                  return (
+                    <a
+                      key={chat.id}
+                      href={getChatUrl(chat.id, assistant.id)}
+                      onClick={(e) => {
+                        if (e.metaKey || e.ctrlKey) return;
+                        e.preventDefault();
+                        handleChatSelect(chat.id);
+                      }}
+                      data-ui="assistant-past-chat-card"
+                      className="block rounded-[var(--theme-radius-shell)] bg-theme-bg-primary p-4 text-left transition-all hover:bg-theme-bg-hover"
+                    >
+                      <div className="flex items-center justify-between gap-4">
+                        <h3 className="flex-1 truncate font-medium text-theme-fg-primary">
+                          {rowTitle(chat)}
+                        </h3>
+                        <div className="shrink-0 text-xs text-theme-fg-muted">
+                          {chat.updatedAt && (
+                            <MessageTimestamp
+                              createdAt={new Date(chat.updatedAt)}
+                            />
+                          )}
+                        </div>
+                        {onChatPin && (
+                          // eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent anchor navigation from menu clicks
+                          <div
+                            className="shrink-0"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
+                          >
+                            <DropdownMenu
+                              items={[
+                                {
+                                  label: chat.isPinned
+                                    ? t({
+                                        id: "chat.history.menu.unpin",
+                                        message: "Unpin",
+                                      })
+                                    : pinnedChatsCount >= pinnedChatsLimit
+                                      ? t({
+                                          id: "chat.history.menu.pinLimitReached",
+                                          message: "Pin limit reached",
+                                        })
+                                      : t({
+                                          id: "chat.history.menu.pin",
+                                          message: "Pin",
+                                        }),
+                                  icon: chat.isPinned ? (
+                                    <PinSlashIcon className="size-4" />
+                                  ) : (
+                                    <PinIcon className="size-4" />
+                                  ),
+                                  onClick: () =>
+                                    onChatPin(chat.id, !chat.isPinned),
+                                  disabled:
+                                    !chat.canEdit ||
+                                    (!chat.isPinned &&
+                                      pinnedChatsCount >= pinnedChatsLimit),
+                                },
+                              ]}
+                            />
+                          </div>
+                        )}
+                      </div>
+                      {origin && (
+                        <p
+                          className="mt-1 truncate text-xs text-theme-fg-muted"
+                          data-ui="assistant-delegated-run-origin"
+                        >
+                          {origin}
+                        </p>
+                      )}
+                    </a>
+                  );
+                })}
+              </div>
+            )}
+
+            {visibleChats.length > PAST_CHAT_PREVIEW_COUNT && (
+              <p
+                className={clsx(
+                  "mt-4 text-sm text-theme-fg-muted",
+                  contentTextAlignment,
+                )}
+              >
+                {t`And`} {visibleChats.length - PAST_CHAT_PREVIEW_COUNT}{" "}
+                {t`more conversations...`}
+              </p>
+            )}
           </div>
         )}
 
-        {/* Start New Conversation Hint */}
-        <div className={clsx("mt-8 text-theme-fg-muted", contentTextAlignment)}>
-          <p className="text-sm">
-            {t`Start typing below to begin a new conversation`}
-          </p>
+      {isLoadingChats && (
+        <div className={clsx("flex w-full py-4", contentJustifyAlignment)}>
+          <div className="size-6 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
         </div>
-      </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Both parts stacked; the shape a whole-welcome override replaces.
+ *
+ * @example
+ * ```tsx
+ * <AssistantWelcomeScreen
+ *   assistant={assistantData}
+ *   pastChats={filteredChats}
+ * />
+ * ```
+ */
+export function AssistantWelcomeScreen({
+  className = "",
+  ...props
+}: AssistantWelcomeScreenProps) {
+  return (
+    <div className={clsx("flex w-full flex-col gap-8", className)}>
+      <AssistantWelcomeUpper assistant={props.assistant} />
+      <AssistantWelcomeLower {...props} />
     </div>
   );
 }
