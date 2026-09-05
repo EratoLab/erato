@@ -2,9 +2,12 @@
 // It exposes registry component roots and their transitive component dependencies.
 // Do not edit it by hand.
 
+export { TEXT_SIZE_LOCAL_STORAGE_KEY } from "@/components/providers/ThemeProvider";
+export { TEXT_SIZE_OPTIONS } from "@/components/providers/ThemeProvider";
 export { THEME_MODE_LOCAL_STORAGE_KEY } from "@/components/providers/ThemeProvider";
 export { ThemeProvider } from "@/components/providers/ThemeProvider";
 export { useTheme } from "@/components/providers/ThemeProvider";
+export type { TextSize } from "@/components/providers/ThemeProvider";
 export type { ThemeMode } from "@/components/providers/ThemeProvider";
 export type { ThemeProviderProps } from "@/components/providers/ThemeProvider";
 export { AssistantWelcomeScreen } from "@/components/ui/Assistant/AssistantWelcomeScreen";

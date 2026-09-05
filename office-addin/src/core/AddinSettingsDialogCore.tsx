@@ -3,6 +3,7 @@ import {
   AudioInputTabContent,
   ModalBase,
   ServersToolsPane,
+  TextSizeSetting,
   useFeatureConfig,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
@@ -218,6 +219,7 @@ export function AddinSettingsDialogCore({
               }
             />
             {hostContribution?.appearanceNotice}
+            <TextSizeSetting />
           </section>
 
           <section

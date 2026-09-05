@@ -1,4 +1,10 @@
-import { cleanup, render, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/app/env", () => ({
@@ -7,7 +13,12 @@ vi.mock("@/app/env", () => ({
 
 import { env } from "@/app/env";
 
-import { THEME_MODE_LOCAL_STORAGE_KEY, ThemeProvider } from "./ThemeProvider";
+import {
+  TEXT_SIZE_LOCAL_STORAGE_KEY,
+  THEME_MODE_LOCAL_STORAGE_KEY,
+  ThemeProvider,
+  useTheme,
+} from "./ThemeProvider";
 
 import type { Env } from "@/app/env";
 import type { CustomThemeConfig } from "@/utils/themeUtils";
@@ -105,6 +116,7 @@ describe("ThemeProvider", () => {
       .forEach((node) => node.remove());
     document.documentElement.removeAttribute("data-theme");
     document.documentElement.removeAttribute("data-theme-name");
+    document.documentElement.removeAttribute("data-text-size");
     document.documentElement.removeAttribute("style");
   });
 
@@ -484,5 +496,72 @@ describe("ThemeProvider", () => {
     expect(varsCss).toContain("--theme-border-field-focus: #6b7280;");
     expect(varsCss).toContain("--theme-border-chat-input-focus: #6b7280;");
     expect(varsCss).toContain("--theme-radius-shell: 1rem;");
+  });
+  it("applies a persisted text size to documentElement", () => {
+    localStorage.setItem(TEXT_SIZE_LOCAL_STORAGE_KEY, "large");
+
+    render(
+      <ThemeProvider>
+        <div>content</div>
+      </ThemeProvider>,
+    );
+
+    expect(document.documentElement).toHaveAttribute("data-text-size", "large");
+  });
+
+  it("sets no text-size attribute for the default or an unknown stored size", () => {
+    const { unmount } = render(
+      <ThemeProvider>
+        <div>content</div>
+      </ThemeProvider>,
+    );
+    expect(document.documentElement).not.toHaveAttribute("data-text-size");
+    unmount();
+
+    localStorage.setItem(TEXT_SIZE_LOCAL_STORAGE_KEY, "huge");
+    render(
+      <ThemeProvider>
+        <div>content</div>
+      </ThemeProvider>,
+    );
+    expect(document.documentElement).not.toHaveAttribute("data-text-size");
+  });
+
+  it("persists a chosen text size unless persistence is disabled", () => {
+    const Chooser = () => {
+      const { setTextSize } = useTheme();
+      return (
+        <button type="button" onClick={() => setTextSize("x-large")}>
+          choose
+        </button>
+      );
+    };
+
+    const { unmount } = render(
+      <ThemeProvider>
+        <Chooser />
+      </ThemeProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "choose" }));
+    expect(document.documentElement).toHaveAttribute(
+      "data-text-size",
+      "x-large",
+    );
+    expect(localStorage.getItem(TEXT_SIZE_LOCAL_STORAGE_KEY)).toBe("x-large");
+    unmount();
+    expect(document.documentElement).not.toHaveAttribute("data-text-size");
+
+    localStorage.clear();
+    render(
+      <ThemeProvider persistTextSize={false}>
+        <Chooser />
+      </ThemeProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "choose" }));
+    expect(document.documentElement).toHaveAttribute(
+      "data-text-size",
+      "x-large",
+    );
+    expect(localStorage.getItem(TEXT_SIZE_LOCAL_STORAGE_KEY)).toBeNull();
   });
 });

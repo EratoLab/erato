@@ -74,14 +74,15 @@ export const useApplySidebarWidth = () => {
   // The customer theme (and its sidebar width) lands asynchronously after
   // mount; re-clamping on theme identity keeps the override from staying
   // pinned to the built-in width's bounds.
-  const { effectiveTheme, customThemeName } = useTheme();
+  // textSize: the min width is measured in px from a rem token.
+  const { effectiveTheme, customThemeName, textSize } = useTheme();
 
   // No unmount cleanup: the override is app-global state, and sidebar
   // instances can overlap during route transitions — a departing instance's
   // cleanup would wipe the value the arriving instance just applied.
   useEffect(() => {
     syncOverrideFromStore(sidebarWidth);
-  }, [sidebarWidth, effectiveTheme, customThemeName]);
+  }, [sidebarWidth, effectiveTheme, customThemeName, textSize]);
 };
 
 interface DragState {

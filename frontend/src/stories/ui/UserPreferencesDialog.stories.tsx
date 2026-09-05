@@ -1,7 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import {
+  ThemeProvider,
+  type TextSize,
+} from "@/components/providers/ThemeProvider";
 import { Button } from "@/components/ui/Controls/Button";
 import { UserPreferencesDialog } from "@/components/ui/Settings/UserPreferencesDialog";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
@@ -11,8 +14,10 @@ import type { Meta, StoryObj } from "@storybook/react";
 
 const UserPreferencesDialogStory = ({
   userProfile,
+  textSize,
 }: {
   userProfile?: UserProfile;
+  textSize?: TextSize;
 }) => {
   const [isOpen, setIsOpen] = useState(true);
   const [queryClient] = useState(
@@ -30,7 +35,12 @@ const UserPreferencesDialogStory = ({
         userPreferences: { enabled: true, mcpServersTabEnabled: true },
       }}
     >
-      <ThemeProvider persistThemeMode={false} enableCustomTheme={false}>
+      <ThemeProvider
+        persistThemeMode={false}
+        enableCustomTheme={false}
+        initialTextSize={textSize}
+        persistTextSize={false}
+      >
         <QueryClientProvider client={queryClient}>
           <div className="min-h-screen bg-theme-bg-secondary p-6">
             <Button variant="secondary" onClick={() => setIsOpen(true)}>
@@ -85,4 +95,13 @@ export const Empty: Story = {
 
 export const WithExistingPreferences: Story = {
   render: () => <UserPreferencesDialogStory userProfile={mockUserProfile} />,
+};
+
+export const LargeTextSize: Story = {
+  render: () => (
+    <UserPreferencesDialogStory
+      userProfile={mockUserProfile}
+      textSize="large"
+    />
+  ),
 };

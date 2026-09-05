@@ -47,6 +47,7 @@ import {
   type StartingAssistantPick,
   type StartScreenChoice,
 } from "./StartingAssistantSetting";
+import { TextSizeSetting } from "./TextSizeSetting";
 
 import type {
   ChatModel,
@@ -834,6 +835,8 @@ export function UserPreferencesDialog({
               </div>
 
               <AppearanceTabContent />
+
+              <TextSizeSetting />
             </section>
 
             {audioInputSettingsEnabled ? (
