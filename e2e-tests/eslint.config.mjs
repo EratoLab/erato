@@ -11,10 +11,11 @@ export default [
     ],
   },
   {
-    files: ["tests/**/*.ts"],
+    files: ["tests/**/*.ts", "storybook-welcome-layout/**/*.ts"],
     languageOptions: { parser: tsParser },
     plugins: { playwright },
     rules: {
+      "playwright/missing-playwright-await": "error",
       // Sleeps are never synchronization: wait on an observable (response,
       // rendered state, stream frame) instead. Bounded absence-window
       // exceptions carry a justified disable comment.
