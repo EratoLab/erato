@@ -192,6 +192,7 @@ export type ThemeRadius = {
   control: string;
   message: string;
   modal: string;
+  dropdown: string;
   pill: string;
 };
 
@@ -228,7 +229,7 @@ export type ThemeSpacing = {
   dropdown: {
     paddingX: string;
     paddingY: string;
-    chromePaddingY: string;
+    chromePadding: string;
   };
   modal: {
     padding: string;
@@ -509,6 +510,7 @@ export const defaultTheme: Theme = {
     control: "0.5rem",
     message: "0.5rem",
     modal: "0.5rem",
+    dropdown: "0.5rem",
     pill: "9999px",
   },
   spacing: {
@@ -544,7 +546,7 @@ export const defaultTheme: Theme = {
     dropdown: {
       paddingX: "1rem",
       paddingY: "0.5rem",
-      chromePaddingY: "0.25rem",
+      chromePadding: "0.25rem",
     },
     modal: {
       padding: "1rem",

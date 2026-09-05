@@ -131,10 +131,12 @@ The typed theme contract is grouped semantically so starter themes can express s
 - `colors.shell` covers app, page, sidebar, chat shell, modal, and dropdown surfaces
 - `colors.message` covers user and assistant message surfaces plus shared hover and controls surfaces
 - `colors.overlay` covers backdrops such as the modal overlay
-- `radius` covers base, shell, input, message, modal, and pill radii
-- `spacing` covers shell, message, controls, sidebar density, and chat input spacing
+- `radius` covers base, shell, input, control, message, modal, dropdown, and pill radii
+- `spacing` covers shell, message, controls, sidebar density, chat input, and dropdown spacing
 - `elevation` covers shell, input, modal, and dropdown shadows
 - `layout` covers chat content width, chat input width, and sidebar width
+
+Dropdown menus nest two shapes. The panel takes `radius.dropdown`, every row is inset by `spacing.dropdown.chromePadding` on all four sides, and the row highlight radius is derived as the panel radius minus that inset. Set those two tokens and the rows stay concentric with the panel; there is no separate row radius to keep in step.
 
 Existing theme JSON can omit these new groups. When a theme does not provide them yet, the corresponding CSS variables fall back to the built-in theme defaults until they are explicitly overridden.
 

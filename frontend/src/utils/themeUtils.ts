@@ -113,6 +113,7 @@ const withBorderRadiusCompatibility = (
       control: override.radius?.control ?? theme.borderRadius,
       message: override.radius?.message ?? theme.borderRadius,
       modal: override.radius?.modal ?? theme.borderRadius,
+      dropdown: override.radius?.dropdown ?? theme.borderRadius,
       pill: override.radius?.pill ?? theme.borderRadius,
     },
   };

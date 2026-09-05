@@ -142,6 +142,7 @@ const getThemeVariableEntries = (theme: Theme): Array<[string, string]> => {
     ["--theme-radius-control", theme.radius.control],
     ["--theme-radius-message", theme.radius.message],
     ["--theme-radius-modal", theme.radius.modal],
+    ["--theme-radius-dropdown", theme.radius.dropdown],
     ["--theme-radius-pill", theme.radius.pill],
     ["--theme-spacing-shell-padding-x", theme.spacing.shell.paddingX],
     ["--theme-spacing-shell-padding-y", theme.spacing.shell.paddingY],
@@ -177,8 +178,8 @@ const getThemeVariableEntries = (theme: Theme): Array<[string, string]> => {
     ["--theme-spacing-dropdown-padding-x", theme.spacing.dropdown.paddingX],
     ["--theme-spacing-dropdown-padding-y", theme.spacing.dropdown.paddingY],
     [
-      "--theme-spacing-dropdown-chrome-padding-y",
-      theme.spacing.dropdown.chromePaddingY,
+      "--theme-spacing-dropdown-chrome-padding",
+      theme.spacing.dropdown.chromePadding,
     ],
     ["--theme-spacing-modal-padding", theme.spacing.modal.padding],
     [

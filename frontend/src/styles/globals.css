@@ -241,6 +241,7 @@
   --theme-radius-control: 0.5rem;
   --theme-radius-message: 0.5rem;
   --theme-radius-modal: 0.5rem;
+  --theme-radius-dropdown: 0.5rem;
   --theme-radius-pill: 9999px;
 
   /* Spacing */
@@ -265,7 +266,7 @@
   --theme-spacing-input-min-height: 2rem;
   --theme-spacing-dropdown-padding-x: 1rem;
   --theme-spacing-dropdown-padding-y: 0.5rem;
-  --theme-spacing-dropdown-chrome-padding-y: 0.25rem;
+  --theme-spacing-dropdown-chrome-padding: 0.25rem;
   --theme-spacing-modal-padding: 1rem;
   --theme-spacing-modal-close-button-padding: 0.25rem;
 
@@ -559,19 +560,22 @@ body {
     border-radius: var(--theme-radius-control);
   }
 
-  .btn-geometry-list-item {
-    padding-inline: var(--theme-spacing-dropdown-padding-x);
-    padding-block: var(--theme-spacing-dropdown-padding-y);
-    border-radius: var(--theme-radius-control);
-  }
-
+  /* Menu rows sit inside .dropdown-panel-chrome-geometry, so their radius is
+     derived, not tokenised: panel radius minus the panel inset keeps the row
+     highlight concentric with the panel corner for any theme values. */
+  .btn-geometry-list-item,
   .dropdown-item-geometry {
     padding-inline: var(--theme-spacing-dropdown-padding-x);
     padding-block: var(--theme-spacing-dropdown-padding-y);
+    border-radius: max(
+      0px,
+      var(--theme-radius-dropdown) -
+        var(--theme-spacing-dropdown-chrome-padding)
+    );
   }
 
   .dropdown-panel-chrome-geometry {
-    padding-block: var(--theme-spacing-dropdown-chrome-padding-y);
+    padding: var(--theme-spacing-dropdown-chrome-padding);
   }
 
   .modal-section-geometry {
@@ -873,7 +877,7 @@ body {
 .anchored-popover-skin {
   background-color: var(--theme-shell-dropdown);
   border-color: var(--theme-border-dropdown);
-  border-radius: var(--theme-radius-base);
+  border-radius: var(--theme-radius-dropdown);
   box-shadow: var(--theme-elevation-dropdown);
   max-width: calc(100vw - 16px);
 }
