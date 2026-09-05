@@ -489,8 +489,6 @@ export const Chat = ({
     null,
   );
   const [isUpdatingChatTitle, setIsUpdatingChatTitle] = useState(false);
-  // ChatInput's audio-mode is hoisted so it survives the empty-state ↔
-  // messages layout flip below.
   const [isAudioMode, setIsAudioMode] = useState(false);
 
   const handleEditTitleSession = useCallback((sessionId: string) => {
