@@ -738,7 +738,7 @@ describe("ChatInput", () => {
     mockUseOptionalTranslation.mockReturnValue(advisory);
 
     const { i18n } = await import("@lingui/core");
-    render(
+    const { container } = render(
       <QueryClientProvider client={queryClient}>
         <I18nProvider i18n={i18n}>
           <ChatInput onSendMessage={onSendMessage} />
@@ -747,6 +747,7 @@ describe("ChatInput", () => {
     );
 
     expect(screen.getByText(advisory)).toBeInTheDocument();
+    expect(container.querySelector("form")).toHaveClass("pb-0");
   });
 
   it("hides the AI usage advisory when disabled by feature config", async () => {
@@ -776,6 +777,37 @@ describe("ChatInput", () => {
     );
 
     expect(screen.queryByText(advisory)).not.toBeInTheDocument();
+  });
+
+  it("leaves the advisory and the form padding to the parent when renderUsageAdvisory is false", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const advisory =
+      "You are interacting with an AI chatbot. Generated answers may contain factual errors and should be verified before use.";
+
+    mockUseOptionalTranslation.mockReturnValue(advisory);
+
+    const { i18n } = await import("@lingui/core");
+    const { container } = render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput
+            onSendMessage={vi.fn()}
+            className="p-2 sm:p-4"
+            renderUsageAdvisory={false}
+          />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.queryByText(advisory)).not.toBeInTheDocument();
+    const form = container.querySelector("form");
+    expect(form).toHaveClass("p-2", "sm:p-4");
+    expect(form).not.toHaveClass("pb-0");
   });
 
   it("uses externally controlled model selection when provided", async () => {

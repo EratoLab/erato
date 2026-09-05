@@ -80,6 +80,7 @@ import { AssistantMentionPopover } from "./AssistantMentionPopover";
 import { ChatInputAddControls } from "./ChatInputAddControls";
 import { ChatInputAudioModeButton } from "./ChatInputAudioModeButton";
 import { ChatInputTokenUsage } from "./ChatInputTokenUsage";
+import { ChatUsageAdvisory } from "./ChatUsageAdvisory";
 import { DelegationRunModePopover } from "./DelegationRunModePopover";
 import { FacetSelector } from "./FacetSelector";
 import { ModelSelector } from "./ModelSelector";
@@ -290,6 +291,12 @@ interface ChatInputProps {
    */
   controlledIsAudioMode?: boolean;
   onControlledIsAudioModeChange?: (isAudioMode: boolean) => void;
+  /**
+   * Pass `false` when the parent renders `ChatUsageAdvisory` itself; the
+   * form then keeps its full bottom padding instead of ceding it to the
+   * inline advisory.
+   */
+  renderUsageAdvisory?: boolean;
 }
 
 interface DictationTarget {
@@ -382,6 +389,7 @@ export const ChatInput = ({
   controlledIsModelSelectionReady,
   controlledIsAudioMode,
   onControlledIsAudioModeChange,
+  renderUsageAdvisory = true,
   ref,
 }: ChatInputPropsWithRef) => {
   const {
@@ -491,14 +499,7 @@ export const ChatInput = ({
     enabled: audioConversationalEnabled,
     maxRecordingDurationSeconds: maxConversationalDurationSeconds,
   } = useAudioConversationalFeature();
-  const { autofocus: shouldAutofocus, showUsageAdvisory = true } =
-    useChatInputFeature();
-  // Dummy for i18n:extract
-  const _aiUsageAdvisoryDefault = t({
-    id: "chat.ai_usage_advisory",
-    message:
-      "You are interacting with an AI chatbot. Generated answers may contain factual errors and should be verified before use.",
-  });
+  const { autofocus: shouldAutofocus } = useChatInputFeature();
   const aiUsageAdvisory = useOptionalTranslation("chat.ai_usage_advisory");
 
   // Use local model selection hook
@@ -2399,7 +2400,7 @@ export const ChatInput = ({
       <form
         ref={formRef}
         className={clsx("w-full ", className, {
-          "pb-0 sm:pb-0": aiUsageAdvisory,
+          "pb-0 sm:pb-0": renderUsageAdvisory && aiUsageAdvisory,
         })}
         onSubmit={handleComposerSubmit}
       >
@@ -3134,13 +3135,7 @@ export const ChatInput = ({
           )}
         </div>
       </form>
-      {showUsageAdvisory && aiUsageAdvisory && (
-        <div className="relative h-10">
-          <p className="absolute inset-0 flex items-center justify-center text-center text-xs text-theme-fg-muted">
-            {aiUsageAdvisory}
-          </p>
-        </div>
-      )}
+      {renderUsageAdvisory ? <ChatUsageAdvisory /> : null}
     </div>
   );
 };
