@@ -338,7 +338,7 @@ export function AssistantWelcomeLower({
   return (
     <div
       className={clsx(
-        "mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] px-4",
+        "mx-auto mt-4 w-full max-w-[var(--theme-layout-chat-input-max-width)] px-4 sm:mt-6",
         className,
       )}
       data-testid="assistant-welcome-screen-lower"
@@ -513,7 +513,7 @@ export function AssistantWelcomeScreen({
   ...props
 }: AssistantWelcomeScreenProps) {
   return (
-    <div className={clsx("flex w-full flex-col gap-8", className)}>
+    <div className={clsx("flex w-full flex-col", className)}>
       <AssistantWelcomeUpper assistant={props.assistant} />
       <AssistantWelcomeLower {...props} />
     </div>
