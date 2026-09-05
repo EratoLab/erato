@@ -58,7 +58,7 @@ describe("FeatureConfigProvider", () => {
       themeAssistantAvatarPath: null,
       disableUpload: false,
       disableChatInputAutofocus: false,
-      chatInputEmptyStateLayout: "bottom",
+      chatInputEmptyStateLayout: "centered",
       disableLogout: false,
       assistantsEnabled: false,
       assistantsShowRecentItems: false,
@@ -132,7 +132,7 @@ describe("FeatureConfigProvider", () => {
         },
         chatInput: {
           autofocus: true,
-          emptyStateLayout: "bottom",
+          emptyStateLayout: "centered",
           showUsageAdvisory: true,
           maxFiles: 10,
         },
@@ -294,7 +294,7 @@ describe("FeatureConfigProvider", () => {
 
       expect(result.current.chatInput).toEqual({
         autofocus: true,
-        emptyStateLayout: "bottom",
+        emptyStateLayout: "centered",
         showUsageAdvisory: false,
         maxFiles: 10,
       });
@@ -590,7 +590,7 @@ describe("FeatureConfigProvider", () => {
 
       expect(result.current).toEqual({
         autofocus: true,
-        emptyStateLayout: "bottom",
+        emptyStateLayout: "centered",
         showUsageAdvisory: true,
         maxFiles: 10,
       });
@@ -665,6 +665,42 @@ describe("FeatureConfigProvider", () => {
       });
 
       expect(result.current.emptyStateLayout).toBe("centered");
+    });
+
+    it("should return a bottom empty-state layout when configured", () => {
+      mockEnv.mockReturnValue({
+        apiRootUrl: "/api/",
+        themeCustomerName: null,
+        themePath: null,
+        themeConfigPath: null,
+        themeLogoPath: null,
+        themeLogoDarkPath: null,
+        themeAssistantAvatarPath: null,
+        disableUpload: false,
+        disableChatInputAutofocus: false,
+        chatInputEmptyStateLayout: "bottom",
+        disableLogout: false,
+        assistantsEnabled: false,
+        assistantsShowRecentItems: false,
+        assistantsShowRecentItemsCollapsible: false,
+        sharepointEnabled: false,
+        sharepointShowDisclaimer: false,
+        messageFeedbackEnabled: false,
+        messageFeedbackCommentsEnabled: false,
+        userPreferencesEnabled: true,
+        userPreferencesDataTabEnabled: true,
+        messageFeedbackEditTimeLimitSeconds: null,
+        maxUploadSizeBytes: 52428800,
+        sidebarCollapsedMode: "hidden",
+        sidebarLogoPath: null,
+        sidebarLogoDarkPath: null,
+      });
+
+      const { result } = renderHook(() => useChatInputFeature(), {
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current.emptyStateLayout).toBe("bottom");
     });
   });
 

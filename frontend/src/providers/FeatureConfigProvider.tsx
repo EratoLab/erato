@@ -249,7 +249,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
   },
   chatInput: {
     autofocus: true,
-    emptyStateLayout: "bottom",
+    emptyStateLayout: "centered",
     showUsageAdvisory: true,
     maxFiles: DEFAULT_MAX_FILES_PER_MESSAGE,
   },

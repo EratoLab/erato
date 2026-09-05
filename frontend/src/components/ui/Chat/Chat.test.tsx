@@ -1,7 +1,7 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
@@ -20,11 +20,28 @@ import type { Messages } from "@lingui/core";
 vi.mock("./ChatHistorySidebar", () => ({
   ChatHistorySidebar: () => <div data-testid="sidebar-stub" />,
 }));
+// Mutable so a test can rerender the same tree under a different chat
+// state or layout mode without swapping the mocks.
+const testState = vi.hoisted(
+  (): {
+    chatContext: Record<string, unknown>;
+    emptyStateLayout: "bottom" | "centered";
+    showUsageAdvisory: boolean;
+  } => ({
+    chatContext: {},
+    emptyStateLayout: "bottom",
+    showUsageAdvisory: true,
+  }),
+);
+
+// An uncontrolled textarea: its draft survives only if Chat keeps the node
+// mounted, which is what the continuity tests check.
 vi.mock("./ChatInput", () => ({
-  ChatInput: (props: { disabled?: boolean }) => (
-    <div
+  ChatInput: (props: { disabled?: boolean; renderUsageAdvisory?: boolean }) => (
+    <textarea
       data-testid="chat-input-stub"
       data-disabled={String(Boolean(props.disabled))}
+      data-render-advisory={String(props.renderUsageAdvisory ?? true)}
     />
   ),
 }));
@@ -46,28 +63,33 @@ vi.mock("@/components/ui/Modal/FilePreviewModal", () => ({
 
 vi.mock("@/providers/ChatProvider", () => ({
   useChatContext: () => ({
-    sendMessage: vi.fn(),
-    editMessage: vi.fn(),
-    regenerateMessage: vi.fn(),
-    isMessagingLoading: false,
-    isPendingResponse: false,
-    chats: [],
-    currentChatId: "origin-1",
-    navigateToChat: vi.fn(),
-    archiveChat: vi.fn(),
-    updateChatTitle: vi.fn(),
-    pinChat: vi.fn(),
-    pinnedChats: [],
-    createNewChat: vi.fn(),
-    isHistoryLoading: false,
-    historyError: null,
-    refetchHistory: vi.fn(),
-    fetchNextHistoryPage: vi.fn(),
-    hasNextHistoryPage: false,
-    isFetchingNextHistoryPage: false,
-    currentChatLastModel: null,
+    ...baseChatContext,
+    ...testState.chatContext,
   }),
 }));
+
+const baseChatContext = {
+  sendMessage: vi.fn(),
+  editMessage: vi.fn(),
+  regenerateMessage: vi.fn(),
+  isMessagingLoading: false,
+  isPendingResponse: false,
+  chats: [],
+  currentChatId: "origin-1",
+  navigateToChat: vi.fn(),
+  archiveChat: vi.fn(),
+  updateChatTitle: vi.fn(),
+  pinChat: vi.fn(),
+  pinnedChats: [],
+  createNewChat: vi.fn(),
+  isHistoryLoading: false,
+  historyError: null,
+  refetchHistory: vi.fn(),
+  fetchNextHistoryPage: vi.fn(),
+  hasNextHistoryPage: false,
+  isFetchingNextHistoryPage: false,
+  currentChatLastModel: null,
+};
 
 vi.mock("@/hooks/chat", () => ({
   useActiveModelSelection: () => ({
@@ -142,7 +164,11 @@ vi.mock("@/hooks/useProfile", () => ({
 }));
 
 vi.mock("@/providers/FeatureConfigProvider", () => ({
-  useChatInputFeature: () => ({ emptyStateLayout: "bottom", maxFiles: 5 }),
+  useChatInputFeature: () => ({
+    emptyStateLayout: testState.emptyStateLayout,
+    showUsageAdvisory: testState.showUsageAdvisory,
+    maxFiles: 5,
+  }),
   useChatSharingFeature: () => ({ enabled: false }),
   usePinnedChatsFeature: () => ({ enabled: false, maxItems: 5 }),
   useSidebarFeature: () => ({ chatHistoryShowMetadata: false }),
@@ -184,29 +210,59 @@ const mockRuns = (chats: RecentChat[]) => {
   });
 };
 
-const renderChat = (props: Partial<Parameters<typeof Chat>[0]> = {}) =>
-  render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
-      <I18nProvider i18n={i18n}>
-        <MemoryRouter>
-          <Chat
-            messages={{}}
-            messageOrder={[]}
-            controlsContext={{}}
-            {...props}
-          />
-        </MemoryRouter>
-      </I18nProvider>
+const chatTree = (props: Partial<Parameters<typeof Chat>[0]> = {}) => (
+  <I18nProvider i18n={i18n}>
+    <MemoryRouter>
+      <Chat messages={{}} messageOrder={[]} controlsContext={{}} {...props} />
+    </MemoryRouter>
+  </I18nProvider>
+);
+
+const renderChat = (props: Partial<Parameters<typeof Chat>[0]> = {}) => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const result = render(
+    <QueryClientProvider client={queryClient}>
+      {chatTree(props)}
     </QueryClientProvider>,
   );
+  return {
+    ...result,
+    rerenderChat: (nextProps: Partial<Parameters<typeof Chat>[0]> = {}) => {
+      result.rerender(
+        <QueryClientProvider client={queryClient}>
+          {chatTree(nextProps)}
+        </QueryClientProvider>,
+      );
+    },
+  };
+};
+
+const welcome = <div data-testid="welcome-stub">Welcome</div>;
+const supplementary = <div data-testid="below-stub">More</div>;
+const firstMessage = {
+  messages: {
+    "user-1": {
+      id: "user-1",
+      content: [],
+      role: "user" as const,
+      sender: "user" as const,
+      authorId: "user-1",
+      createdAt: "2026-08-25T12:00:00.000Z",
+      status: "complete" as const,
+    },
+  },
+  messageOrder: ["user-1"],
+};
+const layoutModes = ["centered", "bottom"] as const;
 
 describe("Chat surface composition", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    testState.chatContext = {};
+    testState.emptyStateLayout = "bottom";
+    testState.showUsageAdvisory = true;
     useGenerationStatusStore.getState().reset();
     (useRecentChats as Mock).mockReturnValue({
       data: undefined,
@@ -322,5 +378,153 @@ describe("Chat surface composition", () => {
       container.querySelector('[data-ui="delegated-runs-section"]'),
     ).toBeNull();
     expect(screen.queryByTestId("chat-input-stub")).toBeNull();
+  });
+});
+
+describe("Chat empty-state shell", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    testState.chatContext = {};
+    testState.emptyStateLayout = "centered";
+    testState.showUsageAdvisory = true;
+    useGenerationStatusStore.getState().reset();
+    mockRuns([]);
+    i18n.load("en", enMessages as unknown as Messages);
+    i18n.activate("en");
+  });
+
+  const shell = (container: HTMLElement, hook: string) =>
+    container.querySelector(`[data-ui="${hook}"]`);
+
+  it("centers the welcome by default and swaps to the bottom shell when configured", () => {
+    const { container, rerenderChat } = renderChat({
+      emptyStateComponent: welcome,
+    });
+
+    expect(shell(container, "chat-empty-state-centered-shell")).not.toBeNull();
+    expect(screen.getByTestId("welcome-stub")).toBeInTheDocument();
+    expect(screen.queryByTestId("message-list-stub")).toBeNull();
+
+    testState.emptyStateLayout = "bottom";
+    rerenderChat({ emptyStateComponent: welcome });
+
+    expect(shell(container, "chat-empty-state-bottom-shell")).not.toBeNull();
+    expect(shell(container, "chat-empty-state-centered-shell")).toBeNull();
+    expect(screen.getByTestId("welcome-stub")).toBeInTheDocument();
+    expect(screen.queryByTestId("message-list-stub")).toBeNull();
+  });
+
+  it.each(layoutModes)(
+    "keeps the same composer node and draft through pending and first message (%s)",
+    (mode) => {
+      testState.emptyStateLayout = mode;
+      const { container, rerenderChat } = renderChat({
+        emptyStateComponent: welcome,
+      });
+      const textbox = screen.getByTestId("chat-input-stub");
+      fireEvent.change(textbox, { target: { value: "draft in progress" } });
+
+      testState.chatContext = { isPendingResponse: true };
+      rerenderChat({ emptyStateComponent: welcome });
+      expect(screen.queryByTestId("welcome-stub")).toBeNull();
+      expect(screen.getByTestId("message-list-stub")).toBeInTheDocument();
+      expect(screen.getByTestId("chat-input-stub")).toBe(textbox);
+
+      testState.chatContext = {};
+      rerenderChat({ emptyStateComponent: welcome, ...firstMessage });
+      expect(shell(container, "chat-conversation-shell")).not.toBeNull();
+      expect(screen.getByTestId("message-list-stub")).toBeInTheDocument();
+      expect(screen.getByTestId("chat-input-stub")).toBe(textbox);
+      expect((textbox as HTMLTextAreaElement).value).toBe("draft in progress");
+    },
+  );
+
+  it.each(layoutModes)(
+    "renders the usage advisory once, in the row below the composer (%s)",
+    (mode) => {
+      testState.emptyStateLayout = mode;
+      const { container } = renderChat({ emptyStateComponent: welcome });
+
+      const advisories = container.querySelectorAll(
+        '[data-ui="chat-usage-advisory"]',
+      );
+      expect(advisories).toHaveLength(1);
+      expect(advisories[0].closest('[data-ui="welcome-below"]')).not.toBeNull();
+      const composerStub = screen.getByTestId("chat-input-stub");
+      expect(
+        composerStub.closest('[data-ui="composer-cluster"]'),
+      ).not.toBeNull();
+      expect(composerStub).toHaveAttribute("data-render-advisory", "false");
+    },
+  );
+
+  it("omits the advisory when the feature is off", () => {
+    testState.showUsageAdvisory = false;
+    const { container } = renderChat({ emptyStateComponent: welcome });
+
+    expect(
+      container.querySelector('[data-ui="chat-usage-advisory"]'),
+    ).toBeNull();
+  });
+
+  it("places supplementary content after the advisory in centered mode", () => {
+    const { container } = renderChat({
+      emptyStateComponent: welcome,
+      emptyStateBelowComponent: supplementary,
+    });
+
+    const below = shell(container, "welcome-below")!;
+    const advisory = below.querySelector('[data-ui="chat-usage-advisory"]')!;
+    const extra = screen.getByTestId("below-stub");
+    expect(below.contains(extra)).toBe(true);
+    expect(
+      advisory.compareDocumentPosition(extra) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(shell(container, "welcome-above")!.contains(extra)).toBe(false);
+  });
+
+  it("places supplementary content after the welcome, above the composer, in bottom mode", () => {
+    testState.emptyStateLayout = "bottom";
+    const { container } = renderChat({
+      emptyStateComponent: welcome,
+      emptyStateBelowComponent: supplementary,
+    });
+
+    const above = shell(container, "welcome-above")!;
+    const extra = screen.getByTestId("below-stub");
+    expect(above.contains(extra)).toBe(true);
+    expect(
+      screen.getByTestId("welcome-stub").compareDocumentPosition(extra) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(shell(container, "welcome-below")!.contains(extra)).toBe(false);
+  });
+
+  it("drops supplementary content once messages exist", () => {
+    renderChat({
+      emptyStateComponent: welcome,
+      emptyStateBelowComponent: supplementary,
+      ...firstMessage,
+    });
+
+    expect(screen.queryByTestId("below-stub")).toBeNull();
+    expect(screen.queryByTestId("welcome-stub")).toBeNull();
+  });
+
+  it("renders a read-only forced-centered state without composer or advisory", () => {
+    testState.emptyStateLayout = "bottom";
+    const { container } = renderChat({
+      emptyStateComponent: welcome,
+      forceCenteredEmptyState: true,
+      readOnly: true,
+    });
+
+    expect(shell(container, "chat-empty-state-centered-shell")).not.toBeNull();
+    expect(screen.getByTestId("welcome-stub")).toBeInTheDocument();
+    expect(screen.queryByTestId("chat-input-stub")).toBeNull();
+    expect(
+      container.querySelector('[data-ui="chat-usage-advisory"]'),
+    ).toBeNull();
   });
 });

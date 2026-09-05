@@ -1338,7 +1338,7 @@ msgid "branding.welcomeScreen.title"
 msgstr "Willkommen beim KI-Assistenten"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
+#: src/components/ui/Chat/ChatUsageAdvisory.tsx
 msgid "chat.ai_usage_advisory"
 msgstr "Sie interagieren mit einem KI-Chatbot. Generierte Antworten können sachliche Fehler enthalten und sollten vor der Verwendung überprüft werden."
 

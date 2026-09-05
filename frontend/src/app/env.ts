@@ -143,7 +143,7 @@ const OFFICE_ADDIN_PUBLIC_BASE_PATH = "/public/platform-office-addin";
 function normalizeChatInputEmptyStateLayout(
   value: string | null | undefined,
 ): "bottom" | "centered" {
-  return value === "centered" ? "centered" : "bottom";
+  return value === "bottom" ? "bottom" : "centered";
 }
 
 export const env = (): Env => {
@@ -216,7 +216,7 @@ export const env = (): Env => {
   const chatInputEmptyStateLayout = normalizeChatInputEmptyStateLayout(
     import.meta.env.VITE_CHAT_INPUT_EMPTY_STATE_LAYOUT ??
       window.CHAT_INPUT_EMPTY_STATE_LAYOUT ??
-      "bottom",
+      "centered",
   );
   const disableLogout =
     import.meta.env.VITE_DISABLE_LOGOUT === "true"
