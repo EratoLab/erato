@@ -13,11 +13,7 @@ import type { ChatSession } from "@/types/chat";
 
 type BaseEmptyStateProps = {
   className?: string;
-  /**
-   * Which side of the composer this instance fills. A registry override is a
-   * whole welcome: it renders once in the upper part and leaves the lower
-   * part empty, so it never gains default content it did not ask for.
-   */
+  /** A registry override is a whole welcome: it renders once in "upper", "lower" stays empty. */
   part?: "upper" | "lower";
 };
 
