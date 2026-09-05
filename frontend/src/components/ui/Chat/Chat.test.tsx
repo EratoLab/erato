@@ -37,10 +37,11 @@ const testState = vi.hoisted(
 // An uncontrolled textarea: its draft survives only if Chat keeps the node
 // mounted, which is what the continuity tests check.
 vi.mock("./ChatInput", () => ({
-  ChatInput: (props: { disabled?: boolean }) => (
+  ChatInput: (props: { disabled?: boolean; renderUsageAdvisory?: boolean }) => (
     <textarea
       data-testid="chat-input-stub"
       data-disabled={String(Boolean(props.disabled))}
+      data-render-advisory={String(props.renderUsageAdvisory ?? true)}
     />
   ),
 }));
@@ -449,11 +450,11 @@ describe("Chat empty-state shell", () => {
       );
       expect(advisories).toHaveLength(1);
       expect(advisories[0].closest('[data-ui="welcome-below"]')).not.toBeNull();
+      const composerStub = screen.getByTestId("chat-input-stub");
       expect(
-        screen
-          .getByTestId("chat-input-stub")
-          .closest('[data-ui="composer-cluster"]'),
+        composerStub.closest('[data-ui="composer-cluster"]'),
       ).not.toBeNull();
+      expect(composerStub).toHaveAttribute("data-render-advisory", "false");
     },
   );
 
