@@ -28,6 +28,15 @@ vi.mock("../icons", () => ({
   ResolvedIcon: () => <span data-testid="starter-prompt-icon" />,
 }));
 
+vi.mock("@/hooks/ui/usePageAlignment", () => ({
+  usePageAlignment: () => ({
+    containerClasses: "max-w-2xl mx-auto",
+    textAlignment: "text-center",
+    flexAlignment: "items-center",
+    justifyAlignment: "justify-center",
+  }),
+}));
+
 describe("StarterPromptsSection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -90,7 +99,10 @@ describe("StarterPromptsSection", () => {
     renderComponent();
 
     expect(screen.getByText("Translated title")).toBeInTheDocument();
-    expect(screen.getByText("Translated subtitle")).toBeInTheDocument();
+    expect(screen.getByTestId("starter-prompt-research_topic")).toHaveAttribute(
+      "title",
+      "Translated subtitle",
+    );
   });
 
   it("falls back to backend labels when locale strings do not exist", () => {
@@ -111,6 +123,9 @@ describe("StarterPromptsSection", () => {
     renderComponent();
 
     expect(screen.getByText("Fallback title")).toBeInTheDocument();
-    expect(screen.getByText("Fallback subtitle")).toBeInTheDocument();
+    expect(screen.getByTestId("starter-prompt-fallback_topic")).toHaveAttribute(
+      "title",
+      "Fallback subtitle",
+    );
   });
 });
