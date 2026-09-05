@@ -129,6 +129,8 @@ describe("WelcomeScreen", () => {
       "max-w-[var(--theme-layout-chat-input-max-width)]",
       "mx-auto",
       "px-4",
+      "mt-4",
+      "sm:mt-6",
     );
     expect(
       screen.getByRole("heading", {

@@ -249,6 +249,8 @@ describe("AssistantWelcomeScreen", () => {
       expect(lower).toContainElement(screen.getByText("chat-1"));
       expect(lower).toHaveClass(
         "max-w-[var(--theme-layout-chat-input-max-width)]",
+        "mt-4",
+        "sm:mt-6",
       );
       expect(
         upper.compareDocumentPosition(lower) & Node.DOCUMENT_POSITION_FOLLOWING,

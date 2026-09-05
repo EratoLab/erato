@@ -158,7 +158,7 @@ export function WelcomeScreenLower({ className = "" }: WelcomeScreenProps) {
   return (
     <div
       className={clsx(
-        "mx-auto flex w-full max-w-[var(--theme-layout-chat-input-max-width)] flex-col px-4",
+        "mx-auto mt-4 flex w-full max-w-[var(--theme-layout-chat-input-max-width)] flex-col px-4 sm:mt-6",
         flexAlignment,
         justifyAlignment,
         className,
@@ -194,7 +194,7 @@ export function WelcomeScreenLower({ className = "" }: WelcomeScreenProps) {
 /** Both parts stacked; the shape a whole-welcome override replaces. */
 export function WelcomeScreen({ className = "" }: WelcomeScreenProps) {
   return (
-    <div className={clsx("flex w-full flex-col gap-6", className)}>
+    <div className={clsx("flex w-full flex-col", className)}>
       <WelcomeScreenUpper />
       <WelcomeScreenLower />
     </div>
