@@ -578,14 +578,14 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
             : baseItems;
         const hiddenCount = isCollapsed ? 0 : itemCount - visibleItems.length;
         const sectionClassName = stickyGroupHeaders
-          ? "attachment-group-geometry bg-[var(--theme-bg-primary)]"
+          ? "attachment-group-geometry overflow-clip border border-[var(--theme-border)] bg-[var(--theme-bg-primary)]"
           : FILE_PREVIEW_STYLES.group.container;
         const headerClassName = clsx(
           stickyGroupHeaders
             ? "flex min-w-0 items-start gap-2"
             : FILE_PREVIEW_STYLES.group.header,
           stickyGroupHeaders &&
-            "attachment-group-header-geometry sticky top-0 z-10 border border-[var(--theme-border)] bg-[var(--theme-bg-primary)]",
+            "attachment-group-header-geometry sticky top-0 z-10 border-b border-[var(--theme-border)] bg-[var(--theme-bg-primary)]",
         );
         // Tiles wrap into rows; checkbox rows and notices stay a column. In
         // practice a group is homogeneous — staged emails are all selectable,
@@ -600,7 +600,7 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
             ? "flex flex-wrap items-start gap-2"
             : "flex flex-col gap-2",
           stickyGroupHeaders &&
-            "attachment-group-items-geometry border-x border-b border-[var(--theme-border)] bg-[var(--theme-bg-primary)]",
+            "attachment-group-items-geometry bg-[var(--theme-bg-primary)]",
         );
 
         const headerInner = (

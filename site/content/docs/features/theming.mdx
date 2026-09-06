@@ -180,7 +180,7 @@ For shell-level overrides in `theme.css`, prefer the app-owned `data-ui` and `da
 - `data-ui="search-result-card"`
 - `data-ui="option-card"` (carries `data-selected="true"` when checked; `data-ui="option-card-icon"` marks its icon tile and `data-ui="option-card-details"` the section shown under a checked card)
 - `data-ui="tab-rail"` (the hand-rolled settings tab rails; their tabs read `--theme-radius-control`)
-- `data-ui="attachment-group"` and `data-ui="thread-message-card"` (attachment group frames and the per-message cards of an email thread)
+- `data-ui="attachment-group"` and `data-ui="thread-message-card"` (attachment group frames and the per-message cards of an email thread; declare `--attachment-tile-radius` on the card to reshape the attachment chips inside it, their icon tiles follow)
 - `data-ui="addin-chat-header"` (the Office add-in's header row when a component kit supplies a top-left accessory)
 
 Every popover panel (dropdown menus, the chat "+" menu, the history filter menu and its flyout, the mention and run-mode menus) also carries the class `anchored-popover-skin`, and every menu row the class `dropdown-item-geometry`. Both are stable hooks: one rule on the skin restyles the whole popover family, and one rule on the row class reshapes every menu row.

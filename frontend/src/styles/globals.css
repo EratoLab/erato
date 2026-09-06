@@ -883,7 +883,11 @@ body {
    the input radius like the app's other framed cards; a card inside derives
    its corner from the frame radius minus the frame inset, so the two stay
    concentric for any theme value. Unlayered so a theme.css rule can retune
-   any of it through the data-ui hooks. */
+   any of it through the data-ui hooks. A sticky-header group clips to the
+   frame (overflow: clip creates no scroll container, so the header still
+   sticks to the outer scroll region) while header and items stay square
+   inside it, so nothing shows through a corner once the frame's top has
+   scrolled away. */
 .attachment-group-geometry {
   --attachment-group-inset: 0.75rem;
   border-radius: var(--theme-radius-input);
@@ -895,16 +899,15 @@ body {
 
 .attachment-group-header-geometry {
   padding: var(--attachment-group-inset) var(--attachment-group-inset) 0.5rem;
-  border-radius: var(--theme-radius-input) var(--theme-radius-input) 0 0;
 }
 
+/* Collapsed, the frame's own bottom border closes the card. */
 .attachment-group-header-geometry[aria-expanded="false"] {
-  border-radius: var(--theme-radius-input);
+  border-bottom-width: 0;
 }
 
 .attachment-group-items-geometry {
   padding: 0.5rem var(--attachment-group-inset) var(--attachment-group-inset);
-  border-radius: 0 0 var(--theme-radius-input) var(--theme-radius-input);
 }
 
 /* The thread card derives from the group frame, and the attachment tiles

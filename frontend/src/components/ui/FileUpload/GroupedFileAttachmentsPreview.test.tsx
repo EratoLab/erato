@@ -304,7 +304,7 @@ describe("GroupedFileAttachmentsPreview", () => {
     expect(screen.getByRole("button", { name: /current email/i })).toHaveClass(
       "sticky",
       "top-0",
-      "border",
+      "border-b",
     );
   });
 
