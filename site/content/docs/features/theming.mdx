@@ -180,7 +180,8 @@ For shell-level overrides in `theme.css`, prefer the app-owned `data-ui` and `da
 - `data-ui="search-result-card"`
 - `data-ui="option-card"` (carries `data-selected="true"` when checked; `data-ui="option-card-icon"` marks its icon tile and `data-ui="option-card-details"` the section shown under a checked card)
 - `data-ui="tab-rail"` (the hand-rolled settings tab rails; their tabs read `--theme-radius-control`)
-- `data-ui="attachment-group"` and `data-ui="thread-message-card"` (attachment group frames and the per-message cards of an email thread; declare `--attachment-tile-radius` on the card to reshape the attachment chips inside it, their icon tiles follow; each chip carries `data-ui="attachment-tile"`)
+- `data-ui="attachment-group"` and `data-ui="thread-message-card"` (attachment group frames and the per-message cards of an email thread; declare `--attachment-tile-radius` on the card to reshape the attachment chips inside it, their icon tiles follow)
+- `data-ui="attachment-tile"` (each attachment chip), `data-ui="attachment-row"` (a selectable attachment row with its checkbox, in kits that offer per-attachment selection), `data-ui="attachment-loading"` (the placeholder while a group's contents load)
 - `data-ui="addin-chat-header"` (the Office add-in's header row when a component kit supplies a top-left accessory)
 
 Every popover panel (dropdown menus, the chat "+" menu, the history filter menu and its flyout, the mention and run-mode menus) also carries the class `anchored-popover-skin`, and every menu row the class `dropdown-item-geometry`. Both are stable hooks: one rule on the skin restyles the whole popover family, and one rule on the row class reshapes every menu row.
@@ -188,6 +189,37 @@ Every popover panel (dropdown menus, the chat "+" menu, the history filter menu 
 Messages also expose `data-role="user"` and `data-role="assistant"` on the message shell.
 
 `message-body` wraps the avatar and the message content. On a user message carrying files, `message-attachments` is a sibling rendered above it, so a fill applied to `message-body` covers the text without covering the attachments; on an assistant message the attachments stay inside `message-body` and the hook is absent. Themes that need to work against both shapes can branch on `:has([data-ui="message-body"])`.
+
+## Surface Glossary
+
+The names people use for these surfaces rarely match the component names, and the same surface can be drawn by the host or by a component kit. This table maps the everyday name to the hook a theme keys on and to where its corner radius comes from, so a theme can give any of them a different shape without touching per-component rules. Elements that carry a `data-ui` hook never use Tailwind rounding utilities; a lint rule enforces that, so every such corner is reachable from a theme.
+
+| What people call it                                        | Hook                                         | Corner comes from                                                                   | Retune                                                               |
+| ---------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Attachment frame, email preview frame                      | `attachment-group`                           | `radius.input`                                                                      | set `radius.input`, or re-declare `--theme-radius-input` on the hook |
+| Email thread card, the collapsible message row             | `thread-message-card`                        | frame radius minus the frame inset                                                  | set `border-radius` on the hook                                      |
+| Attachment chip, file chip inside a thread card            | `attachment-tile`                            | `--attachment-tile-radius`, derived from the card by default; its icon tile follows | declare `--attachment-tile-radius` on `thread-message-card`          |
+| Loading placeholder inside a group                         | `attachment-loading`                         | none, a bare spinner                                                                | style the hook                                                       |
+| Entity card in settings (MCP, apps)                        | `entity-row`                                 | `radius.card`                                                                       | set `radius.card`                                                    |
+| Assistant card, search result card                         | `assistant-list-card`, `search-result-card`  | `radius.card`                                                                       | set `radius.card`                                                    |
+| Option card (appearance, Outlook behaviour), its icon tile | `option-card`, `option-card-icon`            | `radius.control`                                                                    | re-declare `--theme-radius-control` on `option-card`                 |
+| Settings tabs                                              | `tab-rail`                                   | `radius.control`                                                                    | re-declare `--theme-radius-control` on the hook                      |
+| Menu panel, "+" menu, filter menu and flyout               | class `anchored-popover-skin`                | `radius.dropdown`                                                                   | set `radius.dropdown`; rows via class `dropdown-item-geometry`       |
+| Sidebar rows and nav rows                                  | `chat-history-item`, `.sidebar-row-geometry` | `radius.shell`                                                                      | set `radius.shell`                                                   |
+
+Two examples, both from the Open WebUI-like theme:
+
+```css
+/* Pills for the chips inside an email thread card; the icon tiles become circles. */
+[data-ui="thread-message-card"] {
+  --attachment-tile-radius: var(--theme-radius-pill);
+}
+
+/* The same chips as tight rectangles for a denser theme. */
+[data-ui="thread-message-card"] {
+  --attachment-tile-radius: 0.25rem;
+}
+```
 
 ## Custom Logos
 

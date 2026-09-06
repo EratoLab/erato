@@ -10,10 +10,10 @@ import {
   getFileName,
   type FileResource,
 } from "./FilePreviewBase";
-import { FilePreviewLoading } from "./FilePreviewLoading";
 import { FILE_PREVIEW_STYLES } from "./fileUploadStyles";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { Button } from "../Controls/Button";
+import { SpinnerIcon } from "../Feedback/SpinnerIcon";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -217,7 +217,7 @@ interface SelectableAttachmentRowProps {
 }
 
 const SELECTABLE_ROW_CLASS =
-  "flex w-full items-center gap-2 rounded-[var(--theme-radius-base)] border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-2";
+  "flex w-full items-center gap-2 rounded-[var(--attachment-tile-radius,var(--theme-radius-base))] border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-2";
 
 const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
   file,
@@ -266,12 +266,12 @@ const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
 
   if (onPreview) {
     return (
-      <div className={rowClassName}>
+      <div className={rowClassName} data-ui="attachment-tile">
         {checkbox}
         <InteractiveContainer
           onClick={onPreview}
           useDiv={true}
-          className="min-w-0 flex-1 cursor-pointer rounded-[var(--theme-radius-base)] hover:bg-theme-bg-accent"
+          className="min-w-0 flex-1 cursor-pointer rounded-[var(--attachment-tile-radius,var(--theme-radius-base))] hover:bg-theme-bg-accent"
           aria-label={`${t`Preview attachment`} ${filename}`}
         >
           {chip}
@@ -283,11 +283,15 @@ const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
   // Without a toggle there is nothing to label, so the row is a plain
   // container rather than a `label` pointing at a control that isn't there.
   if (!onToggle) {
-    return <div className={rowClassName}>{chip}</div>;
+    return (
+      <div className={rowClassName} data-ui="attachment-tile">
+        {chip}
+      </div>
+    );
   }
 
   return (
-    <label className={rowClassName}>
+    <label className={rowClassName} data-ui="attachment-tile">
       {checkbox}
       {chip}
     </label>
@@ -670,13 +674,23 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
               <div className={itemsClassName}>
                 {visibleItems.map((item) => {
                   if (item.kind === "loading") {
+                    // Inside a group the placeholder is a bare centred
+                    // spinner; the framed loading chip belongs to the
+                    // composer, where a loading file stands in a row of files.
                     return (
-                      <FilePreviewLoading
+                      <div
                         key={item.id}
-                        className="w-full"
-                        label={item.label ?? t`Loading attachment...`}
-                        description={item.description}
-                      />
+                        className="flex w-full justify-center py-2"
+                        data-ui="attachment-loading"
+                      >
+                        <SpinnerIcon
+                          size="md"
+                          srText={item.label ?? t`Loading attachment...`}
+                        />
+                        {item.description ? (
+                          <span className="sr-only">{item.description}</span>
+                        ) : null}
+                      </div>
                     );
                   }
 
