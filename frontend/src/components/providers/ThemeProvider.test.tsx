@@ -291,13 +291,14 @@ describe("ThemeProvider", () => {
               },
               radius: {
                 shell: "1.25rem",
+                dropdown: "0.75rem",
               },
               elevation: {
                 dropdown: "0 16px 32px rgba(15, 23, 42, 0.18)",
               },
               spacing: {
                 dropdown: {
-                  chromePaddingY: "0.375rem",
+                  chromePadding: "0.375rem",
                 },
                 modal: {
                   closeButtonPadding: "0.375rem",
@@ -389,11 +390,12 @@ describe("ThemeProvider", () => {
       "--theme-overlay-modal: rgba(76, 29, 149, 0.32);",
     );
     expect(varsCss).toContain("--theme-radius-shell: 1.25rem;");
+    expect(varsCss).toContain("--theme-radius-dropdown: 0.75rem;");
     expect(varsCss).toContain(
       "--theme-elevation-dropdown: 0 16px 32px rgba(15, 23, 42, 0.18);",
     );
     expect(varsCss).toContain(
-      "--theme-spacing-dropdown-chrome-padding-y: 0.375rem;",
+      "--theme-spacing-dropdown-chrome-padding: 0.375rem;",
     );
     expect(varsCss).toContain(
       "--theme-spacing-modal-close-button-padding: 0.375rem;",

@@ -18,6 +18,7 @@ describe("mergeThemeWithOverrides", () => {
       control: "1.25rem",
       message: "1.25rem",
       modal: "1.25rem",
+      dropdown: "1.25rem",
       pill: "1.25rem",
     });
   });

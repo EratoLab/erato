@@ -83,7 +83,7 @@ const sectionDivider = "my-1 h-px bg-theme-border";
 // typography and hover/focus colors — so customer themes retune every menu
 // surface together.
 const rowClassName =
-  "dropdown-item-geometry theme-transition flex w-full items-center gap-2 rounded-[var(--theme-radius-control)] text-left text-sm text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary focus:bg-theme-bg-hover focus:text-theme-fg-primary focus:outline-none focus:ring-1 focus:ring-inset focus:ring-theme-border-dropdown";
+  "dropdown-item-geometry theme-transition flex w-full items-center gap-2 text-left text-sm text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary focus:bg-theme-bg-hover focus:text-theme-fg-primary focus:outline-none focus:ring-1 focus:ring-inset focus:ring-theme-border-dropdown";
 
 function buildRow<V extends string>(
   key: SubmenuKey,

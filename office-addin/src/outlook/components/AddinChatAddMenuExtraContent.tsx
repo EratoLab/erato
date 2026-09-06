@@ -13,7 +13,7 @@ const headerClassName =
 // Same row recipe as the shared "+" menu / DropdownMenu item channel, so
 // customer themes retune these injected rows together with every other menu.
 const rowClassName =
-  "dropdown-item-geometry theme-transition flex w-full items-start justify-between gap-2 rounded-[var(--theme-radius-control)] text-left text-sm text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary focus:bg-theme-bg-hover focus:text-theme-fg-primary focus:outline-none focus:ring-1 focus:ring-inset focus:ring-theme-border-dropdown disabled:cursor-not-allowed disabled:opacity-50";
+  "dropdown-item-geometry theme-transition flex w-full items-start justify-between gap-2 text-left text-sm text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary focus:bg-theme-bg-hover focus:text-theme-fg-primary focus:outline-none focus:ring-1 focus:ring-inset focus:ring-theme-border-dropdown disabled:cursor-not-allowed disabled:opacity-50";
 const infoRowClassName = "dropdown-item-geometry text-xs";
 
 function formatFileSize(size: number): string {
