@@ -292,6 +292,7 @@ describe("ThemeProvider", () => {
               radius: {
                 shell: "1.25rem",
                 dropdown: "0.75rem",
+                card: "1.5rem",
               },
               elevation: {
                 dropdown: "0 16px 32px rgba(15, 23, 42, 0.18)",
@@ -391,6 +392,7 @@ describe("ThemeProvider", () => {
     );
     expect(varsCss).toContain("--theme-radius-shell: 1.25rem;");
     expect(varsCss).toContain("--theme-radius-dropdown: 0.75rem;");
+    expect(varsCss).toContain("--theme-radius-card: 1.5rem;");
     expect(varsCss).toContain(
       "--theme-elevation-dropdown: 0 16px 32px rgba(15, 23, 42, 0.18);",
     );

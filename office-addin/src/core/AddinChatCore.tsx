@@ -89,9 +89,12 @@ const floatingTriggerStyle: CSSProperties = {
 function HistoryDrawerTrigger({
   isOpen,
   onOpen,
+  floating = true,
 }: {
   isOpen: boolean;
   onOpen: () => void;
+  /** In a header row the trigger sits in flow; `relative` keeps its badge anchored. */
+  floating?: boolean;
 }) {
   const attentionCount = useGenerationIndicatorCount();
 
@@ -121,7 +124,11 @@ function HistoryDrawerTrigger({
               message: "Open menu",
             })
       }
-      className="absolute left-2 top-2 z-20 border"
+      className={
+        floating
+          ? "absolute left-2 top-2 z-20 border"
+          : "relative my-2 ml-2 shrink-0 border"
+      }
       style={floatingTriggerStyle}
       data-testid="addin-history-drawer-trigger"
     >
@@ -671,10 +678,34 @@ export function AddinChatCoreView({
           through the session controller instead of routes the pane lacks. */}
       <DelegatedRunOpenProvider onOpen={controller.openChatById}>
         <div className="app-shell-skin relative flex size-full min-w-0 flex-col">
-          <HistoryDrawerTrigger
-            isOpen={controller.isHistoryMenuOpen}
-            onOpen={() => controller.setIsHistoryMenuOpen(true)}
-          />
+          {TopLeftAccessory ? (
+            // A kit accessory earns a header row and the trigger joins it in
+            // flow, so neither can land on the other at any pane width.
+            // pr-12, not pr-10: the start-view toggle is 8px plus up to 36px.
+            <div
+              className={`flex min-w-0 items-center${hasStartViewToggle ? " pr-12" : ""}`}
+              data-ui="addin-chat-header"
+            >
+              <HistoryDrawerTrigger
+                floating={false}
+                isOpen={controller.isHistoryMenuOpen}
+                onOpen={() => controller.setIsHistoryMenuOpen(true)}
+              />
+              <div className="min-w-0 flex-1">
+                <TopLeftAccessory
+                  availableModels={controller.availableModels}
+                  selectedModel={controller.selectedModel}
+                  onModelChange={controller.setSelectedModel}
+                  isModelSelectionReady={controller.isSelectionReady}
+                />
+              </div>
+            </div>
+          ) : (
+            <HistoryDrawerTrigger
+              isOpen={controller.isHistoryMenuOpen}
+              onOpen={() => controller.setIsHistoryMenuOpen(true)}
+            />
+          )}
 
           <ChatErrorBoundary onReset={() => void controller.refetchHistory()}>
             <div
@@ -713,23 +744,12 @@ export function AddinChatCoreView({
               {beforeMessages}
               {controller.delegatedRunHeader ? (
                 // pl-10 clears the floating drawer trigger, which otherwise
-                // sits on the header's title.
+                // sits on the header's title; with a header row the trigger
+                // is in flow and needs no clearance.
                 <div
-                  className={`relative z-10 shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3 pl-10${hasStartViewToggle ? " pr-10" : ""}`}
+                  className={`relative z-10 shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3${TopLeftAccessory ? "" : " pl-10"}${hasStartViewToggle ? " pr-10" : ""}`}
                 >
                   {controller.delegatedRunHeader}
-                </div>
-              ) : null}
-              {TopLeftAccessory ? (
-                // Cleared past the floating drawer trigger, which otherwise
-                // sits exactly on a top-left accessory.
-                <div className={`pl-10${hasStartViewToggle ? " pr-10" : ""}`}>
-                  <TopLeftAccessory
-                    availableModels={controller.availableModels}
-                    selectedModel={controller.selectedModel}
-                    onModelChange={controller.setSelectedModel}
-                    isModelSelectionReady={controller.isSelectionReady}
-                  />
                 </div>
               ) : null}
               <MessageEditProvider value={controller.messageEditValue}>

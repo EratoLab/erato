@@ -670,7 +670,7 @@ function AssistantListCard({
     <div
       data-ui="assistant-list-card"
       data-testid="assistant-list-item"
-      className="rounded-lg border border-theme-border bg-theme-bg-primary p-4"
+      className="rounded-[var(--theme-radius-card)] border border-theme-border bg-theme-bg-primary p-4"
     >
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <button

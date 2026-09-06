@@ -256,6 +256,24 @@ const eslintConfig = [
       lingui: linguiPlugin,
     },
     rules: {
+      // A data-ui hook promises a theme it can retune the surface. A Tailwind
+      // rounding utility on the same element would sit outside every token
+      // and geometry class, so the corner has to come from one of those.
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            'JSXOpeningElement:has(JSXAttribute[name.name="data-ui"]) JSXAttribute[name.name="className"] Literal[value=/(^|\\s)rounded(?!-\\[)(-(t|b|l|r|tl|tr|bl|br|s|e|ss|se|es|ee))?(-(none|sm|md|lg|xl|2xl|3xl|full))?(\\s|$)/]',
+          message:
+            "Elements carrying a data-ui hook take their corner radius from a token-reading class or a rounded-[var(--theme-radius-…)] value, never a Tailwind rounded-* utility, so customer themes can retune them.",
+        },
+        {
+          selector:
+            'JSXOpeningElement:has(JSXAttribute[name.name="data-ui"]) JSXAttribute[name.name="className"] TemplateElement[value.raw=/(^|\\s)rounded(?!-\\[)(-(t|b|l|r|tl|tr|bl|br|s|e|ss|se|es|ee))?(-(none|sm|md|lg|xl|2xl|3xl|full))?(\\s|$)/]',
+          message:
+            "Elements carrying a data-ui hook take their corner radius from a token-reading class or a rounded-[var(--theme-radius-…)] value, never a Tailwind rounded-* utility, so customer themes can retune them.",
+        },
+      ],
       // Lingui i18n rules - detect hardcoded strings in user-facing code only
       "lingui/no-unlocalized-strings": [
         "warn",

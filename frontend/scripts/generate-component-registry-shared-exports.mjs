@@ -262,6 +262,14 @@ const ownExports = (filePath) => {
   return exports;
 };
 
+// Kit-facing modules that stay on the surface even when no registry component
+// imports them any more. A deployed kit links against the surface by name, so
+// a module leaving it is a load-time failure for that kit; pinning it here
+// beats keeping a dead import alive in a host component.
+const pinnedComponentModules = [
+  path.join(componentsDir, "ui", "FileUpload", "FilePreviewLoading.tsx"),
+];
+
 const collectRegistryComponentModules = () => {
   const configPath = path.join(rootDir, "tsconfig.json");
   const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
@@ -286,7 +294,7 @@ const collectRegistryComponentModules = () => {
     registryPath,
   );
   const componentModules = new Set();
-  const pendingModules = [...registryRoots];
+  const pendingModules = [...registryRoots, ...pinnedComponentModules];
 
   while (pendingModules.length > 0) {
     const modulePath = pendingModules.pop();

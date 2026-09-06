@@ -165,7 +165,10 @@ describe("AssistantHubVersionCard", () => {
       document.querySelector(
         '[data-ui="assistant-hub-management-card-category"]',
       ),
-    ).toHaveClass("rounded-full", "bg-theme-bg-secondary");
+    ).toHaveClass(
+      "rounded-[var(--theme-radius-pill)]",
+      "bg-theme-bg-secondary",
+    );
 
     const rating = document.querySelector<HTMLElement>(
       '[data-ui="assistant-hub-management-card-rating"]',
@@ -220,7 +223,10 @@ describe("AssistantHubVersionOverviewSection", () => {
     expect(header).toContainElement(screen.getByText("by Assistant creator"));
     expect(
       document.querySelector('[data-ui="assistant-hub-overview-category"]'),
-    ).toHaveClass("rounded-full", "bg-theme-bg-secondary");
+    ).toHaveClass(
+      "rounded-[var(--theme-radius-pill)]",
+      "bg-theme-bg-secondary",
+    );
 
     const rating = document.querySelector<HTMLElement>(
       '[data-ui="assistant-hub-overview-rating"]',

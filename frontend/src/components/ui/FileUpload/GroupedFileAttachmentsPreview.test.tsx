@@ -85,7 +85,7 @@ describe("GroupedFileAttachmentsPreview", () => {
     expect(screen.getByText("notes.docx")).toBeVisible();
   });
 
-  it("renders loading items inline with the standardized loading row", async () => {
+  it("renders loading items as a bare spinner with an accessible label", async () => {
     await renderWithI18n(
       <GroupedFileAttachmentsPreview
         groups={[
@@ -104,8 +104,10 @@ describe("GroupedFileAttachmentsPreview", () => {
       />,
     );
 
-    expect(screen.getByText(/loading attachment/i)).toBeVisible();
-    expect(screen.getByText(/please wait/i)).toBeVisible();
+    // A status region takes its name from an author label, not its content,
+    // so the spinner's screen-reader text is asserted as text.
+    expect(screen.getByText(/loading attachment/i)).toBeInTheDocument();
+    expect(screen.queryByText(/please wait/i)).not.toBeInTheDocument();
   });
 
   it("supports custom loading labels for grouped async sources", async () => {
@@ -304,7 +306,7 @@ describe("GroupedFileAttachmentsPreview", () => {
     expect(screen.getByRole("button", { name: /current email/i })).toHaveClass(
       "sticky",
       "top-0",
-      "border",
+      "border-b",
     );
   });
 

@@ -154,6 +154,7 @@ export function AddinSettingsDialogCore({
         <div className="shrink-0 border-b border-theme-border pb-2">
           <div
             role="tablist"
+            data-ui="tab-rail"
             aria-label={dialogTitle}
             aria-orientation="horizontal"
             className="flex gap-1 overflow-x-auto"

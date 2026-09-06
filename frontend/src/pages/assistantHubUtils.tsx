@@ -386,7 +386,7 @@ export function AssistantHubVersionCard({
       >
         <span
           aria-hidden="true"
-          className="flex size-10 shrink-0 items-center justify-center rounded-full bg-theme-bg-secondary text-sm font-semibold text-theme-fg-primary"
+          className="flex size-10 shrink-0 items-center justify-center rounded-[var(--theme-radius-pill)] bg-theme-bg-secondary text-sm font-semibold text-theme-fg-primary"
           data-ui="assistant-hub-card-avatar"
         >
           {avatarLetter}
@@ -436,7 +436,7 @@ export function AssistantHubVersionCard({
         )}
         {categoryNames.length > 0 && (
           <span
-            className="ml-auto truncate rounded-full bg-theme-bg-secondary px-2 py-1 text-xs font-medium text-theme-fg-secondary"
+            className="ml-auto truncate rounded-[var(--theme-radius-pill)] bg-theme-bg-secondary px-2 py-1 text-xs font-medium text-theme-fg-secondary"
             data-ui="assistant-hub-card-category"
           >
             {categoryNames.join(", ")}
@@ -491,7 +491,7 @@ export function AssistantHubVersionCard({
         {categoryNames.map((categoryName) => (
           <span
             key={categoryName}
-            className="inline-flex min-h-6 items-center rounded-full bg-theme-bg-secondary px-2 py-1 text-xs font-medium text-theme-fg-secondary"
+            className="inline-flex min-h-6 items-center rounded-[var(--theme-radius-pill)] bg-theme-bg-secondary px-2 py-1 text-xs font-medium text-theme-fg-secondary"
             data-ui="assistant-hub-management-card-category"
           >
             {categoryName}
@@ -593,7 +593,7 @@ export function AssistantHubVersionOverviewSection({
         >
           <span
             aria-hidden="true"
-            className="flex size-14 shrink-0 items-center justify-center rounded-full bg-theme-bg-secondary text-xl font-semibold text-theme-fg-primary"
+            className="flex size-14 shrink-0 items-center justify-center rounded-[var(--theme-radius-pill)] bg-theme-bg-secondary text-xl font-semibold text-theme-fg-primary"
             data-ui="assistant-hub-overview-avatar"
           >
             {avatarLetter}
@@ -614,7 +614,7 @@ export function AssistantHubVersionOverviewSection({
               {categoryNames.map((categoryName) => (
                 <span
                   key={categoryName}
-                  className="rounded-full bg-theme-bg-secondary px-2 py-1 text-xs font-medium text-theme-fg-secondary"
+                  className="rounded-[var(--theme-radius-pill)] bg-theme-bg-secondary px-2 py-1 text-xs font-medium text-theme-fg-secondary"
                   data-ui="assistant-hub-overview-category"
                 >
                   {categoryName}

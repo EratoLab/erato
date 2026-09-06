@@ -806,12 +806,21 @@ export const Chat = ({
               </div>
             )}
             {TopLeftAccessory ? (
-              <TopLeftAccessory
-                availableModels={availableModels}
-                selectedModel={selectedModel}
-                onModelChange={setSelectedModel}
-                isModelSelectionReady={isSelectionReady}
-              />
+              // In hidden mode the sidebar's floating toggle sits at the
+              // page's top-left; reserve its column so an in-flow accessory
+              // does not slide under it.
+              <div
+                className={clsx(
+                  sidebarCollapsed && collapsedMode === "hidden" && "pl-12",
+                )}
+              >
+                <TopLeftAccessory
+                  availableModels={availableModels}
+                  selectedModel={selectedModel}
+                  onModelChange={setSelectedModel}
+                  isModelSelectionReady={isSelectionReady}
+                />
+              </div>
             ) : null}
             {shouldRenderCenteredEmptyState ? (
               <div

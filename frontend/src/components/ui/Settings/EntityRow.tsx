@@ -73,7 +73,8 @@ export function EntityRow({
 
   return (
     <article
-      className="rounded-[var(--theme-radius-control)] border border-theme-border bg-theme-bg-secondary"
+      className="rounded-[var(--theme-radius-card)] border border-theme-border bg-theme-bg-secondary"
+      data-ui="entity-row"
       data-testid={dataTestId}
     >
       <div className="flex items-center gap-2 p-3">
