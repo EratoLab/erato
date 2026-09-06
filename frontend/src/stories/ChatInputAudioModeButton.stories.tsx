@@ -48,6 +48,26 @@ export const IdleDisabled: Story = {
   ),
 };
 
+export const Starting: Story = {
+  name: "Recording (starting)",
+  render: () => (
+    <ChatInputAudioModeButton
+      isRecording
+      isStarting
+      recordingBars={[3, 5, 7, 5, 3]}
+      onToggle={action("toggle")}
+    />
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Session handshake and mic warm-up: a spinner replaces the waveform so nobody is invited to speak yet. The button stays clickable — it is the only way to stop audio mode.",
+      },
+    },
+  },
+};
+
 export const RecordingStaticBars: Story = {
   name: "Recording (frozen bars)",
   render: () => (

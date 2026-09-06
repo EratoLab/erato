@@ -3,8 +3,9 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
+import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { TeamsConversationView } from "@/components/ui/Teams/TeamsConversationView";
-import { ArrowLeftIcon, LoadingIcon } from "@/components/ui/icons";
+import { ArrowLeftIcon } from "@/components/ui/icons";
 import { createLogger } from "@/utils/debugLogger";
 import { parseTeamsTranscriptIndex } from "@/utils/teams/teamsTranscriptIndex";
 
@@ -140,8 +141,7 @@ export const TeamsTranscriptPreview: React.FC<TeamsTranscriptPreviewProps> = ({
   if (state.kind === "loading") {
     return (
       <div className="flex min-h-[30vh] items-center justify-center">
-        <LoadingIcon className="size-6 animate-spin text-theme-fg-muted" />
-        <span className="sr-only">{t`Loading conversation…`}</span>
+        <SpinnerIcon size="lg" srText={t`Loading conversation…`} />
       </div>
     );
   }

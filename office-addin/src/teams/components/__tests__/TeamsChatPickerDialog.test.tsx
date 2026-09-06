@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -122,7 +123,22 @@ vi.mock("@erato/frontend/library", () => ({
   FolderIcon: () => null,
   PageIcon: () => null,
   SearchIcon: () => null,
-  SpinnerIcon: () => null,
+  // The mock carries the primitive's ARIA contract: `aria-hidden` is what
+  // drops `role="status"`, and that is what the test asserts.
+  SpinnerIcon: ({
+    "aria-hidden": ariaHidden,
+    className,
+  }: {
+    "aria-hidden"?: boolean;
+    className?: string;
+  }) =>
+    ariaHidden ? (
+      <span data-ui="spinner" aria-hidden="true" className={className} />
+    ) : (
+      <span data-ui="spinner" role="status" className={className}>
+        Loading...
+      </span>
+    ),
   FilePreviewModal: ({
     isOpen,
     file,
@@ -1126,6 +1142,53 @@ describe("TeamsChatPickerDialog", () => {
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(openSpy).not.toHaveBeenCalled();
+  });
+
+  it("keeps the downloading chip's spinner out of the accessibility tree", () => {
+    // Never resolves: the chip stays in its loading state for the assertions.
+    hooks.fileFetcher = {
+      downloadSharedFile: vi.fn(() => new Promise<never>(() => {})),
+    };
+    hooks.messages = messagesResult({
+      messages: [
+        {
+          chatId: MOCK_CHAT_ID,
+          messageId: "1754000000000",
+          senderName: "Max Token",
+          createdAt: "2026-08-10T09:15:00Z",
+          editedAt: null,
+          subject: null,
+          text: "check this PDF guys",
+          markers: ["[attachment: multipage-test.pdf]"],
+          replyToId: null,
+          deepLink: "https://example.invalid/m",
+          sharedFiles: [
+            {
+              attachmentId: "att-1",
+              name: "multipage-test.pdf",
+              contentUrl: "https://contoso.sharepoint.com/multipage-test.pdf",
+            },
+          ],
+          imageUrls: [],
+        },
+      ],
+    });
+    renderPicker();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Product sync" }));
+    const chip = screen.getByRole("button", {
+      name: "Open multipage-test.pdf",
+    });
+    fireEvent.click(chip);
+
+    expect(chip).toHaveAttribute("aria-busy", "true");
+    const spinner = chip.querySelector('[data-ui="spinner"]');
+    expect(spinner).not.toBeNull();
+    expect(spinner).toHaveAttribute("aria-hidden", "true");
+    // The chip already names itself; a status region inside it would announce
+    // "Loading..." as a second, competing name for the same control.
+    expect(within(chip).queryByRole("status")).toBeNull();
+    expect(chip).toHaveAccessibleName("Open multipage-test.pdf");
   });
 
   it("says a refused shared file was too large, not the wrong file type", async () => {

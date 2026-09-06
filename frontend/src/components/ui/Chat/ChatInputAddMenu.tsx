@@ -14,9 +14,17 @@ import { useRovingMenuFocus } from "@/hooks/ui/useRovingMenuFocus";
 import { AnchoredPopover } from "../Controls/AnchoredPopover";
 import { Button } from "../Controls/Button";
 import { CountBadge } from "../Controls/CountBadge";
-import { CheckIcon, LoadingIcon, PlusIcon } from "../icons";
+import { SpinnerIcon } from "../Feedback/SpinnerIcon";
+import { CheckIcon, PlusIcon } from "../icons";
 
 import type React from "react";
+
+// The ring swaps into the same slot as a 20px PlusIcon, so it takes that
+// diameter rather than the nearest size step.
+const TRIGGER_RING_STYLE = {
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  "--spinner-size": "1.25rem",
+} as React.CSSProperties;
 
 /** Fields shared by every row in the "+" menu. */
 export interface AddMenuItemBase {
@@ -445,7 +453,7 @@ export function ChatInputAddMenu({
           className={clsx("relative", className)}
           icon={
             isProcessing ? (
-              <LoadingIcon className="size-5 animate-spin" />
+              <SpinnerIcon size="md" style={TRIGGER_RING_STYLE} />
             ) : (
               <PlusIcon className="size-5" />
             )

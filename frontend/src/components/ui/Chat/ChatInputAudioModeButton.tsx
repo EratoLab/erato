@@ -3,7 +3,6 @@ import { t } from "@lingui/core/macro";
 import { Waveform, audioLevelsToBarHeights } from "./Waveform";
 import { WaveformButton } from "./WaveformButton";
 import { Button } from "../Controls/Button";
-import { LoadingIcon } from "../icons";
 
 // Symmetric, gently peaked pattern shown in idle (resting) state. Values
 // flow through the same `max(v, 2) * 2` scale + 14px clamp as live bars,
@@ -59,12 +58,8 @@ export function ChatInputAudioModeButton(props: ChatInputAudioModeButtonProps) {
           aria-label={t`Stop audio mode`}
           title={t`Stop audio mode`}
           data-testid="chat-input-audio-mode-stop"
-          icon={
-            <LoadingIcon
-              className="size-4 animate-spin text-[var(--theme-fg-primary)]"
-              data-testid="chat-input-audio-mode-starting-icon"
-            />
-          }
+          busy
+          iconClassName="text-[var(--theme-fg-primary)]"
         />
       );
     }

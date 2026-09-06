@@ -54,6 +54,13 @@ interface ButtonProps
    * pattern callers previously hand-rolled.
    */
   loading?: boolean;
+  /**
+   * Like `loading`, but the button stays clickable — for work the button
+   * itself can interrupt, where disabling would trap the user (starting a
+   * recording that only this button can stop). `loading` wins when both are
+   * set, because only `loading` disables.
+   */
+  busy?: boolean;
   "aria-label"?: string;
   "aria-pressed"?: boolean;
   "aria-checked"?: boolean | "true" | "false" | "mixed";
@@ -144,6 +151,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       className,
       showOnHover,
       loading = false,
+      busy = false,
       disabled,
       type = "button", // Default to "button" to prevent accidental form submissions
       onClick,
@@ -305,15 +313,23 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           role={role}
           {...props}
           disabled={isDisabled}
-          aria-busy={loading || undefined}
+          aria-busy={loading || busy || undefined}
         >
-          {(loading || icon) && (
+          {(loading || busy || icon) && (
             <span
               className={iconClasses}
-              style={loading ? LOADING_RING_STYLE : undefined}
+              style={loading || busy ? LOADING_RING_STYLE : undefined}
               aria-hidden="true"
             >
-              {loading ? <SpinnerIcon size="sm" /> : icon}
+              {loading ? (
+                <SpinnerIcon size="sm" />
+              ) : busy ? (
+                // `busy` fills the 16px icon slot; `loading` stays 12px, the
+                // size its call sites are laid out for.
+                <SpinnerIcon size="md" />
+              ) : (
+                icon
+              )}
             </span>
           )}
           {children}

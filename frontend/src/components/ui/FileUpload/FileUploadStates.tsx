@@ -1,9 +1,20 @@
 import { t } from "@lingui/core/macro";
+import clsx from "clsx";
 import { memo } from "react";
 
 import { Button } from "../Controls";
 import { CopyErrorButton } from "../Feedback/CopyErrorButton";
-import { LoadingIcon, ErrorIcon } from "../icons";
+import { SpinnerIcon } from "../Feedback/SpinnerIcon";
+import { ErrorIcon } from "../icons";
+
+import type { CSSProperties } from "react";
+
+// The button's icon slot is 20px, which falls between the 16 and 24 size
+// steps.
+const UPLOAD_RING_STYLE = {
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  "--spinner-size": "1.25rem",
+} as CSSProperties;
 
 /**
  * Props for the loading state component
@@ -13,17 +24,22 @@ export interface FileUploadLoadingProps {
   className?: string;
   /** Custom label for accessibility */
   label?: string;
+  /**
+   * Shape of the control this stands in for, so swapping to it does not
+   * change the button's size or fill. Defaults to the filled upload button.
+   */
+  variant?: "secondary" | "ghost";
 }
 
 export const FileUploadLoading = memo<FileUploadLoadingProps>(
-  ({ className = "", label = t`Uploading file` }) => (
+  ({ className = "", label = t`Uploading file`, variant = "secondary" }) => (
     <Button
       disabled
-      className={className}
+      className={clsx("flex min-w-fit items-center justify-center", className)}
       aria-label={label}
-      variant="secondary"
+      variant={variant}
     >
-      <LoadingIcon className="size-5 animate-spin text-[var(--theme-fg-muted)]" />
+      <SpinnerIcon size="md" aria-hidden style={UPLOAD_RING_STYLE} />
     </Button>
   ),
 );

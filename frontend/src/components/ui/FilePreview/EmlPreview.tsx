@@ -5,12 +5,12 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
+import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { formatFileSize } from "@/components/ui/FileUpload/FilePreviewBase";
 import {
   ArrowLeftIcon,
   ChevronDownIcon,
   ChevronRightIcon,
-  LoadingIcon,
   MailIcon,
   PageIcon,
 } from "@/components/ui/icons";
@@ -268,7 +268,7 @@ export const EmlPreview: React.FC<EmlPreviewProps> = ({ url }) => {
         aria-busy="true"
         data-testid="eml-preview-loading"
       >
-        <LoadingIcon className="size-6 animate-spin text-[var(--theme-fg-muted)]" />
+        <SpinnerIcon size="lg" aria-hidden />
       </div>
     );
   }
@@ -484,7 +484,7 @@ const EmlThreadBody: React.FC<{ parsed: ParsedEml }> = ({ parsed }) => {
         aria-busy="true"
         data-testid="eml-thread-loading"
       >
-        <LoadingIcon className="size-6 animate-spin text-[var(--theme-fg-muted)]" />
+        <SpinnerIcon size="lg" aria-hidden />
       </div>
     );
   }
