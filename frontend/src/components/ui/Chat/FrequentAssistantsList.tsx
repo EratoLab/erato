@@ -5,6 +5,7 @@ import { useFrequentAssistants } from "@/lib/generated/v1betaApi/v1betaApiCompon
 import { createLogger } from "@/utils/debugLogger";
 
 import { InteractiveContainer } from "../Container/InteractiveContainer";
+import { SpinnerIcon } from "../Feedback/SpinnerIcon";
 
 const logger = createLogger("UI", "FrequentAssistantsList");
 
@@ -87,7 +88,7 @@ export const FrequentAssistantsList = memo<FrequentAssistantsListProps>(
         {/* Loading state */}
         {isLoading && (
           <div className="flex justify-center py-4">
-            <div className="size-5 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
+            <SpinnerIcon size="md" />
           </div>
         )}
 

@@ -4,6 +4,7 @@ import { lazy, Suspense } from "react";
 import { Routes, Route, Link, Outlet, Navigate } from "react-router-dom";
 
 import { ClientProviders } from "./components/providers/ClientProviders";
+import { SpinnerIcon } from "./components/ui/Feedback/SpinnerIcon";
 // These logic-only route sentinels must not suspend while a newly created chat
 // switches from /chat/new to /chat/:id; doing so hides the optimistic messages.
 import ChatDetailPage from "./pages/ChatDetailPage";
@@ -67,14 +68,8 @@ function App() {
     <ClientProviders>
       <Suspense
         fallback={
-          <div
-            className="flex min-h-screen items-center justify-center"
-            role="status"
-          >
-            <span className="size-6 animate-spin rounded-full border-2 border-theme-border border-t-theme-fg-primary" />
-            <span className="sr-only">
-              <Trans id="common.loadingEllipsis">Loading...</Trans>
-            </span>
+          <div className="flex min-h-screen items-center justify-center">
+            <SpinnerIcon size="lg" />
           </div>
         }
       >

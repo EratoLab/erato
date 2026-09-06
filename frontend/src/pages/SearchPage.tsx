@@ -10,6 +10,7 @@ import { EditChatTitleDialog } from "@/components/ui/Chat/EditChatTitleDialog";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { Button } from "@/components/ui/Controls/Button";
 import { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
+import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { Input } from "@/components/ui/Input/Input";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 import {
@@ -449,7 +450,7 @@ export default function SearchPage() {
                   aria-label={t`Loading...`}
                 >
                   {(isFetchingNextPage || isSearching) && (
-                    <div className="size-5 animate-spin rounded-full border-2 border-theme-border border-t-transparent" />
+                    <SpinnerIcon size="md" aria-hidden />
                   )}
                 </div>
               )}

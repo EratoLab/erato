@@ -20,6 +20,7 @@ import { createLogger } from "@/utils/debugLogger";
 import { ChatAttentionStatusDot } from "./ChatAttentionStatusDot";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { DropdownMenu } from "../Controls/DropdownMenu";
+import { SpinnerIcon } from "../Feedback/SpinnerIcon";
 import {
   EditIcon,
   ResolvedIcon,
@@ -494,9 +495,7 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
             data-ui="chat-history-load-more-sentinel"
             aria-label={t`Loading...`}
           >
-            {isLoadingMore && (
-              <div className="size-4 animate-spin rounded-full border-2 border-theme-border border-t-transparent" />
-            )}
+            {isLoadingMore && <SpinnerIcon size="md" aria-hidden />}
           </div>
         )}
       </div>

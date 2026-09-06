@@ -2357,7 +2357,6 @@ msgid "common.close"
 msgstr "Zamknij"
 
 #. js-lingui-explicit-id
-#: src/App.tsx
 #: src/components/ui/Feedback/SpinnerIcon.tsx
 #: src/pages/assistantHubUtils.tsx
 msgid "common.loadingEllipsis"

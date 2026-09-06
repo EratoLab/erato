@@ -8,6 +8,7 @@
 import { useState, memo } from "react";
 
 import { Alert } from "@/components/ui/Feedback/Alert";
+import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { Input } from "@/components/ui/Input/Input";
 
 import {
@@ -168,8 +169,8 @@ const SubjectSelectorView = memo<SubjectSelectorViewProps>(
               disabled={disabled}
             />
             {isSearching && (
-              <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                <div className="size-4 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
+              <div className="absolute right-3 top-1/2 flex -translate-y-1/2">
+                <SpinnerIcon size="md" />
               </div>
             )}
           </div>

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Controls/Button";
 import { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
 import { SegmentedControl } from "@/components/ui/Controls/SegmentedControl";
 import { Alert } from "@/components/ui/Feedback/Alert";
+import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 import { ModalBase } from "@/components/ui/Modal/ModalBase";
 import { EditIcon, PinIcon, PinSlashIcon } from "@/components/ui/icons";
@@ -496,7 +497,7 @@ export function AssistantWelcomeScreen({
         {isLoadingChats && (
           <div className="w-full">
             <div className={clsx("flex py-4", headerJustifyAlignment)}>
-              <div className="size-6 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
+              <SpinnerIcon size="lg" />
             </div>
           </div>
         )}
