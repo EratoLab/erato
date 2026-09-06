@@ -6,6 +6,7 @@ import { useParams } from "react-router-dom";
 import { Chat } from "@/components/ui/Chat/Chat";
 import { ChatEmptyState } from "@/components/ui/Chat/ChatEmptyState";
 import { Alert } from "@/components/ui/Feedback/Alert";
+import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { seedGenerationStatusFromListing } from "@/hooks/chat/store/generationStatusStore";
 import { useDelegatedRunHeader } from "@/hooks/chat/useDelegatedRunHeader";
 import {
@@ -208,13 +209,13 @@ export default function AssistantChatSpacePage() {
       <div className="flex size-full flex-col">
         <div className="flex flex-1 items-center justify-center">
           <div className="text-center">
-            <div className="mx-auto mb-4 size-8 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
-            <p className="text-sm text-theme-fg-secondary">
-              {t({
+            <SpinnerIcon
+              size="xl"
+              label={t({
                 id: "assistant.loading",
                 message: "Loading assistant...",
               })}
-            </p>
+            />
           </div>
         </div>
       </div>

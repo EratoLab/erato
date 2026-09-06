@@ -6,6 +6,7 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
+import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { Textarea } from "@/components/ui/Input";
 import { ShareGrantsList } from "@/components/ui/Sharing/ShareGrantsList";
 import { ArrowLeftIcon } from "@/components/ui/icons";
@@ -217,13 +218,13 @@ export default function AssistantHubReviewPage() {
           {isLoadingConfig && (
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
-                <div className="mx-auto mb-4 size-8 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
-                <p className="text-sm text-theme-fg-secondary">
-                  {t({
+                <SpinnerIcon
+                  size="xl"
+                  label={t({
                     id: "assistantHub.review.loadingConfig",
                     message: "Loading review permissions...",
                   })}
-                </p>
+                />
               </div>
             </div>
           )}
@@ -256,13 +257,13 @@ export default function AssistantHubReviewPage() {
           {config?.can_review && isLoading && (
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
-                <div className="mx-auto mb-4 size-8 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
-                <p className="text-sm text-theme-fg-secondary">
-                  {t({
+                <SpinnerIcon
+                  size="xl"
+                  label={t({
                     id: "assistantHub.review.loading",
                     message: "Loading review queue...",
                   })}
-                </p>
+                />
               </div>
             </div>
           )}

@@ -8,6 +8,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
+import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { ArrowLeftIcon, EditIcon, PlusIcon } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui";
 import {
@@ -437,13 +438,13 @@ export default function AssistantHubMyPage() {
           {isLoading && (
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
-                <div className="mx-auto mb-4 size-8 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
-                <p className="text-sm text-theme-fg-secondary">
-                  {t({
+                <SpinnerIcon
+                  size="xl"
+                  label={t({
                     id: "assistantHub.my.loading",
                     message: "Loading submissions...",
                   })}
-                </p>
+                />
               </div>
             </div>
           )}

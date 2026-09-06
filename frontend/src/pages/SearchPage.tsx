@@ -291,8 +291,7 @@ export default function SearchPage() {
           {showInitialLoading && (
             <div className="flex items-center justify-center py-8">
               <div className="text-center">
-                <div className="mx-auto mb-4 size-6 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
-                <p className="text-sm text-theme-fg-secondary">{t`Searching...`}</p>
+                <SpinnerIcon size="lg" label={t`Searching...`} />
               </div>
             </div>
           )}

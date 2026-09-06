@@ -2,6 +2,7 @@ import { t } from "@lingui/core/macro";
 import { memo, useMemo } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
+import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 
 import type { ShareGrant } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -44,10 +45,10 @@ export const ShareGrantsList = memo<ShareGrantsListProps>(
     if (isLoading) {
       return (
         <div className={`py-8 text-center ${className}`}>
-          <div className="mx-auto mb-4 size-8 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
-          <p className="text-sm text-theme-fg-secondary">
-            {t({ id: "sharing.loading", message: "Loading..." })}
-          </p>
+          <SpinnerIcon
+            size="xl"
+            label={t({ id: "sharing.loading", message: "Loading..." })}
+          />
         </div>
       );
     }
