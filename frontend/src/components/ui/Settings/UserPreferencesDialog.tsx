@@ -638,6 +638,7 @@ export function UserPreferencesDialog({
         <aside className="shrink-0 border-b border-theme-border pb-3 md:w-48 md:border-b-0 md:border-r md:pb-0 md:pr-4">
           <div
             role="tablist"
+            data-ui="tab-rail"
             aria-label={t({
               id: "preferences.dialog.title",
               message: "Preferences",

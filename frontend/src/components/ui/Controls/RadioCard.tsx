@@ -59,19 +59,22 @@ export function RadioCard({
   const hideRadio = Boolean(icon);
 
   const cardClasses = clsx(
-    "theme-transition border",
+    // The hover fill sits on the inner label, so the card clips it to its
+    // rounded border.
+    "option-card-geometry theme-transition overflow-hidden border",
     // eslint-disable-next-line lingui/no-unlocalized-strings -- Tailwind has-selector for keyboard focus
     "[&:has(input:focus-visible)]:ring-2 [&:has(input:focus-visible)]:ring-theme-focus",
-    size === "md" ? "rounded-lg" : "rounded-md",
     checked
-      ? "border-theme-border-focus bg-theme-bg-hover"
+      ? "border-theme-border-focus bg-theme-bg-selected"
       : "border-theme-border bg-theme-bg-primary",
     disabled && "opacity-60",
   );
 
   const rowClasses = clsx(
     "relative flex items-start gap-3",
-    disabled ? "cursor-not-allowed" : "cursor-pointer hover:bg-theme-bg-hover",
+    disabled ? "cursor-not-allowed" : "cursor-pointer",
+    // Hover is lighter than the selected tint, so a checked card keeps its fill.
+    !disabled && !checked && "hover:bg-theme-bg-hover",
     size === "md" ? "p-4" : "p-3",
   );
 
@@ -86,7 +89,11 @@ export function RadioCard({
   );
 
   return (
-    <div className={cardClasses}>
+    <div
+      className={cardClasses}
+      data-ui="option-card"
+      data-selected={checked || undefined}
+    >
       <label htmlFor={inputId} className={rowClasses}>
         <input
           id={inputId}
@@ -109,8 +116,9 @@ export function RadioCard({
         {icon ? (
           <span
             aria-hidden="true"
+            data-ui="option-card-icon"
             className={clsx(
-              "mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md border bg-theme-bg-secondary",
+              "option-card-geometry mt-0.5 flex size-9 shrink-0 items-center justify-center border bg-theme-bg-secondary",
               checked
                 ? "border-theme-border-focus text-theme-fg-primary"
                 : "border-theme-border text-theme-fg-secondary",
@@ -128,7 +136,12 @@ export function RadioCard({
         </div>
       </label>
       {checked && children ? (
-        <div className="border-t border-theme-border">{children}</div>
+        <div
+          className="border-t border-theme-border"
+          data-ui="option-card-details"
+        >
+          {children}
+        </div>
       ) : null}
     </div>
   );

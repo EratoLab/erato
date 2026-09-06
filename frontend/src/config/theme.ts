@@ -193,6 +193,7 @@ export type ThemeRadius = {
   message: string;
   modal: string;
   dropdown: string;
+  card: string;
   pill: string;
 };
 
@@ -511,6 +512,7 @@ export const defaultTheme: Theme = {
     message: "0.5rem",
     modal: "0.5rem",
     dropdown: "0.5rem",
+    card: "0.5rem",
     pill: "9999px",
   },
   spacing: {

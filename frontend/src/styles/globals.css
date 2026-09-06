@@ -242,6 +242,7 @@
   --theme-radius-message: 0.5rem;
   --theme-radius-modal: 0.5rem;
   --theme-radius-dropdown: 0.5rem;
+  --theme-radius-card: 0.5rem;
   --theme-radius-pill: 9999px;
 
   /* Spacing */
@@ -578,6 +579,15 @@ body {
     padding: var(--theme-spacing-dropdown-chrome-padding);
   }
 
+  /* Selectable option cards and their icon tiles read one token. The tile is
+     not derived from the card corner: card padding exceeds the card radius
+     for every shipped theme, so radius-minus-padding would square it. A theme
+     re-declares --theme-radius-control on [data-ui="option-card"] to move
+     card and tile together. */
+  .option-card-geometry {
+    border-radius: var(--theme-radius-control);
+  }
+
   .modal-section-geometry {
     padding: var(--theme-spacing-modal-padding);
   }
@@ -867,6 +877,41 @@ body {
 
 :root[data-sidebar-resizing] .sidebar-resize-handle {
   background-color: var(--theme-border-divider);
+}
+
+/* Attachment group frames and the thread cards inside them. The frame reads
+   the input radius like the app's other framed cards; a card inside derives
+   its corner from the frame radius minus the frame inset, so the two stay
+   concentric for any theme value. Unlayered so a theme.css rule can retune
+   any of it through the data-ui hooks. */
+.attachment-group-geometry {
+  --attachment-group-inset: 0.75rem;
+  border-radius: var(--theme-radius-input);
+}
+
+.attachment-group-frame-geometry {
+  padding: var(--attachment-group-inset);
+}
+
+.attachment-group-header-geometry {
+  padding: var(--attachment-group-inset) var(--attachment-group-inset) 0.5rem;
+  border-radius: var(--theme-radius-input) var(--theme-radius-input) 0 0;
+}
+
+.attachment-group-header-geometry[aria-expanded="false"] {
+  border-radius: var(--theme-radius-input);
+}
+
+.attachment-group-items-geometry {
+  padding: 0.5rem var(--attachment-group-inset) var(--attachment-group-inset);
+  border-radius: 0 0 var(--theme-radius-input) var(--theme-radius-input);
+}
+
+.thread-message-card-geometry {
+  border-radius: max(
+    0px,
+    var(--theme-radius-input) - var(--attachment-group-inset, 0.75rem)
+  );
 }
 
 /* Surface for AnchoredPopover panels (dropdown menus, the chat "+" menu).

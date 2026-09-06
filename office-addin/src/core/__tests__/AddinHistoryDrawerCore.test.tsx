@@ -46,6 +46,7 @@ const spies = vi.hoisted(() => {
       onSessionEditTitle?: (id: string) => void;
       onSessionShare?: (id: string) => void;
       disableRowLinks?: boolean;
+      showTimestamps?: boolean;
     }>,
     renameDialogProps: {
       current: null as {
@@ -56,6 +57,7 @@ const spies = vi.hoisted(() => {
     },
     filterMenuStore,
     sharingEnabled: { current: true },
+    showMetadata: { current: true },
   };
 });
 
@@ -160,6 +162,9 @@ vi.mock("@erato/frontend/library", () => ({
     fetchNextHistoryPage: spies.fetchNextHistoryPage,
   }),
   useChatSharingFeature: () => ({ enabled: spies.sharingEnabled.current }),
+  useFeatureConfig: () => ({
+    sidebar: { chatHistoryShowMetadata: spies.showMetadata.current },
+  }),
   useGroupedChatSessions: (sessions: { id: string }[]) =>
     sessions.length === 0
       ? []
@@ -209,6 +214,7 @@ describe("AddinHistoryDrawerCore", () => {
     spies.renameDialogProps.current = null;
     spies.filterMenuStore.current = null;
     spies.sharingEnabled.current = true;
+    spies.showMetadata.current = true;
     spies.chatContext.chats = [{ id: "c1" }, { id: "c2" }];
     spies.chatContext.isLoading = false;
     spies.chatContext.isHistoryLoading = false;
@@ -234,6 +240,20 @@ describe("AddinHistoryDrawerCore", () => {
     expect(onClose).toHaveBeenCalled();
     // The pane has no tabs: rows must render without link escape hatches.
     expect(spies.historyListProps[0]?.disableRowLinks).toBe(true);
+  });
+
+  it("passes the sidebar metadata switch through as showTimestamps", () => {
+    spies.showMetadata.current = false;
+
+    renderDrawer();
+
+    expect(spies.historyListProps[0]?.showTimestamps).toBe(false);
+  });
+
+  it("keeps row metadata when the sidebar switch is on", () => {
+    renderDrawer();
+
+    expect(spies.historyListProps[0]?.showTimestamps).toBe(true);
   });
 
   it("puts the pagination sentinel on the last group only", () => {

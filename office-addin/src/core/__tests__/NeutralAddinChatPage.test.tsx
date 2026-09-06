@@ -23,6 +23,9 @@ const spies = vi.hoisted(() => ({
   },
   clearNewlyCreatedChatId: vi.fn(),
   generationIndicatorCount: { current: 0 },
+  componentRegistry: {
+    ChatTopLeftAccessory: undefined as (() => ReactNode) | undefined,
+  },
   setGenerationCurrentChatId: vi.fn(),
   updateChatTitle: vi.fn(async () => undefined),
   runOpenHandler: { current: null as ((chatId: string) => void) | null },
@@ -226,7 +229,7 @@ vi.mock("@erato/frontend/library", async () => {
     ),
     MessageEditProvider: ({ children }: { children?: ReactNode }) => children,
     chatMessagesQuery: () => ({ queryKey: ["chat-messages"] }),
-    componentRegistry: {},
+    componentRegistry: spies.componentRegistry,
     extractTextFromContent: () => "",
     resolveComponentOverride: (override: unknown, fallback: unknown) =>
       override ?? fallback,
@@ -305,6 +308,7 @@ describe("NeutralAddinChatPage host boundary", () => {
   const originalOffice = Object.getOwnPropertyDescriptor(globalThis, "Office");
 
   beforeEach(() => {
+    spies.componentRegistry.ChatTopLeftAccessory = undefined;
     i18n.activate("en");
     Reflect.deleteProperty(globalThis, "Office");
     spies.drawerProps.length = 0;
@@ -621,6 +625,32 @@ describe("NeutralAddinChatPage host boundary", () => {
     expect(screen.getByTestId("neutral-run-banner").parentElement).toHaveClass(
       "pl-10",
     );
+  });
+
+  it("puts a kit accessory and the drawer trigger in one header row", () => {
+    function KitAccessory() {
+      return <div data-testid="kit-accessory" />;
+    }
+    spies.componentRegistry.ChatTopLeftAccessory = KitAccessory;
+
+    renderPage();
+
+    const header = screen
+      .getByTestId("kit-accessory")
+      .closest('[data-ui="addin-chat-header"]');
+    const trigger = screen.getByTestId("addin-history-drawer-trigger");
+    expect(header).not.toBeNull();
+    expect(header).toContainElement(trigger);
+    expect(trigger).not.toHaveClass("absolute");
+  });
+
+  it("keeps the trigger floating without a kit accessory", () => {
+    renderPage();
+
+    expect(screen.getByTestId("addin-history-drawer-trigger")).toHaveClass(
+      "absolute",
+    );
+    expect(document.querySelector('[data-ui="addin-chat-header"]')).toBeNull();
   });
 
   // The pane's only aggregate signal: with the drawer shut there is no row to

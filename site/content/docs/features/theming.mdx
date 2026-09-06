@@ -131,12 +131,14 @@ The typed theme contract is grouped semantically so starter themes can express s
 - `colors.shell` covers app, page, sidebar, chat shell, modal, and dropdown surfaces
 - `colors.message` covers user and assistant message surfaces plus shared hover and controls surfaces
 - `colors.overlay` covers backdrops such as the modal overlay
-- `radius` covers base, shell, input, control, message, modal, dropdown, and pill radii
+- `radius` covers base, shell, input, control, message, modal, dropdown, card, and pill radii
 - `spacing` covers shell, message, controls, sidebar density, chat input, and dropdown spacing
 - `elevation` covers shell, input, modal, and dropdown shadows
 - `layout` covers chat content width, chat input width, and sidebar width
 
 Dropdown menus nest two shapes. The panel takes `radius.dropdown`, every row is inset by `spacing.dropdown.chromePadding` on all four sides, and the row highlight radius is derived as the panel radius minus that inset. Set those two tokens and the rows stay concentric with the panel; there is no separate row radius to keep in step.
+
+Framed cards read `radius.card`: entity rows in settings, assistant cards, and search result cards. Selectable option cards and their icon tiles read `radius.control` instead, because they are choices with a selected state rather than containers.
 
 Existing theme JSON can omit these new groups. When a theme does not provide them yet, the corresponding CSS variables fall back to the built-in theme defaults until they are explicitly overridden.
 
@@ -173,6 +175,15 @@ For shell-level overrides in `theme.css`, prefer the app-owned `data-ui` and `da
 - `data-ui="modal-overlay"`
 - `data-ui="modal-shell"`
 - `data-ui="dropdown-panel"`
+- `data-ui="entity-row"`
+- `data-ui="assistant-list-card"`
+- `data-ui="search-result-card"`
+- `data-ui="option-card"` (carries `data-selected="true"` when checked; `data-ui="option-card-icon"` marks its icon tile and `data-ui="option-card-details"` the section shown under a checked card)
+- `data-ui="tab-rail"` (the hand-rolled settings tab rails; their tabs read `--theme-radius-control`)
+- `data-ui="attachment-group"` and `data-ui="thread-message-card"` (attachment group frames and the per-message cards of an email thread)
+- `data-ui="addin-chat-header"` (the Office add-in's header row when a component kit supplies a top-left accessory)
+
+Every popover panel (dropdown menus, the chat "+" menu, the history filter menu and its flyout, the mention and run-mode menus) also carries the class `anchored-popover-skin`, and every menu row the class `dropdown-item-geometry`. Both are stable hooks: one rule on the skin restyles the whole popover family, and one rule on the row class reshapes every menu row.
 
 Messages also expose `data-role="user"` and `data-role="assistant"` on the message shell.
 

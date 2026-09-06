@@ -341,7 +341,7 @@ export default function SearchPage() {
                       e.preventDefault();
                       handleResultClick(result);
                     }}
-                    className="block cursor-pointer rounded-lg border border-theme-border bg-theme-bg-primary p-4 transition-all hover:border-theme-border-focus hover:bg-theme-bg-hover focus:bg-theme-bg-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus"
+                    className="block cursor-pointer rounded-[var(--theme-radius-card)] border border-theme-border bg-theme-bg-primary p-4 transition-all hover:border-theme-border-focus hover:bg-theme-bg-hover focus:bg-theme-bg-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus"
                     aria-label={result.chatTitle}
                   >
                     <div className="flex items-center gap-4">

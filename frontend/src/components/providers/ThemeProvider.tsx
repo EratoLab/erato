@@ -143,6 +143,7 @@ const getThemeVariableEntries = (theme: Theme): Array<[string, string]> => {
     ["--theme-radius-message", theme.radius.message],
     ["--theme-radius-modal", theme.radius.modal],
     ["--theme-radius-dropdown", theme.radius.dropdown],
+    ["--theme-radius-card", theme.radius.card],
     ["--theme-radius-pill", theme.radius.pill],
     ["--theme-spacing-shell-padding-x", theme.spacing.shell.paddingX],
     ["--theme-spacing-shell-padding-y", theme.spacing.shell.paddingY],

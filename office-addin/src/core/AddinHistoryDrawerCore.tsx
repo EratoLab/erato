@@ -19,6 +19,7 @@ import {
   useAssistantsFeature,
   useChatContext,
   useChatSharingFeature,
+  useFeatureConfig,
   useGroupedChatSessions,
   useSanitizedChatHistoryFilters,
 } from "@erato/frontend/library";
@@ -85,6 +86,8 @@ export function AddinHistoryDrawerCore({
     filterStore,
   );
   const { enabled: sharingEnabled } = useChatSharingFeature();
+  // Same source as the web sidebar: the backend's sidebar metadata switch.
+  const { chatHistoryShowMetadata } = useFeatureConfig().sidebar;
 
   const panelRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -341,6 +344,7 @@ export function AddinHistoryDrawerCore({
       // The pane serves no chat routes and has no tabs; every activation,
       // modified clicks included, selects in place.
       disableRowLinks={true}
+      showTimestamps={chatHistoryShowMetadata}
       onSessionSelect={handleSelect}
       onSessionArchive={handleArchive}
       onSessionEditTitle={setTitleDialogSessionId}
