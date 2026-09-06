@@ -8,6 +8,7 @@ import type { ReactNode } from "react";
 
 vi.mock("@erato/frontend/library", () => ({
   AppearanceTabContent: () => <div data-testid="appearance-settings" />,
+  TextSizeSetting: () => <div data-testid="text-size-settings" />,
   AudioInputTabContent: () => null,
   ServersToolsPane: () => null,
   ModalBase: ({
@@ -38,6 +39,8 @@ describe("AddinSettingsDialogCore", () => {
     render(<AddinSettingsDialogCore isOpen={true} onClose={() => {}} />);
 
     expect(screen.getByRole("tab", { name: "Appearance" })).toBeInTheDocument();
+    expect(screen.getByTestId("appearance-settings")).toBeInTheDocument();
+    expect(screen.getByTestId("text-size-settings")).toBeInTheDocument();
     expect(
       screen.getByRole("tab", { name: "User settings" }),
     ).toBeInTheDocument();
