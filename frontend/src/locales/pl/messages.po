@@ -2358,6 +2358,7 @@ msgstr "Zamknij"
 
 #. js-lingui-explicit-id
 #: src/App.tsx
+#: src/components/ui/Feedback/SpinnerIcon.tsx
 #: src/pages/assistantHubUtils.tsx
 msgid "common.loadingEllipsis"
 msgstr "Ładowanie..."
@@ -5012,7 +5013,6 @@ msgstr ""
 
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/components/ui/Chat/ModelSelector.tsx
-#: src/components/ui/Feedback/SpinnerIcon.tsx
 #: src/components/ui/Message/LoadMoreButton.tsx
 #: src/pages/SearchPage.tsx
 msgid "Loading..."

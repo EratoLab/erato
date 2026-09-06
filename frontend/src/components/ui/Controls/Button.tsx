@@ -105,6 +105,15 @@ const ICON_SIZE_STYLES = {
   lg: "btn-geometry-icon-lg",
 } as const;
 
+// The ring borrows the button's own label colour, so it reads on a filled
+// accent variant and on a light secondary one alike; the track is the same
+// colour diluted. It sits on the icon slot rather than on the ring so that it
+// is only inherited — a theme rule on [data-ui="spinner"] still outranks it.
+const LOADING_RING_STYLE = {
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  "--spinner-head": "currentColor",
+} as React.CSSProperties;
+
 const validateProps = (props: ButtonProps) => {
   if (process.env.NODE_ENV === "development") {
     if (props.variant === "icon-only" && !props.icon) {
@@ -299,7 +308,11 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           aria-busy={loading || undefined}
         >
           {(loading || icon) && (
-            <span className={iconClasses} aria-hidden="true">
+            <span
+              className={iconClasses}
+              style={loading ? LOADING_RING_STYLE : undefined}
+              aria-hidden="true"
+            >
               {loading ? <SpinnerIcon size="sm" /> : icon}
             </span>
           )}
