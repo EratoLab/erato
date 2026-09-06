@@ -174,7 +174,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
           : { width: geometry.mediaSize, height: geometry.mediaSize }
       }
       className={clsx(
-        "rounded-[var(--theme-radius-base)] border [border-color:var(--theme-border-media)]",
+        "rounded-[var(--attachment-tile-radius,var(--theme-radius-base))] border [border-color:var(--theme-border-media)]",
         // Cropping is right for a thumbnail standing in for the file, wrong
         // once the point is seeing what the image actually contains.
         expanded ? "w-full object-contain" : "object-cover",
@@ -183,7 +183,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
   ) : (
     <div
       className={clsx(
-        "flex w-full items-center gap-2 rounded-[var(--theme-radius-base)] border p-2 text-left",
+        "flex w-full items-center gap-2 rounded-[var(--attachment-tile-radius,var(--theme-radius-base))] border p-2 text-left",
         "border-[var(--theme-border)] bg-[var(--theme-bg-secondary)]",
         onActivate &&
           "transition-colors group-hover:border-[var(--theme-border-focus)] group-hover:bg-[var(--theme-bg-accent)]",
@@ -192,7 +192,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
       <span
         className={clsx(
           geometry.iconBox,
-          "flex shrink-0 items-center justify-center rounded-[var(--theme-radius-base)]",
+          "flex shrink-0 items-center justify-center rounded-[var(--attachment-tile-icon-radius,var(--theme-radius-base))]",
         )}
         // The per-type colour already lives in FILE_TYPES; a tinted plate is
         // what makes it readable at tile size without shouting.
@@ -236,7 +236,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
           title={filename}
           aria-label={`${activateLabel ?? t`Preview attachment`} ${filename}, ${metaLabel}`}
           className={clsx(
-            "block w-full cursor-pointer rounded-[var(--theme-radius-base)] text-left",
+            "block w-full cursor-pointer rounded-[var(--attachment-tile-radius,var(--theme-radius-base))] text-left",
             "focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus focus-visible:ring-offset-2",
             isMedia && "hover:opacity-90",
           )}

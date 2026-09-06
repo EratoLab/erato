@@ -907,11 +907,25 @@ body {
   border-radius: 0 0 var(--theme-radius-input) var(--theme-radius-input);
 }
 
+/* The thread card derives from the group frame, and the attachment tiles
+   inside it derive from the card in turn (the tile reads
+   --attachment-tile-radius with the base radius as its fallback elsewhere).
+   The floors keep a deep nest from squaring off entirely. */
 .thread-message-card-geometry {
-  border-radius: max(
+  --thread-message-card-radius: max(
     0px,
     var(--theme-radius-input) - var(--attachment-group-inset, 0.75rem)
   );
+  --thread-message-card-inset: 0.5rem;
+  --attachment-tile-radius: max(
+    0.25rem,
+    var(--thread-message-card-radius) - var(--thread-message-card-inset)
+  );
+  --attachment-tile-icon-radius: max(
+    0.125rem,
+    var(--attachment-tile-radius) - 0.5rem
+  );
+  border-radius: var(--thread-message-card-radius);
 }
 
 /* Surface for AnchoredPopover panels (dropdown menus, the chat "+" menu).
