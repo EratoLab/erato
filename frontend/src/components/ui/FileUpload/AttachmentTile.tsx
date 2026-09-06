@@ -165,6 +165,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
       src={previewUrl ?? undefined}
       alt={onActivate ? "" : filename}
       onError={() => setImageFailed(true)}
+      data-ui="attachment-tile"
       style={
         expanded
           ? {
@@ -182,6 +183,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
     />
   ) : (
     <div
+      data-ui="attachment-tile"
       className={clsx(
         "flex w-full items-center gap-2 rounded-[var(--attachment-tile-radius,var(--theme-radius-base))] border p-2 text-left",
         "border-[var(--theme-border)] bg-[var(--theme-bg-secondary)]",
