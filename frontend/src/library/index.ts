@@ -6,8 +6,10 @@ export * from "@/shared";
 
 export { Trans, useLingui } from "@lingui/react";
 export {
+  TEXT_SIZE_OPTIONS,
   ThemeProvider,
   useTheme,
+  type TextSize,
   type ThemeMode,
   type ThemeProviderProps,
 } from "@/components/providers/ThemeProvider";
@@ -80,6 +82,7 @@ export {
 export { AppearanceTabContent } from "@/components/ui/Settings/AppearanceTabContent";
 export { AudioInputTabContent } from "@/components/ui/Settings/AudioInputTabContent";
 export { DesktopSidecarTabContent } from "@/components/ui/Settings/DesktopSidecarTabContent";
+export { TextSizeSetting } from "@/components/ui/Settings/TextSizeSetting";
 export {
   EntityRow,
   type EntityRowStatus,

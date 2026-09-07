@@ -33,7 +33,7 @@ export const CountBadge = ({
     aria-hidden="true"
     {...props}
     className={clsx(
-      "flex min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-4",
+      "flex min-w-4 items-center justify-center rounded-full px-1 text-[0.625rem] font-semibold leading-4",
       VARIANT_STYLES[variant],
       className,
     )}

@@ -2973,6 +2973,36 @@ msgid "preferences.dialog.actions.saving"
 msgstr "Enregistrement..."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/TextSizeSetting.tsx
+msgid "preferences.dialog.appearance.textSize.description"
+msgstr "Met à l’échelle toute l’interface sur cet appareil."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/TextSizeSetting.tsx
+msgid "preferences.dialog.appearance.textSize.heading"
+msgstr "Taille du texte"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/TextSizeSetting.tsx
+msgid "preferences.dialog.appearance.textSize.option.default"
+msgstr "Par défaut"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/TextSizeSetting.tsx
+msgid "preferences.dialog.appearance.textSize.option.large"
+msgstr "Grande"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/TextSizeSetting.tsx
+msgid "preferences.dialog.appearance.textSize.option.small"
+msgstr "Petite"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/TextSizeSetting.tsx
+msgid "preferences.dialog.appearance.textSize.option.xLarge"
+msgstr "Très grande"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/AppearanceTabContent.tsx
 msgid "preferences.dialog.appearance.theme.current.dark"
 msgstr "Actuellement sombre"

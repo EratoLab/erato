@@ -11,7 +11,10 @@ import {
   ThemeProvider,
   useTheme,
 } from "../src/components/providers/ThemeProvider";
-import type { ThemeMode } from "../src/components/providers/ThemeProvider";
+import type {
+  TextSize,
+  ThemeMode,
+} from "../src/components/providers/ThemeProvider";
 import { FeatureConfigProvider } from "../src/providers/FeatureConfigProvider";
 import { RootProvider } from "../src/providers/RootProvider";
 import { defaultTheme, darkTheme } from "../src/config/theme";
@@ -161,14 +164,19 @@ const withI18n: Decorator = (Story, context) => {
 const ThemeSynchronizer: React.FC<{
   children: React.ReactNode;
   storybookTheme: ThemeMode;
-}> = ({ children, storybookTheme }) => {
-  const { setThemeMode } = useTheme();
+  storybookTextSize: TextSize;
+}> = ({ children, storybookTheme, storybookTextSize }) => {
+  const { setThemeMode, setTextSize } = useTheme();
 
   // Sync Storybook theme with ThemeProvider
   useEffect(() => {
     // Set the theme mode
     setThemeMode(storybookTheme);
   }, [storybookTheme, setThemeMode]);
+
+  useEffect(() => {
+    setTextSize(storybookTextSize);
+  }, [storybookTextSize, setTextSize]);
 
   return <>{children}</>;
 };
@@ -271,10 +279,14 @@ const withAppProviders: Decorator = (Story) => {
 const withThemeDecorator: Decorator = (Story, context) => {
   const { globals } = context;
   const selectedTheme = (globals.theme || "light") as ThemeMode;
+  const selectedTextSize = (globals.textSize || "default") as TextSize;
 
   return (
     <ThemeProvider>
-      <ThemeSynchronizer storybookTheme={selectedTheme}>
+      <ThemeSynchronizer
+        storybookTheme={selectedTheme}
+        storybookTextSize={selectedTextSize}
+      >
         <Story />
       </ThemeSynchronizer>
     </ThemeProvider>
@@ -320,6 +332,21 @@ const preview: Preview = {
           { value: "dark", icon: "circle", title: "Dark Theme" },
         ],
         // Property that specifies if the name of the item will be displayed
+        showName: true,
+      },
+    },
+    textSize: {
+      name: "Text size",
+      description: "User text-size preference (root font-size scale)",
+      defaultValue: "default",
+      toolbar: {
+        icon: "zoom",
+        items: [
+          { value: "small", title: "Small" },
+          { value: "default", title: "Default" },
+          { value: "large", title: "Large" },
+          { value: "x-large", title: "Extra large" },
+        ],
         showName: true,
       },
     },

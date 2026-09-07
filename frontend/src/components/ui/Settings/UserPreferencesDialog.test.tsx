@@ -223,6 +223,22 @@ describe("UserPreferencesDialog", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows the text size control on the appearance tab", () => {
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Appearance" }));
+
+    const control = screen.getByRole("tablist", { name: "Text size" });
+    expect(
+      within(control)
+        .getAllByRole("tab")
+        .map((tab) => tab.textContent),
+    ).toEqual(["Small", "Default", "Large", "Extra large"]);
+    expect(
+      within(control).getByRole("tab", { name: "Default" }),
+    ).toHaveAttribute("aria-selected", "true");
+  });
+
   it("renders accessible vertical tabs and linked tabpanels", () => {
     renderDialog();
 

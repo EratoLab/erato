@@ -1,7 +1,13 @@
 /* eslint-disable lingui/no-unlocalized-strings */
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useState,
+} from "react";
 
 import { defaultTheme, darkTheme } from "@/config/theme";
 import {
@@ -21,16 +27,31 @@ export type ThemeMode = "light" | "dark" | "system";
 
 export const THEME_MODE_LOCAL_STORAGE_KEY = "theme-mode";
 
+export type TextSize = "small" | "default" | "large" | "x-large";
+
+export const TEXT_SIZE_OPTIONS: readonly TextSize[] = [
+  "small",
+  "default",
+  "large",
+  "x-large",
+];
+
+export const TEXT_SIZE_LOCAL_STORAGE_KEY = "text-size";
+
 export interface ThemeProviderProps extends PropsWithChildren {
   enableCustomTheme?: boolean;
   initialThemeMode?: ThemeMode;
   persistThemeMode?: boolean;
+  initialTextSize?: TextSize;
+  persistTextSize?: boolean;
 }
 
 type ThemeContextType = {
   theme: Theme;
   themeMode: ThemeMode;
   setThemeMode: (mode: ThemeMode) => void;
+  textSize: TextSize;
+  setTextSize: (size: TextSize) => void;
   isCustomTheme: boolean;
   customThemeName?: string;
   customThemeConfig?: CustomThemeConfig | null;
@@ -335,6 +356,16 @@ const getSavedTheme = (): ThemeMode => {
   return "system"; // Default to system if nothing saved
 };
 
+const isTextSize = (value: unknown): value is TextSize =>
+  TEXT_SIZE_OPTIONS.includes(value as TextSize);
+
+const getSavedTextSize = (): TextSize => {
+  if (typeof window === "undefined") return "default";
+
+  const saved = localStorage.getItem(TEXT_SIZE_LOCAL_STORAGE_KEY);
+  return isTextSize(saved) ? saved : "default";
+};
+
 // Get the effective theme based on the selected mode and system preference
 const getEffectiveTheme = (mode: ThemeMode): "light" | "dark" => {
   if (mode === "light") return "light";
@@ -355,6 +386,8 @@ export function ThemeProvider({
   enableCustomTheme = true,
   initialThemeMode,
   persistThemeMode = true,
+  initialTextSize,
+  persistTextSize = true,
 }: ThemeProviderProps) {
   const savedOrDefaultThemeMode = initialThemeMode ?? getSavedTheme();
   const [themeMode, setThemeMode] = useState<ThemeMode>(
@@ -362,6 +395,9 @@ export function ThemeProvider({
   );
   const [effectiveTheme, setEffectiveTheme] = useState<"light" | "dark">(
     getEffectiveTheme(savedOrDefaultThemeMode),
+  );
+  const [textSize, setTextSizeState] = useState<TextSize>(
+    () => initialTextSize ?? getSavedTextSize(),
   );
   const [theme, setTheme] = useState<Theme>(defaultTheme);
   const [customThemeConfig, setCustomThemeConfig] =
@@ -534,6 +570,20 @@ export function ThemeProvider({
     };
   }, [theme]);
 
+  // Layout effect: the attribute changes the root font-size, and a passive
+  // effect would paint one frame at the old scale first.
+  useLayoutEffect(() => {
+    if (textSize === "default") {
+      document.documentElement.removeAttribute("data-text-size");
+    } else {
+      document.documentElement.setAttribute("data-text-size", textSize);
+    }
+
+    return () => {
+      document.documentElement.removeAttribute("data-text-size");
+    };
+  }, [textSize]);
+
   const toggleTheme = (mode: ThemeMode) => {
     if (persistThemeMode) {
       localStorage.setItem(THEME_MODE_LOCAL_STORAGE_KEY, mode);
@@ -541,10 +591,19 @@ export function ThemeProvider({
     setThemeMode(mode);
   };
 
+  const setTextSize = (size: TextSize) => {
+    if (persistTextSize) {
+      localStorage.setItem(TEXT_SIZE_LOCAL_STORAGE_KEY, size);
+    }
+    setTextSizeState(size);
+  };
+
   const contextValue: ThemeContextType = {
     theme,
     themeMode,
     setThemeMode: toggleTheme,
+    textSize,
+    setTextSize,
     isCustomTheme,
     customThemeName: customThemeConfig?.name,
     customThemeConfig,

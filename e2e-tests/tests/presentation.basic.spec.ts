@@ -156,6 +156,31 @@ test(
 );
 
 test(
+  "Can pick a larger text size and keep it after reload",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    const html = page.locator("html");
+    const rootFontSize = () =>
+      page.evaluate(() => getComputedStyle(document.documentElement).fontSize);
+
+    await page.goto("/");
+    await chatIsReadyToChat(page);
+    expect(await html.getAttribute("data-text-size")).toBeNull();
+    expect(await rootFontSize()).toBe("16px");
+
+    await openAppearanceSettings(page);
+    await page.getByRole("tab", { name: "Large", exact: true }).click();
+    await expect(html).toHaveAttribute("data-text-size", "large");
+    expect(await rootFontSize()).toBe("18px");
+
+    await page.reload();
+    await chatIsReadyToChat(page);
+    await expect(html).toHaveAttribute("data-text-size", "large");
+    expect(await rootFontSize()).toBe("18px");
+  },
+);
+
+test(
   "Can login and see german language by default",
   { tag: TAG_CI },
   async ({ browser }) => {

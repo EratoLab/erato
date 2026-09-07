@@ -1005,6 +1005,20 @@ body {
   border-radius: var(--thread-message-card-radius);
 }
 
+/* Preferences → Appearance → Text size. Percent, not px, so the browser's own
+   default-font-size preference still applies underneath. */
+:root[data-text-size="small"] {
+  font-size: 87.5%;
+}
+
+:root[data-text-size="large"] {
+  font-size: 112.5%;
+}
+
+:root[data-text-size="x-large"] {
+  font-size: 125%;
+}
+
 /* Surface for AnchoredPopover panels (dropdown menus, the chat "+" menu).
    Deliberately declared here, after @tailwind utilities and outside
    @layer components: it must still outrank a utility a caller passes through
