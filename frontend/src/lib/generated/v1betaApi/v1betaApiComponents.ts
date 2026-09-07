@@ -1580,6 +1580,129 @@ export const useArchiveAssistant = (
   });
 };
 
+export type GetAssistantUsagePathParams = {
+  /**
+   * @format uuid
+   */
+  assistantId: string;
+};
+
+export type GetAssistantUsageQueryParams = {
+  /**
+   * One of 1, 4, 12, or 52. Defaults to 4.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  weeks?: number;
+};
+
+export type GetAssistantUsageError = Fetcher.ErrorWrapper<undefined>;
+
+export type GetAssistantUsageVariables = {
+  pathParams: GetAssistantUsagePathParams;
+  queryParams?: GetAssistantUsageQueryParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchGetAssistantUsage = (
+  variables: GetAssistantUsageVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.AssistantUsage,
+    GetAssistantUsageError,
+    undefined,
+    {},
+    GetAssistantUsageQueryParams,
+    GetAssistantUsagePathParams
+  >({
+    url: "/api/v1beta/assistants/{assistantId}/usage",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function getAssistantUsageQuery(variables: GetAssistantUsageVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.AssistantUsage>;
+};
+
+export function getAssistantUsageQuery(
+  variables: GetAssistantUsageVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.AssistantUsage>)
+    | reactQuery.SkipToken;
+};
+
+export function getAssistantUsageQuery(
+  variables: GetAssistantUsageVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/assistants/{assistantId}/usage",
+      operationId: "getAssistantUsage",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchGetAssistantUsage(variables, signal),
+  };
+}
+
+export const useSuspenseGetAssistantUsage = <TData = Schemas.AssistantUsage,>(
+  variables: GetAssistantUsageVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.AssistantUsage,
+      GetAssistantUsageError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.AssistantUsage,
+    GetAssistantUsageError,
+    TData
+  >({
+    ...getAssistantUsageQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useGetAssistantUsage = <TData = Schemas.AssistantUsage,>(
+  variables: GetAssistantUsageVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.AssistantUsage,
+      GetAssistantUsageError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.AssistantUsage,
+    GetAssistantUsageError,
+    TData
+  >({
+    ...getAssistantUsageQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type ChatsError = Fetcher.ErrorWrapper<undefined>;
 
 export type ChatsResponse = Schemas.Chat[];
@@ -6945,6 +7068,11 @@ export type QueryOperation =
       path: "/api/v1beta/assistants/{assistantId}";
       operationId: "getAssistant";
       variables: GetAssistantVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/assistants/{assistantId}/usage";
+      operationId: "getAssistantUsage";
+      variables: GetAssistantUsageVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/chats";

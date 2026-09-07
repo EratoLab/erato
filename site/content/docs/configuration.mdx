@@ -3392,6 +3392,16 @@ Whether to enable the assistants feature in the frontend. When enabled, the fron
 enabled = true
 ```
 
+#### `assistants.usage_view_enabled`
+
+{/* erato_toml_config_key: assistants.usage_view_enabled */}
+
+Enable the assistants usage view for assistant owners and editors. Requires `assistants.enabled`. Counts persisted generated assistant responses (including regenerations and delegated calls) across the original assistant and all Hub versions. Archived chats remain included. Unique users are distinct chat owners, counted separately for the full timeframe and each bucket. Timeframes include today and use UTC calendar boundaries; weekly buckets start at the beginning of the selected range.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
 #### `assistants.enable_edit_sharing`
 
 {/* erato_toml_config_key: assistants.enable_edit_sharing */}

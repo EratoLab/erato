@@ -40,6 +40,7 @@
   "assistants.max_system_prompt_length": {},
   "assistants.show_recent_items": {},
   "assistants.show_recent_items_collapsible": {},
+  "assistants.usage_view_enabled": {},
   "audio_conversational.chat_provider_id": {},
   "audio_conversational.chunk_duration_seconds": {},
   "audio_conversational.enabled": {},

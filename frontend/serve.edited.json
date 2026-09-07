@@ -53,6 +53,10 @@
       "destination": "index.html"
     },
     {
+      "source": "/assistants/:id/usage",
+      "destination": "index.html"
+    },
+    {
       "source": "/assistant-hub",
       "destination": "index.html"
     },

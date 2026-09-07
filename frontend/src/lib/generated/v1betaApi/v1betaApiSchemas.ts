@@ -414,6 +414,24 @@ export type AssistantHubVersionsResponse = {
   versions: AssistantHubVersion[];
 };
 
+export type AssistantUsage = {
+  assistant_name: string;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  bucket_days: number;
+  buckets: UsageBucket[];
+  /**
+   * @format int64
+   */
+  total_invocations: number;
+  /**
+   * @format int64
+   */
+  total_unique_users: number;
+};
+
 /**
  * An assistant model
  */
@@ -2762,6 +2780,21 @@ export type UpdateProfilePreferencesRequest = {
    * returns to inheriting any audience pin.
    */
   preference_starting_hub_assistant_id?: string | null | undefined;
+};
+
+export type UsageBucket = {
+  /**
+   * @format date
+   */
+  date: string;
+  /**
+   * @format int64
+   */
+  invocations: number;
+  /**
+   * @format int64
+   */
+  unique_users: number;
 };
 
 export type UserProfile = {

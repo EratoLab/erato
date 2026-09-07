@@ -948,6 +948,62 @@
         ]
       }
     },
+    "/api/v1beta/assistants/{assistant_id}/usage": {
+      "get": {
+        "tags": [
+          "assistants"
+        ],
+        "operationId": "get_assistant_usage",
+        "parameters": [
+          {
+            "name": "assistant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "weeks",
+            "in": "query",
+            "description": "One of 1, 4, 12, or 52. Defaults to 4.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantUsage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/chats": {
       "get": {
         "tags": [],
@@ -4493,6 +4549,40 @@
             "items": {
               "$ref": "#/components/schemas/AssistantHubVersion"
             }
+          }
+        }
+      },
+      "AssistantUsage": {
+        "type": "object",
+        "required": [
+          "assistant_name",
+          "total_invocations",
+          "total_unique_users",
+          "bucket_days",
+          "buckets"
+        ],
+        "properties": {
+          "assistant_name": {
+            "type": "string"
+          },
+          "bucket_days": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "buckets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageBucket"
+            }
+          },
+          "total_invocations": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total_unique_users": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -8912,6 +9002,28 @@
               "null"
             ],
             "description": "The user's own start-screen pick when it is a hub assistant, as an\n`assistant_hub_assistants.id` (NOT the clone's `assistants.id` — those\ngo stale on every hub republish). Explicit `null` removes the pick and\nreturns to inheriting any audience pin."
+          }
+        }
+      },
+      "UsageBucket": {
+        "type": "object",
+        "required": [
+          "date",
+          "invocations",
+          "unique_users"
+        ],
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "invocations": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "unique_users": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },

@@ -11,6 +11,10 @@ import type { Assistant } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 let assistant: Assistant;
 const updateAssistantMock = vi.fn().mockResolvedValue({});
 
+vi.mock("@/providers/FeatureConfigProvider", () => ({
+  useAssistantsFeature: () => ({ enabled: true, usageViewEnabled: false }),
+}));
+
 vi.mock("@/hooks/ui", () => ({
   usePageAlignment: () => ({
     containerClasses: "container",

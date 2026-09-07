@@ -251,6 +251,83 @@ msgid "assistant.loading"
 msgstr "Ładowanie asystenta..."
 
 #. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.back"
+msgstr "Powrót do asystentów"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.daily"
+msgstr "Użycie dzienne · UTC · Z uwzględnieniem dzisiaj"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.date"
+msgstr "Początek przedziału (UTC)"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.empty"
+msgstr "Brak użycia w tym okresie."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.error"
+msgstr "Nie udało się wczytać danych użycia. Ten widok jest dostępny tylko dla edytorów asystenta."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.fourWeeks"
+msgstr "Ostatnie 4 tygodnie"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.invocations"
+msgstr "Wywołania asystenta"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.table"
+msgstr "Pokaż tabelę danych"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.timeframe"
+msgstr "Okres"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantEditPage.tsx
+#: src/pages/AssistantsPage.tsx
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.title"
+msgstr "Użycie asystentów"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.twelveWeeks"
+msgstr "Ostatnie 12 tygodni"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.users"
+msgstr "Unikalni użytkownicy"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.week"
+msgstr "Ostatni tydzień"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.weekly"
+msgstr "Użycie tygodniowe · UTC · Z uwzględnieniem dzisiaj"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.year"
+msgstr "Ostatnie 52 tygodnie"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "assistant.welcome.chats.empty"
 msgstr "Brak bezpośrednich rozmów."
@@ -2359,6 +2436,7 @@ msgstr "Zamknij"
 #. js-lingui-explicit-id
 #: src/App.tsx
 #: src/pages/assistantHubUtils.tsx
+#: src/pages/AssistantUsagePage.tsx
 msgid "common.loadingEllipsis"
 msgstr "Ładowanie..."
 

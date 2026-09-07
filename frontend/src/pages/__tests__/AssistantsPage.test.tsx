@@ -38,6 +38,10 @@ const useListMyAssistantHubVersions = vi.fn((_variables?: unknown) => ({
   error: null,
 }));
 
+vi.mock("@/providers/FeatureConfigProvider", () => ({
+  useAssistantsFeature: () => ({ enabled: true, usageViewEnabled: false }),
+}));
+
 vi.mock("@/hooks/ui", () => ({
   usePageAlignment: () => ({
     containerClasses: "container",

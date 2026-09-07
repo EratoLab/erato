@@ -332,6 +332,10 @@ fn build_frontend_environment(
         Value::Bool(config.frontend.disable_logout),
     );
     env.additional_environment.insert(
+        "ASSISTANTS_USAGE_VIEW_ENABLED".to_string(),
+        Value::Bool(config.assistants.enabled && config.assistants.usage_view_enabled),
+    );
+    env.additional_environment.insert(
         FRONTEND_ENV_KEY_ASSISTANTS_ENABLED.to_string(),
         Value::Bool(config.assistants.enabled),
     );

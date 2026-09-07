@@ -27,6 +27,7 @@ export type Env = {
   assistantsDelegationEnabled: boolean;
   assistantsDelegationAllowBackground: boolean;
   assistantsEnableEditSharing?: boolean;
+  assistantsUsageViewEnabled?: boolean;
   assistantsShowRecentItems: boolean;
   assistantsShowRecentItemsCollapsible: boolean;
   assistantContextWarningThreshold: number;
@@ -89,6 +90,7 @@ declare global {
     ASSISTANTS_DELEGATION_ENABLED?: boolean;
     ASSISTANTS_DELEGATION_ALLOW_BACKGROUND?: boolean;
     ASSISTANTS_ENABLE_EDIT_SHARING?: boolean;
+    ASSISTANTS_USAGE_VIEW_ENABLED?: boolean;
     ASSISTANTS_SHOW_RECENT_ITEMS?: boolean;
     ASSISTANTS_SHOW_RECENT_ITEMS_COLLAPSIBLE?: boolean;
     ASSISTANTS_CONTEXT_WARNING_THRESHOLD?: number;
@@ -234,6 +236,9 @@ export const env = (): Env => {
     import.meta.env.VITE_ASSISTANTS_DELEGATION_ALLOW_BACKGROUND === "true"
       ? true
       : (window.ASSISTANTS_DELEGATION_ALLOW_BACKGROUND ?? false);
+  const assistantsUsageViewEnabled =
+    import.meta.env.VITE_ASSISTANTS_USAGE_VIEW_ENABLED === "true" ||
+    (window.ASSISTANTS_USAGE_VIEW_ENABLED ?? false);
   const assistantsEnableEditSharing =
     import.meta.env.VITE_ASSISTANTS_ENABLE_EDIT_SHARING === "false"
       ? false
@@ -419,6 +424,7 @@ export const env = (): Env => {
     assistantsDelegationEnabled,
     assistantsDelegationAllowBackground,
     assistantsEnableEditSharing,
+    assistantsUsageViewEnabled,
     assistantsShowRecentItems,
     assistantsShowRecentItemsCollapsible,
     assistantContextWarningThreshold,
