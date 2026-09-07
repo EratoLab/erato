@@ -208,7 +208,7 @@ export const CloudDriveList = memo<CloudDriveListProps>(
                       {drive.name}
                     </h3>
                     <span
-                      className={`rounded-full px-2 py-0.5 text-xs ${getDriveBadgeColor(drive.kind)}`}
+                      className={`pill-geometry px-2 py-0.5 text-xs ${getDriveBadgeColor(drive.kind)}`}
                     >
                       {getDriveKindLabel(drive.kind)}
                     </span>

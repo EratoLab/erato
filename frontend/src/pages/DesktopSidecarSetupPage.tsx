@@ -367,7 +367,7 @@ function ArtifactCard({
           </div>
         </div>
         {isDefault ? (
-          <span className="shrink-0 rounded-full bg-theme-bg-selected px-2.5 py-1 text-xs font-semibold text-theme-fg-accent">
+          <span className="pill-geometry shrink-0 bg-theme-bg-selected px-2.5 py-1 text-xs font-semibold text-theme-fg-accent">
             <Trans id="desktopSidecar.setup.artifact.recommended">
               Recommended
             </Trans>

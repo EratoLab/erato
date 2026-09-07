@@ -41,7 +41,7 @@ interface ToolStatusPillProps {
 }
 
 // eslint-disable-next-line lingui/no-unlocalized-strings -- utility classes
-const PILL_CLASS = "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium";
+const PILL_CLASS = "pill-geometry shrink-0 px-2 py-0.5 text-xs font-medium";
 
 /**
  * Informational pill for a settled step whose state deserves naming.

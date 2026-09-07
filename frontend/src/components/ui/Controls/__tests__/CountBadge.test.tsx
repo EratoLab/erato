@@ -53,7 +53,7 @@ describe("CountBadge", () => {
     );
 
     const badge = screen.getByTestId("badge");
-    expect(badge).toHaveClass("rounded-full");
+    expect(badge).toHaveClass("pill-geometry");
     expect(badge).toHaveClass("shrink-0");
   });
 });

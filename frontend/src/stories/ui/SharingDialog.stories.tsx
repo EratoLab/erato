@@ -117,7 +117,7 @@ const MockSubjectSelector = memo<MockSubjectSelectorProps>(
                       <span className="font-medium text-theme-fg-primary">
                         {user.display_name}
                       </span>
-                      <span className="rounded-full bg-theme-bg-secondary px-2 py-0.5 text-xs text-theme-fg-secondary">
+                      <span className="pill-geometry bg-theme-bg-secondary px-2 py-0.5 text-xs text-theme-fg-secondary">
                         User
                       </span>
                     </div>
@@ -147,7 +147,7 @@ const MockSubjectSelector = memo<MockSubjectSelectorProps>(
                       <span className="font-medium text-theme-fg-primary">
                         {group.display_name}
                       </span>
-                      <span className="rounded-full bg-theme-bg-secondary px-2 py-0.5 text-xs text-theme-fg-secondary">
+                      <span className="pill-geometry bg-theme-bg-secondary px-2 py-0.5 text-xs text-theme-fg-secondary">
                         Group
                       </span>
                     </div>

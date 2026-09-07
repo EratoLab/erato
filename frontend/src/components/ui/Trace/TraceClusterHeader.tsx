@@ -56,7 +56,7 @@ export const TraceClusterHeader = ({
       aria-expanded={isOpen}
       onClick={onToggle}
       className={clsx(
-        "flex items-center gap-2 rounded-full px-3 py-1 text-sm",
+        "pill-geometry flex items-center gap-2 px-3 py-1 text-sm",
         "text-theme-fg-secondary transition-colors hover:text-theme-fg-primary",
         "cursor-pointer",
       )}

@@ -68,7 +68,7 @@ export const ToolCallItem: React.FC<ToolCallItemProps> = ({
         <div className="flex items-center gap-2">
           <div
             className={clsx(
-              "flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium",
+              "pill-geometry flex items-center gap-1 px-2 py-1 text-xs font-medium",
               config.bgColor,
               config.color,
             )}

@@ -1162,7 +1162,7 @@ function SharedFileChips({
               id: "officeAddin.teams.picker.openSharedFile",
               message: `Open ${file.name}`,
             })}
-            className="theme-transition flex max-w-44 items-center gap-1 rounded-full border border-theme-border bg-theme-bg-accent px-2 py-0.5 text-[11px] text-theme-fg-muted hover:bg-theme-bg-hover hover:text-theme-fg-primary"
+            className="pill-geometry theme-transition flex max-w-44 items-center gap-1 border border-theme-border bg-theme-bg-accent px-2 py-0.5 text-[11px] text-theme-fg-muted hover:bg-theme-bg-hover hover:text-theme-fg-primary"
           >
             {isLoading ? (
               <SpinnerIcon size="sm" className="shrink-0" aria-hidden />
