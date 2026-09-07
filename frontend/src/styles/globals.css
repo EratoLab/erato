@@ -561,6 +561,22 @@ body {
     border-radius: var(--theme-radius-control);
   }
 
+  /* The capsule/circle dialect. A capsule is a text label plus inline padding
+     and reads the pill token; a circle is an intrinsic square with no label
+     and declares 50%, so a theme softening the pill radius — which is what
+     makes every capsule retunable — cannot square a circle along with it. */
+  .pill-geometry {
+    border-radius: var(--theme-radius-pill);
+  }
+
+  .avatar-geometry {
+    border-radius: 50%;
+  }
+
+  .modal-close-geometry {
+    border-radius: 50%;
+  }
+
   /* Menu rows sit inside .dropdown-panel-chrome-geometry, so their radius is
      derived, not tokenised: panel radius minus the panel inset keeps the row
      highlight concentric with the panel corner for any theme values. */
@@ -668,6 +684,20 @@ body {
   pre.message-content-code-block > div,
   pre.message-content-raw-block > code {
     min-width: max-content;
+  }
+
+  .alert-geometry {
+    border-radius: var(--theme-radius-base);
+  }
+
+  /* The framed variant of an alert, worn by the chat input's non-alert notices
+     as well, so the name stays neutral: an alert- name on a plain notice would
+     invite a theme rule that paints it as one. */
+  .message-frame-geometry {
+    border-radius: var(--theme-radius-message);
+    padding: var(--theme-spacing-message-padding-y)
+      var(--theme-spacing-message-padding-x);
+    gap: var(--theme-spacing-control-gap);
   }
 
   /* The spinner ring. --spinner-* are private to this family rather than
