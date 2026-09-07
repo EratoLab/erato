@@ -50,3 +50,28 @@ export function msgFileFromBytes(bytes: Uint8Array, name = "item.msg"): File {
   new Uint8Array(buffer).set(bytes);
   return new File([buffer], name, { type: "application/vnd.ms-outlook" });
 }
+
+/** windows-1252 encoding for MAPI PT_STRING8 string properties. */
+export function latin1(value: string): Uint8Array {
+  const bytes = new Uint8Array(value.length);
+  for (let index = 0; index < value.length; index += 1) {
+    bytes[index] = value.charCodeAt(index) & 0xff;
+  }
+  return bytes;
+}
+
+/** Stream name for PR_INTERNET_MESSAGE_ID_A (MAPI tag 0x1035, PT_STRING8). */
+export const INTERNET_MESSAGE_ID_ANSI_STREAM_NAME = "__substg1.0_1035001E";
+
+/**
+ * Builds a `.msg` CFB blob that stores its Message-ID in the ANSI
+ * (PT_STRING8) property stream instead of the Unicode one. A writer picks one
+ * encoding for all string properties, so both variants must resolve.
+ */
+export function buildAnsiMsgWithInternetMessageId(
+  messageId: string,
+): Uint8Array {
+  return buildCfbWith([
+    { name: INTERNET_MESSAGE_ID_ANSI_STREAM_NAME, content: latin1(messageId) },
+  ]);
+}

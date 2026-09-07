@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
+import {
+  buildAnsiMsgWithInternetMessageId,
+  buildMsgWithInternetMessageId,
+} from "../../../test/fixtures/msg";
 import { parseDroppedFiles } from "../parseDroppedFiles";
+
+import type { OutlookMessageFetcher } from "../fetchOutlookMessage";
 
 const CRLF = "\r\n";
 
@@ -17,6 +23,33 @@ function buildEml(messageId: string | null, subject = "Hi"): string {
     `MIME-Version: 1.0${CRLF}` +
     `Content-Type: text/plain${CRLF}${CRLF}body`
   );
+}
+
+/**
+ * Dropped `.msg` files arrive with an EMPTY `type`, so fixtures must not lean
+ * on the `application/vnd.ms-outlook` type a file picker would supply.
+ */
+function makeDroppedMsgFile(bytes: Uint8Array, name = "dropped.msg"): File {
+  const buffer = new ArrayBuffer(bytes.length);
+  new Uint8Array(buffer).set(bytes);
+  return new File([buffer], name, { type: "" });
+}
+
+function makeFetcherStub(): {
+  fetcher: OutlookMessageFetcher;
+  byteLookups: string[];
+} {
+  const byteLookups: string[] = [];
+  const fetcher = {
+    fetchMessageBytesByInternetMessageId: async (internetMessageId: string) => {
+      byteLookups.push(internetMessageId);
+      return {
+        bytes: new TextEncoder().encode(buildEml(internetMessageId, "Fetched")),
+        internetMessageId,
+      };
+    },
+  } as unknown as OutlookMessageFetcher;
+  return { fetcher, byteLookups };
 }
 
 describe("parseDroppedFiles", () => {
@@ -66,6 +99,45 @@ describe("parseDroppedFiles", () => {
 
     expect(result.emails).toHaveLength(1);
     expect(tryAttachEmail).not.toHaveBeenCalled();
+  });
+
+  it("resolves a dropped .msg that stores its Message-ID as ANSI", async () => {
+    const { fetcher, byteLookups } = makeFetcherStub();
+    const msg = makeDroppedMsgFile(
+      buildAnsiMsgWithInternetMessageId("<ansi-drop@example.com>"),
+    );
+
+    const result = await parseDroppedFiles([msg], { fetcher });
+
+    expect(byteLookups).toEqual(["<ansi-drop@example.com>"]);
+    expect(result.emails).toHaveLength(1);
+    expect(result.nonEmail).toEqual([]);
+  });
+
+  it("resolves a dropped .msg with a Unicode Message-ID and no MIME type", async () => {
+    const { fetcher, byteLookups } = makeFetcherStub();
+    const msg = makeDroppedMsgFile(
+      buildMsgWithInternetMessageId("<unicode-drop@example.com>"),
+    );
+
+    const result = await parseDroppedFiles([msg], { fetcher });
+
+    expect(byteLookups).toEqual(["<unicode-drop@example.com>"]);
+    expect(result.emails).toHaveLength(1);
+  });
+
+  it("warns instead of silently dropping a .msg with no Message-ID", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { fetcher, byteLookups } = makeFetcherStub();
+    const msg = makeDroppedMsgFile(new Uint8Array([1, 2, 3, 4]), "broken.msg");
+
+    const result = await parseDroppedFiles([msg], { fetcher });
+
+    expect(byteLookups).toEqual([]);
+    expect(result.emails).toEqual([]);
+    expect(result.nonEmail).toEqual([]);
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 
   it("skips .msg drops without a message fetcher", async () => {

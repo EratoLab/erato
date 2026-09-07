@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildCfbWith, utf16le } from "../../../test/fixtures/msg";
+import { buildCfbWith, latin1, utf16le } from "../../../test/fixtures/msg";
 import {
   extractMsgInternetMessageId,
   extractMsgInternetMessageIdFromBytes,
@@ -47,6 +47,74 @@ describe("extractMsgInternetMessageIdFromBytes", () => {
       },
     ]);
     expect(extractMsgInternetMessageIdFromBytes(cfbBytes)).toBeNull();
+  });
+
+  it("reads the ANSI (PT_STRING8) stream when only that variant is present", () => {
+    const cfbBytes = buildCfbWith([
+      {
+        name: "__substg1.0_1035001E",
+        content: latin1("<ansi-only@example.com>"),
+      },
+    ]);
+    expect(extractMsgInternetMessageIdFromBytes(cfbBytes)).toBe(
+      "<ansi-only@example.com>",
+    );
+  });
+
+  it("prefers the Unicode stream when both variants are present", () => {
+    const cfbBytes = buildCfbWith([
+      {
+        name: "__substg1.0_1035001E",
+        content: latin1("<ansi@example.com>"),
+      },
+      {
+        name: "__substg1.0_1035001F",
+        content: utf16le("<unicode@example.com>"),
+      },
+    ]);
+    expect(extractMsgInternetMessageIdFromBytes(cfbBytes)).toBe(
+      "<unicode@example.com>",
+    );
+  });
+
+  it("strips trailing null padding from the ANSI stream", () => {
+    const cfbBytes = buildCfbWith([
+      {
+        name: "__substg1.0_1035001E",
+        content: latin1("<padded@host>  \u0000\u0000"),
+      },
+    ]);
+    expect(extractMsgInternetMessageIdFromBytes(cfbBytes)).toBe(
+      "<padded@host>",
+    );
+  });
+
+  it("ignores an embedded attachment's Message-ID when the top level has none", () => {
+    // A bare stream name resolves against every leaf in the tree, so an
+    // embedded forwarded message can shadow the carrier's own id.
+    const cfbBytes = buildCfbWith([
+      {
+        name: "/__attach_version1.0_#00000000/__substg1.0_3701000D/__substg1.0_1035001F",
+        content: utf16le("<embedded@example.com>"),
+      },
+    ]);
+    expect(extractMsgInternetMessageIdFromBytes(cfbBytes)).toBeNull();
+  });
+
+  it("returns the top-level Message-ID even when an embedded one exists", () => {
+    const cfbBytes = buildCfbWith([
+      {
+        name: "/__attach_version1.0_#00000000/__substg1.0_3701000D/__substg1.0_1035001F",
+        content: utf16le("<embedded@example.com>"),
+      },
+      {
+        name: "/__substg1.0_1035001F",
+        content: utf16le("<carrier@example.com>"),
+      },
+    ]);
+    expect(extractMsgInternetMessageIdFromBytes(cfbBytes)).toBe(
+      "<carrier@example.com>",
+    );
   });
 
   it("returns null for non-CFB input", () => {

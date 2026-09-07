@@ -33,6 +33,7 @@ export async function parseMsgFileToFiles(
 ): Promise<MsgParseResult> {
   const internetMessageId = await extractMessageIdSafely(file);
   if (!internetMessageId) {
+    warnMissingMessageId(file);
     return { files: [], messageId: null };
   }
 
@@ -75,6 +76,7 @@ export async function parseMsgFileToParsedEmail(
 ): Promise<MsgParsedResult> {
   const internetMessageId = await extractMessageIdSafely(file);
   if (!internetMessageId) {
+    warnMissingMessageId(file);
     return { parsed: null, messageId: null };
   }
 
@@ -111,6 +113,18 @@ export async function parseMsgFileToParsedEmail(
     parsed,
     messageId: parsed?.messageId ?? internetMessageId,
   };
+}
+
+/**
+ * The no-Message-ID exit drops the file with no other trace: callers treat an
+ * empty result as "nothing to attach", so without this the drop is a no-op the
+ * user cannot distinguish from a dead dropzone.
+ */
+function warnMissingMessageId(file: File): void {
+  console.warn(
+    "[parseMsgFile] no PR_INTERNET_MESSAGE_ID in dropped .msg — cannot resolve it:",
+    file.name,
+  );
 }
 
 async function extractMessageIdSafely(file: File): Promise<string | null> {
