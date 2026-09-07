@@ -46,16 +46,6 @@ export const Alert: React.FC<AlertProps> = ({
   geometryVariant = "default",
   "data-testid": dataTestId,
 }) => {
-  const alertFrameStyle =
-    geometryVariant === "message"
-      ? ({
-          borderRadius: "var(--theme-radius-message)",
-          gap: "var(--theme-spacing-control-gap)",
-          padding:
-            "var(--theme-spacing-message-padding-y) var(--theme-spacing-message-padding-x)",
-        } as const)
-      : undefined;
-
   // Get themed icon IDs for each alert type
   const errorIconId = useThemedIcon("status", "error");
   const warningIconId = useThemedIcon("status", "warning");
@@ -94,12 +84,15 @@ export const Alert: React.FC<AlertProps> = ({
     <div
       className={clsx(
         "flex items-start border",
-        geometryVariant === "message" ? "" : "gap-3 rounded-md p-3",
+        geometryVariant === "message"
+          ? "message-frame-geometry"
+          : "alert-geometry gap-3 p-3",
         styles[type].container,
         className,
       )}
-      style={alertFrameStyle}
       role="alert"
+      data-ui="alert"
+      data-tone={type}
       data-testid={dataTestId}
     >
       <div className="mt-0.5 shrink-0">{alertIcon}</div>
