@@ -9,6 +9,7 @@ import { AssistantForm } from "@/components/ui/Assistant/AssistantForm";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
+import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { SharingDialog, SharingErrorBoundary } from "@/components/ui/Sharing";
 import { CheckCircleIcon, ShareIcon } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui";
@@ -162,13 +163,13 @@ export default function AssistantEditPage() {
         />
         <div className="flex flex-1 items-center justify-center">
           <div className="text-center">
-            <div className="mx-auto mb-4 size-8 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
-            <p className="text-sm text-theme-fg-secondary">
-              {t({
+            <SpinnerIcon
+              size="xl"
+              label={t({
                 id: "assistant.loading",
                 message: "Loading assistant...",
               })}
-            </p>
+            />
           </div>
         </div>
       </div>

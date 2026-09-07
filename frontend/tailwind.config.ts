@@ -6,11 +6,10 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
     // The add-in ships no Tailwind build of its own — it renders against this
-    // stylesheet (`@erato/frontend/library.css`). Without this glob its classes
-    // only resolve when the frontend happens to use the same ones, which fails
-    // silently: `border-t-theme-fg-primary` (AddinChatInput's spinner) was
-    // never emitted. A missing directory matches nothing, so a standalone
-    // frontend build is unaffected.
+    // stylesheet (`@erato/frontend/library.css`). Without this glob a utility
+    // the add-in uses but the frontend does not is simply never emitted, and
+    // the add-in renders unstyled with no build error. A missing directory
+    // matches nothing, so a standalone frontend build is unaffected.
     "../office-addin/src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {

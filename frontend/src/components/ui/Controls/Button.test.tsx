@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import { Button } from "./Button";
 
@@ -117,5 +117,65 @@ describe("Button", () => {
 
     expect(button.className).toContain("rounded-[var(--theme-radius-pill)]");
     expect(button.className).not.toContain("rounded-full");
+  });
+
+  it("keeps a busy button clickable so it can interrupt its own work", () => {
+    const onClick = vi.fn();
+    render(
+      <Button busy onClick={onClick}>
+        Stop
+      </Button>,
+    );
+
+    const button = screen.getByRole("button", { name: "Stop" });
+
+    expect(button).not.toBeDisabled();
+    expect(button).toHaveAttribute("aria-busy", "true");
+    // `busy` stands in for a size-4 icon, so it renders the 16px ring.
+    expect(
+      button.querySelector('[data-ui="spinner"][data-size="md"]'),
+    ).not.toBeNull();
+
+    fireEvent.click(button);
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("still disables a loading button", () => {
+    const onClick = vi.fn();
+    render(
+      <Button loading onClick={onClick}>
+        Saving
+      </Button>,
+    );
+
+    const button = screen.getByRole("button", { name: "Saving" });
+
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("aria-busy", "true");
+    expect(
+      button.querySelector('[data-ui="spinner"][data-size="sm"]'),
+    ).not.toBeNull();
+  });
+
+  it("shows the busy ring in place of the idle icon", () => {
+    const { rerender } = render(
+      <Button busy={false} icon={<span>idle</span>}>
+        Dictate
+      </Button>,
+    );
+
+    const button = screen.getByRole("button", { name: /Dictate/ });
+
+    expect(button).toHaveTextContent("idle");
+    expect(button.querySelector('[data-ui="spinner"]')).toBeNull();
+
+    rerender(
+      <Button busy icon={<span>idle</span>}>
+        Dictate
+      </Button>,
+    );
+
+    expect(button).not.toHaveTextContent("idle");
+    expect(button.querySelector('[data-ui="spinner"]')).not.toBeNull();
   });
 });

@@ -54,6 +54,7 @@ export type { CopyErrorButtonProps } from "@/components/ui/Feedback/CopyErrorBut
 export { LoadingIndicator } from "@/components/ui/Feedback/LoadingIndicator";
 export type { LoadingState } from "@/components/ui/Feedback/LoadingIndicator";
 export { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
+export type { SpinnerIconProps } from "@/components/ui/Feedback/SpinnerIcon";
 export { AttachmentTile } from "@/components/ui/FileUpload/AttachmentTile";
 export type { AttachmentTileProps } from "@/components/ui/FileUpload/AttachmentTile";
 export type { AttachmentTileSize } from "@/components/ui/FileUpload/AttachmentTile";

@@ -4,6 +4,7 @@ import { useMemo, useState, memo } from "react";
 import { useDebounce } from "use-debounce";
 
 import { Alert } from "@/components/ui/Feedback/Alert";
+import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { Input } from "@/components/ui/Input/Input";
 import { useOrganizationMembersSearch } from "@/hooks/sharing";
 import {
@@ -280,8 +281,8 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
             />
             {/* Show subtle loading indicator when search is pending or searching */}
             {(isSearchPending || isSearching) && (
-              <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                <div className="size-4 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
+              <div className="absolute right-3 top-1/2 flex -translate-y-1/2">
+                <SpinnerIcon size="md" />
               </div>
             )}
           </div>

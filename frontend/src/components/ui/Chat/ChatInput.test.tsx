@@ -199,15 +199,26 @@ vi.mock("./ModelSelector", () => ({
 }));
 
 vi.mock("../Controls/Button", () => ({
+  // Mirrors the real button's busy/loading contract: both mark aria-busy and
+  // put a ring in the icon slot, but only `loading` disables.
   Button: ({
     children,
     icon,
+    loading = false,
+    busy = false,
+    disabled = false,
     ...props
   }: ButtonHTMLAttributes<HTMLButtonElement> & {
     icon?: ReactNode;
+    loading?: boolean;
+    busy?: boolean;
   }) => (
-    <button {...props}>
-      {icon}
+    <button
+      {...props}
+      disabled={loading || disabled}
+      aria-busy={loading || busy || undefined}
+    >
+      {loading || busy ? <span data-ui="spinner" /> : icon}
       {children}
     </button>
   ),
@@ -1442,9 +1453,8 @@ describe("ChatInput", () => {
     expect(button).toHaveAccessibleName("Finishing dictation");
     expect(button).toBeDisabled();
     expect(screen.getByTestId("chat-input-send-message")).toBeDisabled();
-    expect(
-      screen.getByTestId("chat-input-dictation-loading-icon"),
-    ).toHaveTextContent("loading");
+    expect(button).toHaveAttribute("aria-busy", "true");
+    expect(button.querySelector('[data-ui="spinner"]')).not.toBeNull();
   });
 
   it("does not show the record button when audio dictation is disabled", async () => {

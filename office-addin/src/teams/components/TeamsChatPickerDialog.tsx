@@ -1165,10 +1165,7 @@ function SharedFileChips({
             className="theme-transition flex max-w-44 items-center gap-1 rounded-full border border-theme-border bg-theme-bg-accent px-2 py-0.5 text-[11px] text-theme-fg-muted hover:bg-theme-bg-hover hover:text-theme-fg-primary"
           >
             {isLoading ? (
-              <SpinnerIcon
-                className="size-3 shrink-0 animate-spin"
-                aria-hidden
-              />
+              <SpinnerIcon size="sm" className="shrink-0" aria-hidden />
             ) : (
               <PageIcon className="size-3 shrink-0" aria-hidden />
             )}

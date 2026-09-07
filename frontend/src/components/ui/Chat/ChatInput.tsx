@@ -70,7 +70,6 @@ import {
   ArrowUpIcon,
   CloseIcon,
   EditIcon,
-  LoadingIcon,
   StopIcon,
   VoiceIcon,
 } from "../icons";
@@ -2910,12 +2909,8 @@ export const ChatInput = ({
                     type="button"
                     variant="secondary"
                     size="sm"
-                    icon={
-                      <LoadingIcon
-                        className="size-4 animate-spin text-[var(--theme-fg-primary)]"
-                        data-testid="chat-input-audio-mode-pending-loading-icon"
-                      />
-                    }
+                    busy
+                    iconClassName="text-[var(--theme-fg-primary)]"
                     onClick={handleAudioModeButtonToggle}
                     disabled={disabled || isLoading || isDictationCompleting}
                     data-testid="chat-input-audio-mode-pending-recording"
@@ -2952,12 +2947,8 @@ export const ChatInput = ({
                     type="button"
                     variant="secondary"
                     size="sm"
-                    icon={
-                      <LoadingIcon
-                        className="size-4 animate-spin text-[var(--theme-fg-primary)]"
-                        data-testid="chat-input-record-audio-transcript-loading-icon"
-                      />
-                    }
+                    busy
+                    iconClassName="text-[var(--theme-fg-primary)]"
                     onClick={isRecording ? toggleAudioRecording : undefined}
                     disabled={!isRecording}
                     data-testid="chat-input-record-audio-transcript"
@@ -3010,19 +3001,16 @@ export const ChatInput = ({
                     variant="secondary"
                     size="sm"
                     geometry="icon"
-                    icon={
+                    busy={
                       isDictationStarting ||
                       isDictating ||
                       isCapturingAudio ||
-                      isDictationCompleting ? (
-                        <LoadingIcon
-                          className="size-4 animate-spin text-[var(--theme-fg-primary)]"
-                          data-testid="chat-input-dictation-loading-icon"
-                        />
-                      ) : (
-                        <VoiceIcon className="size-4 text-[var(--theme-fg-primary)]" />
-                      )
+                      isDictationCompleting
                     }
+                    // Colours the slot, so the mic and the busy ring that
+                    // replaces it read the same.
+                    iconClassName="text-[var(--theme-fg-primary)]"
+                    icon={<VoiceIcon className="size-4" />}
                     onClick={toggleDictationForCurrentTarget}
                     disabled={
                       disabled ||

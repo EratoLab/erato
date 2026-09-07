@@ -47,7 +47,7 @@ export const FileSourceSelector = memo<FileSourceSelectorProps>(
     className = "",
   }) => {
     if (isProcessing) {
-      return <FileUploadLoading className={className} />;
+      return <FileUploadLoading className={className} variant="ghost" />;
     }
 
     // Build menu items based on available providers

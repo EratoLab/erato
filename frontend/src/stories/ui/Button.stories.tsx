@@ -173,6 +173,34 @@ export const Loading: Story = {
   ),
 };
 
+export const Busy: Story = {
+  render: () => (
+    <div className="flex items-center gap-4">
+      <Button variant="secondary" busy>
+        Starting...
+      </Button>
+      <Button variant="primary" busy>
+        Starting...
+      </Button>
+      <Button
+        variant="secondary"
+        geometry="icon"
+        busy
+        icon={<PlusIcon />}
+        aria-label="Add"
+      />
+    </div>
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "`busy` marks work in progress without disabling: for a button that is the only way to interrupt that work, `loading` would trap the user.",
+      },
+    },
+  },
+};
+
 export const Link: Story = {
   render: () => (
     <div className="flex items-center gap-4">

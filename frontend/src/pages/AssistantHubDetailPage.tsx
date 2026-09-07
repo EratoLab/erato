@@ -7,6 +7,7 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
+import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { FormField, Textarea } from "@/components/ui/Input";
 import { ArrowLeftIcon } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui";
@@ -394,13 +395,13 @@ export default function AssistantHubDetailPage() {
           {isLoading && (
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
-                <div className="mx-auto mb-4 size-8 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
-                <p className="text-sm text-theme-fg-secondary">
-                  {t({
+                <SpinnerIcon
+                  size="xl"
+                  label={t({
                     id: "assistantHub.detail.loading",
                     message: "Loading hub assistant...",
                   })}
-                </p>
+                />
               </div>
             </div>
           )}

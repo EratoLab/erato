@@ -669,6 +669,80 @@ body {
   pre.message-content-raw-block > code {
     min-width: max-content;
   }
+
+  /* The spinner ring. --spinner-* are private to this family rather than
+     --theme-* names, which ThemeProvider emits as literals on :root and would
+     therefore overwrite. They are read with fallbacks and never declared here:
+     a labelled spinner puts this class on a child of the [data-ui="spinner"]
+     hook, and a declaration on the child would beat the theme's value on the
+     parent, silently killing the retune. */
+  .spinner-geometry {
+    display: inline-block;
+    box-sizing: border-box;
+    width: var(--spinner-size, 1rem);
+    height: var(--spinner-size, 1rem);
+    /* A ring is a circle by intrinsic shape, so it reads no radius token: a
+       theme squaring the pill radius must not square the spinner. */
+    border-radius: 50%;
+    /* The head is painted, not cut out: a ring missing a quadrant carries its
+       ink ~30% of the radius off centre, and that offset travels with the
+       rotation. A full track keeps the shape centred; only the head moves.
+
+       The track defaults to a dilution of the head rather than to a token of
+       its own, so the two always fade together — under a disabled control's
+       opacity, on a filled surface, in any theme. A track pinned to its own
+       colour can wash out and leave the head alone, and a lone quadrant sits
+       ~90% of the radius off centre. Repeated rather than hoisted into a
+       variable: this class reads the --spinner-* knobs and declares none, or
+       a labelled spinner's ring would shadow the value its hook inherits. */
+    border: var(--spinner-thickness, 2px) solid
+      var(
+        --spinner-track,
+        color-mix(
+          in srgb,
+          var(--spinner-head, var(--theme-fg-secondary)) 25%,
+          transparent
+        )
+      );
+    border-inline-end-color: var(--spinner-head, var(--theme-fg-secondary));
+    vertical-align: -0.125em;
+    animation: erato-spin var(--spinner-duration, 1s) linear infinite;
+  }
+
+  .spinner-sm {
+    --spinner-size: 0.75rem;
+  }
+
+  .spinner-md {
+    --spinner-size: 1rem;
+  }
+
+  .spinner-lg {
+    --spinner-size: 1.5rem;
+  }
+
+  .spinner-xl {
+    --spinner-size: 2rem;
+  }
+
+  .spinner-fill {
+    --spinner-size: 100%;
+  }
+
+  /* Slowed, never stopped: a frozen spinner is indistinguishable from a hung
+     app. The longhand outranks the shorthand's variable, so a theme cannot
+     re-speed it here. */
+  @media (prefers-reduced-motion: reduce) {
+    .spinner-geometry {
+      animation-duration: 1.5s;
+    }
+  }
+
+  @keyframes erato-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
 }
 
 .theme-transition {

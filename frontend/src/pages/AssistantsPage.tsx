@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Controls/Button";
 import { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
 import { SegmentedControl } from "@/components/ui/Controls/SegmentedControl";
 import { Alert } from "@/components/ui/Feedback/Alert";
+import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { Input } from "@/components/ui/Input";
 import { SharingDialog, SharingErrorBoundary } from "@/components/ui/Sharing";
 import {
@@ -224,8 +225,7 @@ function LoadingState({ message }: { message: string }) {
   return (
     <div className="flex items-center justify-center py-12">
       <div className="text-center">
-        <div className="mx-auto mb-4 size-8 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
-        <p className="text-sm text-theme-fg-secondary">{message}</p>
+        <SpinnerIcon size="xl" label={message} />
       </div>
     </div>
   );

@@ -54,6 +54,13 @@ interface ButtonProps
    * pattern callers previously hand-rolled.
    */
   loading?: boolean;
+  /**
+   * Like `loading`, but the button stays clickable — for work the button
+   * itself can interrupt, where disabling would trap the user (starting a
+   * recording that only this button can stop). `loading` wins when both are
+   * set, because only `loading` disables.
+   */
+  busy?: boolean;
   "aria-label"?: string;
   "aria-pressed"?: boolean;
   "aria-checked"?: boolean | "true" | "false" | "mixed";
@@ -105,6 +112,15 @@ const ICON_SIZE_STYLES = {
   lg: "btn-geometry-icon-lg",
 } as const;
 
+// The ring borrows the button's own label colour, so it reads on a filled
+// accent variant and on a light secondary one alike; the track is the same
+// colour diluted. It sits on the icon slot rather than on the ring so that it
+// is only inherited — a theme rule on [data-ui="spinner"] still outranks it.
+const LOADING_RING_STYLE = {
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  "--spinner-head": "currentColor",
+} as React.CSSProperties;
+
 const validateProps = (props: ButtonProps) => {
   if (process.env.NODE_ENV === "development") {
     if (props.variant === "icon-only" && !props.icon) {
@@ -135,6 +151,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       className,
       showOnHover,
       loading = false,
+      busy = false,
       disabled,
       type = "button", // Default to "button" to prevent accidental form submissions
       onClick,
@@ -296,11 +313,23 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           role={role}
           {...props}
           disabled={isDisabled}
-          aria-busy={loading || undefined}
+          aria-busy={loading || busy || undefined}
         >
-          {(loading || icon) && (
-            <span className={iconClasses} aria-hidden="true">
-              {loading ? <SpinnerIcon size="sm" /> : icon}
+          {(loading || busy || icon) && (
+            <span
+              className={iconClasses}
+              style={loading || busy ? LOADING_RING_STYLE : undefined}
+              aria-hidden="true"
+            >
+              {loading ? (
+                <SpinnerIcon size="sm" />
+              ) : busy ? (
+                // `busy` fills the 16px icon slot; `loading` stays 12px, the
+                // size its call sites are laid out for.
+                <SpinnerIcon size="md" />
+              ) : (
+                icon
+              )}
             </span>
           )}
           {children}

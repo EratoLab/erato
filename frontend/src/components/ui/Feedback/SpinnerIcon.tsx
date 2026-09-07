@@ -2,47 +2,89 @@ import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { memo } from "react";
 
-interface SpinnerIconProps {
+import type { ComponentPropsWithoutRef, ReactNode } from "react";
+
+export interface SpinnerIconProps extends ComponentPropsWithoutRef<"span"> {
   /**
-   * Size of the spinner in pixels
+   * Ring diameter: 12 / 16 / 24 / 32px, or the size of the containing box.
    */
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl" | "fill";
 
   /**
-   * Additional CSS classes to apply
+   * Visible caption rendered under the ring. It supplies the accessible name,
+   * so no screen-reader-only text is rendered alongside it.
    */
-  className?: string;
+  label?: ReactNode;
 
   /**
-   * Optional text for screen readers
+   * Screen-reader-only text for a ring with no visible caption.
    */
   srText?: string;
 }
 
+// Full literals: Tailwind drops @layer components rules whose class name never
+// appears in the scanned sources, so a `spinner-${size}` template would compile
+// away every size rule.
+const SIZE_CLASSES: Record<NonNullable<SpinnerIconProps["size"]>, string> = {
+  sm: "spinner-sm",
+  md: "spinner-md",
+  lg: "spinner-lg",
+  xl: "spinner-xl",
+  fill: "spinner-fill",
+};
+
 /**
- * A reusable spinner icon component for loading states
+ * The loading ring. Announces itself as a status region by default; pass
+ * `aria-hidden` where the surrounding element already carries the live region,
+ * which drops `role="status"` so nothing announces twice.
  */
-export const SpinnerIcon = memo<SpinnerIconProps>(
-  ({ size = "md", className, srText = t`Loading...` }) => {
-    const sizeClasses = {
-      sm: "h-3 w-3",
-      md: "h-4 w-4",
-      lg: "h-6 w-6",
-    };
+export const SpinnerIcon = memo(
+  ({
+    size = "md",
+    className,
+    label,
+    srText = t({ id: "common.loadingEllipsis", message: "Loading..." }),
+    ...props
+  }: SpinnerIconProps) => {
+    const ariaHidden = props["aria-hidden"];
+    const decorative = ariaHidden === true || ariaHidden === "true";
+    const role = decorative ? undefined : "status";
+    const ringClassName = clsx("spinner-geometry", SIZE_CLASSES[size]);
+
+    if (label !== undefined && label !== null) {
+      return (
+        <span
+          role={role}
+          data-ui="spinner"
+          data-size={size}
+          {...props}
+          className={clsx("inline-flex flex-col items-center gap-4", className)}
+        >
+          <span
+            aria-hidden="true"
+            data-ui="spinner-ring"
+            className={ringClassName}
+          />
+          <span
+            data-ui="spinner-label"
+            className="text-sm text-theme-fg-secondary"
+          >
+            {label}
+          </span>
+        </span>
+      );
+    }
 
     return (
-      <div
-        className={clsx(
-          "inline-block animate-spin rounded-full border-2 border-solid border-current border-e-transparent align-[-0.125em] text-theme-fg-secondary motion-reduce:animate-[spin_1.5s_linear_infinite]",
-          sizeClasses[size],
-          className,
-        )}
-        role="status"
+      <span
+        role={role}
+        data-ui="spinner"
+        data-size={size}
+        {...props}
+        className={clsx(ringClassName, className)}
       >
-        <span className="!absolute !-m-px !h-px !w-px !overflow-hidden !whitespace-nowrap !border-0 !p-0 ![clip:rect(0,0,0,0)]">
-          {srText}
-        </span>
-      </div>
+        {decorative ? null : <span className="sr-only">{srText}</span>}
+      </span>
     );
   },
 );

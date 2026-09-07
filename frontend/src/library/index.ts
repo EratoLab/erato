@@ -140,6 +140,7 @@ export {
   type DropdownMenuProps,
 } from "@/components/ui/Controls/DropdownMenu";
 export { Alert } from "@/components/ui/Feedback/Alert";
+export { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 export {
   Toaster,
   toast,

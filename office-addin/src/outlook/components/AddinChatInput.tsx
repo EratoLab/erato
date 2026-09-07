@@ -1,6 +1,7 @@
 import {
   FileTypeUtil,
   GroupedFileAttachmentsPreview,
+  SpinnerIcon,
   fetchUploadFile,
   getIdToken,
   useUploadFeature,
@@ -961,10 +962,7 @@ export const AddinChatInput = forwardRef<
             aria-live="polite"
             data-testid="addin-chat-email-expansion-indicator"
           >
-            <span
-              aria-hidden="true"
-              className="inline-block size-3 animate-spin rounded-full border-2 border-theme-border border-t-theme-fg-primary"
-            />
+            <SpinnerIcon size="sm" aria-hidden />
             <span className="min-w-0 truncate">
               {t({
                 id: "officeAddin.chatInput.expandingDroppedEmails",

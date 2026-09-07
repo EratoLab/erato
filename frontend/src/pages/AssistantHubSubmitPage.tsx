@@ -7,6 +7,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
+import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import {
   FormField,
   Input,
@@ -455,13 +456,13 @@ export default function AssistantHubSubmitPage() {
           {isLoading && (
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
-                <div className="mx-auto mb-4 size-8 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
-                <p className="text-sm text-theme-fg-secondary">
-                  {t({
+                <SpinnerIcon
+                  size="xl"
+                  label={t({
                     id: "assistantHub.submit.loading",
                     message: "Loading assistant...",
                   })}
-                </p>
+                />
               </div>
             </div>
           )}

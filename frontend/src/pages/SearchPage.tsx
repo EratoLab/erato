@@ -10,6 +10,7 @@ import { EditChatTitleDialog } from "@/components/ui/Chat/EditChatTitleDialog";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { Button } from "@/components/ui/Controls/Button";
 import { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
+import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { Input } from "@/components/ui/Input/Input";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 import {
@@ -290,8 +291,7 @@ export default function SearchPage() {
           {showInitialLoading && (
             <div className="flex items-center justify-center py-8">
               <div className="text-center">
-                <div className="mx-auto mb-4 size-6 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
-                <p className="text-sm text-theme-fg-secondary">{t`Searching...`}</p>
+                <SpinnerIcon size="lg" label={t`Searching...`} />
               </div>
             </div>
           )}
@@ -449,7 +449,7 @@ export default function SearchPage() {
                   aria-label={t`Loading...`}
                 >
                   {(isFetchingNextPage || isSearching) && (
-                    <div className="size-5 animate-spin rounded-full border-2 border-theme-border border-t-transparent" />
+                    <SpinnerIcon size="md" aria-hidden />
                   )}
                 </div>
               )}
