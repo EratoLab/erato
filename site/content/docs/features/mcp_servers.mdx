@@ -81,7 +81,7 @@ The MCP server therefore continues to receive the Base64 value declared by its o
 
 #### File outputs
 
-A marked output field must be part of an object that also contains a sibling `mime_type` or `content_type` string. The MCP tool result must provide the object as JSON in text content.
+A marked output field must be part of an object that also contains a sibling `mime_type` or `content_type` string. The MCP tool result must provide the object in `structuredContent` or as JSON in text content. When both are present, `structuredContent` takes precedence.
 
 An optional sibling string field can supply the file's display name by carrying the `chat.erato/file_name_field` annotation. The field name itself is arbitrary:
 
@@ -110,13 +110,13 @@ For each marked output, Erato:
 
 1. Decodes and stores the Base64 data.
 2. Creates a file upload associated with the current chat.
-3. Uses the annotated sibling value as the display name, or generates a name when the annotation or value is absent.
+3. Uses the annotated sibling value as the display name. Without a file-name annotation, a sibling `name` value is used; if no name is provided, Erato generates one.
 4. Replaces the Base64 value in the tool result with an `erato-file://<file_upload_id>` URI.
 5. Adds a file pointer to the assistant message so the client can render the file.
 
-MCP-provided display names are not used as storage paths. At most one sibling field may be marked as the file name for a file-content field.
+MCP-provided display names are not used as storage paths. Names containing path separators, colons, or control characters, and the names `.` and `..`, are rejected. Invalid Base64 and unsafe filenames fail the tool call with a recoverable error before any files in the result are stored. At most one sibling field may be marked as the file name for a file-content field.
 
-The `x-chat.erato/file_content_field` and `x-chat.erato/file_name_field` aliases are also accepted for compatibility. File-output processing currently supports image MIME types only.
+The `x-chat.erato/file_content_field` and `x-chat.erato/file_name_field` aliases are also accepted for compatibility. File outputs support all MIME types, including DOCX and PDF, and arrays may mix images and documents. The original MIME type is passed to file storage. Images use the image renderer; other files appear as attachment cards with the same preview options as user uploads. Documents supported by text extraction remain available in subsequent model context. Files without an available preview or text extractor can still be downloaded.
 
 ### Multiple Server Support
 

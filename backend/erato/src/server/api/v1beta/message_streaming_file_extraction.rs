@@ -1,4 +1,6 @@
-use crate::models::message::{ContentPart, ContentPartImageFilePointer, GenerationErrorType};
+use crate::models::message::{
+    ContentPart, ContentPartImageFilePointer, ContentPartTextFilePointer, GenerationErrorType,
+};
 use crate::policy::engine::PolicyEngine;
 use crate::policy::types::Subject;
 use crate::state::AppState;
@@ -33,7 +35,7 @@ struct ExtractedFileField {
 pub struct McpToolPostProcessResult {
     pub tool_response: ToolResponse,
     pub output_value: Option<JsonValue>,
-    pub image_content_parts: Vec<ContentPart>,
+    pub file_content_parts: Vec<ContentPart>,
 }
 
 fn json_pointer_escape(segment: &str) -> String {
@@ -261,7 +263,10 @@ fn extract_mcp_file_fields(
             .ok_or_else(|| eyre!("File content field is not a string"))?;
 
         let file_name = match file_name_fields.as_slice() {
-            [] => None,
+            [] => parent_object
+                .get("name")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
             [field_name] => match parent_object.get(field_name) {
                 None | Some(Value::Null) => None,
                 Some(Value::String(file_name)) => Some(file_name.clone()),
@@ -313,7 +318,51 @@ fn extension_for_mime_type(mime_type: &str) -> Option<&'static str> {
         "image/svg+xml" => Some("svg"),
         "image/tiff" => Some("tiff"),
         "image/x-icon" => Some("ico"),
+        "application/pdf" => Some("pdf"),
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => Some("docx"),
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => Some("xlsx"),
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation" => Some("pptx"),
+        "text/plain" => Some("txt"),
+        "text/csv" => Some("csv"),
+        "application/json" => Some("json"),
+        "application/zip" => Some("zip"),
         _ => None,
+    }
+}
+
+fn decode_mcp_file(extracted: &ExtractedFileField) -> Result<Vec<u8>, Report> {
+    use base64::{Engine as _, engine::general_purpose};
+
+    if let Some(name) = &extracted.file_name
+        && (name == "."
+            || name == ".."
+            || name.contains(['/', '\\', ':'])
+            || name.chars().any(char::is_control))
+    {
+        return Err(eyre!("Unsafe filename in MCP file output"));
+    }
+    if !extracted.mime_type.contains('/') || extracted.mime_type.chars().any(char::is_control) {
+        return Err(eyre!("Invalid MIME type in MCP file output"));
+    }
+    general_purpose::STANDARD
+        .decode(extracted.base64_data.as_bytes())
+        .wrap_err_with(|| {
+            format!(
+                "Failed to decode base64 file data from MCP at {}",
+                extracted.json_pointer
+            )
+        })
+}
+
+fn mcp_file_content_part(file_upload_id: Uuid, mime_type: &str) -> ContentPart {
+    if mime_type.starts_with("image/") {
+        ContentPart::ImageFilePointer(ContentPartImageFilePointer {
+            file_upload_id,
+            download_url: None,
+            preview_url: None,
+        })
+    } else {
+        ContentPart::TextFilePointer(ContentPartTextFilePointer { file_upload_id })
     }
 }
 
@@ -326,31 +375,22 @@ async fn process_mcp_file_outputs(
     output_value: &mut Value,
 ) -> Result<Vec<ContentPart>, Report> {
     use crate::models::file_upload::create_file_upload;
-    use base64::{Engine as _, engine::general_purpose};
-
     let extracted_fields = extract_mcp_file_fields(output_schema, output_value)?;
     if extracted_fields.is_empty() {
         return Ok(Vec::new());
     }
 
-    let mut image_pointers = Vec::new();
+    // Validate the entire result before persisting any files.
+    let decoded_files = extracted_fields
+        .iter()
+        .map(decode_mcp_file)
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut file_pointers = Vec::new();
     let mut replacements = Vec::new();
 
-    for (index, extracted) in extracted_fields.iter().enumerate() {
+    for (index, (extracted, file_bytes)) in extracted_fields.iter().zip(decoded_files).enumerate() {
         let mime_type = extracted.mime_type.as_str();
-        if !mime_type.starts_with("image/") {
-            return Err(eyre!(
-                "MCP tool returned non-image file with mime type '{}'",
-                mime_type
-            ));
-        }
-
-        let extension = extension_for_mime_type(mime_type)
-            .ok_or_else(|| eyre!("Unsupported image mime type '{}'", mime_type))?;
-
-        let image_bytes = general_purpose::STANDARD
-            .decode(extracted.base64_data.as_bytes())
-            .wrap_err("Failed to decode base64 image data from MCP")?;
+        let extension = extension_for_mime_type(mime_type).unwrap_or("bin");
 
         let timestamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -368,22 +408,27 @@ async fn process_mcp_file_outputs(
         let file_storage = app_state.default_file_storage_provider();
         // Keep MCP-provided display names out of storage paths. Besides avoiding path traversal,
         // this preserves the existing unique generated storage naming behavior.
-        let file_storage_path = format!("generated_images/{}", generated_filename);
+        let directory = if mime_type.starts_with("image/") {
+            "generated_images"
+        } else {
+            "generated_files"
+        };
+        let file_storage_path = format!("{directory}/{generated_filename}");
 
         let mut writer = file_storage
             .upload_file_writer(&file_storage_path, Some(mime_type))
             .await
-            .wrap_err("Failed to create writer for MCP generated image")?;
+            .wrap_err("Failed to create writer for MCP generated file")?;
 
         writer
-            .write(image_bytes)
+            .write(file_bytes)
             .await
-            .wrap_err("Failed to write MCP generated image bytes")?;
+            .wrap_err("Failed to write MCP generated file bytes")?;
 
         writer
             .close()
             .await
-            .wrap_err("Failed to close MCP generated image writer")?;
+            .wrap_err("Failed to close MCP generated file writer")?;
 
         let file_upload = create_file_upload(
             &app_state.db,
@@ -401,11 +446,7 @@ async fn process_mcp_file_outputs(
             format!("erato-file://{}", file_upload.id),
         ));
 
-        image_pointers.push(ContentPart::ImageFilePointer(ContentPartImageFilePointer {
-            file_upload_id: file_upload.id,
-            download_url: None,
-            preview_url: None,
-        }));
+        file_pointers.push(mcp_file_content_part(file_upload.id, mime_type));
     }
 
     replace_mcp_file_fields(output_value, &replacements)?;
@@ -414,7 +455,7 @@ async fn process_mcp_file_outputs(
     // fetches their previews after the turn completes.
     app_state.global_policy_engine.invalidate_data().await;
 
-    Ok(image_pointers)
+    Ok(file_pointers)
 }
 
 fn mcp_result_to_text(result: &rmcp::model::CallToolResult) -> String {
@@ -513,15 +554,18 @@ pub async fn post_process_mcp_tool_result(
     let mut output_value = serde_json::from_str(&tool_response_content)
         .ok()
         .or(Some(JsonValue::String(tool_response_content.clone())));
-    let mut image_content_parts: Vec<ContentPart> = Vec::new();
+    let mut file_content_parts: Vec<ContentPart> = Vec::new();
 
     if let Some(output_schema) = output_schema {
         let output_schema_value = Value::Object(output_schema.as_ref().clone());
         let schema_paths = collect_file_content_paths(&output_schema_value);
         if !schema_paths.is_empty() {
-            let mut output_json: Value = serde_json::from_str(&tool_response_content)
-                .wrap_err("Failed to parse MCP tool output as JSON")?;
-            image_content_parts = process_mcp_file_outputs(
+            let mut output_json: Value = match &tool_call_result.structured_content {
+                Some(value) => value.clone(),
+                None => serde_json::from_str(&tool_response_content)
+                    .wrap_err("Failed to parse MCP tool output as JSON")?,
+            };
+            file_content_parts = process_mcp_file_outputs(
                 app_state,
                 policy,
                 subject,
@@ -542,7 +586,7 @@ pub async fn post_process_mcp_tool_result(
             content: tool_response_content,
         },
         output_value,
-        image_content_parts,
+        file_content_parts,
     })
 }
 
@@ -551,6 +595,103 @@ mod tests {
     use super::*;
     use rmcp::model::{CallToolResult, Content};
     use serde_json::json;
+
+    #[test]
+    fn document_and_mixed_outputs_decode_and_become_file_references() {
+        let schema = json!({
+            "properties": {
+                "files": { "type": "array", "items": {
+                    "properties": {
+                        "data_base64": { "chat.erato/file_content_field": true },
+                        "name": { "type": "string" },
+                        "mime_type": { "type": "string" }
+                    }
+                }}
+            }
+        });
+        let cases = [
+            (
+                "report.docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ),
+            ("report.pdf", "application/pdf"),
+            ("chart.png", "image/png"),
+            ("custom.bin", "application/x-custom"),
+        ];
+        // Exercise individual documents as well as mixed image/document arrays.
+        for count in [1, 2, 4] {
+            let mut output = json!({ "files": cases[..count].iter().map(|(name, mime)| {
+                json!({ "name": name, "mime_type": mime, "data_base64": "aGVsbG8=" })
+            }).collect::<Vec<_>>() });
+            let fields = extract_mcp_file_fields(&schema, &output).unwrap();
+            let mut replacements = Vec::new();
+            for (index, field) in fields.iter().enumerate() {
+                assert_eq!(field.file_name.as_deref(), Some(cases[index].0));
+                assert_eq!(field.mime_type, cases[index].1);
+                assert_eq!(decode_mcp_file(field).unwrap(), b"hello");
+                let id = Uuid::new_v4();
+                match mcp_file_content_part(id, &field.mime_type) {
+                    ContentPart::ImageFilePointer(pointer) => {
+                        assert_eq!(index, 2);
+                        assert_eq!(pointer.file_upload_id, id);
+                        assert!(pointer.download_url.is_none());
+                    }
+                    ContentPart::TextFilePointer(pointer) => {
+                        assert_ne!(index, 2);
+                        assert_eq!(pointer.file_upload_id, id);
+                    }
+                    _ => panic!("Expected file pointer"),
+                }
+                replacements.push((field.json_pointer.as_str(), format!("erato-file://{id}")));
+            }
+            replace_mcp_file_fields(&mut output, &replacements).unwrap();
+            for (index, (_, reference)) in replacements.iter().enumerate() {
+                assert_eq!(output["files"][index]["data_base64"], *reference);
+                assert_eq!(output["files"][index]["name"], cases[index].0);
+                assert_eq!(output["files"][index]["mime_type"], cases[index].1);
+            }
+        }
+    }
+
+    #[test]
+    fn invalid_file_outputs_have_recoverable_errors() {
+        let mut field = ExtractedFileField {
+            json_pointer: "/files/0/data_base64".into(),
+            mime_type: "application/pdf".into(),
+            base64_data: "invalid!".into(),
+            file_name: Some("report.pdf".into()),
+        };
+        assert!(
+            decode_mcp_file(&field)
+                .unwrap_err()
+                .to_string()
+                .contains("base64 file data")
+        );
+        field.base64_data = "aGVsbG8=".into();
+        for name in [
+            "../report.pdf",
+            "dir/report.pdf",
+            "dir\\report.pdf",
+            "..",
+            "bad\nname.pdf",
+        ] {
+            field.file_name = Some(name.into());
+            assert!(
+                decode_mcp_file(&field)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("Unsafe filename")
+            );
+        }
+        field.file_name = None;
+        field.mime_type = "invalid".into();
+        assert!(
+            decode_mcp_file(&field)
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid MIME type")
+        );
+    }
 
     #[test]
     fn extract_mcp_file_fields_handles_defs_and_arrays() {

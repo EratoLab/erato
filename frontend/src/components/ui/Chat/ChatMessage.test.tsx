@@ -63,12 +63,13 @@ vi.mock("../Message/ImageLightbox", () => ({
 // real component's behaviour while the file ids are still resolving.
 const attachmentsRenderMock = vi.hoisted(() => vi.fn());
 vi.mock("./MessageAttachments", () => ({
-  MessageAttachments: () => attachmentsRenderMock(),
+  MessageAttachments: (props: unknown) => attachmentsRenderMock(props),
 }));
 
 describe("ChatMessage", () => {
   beforeEach(() => {
     messageContentMock.mockClear();
+    attachmentsRenderMock.mockClear();
     attachmentsRenderMock.mockReturnValue(
       <div data-testid="attachments-stub" />,
     );
@@ -222,6 +223,53 @@ describe("ChatMessage", () => {
       );
     },
   );
+
+  it("renders generated documents as assistant attachments without duplicating images", async () => {
+    const message: UiChatMessage = {
+      id: "generated-files",
+      content: [
+        { content_type: "text_file_pointer", file_upload_id: "docx-file" },
+        { content_type: "text_file_pointer", file_upload_id: "pdf-file" },
+        { content_type: "image_file_pointer", file_upload_id: "image-file" },
+      ],
+      role: "assistant",
+      sender: "assistant",
+      authorId: "assistant_1",
+      createdAt: new Date().toISOString(),
+      status: "complete",
+      input_files_ids: ["pdf-file"],
+    };
+    const onFilePreview = vi.fn();
+    const { i18n } = await import("@lingui/core");
+    i18n.load("en", enMessages as unknown as Messages);
+    i18n.activate("en");
+    render(
+      <I18nProvider i18n={i18n}>
+        <ChatMessage
+          message={message}
+          controls={() => null}
+          controlsContext={{
+            currentUserId: "user_1",
+            dialogOwnerId: "user_1",
+            isSharedDialog: false,
+          }}
+          onMessageAction={async () => true}
+          onFilePreview={onFilePreview}
+        />
+      </I18nProvider>,
+    );
+    expect(attachmentsRenderMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fileIds: ["pdf-file", "docx-file"],
+        onFilePreview,
+      }),
+    );
+    expect(
+      screen
+        .getByTestId("message-assistant")
+        .contains(screen.getByTestId("attachments-stub")),
+    ).toBe(true);
+  });
 
   it("keeps the attachments hook out of the layout until files resolve", async () => {
     attachmentsRenderMock.mockReturnValue(null);

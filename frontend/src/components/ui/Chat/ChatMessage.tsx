@@ -154,10 +154,22 @@ export const ChatMessage = memo(function ChatMessage({
     return null;
   }
 
+  const attachmentIds = [
+    ...new Set([
+      ...(message.input_files_ids ?? []),
+      ...(!isUser
+        ? message.content.flatMap((part) =>
+            part.content_type === "text_file_pointer"
+              ? [part.file_upload_id]
+              : [],
+          )
+        : []),
+    ]),
+  ];
   const attachments =
-    message.input_files_ids && message.input_files_ids.length > 0 ? (
+    attachmentIds.length > 0 ? (
       <MessageAttachments
-        fileIds={message.input_files_ids}
+        fileIds={attachmentIds}
         filesById={filesById}
         relatedFiles={siblingFiles}
         onFilePreview={onFilePreview}
