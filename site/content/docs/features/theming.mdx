@@ -142,6 +142,8 @@ Framed cards read `radius.card`: entity rows in settings, assistant cards, and s
 
 Existing theme JSON can omit these new groups. When a theme does not provide them yet, the corresponding CSS variables fall back to the built-in theme defaults until they are explicitly overridden.
 
+One older field is not a fallback case. A theme that still sets a single top-level `borderRadius` inside `theme.light` or `theme.dark` has that one value copied onto every radius key it leaves unset under `radius`: `base`, `shell`, `input`, `control`, `message`, `modal`, `dropdown`, `card` and `pill` alike, resolved separately per mode. Any per-key value under `radius` still wins over it. The consequence worth knowing is `pill`: under such a theme every badge, chip and status pill takes that radius instead of staying a full capsule. Set `radius.pill` explicitly to keep them round while the rest of the theme softens.
+
 ## Optional Stylesheets
 
 Theme packs can include these optional sibling stylesheets beside `theme.json`:
@@ -178,11 +180,12 @@ For shell-level overrides in `theme.css`, prefer the app-owned `data-ui` and `da
 - `data-ui="entity-row"`
 - `data-ui="assistant-list-card"`
 - `data-ui="search-result-card"`
-- `data-ui="option-card"` (carries `data-selected="true"` when checked; `data-ui="option-card-icon"` marks its icon tile and `data-ui="option-card-details"` the section shown under a checked card)
+- `data-ui="option-card"` (carries `data-selected="true"` when checked; `data-ui="option-card-icon"` marks its icon tile and carries it too, and `data-ui="option-card-details"` the section shown under a checked card)
 - `data-ui="tab-rail"` (the hand-rolled settings tab rails; their tabs read `--theme-radius-control`)
 - `data-ui="attachment-group"` and `data-ui="thread-message-card"` (attachment group frames and the per-message cards of an email thread; declare `--attachment-tile-radius` on the card to reshape the attachment chips inside it, their icon tiles follow)
 - `data-ui="attachment-tile"` (each attachment chip), `data-ui="attachment-row"` (a selectable attachment row with its checkbox, in kits that offer per-attachment selection), `data-ui="attachment-loading"` (the placeholder while a group's contents load)
 - `data-ui="addin-chat-header"` (the Office add-in's header row when a component kit supplies a top-left accessory)
+- `data-ui="alert"` (the shared inline error, warning, info and success banners; `data-tone` on the same element says which one, taking `error`, `warning`, `info` or `success`, so a theme can restyle a single tone or the whole family. A few hand-rolled banners still sit outside this hook and carry only their tone colours)
 - `data-ui="spinner"` (every loading ring the app and the Office add-in draw, and those of a component kit that adopts the host spinner; declare `--spinner-track`, `--spinner-head`, `--spinner-thickness` and `--spinner-duration` on it to restyle all of them at once; the head defaults to `--theme-fg-secondary` and the track to a 25% dilution of it, which keeps the ink a full circle so the ring stays centred as it turns and cannot wash out to a lone arc on a faded control). A ring that carries a visible caption wraps two sub-parts, `data-ui="spinner-ring"` and `data-ui="spinner-label"`.
 
 Every popover panel (dropdown menus, the chat "+" menu, the history filter menu and its flyout, the mention and run-mode menus) also carries the class `anchored-popover-skin`, and every menu row the class `dropdown-item-geometry`. Both are stable hooks: one rule on the skin restyles the whole popover family, and one rule on the row class reshapes every menu row.
@@ -208,6 +211,13 @@ The names people use for these surfaces rarely match the component names, and th
 | Settings tabs                                              | `tab-rail`                                   | `radius.control`                                                                    | re-declare `--theme-radius-control` on the hook                                                      |
 | Menu panel, "+" menu, filter menu and flyout               | class `anchored-popover-skin`                | `radius.dropdown`                                                                   | set `radius.dropdown`; rows via class `dropdown-item-geometry`                                       |
 | Sidebar rows and nav rows                                  | `chat-history-item`, `.sidebar-row-geometry` | `radius.shell`                                                                      | set `radius.shell`                                                                                   |
+| Badge, chip, status pill                                   | class `pill-geometry`                        | `radius.pill`                                                                       | set `radius.pill`                                                                                    |
+| Avatar circle                                              | class `avatar-geometry`                      | `50%`, a circle reads no radius token                                               | none, a circle stays a circle                                                                        |
+| Alert, inline error or warning banner                      | `alert`                                      | `radius.base`; the framed alerts inside a chat take `radius.message`                | set `radius.base`, or `radius.message` for the framed form                                           |
+
+Capsules and circles are deliberately kept apart. A badge, chip or status pill is a text label with side padding, so it follows `radius.pill` and softens along with the theme. An avatar, status dot, spinner or round close button is a fixed-size square rather than a padded label, so it declares `50%` and reads no radius token at all, even when it holds an initial. That separation is what lets a theme set `radius.pill`, or the legacy `borderRadius` above, to a small value and get square-ish chips without turning every avatar and dot into a rounded square.
+
+`radius.base` deserves a second look, because the plain alert is its most visible reader: every inline error, warning, info and success banner that does not take the framed form reads it. A theme that raises `base` rounds all of them along with the rest of the app — under the Open WebUI-like theme's `0.75rem` they are twice as round as the app's own `0.375rem`, and a theme setting only the legacy `borderRadius` moves them too. Give the banners a corner of their own with a `[data-ui="alert"]` rule in `theme.css` if that is not what you want.
 
 Two examples, both from the Open WebUI-like theme:
 
@@ -222,6 +232,34 @@ Two examples, both from the Open WebUI-like theme:
   --attachment-tile-radius: 0.25rem;
 }
 ```
+
+## State
+
+Selected, pressed, expanded, current and disabled are announced on the element itself, so a theme can paint them without knowing how the app tracks them.
+
+The ARIA attribute comes first. Where an element already is the widget the state belongs to, that widget's own ARIA attribute is the channel to key on, and no parallel `data-` attribute is emitted beside it:
+
+- `aria-selected` on the segments of a segmented control and on settings tabs
+- `aria-checked` on menu rows that toggle something
+- `aria-pressed` on toggle buttons; the shared button also derives its selected tint from it
+- `aria-current="page"` on the link of the open conversation in the history list
+- `aria-expanded` on the row of an open submenu, which the app itself styles through the `aria-expanded:` variant
+- `aria-disabled` on a control that is inert but must stay reachable
+
+A `data-` attribute is minted only where the element carrying the hook is not that widget (a wrapper row, an icon tile, a decorative box), and then only as a presence boolean: it is there with the value `true` while the state holds and absent otherwise, never written as `"false"`, so `[data-selected]` on its own is a sufficient selector. The surfaces that carry one:
+
+- `data-ui="chat-history-item"` takes `data-selected` on the open conversation's row, beside the `aria-current` on its link
+- the sidebar navigation row takes both `aria-current="page"` and `data-selected`, because the active row is drawn without a link and would otherwise announce nothing
+- `data-ui="option-card"` and `data-ui="option-card-icon"` take `data-selected` while the card is checked; the radio input underneath keeps the ARIA
+- `data-ui="attachment-tile"` takes `data-selected` only when the row owns a checkbox and is selected. A read-only attachment row never carries it, whether or not it can be previewed
+
+`data-state` and `data-active` are not part of this contract and are emitted nowhere. Rules written against them match nothing.
+
+Three details are easy to read the wrong way:
+
+- `data-pressed` on a button is an animation, not a state. It sits on the shared button at all times, reading `false` at rest and flipping to `true` for 200 milliseconds after a click, on the same element as `aria-pressed`, which is the real toggle state. A rule keyed on `[data-pressed="true"]` paints a flicker on every click and never the sustained state it looks like it should. Key on `aria-pressed` instead.
+- A control that is unavailable but must stay reachable by keyboard uses `aria-disabled` together with the `aria-disabled:` variant for its dimmed look, rather than the native `disabled` attribute, so the control keeps its place in the tab order and can still explain why it is unavailable. No `data-disabled` is minted for that case; key on `aria-disabled`.
+- The highlight a newly arrived message wears is an exception to all of this: it is a lasting state painted with the hover surface, so a theme that retints hover retints that highlight with it. Giving it a surface of its own would change how it looks, and that is held for a later pass.
 
 ## Custom Logos
 
