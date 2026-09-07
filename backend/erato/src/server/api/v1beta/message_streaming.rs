@@ -4182,7 +4182,7 @@ async fn stream_generate_chat_completion<
                     };
                     let tool_response = post_processed.tool_response;
                     let output_value = post_processed.output_value;
-                    let image_content_parts = post_processed.image_content_parts;
+                    let file_content_parts = post_processed.file_content_parts;
 
                     persist_otel_tool_call(
                         tracing_client.as_ref(),
@@ -4245,8 +4245,8 @@ async fn stream_generate_chat_completion<
                             started_at: Some(tool_call_started.clone()),
                             ended_at: Some(now_timestamp()),
                         }));
-                        if !image_content_parts.is_empty() {
-                            current_message_content.extend(image_content_parts);
+                        if !file_content_parts.is_empty() {
+                            current_message_content.extend(file_content_parts);
                         }
                     }
 
