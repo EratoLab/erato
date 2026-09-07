@@ -1,8 +1,9 @@
-import { extractMsgInternetMessageId } from "./extractMsgInternetMessageId";
+import { extractMsgInternetMessageIdFromBytes } from "./extractMsgInternetMessageId";
 import {
   OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
   runWithGraphTimeout,
 } from "./graphRequestTimeout";
+import { parseMsgLocallyToEml } from "./parseMsgLocally";
 import { parseEmlBytes } from "./parsedEmail";
 
 import type { OutlookMessageFetcher } from "./fetchOutlookMessage";
@@ -31,7 +32,10 @@ export async function parseMsgFileToFiles(
   file: File,
   fetcher: OutlookMessageFetcher,
 ): Promise<MsgParseResult> {
-  const internetMessageId = await extractMessageIdSafely(file);
+  const bytes = await readBytesSafely(file);
+  const internetMessageId = bytes
+    ? extractMessageIdSafely(bytes, file.name)
+    : null;
   if (!internetMessageId) {
     return { files: [], messageId: null };
   }
@@ -73,11 +77,44 @@ export async function parseMsgFileToParsedEmail(
   file: File,
   fetcher: OutlookMessageFetcher,
 ): Promise<MsgParsedResult> {
-  const internetMessageId = await extractMessageIdSafely(file);
-  if (!internetMessageId) {
+  const bytes = await readBytesSafely(file);
+  if (!bytes) {
     return { parsed: null, messageId: null };
   }
 
+  const internetMessageId = extractMessageIdSafely(bytes, file.name);
+
+  // The backend copy is preferred whenever it can be had: it owns the
+  // fidelity-sensitive work (RTF-encapsulated HTML, embedded content types)
+  // that the local reader deliberately skips.
+  if (internetMessageId) {
+    const fetched = await fetchParsedEmail(file, fetcher, internetMessageId);
+    if (fetched) {
+      return {
+        parsed: fetched,
+        messageId: fetched.messageId ?? internetMessageId,
+      };
+    }
+  }
+
+  // Every remaining path — no Message-ID, no match, network or auth failure —
+  // used to drop the email with nothing to show for it. The file itself still
+  // describes the message well enough to attach.
+  const parsed = await parseMsgBytesLocally(bytes, file.name);
+  if (!parsed) {
+    console.warn(
+      "[parseMsgFile] could not resolve or read dropped .msg:",
+      file.name,
+    );
+  }
+  return { parsed, messageId: parsed?.messageId ?? internetMessageId };
+}
+
+async function fetchParsedEmail(
+  file: File,
+  fetcher: OutlookMessageFetcher,
+  internetMessageId: string,
+): Promise<ParsedEmail | null> {
   let bytesResult;
   try {
     bytesResult = await runWithGraphTimeout(
@@ -89,37 +126,48 @@ export async function parseMsgFileToParsedEmail(
           signal,
         }),
     );
+  } catch {
+    return null;
+  }
+  if (!bytesResult) {
+    return null;
+  }
+  return parseEmlBytes(bytesResult.bytes);
+}
+
+async function parseMsgBytesLocally(
+  bytes: Uint8Array,
+  sourceName: string,
+): Promise<ParsedEmail | null> {
+  const filename = sourceName.replace(/\.msg$/i, "") + ".eml";
+  const eml = parseMsgLocallyToEml(bytes, { filename });
+  if (!eml) return null;
+  return parseEmlBytes(await eml.arrayBuffer(), { filename });
+}
+
+async function readBytesSafely(file: File): Promise<Uint8Array | null> {
+  try {
+    return new Uint8Array(await file.arrayBuffer());
   } catch (error) {
     console.warn(
-      "[parseMsgFile] message fetch failed for dropped .msg:",
+      "[parseMsgFile] could not read dropped .msg:",
       file.name,
       error,
     );
-    return { parsed: null, messageId: internetMessageId };
+    return null;
   }
-
-  if (!bytesResult) {
-    console.warn(
-      "[parseMsgFile] lookup returned no match for Message-ID:",
-      internetMessageId,
-    );
-    return { parsed: null, messageId: internetMessageId };
-  }
-
-  const parsed = await parseEmlBytes(bytesResult.bytes);
-  return {
-    parsed,
-    messageId: parsed?.messageId ?? internetMessageId,
-  };
 }
 
-async function extractMessageIdSafely(file: File): Promise<string | null> {
+function extractMessageIdSafely(
+  bytes: Uint8Array,
+  sourceName: string,
+): string | null {
   try {
-    return await extractMsgInternetMessageId(file);
+    return extractMsgInternetMessageIdFromBytes(bytes);
   } catch (error) {
     console.warn(
       "[parseMsgFile] Failed to read CFB from dropped .msg:",
-      file.name,
+      sourceName,
       error,
     );
     return null;

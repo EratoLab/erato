@@ -232,7 +232,7 @@ describe("parseMsgFileToParsedEmail", () => {
     expect(result.messageId).toBe("<abc@host>");
   });
 
-  it("returns null parsed + null id when the CFB has no Message-ID", async () => {
+  it("reads the file itself when the CFB has no Message-ID", async () => {
     const file = msgFileFromBytes(
       buildCfbWith([
         { name: "__substg1.0_0037001F", content: utf16le("Some subject") },
@@ -247,7 +247,10 @@ describe("parseMsgFileToParsedEmail", () => {
       createGraphOutlookMessageFetcher(acquireToken),
     );
 
-    expect(result).toEqual({ parsed: null, messageId: null });
+    expect(result.parsed).not.toBeNull();
+    expect(result.parsed?.subject).toBe("Some subject");
+    expect(result.messageId).toBeNull();
+    // Without an id there is nothing to look up, so the network stays untouched.
     expect(fetchMock).not.toHaveBeenCalled();
     expect(acquireToken).not.toHaveBeenCalled();
   });
@@ -269,7 +272,7 @@ describe("parseMsgFileToParsedEmail", () => {
       }),
     },
   ])(
-    "preserves the CFB Message-ID with null parsed when $label",
+    "falls back to the file itself, preserving the Message-ID, when $label",
     async ({ responder }) => {
       const file = msgFileFromBytes(
         buildMsgWithInternetMessageId("<abc@host>"),
@@ -282,7 +285,11 @@ describe("parseMsgFileToParsedEmail", () => {
         createGraphOutlookMessageFetcher(acquireToken),
       );
 
-      expect(result).toEqual({ parsed: null, messageId: "<abc@host>" });
+      // The id must survive a failed lookup either way: the dedup path claims
+      // against it, so losing it would let a duplicate through.
+      expect(result.messageId).toBe("<abc@host>");
+      expect(result.parsed).not.toBeNull();
+      expect(result.parsed?.messageId).toBe("<abc@host>");
     },
   );
 });

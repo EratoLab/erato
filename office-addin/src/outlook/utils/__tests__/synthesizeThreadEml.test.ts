@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseEmlBytes } from "../parsedEmail";
 import {
+  synthesizeMessageEml,
   synthesizeThreadEml,
   type ThreadMessageInput,
 } from "../synthesizeThreadEml";
@@ -273,5 +274,93 @@ describe("synthesizeThreadEml", () => {
     // Round-trip filename via postal-mime.
     const nestedParsed = await parseEmlBytes(await nestedFile.arrayBuffer());
     expect(nestedParsed?.attachments[0].filename).toBe(filename);
+  });
+});
+
+describe("synthesizeMessageEml display names", () => {
+  const base: ThreadMessageInput = {
+    internetMessageId: "<solo@example.com>",
+    subject: "Betreff",
+    from: null,
+    to: [],
+    cc: [],
+    date: "2026-03-01T09:00:00Z",
+    bodyText: "hallo",
+    bodyHtml: null,
+    attachments: [],
+  };
+
+  async function parseFrom(from: ThreadMessageInput["from"]) {
+    const eml = synthesizeMessageEml({ ...base, from });
+    return parseEmlBytes(await eml.arrayBuffer());
+  }
+
+  it("keeps a comma-bearing display name as one address", async () => {
+    const parsed = await parseFrom({
+      name: "Jensch, Esther",
+      address: "esther@example.com",
+    });
+
+    expect(parsed?.from).toEqual({
+      name: "Jensch, Esther",
+      address: "esther@example.com",
+    });
+  });
+
+  it("keeps a comma-bearing recipient list from splitting", async () => {
+    const eml = synthesizeMessageEml({
+      ...base,
+      to: [
+        { name: "Jensch, Esther", address: "esther@example.com" },
+        { name: "Heinze, Sascha", address: "sascha@example.com" },
+      ],
+    });
+    const parsed = await parseEmlBytes(await eml.arrayBuffer());
+
+    expect(parsed?.to).toEqual([
+      { name: "Jensch, Esther", address: "esther@example.com" },
+      { name: "Heinze, Sascha", address: "sascha@example.com" },
+    ]);
+  });
+
+  it("round-trips a non-ASCII display name", async () => {
+    const parsed = await parseFrom({
+      name: "Jörg Müller",
+      address: "joerg@example.com",
+    });
+
+    expect(parsed?.from).toEqual({
+      name: "Jörg Müller",
+      address: "joerg@example.com",
+    });
+  });
+
+  it("keeps an ASCII name with no routable address, without inventing one", async () => {
+    for (const name of ["Jensch, Esther", "Plain Name"]) {
+      const parsed = await parseFrom({ name, address: "" });
+      expect(parsed?.from?.name).toBe(name);
+      expect(parsed?.from?.address).toBe("");
+    }
+  });
+
+  it("omits the sender entirely when a non-ASCII name has no address", async () => {
+    // An encoded-word before an empty angle-addr is read back as the address,
+    // and header bytes are ASCII, so there is no faithful form here.
+    const parsed = await parseFrom({ name: "Jörg Müller", address: "" });
+
+    expect(parsed?.from).toBeNull();
+  });
+
+  it("emits a standalone message rather than a one-member thread envelope", async () => {
+    const eml = synthesizeMessageEml({
+      ...base,
+      from: { name: "A", address: "a@example.com" },
+    });
+    const parsed = await parseEmlBytes(await eml.arrayBuffer());
+
+    expect(parsed?.subject).toBe("Betreff");
+    expect(parsed?.text?.trim()).toBe("hallo");
+    // A thread envelope would surface the message itself as a nested .eml.
+    expect(parsed?.attachments).toEqual([]);
   });
 });

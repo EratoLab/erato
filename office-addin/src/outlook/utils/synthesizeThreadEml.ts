@@ -101,16 +101,37 @@ export function synthesizeThreadEml(options: SynthesizeThreadOptions): File {
   });
 }
 
+/**
+ * One message as a standalone `.eml` File. Same RFC 822 rendering the thread
+ * envelope uses for its nested parts, minus the multipart/mixed wrapper — a
+ * single message must not arrive looking like a one-member thread, or its own
+ * attachments would surface as the envelope's.
+ */
+export function synthesizeMessageEml(
+  message: ThreadMessageInput,
+  options: { filename?: string } = {},
+): File {
+  const bytes = buildNestedMessage(message);
+  return new File(
+    [bytes as BlobPart],
+    options.filename ?? slugFilename(message.subject),
+    { type: "message/rfc822" },
+  );
+}
+
 function buildNestedMessage(message: ThreadMessageInput): Uint8Array {
   const headerLines: [string, string][] = [];
-  if (message.from) {
-    headerLines.push(["From", formatAddress(message.from)]);
+  const from = message.from ? formatAddress(message.from) : null;
+  if (from) {
+    headerLines.push(["From", from]);
   }
-  if (message.to.length > 0) {
-    headerLines.push(["To", formatAddressList(message.to)]);
+  const to = formatAddressList(message.to);
+  if (to) {
+    headerLines.push(["To", to]);
   }
-  if (message.cc.length > 0) {
-    headerLines.push(["Cc", formatAddressList(message.cc)]);
+  const cc = formatAddressList(message.cc);
+  if (cc) {
+    headerLines.push(["Cc", cc]);
   }
   headerLines.push(["Subject", encodeHeader(message.subject)]);
   headerLines.push(["Date", formatRfcDate(message.date)]);
@@ -192,16 +213,59 @@ function encodeBodyBase64(body: string): string {
   return `${wrapBase64(base64Encode(utf8Bytes(body)))}${CRLF}`;
 }
 
-function formatAddress(addr: { name: string; address: string }): string {
+/**
+ * Null when the address cannot be written without inventing one, so the caller
+ * omits the header entirely.
+ *
+ * Exchange senders whose only address is an X.500 DN reach us with a display
+ * name and nothing routable. A quoted ASCII name ahead of an empty angle-addr
+ * reads back cleanly as a name with no address — but an RFC 2047 encoded-word
+ * there is read back AS the address, and header bytes are ASCII, so a non-ASCII
+ * name cannot be carried literally either. That last combination has no
+ * faithful representation, and a fabricated sender is worse than none.
+ */
+function formatAddress(addr: { name: string; address: string }): string | null {
   const trimmedName = addr.name.trim();
+  if (addr.address.length === 0) {
+    if (trimmedName.length === 0 || !isPrintableAscii(trimmedName)) {
+      return null;
+    }
+    return `${quoteDisplayName(trimmedName)} <>`;
+  }
   if (trimmedName.length === 0) {
     return addr.address;
   }
-  return `${encodeHeader(trimmedName)} <${addr.address}>`;
+  return `${formatDisplayName(trimmedName)} <${addr.address}>`;
+}
+
+/**
+ * RFC 5322 `display-name` is an atom sequence, so a name carrying any special —
+ * above all the comma in Outlook's default "Lastname, Firstname" — has to be a
+ * quoted-string or the comma reads as the address-list separator and splits one
+ * sender into two bogus addresses.
+ *
+ * A non-ASCII name needs no quoting: its encoded-word hides every special, and
+ * RFC 2047 §5 forbids encoded-words inside a quoted-string anyway.
+ */
+function formatDisplayName(name: string): string {
+  if (!isPrintableAscii(name)) {
+    return encodeHeader(name);
+  }
+  if (!/[()<>[\]:;@\\,."]/.test(name)) {
+    return name;
+  }
+  return quoteDisplayName(name);
+}
+
+function quoteDisplayName(name: string): string {
+  return `"${name.replace(/(["\\])/g, "\\$1")}"`;
 }
 
 function formatAddressList(addrs: { name: string; address: string }[]): string {
-  return addrs.map(formatAddress).join(", ");
+  return addrs
+    .map(formatAddress)
+    .filter((entry): entry is string => entry !== null)
+    .join(", ");
 }
 
 /**
