@@ -233,6 +233,9 @@ const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
   const filename = getFileName(file);
   const invalid = validation?.ok === false;
   const rowClassName = clsx(SELECTABLE_ROW_CLASS, !selected && "opacity-50");
+  // A row without a toggle is read-only, so it has no selection to report and
+  // must not look selected to a theme rule.
+  const rowSelected = onToggle ? selected || undefined : undefined;
   const chip = (
     <div className="min-w-0 flex-1">
       <FilePreviewBase
@@ -266,7 +269,11 @@ const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
 
   if (onPreview) {
     return (
-      <div className={rowClassName} data-ui="attachment-tile">
+      <div
+        className={rowClassName}
+        data-selected={rowSelected}
+        data-ui="attachment-tile"
+      >
         {checkbox}
         <InteractiveContainer
           onClick={onPreview}
@@ -291,7 +298,11 @@ const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
   }
 
   return (
-    <label className={rowClassName} data-ui="attachment-tile">
+    <label
+      className={rowClassName}
+      data-selected={rowSelected}
+      data-ui="attachment-tile"
+    >
       {checkbox}
       {chip}
     </label>

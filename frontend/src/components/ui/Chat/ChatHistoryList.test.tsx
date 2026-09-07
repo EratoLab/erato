@@ -290,6 +290,7 @@ describe("ChatHistoryList", () => {
 
     expect(historyItem).toHaveClass("sidebar-row-geometry");
     expect(historyItem).toHaveClass("sidebar-row-selected");
+    expect(historyItem).toHaveAttribute("data-selected");
     expect(historyItem?.getAttribute("style") ?? "").toBe("");
     expect(historyItem).not.toHaveClass(
       "hover:bg-[var(--theme-shell-sidebar-hover)]",
@@ -301,6 +302,7 @@ describe("ChatHistoryList", () => {
         "calc(var(--theme-spacing-shell-padding-y) / 2) calc(var(--theme-spacing-shell-padding-x) / 2)",
     });
     expect(historyItems[1]).not.toHaveClass("sidebar-row-selected");
+    expect(historyItems[1]).not.toHaveAttribute("data-selected");
   });
 
   it("uses the same sidebar tokens in the loading skeleton", () => {

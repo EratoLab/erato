@@ -117,6 +117,7 @@ export function RadioCard({
           <span
             aria-hidden="true"
             data-ui="option-card-icon"
+            data-selected={checked || undefined}
             className={clsx(
               "option-card-geometry mt-0.5 flex size-9 shrink-0 items-center justify-center border bg-theme-bg-secondary",
               checked

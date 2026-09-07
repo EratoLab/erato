@@ -73,6 +73,10 @@ export const SidebarNavigationItem = ({
           )}
           aria-label={label}
           title={isSlimMode ? label : undefined}
+          // This branch renders no link, so the row itself has to announce
+          // that it is the current page.
+          aria-current="page"
+          data-selected={true}
           data-ui={dataUi}
         >
           {icon}
