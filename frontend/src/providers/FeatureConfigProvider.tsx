@@ -90,6 +90,7 @@ interface AssistantsFeatureConfig {
   delegationAllowBackground: boolean;
   /** Whether assistants may be shared with edit access */
   enableEditSharing: boolean;
+  usageViewEnabled: boolean;
   /** Whether recent assistants should be shown in the sidebar */
   showRecentItems: boolean;
   /** Whether the recent assistants sidebar section is rendered as a collapsible section */
@@ -274,6 +275,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
     delegationEnabled: false,
     delegationAllowBackground: false,
     enableEditSharing: true,
+    usageViewEnabled: false,
     showRecentItems: false,
     showRecentItemsCollapsible: false,
     contextWarningThreshold: 0.5,
@@ -387,6 +389,7 @@ function createFeatureConfig(
         environment.assistantsDelegationAllowBackground,
       ),
       enableEditSharing: environment.assistantsEnableEditSharing ?? true,
+      usageViewEnabled: environment.assistantsUsageViewEnabled ?? false,
       showRecentItems: environment.assistantsShowRecentItems,
       showRecentItemsCollapsible:
         environment.assistantsShowRecentItemsCollapsible,

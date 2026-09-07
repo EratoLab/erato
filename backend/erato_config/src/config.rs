@@ -2794,6 +2794,9 @@ fn default_pinned_chats_limit() -> u64 {
 
 #[derive(Debug, Deserialize, PartialEq, Clone, Facet)]
 pub struct AssistantsConfig {
+    /// Whether editors can access the assistants usage view. Defaults to false.
+    #[serde(default)]
+    pub usage_view_enabled: bool,
     // Whether the assistants feature is enabled.
     // Defaults to `false`.
     #[serde(default)]
@@ -2848,6 +2851,7 @@ impl Default for AssistantsConfig {
         Self {
             enabled: false,
             enable_edit_sharing: default_assistants_enable_edit_sharing(),
+            usage_view_enabled: false,
             show_recent_items: false,
             show_recent_items_collapsible: false,
             context_warning_threshold: default_assistant_context_warning_threshold(),

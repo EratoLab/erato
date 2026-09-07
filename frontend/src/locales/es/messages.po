@@ -251,6 +251,83 @@ msgid "assistant.loading"
 msgstr "Cargando asistente..."
 
 #. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.back"
+msgstr "Volver a los asistentes"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.daily"
+msgstr "Uso diario · UTC · Incluye hoy"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.date"
+msgstr "Inicio del intervalo (UTC)"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.empty"
+msgstr "No hay uso en este período."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.error"
+msgstr "No se pudo cargar el uso. Esta vista solo está disponible para los editores del asistente."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.fourWeeks"
+msgstr "Últimas 4 semanas"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.invocations"
+msgstr "Invocaciones del asistente"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.table"
+msgstr "Ver tabla de datos"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.timeframe"
+msgstr "Período"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantEditPage.tsx
+#: src/pages/AssistantsPage.tsx
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.title"
+msgstr "Uso de asistentes"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.twelveWeeks"
+msgstr "Últimas 12 semanas"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.users"
+msgstr "Usuarios únicos"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.week"
+msgstr "Última semana"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.weekly"
+msgstr "Uso semanal · UTC · Incluye hoy"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.year"
+msgstr "Últimas 52 semanas"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "assistant.welcome.chats.empty"
 msgstr "Todavía no hay conversaciones directas."
@@ -2359,6 +2436,7 @@ msgstr "Cerrar"
 #. js-lingui-explicit-id
 #: src/App.tsx
 #: src/pages/assistantHubUtils.tsx
+#: src/pages/AssistantUsagePage.tsx
 msgid "common.loadingEllipsis"
 msgstr "Cargando..."
 

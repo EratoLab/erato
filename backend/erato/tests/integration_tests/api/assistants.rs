@@ -1195,3 +1195,159 @@ async fn test_list_assistants_sharing_relation_filter(pool: Pool<Postgres>) {
 
     assert_eq!(response.status_code(), http::StatusCode::BAD_REQUEST);
 }
+
+/// Usage combines Hub versions and delegated/archived chats, counts all persisted
+/// generations, and deduplicates people separately over the range and buckets.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_assistant_usage_aggregation_and_access(pool: Pool<Postgres>) {
+    let mut config = hermetic_app_config(None, None);
+    config.assistants.enabled = true;
+    config.assistants.usage_view_enabled = true;
+    let state = test_app_state(config, pool.clone()).await;
+    let user = erato::models::user::get_or_create_user(
+        &state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let source: sqlx::types::Uuid = sqlx::query_scalar("INSERT INTO assistants (owner_user_id, name, prompt) VALUES ($1, 'Usage test', '') RETURNING id").bind(user.id).fetch_one(&pool).await.unwrap();
+    let version: sqlx::types::Uuid = sqlx::query_scalar("INSERT INTO assistants (owner_user_id, name, prompt) VALUES ($1, 'Version', '') RETURNING id").bind(user.id).fetch_one(&pool).await.unwrap();
+    let hub: sqlx::types::Uuid = sqlx::query_scalar("INSERT INTO assistant_hub_assistants (source_assistant_id, owner_user_id) VALUES ($1, $2) RETURNING id").bind(source).bind(user.id).fetch_one(&pool).await.unwrap();
+    sqlx::query("INSERT INTO assistant_hub_assistant_versions (assistant_hub_assistant_id, assistant_id, status, version_number, long_description) VALUES ($1, $2, 'review_accepted', '1', '')").bind(hub).bind(version).execute(&pool).await.unwrap();
+    for (assistant, owner, delegated) in [
+        (source, "person-a", false),
+        (version, "person-a", true),
+        (version, "person-b", false),
+    ] {
+        let chat: sqlx::types::Uuid = sqlx::query_scalar("INSERT INTO chats (owner_user_id, assistant_configuration, archived_at) VALUES ($1, $2, now()) RETURNING id")
+            .bind(owner).bind(json!({"assistant_id": assistant, "provenance": {"kind": if delegated {"delegation"} else {"handoff"}}})).fetch_one(&pool).await.unwrap();
+        for days in [0, 1, 400] {
+            sqlx::query("INSERT INTO messages (chat_id, raw_message, generation_metadata, created_at) VALUES ($1, '{\"role\":\"assistant\",\"content\":[]}', '{}', (date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC') - make_interval(days => $2))")
+                .bind(chat).bind(days).execute(&pool).await.unwrap();
+        }
+        // A user message and an unfinished placeholder must not add invocations.
+        sqlx::query("INSERT INTO messages (chat_id, raw_message) VALUES ($1, '{\"role\":\"user\",\"content\":[]}'), ($1, '{\"role\":\"assistant\",\"content\":[]}')").bind(chat).execute(&pool).await.unwrap();
+    }
+    let server = TestServer::new(
+        router(state.clone())
+            .split_for_parts()
+            .0
+            .with_state(state)
+            .into_make_service(),
+    )
+    .unwrap();
+    let url = format!("/api/v1beta/assistants/{source}/usage");
+    for (weeks, buckets, bucket_days) in [(1, 7, 1), (4, 28, 1), (12, 12, 7), (52, 52, 7)] {
+        let response = server
+            .get(&format!("{url}?weeks={weeks}"))
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .await;
+        response.assert_status_ok();
+        let body: Value = response.json();
+        assert_eq!(body["total_invocations"], 6);
+        assert_eq!(body["total_unique_users"], 2);
+        assert_eq!(body["bucket_days"], bucket_days);
+        let points = body["buckets"].as_array().unwrap();
+        assert_eq!(points.len(), buckets);
+        assert_eq!(
+            points
+                .iter()
+                .map(|p| p["invocations"].as_i64().unwrap())
+                .sum::<i64>(),
+            6
+        );
+        assert_eq!(points.last().unwrap()["unique_users"], 2);
+        if bucket_days == 1 {
+            assert_eq!(
+                points
+                    .iter()
+                    .map(|p| p["unique_users"].as_i64().unwrap())
+                    .sum::<i64>(),
+                4
+            );
+        }
+    }
+    server
+        .get(&format!("{url}?weeks=2"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .assert_status_bad_request();
+    let outsider = erato::models::user::get_or_create_user(
+        &test_app_state(hermetic_app_config(None, None), pool.clone())
+            .await
+            .db,
+        TEST_USER_ISSUER,
+        "usage-outsider",
+        None,
+    )
+    .await
+    .unwrap();
+    sqlx::query("UPDATE assistants SET owner_user_id = $1 WHERE id = $2")
+        .bind(outsider.id)
+        .bind(source)
+        .execute(&pool)
+        .await
+        .unwrap();
+    // A fresh router ensures authorization data reflects the ownership change.
+    let mut config = hermetic_app_config(None, None);
+    config.assistants.enabled = true;
+    config.assistants.usage_view_enabled = true;
+    let state = test_app_state(config, pool.clone()).await;
+    let server = TestServer::new(
+        router(state.clone())
+            .split_for_parts()
+            .0
+            .with_state(state)
+            .into_make_service(),
+    )
+    .unwrap();
+    server
+        .get(&url)
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .assert_status_forbidden();
+    for (role, expected) in [
+        ("viewer", http::StatusCode::FORBIDDEN),
+        ("editor", http::StatusCode::OK),
+    ] {
+        sqlx::query("DELETE FROM share_grants WHERE resource_id = $1")
+            .bind(source.to_string())
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO share_grants (resource_type, resource_id, subject_type, subject_id_type, subject_id, role) VALUES ('assistant', $1, 'user', 'id', $2, $3)").bind(source.to_string()).bind(user.id.to_string()).bind(role).execute(&pool).await.unwrap();
+        let mut config = hermetic_app_config(None, None);
+        config.assistants.enabled = true;
+        config.assistants.usage_view_enabled = true;
+        let state = test_app_state(config, pool.clone()).await;
+        let server = TestServer::new(
+            router(state.clone())
+                .split_for_parts()
+                .0
+                .with_state(state)
+                .into_make_service(),
+        )
+        .unwrap();
+        server
+            .get(&url)
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .await
+            .assert_status(expected);
+    }
+    let state = test_app_state(hermetic_app_config(None, None), pool).await;
+    let server = TestServer::new(
+        router(state.clone())
+            .split_for_parts()
+            .0
+            .with_state(state)
+            .into_make_service(),
+    )
+    .unwrap();
+    server
+        .get(&url)
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .assert_status_not_found();
+}

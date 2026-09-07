@@ -1,4 +1,10 @@
-import React, { useEffect, useId, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 
 import type { ReactNode } from "react";
@@ -99,7 +105,8 @@ export const Tooltip: React.FC<TooltipProps> = ({
   // Capture phase + stopPropagation so the Escape that dismisses the tooltip
   // does not also reach ModalBase/AnchoredPopover and close the surrounding
   // dialog. Registered only while visible, so Escape is untouched otherwise.
-  useEffect(() => {
+  // Attach during the commit so Escape works as soon as the tooltip appears.
+  useLayoutEffect(() => {
     if (!isVisible) {
       return;
     }

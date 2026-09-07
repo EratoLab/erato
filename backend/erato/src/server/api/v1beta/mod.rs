@@ -1,5 +1,6 @@
 #![allow(deprecated)]
 pub mod assistant_hub;
+pub mod assistant_usage;
 pub mod assistants;
 pub mod audio_transcription;
 pub mod budget;
@@ -240,6 +241,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         )
         .route("/prompt-optimizer", post(prompt_optimizer))
         // Assistants routes - manually registered for clarity and consistency
+        .route(
+            "/assistants/{assistant_id}/usage",
+            get(assistant_usage::get_assistant_usage),
+        )
         .route("/assistants", post(create_assistant))
         .route("/assistants", get(list_assistants))
         .route("/assistants/{assistant_id}", get(get_assistant))
@@ -416,6 +421,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         desktop_sidecar::organization_configuration,
         desktop_sidecar::distribution,
         desktop_sidecar::download_distribution_artifact,
+        assistant_usage::get_assistant_usage,
         assistants::create_assistant,
         assistants::list_assistants,
         assistants::get_assistant,

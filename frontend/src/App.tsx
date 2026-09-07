@@ -18,6 +18,7 @@ const AssistantChatSpacePage = lazy(
   () => import("./pages/AssistantChatSpacePage"),
 );
 const AssistantCreatePage = lazy(() => import("./pages/AssistantCreatePage"));
+const AssistantUsagePage = lazy(() => import("./pages/AssistantUsagePage"));
 const AssistantEditPage = lazy(() => import("./pages/AssistantEditPage"));
 const AssistantHubDetailPage = lazy(
   () => import("./pages/AssistantHubDetailPage"),
@@ -125,6 +126,7 @@ function AppRoutes() {
           />
           <Route path="new" element={<AssistantCreatePage />} />
           <Route path=":id/edit" element={<AssistantEditPage />} />
+          <Route path=":id/usage" element={<AssistantUsagePage />} />
         </Route>
         <Route path="assistant-hub" element={<AssistantsLayout />}>
           <Route index element={<AssistantsPage view="hub" />} />

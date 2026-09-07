@@ -20,6 +20,7 @@ import {
   listAssistantsQuery,
   getAssistantQuery,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { useAssistantsFeature } from "@/providers/FeatureConfigProvider";
 
 import type { AssistantFormData } from "@/components/ui/Assistant/AssistantForm";
 import type {
@@ -55,6 +56,7 @@ const toFileUploadItems = (files: AssistantFile[]): FileUploadItem[] =>
 
 export default function AssistantEditPage() {
   const navigate = useNavigate();
+  const { enabled, usageViewEnabled } = useAssistantsFeature();
   const queryClient = useQueryClient();
   const { id } = useParams<{ id: string }>();
   const { containerClasses, horizontalPadding } =
@@ -265,6 +267,18 @@ export default function AssistantEditPage() {
         <div className={clsx("py-6", containerClasses)}>
           {/* Share button - always shown since we only reach this code if can_edit is true */}
           <div className="mb-4 flex justify-end gap-2">
+            {enabled && usageViewEnabled && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => navigate(`/assistants/${id}/usage`)}
+              >
+                {t({
+                  id: "assistant.usage.title",
+                  message: "Assistants usage view",
+                })}
+              </Button>
+            )}
             {hubConfig?.enabled && (
               <Button
                 variant="secondary"

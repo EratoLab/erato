@@ -251,6 +251,83 @@ msgid "assistant.loading"
 msgstr "Chargement de l'assistant..."
 
 #. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.back"
+msgstr "Retour aux assistants"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.daily"
+msgstr "Utilisation quotidienne · UTC · Aujourd’hui inclus"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.date"
+msgstr "Début de l’intervalle (UTC)"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.empty"
+msgstr "Aucune utilisation sur cette période."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.error"
+msgstr "Impossible de charger l’utilisation. Cette vue est réservée aux éditeurs de l’assistant."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.fourWeeks"
+msgstr "4 dernières semaines"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.invocations"
+msgstr "Appels de l’assistant"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.table"
+msgstr "Afficher le tableau de données"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.timeframe"
+msgstr "Période"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantEditPage.tsx
+#: src/pages/AssistantsPage.tsx
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.title"
+msgstr "Utilisation des assistants"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.twelveWeeks"
+msgstr "12 dernières semaines"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.users"
+msgstr "Utilisateurs uniques"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.week"
+msgstr "Dernière semaine"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.weekly"
+msgstr "Utilisation hebdomadaire · UTC · Aujourd’hui inclus"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantUsagePage.tsx
+msgid "assistant.usage.year"
+msgstr "52 dernières semaines"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "assistant.welcome.chats.empty"
 msgstr "Aucune conversation directe pour le moment."
@@ -2359,6 +2436,7 @@ msgstr "Fermer"
 #. js-lingui-explicit-id
 #: src/App.tsx
 #: src/pages/assistantHubUtils.tsx
+#: src/pages/AssistantUsagePage.tsx
 msgid "common.loadingEllipsis"
 msgstr "Chargement..."
 

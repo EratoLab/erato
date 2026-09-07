@@ -32,6 +32,7 @@ import {
   useListAssistants,
   useListMyAssistantHubVersions,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { useAssistantsFeature } from "@/providers/FeatureConfigProvider";
 import { createLogger } from "@/utils/debugLogger";
 
 import {
@@ -655,6 +656,8 @@ function AssistantListCard({
   onStartChat: () => void;
   onSubmitToHub: () => void;
 }) {
+  const { enabled, usageViewEnabled } = useAssistantsFeature();
+  const navigate = useNavigate();
   const dateFnsLocale = useDateFnsLocale();
   const isArchived = assistant.archived_at != null;
   const updatedRelativeTime = formatDistanceToNow(
@@ -708,6 +711,18 @@ function AssistantListCard({
             {assistant.can_edit && (
               <DropdownMenu
                 items={[
+                  ...(enabled && usageViewEnabled
+                    ? [
+                        {
+                          label: t({
+                            id: "assistant.usage.title",
+                            message: "Assistants usage view",
+                          }),
+                          onClick: () =>
+                            navigate(`/assistants/${assistant.id}/usage`),
+                        },
+                      ]
+                    : []),
                   {
                     label: t({
                       id: "sharing.action.share",
