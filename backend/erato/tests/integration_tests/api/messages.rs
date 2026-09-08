@@ -3364,30 +3364,28 @@ async fn test_message_submit_records_mcp_server_needing_oauth_authorization(pool
     // the "configured but not connected" state needs: token resolution finds
     // the metadata, then fails with AuthorizationRequired because no
     // credentials are stored for the user — before any MCP request is made.
-    let mut oauth_mocks = MockSet::new();
-    oauth_mocks.mock(|when, then| {
-        when.get()
-            .path("/.well-known/oauth-authorization-server/oauth");
-        then.status(http::StatusCode::OK)
-            .headers([("Content-Type", "application/json")])
-            .json(json!({
-                "authorization_endpoint": "http://127.0.0.1:1/authorize",
-                "token_endpoint": "http://127.0.0.1:1/token",
-            }));
-    });
     let mockserver_config = MockServerConfig {
         listen_addr: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
         ..Default::default()
     };
-    let oauth_server = MockServer::new_http("mcp-oauth-mock")
-        .with_config(mockserver_config)
-        .with_mocks(oauth_mocks);
+    let oauth_server = MockServer::new_http("mcp-oauth-mock").with_config(mockserver_config);
     oauth_server
         .start()
         .await
         .expect("Failed to start OAuth metadata mock server");
     let oauth_server_base_url = oauth_server.url("").to_string();
     let oauth_server_base_url = oauth_server_base_url.trim_end_matches('/');
+    oauth_server.mocks().mock(|when, then| {
+        when.get()
+            .path("/.well-known/oauth-authorization-server/oauth");
+        then.status(http::StatusCode::OK)
+            .headers([("Content-Type", "application/json")])
+            .json(json!({
+                "issuer": format!("{oauth_server_base_url}/oauth"),
+                "authorization_endpoint": "http://127.0.0.1:1/authorize",
+                "token_endpoint": "http://127.0.0.1:1/token",
+            }));
+    });
 
     app_config.mcp_servers.insert(
         "healthy-file".to_string(),
@@ -3412,6 +3410,7 @@ async fn test_message_submit_records_mcp_server_needing_oauth_authorization(pool
             "/oauth",
             McpServerAuthenticationConfig::Oauth2 {
                 oauth2: McpServerOauth2AuthenticationConfig {
+                    resource: None,
                     client_id: Some("test-oauth-client".to_string()),
                     client_secret: None,
                     scopes: vec![],

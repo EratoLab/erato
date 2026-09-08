@@ -1,3 +1,5 @@
+pub mod oauth;
+
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -15,8 +17,9 @@ use colored::Colorize;
 use rmcp::{
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{
-        CallToolRequestParams, CallToolResult, Content, ListToolsResult, Meta,
-        PaginatedRequestParams, ProgressNotificationParam, ServerCapabilities, ServerInfo,
+        CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, ListToolsResult,
+        MetaObject, PaginatedRequestParams, ProgressNotificationParam, RequestMetaObject,
+        ServerCapabilities, ServerInfo,
     },
     schemars,
     service::RequestContext,
@@ -244,8 +247,7 @@ where
 {
     ListToolsResult {
         tools: tool_router.list_all(),
-        next_cursor: None,
-        meta: None,
+        ..Default::default()
     }
 }
 
@@ -261,7 +263,7 @@ async fn call_tool_from_router<S>(
     tool_router: &ToolRouter<S>,
     request: CallToolRequestParams,
     context: RequestContext<RoleServer>,
-) -> Result<CallToolResult, McpError>
+) -> Result<CallToolResponse, McpError>
 where
     S: Send + Sync + 'static,
 {
@@ -325,7 +327,7 @@ impl ServerHandler for FileServer {
         &self,
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
-    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
+    ) -> impl std::future::Future<Output = Result<CallToolResponse, McpError>> + Send + '_ {
         call_tool_from_router(self, &self.tool_router, request, context)
     }
 
@@ -398,7 +400,7 @@ impl ServerHandler for ErrorFileServer {
         &self,
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
-    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
+    ) -> impl std::future::Future<Output = Result<CallToolResponse, McpError>> + Send + '_ {
         call_tool_from_router(self, &self.tool_router, request, context)
     }
 
@@ -456,19 +458,18 @@ impl ProgressFileServer {
         )
     )]
     async fn read_file(
-        meta: Meta,
+        meta: RequestMetaObject,
         client: Peer<RoleServer>,
         Parameters(ReadFileParams { path }): Parameters<ReadFileParams>,
     ) -> Result<String, McpError> {
         if let Some(progress_token) = meta.get_progress_token() {
             for step in 1..=3 {
                 let _ = client
-                    .notify_progress(ProgressNotificationParam {
-                        progress_token: progress_token.clone(),
-                        progress: step as f64,
-                        total: Some(3.0),
-                        message: Some(format!("Reading file step {step}/3")),
-                    })
+                    .notify_progress(
+                        ProgressNotificationParam::new(progress_token.clone(), step as f64)
+                            .with_total(3.0)
+                            .with_message(format!("Reading file step {step}/3")),
+                    )
                     .await;
                 sleep(Duration::from_secs(5)).await;
             }
@@ -485,7 +486,7 @@ impl ServerHandler for ProgressFileServer {
         &self,
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
-    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
+    ) -> impl std::future::Future<Output = Result<CallToolResponse, McpError>> + Send + '_ {
         call_tool_from_router(self, &self.tool_router, request, context)
     }
 
@@ -546,7 +547,7 @@ impl ServerHandler for ContentFilterFileServer {
         &self,
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
-    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
+    ) -> impl std::future::Future<Output = Result<CallToolResponse, McpError>> + Send + '_ {
         call_tool_from_router(self, &self.tool_router, request, context)
     }
 
@@ -589,7 +590,7 @@ impl ImageGenerationServer {
         Parameters(params): Parameters<ImageGenerationParams>,
     ) -> Result<CallToolResult, McpError> {
         if params.prompt == "malformed" {
-            return Ok(CallToolResult::success(vec![Content::text(
+            return Ok(CallToolResult::success(vec![ContentBlock::text(
                 "this is not valid JSON",
             )]));
         }
@@ -612,7 +613,7 @@ impl ImageGenerationServer {
             )
         })?;
         let prompt_tokens = (params.prompt.len() as u64) * 4;
-        let meta = Meta(serde_json::Map::from_iter([(
+        let meta = MetaObject(serde_json::Map::from_iter([(
             "chat.erato/token_usage".to_string(),
             json!({
                 "total_prompt_tokens": prompt_tokens,
@@ -631,7 +632,7 @@ impl ServerHandler for ImageGenerationServer {
         &self,
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
-    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
+    ) -> impl std::future::Future<Output = Result<CallToolResponse, McpError>> + Send + '_ {
         call_tool_from_router(self, &self.tool_router, request, context)
     }
 
@@ -706,7 +707,7 @@ impl ServerHandler for DeepResearchServer {
         &self,
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
-    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
+    ) -> impl std::future::Future<Output = Result<CallToolResponse, McpError>> + Send + '_ {
         call_tool_from_router(self, &self.tool_router, request, context)
     }
 
@@ -758,7 +759,7 @@ impl ServerHandler for NoneAuthProbeServer {
         &self,
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
-    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
+    ) -> impl std::future::Future<Output = Result<CallToolResponse, McpError>> + Send + '_ {
         call_tool_from_router(self, &self.tool_router, request, context)
     }
 
@@ -823,7 +824,7 @@ impl ServerHandler for FixedApiKeyProbeServer {
         &self,
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
-    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
+    ) -> impl std::future::Future<Output = Result<CallToolResponse, McpError>> + Send + '_ {
         call_tool_from_router(self, &self.tool_router, request, context)
     }
 
@@ -875,7 +876,7 @@ impl ServerHandler for ForwardedAccessProbeServer {
         &self,
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
-    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
+    ) -> impl std::future::Future<Output = Result<CallToolResponse, McpError>> + Send + '_ {
         call_tool_from_router(self, &self.tool_router, request, context)
     }
 
@@ -927,7 +928,7 @@ impl ServerHandler for ForwardedOidcProbeServer {
         &self,
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
-    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
+    ) -> impl std::future::Future<Output = Result<CallToolResponse, McpError>> + Send + '_ {
         call_tool_from_router(self, &self.tool_router, request, context)
     }
 
@@ -995,7 +996,7 @@ impl ServerHandler for ApprovalPolicyServer {
         &self,
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
-    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
+    ) -> impl std::future::Future<Output = Result<CallToolResponse, McpError>> + Send + '_ {
         call_tool_from_router(self, &self.tool_router, request, context)
     }
 
@@ -1020,7 +1021,7 @@ impl ServerHandler for EmptyToolServer {
         &self,
         _request: CallToolRequestParams,
         _context: RequestContext<RoleServer>,
-    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
+    ) -> impl std::future::Future<Output = Result<CallToolResponse, McpError>> + Send + '_ {
         std::future::ready(Err(McpError::internal_error(
             "No tools available for this identity".to_string(),
             None,
@@ -1034,8 +1035,7 @@ impl ServerHandler for EmptyToolServer {
     ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
         std::future::ready(Ok(ListToolsResult {
             tools: Vec::new(),
-            next_cursor: None,
-            meta: None,
+            ..Default::default()
         }))
     }
 
@@ -1051,7 +1051,7 @@ where
     S: ServerHandler + Send + Sync + 'static,
 {
     let mut config = StreamableHttpServerConfig::default();
-    config.stateful_mode = true;
+    config.legacy_session_mode = true;
     config.sse_keep_alive = None;
     config.allowed_hosts.clear();
     config.allowed_origins.clear();
@@ -1245,6 +1245,12 @@ async fn always_500() -> Response {
 fn builtin_mechanisms() -> Vec<MechanismSummary> {
     vec![
         MechanismSummary {
+            name: "Entra-like OAuth resource validation",
+            description: "PRM uses a distinct API resource; authorization, exchange, and refresh reject mismatches",
+            endpoint: "Streamable HTTP /mcp/oauth",
+            tools: &["list_files", "read_file"],
+        },
+        MechanismSummary {
             name: "File server",
             description: "Provides list_files and read_file for mock files",
             endpoint: "Streamable HTTP /mcp/file",
@@ -1333,6 +1339,11 @@ fn log_startup(addr: &str, mechanisms: &[MechanismSummary]) {
 
     println!("{}", "Available endpoints:".bright_white());
     println!("  {} {}", "GET".bright_cyan(), "/health".bright_yellow());
+    println!(
+        "  {} {}",
+        "MCP HTTP".bright_cyan(),
+        "/mcp/oauth".bright_yellow()
+    );
     println!(
         "  {} {}",
         "MCP HTTP".bright_cyan(),
@@ -1502,7 +1513,10 @@ pub async fn serve(addr: SocketAddr) {
         .await
         .unwrap_or_else(|e| panic!("Failed to bind to {}: {}", addr, e));
 
-    axum::serve(listener, app())
+    let oauth_base_url =
+        std::env::var("OAUTH_BASE_URL").unwrap_or_else(|_| format!("http://{addr}"));
+    let app = app().merge(oauth::router(oauth::OAuthConfig::entra(oauth_base_url)));
+    axum::serve(listener, app)
         .with_graceful_shutdown(async move {
             let _ = tokio::signal::ctrl_c().await;
         })

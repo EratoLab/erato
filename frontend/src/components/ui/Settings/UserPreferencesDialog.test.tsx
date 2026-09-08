@@ -127,6 +127,7 @@ function renderDialog({
   onMcpOauthCallbackHandled?: () => void;
   pendingMcpOauthCallback?: {
     code: string;
+    iss?: string;
     serverId: string;
     state: string;
   } | null;
@@ -607,65 +608,66 @@ describe("UserPreferencesDialog", () => {
     ).toBeInTheDocument();
   });
 
-  it("completes an OAuth callback after returning to the MCP servers tab", async () => {
-    const onMcpOauthCallbackHandled = vi.fn();
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(async (input, init) => {
-        const url = String(input);
-        const method = init?.method ?? "GET";
+  it.each([undefined, "https://issuer.example.com"])(
+    "completes an OAuth callback with issuer %s",
+    async (iss) => {
+      const callbackUrl = `/api/v1beta/me/mcp_servers/notion/oauth/callback?code=oauth-code&state=oauth-state${iss ? `&iss=${encodeURIComponent(iss)}` : ""}`;
+      const onMcpOauthCallbackHandled = vi.fn();
+      const fetchMock = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation(async (input, init) => {
+          const url = String(input);
+          const method = init?.method ?? "GET";
 
-        if (url === "/api/v1beta/me/mcp_servers" && method === "GET") {
-          return createJsonResponse({
-            servers: [
-              {
-                id: "notion",
-                authentication_mode: "oauth2",
-                connection_status: "SUCCESS",
-              },
-            ],
-          });
-        }
+          if (url === "/api/v1beta/me/mcp_servers" && method === "GET") {
+            return createJsonResponse({
+              servers: [
+                {
+                  id: "notion",
+                  authentication_mode: "oauth2",
+                  connection_status: "SUCCESS",
+                },
+              ],
+            });
+          }
 
-        if (
-          url ===
-            "/api/v1beta/me/mcp_servers/notion/oauth/callback?code=oauth-code&state=oauth-state" &&
-          method === "GET"
-        ) {
-          return createJsonResponse({
-            connection_status: "SUCCESS",
-          });
-        }
+          if (url === callbackUrl && method === "GET") {
+            return createJsonResponse({
+              connection_status: "SUCCESS",
+            });
+          }
 
-        throw new Error(`Unexpected request: ${method} ${url}`);
+          throw new Error(`Unexpected request: ${method} ${url}`);
+        });
+
+      renderDialog({
+        initialTab: "serversTools",
+        onMcpOauthCallbackHandled,
+        pendingMcpOauthCallback: {
+          code: "oauth-code",
+          iss,
+          serverId: "notion",
+          state: "oauth-state",
+        },
       });
 
-    renderDialog({
-      initialTab: "serversTools",
-      onMcpOauthCallbackHandled,
-      pendingMcpOauthCallback: {
-        code: "oauth-code",
-        serverId: "notion",
-        state: "oauth-state",
-      },
-    });
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledWith(
+          callbackUrl,
+          expect.objectContaining({
+            method: "GET",
+          }),
+        );
+      });
 
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/api/v1beta/me/mcp_servers/notion/oauth/callback?code=oauth-code&state=oauth-state",
-        expect.objectContaining({
-          method: "GET",
-        }),
-      );
-    });
-
-    expect(
-      await screen.findByText(
-        "Authorization complete. The server is ready to use.",
-      ),
-    ).toBeInTheDocument();
-    expect(onMcpOauthCallbackHandled).toHaveBeenCalled();
-  });
+      expect(
+        await screen.findByText(
+          "Authorization complete. The server is ready to use.",
+        ),
+      ).toBeInTheDocument();
+      expect(onMcpOauthCallbackHandled).toHaveBeenCalled();
+    },
+  );
 
   it("archives chats, refreshes recent chats, and redirects to a new chat", async () => {
     const queryClient = new QueryClient({

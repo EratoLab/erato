@@ -2406,6 +2406,9 @@ pub struct McpServerFixedAuthenticationConfig {
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct McpServerOauth2AuthenticationConfig {
+    /// OAuth resource: unset discovers PRM (endpoint without query/fragment as fallback),
+    /// a nonempty absolute URI overrides it, and an empty string omits the parameter.
+    pub resource: Option<String>,
     pub client_id: Option<String>,
     #[facet(sensitive)]
     pub client_secret: Option<SecretConfigString>,

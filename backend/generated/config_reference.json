@@ -455,6 +455,7 @@
   "mcp_servers.<server-id>.authentication.oauth2.client_id": {},
   "mcp_servers.<server-id>.authentication.oauth2.client_name": {},
   "mcp_servers.<server-id>.authentication.oauth2.client_secret": {},
+  "mcp_servers.<server-id>.authentication.oauth2.resource": {},
   "mcp_servers.<server-id>.authentication.oauth2.scopes.[]": {},
   "mcp_servers.<server-id>.exclude_tools.[]": {},
   "mcp_servers.<server-id>.http_headers.<key>": {},

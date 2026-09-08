@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["erato", "erato_config", "mock-llm-server", "mock-mcp-server", "rmcp-sse"]
+members = ["erato", "erato_config", "mock-llm-server", "mock-mcp-server", "rmcp-sse", "erato_mcp_oauth"]
 
 [profile.dev]
 split-debuginfo = "packed"

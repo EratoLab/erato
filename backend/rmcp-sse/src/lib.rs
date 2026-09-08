@@ -305,7 +305,7 @@ impl SseClient for reqwest::Client {
             None => return Err(SseTransportError::UnexpectedContentType(None)),
         }
 
-        Ok(SseStream::from_byte_stream(response.bytes_stream()).boxed())
+        Ok(SseStream::from_bytes_stream(response.bytes_stream()).boxed())
     }
 }
 

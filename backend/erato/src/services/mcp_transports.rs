@@ -95,9 +95,7 @@ async fn apply_auth_headers(
     }
 }
 
-pub fn build_oauth_supporting_reqwest_client(
-    config: &McpServerConfig,
-) -> Result<reqwest::Client, Report> {
+pub fn oauth_default_headers(config: &McpServerConfig) -> Result<HeaderMap, Report> {
     let mut default_headers = HeaderMap::new();
     if let Some(http_headers) = &config.http_headers {
         for (name, value) in http_headers {
@@ -110,8 +108,14 @@ pub fn build_oauth_supporting_reqwest_client(
         }
     }
 
+    Ok(default_headers)
+}
+
+pub fn build_oauth_supporting_reqwest_client(
+    config: &McpServerConfig,
+) -> Result<reqwest::Client, Report> {
     reqwest::Client::builder()
-        .default_headers(default_headers)
+        .default_headers(oauth_default_headers(config)?)
         .build()
         .map_err(|e| eyre!("Failed to build MCP reqwest client: {}", e))
 }

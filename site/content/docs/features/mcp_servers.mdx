@@ -542,6 +542,51 @@ flowchart LR
     E -->|Authorization: Bearer refreshed user token| MCP
 ```
 
+#### OAuth resource selection
+
+`mcp_servers.<server-id>.authentication.oauth2.resource` controls the OAuth
+`resource` parameter consistently in authorization, authorization-code exchange,
+and token refresh. The MCP endpoint URL and the API resource identifier can be
+different, including different hosts (for example with Microsoft Entra).
+
+| Configuration | Behavior |
+| --- | --- |
+| `resource` unset | Use `resource` from Protected Resource Metadata (PRM). If PRM or its resource field is absent, use the MCP endpoint URL without its query string or fragment. |
+| `resource = "https://api.example.com"` | Use this exact identifier, taking precedence over PRM. |
+| `resource = ""` | Omit the parameter entirely, even when PRM declares a resource. Use for providers that require resource selection through scopes alone. |
+
+Nonempty resource identifiers must be absolute URIs without fragments. PRM and
+explicit identifiers are sent verbatim, preserving trailing slashes and resource
+query parameters. Transport query parameters do not affect PRM selection and are
+excluded from the endpoint fallback. Invalid resource metadata fails automatic
+selection; an explicit override or omission bypasses that metadata value.
+Authorization-server discovery and scope selection still run in every mode.
+
+For example, an MCP endpoint at `https://mcp.example.com/mcp` can advertise
+`https://api.example.com` as its PRM resource and
+`https://api.example.com/Mcp.Read` as its scope. Automatic selection uses that API
+identifier. To supply it explicitly when metadata is unavailable or incorrect:
+
+```toml
+[mcp_servers.entra]
+transport_type = "streamable_http"
+url = "https://mcp.example.com/mcp"
+
+[mcp_servers.entra.authentication]
+mode = "oauth2"
+
+[mcp_servers.entra.authentication.oauth2]
+client_id = "your-registered-client-id"
+scopes = ["https://api.example.com/Mcp.Read"]
+resource = "https://api.example.com"
+```
+
+The override selects the resource; it does not rewrite configured scopes. For
+Entra, choose scopes qualified by the intended API's resource identifier. Servers
+with no PRM keep the endpoint fallback, except that transport query strings and
+fragments are removed. Reconnect an existing authorization after changing its
+resource or scopes so the user grants access to the intended API.
+
 #### Backend flow support
 
 For OAuth-backed MCP servers, the backend now exposes endpoints that let the frontend list server connectivity and drive the authorization flow:
@@ -559,5 +604,6 @@ The list endpoint evaluates each authorized MCP server and returns one of these 
 #### Operational notes
 
 - Configure `server.encryption_key` before using `oauth2`, otherwise Erato cannot persist OAuth secrets and tokens.
+- Authorization-server metadata must declare its issuer, as required by rmcp 3.2.0. Erato forwards the optional callback `iss` parameter for issuer validation.
 - Dynamic client registration is optional. If your provider requires a pre-registered client, set `client_id` and `client_secret` explicitly.
 - Erato closes the temporary MCP session created for status checks immediately after evaluating connectivity, so status checks do not keep idle probe sessions around.

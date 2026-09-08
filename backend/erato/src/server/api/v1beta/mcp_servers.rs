@@ -55,6 +55,7 @@ pub struct DisconnectMcpServerOauthResponse {
 pub struct McpOauthCallbackQuery {
     pub code: String,
     pub state: String,
+    pub iss: Option<String>,
 }
 
 #[utoipa::path(
@@ -148,7 +149,8 @@ pub async fn start_mcp_server_oauth(
     params(
         ("server_id" = String, Path, description = "Configured MCP server ID"),
         ("code" = String, Query, description = "OAuth authorization code"),
-        ("state" = String, Query, description = "OAuth authorization state")
+        ("state" = String, Query, description = "OAuth authorization state"),
+        ("iss" = Option<String>, Query, description = "OAuth authorization response issuer")
     ),
     responses(
         (status = OK, body = CompleteMcpServerOauthResponse),
@@ -185,6 +187,7 @@ pub async fn complete_mcp_server_oauth(
         redirect_uri: &redirect_uri,
         code: &query.code,
         csrf_token: &query.state,
+        issuer: query.iss.as_deref(),
     })
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
