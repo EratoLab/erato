@@ -23,6 +23,7 @@ import {
   PopoverSeparator,
   resolvePopoverViewportPadding,
 } from "../Controls/PopoverPanel";
+import { Row } from "../Controls/Row";
 import { CheckIcon, ChevronRightIcon, FilterSortIcon } from "../icons";
 
 import type {
@@ -70,7 +71,9 @@ interface SubmenuRow {
 
 // Navigable rows for roving focus: the top-level rows while no flyout is open,
 // only the flyout's options while one is — so ArrowUp/Down never jump between
-// the two levels.
+// the two levels. This menu therefore keeps its own two keyed markers rather
+// than navigating by the row marker every `Row` carries, which cannot tell the
+// levels apart.
 const ROW_SELECTOR = "[data-filter-menu-row]";
 const OPTION_SELECTOR = "[data-filter-menu-option]";
 
@@ -81,12 +84,6 @@ const SUBMENU_OVERLAP_PX = 4;
 // Same delayed close as DropdownMenu's item click, so a selection stays
 // visible for a beat (checkmark moves) before the menu dismisses.
 const CLOSE_ON_SELECT_DELAY_MS = 100;
-
-// Rows and flyout options share DropdownMenu's item channel — geometry class,
-// typography and hover/focus colors — so customer themes retune every menu
-// surface together.
-const rowClassName =
-  "dropdown-item-geometry theme-transition flex w-full items-center gap-2 text-left text-sm text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary focus:bg-theme-bg-hover focus:text-theme-fg-primary focus:outline-none focus:ring-1 focus:ring-inset focus:ring-theme-border-dropdown";
 
 function buildRow<V extends string>(
   key: SubmenuKey,
@@ -134,9 +131,7 @@ export function ChatHistoryFilterMenu({
 
   const panelRef = useRef<HTMLDivElement>(null);
   const submenuRef = useRef<HTMLDivElement>(null);
-  const rowRefs = useRef<Partial<Record<SubmenuKey, HTMLButtonElement | null>>>(
-    {},
-  );
+  const rowRefs = useRef<Partial<Record<SubmenuKey, HTMLElement | null>>>({});
   const hoverOpenTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const hoverCloseTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const selectCloseTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -467,15 +462,16 @@ export function ChatHistoryFilterMenu({
   const activeRow = openSubmenu ? rowsByKey[openSubmenu] : null;
 
   const renderSubmenuRow = (row: SubmenuRow) => (
-    <button
+    <Row
       key={row.key}
+      variant="menu"
       ref={(element) => {
         rowRefs.current[row.key] = element;
       }}
-      type="button"
       role="menuitem"
       aria-haspopup="menu"
-      aria-expanded={openSubmenu === row.key}
+      // Row keeps an expanded row lit for as long as its flyout is up.
+      expanded={openSubmenu === row.key}
       tabIndex={-1}
       data-filter-menu-row={row.key}
       data-testid={`chat-history-filter-menu-row-${row.key}`}
@@ -492,24 +488,15 @@ export function ChatHistoryFilterMenu({
       }}
       onPointerEnter={() => scheduleSubmenuOpen(row.key)}
       onPointerLeave={handleSubmenuHoverAway}
-      className={clsx(
-        rowClassName,
-        // Keyed off the `aria-expanded` already on this button rather than a
-        // `openSubmenu === row.key && "…"` branch: without tailwind-merge the
-        // conditional `text-theme-fg-primary` raced `rowClassName`'s
-        // `text-theme-fg-secondary` on stylesheet position and lost, so an open
-        // row never brightened. `aria-expanded:` compiles to
-        // `.aria-expanded\:text-…[aria-expanded="true"]` — (0,2,0) beats
-        // (0,1,0) — and applies only while this row's submenu is open.
-        "aria-expanded:bg-theme-bg-hover aria-expanded:text-theme-fg-primary",
-      )}
+      trailing={
+        <ChevronRightIcon className="size-3 shrink-0 text-theme-fg-muted" />
+      }
     >
       <span className="min-w-0 flex-1 truncate">{row.label}</span>
       <span className="shrink-0 text-xs text-theme-fg-muted">
         {row.valueLabel}
       </span>
-      <ChevronRightIcon className="size-3 shrink-0 text-theme-fg-muted" />
-    </button>
+    </Row>
   );
 
   return (
@@ -567,15 +554,14 @@ export function ChatHistoryFilterMenu({
         <PopoverSeparator />
         {renderSubmenuRow(groupByRow)}
         <PopoverSeparator />
-        <button
-          type="button"
+        <Row
+          variant="menu"
           role="menuitem"
           tabIndex={-1}
           data-filter-menu-row="reset"
           data-testid="chat-history-filter-menu-reset"
           onClick={() => applyAndClose(resetToDefaults)}
           onPointerEnter={handleSubmenuHoverAway}
-          className={rowClassName}
         >
           <span className="min-w-0 flex-1 truncate">
             {t({
@@ -583,7 +569,7 @@ export function ChatHistoryFilterMenu({
               message: "Reset to defaults",
             })}
           </span>
-        </button>
+        </Row>
 
         {activeRow && (
           <PopoverPanel
@@ -609,25 +595,26 @@ export function ChatHistoryFilterMenu({
             onPointerLeave={scheduleSubmenuClose}
           >
             {activeRow.options.map((option) => (
-              <button
+              <Row
                 key={option.id}
-                type="button"
+                variant="menu"
                 role="menuitemradio"
-                aria-checked={option.selected}
+                checked={option.selected}
                 tabIndex={-1}
                 data-filter-menu-option=""
                 data-testid={`chat-history-filter-menu-option-${activeRow.key}-${option.id}`}
                 onClick={option.onSelect}
-                className={rowClassName}
+                trailing={
+                  <CheckIcon
+                    className={clsx(
+                      "size-4 shrink-0 text-theme-fg-primary",
+                      option.selected ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                }
               >
                 <span className="min-w-0 flex-1 truncate">{option.label}</span>
-                <CheckIcon
-                  className={clsx(
-                    "size-4 shrink-0 text-theme-fg-primary",
-                    option.selected ? "opacity-100" : "opacity-0",
-                  )}
-                />
-              </button>
+              </Row>
             ))}
           </PopoverPanel>
         )}

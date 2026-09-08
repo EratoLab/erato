@@ -322,6 +322,15 @@ describe("ChatHistoryFilterMenu", () => {
     expect(row).toHaveClass("dropdown-item-geometry");
 
     fireEvent.click(row);
+    // A row whose flyout is up stays lit. The pair that does it is part of the
+    // row primitive's recipe, so no call site has to out-specify the row's own
+    // resting colour; that the pair actually paints the hover surface is pinned
+    // against the real stylesheet by the Row play story.
+    expect(row).toHaveAttribute("aria-expanded", "true");
+    expect(row).toHaveClass(
+      "aria-expanded:bg-theme-bg-hover",
+      "aria-expanded:text-theme-fg-primary",
+    );
     const submenu = screen.getByTestId("chat-history-filter-menu-submenu");
     expect(submenu).toHaveClass("anchored-popover-skin");
     expect(submenu).toHaveClass("dropdown-panel-chrome-geometry");

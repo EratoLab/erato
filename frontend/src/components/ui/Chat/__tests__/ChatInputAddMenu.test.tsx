@@ -69,4 +69,87 @@ describe("ChatInputAddMenu", () => {
 
     expect(screen.getByTestId("chat-input-add-menu-trigger")).toBeDisabled();
   });
+
+  /**
+   * The menu's own rows carry the shared row marker while a host injecting
+   * content through `extraContent` still writes the add-menu marker by hand,
+   * so roving focus reads both. The two must interleave by document order —
+   * `querySelectorAll` on a comma list returns document order, not clause
+   * order — or an injected row lands in the wrong place in the walk.
+   *
+   * The same walk pins which rows drop out: a natively-disabled row is skipped,
+   * an `aria-disabled` one is not. An unavailable tool has to stay reachable to
+   * say why it is unavailable.
+   */
+  it("roves over injected and own rows in document order, skipping only natively-disabled ones", () => {
+    render(
+      <ChatInputAddMenu
+        fileSources={[
+          { id: "upload", label: "Upload from Computer", onSelect: vi.fn() },
+          {
+            id: "cloud",
+            label: "Sharepoint",
+            onSelect: vi.fn(),
+            disabled: true,
+          },
+        ]}
+        extraContent={() => (
+          <button
+            type="button"
+            role="menuitem"
+            tabIndex={-1}
+            data-add-menu-item=""
+            data-testid="injected-row"
+          >
+            Email thread
+          </button>
+        )}
+        tools={[
+          {
+            id: "search",
+            label: "Web search",
+            checked: false,
+            onToggle: vi.fn(),
+          },
+          {
+            id: "code",
+            label: "Code interpreter",
+            checked: false,
+            disabled: true,
+            onToggle: vi.fn(),
+          },
+        ]}
+      />,
+    );
+
+    // detail 1 is a pointer open, which leaves focus on the panel; a
+    // keyboard open would have focused the first row already.
+    fireEvent.click(screen.getByTestId("chat-input-add-menu-trigger"), {
+      detail: 1,
+    });
+    const menu = screen.getByRole("menu");
+
+    // The unavailable tool announces itself rather than vanishing from the
+    // keyboard walk; the unavailable file source is natively disabled and does.
+    expect(screen.getByTestId("chat-input-add-menu-tool-code")).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(screen.getByText("Sharepoint").closest("button")).toBeDisabled();
+
+    const walk: (string | null)[] = [];
+    for (let step = 0; step < 4; step += 1) {
+      fireEvent.keyDown(menu, { key: "ArrowDown" });
+      walk.push(
+        (document.activeElement as HTMLElement | null)?.textContent ?? null,
+      );
+    }
+
+    expect(walk).toEqual([
+      "Upload from Computer",
+      "Email thread",
+      "Web search",
+      "Code interpreter",
+    ]);
+  });
 });

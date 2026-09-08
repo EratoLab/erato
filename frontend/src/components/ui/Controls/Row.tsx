@@ -177,9 +177,13 @@ export const Row = forwardRef<HTMLElement, RowProps>(function Row(
             "theme-transition cursor-pointer",
             "focus:outline-none focus:ring-1 focus:ring-inset",
             MENU_TONE_STATE[tone],
-            // An open submenu row stays lit while the flyout is up. Two
-            // attribute variants beat the one-class hover rule on their own,
-            // so no ordering workaround is needed at the call site.
+            // An open submenu row stays lit while the flyout is up. Keyed off
+            // the attribute rather than a caller's `isOpen && "…"` branch:
+            // without tailwind-merge that conditional class races the resting
+            // `text-theme-fg-secondary` on stylesheet position and loses, so an
+            // open row never brightens. `aria-expanded:` compiles to
+            // `.aria-expanded\:text-…[aria-expanded="true"]`, and (0,2,0) beats
+            // (0,1,0) whatever the order.
             "aria-expanded:bg-theme-bg-hover aria-expanded:text-theme-fg-primary",
           ],
           disabledMode === "aria" &&

@@ -19,6 +19,7 @@ import {
   PopoverSectionHeader,
   PopoverSeparator,
 } from "../Controls/PopoverPanel";
+import { Row, ROW_ITEM_SELECTOR } from "../Controls/Row";
 import { SpinnerIcon } from "../Feedback/SpinnerIcon";
 import { CheckIcon, PlusIcon } from "../icons";
 
@@ -114,15 +115,17 @@ export interface ChatInputAddMenuProps {
 // visible for a beat before the menu dismisses.
 const CLOSE_ON_SELECT_DELAY_MS = 100;
 
-// Rows share DropdownMenu's item channel — geometry class, typography and
-// hover/focus colors — so customer themes retune every menu surface together.
-const rowClassName =
-  "dropdown-item-geometry theme-transition flex w-full items-center gap-2 text-left text-sm text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary focus:bg-theme-bg-hover focus:text-theme-fg-primary focus:outline-none focus:ring-1 focus:ring-inset focus:ring-theme-border-dropdown";
-
 // CSS selector for the menu's navigable rows; natively-disabled rows are
 // excluded from roving focus (aria-disabled tool rows stay reachable).
+//
+// Two markers, because the rows come from two places: the menu's own rows are
+// `Row`s and carry `data-row-item`, while a host injecting content through
+// `extraContent` still writes `data-add-menu-item` by hand. `querySelectorAll`
+// returns a comma list in document order, not clause order, so the injected
+// rows keep their place in the arrow-key walk. The first clause retires once
+// the injectors render `Row`s too.
 // eslint-disable-next-line lingui/no-unlocalized-strings -- CSS selector, not user-facing
-export const ADD_MENU_ITEM_SELECTOR = "[data-add-menu-item]:not([disabled])";
+export const ADD_MENU_ITEM_SELECTOR = `[data-add-menu-item]:not([disabled]),${ROW_ITEM_SELECTOR}`;
 
 export interface AddMenuActionRowProps {
   label: React.ReactNode;
@@ -148,27 +151,27 @@ export function AddMenuActionRow({
   onActivate,
 }: AddMenuActionRowProps) {
   return (
-    <button
-      type="button"
+    <Row
+      variant="menu"
       role="menuitem"
       tabIndex={-1}
-      data-add-menu-item=""
       onClick={onActivate}
       disabled={disabled}
       data-testid={testId}
-      className={clsx(
-        rowClassName,
-        "disabled:cursor-not-allowed disabled:opacity-50",
-      )}
+      leading={
+        icon && (
+          <span
+            className="flex size-5 shrink-0 items-center justify-center"
+            aria-hidden="true"
+          >
+            {icon}
+          </span>
+        )
+      }
     >
-      {icon && (
-        <span
-          className="flex size-5 shrink-0 items-center justify-center"
-          aria-hidden="true"
-        >
-          {icon}
-        </span>
-      )}
+      {/* The body is written out rather than handed to Row's `description`
+          slot: this row truncates its label whether or not a second line
+          follows, and Row drops the wrapper when there is no description. */}
       <span className="min-w-0 flex-1">
         <span className="block truncate">{label}</span>
         {description && (
@@ -177,7 +180,7 @@ export function AddMenuActionRow({
           </span>
         )}
       </span>
-    </button>
+    </Row>
   );
 }
 
@@ -353,37 +356,40 @@ export function ChatInputAddMenu({
           {tools.map((tool) => {
             const toolDisabled = isBusy || tool.disabled;
             return (
-              <button
+              <Row
                 key={tool.id}
-                type="button"
+                variant="menu"
                 role="menuitemcheckbox"
-                aria-checked={tool.checked}
-                aria-disabled={toolDisabled ? true : undefined}
+                checked={tool.checked}
+                // An unavailable tool still explains itself, so it stays in
+                // the tab order and in the roving walk; only the activation
+                // goes away.
+                disabled={toolDisabled}
+                disabledMode="aria"
                 tabIndex={-1}
-                data-add-menu-item=""
                 onClick={toolDisabled ? undefined : tool.onToggle}
                 data-testid={`chat-input-add-menu-tool-${tool.id}`}
-                className={clsx(
-                  rowClassName,
-                  "aria-disabled:cursor-not-allowed aria-disabled:opacity-50",
-                )}
+                leading={
+                  tool.icon && (
+                    <span
+                      className="flex size-5 shrink-0 items-center justify-center"
+                      aria-hidden="true"
+                    >
+                      {tool.icon}
+                    </span>
+                  )
+                }
+                trailing={
+                  <CheckIcon
+                    className={clsx(
+                      "size-4 shrink-0 text-theme-fg-primary transition-opacity",
+                      tool.checked ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                }
               >
-                {tool.icon && (
-                  <span
-                    className="flex size-5 shrink-0 items-center justify-center"
-                    aria-hidden="true"
-                  >
-                    {tool.icon}
-                  </span>
-                )}
                 <span className="min-w-0 flex-1 truncate">{tool.label}</span>
-                <CheckIcon
-                  className={clsx(
-                    "size-4 shrink-0 text-theme-fg-primary transition-opacity",
-                    tool.checked ? "opacity-100" : "opacity-0",
-                  )}
-                />
-              </button>
+              </Row>
             );
           })}
         </div>
