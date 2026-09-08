@@ -1,16 +1,19 @@
 import clsx from "clsx";
 
-import {
-  sidebarInsetClassName,
-  sidebarItemClassName,
-} from "./SidebarCollapsibleSection";
-import { InteractiveContainer } from "../Container/InteractiveContainer";
+import { sidebarInsetClassName } from "./SidebarCollapsibleSection";
+import { Row } from "../Controls/Row";
 
-const activeSidebarItemClassName = "sidebar-row-geometry sidebar-row-selected";
 // Inset ring for the same reason as the chat rows: the row inset is
 // themeable and can be narrower than an outside-drawn ring.
 const sidebarLinkClassName =
   "focus-ring-inset block rounded-[var(--theme-radius-shell)]";
+
+/**
+ * Flow the row body keeps for itself: Row's sidebar variant emits nothing on
+ * the cross axis, because the history rows stack and these rows do not.
+ */
+const sidebarNavigationRowClassName =
+  "sidebar-content-col-geometry items-center gap-3 py-2 pr-3";
 
 /** Icon geometry every sidebar nav row shares; apply it to the `icon` node. */
 export const sidebarNavigationIconClassName =
@@ -39,6 +42,10 @@ export interface SidebarNavigationItemProps {
  * One sidebar navigation row: sidebar row/content-column geometry channels,
  * themeable hover surface and the slim-mode label collapse, shared by the web
  * sidebar's nav rows and the add-in's history drawer.
+ *
+ * Three elements, deliberately, and the shape is the row-alignment contract:
+ * the inset div sets the themeable margin, the link (where there is one) takes
+ * focus, and the Row paints.
  */
 export const SidebarNavigationItem = ({
   label,
@@ -60,35 +67,38 @@ export const SidebarNavigationItem = ({
     </span>
   );
 
-  if (active) {
-    return (
-      <div className={clsx(sidebarInsetClassName, "py-1")}>
-        <InteractiveContainer
-          useDiv={true}
-          interactive={false}
-          className={clsx(
-            activeSidebarItemClassName,
-            "flex items-center text-left",
-            "sidebar-content-col-geometry gap-3 py-2 pr-3",
-          )}
-          aria-label={label}
-          title={isSlimMode ? label : undefined}
-          // This branch renders no link, so the row itself has to announce
-          // that it is the current page.
-          aria-current="page"
-          data-selected={true}
-          data-ui={dataUi}
-        >
-          {icon}
-          {labelNode}
-        </InteractiveContainer>
-      </div>
-    );
-  }
+  // `active` wins over `href`: the current page gets no link at all.
+  const isLink = !active && href != null;
+  const tooltip = isSlimMode ? label : undefined;
 
-  if (href != null) {
-    return (
-      <div className={clsx(sidebarInsetClassName, "py-1")}>
+  const row = (
+    <Row
+      variant="sidebar"
+      as="div"
+      // The active row only presents. Everything else takes the hover tint,
+      // and the unlinked row takes the focus ring too, because there it is
+      // the element that receives focus.
+      interactive={!active}
+      selected={active}
+      // The active branch renders no link, so the row itself has to announce
+      // that it is the current page.
+      current={active}
+      className={sidebarNavigationRowClassName}
+      // In the linked branch the <a> is what focus lands on, so it carries the
+      // name and the slim-mode tooltip and the row would only repeat them.
+      aria-label={isLink ? undefined : label}
+      title={isLink ? undefined : tooltip}
+      onClick={active || isLink ? undefined : () => onClick?.()}
+      data-ui={dataUi}
+    >
+      {icon}
+      {labelNode}
+    </Row>
+  );
+
+  return (
+    <div className={clsx(sidebarInsetClassName, "py-1")}>
+      {isLink ? (
         <a
           href={href}
           onClick={(e) => {
@@ -102,44 +112,13 @@ export const SidebarNavigationItem = ({
           }}
           className={sidebarLinkClassName}
           aria-label={label}
-          title={isSlimMode ? label : undefined}
+          title={tooltip}
         >
-          <InteractiveContainer
-            useDiv={true}
-            showFocusRing={false}
-            className={clsx(
-              sidebarItemClassName,
-              "theme-transition flex items-center text-left hover:bg-[var(--theme-shell-sidebar-hover)]",
-              "sidebar-content-col-geometry gap-3 py-2 pr-3",
-            )}
-            data-ui={dataUi}
-          >
-            {icon}
-            {labelNode}
-          </InteractiveContainer>
+          {row}
         </a>
-      </div>
-    );
-  }
-
-  return (
-    <div className={clsx(sidebarInsetClassName, "py-1")}>
-      <InteractiveContainer
-        useDiv={true}
-        showFocusRing={false}
-        onClick={() => onClick?.()}
-        className={clsx(
-          sidebarItemClassName,
-          "focus-ring-inset theme-transition flex items-center text-left hover:bg-[var(--theme-shell-sidebar-hover)]",
-          "sidebar-content-col-geometry gap-3 py-2 pr-3",
-        )}
-        aria-label={label}
-        title={isSlimMode ? label : undefined}
-        data-ui={dataUi}
-      >
-        {icon}
-        {labelNode}
-      </InteractiveContainer>
+      ) : (
+        row
+      )}
     </div>
   );
 };

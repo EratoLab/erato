@@ -44,4 +44,22 @@ describe("SidebarNavigationItem", () => {
     expect(row).not.toHaveAttribute("aria-current");
     expect(row).not.toHaveAttribute("data-selected");
   });
+
+  // The linked row's ring lives on the <a>; the unlinked row is itself the
+  // element focus lands on, so it draws its own. The e2e geometry spec also
+  // reaches the unlinked row as `div[aria-label="…"]` and silently skips it if
+  // either half moves, which is why the tag and the name are asserted here.
+  it("draws the inset ring only where the row itself takes focus", () => {
+    const buttonRow = renderItem({ onClick: vi.fn() });
+
+    expect(buttonRow.tagName).toBe("DIV");
+    expect(buttonRow).toHaveAttribute("aria-label", "Search");
+    expect(buttonRow).toHaveAttribute("role", "button");
+    expect(buttonRow).toHaveClass("focus-ring-inset");
+
+    const linkRow = renderItem({ href: "/search", onClick: vi.fn() });
+
+    expect(linkRow).not.toHaveClass("focus-ring-inset");
+    expect(linkRow.closest("a")).toHaveClass("focus-ring-inset");
+  });
 });
