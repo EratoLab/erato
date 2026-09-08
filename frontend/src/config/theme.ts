@@ -271,6 +271,9 @@ export type ThemeLayout = {
   };
   dropdown: {
     minWidth: string;
+    /** Width of the panels that opt out of the narrow default (the chat
+     * "+" menu and its siblings). */
+    wideWidth: string;
     viewportMargin: string;
   };
   modal: {
@@ -586,6 +589,7 @@ export const defaultTheme: Theme = {
     },
     dropdown: {
       minWidth: "12rem",
+      wideWidth: "20rem",
       viewportMargin: "8px",
     },
     modal: {

@@ -323,6 +323,7 @@ describe("ThemeProvider", () => {
                 },
                 dropdown: {
                   minWidth: "14rem",
+                  wideWidth: "22rem",
                   viewportMargin: "12px",
                 },
                 modal: {
@@ -416,6 +417,7 @@ describe("ThemeProvider", () => {
     );
     expect(varsCss).toContain("--theme-layout-chat-input-max-width: 60rem;");
     expect(varsCss).toContain("--theme-layout-dropdown-min-width: 14rem;");
+    expect(varsCss).toContain("--theme-layout-dropdown-wide-width: 22rem;");
     expect(varsCss).toContain("--theme-layout-dropdown-viewport-margin: 12px;");
     expect(varsCss).toContain("--theme-layout-modal-backdrop-blur: 6px;");
     expect(varsCss).toContain("--theme-layout-modal-max-height: 85vh;");

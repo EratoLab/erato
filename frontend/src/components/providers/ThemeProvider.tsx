@@ -252,6 +252,7 @@ const getThemeVariableEntries = (theme: Theme): Array<[string, string]> => {
     ["--theme-layout-sidebar-width", theme.layout.sidebar.width],
     ["--theme-layout-sidebar-slim-width", theme.layout.sidebar.slimWidth],
     ["--theme-layout-dropdown-min-width", theme.layout.dropdown.minWidth],
+    ["--theme-layout-dropdown-wide-width", theme.layout.dropdown.wideWidth],
     [
       "--theme-layout-dropdown-viewport-margin",
       theme.layout.dropdown.viewportMargin,
