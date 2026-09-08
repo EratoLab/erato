@@ -582,21 +582,14 @@ body {
      derived, not tokenised: panel radius minus the panel inset keeps the row
      highlight concentric with the panel corner for any theme values. The
      derivation is declared once on .anchored-popover-skin and only read here.
-     The fallback repeats it because .btn-geometry-list-item shares this
-     selector and is also used outside any popover, where nothing declares the
-     var and an unguarded read would square the corner to 0. */
-  .btn-geometry-list-item,
+     The read carries no fallback: only `Row variant="menu"` emits this class
+     and every menu row renders inside a popover panel, so the variable is
+     always declared above it. A fallback would let a row that escaped the
+     panel look right while silently missing the skin. */
   .dropdown-item-geometry {
     padding-inline: var(--theme-spacing-dropdown-padding-x);
     padding-block: var(--theme-spacing-dropdown-padding-y);
-    border-radius: var(
-      --dropdown-item-radius,
-      max(
-        0px,
-        var(--theme-radius-dropdown) -
-          var(--theme-spacing-dropdown-chrome-padding)
-      )
-    );
+    border-radius: var(--dropdown-item-radius);
   }
 
   .dropdown-panel-chrome-geometry {

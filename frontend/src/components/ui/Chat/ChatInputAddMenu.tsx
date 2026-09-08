@@ -118,71 +118,11 @@ const CLOSE_ON_SELECT_DELAY_MS = 100;
 // CSS selector for the menu's navigable rows; natively-disabled rows are
 // excluded from roving focus (aria-disabled tool rows stay reachable).
 //
-// Two markers, because the rows come from two places: the menu's own rows are
-// `Row`s and carry `data-row-item`, while a host injecting content through
-// `extraContent` still writes `data-add-menu-item` by hand. `querySelectorAll`
-// returns a comma list in document order, not clause order, so the injected
-// rows keep their place in the arrow-key walk. The first clause retires once
-// the injectors render `Row`s too.
-// eslint-disable-next-line lingui/no-unlocalized-strings -- CSS selector, not user-facing
-export const ADD_MENU_ITEM_SELECTOR = `[data-add-menu-item]:not([disabled]),${ROW_ITEM_SELECTOR}`;
-
-export interface AddMenuActionRowProps {
-  label: React.ReactNode;
-  /** Optional secondary line (e.g. file size, assistant description). */
-  description?: React.ReactNode;
-  icon?: React.ReactNode;
-  disabled?: boolean;
-  testId?: string;
-  onActivate: () => void;
-}
-
-/**
- * One activatable menu row. Exported so surfaces outside this menu — the
- * composer's mention picker — present identical rows without re-deriving the
- * item channel or the roving-focus contract.
- */
-export function AddMenuActionRow({
-  label,
-  description,
-  icon,
-  disabled = false,
-  testId,
-  onActivate,
-}: AddMenuActionRowProps) {
-  return (
-    <Row
-      variant="menu"
-      role="menuitem"
-      tabIndex={-1}
-      onClick={onActivate}
-      disabled={disabled}
-      data-testid={testId}
-      leading={
-        icon && (
-          <span
-            className="flex size-5 shrink-0 items-center justify-center"
-            aria-hidden="true"
-          >
-            {icon}
-          </span>
-        )
-      }
-    >
-      {/* The body is written out rather than handed to Row's `description`
-          slot: this row truncates its label whether or not a second line
-          follows, and Row drops the wrapper when there is no description. */}
-      <span className="min-w-0 flex-1">
-        <span className="block truncate">{label}</span>
-        {description && (
-          <span className="block truncate text-xs text-theme-fg-muted">
-            {description}
-          </span>
-        )}
-      </span>
-    </Row>
-  );
-}
+// Every row here is a `Row`, injected ones included, so the shared row marker
+// is the whole selector. Re-exported under the menu's own name because the
+// surfaces that reuse this menu's roving contract — the mention picker, the
+// run-mode picker — address it that way.
+export { ROW_ITEM_SELECTOR as ADD_MENU_ITEM_SELECTOR };
 
 /**
  * Unified "+" menu for the chat input. Presentational and prop-driven so it
@@ -219,7 +159,7 @@ export function ChatInputAddMenu({
   useRovingMenuFocus({
     containerRef: panelRef,
     enabled: isOpen,
-    itemSelector: ADD_MENU_ITEM_SELECTOR,
+    itemSelector: ROW_ITEM_SELECTOR,
   });
 
   const cancelPendingClose = useCallback(() => {
@@ -259,14 +199,14 @@ export function ChatInputAddMenu({
   useEffect(() => () => clearTimeout(closeTimerRef.current), []);
 
   const renderActionRow = (item: AddMenuActionItem, testId: string) => (
-    <AddMenuActionRow
+    <Row
       key={item.id}
-      label={item.label}
-      description={item.description}
-      icon={item.icon}
+      variant="menu"
+      role="menuitem"
+      tabIndex={-1}
       disabled={isBusy || item.disabled}
-      testId={testId}
-      onActivate={() => {
+      data-testid={testId}
+      onClick={() => {
         // A pending close means a selection already ran; the row stays
         // mounted through the close delay, so swallow re-activations.
         if (closeTimerRef.current !== undefined) {
@@ -279,7 +219,29 @@ export function ChatInputAddMenu({
         }
         closeAfterSelect();
       }}
-    />
+      leading={
+        item.icon && (
+          <span
+            className="flex size-5 shrink-0 items-center justify-center"
+            aria-hidden="true"
+          >
+            {item.icon}
+          </span>
+        )
+      }
+    >
+      {/* The body is written out rather than handed to Row's `description`
+          slot: the label truncates whether or not a second line follows, and
+          Row drops the wrapper when there is no description. */}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">{item.label}</span>
+        {item.description && (
+          <span className="block truncate text-xs text-theme-fg-muted">
+            {item.description}
+          </span>
+        )}
+      </span>
+    </Row>
   );
 
   const renderExtraSection = (section: AddMenuSection) => {
@@ -414,7 +376,7 @@ export function ChatInputAddMenu({
       ariaHasPopup="menu"
       role="menu"
       preferredOrientation={{ vertical: "top", horizontal: "left" }}
-      initialFocusSelector={ADD_MENU_ITEM_SELECTOR}
+      initialFocusSelector={ROW_ITEM_SELECTOR}
       width="wide"
       dataUi="chat-input-add-menu"
       // `relative` is the only styling this needs beyond the shared Button:

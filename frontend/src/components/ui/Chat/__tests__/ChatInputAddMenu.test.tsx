@@ -71,11 +71,10 @@ describe("ChatInputAddMenu", () => {
   });
 
   /**
-   * The menu's own rows carry the shared row marker while a host injecting
-   * content through `extraContent` still writes the add-menu marker by hand,
-   * so roving focus reads both. The two must interleave by document order —
-   * `querySelectorAll` on a comma list returns document order, not clause
-   * order — or an injected row lands in the wrong place in the walk.
+   * `extraContent` is a seam an out-of-repo host can fill with its own markup,
+   * so the injected row here is a raw button carrying the row marker by hand
+   * rather than a `Row`. It must take its place in the walk by document order,
+   * not by where it sits in the selector.
    *
    * The same walk pins which rows drop out: a natively-disabled row is skipped,
    * an `aria-disabled` one is not. An unavailable tool has to stay reachable to
@@ -98,7 +97,7 @@ describe("ChatInputAddMenu", () => {
             type="button"
             role="menuitem"
             tabIndex={-1}
-            data-add-menu-item=""
+            data-row-item=""
             data-testid="injected-row"
           >
             Email thread

@@ -149,22 +149,7 @@ export const FocusVisibleStyles: Story = {
   render: () => <Button>Focus Visible Test</Button>,
 };
 
-// Test 6: List item button role
-export const ListItemButtonRole: Story = {
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    const button = canvas.getByRole("menuitem");
-
-    await expect(button).toHaveAttribute("role", "menuitem");
-  },
-  render: () => (
-    <div role="menu" className="flex flex-col">
-      <Button variant="list-item">List Item Button</Button>
-    </div>
-  ),
-};
-
-// Test 7: Multiple button navigation
+// Test 6: Multiple button navigation
 export const KeyboardNavigation: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

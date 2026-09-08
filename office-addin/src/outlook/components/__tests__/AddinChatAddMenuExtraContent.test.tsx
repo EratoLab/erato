@@ -128,9 +128,9 @@ describe("AddinChatAddMenuExtraContent", () => {
     );
 
     const row = screen.getByTestId("addin-add-menu-email-thread");
-    // The add-menu roves over `[data-row-item]`. The hand-written
-    // `data-add-menu-item` marker is gone: the second clause of the menu's
-    // compound selector is what these rows are now reached by.
+    // The add-menu roves over `[data-row-item]` and nothing else now, so the
+    // retired hand-written `data-add-menu-item` marker would not reach these
+    // rows: losing the shared one drops them out of keyboard navigation.
     expect(row).toHaveAttribute("data-row-item");
     expect(row).not.toHaveAttribute("data-add-menu-item");
     expect(row).toHaveAttribute("tabindex", "-1");

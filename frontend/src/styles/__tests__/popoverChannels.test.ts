@@ -68,13 +68,16 @@ describe("popover shape channels", () => {
     expect(ruleBody(".anchored-popover-skin")).toContain(
       "--dropdown-item-radius:max(",
     );
-    // List-item buttons share the row rule and render outside any popover, so
-    // the read has to carry the derivation as its own fallback.
     declares(
-      ".btn-geometry-list-item, .dropdown-item-geometry",
+      ".dropdown-item-geometry",
       "border-radius",
-      "var(--dropdown-item-radius, max(0px, var(--theme-radius-dropdown) - var(--theme-spacing-dropdown-chrome-padding)))",
+      "var(--dropdown-item-radius)",
     );
+    // The read is deliberately bare. Every element carrying this class is a
+    // menu Row inside a popover panel, so the skin always declares the
+    // variable above it; repeating the derivation as a fallback here would
+    // hide a row that escaped the panel instead of squaring its corner.
+    expect(ruleBody(".dropdown-item-geometry")).not.toContain("max(");
   });
 
   it("gives every popover layout token a built-in fallback", () => {
