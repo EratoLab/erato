@@ -112,7 +112,6 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
                 right: "var(--theme-spacing-modal-padding)",
                 top: "var(--theme-spacing-modal-padding)",
               }}
-              data-geometry="icon-sm"
               aria-label={t`Close modal`}
             >
               <CloseIcon className="size-6" />
