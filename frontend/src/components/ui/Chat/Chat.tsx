@@ -304,9 +304,16 @@ export const Chat = ({
     [pinnedChatHistory],
   );
 
-  const canEditForCurrentChat = Array.isArray(chatHistory)
-    ? !!chatHistory.find((c) => c.id === (currentChatId ?? ""))?.can_edit
-    : false;
+  // Pinned chats are excluded from the regular history listing.
+  const currentChat = useMemo(
+    () =>
+      pinnedChatHistory.find((chat) => chat.id === currentChatId) ??
+      (Array.isArray(chatHistory)
+        ? chatHistory.find((chat) => chat.id === currentChatId)
+        : undefined),
+    [chatHistory, pinnedChatHistory, currentChatId],
+  );
+  const canEditForCurrentChat = currentChat?.can_edit ?? false;
   const modelSwitches = useModelSwitches(
     messages,
     messageOrder,
@@ -326,14 +333,7 @@ export const Chat = ({
       : null,
   );
 
-  const currentChatLastSelectedFacets = useMemo(() => {
-    if (!Array.isArray(chatHistory)) {
-      return undefined;
-    }
-
-    return chatHistory.find((chat) => chat.id === (currentChatId ?? ""))
-      ?.last_selected_facets;
-  }, [chatHistory, currentChatId]);
+  const currentChatLastSelectedFacets = currentChat?.last_selected_facets;
 
   const effectiveInitialSelectedFacetIds = useMemo(() => {
     if (assistantFacetSettingsEnforced) {

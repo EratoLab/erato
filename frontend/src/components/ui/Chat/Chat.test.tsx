@@ -10,26 +10,53 @@ import { useRecentChats } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { Chat } from "./Chat";
+import { DefaultMessageControls } from "../Message/DefaultMessageControls";
 
 import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { MessageControlsContext } from "@/types/message-controls";
 import type { Messages } from "@lingui/core";
 
+const chatLists = vi.hoisted(() => ({
+  chats: [] as RecentChat[],
+  pinnedChats: [] as RecentChat[],
+}));
+
 // The surface under test is Chat's own composition — which chrome mounts
-// where — so the heavyweight children are stubs and only the delegated-runs
-// bar stays real.
+// where — so heavyweight children are stubs while the delegated-runs bar
+// and message controls stay real.
 vi.mock("./ChatHistorySidebar", () => ({
   ChatHistorySidebar: () => <div data-testid="sidebar-stub" />,
 }));
 vi.mock("./ChatInput", () => ({
-  ChatInput: (props: { disabled?: boolean }) => (
+  ChatInput: (props: {
+    disabled?: boolean;
+    initialSelectedFacetIds?: string[];
+  }) => (
     <div
       data-testid="chat-input-stub"
       data-disabled={String(Boolean(props.disabled))}
+      data-facets={JSON.stringify(props.initialSelectedFacetIds)}
     />
   ),
 }));
 vi.mock("../MessageList/MessageList", () => ({
-  MessageList: () => <div data-testid="message-list-stub" />,
+  MessageList: ({
+    controlsContext,
+  }: {
+    controlsContext: MessageControlsContext;
+  }) => (
+    <div data-testid="message-list-stub">
+      {[true, false].map((isUser) => (
+        <DefaultMessageControls
+          key={String(isUser)}
+          messageId={isUser ? "user-1" : "assistant-1"}
+          context={controlsContext}
+          onAction={vi.fn(async () => true)}
+          isUserMessage={isUser}
+        />
+      ))}
+    </div>
+  ),
 }));
 vi.mock("./ChatMessage", () => ({ ChatMessage: () => null }));
 vi.mock("./ChatShareDialog", () => ({ ChatShareDialog: () => null }));
@@ -51,13 +78,13 @@ vi.mock("@/providers/ChatProvider", () => ({
     regenerateMessage: vi.fn(),
     isMessagingLoading: false,
     isPendingResponse: false,
-    chats: [],
+    chats: chatLists.chats,
     currentChatId: "origin-1",
     navigateToChat: vi.fn(),
     archiveChat: vi.fn(),
     updateChatTitle: vi.fn(),
     pinChat: vi.fn(),
-    pinnedChats: [],
+    pinnedChats: chatLists.pinnedChats,
     createNewChat: vi.fn(),
     isHistoryLoading: false,
     historyError: null,
@@ -143,8 +170,8 @@ vi.mock("@/hooks/useProfile", () => ({
 
 vi.mock("@/providers/FeatureConfigProvider", () => ({
   useChatInputFeature: () => ({ emptyStateLayout: "bottom", maxFiles: 5 }),
-  useChatSharingFeature: () => ({ enabled: false }),
-  usePinnedChatsFeature: () => ({ enabled: false, maxItems: 5 }),
+  useChatSharingFeature: () => ({ enabled: true }),
+  usePinnedChatsFeature: () => ({ enabled: true, maxItems: 5 }),
   useSidebarFeature: () => ({ chatHistoryShowMetadata: false }),
   useAssistantsFeature: () => ({ enabled: true, delegationEnabled: true }),
 }));
@@ -207,6 +234,8 @@ const renderChat = (props: Partial<Parameters<typeof Chat>[0]> = {}) =>
 describe("Chat surface composition", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    chatLists.chats = [];
+    chatLists.pinnedChats = [];
     useGenerationStatusStore.getState().reset();
     (useRecentChats as Mock).mockReturnValue({
       data: undefined,
@@ -214,6 +243,43 @@ describe("Chat surface composition", () => {
     });
     i18n.load("en", enMessages as unknown as Messages);
     i18n.activate("en");
+  });
+
+  it.each([false, true])(
+    "shows edit, regenerate and share for an editable chat (pinned: %s)",
+    (isPinned) => {
+      const chat = {
+        ...backgroundRun("origin-1"),
+        can_edit: true,
+        is_pinned: isPinned,
+        last_selected_facets: ["selected-facet"],
+      };
+      chatLists[isPinned ? "pinnedChats" : "chats"] = [chat];
+
+      renderChat({ messageOrder: ["user-1"] });
+
+      expect(screen.getByTestId("chat-input-stub")).toHaveAttribute(
+        "data-facets",
+        JSON.stringify(["selected-facet"]),
+      );
+      expect(screen.getByLabelText("Edit message")).toBeInTheDocument();
+      expect(screen.getByLabelText("Regenerate response")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Share" })).toBeInTheDocument();
+    },
+  );
+
+  it("keeps editing and sharing unavailable for a pinned chat without permission", () => {
+    chatLists.pinnedChats = [{ ...backgroundRun("origin-1"), is_pinned: true }];
+
+    renderChat({ messageOrder: ["user-1"] });
+
+    expect(screen.queryByLabelText("Edit message")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Regenerate response"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Share" }),
+    ).not.toBeInTheDocument();
   });
 
   it("mounts the delegated-runs bar directly above the composer", () => {

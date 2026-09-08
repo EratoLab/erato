@@ -371,7 +371,8 @@ export function useChatHistory({
   // without waiting for a poll.
   useEffect(() => {
     seedGenerationStatusFromListing(chats);
-  }, [chats]);
+    seedGenerationStatusFromListing(pinnedChats);
+  }, [chats, pinnedChats]);
 
   // Navigate to a specific chat (assistant-aware)
   const navigateToChat = useCallback(
@@ -400,13 +401,22 @@ export function useChatHistory({
       }
 
       // Look up the chat to check if it has an assistant
-      const chat = chats.find((c) => c.id === chatId);
+      const chat =
+        pinnedChats.find((c) => c.id === chatId) ??
+        chats.find((c) => c.id === chatId);
       const url = getChatUrl(chatId, chat?.assistant_id);
 
       logger.log(`navigateToChat: Navigating to ${url}`);
       navigate(url);
     },
-    [navigate, isNewChatPending, chats, currentChatId, queryClient],
+    [
+      navigate,
+      isNewChatPending,
+      chats,
+      pinnedChats,
+      currentChatId,
+      queryClient,
+    ],
   );
 
   // Create a new chat and navigate to it
