@@ -303,6 +303,11 @@ describe("ChatHistoryList", () => {
     });
     expect(historyItems[1]).not.toHaveClass("sidebar-row-selected");
     expect(historyItems[1]).not.toHaveAttribute("data-selected");
+    // The other half of the selected/hover exchange: the fill and the tint are
+    // alternatives, so a row that is not the open one still takes the tint.
+    expect(historyItems[1]).toHaveClass(
+      "hover:bg-[var(--theme-shell-sidebar-hover)]",
+    );
   });
 
   it("uses the same sidebar tokens in the loading skeleton", () => {
@@ -312,6 +317,9 @@ describe("ChatHistoryList", () => {
 
     expect(skeletonItem).toHaveClass("sidebar-row-geometry");
     expect(skeletonItem).toHaveClass("sidebar-row-selected");
+    // The row frame is a flex container, so the shimmer bars only stay stacked
+    // while the column axis is spelled out here — Row sets none.
+    expect(skeletonItem).toHaveClass("flex-col");
     expect(screen.getByTestId("chat-history-skeleton")).toHaveStyle({
       padding:
         "calc(var(--theme-spacing-shell-padding-y) / 2) calc(var(--theme-spacing-shell-padding-x) / 2)",
