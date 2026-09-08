@@ -35,13 +35,11 @@ describe("DropdownMenu", () => {
       "dropdown-panel",
     );
     const panel = screen.getByRole("menu");
-    // Surface from the class; only consumer-supplied sizing stays inline.
+    // Surface and shape both come from the stylesheet; nothing but runtime
+    // positioning stays inline.
     expect(panel).toHaveClass("anchored-popover-skin");
-    expect(panel).toHaveStyle({
-      maxWidth:
-        "calc(100vw - (var(--theme-layout-dropdown-viewport-margin) * 2))",
-      minWidth: "var(--theme-layout-dropdown-min-width)",
-    });
+    expect(panel).toHaveAttribute("data-popover-width", "min");
+    expect(panel).toHaveAttribute("data-popover-position", "fixed");
     const inlineStyle = panel.getAttribute("style") ?? "";
     for (const property of [
       "background-color",

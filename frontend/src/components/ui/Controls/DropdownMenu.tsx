@@ -16,6 +16,11 @@ import { useKeyboard } from "@/hooks/useKeyboard";
 
 import { AnchoredPopover } from "./AnchoredPopover";
 import { Button } from "./Button";
+import {
+  PopoverChrome,
+  PopoverSectionHeader,
+  PopoverSeparator,
+} from "./PopoverPanel";
 import { ConfirmationDialog } from "../Modal/ConfirmationDialog";
 import { MoreVertical, CheckIcon } from "../icons";
 
@@ -64,6 +69,8 @@ export interface DropdownMenuProps {
   autoFocusFirstItem?: boolean;
   /** Callback fired when dropdown open state changes */
   onOpenChange?: (isOpen: boolean) => void;
+  /** Panel theme hook; override to keep a menu out of the family's rules. */
+  dataUi?: string;
 }
 
 // Navigable rows for roving focus and initial keyboard focus; natively-disabled
@@ -144,6 +151,7 @@ export const DropdownMenu = memo(
     noWrapItems = false,
     autoFocusFirstItem = true,
     onOpenChange,
+    dataUi = "dropdown-panel",
   }: DropdownMenuProps) => {
     const [isOpen, setIsOpenState] = useState(false);
 
@@ -277,19 +285,8 @@ export const DropdownMenu = memo(
             autoFocusFirstItem ? MENU_ITEM_SELECTOR : undefined
           }
           panelRef={menuRef}
-          panelStyle={{
-            maxWidth:
-              "calc(100vw - (var(--theme-layout-dropdown-viewport-margin) * 2))",
-            minWidth: "var(--theme-layout-dropdown-min-width)",
-          }}
-          panelClassName={clsx(
-            "flex flex-col",
-            matchContentWidth
-              ? "w-max"
-              : "w-[var(--theme-layout-dropdown-min-width)]",
-          )}
-          viewportPadding="var(--theme-layout-dropdown-viewport-margin)"
-          dataUi="dropdown-panel"
+          width={matchContentWidth ? "content" : "min"}
+          dataUi={dataUi}
           trigger={(triggerProps) => (
             <Button
               ref={triggerProps.ref}
@@ -313,10 +310,7 @@ export const DropdownMenu = memo(
             </Button>
           )}
         >
-          <div
-            className="dropdown-panel-chrome-geometry min-h-0 flex-1 overflow-y-auto overscroll-contain"
-            role="none"
-          >
+          <PopoverChrome column={false}>
             {sections.map((section, sectionIndex) => {
               const rows = section.items.map(({ item, index }) => (
                 <MenuItem
@@ -339,26 +333,17 @@ export const DropdownMenu = memo(
               const headerId = `${baseId}-section-${sectionIndex}`;
               return (
                 <Fragment key={section.key}>
-                  {sectionIndex > 0 && (
-                    <div
-                      role="separator"
-                      className="my-1 h-px bg-theme-border"
-                    />
-                  )}
+                  {sectionIndex > 0 && <PopoverSeparator />}
                   <div role="group" aria-labelledby={headerId}>
-                    <div
-                      id={headerId}
-                      role="presentation"
-                      className="px-[var(--theme-spacing-dropdown-padding-x)] pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-theme-fg-muted"
-                    >
+                    <PopoverSectionHeader id={headerId}>
                       {section.header}
-                    </div>
+                    </PopoverSectionHeader>
                     {rows}
                   </div>
                 </Fragment>
               );
             })}
-          </div>
+          </PopoverChrome>
         </AnchoredPopover>
 
         {/* Render Confirmation Dialog if needed */}
