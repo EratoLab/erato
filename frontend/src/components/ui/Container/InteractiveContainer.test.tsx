@@ -97,4 +97,24 @@ describe("InteractiveContainer", () => {
       screen.getByRole("button", { name: "Ref target" }),
     );
   });
+
+  it("drops the button appearance reset when resetAppearance is false", () => {
+    render(
+      <InteractiveContainer
+        resetAppearance={false}
+        className="dropdown-item-geometry"
+      >
+        Menu row
+      </InteractiveContainer>,
+    );
+
+    const button = screen.getByRole("button", { name: "Menu row" });
+
+    // The reset's `p-0` is a utility; a caller whose padding comes from a class
+    // in @layer components would lose it silently.
+    expect(button).not.toHaveClass("p-0");
+    expect(button).not.toHaveClass("appearance-none");
+    expect(button).toHaveClass("dropdown-item-geometry");
+    expect(button).toHaveAttribute("type", "button");
+  });
 });

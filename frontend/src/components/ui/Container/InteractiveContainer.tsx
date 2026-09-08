@@ -21,6 +21,13 @@ type BaseProps = {
    */
   as?: ContainerTag;
   useDiv?: boolean; // Use div instead of button to prevent nesting buttons
+  /**
+   * Strips the browser's button chrome so a `<button>` reads as a neutral box.
+   * Turn it off when the element's geometry comes from a class in
+   * `@layer components`: the reset's `p-0` is a utility, utilities are emitted
+   * after components, and it silently zeroes that class's padding.
+   */
+  resetAppearance?: boolean;
   fullWidth?: boolean;
   showFocusRing?: boolean;
   onClick?: (e: React.MouseEvent<ContainerElement>) => void;
@@ -64,6 +71,7 @@ export const InteractiveContainer = forwardRef<
     interactive = true,
     as,
     useDiv = false,
+    resetAppearance = true,
     fullWidth = true,
     showFocusRing = true,
     onClick,
@@ -187,7 +195,8 @@ export const InteractiveContainer = forwardRef<
     <button
       ref={ref as React.Ref<HTMLButtonElement>}
       className={clsx(
-        "appearance-none border-0 bg-transparent p-0 text-inherit",
+        resetAppearance &&
+          "appearance-none border-0 bg-transparent p-0 text-inherit",
         commonClassNames,
       )}
       type="button"
