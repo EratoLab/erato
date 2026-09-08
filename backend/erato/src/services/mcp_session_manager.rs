@@ -5,7 +5,7 @@ use crate::config::{
 use crate::metrics::report_mcp_active_sessions_for_server;
 use crate::services::mcp_manager::{McpRequestAuthContext, ToolDiscoveryResult};
 use crate::services::mcp_oauth::resolve_oauth_access_token;
-use crate::services::mcp_transports::{EmptyClientHandler, create_mcp_service};
+use crate::services::mcp_transports::{ProgressClientHandler, create_mcp_service};
 use eyre::{Report, eyre};
 use futures::future::join_all;
 use rmcp::model::{CallToolRequestParams, CallToolResult, Tool};
@@ -29,7 +29,7 @@ pub enum McpServerConnectionStatus {
 #[derive(Debug)]
 struct McpSession {
     /// The rmcp running service (must be kept alive to maintain the connection)
-    _service: RunningService<RoleClient, EmptyClientHandler>,
+    _service: RunningService<RoleClient, ProgressClientHandler>,
     /// The rmcp peer instance for making requests
     peer: Peer<RoleClient>,
     /// Server ID this session is for
@@ -41,6 +41,12 @@ struct McpSession {
     last_activity: SystemTime,
     /// Maximum idle time before this session is evicted
     max_idle_duration: Duration,
+}
+
+impl Drop for McpSession {
+    fn drop(&mut self) {
+        self._service.service().clear();
+    }
 }
 
 impl McpSession {
@@ -102,6 +108,9 @@ impl McpSession {
 
     /// Check if this session has been inactive for longer than the given duration
     fn is_inactive(&self) -> bool {
+        if self._service.service().has_active_calls() {
+            return false;
+        }
         if let Ok(elapsed) = self.last_activity.elapsed() {
             elapsed > self.max_idle_duration
         } else {
@@ -120,18 +129,6 @@ impl McpSession {
         self.tools = filter_tools_by_server_config(tools_result.tools, config);
         self.touch();
         Ok(())
-    }
-
-    /// Call a tool on this session
-    async fn call_tool(&mut self, params: CallToolRequestParams) -> Result<CallToolResult, Report> {
-        let result = self
-            .peer
-            .call_tool(params)
-            .await
-            .map_err(|e| eyre!("Failed to call tool: {}", e))?;
-
-        self.touch();
-        Ok(result)
     }
 }
 
@@ -207,6 +204,12 @@ pub struct McpSessionManager {
     configuration: Arc<RwLock<McpSessionManagerConfig>>,
     /// Handle to the background cleanup task
     _cleanup_task: JoinHandle<()>,
+}
+
+impl Drop for McpSessionManager {
+    fn drop(&mut self) {
+        self._cleanup_task.abort();
+    }
 }
 
 #[derive(Debug)]
@@ -454,7 +457,7 @@ impl McpSessionManager {
         .await?;
 
         let mut sessions_guard = self.sessions.write().await;
-        sessions_guard.insert(key.clone(), session);
+        sessions_guard.entry(key.clone()).or_insert(session);
         Self::update_active_session_metrics(
             &sessions_guard,
             configuration.server_configs.keys().cloned(),
@@ -678,19 +681,33 @@ impl McpSessionManager {
         params: CallToolRequestParams,
         auth_context: &McpRequestAuthContext<'_>,
     ) -> Result<CallToolResult, Report> {
+        self.call_tool_with_progress(chat_id, server_id, params, auth_context, None)
+            .await
+    }
+
+    pub async fn call_tool_with_progress(
+        &self,
+        chat_id: Uuid,
+        server_id: &str,
+        params: CallToolRequestParams,
+        auth_context: &McpRequestAuthContext<'_>,
+        progress: Option<
+            tokio::sync::mpsc::UnboundedSender<rmcp::model::ProgressNotificationParam>,
+        >,
+    ) -> Result<CallToolResult, Report> {
         // Try calling the tool with the current session
         match self
-            .call_tool_internal(chat_id, server_id, params.clone(), auth_context)
+            .call_tool_internal(
+                chat_id,
+                server_id,
+                params.clone(),
+                auth_context,
+                progress.clone(),
+            )
             .await
         {
             Ok(result) => Ok(result),
             Err(e) if Self::is_session_invalid_error(&e) => {
-                let config = self.server_config(server_id).await?;
-                let key = (
-                    chat_id,
-                    server_id.to_string(),
-                    Self::session_auth_key(server_id, &config, auth_context).await?,
-                );
                 warn!(
                     chat_id = %chat_id,
                     server_id = %server_id,
@@ -698,11 +715,8 @@ impl McpSessionManager {
                     "MCP session appears to be invalid, recreating and retrying"
                 );
 
-                // Invalidate the session
-                self.invalidate_session(&key).await;
-
                 // Retry with a new session
-                self.call_tool_internal(chat_id, server_id, params, auth_context)
+                self.call_tool_internal(chat_id, server_id, params, auth_context, progress)
                     .await
             }
             Err(e) => Err(e),
@@ -716,6 +730,9 @@ impl McpSessionManager {
         server_id: &str,
         params: CallToolRequestParams,
         auth_context: &McpRequestAuthContext<'_>,
+        progress: Option<
+            tokio::sync::mpsc::UnboundedSender<rmcp::model::ProgressNotificationParam>,
+        >,
     ) -> Result<CallToolResult, Report> {
         // Ensure session exists
         let key = self
@@ -729,7 +746,54 @@ impl McpSessionManager {
             .get_mut(&key)
             .ok_or_else(|| eyre!("Session not found after creation"))?;
 
-        session.call_tool(params).await
+        session.touch();
+        let peer = session.peer.clone();
+        let handler = session._service.service().clone();
+        // The SDK allocates the token when sending. Gate notifications until
+        // that token is registered, including servers that respond immediately.
+        let gate = handler.registration_gate.lock().await;
+        drop(sessions_guard);
+        let result = async {
+            let request = peer
+                .send_request_with_option(
+                    rmcp::model::ClientRequest::CallToolRequest(rmcp::model::CallToolRequest::new(
+                        params,
+                    )),
+                    rmcp::service::PeerRequestOptions::default(),
+                )
+                .await
+                .map_err(|e| eyre!("Failed to call tool: {}", e))?;
+            let registration = handler.register(request.progress_token.clone(), progress);
+            drop(gate);
+            let result = request
+                .await_response()
+                .await
+                .map_err(|e| eyre!("Failed to call tool: {}", e))?;
+            drop(registration);
+            Ok::<_, Report>(result)
+        }
+        .await;
+        let configured_server_ids = self.configured_server_ids().await;
+        let mut sessions = self.sessions.write().await;
+        if let Some(session) = sessions.get_mut(&key)
+            && session._service.service().same_connection(&handler)
+        {
+            if result
+                .as_ref()
+                .err()
+                .is_some_and(Self::is_session_invalid_error)
+            {
+                // A failing older call must not evict a replacement connection.
+                sessions.remove(&key);
+                Self::update_active_session_metrics(&sessions, configured_server_ids.into_iter());
+            } else {
+                session.touch();
+            }
+        }
+        match result? {
+            rmcp::model::ServerResult::CallToolResult(result) => Ok(result),
+            other => Err(eyre!("Unexpected MCP tool response: {:?}", other)),
+        }
     }
 
     /// Manually refresh the tools list for a specific chat and server
@@ -924,7 +988,10 @@ mod tests {
     };
     use rmcp::model::Tool;
 
-    fn server_config(allow_tools: Option<Vec<&str>>, exclude_tools: Vec<&str>) -> McpServerConfig {
+    pub(super) fn server_config(
+        allow_tools: Option<Vec<&str>>,
+        exclude_tools: Vec<&str>,
+    ) -> McpServerConfig {
         McpServerConfig {
             transport_type: "streamable_http".to_string(),
             url: "http://localhost/mcp".to_string(),
@@ -1042,3 +1109,7 @@ mod tests {
         assert_eq!(manager.reconfigure(&next).await, vec!["added", "changed"]);
     }
 }
+
+#[cfg(test)]
+#[path = "mcp_progress_tests.rs"]
+mod progress_tests;

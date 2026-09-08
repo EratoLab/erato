@@ -1067,6 +1067,10 @@ pub enum StreamingEvent {
         status: ToolCallStatus,
         #[serde(skip_serializing_if = "Option::is_none")]
         progress_message: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        progress: Option<f64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        total: Option<f64>,
         #[serde(skip_serializing_if = "Option::is_none")]
         output: Option<JsonValue>,
     },

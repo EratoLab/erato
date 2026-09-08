@@ -71,7 +71,19 @@ const PlainToolUseStep = ({
       <TraceStep
         railIcon={railIconFor(part.content_type, status)}
         hasTrailingRailLine={!isLastStep}
-        title={toolName}
+        title={
+          <>
+            {toolName}
+            {part.progress_message && (
+              <span
+                className="pl-2 font-normal text-theme-fg-muted"
+                title={part.progress_message}
+              >
+                {part.progress_message}
+              </span>
+            )}
+          </>
+        }
         titleSlot={
           <ToolStatusPill status={status} approvalStatus={approvalStatus} />
         }

@@ -513,7 +513,7 @@ pub enum ToolCallStatus {
     Error,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize, ToSchema, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct MessageSubmitStreamingResponseToolCallUpdate {
     message_id: Uuid,
@@ -525,6 +525,12 @@ pub struct MessageSubmitStreamingResponseToolCallUpdate {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     progress_message: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    progress: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    total: Option<f64>,
     output: Option<JsonValue>,
 }
 
@@ -556,6 +562,70 @@ trait SendAsSseEvent {
             .await
             .map_err(|err| eyre!("Failed to send {} event: {err}", self.tag()))?;
         Ok(())
+    }
+}
+
+/// Drain accepted progress before exposing the final result to the caller.
+async fn await_mcp_tool_with_progress<
+    MSG: SendAsSseEvent + From<MessageSubmitStreamingResponseToolCallUpdate>,
+>(
+    call: impl std::future::Future<Output = Result<rmcp::model::CallToolResult, Report>>,
+    mut receiver: tokio::sync::mpsc::UnboundedReceiver<rmcp::model::ProgressNotificationParam>,
+    mut update: MessageSubmitStreamingResponseToolCallUpdate,
+    task: Option<&Arc<StreamingTask>>,
+    tx: Sender<Result<Event, Report>>,
+) -> Result<rmcp::model::CallToolResult, Report> {
+    tokio::pin!(call);
+    let mut completed = None;
+    loop {
+        let progress = if let Some(result) = completed.take() {
+            match receiver.try_recv() {
+                Ok(progress) => {
+                    completed = Some(result);
+                    progress
+                }
+                Err(_) => return result,
+            }
+        } else {
+            tokio::select! {
+                biased;
+                _ = async {
+                    match task {
+                        Some(task) => task.wait_for_abort().await,
+                        None => std::future::pending::<()>().await,
+                    }
+                } => return Err(eyre!("MCP tool call cancelled")),
+                Some(progress) = receiver.recv() => progress,
+                result = &mut call => {
+                    completed = Some(result);
+                    continue;
+                }
+            }
+        };
+        update.progress_message = progress.message;
+        update.progress = Some(progress.progress);
+        update.total = progress.total;
+        if let Some(task) = task {
+            send_background_event(
+                task,
+                StreamingEvent::ToolCallUpdate {
+                    message_id: update.message_id,
+                    content_index: update.content_index,
+                    tool_call_id: update.tool_call_id.clone(),
+                    tool_name: update.tool_name.clone(),
+                    input: None,
+                    status: BgToolCallStatus::InProgress,
+                    progress_message: update.progress_message.clone(),
+                    progress: update.progress,
+                    total: update.total,
+                    output: None,
+                },
+                "broadcast MCP progress",
+            )
+            .await;
+        }
+        let message: MSG = update.clone().into();
+        send_generation_event(&message, tx.clone()).await?;
     }
 }
 
@@ -1057,24 +1127,30 @@ fn streaming_event_to_sse(event: &StreamingEvent) -> Result<Event, Report> {
             input,
             status,
             progress_message,
+            progress,
+            total,
             output,
         } => {
-            let status_str = match status {
-                BgToolCallStatus::InProgress => "in_progress",
-                BgToolCallStatus::Success => "success",
-                BgToolCallStatus::Error => "error",
+            let status = match status {
+                BgToolCallStatus::InProgress => ToolCallStatus::InProgress,
+                BgToolCallStatus::Success => ToolCallStatus::Success,
+                BgToolCallStatus::Error => ToolCallStatus::Error,
             };
-            let data = serde_json::to_string(&serde_json::json!({
-                "message_type": "tool_call_update",
-                "message_id": message_id.to_string(),
-                "content_index": content_index,
-                "tool_call_id": tool_call_id,
-                "tool_name": tool_name,
-                "input": input,
-                "status": status_str,
-                "progress_message": progress_message,
-                "output": output
-            }))?;
+            let data = MessageSubmitStreamingResponseMessage::ToolCallUpdate(
+                MessageSubmitStreamingResponseToolCallUpdate {
+                    message_id: *message_id,
+                    content_index: *content_index,
+                    tool_call_id: tool_call_id.clone(),
+                    tool_name: tool_name.clone(),
+                    input: input.clone(),
+                    status,
+                    progress_message: progress_message.clone(),
+                    progress: *progress,
+                    total: *total,
+                    output: output.clone(),
+                },
+            )
+            .data_json()?;
             ("tool_call_update", data)
         }
         StreamingEvent::ClientToolCall {
@@ -3268,6 +3344,8 @@ async fn stream_generate_chat_completion<
                     tool_name: unfinished_tool_call.fn_name.clone(),
                     input: Some(unfinished_tool_call.fn_arguments.clone()),
                     progress_message: None,
+                    progress: None,
+                    total: None,
                     output: Some(json!({ "status": "error", "error": error_message })),
                     started_at: Some(tool_call_started),
                     ended_at: Some(now_timestamp()),
@@ -3385,6 +3463,8 @@ async fn stream_generate_chat_completion<
                     input: Some(unfinished_tool_call.fn_arguments.clone()),
                     status,
                     progress_message: None,
+                    progress: None,
+                    total: None,
                     output: Some(output_value.clone()),
                 };
                 if let Some(task) = streaming_task {
@@ -3398,6 +3478,8 @@ async fn stream_generate_chat_completion<
                             input: Some(unfinished_tool_call.fn_arguments.clone()),
                             status: bg_status,
                             progress_message: None,
+                            progress: None,
+                            total: None,
                             output: Some(output_value.clone()),
                         },
                         "broadcast client-action tool update",
@@ -3412,6 +3494,8 @@ async fn stream_generate_chat_completion<
                     tool_name: unfinished_tool_call.fn_name.clone(),
                     input: Some(unfinished_tool_call.fn_arguments.clone()),
                     progress_message: None,
+                    progress: None,
+                    total: None,
                     output: Some(output_value.clone()),
                     started_at: Some(tool_call_started),
                     ended_at: Some(now_timestamp()),
@@ -3551,6 +3635,8 @@ async fn stream_generate_chat_completion<
                     input: Some(unfinished_tool_call.fn_arguments.clone()),
                     status,
                     progress_message: None,
+                    progress: None,
+                    total: None,
                     output: Some(output_value.clone()),
                 };
                 if let Some(task) = streaming_task {
@@ -3564,6 +3650,8 @@ async fn stream_generate_chat_completion<
                             input: Some(unfinished_tool_call.fn_arguments.clone()),
                             status: bg_status,
                             progress_message: None,
+                            progress: None,
+                            total: None,
                             output: Some(output_value.clone()),
                         },
                         "broadcast delegation tool update",
@@ -3578,6 +3666,8 @@ async fn stream_generate_chat_completion<
                     tool_name: unfinished_tool_call.fn_name.clone(),
                     input: Some(unfinished_tool_call.fn_arguments.clone()),
                     progress_message: None,
+                    progress: None,
+                    total: None,
                     output: Some(output_value.clone()),
                     started_at: Some(tool_call_started),
                     ended_at: Some(now_timestamp()),
@@ -3633,6 +3723,8 @@ async fn stream_generate_chat_completion<
                         tool_name: tool_name.clone(),
                         input: Some(tool_input.clone()),
                         progress_message: None,
+                        progress: None,
+                        total: None,
                         output: Some(json!({ "status": "error", "error": response_text })),
                         started_at: Some(tool_call_started),
                         ended_at: Some(now_timestamp()),
@@ -3809,6 +3901,8 @@ async fn stream_generate_chat_completion<
                         input: Some(tool_input.clone()),
                         status: bg_status,
                         progress_message: None,
+                        progress: None,
+                        total: None,
                         output: Some(output_value.clone()),
                     },
                     "broadcast client tool result",
@@ -3822,6 +3916,8 @@ async fn stream_generate_chat_completion<
                     input: Some(tool_input.clone()),
                     status,
                     progress_message: None,
+                    progress: None,
+                    total: None,
                     output: Some(output_value.clone()),
                 };
                 let update_message: MSG = update_event.into();
@@ -3838,6 +3934,8 @@ async fn stream_generate_chat_completion<
                     tool_name: tool_name.clone(),
                     input: Some(tool_input),
                     progress_message: None,
+                    progress: None,
+                    total: None,
                     output: Some(output_value.clone()),
                     started_at: Some(tool_call_started),
                     ended_at: Some(now_timestamp()),
@@ -3924,6 +4022,8 @@ async fn stream_generate_chat_completion<
                         tool_name: unfinished_tool_call.fn_name.clone(),
                         input: Some(unfinished_tool_call.fn_arguments.clone()),
                         progress_message: None,
+                        progress: None,
+                        total: None,
                         output: Some(json!({ "status": "rejected", "error": error_message })),
                         started_at: Some(tool_call_started),
                         ended_at: Some(now_timestamp()),
@@ -3960,10 +4060,32 @@ async fn stream_generate_chat_completion<
             };
             let tool_call_parent_observation_id =
                 tool_call_parent_observation_ids.remove(&unfinished_tool_call.call_id);
-            let tool_call_result = mcp
-                .servers
-                .call_tool(chat_id, managed_tool_call, &mcp_auth_context)
-                .await;
+            let (progress_tx, progress_rx) = tokio::sync::mpsc::unbounded_channel();
+            let call = mcp.servers.call_tool_with_progress(
+                chat_id,
+                managed_tool_call,
+                &mcp_auth_context,
+                Some(progress_tx),
+            );
+            let tool_call_result = await_mcp_tool_with_progress::<MSG>(
+                call,
+                progress_rx,
+                MessageSubmitStreamingResponseToolCallUpdate {
+                    message_id: assistant_message_id,
+                    content_index: current_message_content.len(),
+                    tool_call_id: unfinished_tool_call.call_id.clone(),
+                    tool_name: unfinished_tool_call.fn_name.clone(),
+                    input: None,
+                    status: ToolCallStatus::InProgress,
+                    progress_message: None,
+                    progress: None,
+                    total: None,
+                    output: None,
+                },
+                streaming_task,
+                tx.clone(),
+            )
+            .await;
             let tool_call_end_time = if langfuse_enabled {
                 Some(SystemTime::now())
             } else {
@@ -4139,6 +4261,8 @@ async fn stream_generate_chat_completion<
                                 input: Some(unfinished_tool_call.fn_arguments.clone()),
                                 status: ToolCallStatus::Error,
                                 progress_message: None,
+                                progress: None,
+                                total: None,
                                 output: Some(output_value.clone()),
                             };
                             if let Some(task) = streaming_task {
@@ -4152,6 +4276,8 @@ async fn stream_generate_chat_completion<
                                         input: Some(unfinished_tool_call.fn_arguments.clone()),
                                         status: BgToolCallStatus::Error,
                                         progress_message: None,
+                                        progress: None,
+                                        total: None,
                                         output: Some(output_value.clone()),
                                     },
                                     "broadcast failed MCP tool output processing",
@@ -4169,6 +4295,8 @@ async fn stream_generate_chat_completion<
                                 tool_name: unfinished_tool_call.fn_name.clone(),
                                 input: Some(unfinished_tool_call.fn_arguments.clone()),
                                 progress_message: None,
+                                progress: None,
+                                total: None,
                                 output: Some(output_value),
                                 started_at: Some(tool_call_started),
                                 ended_at: Some(now_timestamp()),
@@ -4209,6 +4337,8 @@ async fn stream_generate_chat_completion<
                             input: Some(finished_tool_call.fn_arguments.clone()),
                             status: ToolCallStatus::Success,
                             progress_message: None,
+                            progress: None,
+                            total: None,
                             output: output_value_for_event.clone(),
                         };
                         // Forward to streaming_task if present
@@ -4223,6 +4353,8 @@ async fn stream_generate_chat_completion<
                                     input: Some(finished_tool_call.fn_arguments),
                                     status: BgToolCallStatus::Success,
                                     progress_message: None,
+                                    progress: None,
+                                    total: None,
                                     output: output_value_for_event,
                                 },
                                 "broadcast completed MCP tool call",
@@ -4241,6 +4373,8 @@ async fn stream_generate_chat_completion<
                             tool_name: finished_tool_call.fn_name,
                             input: Some(finished_tool_call.fn_arguments),
                             progress_message: None,
+                            progress: None,
+                            total: None,
                             output: output_value.clone(),
                             started_at: Some(tool_call_started.clone()),
                             ended_at: Some(now_timestamp()),
@@ -4278,6 +4412,8 @@ async fn stream_generate_chat_completion<
                         input: Some(unfinished_tool_call.fn_arguments.clone()),
                         status: ToolCallStatus::Error,
                         progress_message: None,
+                        progress: None,
+                        total: None,
                         output: Some(output_value.clone()),
                     };
                     if let Some(task) = streaming_task {
@@ -4291,6 +4427,8 @@ async fn stream_generate_chat_completion<
                                 input: Some(unfinished_tool_call.fn_arguments.clone()),
                                 status: BgToolCallStatus::Error,
                                 progress_message: None,
+                                progress: None,
+                                total: None,
                                 output: Some(output_value.clone()),
                             },
                             "broadcast failed MCP tool call",
@@ -4308,6 +4446,8 @@ async fn stream_generate_chat_completion<
                         tool_name: unfinished_tool_call.fn_name.clone(),
                         input: Some(unfinished_tool_call.fn_arguments.clone()),
                         progress_message: None,
+                        progress: None,
+                        total: None,
                         output: Some(output_value),
                         started_at: Some(tool_call_started),
                         ended_at: Some(now_timestamp()),
@@ -4382,6 +4522,8 @@ async fn stream_generate_chat_completion<
                     input: Some(pending_wait.tool_call.fn_arguments.clone()),
                     status,
                     progress_message: None,
+                    progress: None,
+                    total: None,
                     output: Some(output_value.clone()),
                 };
                 if let Some(task) = streaming_task {
@@ -4395,6 +4537,8 @@ async fn stream_generate_chat_completion<
                             input: Some(pending_wait.tool_call.fn_arguments.clone()),
                             status: bg_status,
                             progress_message: None,
+                            progress: None,
+                            total: None,
                             output: Some(output_value.clone()),
                         },
                         "broadcast completed wait tool call",
@@ -4409,6 +4553,8 @@ async fn stream_generate_chat_completion<
                     tool_name: pending_wait.tool_call.fn_name.clone(),
                     input: Some(pending_wait.tool_call.fn_arguments.clone()),
                     progress_message: None,
+                    progress: None,
+                    total: None,
                     output: Some(output_value.clone()),
                     started_at: Some(pending_wait.tool_call_started),
                     ended_at: Some(now_timestamp()),
@@ -9956,24 +10102,44 @@ async fn run_continue_message_task(
             fn_arguments: approval_request.input.clone(),
             thought_signatures: None,
         };
-        let result = mcp
-            .servers
-            .call_tool(
-                chat.id,
-                crate::services::mcp_manager::ManagedToolCall {
-                    server_id: managed_tool.server_id,
-                    tool_call: call,
-                    tool: managed_tool.tool,
-                },
-                &mcp_auth_context,
-            )
-            .await?;
+        let (progress_tx, progress_rx) = tokio::sync::mpsc::unbounded_channel();
+        let call = mcp.servers.call_tool_with_progress(
+            chat.id,
+            crate::services::mcp_manager::ManagedToolCall {
+                server_id: managed_tool.server_id,
+                tool_call: call,
+                tool: managed_tool.tool,
+            },
+            &mcp_auth_context,
+            Some(progress_tx),
+        );
+        let result = await_mcp_tool_with_progress::<MessageSubmitStreamingResponseMessage>(
+            call,
+            progress_rx,
+            MessageSubmitStreamingResponseToolCallUpdate {
+                message_id: message.id,
+                content_index: parsed.content.len(),
+                tool_call_id: approval_request.tool_call_id.clone(),
+                tool_name: approval_request.tool_name.clone(),
+                input: None,
+                status: ToolCallStatus::InProgress,
+                progress_message: None,
+                progress: None,
+                total: None,
+                output: None,
+            },
+            Some(task),
+            tx.clone(),
+        )
+        .await?;
         ToolUse {
             tool_call_id: approval_request.tool_call_id.clone(),
             status: MessageToolCallStatus::Success,
             tool_name: approval_request.tool_name.clone(),
             input: Some(approval_request.input.clone()),
             progress_message: None,
+            progress: None,
+            total: None,
             output: Some(serde_json::to_value(result)?),
             started_at: Some(now_timestamp()),
             ended_at: Some(now_timestamp()),
@@ -9985,6 +10151,8 @@ async fn run_continue_message_task(
             tool_name: approval_request.tool_name.clone(),
             input: Some(approval_request.input.clone()),
             progress_message: None,
+            progress: None,
+            total: None,
             output: Some(json!({"status": "rejected", "error": "The user denied this tool call."})),
             started_at: Some(now_timestamp()),
             ended_at: Some(now_timestamp()),
@@ -10242,5 +10410,123 @@ mod client_tool_result_request_tests {
         with_value["result"] = serde_json::json!({ "slots": 3 });
         let with_value: ClientToolResultRequest = serde_json::from_value(with_value).unwrap();
         assert_eq!(with_value.result, Some(serde_json::json!({ "slots": 3 })));
+    }
+}
+
+#[cfg(test)]
+mod mcp_progress_event_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn cancelling_running_chat_cleans_up_progress_registration() {
+        let manager = crate::services::background_tasks::BackgroundTaskManager::new(
+            None,
+            Default::default(),
+            None,
+        );
+        let message_id = Uuid::new_v4();
+        let (mut events, task) = manager.start_task(Uuid::new_v4(), message_id).await;
+        let handler = crate::services::mcp_transports::ProgressClientHandler::default();
+        let token = rmcp::model::ProgressToken(rmcp::model::NumberOrString::Number(1));
+        let (progress_tx, progress_rx) = tokio::sync::mpsc::unbounded_channel();
+        let registration = handler.register(token.clone(), Some(progress_tx.clone()));
+        let call = async move {
+            let _registration = registration;
+            progress_tx
+                .send(rmcp::model::ProgressNotificationParam::new(token, 1.0))
+                .unwrap();
+            std::future::pending::<Result<rmcp::model::CallToolResult, Report>>().await
+        };
+        let (tx, _rx) = tokio::sync::mpsc::channel(8);
+        let future = await_mcp_tool_with_progress::<MessageSubmitStreamingResponseMessage>(
+            call,
+            progress_rx,
+            MessageSubmitStreamingResponseToolCallUpdate {
+                message_id,
+                content_index: 0,
+                tool_call_id: "cancelled-call".into(),
+                tool_name: "read_file".into(),
+                input: None,
+                status: ToolCallStatus::InProgress,
+                progress_message: None,
+                progress: None,
+                total: None,
+                output: None,
+            },
+            Some(&task),
+            tx,
+        );
+        tokio::pin!(future);
+        tokio::select! {
+            event = events.recv() => { event.unwrap(); },
+            _ = &mut future => panic!("call must still be running"),
+        }
+        assert!(handler.has_active_calls());
+        task.request_abort();
+        assert!(future.await.is_err());
+        assert!(!handler.has_active_calls());
+    }
+
+    #[tokio::test]
+    async fn progress_is_delivered_live_and_replayed_with_tool_identity() {
+        let manager = crate::services::background_tasks::BackgroundTaskManager::new(
+            None,
+            Default::default(),
+            None,
+        );
+        let message_id = Uuid::new_v4();
+        let (mut events, task) = manager.start_task(Uuid::new_v4(), message_id).await;
+        let (progress_tx, progress_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (sse_tx, mut sse_rx) = tokio::sync::mpsc::channel(8);
+        let (ack_tx, mut ack_rx) = tokio::sync::mpsc::channel(1);
+        let call = async move {
+            for step in 1..=3 {
+                progress_tx
+                    .send(rmcp::model::ProgressNotificationParam::new(
+                        rmcp::model::ProgressToken(rmcp::model::NumberOrString::Number(1)),
+                        f64::from(step),
+                    ))
+                    .unwrap();
+                // The result cannot complete until the consumer observes each update.
+                ack_rx.recv().await.unwrap();
+            }
+            Ok(rmcp::model::CallToolResult::default())
+        };
+        let future = await_mcp_tool_with_progress::<MessageSubmitStreamingResponseMessage>(
+            call,
+            progress_rx,
+            MessageSubmitStreamingResponseToolCallUpdate {
+                message_id,
+                content_index: 2,
+                tool_call_id: "call-progress".into(),
+                tool_name: "read_file".into(),
+                input: None,
+                status: ToolCallStatus::InProgress,
+                progress_message: None,
+                progress: None,
+                total: None,
+                output: None,
+            },
+            Some(&task),
+            sse_tx,
+        );
+        tokio::pin!(future);
+        for step in 1..=3 {
+            let event = tokio::select! {
+                event = events.recv() => event.unwrap(),
+                result = &mut future => panic!("result preceded progress: {result:?}"),
+            };
+            let value = serde_json::to_value(&event).unwrap();
+            assert_eq!(value["tool_call_id"], "call-progress");
+            assert_eq!(value["message_id"], message_id.to_string());
+            assert_eq!(value["content_index"], 2);
+            assert_eq!(value["progress"], f64::from(step));
+            assert_eq!(value["status"], "in_progress");
+            assert!(sse_rx.try_recv().unwrap().is_ok());
+            assert!(streaming_event_to_sse(&event).is_ok());
+            ack_tx.send(()).await.unwrap();
+        }
+        assert!(future.await.is_ok());
+        assert_eq!(task.get_event_history().await.len(), 3);
     }
 }

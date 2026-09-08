@@ -35,6 +35,12 @@ export const handleToolCallUpdate = (
       const resolvedStreamKey = streamKey ?? state.activeStreamKey;
       const currentStreaming =
         state.streamingByKey[resolvedStreamKey] ?? state.streaming;
+      if (
+        currentStreaming.currentMessageId &&
+        currentStreaming.currentMessageId !== responseData.message_id
+      ) {
+        return state;
+      }
       const updatedContent = applyToolUseUpdate(
         currentStreaming.content,
         responseData,

@@ -495,6 +495,8 @@ impl DelegationProgressEmitter<'_> {
                 input: Some(self.input.clone()),
                 status: crate::services::background_tasks::ToolCallStatus::InProgress,
                 progress_message: None,
+                progress: None,
+                total: None,
                 output: Some(json!({
                     "assistant_id": self.assistant_id,
                     "assistant_name": self.assistant_name,

@@ -18,16 +18,19 @@ const buildToolUsePart = (data: {
   input?: ToolUse["input"];
   output?: ToolUse["output"];
   progressMessage?: string | null;
-}): ToolUseContentPart =>
-  ({
-    content_type: "tool_use",
-    tool_call_id: data.toolCallId,
-    tool_name: data.toolName,
-    status: data.status,
-    input: data.input ?? null,
-    output: data.output ?? null,
-    progress_message: data.progressMessage ?? null,
-  }) as ToolUseContentPart;
+  progress?: number | null;
+  total?: number | null;
+}): ToolUseContentPart => ({
+  content_type: "tool_use",
+  tool_call_id: data.toolCallId,
+  tool_name: data.toolName,
+  status: data.status,
+  input: data.input ?? null,
+  output: data.output ?? null,
+  progress_message: data.progressMessage ?? null,
+  ...(data.progress != null ? { progress: data.progress } : {}),
+  ...(data.total != null ? { total: data.total } : {}),
+});
 
 /**
  * Insert a freshly-proposed tool_use part into the content array at its
@@ -85,6 +88,9 @@ export function applyToolUseUpdate(
 
   if (existingIndex >= 0) {
     const existing = updated[existingIndex] as ToolUseContentPart;
+    if (responseData.progress != null && existing.status !== "in_progress") {
+      return currentContent;
+    }
     updated[existingIndex] = buildToolUsePart({
       toolCallId: responseData.tool_call_id,
       toolName: responseData.tool_name,
@@ -92,6 +98,8 @@ export function applyToolUseUpdate(
       input: responseData.input ?? existing.input ?? null,
       output: responseData.output ?? null,
       progressMessage: responseData.progress_message ?? null,
+      progress: responseData.progress,
+      total: responseData.total,
     });
     return updated;
   }
@@ -103,6 +111,8 @@ export function applyToolUseUpdate(
     input: responseData.input ?? null,
     output: responseData.output ?? null,
     progressMessage: responseData.progress_message ?? null,
+    progress: responseData.progress,
+    total: responseData.total,
   });
   const index = responseData.content_index;
   if (index >= updated.length) {

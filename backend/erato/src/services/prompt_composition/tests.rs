@@ -1792,6 +1792,8 @@ mod test_cases {
                     status: ToolCallStatus::Success,
                     tool_name: "search_documents".to_string(),
                     progress_message: None,
+                    progress: None,
+                    total: None,
                     input: Some(serde_json::json!({ "query": "source" })),
                     output: Some(serde_json::json!({
                         "results": [
@@ -1928,6 +1930,8 @@ mod test_cases {
                     status: ToolCallStatus::Success,
                     tool_name: crate::services::client_actions::CLIENT_ACTION_TOOL_NAME.to_string(),
                     progress_message: None,
+                    progress: None,
+                    total: None,
                     input: Some(serde_json::json!({ "action": "outlook.reply" })),
                     output: Some(
                         serde_json::json!({ "status": "proposed", "action": "outlook.reply" }),
@@ -2003,6 +2007,8 @@ mod test_cases {
                     status: ToolCallStatus::Error,
                     tool_name: crate::services::client_actions::CLIENT_ACTION_TOOL_NAME.to_string(),
                     progress_message: None,
+                    progress: None,
+                    total: None,
                     input: Some(serde_json::json!({ "action": "outlook.forward" })),
                     output: Some(serde_json::json!({
                         "status": "rejected",
@@ -2070,6 +2076,8 @@ mod test_cases {
                 status: ToolCallStatus::Success,
                 tool_name: crate::services::client_actions::CLIENT_ACTION_TOOL_NAME.to_string(),
                 progress_message: None,
+                progress: None,
+                total: None,
                 input: Some(serde_json::json!({ "action": "outlook.reply" })),
                 output: Some(serde_json::json!({ "result": "reply form opened" })),
                 ..Default::default()
@@ -2177,6 +2185,8 @@ mod test_cases {
                     status: ToolCallStatus::Success,
                     tool_name: crate::services::client_actions::CLIENT_ACTION_TOOL_NAME.to_string(),
                     progress_message: None,
+                    progress: None,
+                    total: None,
                     input: Some(serde_json::json!({ "action": "outlook.reply" })),
                     output: Some(serde_json::json!({
                         "status": "proposed",
@@ -2189,6 +2199,8 @@ mod test_cases {
                     status: ToolCallStatus::Error,
                     tool_name: crate::services::client_actions::CLIENT_ACTION_TOOL_NAME.to_string(),
                     progress_message: None,
+                    progress: None,
+                    total: None,
                     input: Some(serde_json::json!({ "action": "outlook.forward" })),
                     output: Some(serde_json::json!({ "status": "rejected", "error": 42 })),
                     ..Default::default()
@@ -2263,6 +2275,8 @@ mod test_cases {
             status: ToolCallStatus::Success,
             tool_name: crate::services::client_actions::CLIENT_ACTION_TOOL_NAME.to_string(),
             progress_message: None,
+            progress: None,
+            total: None,
             input: Some(serde_json::json!({ "action": "outlook.reply" })),
             output: Some(serde_json::json!({ "status": "proposed", "action": "outlook.reply" })),
             ..Default::default()
@@ -2337,6 +2351,8 @@ mod test_cases {
                         status: ToolCallStatus::Success,
                         tool_name: "search_documents".to_string(),
                         progress_message: None,
+                        progress: None,
+                        total: None,
                         input: Some(serde_json::json!({ "query": "source" })),
                         output: None,
                         ..Default::default()
@@ -2349,6 +2365,8 @@ mod test_cases {
                         status: ToolCallStatus::Success,
                         tool_name: "search_documents".to_string(),
                         progress_message: None,
+                        progress: None,
+                        total: None,
                         input: None,
                         output: Some(serde_json::json!({ "results": ["doc-1"] })),
                         ..Default::default()
@@ -2387,6 +2405,8 @@ mod test_cases {
                         status: ToolCallStatus::Success,
                         tool_name: "search_documents".to_string(),
                         progress_message: None,
+                        progress: None,
+                        total: None,
                         input: Some(serde_json::json!({ "query": "foo" })),
                         output: None,
                         ..Default::default()
@@ -2399,6 +2419,8 @@ mod test_cases {
                         status: ToolCallStatus::Success,
                         tool_name: "search_documents".to_string(),
                         progress_message: None,
+                        progress: None,
+                        total: None,
                         input: None,
                         output: Some(serde_json::json!({ "results": ["doc-1"] })),
                         ..Default::default()
@@ -2411,6 +2433,8 @@ mod test_cases {
                         status: ToolCallStatus::Success,
                         tool_name: "fetch_metadata".to_string(),
                         progress_message: None,
+                        progress: None,
+                        total: None,
                         input: Some(serde_json::json!({ "id": "doc-1" })),
                         output: None,
                         ..Default::default()
@@ -2423,6 +2447,8 @@ mod test_cases {
                         status: ToolCallStatus::Success,
                         tool_name: "fetch_metadata".to_string(),
                         progress_message: None,
+                        progress: None,
+                        total: None,
                         input: None,
                         output: Some(serde_json::json!({ "title": "Doc 1" })),
                         ..Default::default()
@@ -2461,6 +2487,8 @@ mod test_cases {
                         status: ToolCallStatus::Success,
                         tool_name: "search_documents".to_string(),
                         progress_message: None,
+                        progress: None,
+                        total: None,
                         input: Some(serde_json::json!({ "query": "foo" })),
                         output: None,
                         ..Default::default()
@@ -2473,6 +2501,8 @@ mod test_cases {
                         status: ToolCallStatus::Success,
                         tool_name: "search_documents".to_string(),
                         progress_message: None,
+                        progress: None,
+                        total: None,
                         input: None,
                         output: Some(serde_json::json!({ "results": ["doc-1"] })),
                         ..Default::default()
@@ -2485,6 +2515,8 @@ mod test_cases {
                         status: ToolCallStatus::Success,
                         tool_name: "fetch_details".to_string(),
                         progress_message: None,
+                        progress: None,
+                        total: None,
                         input: Some(serde_json::json!({ "id": "doc-1" })),
                         output: None,
                         ..Default::default()
@@ -2497,6 +2529,8 @@ mod test_cases {
                         status: ToolCallStatus::Success,
                         tool_name: "fetch_details".to_string(),
                         progress_message: None,
+                        progress: None,
+                        total: None,
                         input: None,
                         output: Some(serde_json::json!({ "summary": "done" })),
                         ..Default::default()

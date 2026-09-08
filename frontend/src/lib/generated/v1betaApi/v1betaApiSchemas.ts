@@ -1895,10 +1895,18 @@ export type MessageSubmitStreamingResponseToolCallUpdate = {
    */
   message_id: string;
   output?: null | Value;
+  /**
+   * @format double
+   */
+  progress?: number;
   progress_message?: string;
   status: ToolCallStatus;
   tool_call_id: string;
   tool_name: string;
+  /**
+   * @format double
+   */
+  total?: number;
 };
 
 export type MessageSubmitStreamingResponseUserMessageSaved = {
@@ -2633,9 +2641,14 @@ export type ToolUse = {
    */
   output?: null | Value;
   /**
+   * @format double
    * @default null
    */
-  progress_message?: null | undefined;
+  progress?: number;
+  /**
+   * @default null
+   */
+  progress_message?: string | null | undefined;
   /**
    * @default null
    */
@@ -2652,6 +2665,11 @@ export type ToolUse = {
    * @default
    */
   tool_name?: string;
+  /**
+   * @format double
+   * @default null
+   */
+  total?: number;
 };
 
 /**
