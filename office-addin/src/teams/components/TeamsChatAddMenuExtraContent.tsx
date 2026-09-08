@@ -1,5 +1,6 @@
 import {
   PopoverSectionHeader,
+  Row,
   getSupportedFileTypes,
   useFileCapabilitiesContext,
 } from "@erato/frontend/library";
@@ -9,11 +10,6 @@ import { useTeamsChatFetcher } from "../hooks/useTeamsChatFetcher";
 import { useTeamsChatPicker } from "../providers/TeamsChatPickerProvider";
 
 import type { ChatAddMenuExtraContentProps } from "@erato/frontend/library";
-
-// Same row recipe as the shared "+" menu / DropdownMenu item channel, so
-// customer themes retune these injected rows together with every other menu.
-const rowClassName =
-  "dropdown-item-geometry theme-transition flex w-full items-start justify-between gap-2 text-left text-sm text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary focus:bg-theme-bg-hover focus:text-theme-fg-primary focus:outline-none focus:ring-1 focus:ring-inset focus:ring-theme-border-dropdown disabled:cursor-not-allowed disabled:opacity-50";
 
 /**
  * Teams contribution to the unified chat "+" menu: one row that opens the chat
@@ -53,14 +49,13 @@ export function TeamsChatAddMenuExtraContent({
           message: "Teams content",
         })}
       </PopoverSectionHeader>
-      <button
-        type="button"
+      <Row
+        variant="menu"
+        align="start"
         role="menuitem"
         tabIndex={-1}
-        data-add-menu-item=""
         data-testid="teams-add-menu-chats"
         disabled={isDisabled}
-        className={rowClassName}
         onClick={() => {
           if (!onSelectFiles) return;
           open(onSelectFiles);
@@ -86,7 +81,7 @@ export function TeamsChatAddMenuExtraContent({
                 })}
           </div>
         </div>
-      </button>
+      </Row>
     </>
   );
 }

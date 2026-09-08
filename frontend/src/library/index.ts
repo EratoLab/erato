@@ -159,6 +159,7 @@ export {
   type DropdownMenuItem,
   type DropdownMenuProps,
 } from "@/components/ui/Controls/DropdownMenu";
+export { Row, type RowProps } from "@/components/ui/Controls/Row";
 export { Alert } from "@/components/ui/Feedback/Alert";
 export { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 export {

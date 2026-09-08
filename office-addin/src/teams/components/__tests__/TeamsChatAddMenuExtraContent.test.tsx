@@ -5,7 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TeamsChatAddMenuExtraContent } from "../TeamsChatAddMenuExtraContent";
 
 import type { TeamsChatFetcherUnavailableReason } from "../../hooks/useTeamsChatFetcher";
-import type { PopoverSectionHeaderProps } from "@erato/frontend/library";
+import type {
+  PopoverSectionHeaderProps,
+  RowProps,
+} from "@erato/frontend/library";
 
 interface TestCapability {
   id: string;
@@ -22,6 +25,22 @@ const state = vi.hoisted(() => ({
 vi.mock("@erato/frontend/library", () => ({
   PopoverSectionHeader: ({ children }: PopoverSectionHeaderProps) => (
     <div>{children}</div>
+  ),
+  // The stub keeps the row's contract — the element, its role and its
+  // disabled state — and drops the styling props, so the assertions below
+  // still describe the component and not the primitive.
+  Row: ({
+    children,
+    disabled,
+    variant,
+    as,
+    align,
+    tone,
+    ...rest
+  }: RowProps) => (
+    <button type="button" disabled={disabled} {...rest}>
+      {children}
+    </button>
   ),
   getSupportedFileTypes: (capabilities: TestCapability[]) =>
     capabilities.map((capability) => capability.id),
