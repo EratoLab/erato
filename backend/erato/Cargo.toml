@@ -73,8 +73,9 @@ genai = { version = "0.6.0-beta.19-WIP", git = "https://github.com/EratoLab/rust
 tiktoken-rs = "0.12.0"
 
 # Dependencies: MCP
-rmcp = { version = "=1.7.0", features = ["auth", "client", "reqwest", "transport-streamable-http-client-reqwest"] }
+rmcp = { version = "=3.2.0", features = ["auth", "client", "reqwest", "transport-streamable-http-client-reqwest"] }
 rmcp-sse = { path = "../rmcp-sse" }
+erato_mcp_oauth = { path = "../erato_mcp_oauth" }
 
 # Dependencies: Observability
 sentry-tower = { version = "0.41.0", optional = true, features = ["http"] }

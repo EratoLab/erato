@@ -462,12 +462,9 @@ fn mcp_result_to_text(result: &rmcp::model::CallToolResult) -> String {
     result
         .content
         .iter()
-        .filter_map(|annotated_content| match &annotated_content.raw {
-            rmcp::model::RawContent::Text(text_content) => Some(text_content.text.to_string()),
-            rmcp::model::RawContent::Image { .. } => None,
-            rmcp::model::RawContent::Resource { .. } => None,
-            rmcp::model::RawContent::Audio(_) => None,
-            rmcp::model::RawContent::ResourceLink(_) => None,
+        .filter_map(|content| match content {
+            rmcp::model::ContentBlock::Text(text_content) => Some(text_content.text.to_string()),
+            _ => None,
         })
         .collect::<Vec<String>>()
         .join("\n")
@@ -529,8 +526,8 @@ pub fn parse_content_filter_error_from_mcp_tool_result(
         return Some(parsed);
     }
 
-    for annotated_content in &tool_call_result.content {
-        if let rmcp::model::RawContent::Text(text_content) = &annotated_content.raw
+    for content in &tool_call_result.content {
+        if let rmcp::model::ContentBlock::Text(text_content) = content
             && let Ok(json_value) = serde_json::from_str::<Value>(&text_content.text)
             && let Some(parsed) = parse_content_filter_error_payload(&json_value)
         {
@@ -593,7 +590,7 @@ pub async fn post_process_mcp_tool_result(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rmcp::model::{CallToolResult, Content};
+    use rmcp::model::{CallToolResult, ContentBlock};
     use serde_json::json;
 
     #[test]
@@ -900,7 +897,7 @@ mod tests {
             }
         });
 
-        let tool_result = CallToolResult::error(vec![Content::text(payload.to_string())]);
+        let tool_result = CallToolResult::error(vec![ContentBlock::text(payload.to_string())]);
         let parsed = parse_content_filter_error_from_mcp_tool_result(&tool_result);
 
         match parsed {

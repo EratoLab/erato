@@ -2245,6 +2245,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "iss",
+            "in": "query",
+            "description": "OAuth authorization response issuer",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {

@@ -35,7 +35,12 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
       if (!serverId || !code || !state) {
         return null;
       }
-      return { code, serverId, state };
+      return {
+        code,
+        serverId,
+        state,
+        iss: searchParams.get("iss") ?? undefined,
+      };
     }, [searchParams]);
 
     useEffect(() => {
@@ -51,6 +56,7 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
       nextParams.delete("mcpOauthServerId");
       nextParams.delete("code");
       nextParams.delete("state");
+      nextParams.delete("iss");
       setSearchParams(nextParams, { replace: true });
     }, [searchParams, setSearchParams]);
 

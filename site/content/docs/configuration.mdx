@@ -3219,6 +3219,31 @@ Optional display name used during dynamic client registration when `authenticati
 
 **Default behavior:** Falls back to `"Erato MCP OAuth Client"`
 
+#### `mcp_servers.<server-id>.authentication.oauth2.resource`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.authentication.oauth2.resource */}
+
+Selects the OAuth `resource` parameter for authorization, code exchange, and refresh.
+
+- Unset: use the resource identifier advertised by Protected Resource Metadata (PRM).
+  If PRM or its resource field is absent, fall back to the MCP endpoint URL with
+  its query string and fragment removed.
+- A nonempty string: override PRM with this exact absolute URI (no fragments).
+- An empty string (`resource = ""`): omit the parameter, taking precedence over PRM.
+
+PRM and explicit resource identifiers preserve their trailing slash and query
+string. The resource can have a different host or path than the MCP endpoint.
+Invalid resource metadata fails automatic selection; override/omission bypasses
+that value. Scope selection and authorization-server discovery still apply.
+
+**Type:** `string | None`
+
+**Example:** `resource = "https://api.example.com"` with scope
+`https://api.example.com/Mcp.Read` for an Entra-protected API.
+
+See [OAuth resource selection](./features/mcp_servers#oauth-resource-selection)
+for precedence, compatibility, and a complete configuration example.
+
 #### `mcp_servers.<server-id>.authentication.oauth2.scopes`
 
 {/* erato_toml_config_key: mcp_servers.<server-id>.authentication.oauth2.scopes */}

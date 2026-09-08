@@ -4428,6 +4428,10 @@ export type CompleteMcpServerOauthQueryParams = {
    * OAuth authorization state
    */
   state: string;
+  /**
+   * OAuth authorization response issuer
+   */
+  iss?: string;
 };
 
 export type CompleteMcpServerOauthError = Fetcher.ErrorWrapper<undefined>;

@@ -2,12 +2,12 @@ use crate::config::{McpServerConfig, McpServerOauth2AuthenticationConfig};
 use crate::models::mcp_oauth;
 use crate::services::mcp_transports::build_oauth_supporting_reqwest_client;
 use crate::state::AppState;
+use erato_mcp_oauth::AuthorizationManager;
 use eyre::{Report, eyre};
 use reqwest::Url;
 use rmcp::transport::auth::OAuthClientConfig;
 use rmcp::transport::{
-    AuthError, AuthorizationManager, CredentialStore, StateStore, StoredAuthorizationState,
-    StoredCredentials,
+    AuthError, CredentialStore, StateStore, StoredAuthorizationState, StoredCredentials,
 };
 use sea_orm::prelude::Uuid;
 use serde::{Deserialize, Serialize};
@@ -181,8 +181,9 @@ pub async fn start_oauth_authorization(
     oauth2: &McpServerOauth2AuthenticationConfig,
     redirect_uri: &str,
 ) -> Result<String, AuthError> {
-    let mut manager = authorization_manager(app_state, user_id, mcp_server_id, config).await?;
-    let metadata = manager.discover_metadata().await?;
+    let mut manager =
+        authorization_manager(app_state, user_id, mcp_server_id, config, oauth2).await?;
+    let metadata = manager.resolve_metadata().await?.metadata;
     trace!(
         mcp_server_id,
         user_id = %user_id,
@@ -261,6 +262,7 @@ pub struct CompleteOauthAuthorizationParams<'a> {
     pub redirect_uri: &'a str,
     pub code: &'a str,
     pub csrf_token: &'a str,
+    pub issuer: Option<&'a str>,
 }
 
 pub async fn complete_oauth_authorization(
@@ -277,7 +279,7 @@ pub async fn complete_oauth_authorization(
     .await?;
 
     manager
-        .exchange_code_for_token(params.code, params.csrf_token)
+        .exchange_code_for_token_with_issuer(params.code, params.csrf_token, params.issuer)
         .await?;
     let access_token = manager.get_access_token().await?;
     debug_log_token_metadata(
@@ -316,8 +318,9 @@ async fn configured_authorization_manager(
     oauth2: &McpServerOauth2AuthenticationConfig,
     redirect_uri: &str,
 ) -> Result<AuthorizationManager, AuthError> {
-    let mut manager = authorization_manager(app_state, user_id, mcp_server_id, config).await?;
-    let metadata = manager.discover_metadata().await?;
+    let mut manager =
+        authorization_manager(app_state, user_id, mcp_server_id, config, oauth2).await?;
+    let metadata = manager.resolve_metadata().await?.metadata;
     trace!(
         mcp_server_id,
         user_id = %user_id,
@@ -347,12 +350,15 @@ async fn authorization_manager(
     user_id: Uuid,
     mcp_server_id: &str,
     config: &McpServerConfig,
+    oauth2: &McpServerOauth2AuthenticationConfig,
 ) -> Result<AuthorizationManager, AuthError> {
-    let mut manager = AuthorizationManager::new(&config.url).await?;
-    manager.with_client(
-        crate::services::mcp_transports::build_oauth_supporting_reqwest_client(config)
+    let mut manager = AuthorizationManager::new(
+        &config.url,
+        oauth2.resource.clone(),
+        crate::services::mcp_transports::oauth_default_headers(config)
             .map_err(report_to_auth_error)?,
-    )?;
+    )
+    .await?;
     manager.set_credential_store(DatabaseCredentialStore {
         app_state: app_state.clone(),
         user_id,

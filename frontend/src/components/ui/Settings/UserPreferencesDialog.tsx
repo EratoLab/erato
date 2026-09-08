@@ -70,6 +70,7 @@ interface UserPreferencesDialogProps {
   onClose: () => void;
   pendingMcpOauthCallback?: {
     code: string;
+    iss?: string;
     serverId: string;
     state: string;
   } | null;
@@ -303,6 +304,7 @@ export function UserPreferencesDialog({
       pendingMcpOauthCallback.serverId,
       pendingMcpOauthCallback.code,
       pendingMcpOauthCallback.state,
+      pendingMcpOauthCallback.iss ?? "",
     ].join(":");
     if (handledOauthCallbackKeyRef.current === callbackKey) {
       return;
@@ -319,6 +321,9 @@ export function UserPreferencesDialog({
           queryParams: {
             code: pendingMcpOauthCallback.code,
             state: pendingMcpOauthCallback.state,
+            ...(pendingMcpOauthCallback.iss !== undefined
+              ? { iss: pendingMcpOauthCallback.iss }
+              : {}),
           },
         });
         await refetchMcpServers();
