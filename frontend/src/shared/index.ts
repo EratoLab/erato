@@ -40,6 +40,7 @@ export {
   PopoverPanel,
   PopoverSectionHeader,
   PopoverSeparator,
+  resolvePopoverViewportPadding,
 } from "@/components/ui/Controls/PopoverPanel";
 export type {
   PopoverChromeProps,

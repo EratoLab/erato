@@ -179,8 +179,8 @@ For shell-level overrides in `theme.css`, prefer the app-owned `data-ui` and `da
 - `data-ui="modal-overlay"`
 - `data-ui="modal-shell"`
 - `data-ui="dropdown-panel"` (the panel `DropdownMenu` draws — an instance name rather than a family hook: a caller renames it through the `dataUi` prop, as the model selector does with `model-selector-menu`)
-- `data-ui="chat-input-add-menu"`, `data-ui="chat-input-mention-menu"`, `data-ui="chat-input-delegation-run-mode-menu"`, `data-ui="chat-history-filter-menu"` and `data-ui="chat-history-filter-menu-submenu"` (the app's other popover panels. The row container inside a panel repeats the panel's name with a `-content` suffix, spelled `chat-input-delegation-run-mode-content` for the run-mode menu; the submenu has no separate body. A panel whose caller names none falls back to `data-ui="anchored-popover-panel"`)
-- `data-ui="popover-section-header"` and `data-ui="popover-separator"` (the label above a run of menu rows, and the hairline between two runs, in every panel above)
+- `data-ui="chat-input-add-menu"`, `data-ui="chat-input-mention-menu"`, `data-ui="chat-input-delegation-run-mode-menu"`, `data-ui="chat-history-filter-menu"` and `data-ui="chat-history-filter-menu-submenu"` (the app's other popover panels. The row container inside each of these repeats the panel's name with a `-content` suffix, spelled `chat-input-delegation-run-mode-content` for the run-mode menu; the submenu has no separate body. A panel whose caller names none falls back to `data-ui="anchored-popover-panel"`)
+- `data-ui="popover-section-header"` and `data-ui="popover-separator"` (the label above a run of menu rows, and the hairline between two runs, wherever a panel above draws them)
 - `data-ui="entity-row"`
 - `data-ui="assistant-list-card"`
 - `data-ui="search-result-card"`

@@ -26,6 +26,9 @@ describe("PopoverPanel", () => {
     expect(panel).toHaveAttribute("data-popover-position", "fixed");
     // The width dialect defaults to the token floor.
     expect(panel).toHaveAttribute("data-popover-width", "min");
+    // Every panel nests a chrome that carries this class legitimately, so a
+    // flipped `padded` default would double the inset unnoticed.
+    expect(panel).not.toHaveClass("dropdown-panel-chrome-geometry");
   });
 
   it.each(["min", "content", "wide"] as const)(
@@ -76,6 +79,8 @@ describe("PopoverPanel", () => {
         aria-label="Filters"
         data-testid="test-panel-node"
         onPointerEnter={onPointerEnter}
+        data-ui="hijacked"
+        data-popover-width="wide"
       >
         <span>Panel content</span>
       </PopoverPanel>,
@@ -86,6 +91,11 @@ describe("PopoverPanel", () => {
     expect(ref.current).toBe(panel);
     expect(panel).toHaveAttribute("role", "menu");
     expect(panel).toHaveAccessibleName("Filters");
+
+    // The hooks the stylesheet and the themes key on are written after the
+    // rest-spread, so a caller cannot overwrite them by passing them raw.
+    expect(panel).toHaveAttribute("data-ui", "test-panel");
+    expect(panel).toHaveAttribute("data-popover-width", "min");
 
     fireEvent.pointerEnter(panel);
     expect(onPointerEnter).toHaveBeenCalledTimes(1);

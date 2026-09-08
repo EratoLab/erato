@@ -46,6 +46,8 @@ describe("DropdownMenu", () => {
       "border-color",
       "border-radius",
       "box-shadow",
+      "width",
+      "position",
     ]) {
       expect(inlineStyle).not.toContain(property);
     }
