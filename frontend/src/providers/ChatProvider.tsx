@@ -191,6 +191,7 @@ export function ChatProvider({
   const { currentChatLastModel } = useModelHistory({
     currentChatId,
     chats,
+    pinnedChats,
   });
 
   // Custom createNewChat that also increments the counter

@@ -16,22 +16,26 @@ const logger = createLogger("HOOK", "useModelHistory");
 interface UseModelHistoryParams {
   currentChatId: string | null;
   chats: RecentChat[];
+  pinnedChats?: RecentChat[];
 }
 
 export function useModelHistory({
   currentChatId,
   chats,
+  pinnedChats,
 }: UseModelHistoryParams) {
   // Fetch available models to validate historical models still exist
   const { data: availableModels = [] } = useAvailableModels({});
 
   // Resolve current chat's last used model (historical context)
   const currentChatLastModel = useMemo(() => {
-    if (!currentChatId || chats.length === 0) {
+    if (!currentChatId) {
       return null;
     }
 
-    const currentChat = chats.find((chat) => chat.id === currentChatId);
+    const currentChat =
+      pinnedChats?.find((chat) => chat.id === currentChatId) ??
+      chats.find((chat) => chat.id === currentChatId);
     const lastModel = currentChat?.last_model;
 
     // Validate the historical model still exists in available models
@@ -56,7 +60,7 @@ export function useModelHistory({
     }
 
     return null;
-  }, [currentChatId, chats, availableModels]);
+  }, [currentChatId, chats, pinnedChats, availableModels]);
 
   return {
     // Historical model information

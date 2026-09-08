@@ -5,6 +5,7 @@ import {
   CHAT_HISTORY_FILTER_DEFAULTS,
   useChatHistoryFilterStore,
 } from "@/hooks/chat/store/chatHistoryFilterStore";
+import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import {
   fetchRecentChats,
   useArchiveChatEndpoint,
@@ -115,6 +116,46 @@ describe("useChatHistory pending chat placeholder", () => {
     vi.mocked(useUpdateChat).mockReturnValue({
       mutateAsync: vi.fn().mockResolvedValue({}),
     } as unknown as ReturnType<typeof useUpdateChat>);
+  });
+
+  it("preserves assistant navigation and seeds status for chats only in the pinned list", () => {
+    const pinnedChats = [
+      {
+        ...listedChat("pinned-running"),
+        is_pinned: true,
+        assistant_id: "assistant-1",
+        active_generation_started_at: "2026-09-08T12:00:00Z",
+      },
+      {
+        ...listedChat("pinned-approval"),
+        is_pinned: true,
+        pending_tool_approval_at: "2026-09-08T12:01:00Z",
+      },
+    ];
+    mockUseInfiniteQuery.mockImplementation(
+      ({ enabled }: { enabled?: boolean }) => ({
+        data: { pages: [{ chats: enabled ? pinnedChats : [] }] },
+      }),
+    );
+    useGenerationStatusStore.getState().reset();
+
+    const { result } = renderHook(() =>
+      useChatHistory({ pinnedChatsEnabled: true }),
+    );
+    expect(result.current.chats).toEqual([]);
+    expect(result.current.pinnedChats).toEqual(pinnedChats);
+
+    act(() => result.current.navigateToChat("pinned-running"));
+    expect(mockNavigate).toHaveBeenCalledWith("/a/assistant-1/pinned-running");
+    expect(
+      useGenerationStatusStore.getState().statusByChatId["pinned-running"]
+        ?.kind,
+    ).toBe("running");
+    expect(
+      useGenerationStatusStore.getState().statusByChatId["pinned-approval"]
+        ?.kind,
+    ).toBe("action_required");
+    useGenerationStatusStore.getState().reset();
   });
 
   it("prepends a placeholder row for a chat the list does not have yet", () => {
