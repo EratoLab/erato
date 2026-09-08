@@ -1,4 +1,4 @@
-import { useChatContext } from "@erato/frontend/library";
+import { PopoverSectionHeader, useChatContext } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useCallback, useMemo, useState } from "react";
 
@@ -8,8 +8,6 @@ import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 
 import type { ChatAddMenuExtraContentProps } from "@erato/frontend/library";
 
-const headerClassName =
-  "px-[var(--theme-spacing-dropdown-padding-x)] pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-theme-fg-muted";
 // Same row recipe as the shared "+" menu / DropdownMenu item channel, so
 // customer themes retune these injected rows together with every other menu.
 const rowClassName =
@@ -160,12 +158,12 @@ export function AddinChatAddMenuExtraContent({
 
   return (
     <>
-      <div className={headerClassName}>
+      <PopoverSectionHeader>
         {t({
           id: "officeAddin.fileSource.emailContent",
           message: "Email content",
         })}
-      </div>
+      </PopoverSectionHeader>
 
       {isLoadingEmailBody && (
         <div className={`${infoRowClassName} text-theme-fg-muted`}>
