@@ -134,9 +134,11 @@ The typed theme contract is grouped semantically so starter themes can express s
 - `radius` covers base, shell, input, control, message, modal, dropdown, card, and pill radii
 - `spacing` covers shell, message, controls, sidebar density, chat input, and dropdown spacing
 - `elevation` covers shell, input, modal, and dropdown shadows
-- `layout` covers chat content width, chat input width, and sidebar width
+- `layout` covers chat content width, chat input width, sidebar width, and under `layout.dropdown` the popover panel's `minWidth`, `wideWidth` and `viewportMargin`
 
 Dropdown menus nest two shapes. The panel takes `radius.dropdown`, every row is inset by `spacing.dropdown.chromePadding` on all four sides, and the row highlight radius is derived as the panel radius minus that inset. Set those two tokens and the rows stay concentric with the panel; there is no separate row radius to keep in step.
+
+That derivation is declared once, as `--dropdown-item-radius` on the panel's `anchored-popover-skin` class, and only read by the rows. A theme that wants a row corner unrelated to the panel re-declares that one variable on the skin. Declaring it on `dropdown-item-geometry` instead shadows the panel's value on that row, and a later panel-level retune stops reaching it. The row rule is shared with list-item buttons that render outside any popover, so it repeats the derivation as its own fallback: nothing declares the variable above those buttons, and they keep their corner while the menu rows follow the skin.
 
 Framed cards read `radius.card`: entity rows in settings, assistant cards, and search result cards. Selectable option cards and their icon tiles read `radius.control` instead, because they are choices with a selected state rather than containers.
 
@@ -176,7 +178,9 @@ For shell-level overrides in `theme.css`, prefer the app-owned `data-ui` and `da
 - `data-ui="message-controls"`
 - `data-ui="modal-overlay"`
 - `data-ui="modal-shell"`
-- `data-ui="dropdown-panel"`
+- `data-ui="dropdown-panel"` (the panel `DropdownMenu` draws — an instance name rather than a family hook: a caller renames it through the `dataUi` prop, as the model selector does with `model-selector-menu`)
+- `data-ui="chat-input-add-menu"`, `data-ui="chat-input-mention-menu"`, `data-ui="chat-input-delegation-run-mode-menu"`, `data-ui="chat-history-filter-menu"` and `data-ui="chat-history-filter-menu-submenu"` (the app's other popover panels. The row container inside each of these repeats the panel's name with a `-content` suffix, spelled `chat-input-delegation-run-mode-content` for the run-mode menu; the submenu has no separate body. A panel whose caller names none falls back to `data-ui="anchored-popover-panel"`)
+- `data-ui="popover-section-header"` and `data-ui="popover-separator"` (the label above a run of menu rows, and the hairline between two runs, wherever a panel above draws them)
 - `data-ui="entity-row"`
 - `data-ui="assistant-list-card"`
 - `data-ui="search-result-card"`
@@ -188,7 +192,7 @@ For shell-level overrides in `theme.css`, prefer the app-owned `data-ui` and `da
 - `data-ui="alert"` (the shared inline error, warning, info and success banners; `data-tone` on the same element says which one, taking `error`, `warning`, `info` or `success`, so a theme can restyle a single tone or the whole family. A few hand-rolled banners still sit outside this hook and carry only their tone colours)
 - `data-ui="spinner"` (every loading ring the app and the Office add-in draw, and those of a component kit that adopts the host spinner; declare `--spinner-track`, `--spinner-head`, `--spinner-thickness` and `--spinner-duration` on it to restyle all of them at once; the head defaults to `--theme-fg-secondary` and the track to a 25% dilution of it, which keeps the ink a full circle so the ring stays centred as it turns and cannot wash out to a lone arc on a faded control). A ring that carries a visible caption wraps two sub-parts, `data-ui="spinner-ring"` and `data-ui="spinner-label"`.
 
-Every popover panel (dropdown menus, the chat "+" menu, the history filter menu and its flyout, the mention and run-mode menus) also carries the class `anchored-popover-skin`, and every menu row the class `dropdown-item-geometry`. Both are stable hooks: one rule on the skin restyles the whole popover family, and one rule on the row class reshapes every menu row.
+Every popover panel (dropdown menus, the chat "+" menu, the history filter menu and its flyout, the mention and run-mode menus) also carries the class `anchored-popover-skin`, and every menu row the class `dropdown-item-geometry`. Both are stable hooks: one rule on the skin restyles the whole popover family, and one rule on the row class reshapes every menu row. The skin also declares `--dropdown-item-radius`, the derived row corner described above; the rows only read it, so a retune belongs on the skin and never on a row.
 
 Messages also expose `data-role="user"` and `data-role="assistant"` on the message shell.
 
@@ -209,7 +213,7 @@ The names people use for these surfaces rarely match the component names, and th
 | Assistant card, search result card                         | `assistant-list-card`, `search-result-card`  | `radius.card`                                                                       | set `radius.card`                                                                                    |
 | Option card (appearance, Outlook behaviour), its icon tile | `option-card`, `option-card-icon`            | `radius.control`                                                                    | re-declare `--theme-radius-control` on `option-card`                                                 |
 | Settings tabs                                              | `tab-rail`                                   | `radius.control`                                                                    | re-declare `--theme-radius-control` on the hook                                                      |
-| Menu panel, "+" menu, filter menu and flyout               | class `anchored-popover-skin`                | `radius.dropdown`                                                                   | set `radius.dropdown`; rows via class `dropdown-item-geometry`                                       |
+| Menu panel, "+" menu, filter menu and flyout               | class `anchored-popover-skin`                | `radius.dropdown`                                                                   | set `radius.dropdown`; rows via `--dropdown-item-radius` on `.anchored-popover-skin`                 |
 | Sidebar rows and nav rows                                  | `chat-history-item`, `.sidebar-row-geometry` | `radius.shell`                                                                      | set `radius.shell`                                                                                   |
 | Badge, chip, status pill                                   | class `pill-geometry`                        | `radius.pill`                                                                       | set `radius.pill`                                                                                    |
 | Avatar circle                                              | class `avatar-geometry`                      | `50%`, a circle reads no radius token                                               | none, a circle stays a circle                                                                        |

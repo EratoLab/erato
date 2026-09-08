@@ -1,4 +1,5 @@
 import {
+  PopoverSectionHeader,
   getSupportedFileTypes,
   useFileCapabilitiesContext,
 } from "@erato/frontend/library";
@@ -9,8 +10,6 @@ import { useTeamsChatPicker } from "../providers/TeamsChatPickerProvider";
 
 import type { ChatAddMenuExtraContentProps } from "@erato/frontend/library";
 
-const headerClassName =
-  "px-[var(--theme-spacing-dropdown-padding-x)] pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-theme-fg-muted";
 // Same row recipe as the shared "+" menu / DropdownMenu item channel, so
 // customer themes retune these injected rows together with every other menu.
 const rowClassName =
@@ -48,12 +47,12 @@ export function TeamsChatAddMenuExtraContent({
 
   return (
     <>
-      <div className={headerClassName}>
+      <PopoverSectionHeader>
         {t({
           id: "officeAddin.teams.fileSource.heading",
           message: "Teams content",
         })}
-      </div>
+      </PopoverSectionHeader>
       <button
         type="button"
         role="menuitem"

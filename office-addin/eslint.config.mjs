@@ -84,19 +84,24 @@ const eslintConfig = [
     },
     rules: {
       // A data-ui hook promises a theme it can retune the surface. A Tailwind
-      // rounding utility on the same element would sit outside every token
-      // and geometry class, so the corner has to come from one of those.
+      // rounding utility on the same element would sit outside every token and
+      // geometry class, so the corner has to come from one of those. The hook
+      // arrives as the attribute or through a component's `dataUi` prop, so
+      // both spellings are guarded. `className` has to be a direct child of the
+      // opening element: a render-prop attribute nests whole JSX subtrees in
+      // that same element, and a descendant match blames the hook for the
+      // utilities those subtrees write.
       "no-restricted-syntax": [
         "error",
         {
           selector:
-            'JSXOpeningElement:has(JSXAttribute[name.name="data-ui"]) JSXAttribute[name.name="className"] Literal[value=/(^|\\s)rounded(?!-\\[)(-(t|b|l|r|tl|tr|bl|br|s|e|ss|se|es|ee))?(-(none|sm|md|lg|xl|2xl|3xl|full))?(\\s|$)/]',
+            'JSXOpeningElement:has(JSXAttribute[name.name=/^(data-ui|dataUi)$/]) > JSXAttribute[name.name="className"] Literal[value=/(^|\\s)rounded(?!-\\[)(-(t|b|l|r|tl|tr|bl|br|s|e|ss|se|es|ee))?(-(none|sm|md|lg|xl|2xl|3xl|full))?(\\s|$)/]',
           message:
             "Elements carrying a data-ui hook take their corner radius from a token-reading class or a rounded-[var(--theme-radius-…)] value, never a Tailwind rounded-* utility, so customer themes can retune them.",
         },
         {
           selector:
-            'JSXOpeningElement:has(JSXAttribute[name.name="data-ui"]) JSXAttribute[name.name="className"] TemplateElement[value.raw=/(^|\\s)rounded(?!-\\[)(-(t|b|l|r|tl|tr|bl|br|s|e|ss|se|es|ee))?(-(none|sm|md|lg|xl|2xl|3xl|full))?(\\s|$)/]',
+            'JSXOpeningElement:has(JSXAttribute[name.name=/^(data-ui|dataUi)$/]) > JSXAttribute[name.name="className"] TemplateElement[value.raw=/(^|\\s)rounded(?!-\\[)(-(t|b|l|r|tl|tr|bl|br|s|e|ss|se|es|ee))?(-(none|sm|md|lg|xl|2xl|3xl|full))?(\\s|$)/]',
           message:
             "Elements carrying a data-ui hook take their corner radius from a token-reading class or a rounded-[var(--theme-radius-…)] value, never a Tailwind rounded-* utility, so customer themes can retune them.",
         },

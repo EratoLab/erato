@@ -135,6 +135,19 @@ export {
   type WelcomeScreenProps,
 } from "@/components/ui/WelcomeScreen";
 export { AnchoredPopover } from "@/components/ui/Controls/AnchoredPopover";
+export {
+  PopoverChrome,
+  PopoverPanel,
+  PopoverSectionHeader,
+  PopoverSeparator,
+  resolvePopoverViewportPadding,
+  type PopoverChromeProps,
+  type PopoverPanelProps,
+  type PopoverPosition,
+  type PopoverSectionHeaderProps,
+  type PopoverSeparatorProps,
+  type PopoverWidth,
+} from "@/components/ui/Controls/PopoverPanel";
 export { Button } from "@/components/ui/Controls/Button";
 export { RadioCard } from "@/components/ui/Controls/RadioCard";
 export {

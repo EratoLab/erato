@@ -18,7 +18,7 @@ describe("AnchoredPopover", () => {
     const panel = screen.getByText("Panel content").parentElement;
 
     // The surface comes from a class, not an inline style, so a theme.css
-    // rule on [data-ui="dropdown-panel"] can override it.
+    // rule on the panel's data-ui hook can override it.
     expect(panel).toHaveClass("anchored-popover-skin");
     expect(panel?.getAttribute("style") ?? "").not.toContain("border-color");
   });

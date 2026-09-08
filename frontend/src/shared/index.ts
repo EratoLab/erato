@@ -35,6 +35,19 @@ export { InteractiveContainer } from "@/components/ui/Container/InteractiveConta
 export { Button } from "@/components/ui/Controls/Button";
 export { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
 export type { DropdownMenuItem } from "@/components/ui/Controls/DropdownMenu";
+export {
+  PopoverChrome,
+  PopoverPanel,
+  PopoverSectionHeader,
+  PopoverSeparator,
+  resolvePopoverViewportPadding,
+} from "@/components/ui/Controls/PopoverPanel";
+export type {
+  PopoverChromeProps,
+  PopoverPanelProps,
+  PopoverSectionHeaderProps,
+  PopoverSeparatorProps,
+} from "@/components/ui/Controls/PopoverPanel";
 export { Alert } from "@/components/ui/Feedback/Alert";
 export { Avatar } from "@/components/ui/Feedback/Avatar";
 export { CopyErrorButton } from "@/components/ui/Feedback/CopyErrorButton";
@@ -82,3 +95,7 @@ export {
 // Bump on breaking changes to the shared host surface. Kits compare this at
 // startup and warn loudly when their expected contract does not match.
 export const ERATO_SHARED_SURFACE_VERSION = 1;
+
+// Bump on purely additive growth of the surface, so a kit can require a name
+// that exists without demanding a new major.
+export const ERATO_SHARED_SURFACE_MINOR = 1;

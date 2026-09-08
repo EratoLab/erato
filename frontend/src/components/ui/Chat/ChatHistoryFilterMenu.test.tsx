@@ -310,10 +310,8 @@ describe("ChatHistoryFilterMenu", () => {
       '[data-ui="chat-history-filter-menu"]',
     );
     expect(panel).toHaveClass("anchored-popover-skin");
-    expect(panel).toHaveClass("w-[var(--theme-layout-dropdown-min-width)]");
-    expect(panel).toHaveStyle({
-      minWidth: "var(--theme-layout-dropdown-min-width)",
-    });
+    expect(panel).toHaveAttribute("data-popover-width", "min");
+    expect(panel).toHaveAttribute("data-popover-position", "fixed");
 
     const content = document.querySelector(
       '[data-ui="chat-history-filter-menu-content"]',

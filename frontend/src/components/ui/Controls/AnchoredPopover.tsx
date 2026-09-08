@@ -15,6 +15,10 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { PopoverPanel, resolvePopoverViewportPadding } from "./PopoverPanel";
+
+import type { PopoverWidth } from "./PopoverPanel";
+
 type Orientation = {
   vertical: "top" | "bottom";
   horizontal: "left" | "right";
@@ -40,6 +44,8 @@ export interface AnchoredPopoverProps {
   panelClassName?: string;
   panelStyle?: CSSProperties;
   panelRef?: RefObject<HTMLDivElement | null>;
+  /** Panel width dialect; see PopoverPanel. */
+  width?: PopoverWidth;
   viewportPadding?: string;
   id?: string;
   role?: React.AriaRole;
@@ -58,32 +64,6 @@ export interface AnchoredPopoverProps {
   dataUi?: string;
 }
 
-const VIEWPORT_PADDING = 8;
-
-function resolveCssLengthToPixels(
-  value: string,
-  referenceElement: HTMLElement,
-  fallback: number,
-) {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
-
-  const probe = document.createElement("div");
-  probe.style.position = "absolute";
-  probe.style.visibility = "hidden";
-  probe.style.pointerEvents = "none";
-  probe.style.width = value;
-
-  referenceElement.appendChild(probe);
-  const resolvedWidth = probe.getBoundingClientRect().width;
-  probe.remove();
-
-  return Number.isFinite(resolvedWidth) && resolvedWidth > 0
-    ? resolvedWidth
-    : fallback;
-}
-
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
@@ -97,7 +77,8 @@ export function AnchoredPopover({
   panelClassName,
   panelStyle,
   panelRef,
-  viewportPadding = `${VIEWPORT_PADDING}px`,
+  width = "min",
+  viewportPadding = "var(--theme-layout-dropdown-viewport-margin)",
   id,
   role,
   ariaHasPopup,
@@ -153,10 +134,9 @@ export function AnchoredPopover({
     const viewport = {
       width: window.innerWidth,
       height: window.innerHeight,
-      padding: resolveCssLengthToPixels(
+      padding: resolvePopoverViewportPadding(
         viewportPadding,
         triggerRef.current,
-        VIEWPORT_PADDING,
       ),
     };
 
@@ -346,21 +326,24 @@ export function AnchoredPopover({
   };
 
   const panel = isOpen ? (
-    <div
+    <PopoverPanel
       ref={setPanelElement}
+      positioned="fixed"
+      width={width}
+      dataUi={dataUi}
       id={panelId}
-      className={clsx(
-        "anchored-popover-skin theme-transition fixed z-[9999] border focus:outline-none",
-        panelClassName,
-      )}
+      // The flex column is the panel's own contract, not a caller's: the
+      // max-height written in updatePosition() only contains the rows while
+      // their wrapper can shrink against it.
+      className={clsx("z-[9999] flex flex-col", panelClassName)}
       // Focusable container so a pointer-open can hold focus without any item
       // looking pre-selected; roving arrow-key nav then works from here.
       tabIndex={-1}
-      // Only runtime values belong here. The panel's surface lives in
-      // .anchored-popover-skin: an inline style outranks every author rule, so
-      // holding it here made `[data-ui="dropdown-panel"]` — a hook the theming
-      // docs advertise as overridable — silently inert for background, border
-      // and radius. Positioning is written directly to the node in
+      // Only runtime values belong here. The panel's surface and shape live in
+      // classes and the shape attributes: an inline style outranks every author
+      // rule, so holding them here made the panel's `data-ui` hook — which the
+      // theming docs advertise as overridable — silently inert for background,
+      // border and radius. Positioning is written directly to the node in
       // updatePosition(), so it is unaffected.
       style={{
         ...panelStyle,
@@ -369,10 +352,9 @@ export function AnchoredPopover({
       role={role}
       aria-label={ariaLabel}
       aria-labelledby={ariaLabel ? undefined : triggerId}
-      data-ui={dataUi}
     >
       {children}
-    </div>
+    </PopoverPanel>
   ) : null;
 
   return (

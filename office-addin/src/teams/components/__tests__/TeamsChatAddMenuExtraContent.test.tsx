@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TeamsChatAddMenuExtraContent } from "../TeamsChatAddMenuExtraContent";
 
 import type { TeamsChatFetcherUnavailableReason } from "../../hooks/useTeamsChatFetcher";
+import type { PopoverSectionHeaderProps } from "@erato/frontend/library";
 
 interface TestCapability {
   id: string;
@@ -16,7 +17,12 @@ const state = vi.hoisted(() => ({
   open: vi.fn(),
 }));
 
+// A factory mock with no importOriginal replaces the whole namespace, so every
+// library name the component under test renders has to be listed here.
 vi.mock("@erato/frontend/library", () => ({
+  PopoverSectionHeader: ({ children }: PopoverSectionHeaderProps) => (
+    <div>{children}</div>
+  ),
   getSupportedFileTypes: (capabilities: TestCapability[]) =>
     capabilities.map((capability) => capability.id),
   useFileCapabilitiesContext: () => ({ capabilities: state.capabilities }),
