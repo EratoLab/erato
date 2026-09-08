@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { InteractiveContainer } from "./InteractiveContainer";
@@ -66,5 +67,34 @@ describe("InteractiveContainer", () => {
     });
 
     expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("keeps a role and tabIndex the caller passes", () => {
+    render(
+      <InteractiveContainer
+        as="div"
+        onClick={vi.fn()}
+        role="menuitem"
+        tabIndex={-1}
+      >
+        Menu row
+      </InteractiveContainer>,
+    );
+
+    expect(screen.getByRole("menuitem", { name: "Menu row" })).toHaveAttribute(
+      "tabindex",
+      "-1",
+    );
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("forwards a ref to the rendered element", () => {
+    const ref = createRef<HTMLButtonElement>();
+
+    render(<InteractiveContainer ref={ref}>Ref target</InteractiveContainer>);
+
+    expect(ref.current).toBe(
+      screen.getByRole("button", { name: "Ref target" }),
+    );
   });
 });
