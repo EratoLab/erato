@@ -181,6 +181,7 @@ export const ModelSelector = ({
         items={dropdownItems}
         align={align}
         onOpenChange={setIsDropdownOpen}
+        dataUi="model-selector-menu"
         matchContentWidth
         triggerButtonVariant="secondary"
         triggerButtonClassName="min-w-[10rem] justify-between gap-2"

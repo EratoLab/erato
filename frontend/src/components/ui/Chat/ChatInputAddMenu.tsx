@@ -14,6 +14,11 @@ import { useRovingMenuFocus } from "@/hooks/ui/useRovingMenuFocus";
 import { AnchoredPopover } from "../Controls/AnchoredPopover";
 import { Button } from "../Controls/Button";
 import { CountBadge } from "../Controls/CountBadge";
+import {
+  PopoverChrome,
+  PopoverSectionHeader,
+  PopoverSeparator,
+} from "../Controls/PopoverPanel";
 import { SpinnerIcon } from "../Feedback/SpinnerIcon";
 import { CheckIcon, PlusIcon } from "../icons";
 
@@ -109,8 +114,6 @@ export interface ChatInputAddMenuProps {
 // visible for a beat before the menu dismisses.
 const CLOSE_ON_SELECT_DELAY_MS = 100;
 
-export const addMenuSectionDividerClassName = "my-1 h-px bg-theme-border";
-
 // Rows share DropdownMenu's item channel — geometry class, typography and
 // hover/focus colors — so customer themes retune every menu surface together.
 const rowClassName =
@@ -175,27 +178,6 @@ export function AddMenuActionRow({
         )}
       </span>
     </button>
-  );
-}
-
-/**
- * Non-interactive section label. Exported so popovers outside this menu — the
- * composer's run-mode choice — carry the same header channel.
- */
-export function AddMenuSectionHeader({
-  id,
-  children,
-}: {
-  id?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      id={id}
-      className="px-[var(--theme-spacing-dropdown-padding-x)] pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-theme-fg-muted"
-    >
-      {children}
-    </div>
   );
 }
 
@@ -307,9 +289,9 @@ export function ChatInputAddMenu({
         aria-labelledby={section.header != null ? headerId : undefined}
       >
         {section.header != null && (
-          <AddMenuSectionHeader id={headerId}>
+          <PopoverSectionHeader id={headerId}>
             {section.header}
-          </AddMenuSectionHeader>
+          </PopoverSectionHeader>
         )}
         {section.items.map((item) =>
           renderActionRow(item, `chat-input-add-menu-extra-${item.id}`),
@@ -365,9 +347,9 @@ export function ChatInputAddMenu({
           aria-labelledby={toolsHeaderId}
           className="flex flex-col"
         >
-          <AddMenuSectionHeader id={toolsHeaderId}>
+          <PopoverSectionHeader id={toolsHeaderId}>
             {t({ id: "chatInput.addMenu.toolsHeader", message: "Tools" })}
-          </AddMenuSectionHeader>
+          </PopoverSectionHeader>
           {tools.map((tool) => {
             const toolDisabled = isBusy || tool.disabled;
             return (
@@ -427,13 +409,7 @@ export function ChatInputAddMenu({
       role="menu"
       preferredOrientation={{ vertical: "top", horizontal: "left" }}
       initialFocusSelector={ADD_MENU_ITEM_SELECTOR}
-      panelStyle={{
-        maxWidth:
-          "calc(100vw - (var(--theme-layout-dropdown-viewport-margin) * 2))",
-        minWidth: "var(--theme-layout-dropdown-min-width)",
-      }}
-      panelClassName="flex w-80 flex-col"
-      viewportPadding="var(--theme-layout-dropdown-viewport-margin)"
+      width="wide"
       dataUi="chat-input-add-menu"
       // `relative` is the only styling this needs beyond the shared Button:
       // it anchors the absolutely-positioned count badge. Size, radius, hover
@@ -474,18 +450,14 @@ export function ChatInputAddMenu({
         </Button>
       )}
     >
-      <div
-        className="dropdown-panel-chrome-geometry flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain"
-        role="none"
-        data-ui="chat-input-add-menu-content"
-      >
+      <PopoverChrome dataUi="chat-input-add-menu-content">
         {blocks.map((block, index) => (
           <Fragment key={block.key}>
-            {index > 0 && <div className={addMenuSectionDividerClassName} />}
+            {index > 0 && <PopoverSeparator />}
             {block.node}
           </Fragment>
         ))}
-      </div>
+      </PopoverChrome>
     </AnchoredPopover>
   );
 }

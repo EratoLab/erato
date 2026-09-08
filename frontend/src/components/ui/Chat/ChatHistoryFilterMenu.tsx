@@ -17,6 +17,12 @@ import { useRovingMenuFocus } from "@/hooks/ui/useRovingMenuFocus";
 
 import { AnchoredPopover } from "../Controls/AnchoredPopover";
 import { Button } from "../Controls/Button";
+import {
+  PopoverChrome,
+  PopoverPanel,
+  PopoverSeparator,
+  resolvePopoverViewportPadding,
+} from "../Controls/PopoverPanel";
 import { CheckIcon, ChevronRightIcon, FilterSortIcon } from "../icons";
 
 import type {
@@ -72,12 +78,9 @@ const SUBMENU_HOVER_DELAY_MS = 150;
 // The flyout overlaps the parent panel so the pointer never crosses a gap on
 // its way in (a gap would fire the row's pointerleave and close the flyout).
 const SUBMENU_OVERLAP_PX = 4;
-const VIEWPORT_PADDING_PX = 8;
 // Same delayed close as DropdownMenu's item click, so a selection stays
 // visible for a beat (checkmark moves) before the menu dismisses.
 const CLOSE_ON_SELECT_DELAY_MS = 100;
-
-const sectionDivider = "my-1 h-px bg-theme-border";
 
 // Rows and flyout options share DropdownMenu's item channel — geometry class,
 // typography and hover/focus colors — so customer themes retune every menu
@@ -250,6 +253,10 @@ export function ChatHistoryFilterMenu({
       return;
     }
 
+    const viewportPadding = resolvePopoverViewportPadding(
+      "var(--theme-layout-dropdown-viewport-margin)",
+      panelElement,
+    );
     const panelRect = panelElement.getBoundingClientRect();
     setSubmenuPadTop(
       Number.parseFloat(window.getComputedStyle(submenuElement).paddingTop) ||
@@ -258,9 +265,9 @@ export function ChatHistoryFilterMenu({
     const submenuWidth = submenuElement.offsetWidth;
     const overflowsRight =
       panelRect.right - SUBMENU_OVERLAP_PX + submenuWidth >
-      window.innerWidth - VIEWPORT_PADDING_PX;
+      window.innerWidth - viewportPadding;
     const fitsLeft =
-      panelRect.left + SUBMENU_OVERLAP_PX - submenuWidth >= VIEWPORT_PADDING_PX;
+      panelRect.left + SUBMENU_OVERLAP_PX - submenuWidth >= viewportPadding;
     setSubmenuSide(overflowsRight && fitsLeft ? "left" : "right");
 
     // Panel-relative bounds keeping the flyout inside the viewport; the lower
@@ -268,11 +275,8 @@ export function ChatHistoryFilterMenu({
     const submenuHeight = submenuElement.offsetHeight;
     setSubmenuMaxTop(
       Math.max(
-        VIEWPORT_PADDING_PX - panelRect.top,
-        window.innerHeight -
-          VIEWPORT_PADDING_PX -
-          panelRect.top -
-          submenuHeight,
+        viewportPadding - panelRect.top,
+        window.innerHeight - viewportPadding - panelRect.top - submenuHeight,
       ),
     );
 
@@ -517,13 +521,7 @@ export function ChatHistoryFilterMenu({
       ariaHasPopup="menu"
       preferredOrientation={{ vertical: "bottom", horizontal: "right" }}
       initialFocusSelector={ROW_SELECTOR}
-      panelStyle={{
-        maxWidth:
-          "calc(100vw - (var(--theme-layout-dropdown-viewport-margin) * 2))",
-        minWidth: "var(--theme-layout-dropdown-min-width)",
-      }}
-      panelClassName="flex w-[var(--theme-layout-dropdown-min-width)] flex-col"
-      viewportPadding="var(--theme-layout-dropdown-viewport-margin)"
+      width="min"
       dataUi="chat-history-filter-menu"
       trigger={(triggerProps) => (
         <Button
@@ -555,19 +553,20 @@ export function ChatHistoryFilterMenu({
     >
       {/* Single wrapper around rows AND flyout so keydown from either bubbles
           here; it stays unpositioned so the flyout's absolute coordinates
-          resolve against the popover panel, matching the rows' offsetTop. */}
-      <div
-        className="dropdown-panel-chrome-geometry flex flex-col"
-        role="none"
+          resolve against the popover panel, matching the rows' offsetTop. It
+          also must not scroll: offsetTop ignores an ancestor's scrollTop, so
+          scrolled rows would drift away from the flyout anchored to them. */}
+      <PopoverChrome
+        scroll={false}
         onKeyDown={handlePanelKeyDown}
-        data-ui="chat-history-filter-menu-content"
+        dataUi="chat-history-filter-menu-content"
       >
         {typeRow && renderSubmenuRow(typeRow)}
         {renderSubmenuRow(statusRow)}
         {delegatedRow && renderSubmenuRow(delegatedRow)}
-        <div className={sectionDivider} />
+        <PopoverSeparator />
         {renderSubmenuRow(groupByRow)}
-        <div className={sectionDivider} />
+        <PopoverSeparator />
         <button
           type="button"
           role="menuitem"
@@ -587,13 +586,16 @@ export function ChatHistoryFilterMenu({
         </button>
 
         {activeRow && (
-          <div
+          <PopoverPanel
             ref={submenuRef}
+            positioned="absolute"
+            width="content"
+            padded
             role="menu"
             aria-label={activeRow.label}
             data-testid="chat-history-filter-menu-submenu"
-            data-ui="chat-history-filter-menu-submenu"
-            className="anchored-popover-skin dropdown-panel-chrome-geometry theme-transition absolute z-10 w-max border"
+            dataUi="chat-history-filter-menu-submenu"
+            className="z-10"
             style={{
               top: Math.min(
                 Math.max(0, submenuTop - submenuPadTop),
@@ -627,9 +629,9 @@ export function ChatHistoryFilterMenu({
                 />
               </button>
             ))}
-          </div>
+          </PopoverPanel>
         )}
-      </div>
+      </PopoverChrome>
     </AnchoredPopover>
   );
 }

@@ -3,12 +3,9 @@ import { useEffect, useRef } from "react";
 
 import { useRovingMenuFocus } from "@/hooks/ui/useRovingMenuFocus";
 
-import {
-  ADD_MENU_ITEM_SELECTOR,
-  AddMenuActionRow,
-  AddMenuSectionHeader,
-} from "./ChatInputAddMenu";
+import { ADD_MENU_ITEM_SELECTOR, AddMenuActionRow } from "./ChatInputAddMenu";
 import { AnchoredPopover } from "../Controls/AnchoredPopover";
+import { PopoverChrome, PopoverSectionHeader } from "../Controls/PopoverPanel";
 
 import type { DelegationRunMode } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -96,13 +93,7 @@ export function DelegationRunModePopover({
       panelRef={panelRef}
       role="menu"
       preferredOrientation={{ vertical: "top", horizontal: "right" }}
-      panelStyle={{
-        maxWidth:
-          "calc(100vw - (var(--theme-layout-dropdown-viewport-margin) * 2))",
-        minWidth: "var(--theme-layout-dropdown-min-width)",
-      }}
-      panelClassName="flex w-80 flex-col"
-      viewportPadding="var(--theme-layout-dropdown-viewport-margin)"
+      width="wide"
       dataUi="chat-input-delegation-run-mode-menu"
       manageFocus={false}
       ariaLabel={t({
@@ -122,19 +113,17 @@ export function DelegationRunModePopover({
         />
       )}
     >
-      <div
-        className="dropdown-panel-chrome-geometry flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain"
-        role="none"
+      <PopoverChrome
         onKeyDown={handlePanelKeyDown}
-        data-ui="chat-input-delegation-run-mode-content"
+        dataUi="chat-input-delegation-run-mode-content"
         data-testid="chat-input-delegation-run-mode"
       >
-        <AddMenuSectionHeader>
+        <PopoverSectionHeader>
           {t({
             id: "chatInput.delegationRunMode.title",
             message: "How should mentioned assistants run?",
           })}
-        </AddMenuSectionHeader>
+        </PopoverSectionHeader>
         <AddMenuActionRow
           label={t({
             id: "chatInput.delegationRunMode.wait.label",
@@ -160,7 +149,7 @@ export function DelegationRunModePopover({
           testId="chat-input-delegation-run-mode-background"
           onActivate={() => onChoose("background")}
         />
-      </div>
+      </PopoverChrome>
     </AnchoredPopover>
   );
 }

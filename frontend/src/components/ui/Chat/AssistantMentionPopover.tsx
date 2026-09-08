@@ -3,12 +3,9 @@ import { useCallback, useEffect, useImperativeHandle, useRef } from "react";
 
 import { useRovingMenuFocus } from "@/hooks/ui/useRovingMenuFocus";
 
-import {
-  ADD_MENU_ITEM_SELECTOR,
-  AddMenuActionRow,
-  addMenuSectionDividerClassName,
-} from "./ChatInputAddMenu";
+import { ADD_MENU_ITEM_SELECTOR, AddMenuActionRow } from "./ChatInputAddMenu";
 import { AnchoredPopover } from "../Controls/AnchoredPopover";
+import { PopoverChrome, PopoverSeparator } from "../Controls/PopoverPanel";
 
 import type { MentionableAssistant } from "@/hooks/chat/useMentionableAssistants";
 import type { KeyboardEvent as ReactKeyboardEvent, Ref } from "react";
@@ -137,13 +134,7 @@ export function AssistantMentionPopover({
       role="menu"
       ariaHasPopup="menu"
       preferredOrientation={{ vertical: "top", horizontal: "left" }}
-      panelStyle={{
-        maxWidth:
-          "calc(100vw - (var(--theme-layout-dropdown-viewport-margin) * 2))",
-        minWidth: "var(--theme-layout-dropdown-min-width)",
-      }}
-      panelClassName="flex w-80 flex-col"
-      viewportPadding="var(--theme-layout-dropdown-viewport-margin)"
+      width="wide"
       dataUi="chat-input-mention-menu"
       manageFocus={false}
       ariaLabel={t({
@@ -163,14 +154,12 @@ export function AssistantMentionPopover({
         />
       )}
     >
-      <div
-        className="dropdown-panel-chrome-geometry flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain"
-        role="none"
+      <PopoverChrome
         onKeyDown={handlePanelKeyDown}
         onFocus={() => {
           panelHasFocusRef.current = true;
         }}
-        data-ui="chat-input-mention-menu-content"
+        dataUi="chat-input-mention-menu-content"
       >
         {assistants.map((assistant) => (
           <AddMenuActionRow
@@ -181,7 +170,7 @@ export function AssistantMentionPopover({
             onActivate={() => onSelect(assistant)}
           />
         ))}
-        <div className={addMenuSectionDividerClassName} />
+        <PopoverSeparator />
         <AddMenuActionRow
           label={t({
             id: "chatInput.mentions.browse",
@@ -190,7 +179,7 @@ export function AssistantMentionPopover({
           testId="chat-input-mention-browse"
           onActivate={onBrowse}
         />
-      </div>
+      </PopoverChrome>
     </AnchoredPopover>
   );
 }
