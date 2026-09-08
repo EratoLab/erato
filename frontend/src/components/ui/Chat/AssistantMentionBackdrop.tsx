@@ -119,7 +119,12 @@ export function AssistantMentionBackdrop({
             // step, so the outline is what makes the pill a shape. Inset rather
             // than a border: a border box widens the span and walks the mirrored
             // glyphs out of line with the textarea's.
-            className="rounded-[var(--theme-radius-control)] bg-theme-info-bg box-decoration-clone shadow-[inset_0_0_0_1px_var(--theme-info-border)]"
+            //
+            // The side padding is cancelled by an equal negative margin. Padding
+            // alone would advance the mirrored text past the textarea's, so the
+            // pair buys the fill some width around the word while leaving every
+            // glyph at the x it would have had without it.
+            className="-mx-1 rounded-[var(--theme-radius-control)] bg-theme-info-bg box-decoration-clone px-1 shadow-[inset_0_0_0_1px_var(--theme-info-border)]"
             data-mention-id={segment.id}
             data-testid="chat-input-mention-highlight"
           >
