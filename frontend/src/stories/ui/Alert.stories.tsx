@@ -46,6 +46,15 @@ const meta = {
       control: "text",
       description: "Additional CSS classes",
     },
+    geometryVariant: {
+      control: "inline-radio",
+      options: ["default", "message"],
+      description:
+        "Frame geometry: `default` reads radius.base, `message` reads radius.message plus the message padding and control gap",
+      table: {
+        defaultValue: { summary: "default" },
+      },
+    },
   },
   decorators: [
     (Story) => (
@@ -243,6 +252,41 @@ export const AllTypes: Story = {
       <Alert type="success" title="Success">
         Success message with green styling
       </Alert>
+    </div>
+  ),
+  args: {
+    type: "info",
+    children: "",
+  },
+};
+
+/**
+ * Every tone in both frame geometries. The default frame reads `radius.base`;
+ * the message frame reads `radius.message` with the message padding and the
+ * control gap, and is what the chat surfaces opt into. Each alert also carries
+ * `data-ui="alert"` and a `data-tone`, the hooks a theme keys on.
+ */
+export const ToneAndGeometryMatrix: Story = {
+  render: () => (
+    <div className="space-y-8">
+      {(["default", "message"] as const).map((geometryVariant) => (
+        <div key={geometryVariant} className="space-y-4">
+          <h3 className="text-sm font-medium text-theme-fg-secondary">
+            geometryVariant=&quot;{geometryVariant}&quot;
+          </h3>
+
+          {(["info", "warning", "error", "success"] as const).map((type) => (
+            <Alert
+              key={type}
+              type={type}
+              geometryVariant={geometryVariant}
+              title={type}
+            >
+              data-tone=&quot;{type}&quot;
+            </Alert>
+          ))}
+        </div>
+      ))}
     </div>
   ),
   args: {

@@ -209,7 +209,7 @@ const getOwnedAssistantStatusLabel = (status: OwnedAssistantStatusFilter) => {
 
 const getOwnedAssistantStatusClassName = (status: OwnedAssistantStatus) =>
   clsx(
-    "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
+    "pill-geometry inline-flex items-center border px-2 py-0.5 text-xs font-medium",
     status === "in_review" &&
       "border-theme-info-border bg-theme-info-bg text-theme-info-fg",
     status === "published" &&

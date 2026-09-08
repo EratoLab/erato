@@ -66,7 +66,7 @@ export const getAssistantHubStatusLabel = (status: string) => {
 export const getAssistantHubStatusClassName = (status: string) =>
   clsx(
     // eslint-disable-next-line lingui/no-unlocalized-strings -- Tailwind class list
-    "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+    "pill-geometry inline-flex items-center px-2 py-0.5 text-xs font-medium",
     isAssistantHubReviewAcceptedStatus(status) &&
       "border border-theme-success-border bg-theme-success-bg text-theme-success-fg",
     isAssistantHubReviewDeclinedStatus(status) &&
@@ -122,7 +122,7 @@ export const getAssistantHubRatingLabel = (
 
 export function AssistantHubCurrentPublishedIndicator() {
   return (
-    <span className="inline-flex min-h-6 items-center rounded-full border border-theme-info-border bg-theme-info-bg px-2 py-0.5 text-xs font-medium text-theme-info-fg">
+    <span className="pill-geometry inline-flex min-h-6 items-center border border-theme-info-border bg-theme-info-bg px-2 py-0.5 text-xs font-medium text-theme-info-fg">
       {t({
         id: "assistantHub.my.currentPublished",
         message: "Current published version",
@@ -386,7 +386,7 @@ export function AssistantHubVersionCard({
       >
         <span
           aria-hidden="true"
-          className="flex size-10 shrink-0 items-center justify-center rounded-[var(--theme-radius-pill)] bg-theme-bg-secondary text-sm font-semibold text-theme-fg-primary"
+          className="avatar-geometry flex size-10 shrink-0 items-center justify-center bg-theme-bg-secondary text-sm font-semibold text-theme-fg-primary"
           data-ui="assistant-hub-card-avatar"
         >
           {avatarLetter}
@@ -593,7 +593,7 @@ export function AssistantHubVersionOverviewSection({
         >
           <span
             aria-hidden="true"
-            className="flex size-14 shrink-0 items-center justify-center rounded-[var(--theme-radius-pill)] bg-theme-bg-secondary text-xl font-semibold text-theme-fg-primary"
+            className="avatar-geometry flex size-14 shrink-0 items-center justify-center bg-theme-bg-secondary text-xl font-semibold text-theme-fg-primary"
             data-ui="assistant-hub-overview-avatar"
           >
             {avatarLetter}

@@ -120,7 +120,7 @@ const GrantRow = memo<GrantRowProps>(
             <span className="truncate font-medium text-theme-fg-primary">
               {displayName}
             </span>
-            <span className="shrink-0 rounded-full bg-theme-bg-secondary px-2 py-0.5 text-xs text-theme-fg-secondary">
+            <span className="pill-geometry shrink-0 bg-theme-bg-secondary px-2 py-0.5 text-xs text-theme-fg-secondary">
               {isGroup
                 ? t({ id: "sharing.type.group", message: "Group" })
                 : isOrganization
@@ -130,7 +130,7 @@ const GrantRow = memo<GrantRowProps>(
                     })
                   : t({ id: "sharing.type.user", message: "User" })}
             </span>
-            <span className="shrink-0 rounded-full bg-theme-bg-secondary px-2 py-0.5 text-xs text-theme-fg-secondary">
+            <span className="pill-geometry shrink-0 bg-theme-bg-secondary px-2 py-0.5 text-xs text-theme-fg-secondary">
               {grant.role === "editor"
                 ? t({ id: "sharing.role.editor", message: "Editor" })
                 : t({ id: "sharing.role.viewer", message: "Viewer" })}

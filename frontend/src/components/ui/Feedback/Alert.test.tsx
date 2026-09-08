@@ -34,26 +34,29 @@ describe("Alert", () => {
 
     const alert = screen.getByRole("alert");
 
-    expect(alert.className).toContain("gap-3");
-    expect(alert.className).toContain("rounded-md");
-    expect(alert.className).toContain("p-3");
+    expect(alert).toHaveAttribute("data-ui", "alert");
+    expect(alert).toHaveAttribute("data-tone", "info");
+    expect(alert).toHaveClass("alert-geometry", "gap-3", "p-3");
+    expect(alert.className).not.toContain("rounded-md");
+    expect(alert.className).not.toContain("message-frame-geometry");
     expect(alert.getAttribute("style")).toBeNull();
   });
 
   it("supports opt-in message geometry for chat surfaces", () => {
     render(
-      <Alert type="info" geometryVariant="message">
+      <Alert type="error" geometryVariant="message">
         Alert content
       </Alert>,
     );
 
     const alert = screen.getByRole("alert");
 
-    expect(alert).toHaveStyle({
-      borderRadius: "var(--theme-radius-message)",
-      gap: "var(--theme-spacing-control-gap)",
-      padding:
-        "var(--theme-spacing-message-padding-y) var(--theme-spacing-message-padding-x)",
-    });
+    expect(alert).toHaveAttribute("data-ui", "alert");
+    expect(alert).toHaveAttribute("data-tone", "error");
+    expect(alert).toHaveClass("message-frame-geometry");
+    expect(alert.className).not.toContain("alert-geometry");
+    expect(alert).not.toHaveClass("gap-3");
+    expect(alert).not.toHaveClass("p-3");
+    expect(alert.getAttribute("style")).toBeNull();
   });
 });

@@ -339,7 +339,7 @@ describe("GroupedFileAttachmentsPreview", () => {
   });
 
   it("renders a thread message without checkboxes when it cannot be toggled", async () => {
-    await renderWithI18n(
+    const { container } = await renderWithI18n(
       <GroupedFileAttachmentsPreview
         groups={[
           {
@@ -369,6 +369,85 @@ describe("GroupedFileAttachmentsPreview", () => {
     expect(screen.getByText("Anna Schmidt")).toBeVisible();
     expect(screen.getByText("invoice")).toBeVisible();
     expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(
+      container.querySelector('[data-ui="attachment-tile"]'),
+    ).not.toHaveAttribute("data-selected");
+  });
+
+  it("reports the selection on toggleable attachment rows", async () => {
+    const { container } = await renderWithI18n(
+      <GroupedFileAttachmentsPreview
+        groups={[
+          {
+            id: "group-email",
+            label: "Current email",
+            items: [
+              {
+                kind: "selectableAttachment",
+                id: "file-1",
+                file: { id: "file-1", filename: "invoice.pdf", size: 2048 },
+                selected: true,
+                onToggle: () => {},
+              },
+              {
+                kind: "selectableAttachment",
+                id: "file-2",
+                file: { id: "file-2", filename: "notes.docx", size: 4096 },
+                selected: false,
+                onToggle: () => {},
+              },
+            ],
+          },
+        ]}
+        onRemoveFile={() => {}}
+      />,
+    );
+
+    const tiles = container.querySelectorAll('[data-ui="attachment-tile"]');
+    expect(tiles[0]).toHaveAttribute("data-selected", "true");
+    expect(tiles[1]).not.toHaveAttribute("data-selected");
+  });
+
+  it("keeps the selection off a preview row that owns no toggle", async () => {
+    const { container } = await renderWithI18n(
+      <GroupedFileAttachmentsPreview
+        groups={[
+          {
+            id: "group-conversation",
+            label: "Project Alpha",
+            items: [
+              {
+                kind: "threadMessageGroup",
+                id: "message-1",
+                label: "Anna Schmidt",
+                defaultCollapsed: false,
+                attachments: [
+                  {
+                    id: "file-1",
+                    file: { id: "file-1", filename: "invoice.pdf", size: 2048 },
+                    selected: true,
+                    onToggle: () => {},
+                  },
+                  {
+                    id: "file-2",
+                    file: { id: "file-2", filename: "notes.docx", size: 4096 },
+                    selected: true,
+                  },
+                ],
+              },
+            ],
+          },
+        ]}
+        onRemoveFile={() => {}}
+        onFilePreview={() => {}}
+      />,
+    );
+
+    const tiles = container.querySelectorAll('[data-ui="attachment-tile"]');
+    expect(tiles[0]).toHaveAttribute("data-selected", "true");
+    // A read-only row still defaults to `selected`; without a toggle it has
+    // nothing to report.
+    expect(tiles[1]).not.toHaveAttribute("data-selected");
   });
 
   it("forwards file removal through item ids", async () => {

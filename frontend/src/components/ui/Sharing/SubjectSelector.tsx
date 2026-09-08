@@ -334,7 +334,7 @@ const SubjectRow = memo<SubjectRowProps>(
             <span className="truncate font-medium text-theme-fg-primary">
               {subject.display_name}
             </span>
-            <span className="shrink-0 rounded-full bg-theme-bg-secondary px-2 py-0.5 text-xs text-theme-fg-secondary">
+            <span className="pill-geometry shrink-0 bg-theme-bg-secondary px-2 py-0.5 text-xs text-theme-fg-secondary">
               {subject.type === "user"
                 ? t({ id: "sharing.type.user", message: "User" })
                 : subject.type === "organization"

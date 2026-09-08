@@ -2429,12 +2429,7 @@ export const ChatInput = ({
                 return (
                   <div
                     key={attachment.fileId}
-                    className="mb-0 border bg-theme-bg-primary text-theme-fg-primary [border-color:var(--theme-border-attachment)]"
-                    style={{
-                      borderRadius: "var(--theme-radius-message)",
-                      padding:
-                        "var(--theme-spacing-message-padding-y) var(--theme-spacing-message-padding-x)",
-                    }}
+                    className="message-frame-geometry mb-0 border bg-theme-bg-primary text-theme-fg-primary [border-color:var(--theme-border-attachment)]"
                     role="status"
                     data-testid={`chat-audio-transcription-${attachment.fileId}`}
                   >
@@ -2542,15 +2537,12 @@ export const ChatInput = ({
 
         {/* Queued next message: auto-sends when the current turn finishes.
             Geometry and surface tokens match the sibling attachment preview;
-            `data-ui` lets kits restyle it. */}
+            `data-ui` lets kits restyle it. `gap-2` deliberately outranks the
+            gap `.message-frame-geometry` carries, keeping the row on the
+            attachment preview's gap rather than the framed-message one. */}
         {queuedMessage && (
           <div
-            className="theme-transition mb-2 flex items-center gap-2 border bg-theme-bg-primary text-sm [border-color:var(--theme-border-attachment)]"
-            style={{
-              borderRadius: "var(--theme-radius-message)",
-              padding:
-                "var(--theme-spacing-message-padding-y) var(--theme-spacing-message-padding-x)",
-            }}
+            className="message-frame-geometry theme-transition mb-2 flex items-center gap-2 border bg-theme-bg-primary text-sm [border-color:var(--theme-border-attachment)]"
             data-ui="chat-input-queued-message"
             data-testid="chat-input-queued-message"
             role="status"

@@ -224,6 +224,7 @@ const ChatHistoryListItem = memo<{
           layout === "compact" ? "gap-0.5" : "gap-1",
         )}
         data-chat-id={session.id}
+        data-selected={isActive || undefined}
         data-ui="chat-history-item"
       >
         <div className="flex items-center justify-between gap-2">
