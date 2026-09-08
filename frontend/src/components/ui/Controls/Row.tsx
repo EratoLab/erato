@@ -6,10 +6,15 @@ import { InteractiveContainer } from "../Container/InteractiveContainer";
 import type React from "react";
 
 /**
- * Roving-focus marker every Row carries, and the selector the menus navigate
- * by. Natively-disabled rows drop out of the list; `disabledMode="aria"` rows
- * stay in it, so a row that is unavailable but wants to say why is still
+ * Roving-focus marker every interactive Row carries, and the selector the menus
+ * navigate by. Natively-disabled rows drop out of the list; `disabledMode="aria"`
+ * rows stay in it, so a row that is unavailable but wants to say why is still
  * reachable by keyboard.
+ *
+ * `interactive={false}` rows carry no marker: they render as plain `<div>`s with
+ * no role and no tab stop, and `.focus()` on one is a no-op — a roving walk that
+ * stepped onto one would leave `document.activeElement` where it was and target
+ * the same element again on the next key, freezing the menu.
  */
 // eslint-disable-next-line lingui/no-unlocalized-strings -- CSS selector, not user-facing
 export const ROW_ITEM_SELECTOR = "[data-row-item]:not([disabled])";
@@ -84,6 +89,8 @@ type RowOwnProps = {
    * Off for a row that only presents. The `menu` variant then drops its hover
    * tint, its focus recipe, `cursor-pointer` and `theme-transition`, so a
    * static info line inside a menu keeps the item geometry and nothing else.
+   * It also drops the roving marker and the family-default `data-ui`, both of
+   * which say "this is a row you can act on".
    */
   interactive?: boolean;
   align?: RowAlign;
@@ -227,8 +234,10 @@ export const Row = forwardRef<HTMLElement, RowProps>(function Row(
       // is the wrong shape for both.
       showFocusRing={false}
       className={clsx(variantClassName, className)}
-      data-row-item=""
-      data-ui={dataUi ?? (variant === "menu" ? "menu-item" : undefined)}
+      data-row-item={interactive ? "" : undefined}
+      data-ui={
+        dataUi ?? (interactive && variant === "menu" ? "menu-item" : undefined)
+      }
       data-selected={selected || undefined}
       data-tone={tone === "neutral" ? undefined : tone}
       aria-checked={checked}
@@ -242,7 +251,18 @@ export const Row = forwardRef<HTMLElement, RowProps>(function Row(
     >
       {leading}
       {body}
-      {trailing == null ? null : <span className="ml-auto">{trailing}</span>}
+      {trailing == null ? null : (
+        // A flex box, not a bare inline span: preflight makes an `<svg>` mark
+        // `display: block`, which inside an inline wrapper breaks the row onto
+        // a second line, and an inline wrapper also imposes the row's `text-sm`
+        // line box on a `text-xs` label and drops it a few pixels. `shrink-0`
+        // sits here because the wrapper — not the caller's node — is the flex
+        // item now, and `gap-2` keeps two marks apart the way the row's own
+        // gap used to.
+        <span className="ml-auto flex shrink-0 items-center gap-2">
+          {trailing}
+        </span>
+      )}
     </InteractiveContainer>
   );
 });

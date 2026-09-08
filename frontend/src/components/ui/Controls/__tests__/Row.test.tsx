@@ -67,7 +67,7 @@ describe("Row", () => {
   });
 
   it("suppresses the interactive dialect when interactive is false", () => {
-    render(
+    const { container } = render(
       <Row variant="menu" as="div" interactive={false} tone="muted">
         Loading email thread...
       </Row>,
@@ -84,6 +84,28 @@ describe("Row", () => {
     expect(row.className).not.toContain("theme-transition");
     expect(row).not.toHaveAttribute("role");
     expect(row).not.toHaveAttribute("tabindex");
+    // With no role and no tab stop the line cannot take focus, so it must not
+    // claim a place in the roving walk: `.focus()` on it is a no-op and the
+    // walk would target it again on every key. It states nothing either, so it
+    // takes no `menu-item` hook.
+    expect(row).not.toHaveAttribute("data-row-item");
+    expect(row).not.toHaveAttribute("data-ui");
+    expect(container.querySelectorAll(ROW_ITEM_SELECTOR)).toHaveLength(0);
+  });
+
+  it("keeps a caller's data-ui on a non-interactive row", () => {
+    render(
+      <Row variant="menu" as="div" interactive={false} data-ui="status-line">
+        Loading attachments...
+      </Row>,
+    );
+
+    // Only the family default is withheld; a hook the caller asks for is its
+    // own decision and still reaches the element.
+    expect(screen.getByText("Loading attachments...")).toHaveAttribute(
+      "data-ui",
+      "status-line",
+    );
   });
 
   it("keeps a role the caller passes and forces none of its own", () => {

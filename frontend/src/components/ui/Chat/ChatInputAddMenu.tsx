@@ -118,8 +118,10 @@ const CLOSE_ON_SELECT_DELAY_MS = 100;
 // CSS selector for the menu's navigable rows; natively-disabled rows are
 // excluded from roving focus (aria-disabled tool rows stay reachable).
 //
-// Every row here is a `Row`, injected ones included, so the shared row marker
-// is the whole selector. Re-exported under the menu's own name because the
+// Every navigable row here is a `Row`, injected ones included, so the shared
+// row marker is the whole selector — and a `Row` that only presents, like the
+// add-in's "loading…" lines, carries no marker and stays out of the walk.
+// Re-exported under the menu's own name because the
 // surfaces that reuse this menu's roving contract — the mention picker, the
 // run-mode picker — address it that way.
 export { ROW_ITEM_SELECTOR as ADD_MENU_ITEM_SELECTOR };

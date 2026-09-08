@@ -137,6 +137,12 @@ function RecentChatPicker({ chats, onPick }: RecentChatPickerProps) {
       {chats.map((chat) => {
         const title = chat.title?.trim() || defaultChatTitle();
         return (
+          // The focus ring moves inside the row here: the sidebar variant
+          // draws `focus-ring-inset`, replacing the outset 2px ring this site
+          // used to spell out. It is the same width and colour, and the row
+          // sits flush against the left edge of a container that computes
+          // `overflow-x: auto`, so the outset half of the old ring was clipped
+          // on that side anyway.
           <Row
             key={chat.id}
             variant="sidebar"

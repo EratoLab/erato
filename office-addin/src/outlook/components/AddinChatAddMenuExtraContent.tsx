@@ -223,9 +223,8 @@ export function AddinChatAddMenuExtraContent({
                 </span>
               }
             >
-              {/* flex-1 keeps the size at its natural width: Row's trailing
-                  wrapper is an ordinary flex item, so without it a long name
-                  would shrink the size text until it wrapped. */}
+              {/* The body takes the row's free space so a long name truncates
+                  rather than pushing at the size text after it. */}
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">
                   {t({

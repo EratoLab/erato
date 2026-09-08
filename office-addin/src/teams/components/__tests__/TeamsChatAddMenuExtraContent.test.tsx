@@ -5,10 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TeamsChatAddMenuExtraContent } from "../TeamsChatAddMenuExtraContent";
 
 import type { TeamsChatFetcherUnavailableReason } from "../../hooks/useTeamsChatFetcher";
-import type {
-  PopoverSectionHeaderProps,
-  RowProps,
-} from "@erato/frontend/library";
 
 interface TestCapability {
   id: string;
@@ -20,28 +16,12 @@ const state = vi.hoisted(() => ({
   open: vi.fn(),
 }));
 
-// A factory mock with no importOriginal replaces the whole namespace, so every
-// library name the component under test renders has to be listed here.
-vi.mock("@erato/frontend/library", () => ({
-  PopoverSectionHeader: ({ children }: PopoverSectionHeaderProps) => (
-    <div>{children}</div>
-  ),
-  // The stub keeps the row's contract — the element, its role and its
-  // disabled state — and drops the styling props, so the assertions below
-  // still describe the component and not the primitive.
-  Row: ({
-    children,
-    disabled,
-    variant,
-    as,
-    align,
-    tone,
-    ...rest
-  }: RowProps) => (
-    <button type="button" disabled={disabled} {...rest}>
-      {children}
-    </button>
-  ),
+// Two seams only: the capability lookup, which otherwise needs a provider.
+// `Row` and `PopoverSectionHeader` stay real — the row's element, its role and
+// its roving marker are what this suite asserts, and a stub would assert the
+// stub.
+vi.mock("@erato/frontend/library", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   getSupportedFileTypes: (capabilities: TestCapability[]) =>
     capabilities.map((capability) => capability.id),
   useFileCapabilitiesContext: () => ({ capabilities: state.capabilities }),
@@ -83,6 +63,22 @@ describe("TeamsChatAddMenuExtraContent", () => {
 
     expect(state.open).toHaveBeenCalledWith(onSelectFiles);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the injected row on the menu's roving marker", () => {
+    render(
+      <TeamsChatAddMenuExtraContent
+        onSelectFiles={onSelectFiles}
+        onClose={() => {}}
+      />,
+    );
+
+    // The "+" menu roves over `[data-row-item]`, which Row emits and the row
+    // no longer writes by hand. Without it this row is unreachable by arrow
+    // keys while every role assertion above stays green.
+    const row = screen.getByTestId("teams-add-menu-chats");
+    expect(row).toHaveAttribute("data-row-item");
+    expect(row).toHaveAttribute("tabindex", "-1");
   });
 
   it("renders nothing when Graph is unavailable on this session", () => {

@@ -22,7 +22,7 @@ component, so a customer theme reaches all of them through the geometry class th
 the \`data-ui\` hook it carries.
 
 \`\`\`css
-[data-ui="menu-item"] { … }          /* every menu row */
+[data-ui="menu-item"] { … }          /* every actionable menu row */
 .dropdown-item-geometry { … }        /* the menu row's padding and radius */
 .sidebar-row-geometry { … }          /* the sidebar row's height and radius */
 .sidebar-row-selected { … }          /* the selected sidebar surface */
@@ -210,7 +210,9 @@ export const MenuRowsStartAligned: Story = {
  * `interactive={false}` drops the hover tint, the focus recipe, `cursor-pointer`
  * and `theme-transition`, leaving the item geometry and a tone colour. It is
  * what a status line inside a menu needs; without it the line would light up
- * under the pointer as though it could be chosen.
+ * under the pointer as though it could be chosen. It also drops the roving
+ * marker and the `menu-item` hook, so an arrow-key walk steps over the line
+ * rather than stalling on an element that cannot take focus.
  */
 export const MenuInfoRows: Story = {
   name: "Menu info rows",

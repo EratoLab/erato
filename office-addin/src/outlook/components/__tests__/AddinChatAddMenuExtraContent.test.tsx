@@ -159,6 +159,11 @@ describe("AddinChatAddMenuExtraContent", () => {
     // it is emitted later in the stylesheet, not because of specificity.
     expect(infoRow).not.toHaveAttribute("role");
     expect(infoRow).not.toHaveAttribute("tabindex");
+    // And no roving marker, which is the attribute that would matter most:
+    // the "+" menu walks `[data-row-item]` and calls `.focus()` on what it
+    // finds. A status line cannot take focus, so a marked one would stop the
+    // walk dead on itself — and the thread-load error line is not transient.
+    expect(infoRow).not.toHaveAttribute("data-row-item");
     expect(infoRow.className).not.toContain("hover:");
     expect(infoRow.className).not.toContain("focus:");
     expect(infoRow.className).not.toContain("cursor-pointer");

@@ -1,6 +1,7 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { Row } from "../../Controls/Row";
 import { ChatInputAddMenu } from "../ChatInputAddMenu";
 
 /**
@@ -150,5 +151,95 @@ describe("ChatInputAddMenu", () => {
       "Web search",
       "Code interpreter",
     ]);
+  });
+
+  /**
+   * The add-in injects status lines — "Loading email thread…", a persistent
+   * thread-load error — as non-interactive `Row`s. They render as plain divs
+   * with no role and no tab stop, so `.focus()` on one does nothing: were they
+   * in the selector, the walk would recompute the same index on every key and
+   * never move again, and the error line would wall off the menu for good.
+   */
+  it("steps over non-interactive rows instead of stalling on them", () => {
+    render(
+      <ChatInputAddMenu
+        fileSources={[
+          { id: "upload", label: "Upload from Computer", onSelect: vi.fn() },
+        ]}
+        extraContent={() => (
+          <>
+            <Row variant="menu" as="div" interactive={false} tone="muted">
+              Loading email thread...
+            </Row>
+            <Row variant="menu" role="menuitem" tabIndex={-1}>
+              Email thread
+            </Row>
+          </>
+        )}
+        tools={[
+          {
+            id: "search",
+            label: "Web search",
+            checked: false,
+            onToggle: vi.fn(),
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("chat-input-add-menu-trigger"), {
+      detail: 1,
+    });
+    const menu = screen.getByRole("menu");
+
+    const walk: (string | null)[] = [];
+    for (let step = 0; step < 4; step += 1) {
+      fireEvent.keyDown(menu, { key: "ArrowDown" });
+      walk.push(
+        (document.activeElement as HTMLElement | null)?.textContent ?? null,
+      );
+    }
+
+    expect(walk).toEqual([
+      "Upload from Computer",
+      "Email thread",
+      "Web search",
+      "Upload from Computer",
+    ]);
+  });
+
+  /**
+   * The worst shape is a menu whose first panel child is a status line: with
+   * uploads unavailable the host passes no file sources at all, so a keyboard
+   * open would aim `initialFocusSelector` at something that cannot take focus
+   * and the menu would open with focus nowhere.
+   */
+  it("opens on the first navigable row when a status line comes first", async () => {
+    render(
+      <ChatInputAddMenu
+        fileSources={[]}
+        extraContent={() => (
+          <>
+            <Row variant="menu" as="div" interactive={false} tone="error">
+              Couldn&apos;t load this conversation from the server.
+            </Row>
+            <Row variant="menu" role="menuitem" tabIndex={-1}>
+              Email thread
+            </Row>
+          </>
+        )}
+      />,
+    );
+
+    // detail 0 is a keyboard activation, which focuses the first row on open.
+    fireEvent.click(screen.getByTestId("chat-input-add-menu-trigger"), {
+      detail: 0,
+    });
+
+    await waitFor(() => {
+      expect((document.activeElement as HTMLElement | null)?.textContent).toBe(
+        "Email thread",
+      );
+    });
   });
 });
