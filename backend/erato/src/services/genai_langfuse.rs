@@ -821,6 +821,8 @@ mod tests {
                 status: ToolCallStatus::Success,
                 tool_name: "test_tool".to_string(),
                 progress_message: None,
+                progress: None,
+                total: None,
                 input: Some(json!({"param": "value"})),
                 output: Some(json!({"result": "success"})),
                 ..Default::default()

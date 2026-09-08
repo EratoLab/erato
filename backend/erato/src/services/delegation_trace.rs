@@ -289,6 +289,8 @@ mod tests {
             input: None,
             status,
             progress_message: Some("SHOULD-NOT-LEAK".to_string()),
+            progress: None,
+            total: None,
             output: Some(json!({ "text": "SHOULD-NOT-LEAK" })),
         }
     }

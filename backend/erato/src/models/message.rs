@@ -223,6 +223,12 @@ pub struct ToolUse {
     pub status: ToolCallStatus,
     pub tool_name: String,
     pub progress_message: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub progress: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub total: Option<f64>,
     pub input: Option<JsonValue>,
     pub output: Option<JsonValue>,
     #[serde(skip_serializing_if = "Option::is_none")]

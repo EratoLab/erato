@@ -38,7 +38,7 @@ export function extractToolCallsFromContent(
         status: toolUse.status,
         input: toolUse.input as UiToolCall["input"],
         output: toolUse.output as UiToolCall["output"],
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/prefer-nullish-coalescing
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
         progressMessage: toolUse.progress_message || undefined,
       };
     })

@@ -78,6 +78,10 @@ type Enabled<
 const schemaFile = path.join(targetDir, "v1betaApiSchemas.ts");
 const schemaStringFieldFixes = [
   {
+    from: "progress_message?: null | undefined;",
+    to: "progress_message?: string | null | undefined;",
+  },
+  {
     from: "model_description?: null | undefined;",
     to: "model_description?: string | null | undefined;",
   },

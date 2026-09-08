@@ -162,6 +162,19 @@ impl McpServers {
         managed_tool_call: ManagedToolCall,
         auth_context: &McpRequestAuthContext<'_>,
     ) -> Result<rmcp::model::CallToolResult, Report> {
+        self.call_tool_with_progress(chat_id, managed_tool_call, auth_context, None)
+            .await
+    }
+
+    pub async fn call_tool_with_progress(
+        &self,
+        chat_id: Uuid,
+        managed_tool_call: ManagedToolCall,
+        auth_context: &McpRequestAuthContext<'_>,
+        progress: Option<
+            tokio::sync::mpsc::UnboundedSender<rmcp::model::ProgressNotificationParam>,
+        >,
+    ) -> Result<rmcp::model::CallToolResult, Report> {
         let mut params = CallToolRequestParams::default();
         params.name = managed_tool_call.tool_call.fn_name.clone().into();
         let mut tool_args = managed_tool_call.tool_call.fn_arguments.clone();
@@ -174,7 +187,13 @@ impl McpServers {
         params.arguments = tool_args.as_object().cloned();
 
         self.session_manager
-            .call_tool(chat_id, &managed_tool_call.server_id, params, auth_context)
+            .call_tool_with_progress(
+                chat_id,
+                &managed_tool_call.server_id,
+                params,
+                auth_context,
+                progress,
+            )
             .await
     }
 }
