@@ -524,7 +524,7 @@ describe("ChatPage", () => {
     expect(screen.getByTestId("chat-input")).toBeInTheDocument();
   });
 
-  it("centers the welcome state and hides the message list when configured", () => {
+  const mockEmptyChat = (overrides: Record<string, unknown> = {}) => {
     (useChatContext as unknown as ReturnType<typeof vi.fn>).mockImplementation(
       () => ({
         chats: [],
@@ -557,10 +557,36 @@ describe("ChatPage", () => {
         silentChatId: null,
         newChatCounter: 0,
         mountKey: "test-mount-key",
+        ...overrides,
       }),
     );
+  };
 
-    render(
+  it("centers the welcome state and hides the message list by default", () => {
+    mockEmptyChat();
+
+    const { container } = render(
+      <TestWrapper>
+        <StaticFeatureConfigProvider>
+          <ChatPageStructure>
+            <div />
+          </ChatPageStructure>
+        </StaticFeatureConfigProvider>
+      </TestWrapper>,
+    );
+
+    expect(
+      container.querySelector('[data-ui="chat-empty-state-centered-shell"]'),
+    ).not.toBeNull();
+    expect(screen.getByTestId("welcome-screen")).toBeInTheDocument();
+    expect(screen.getByTestId("chat-input")).toBeInTheDocument();
+    expect(screen.queryByTestId("message-list")).not.toBeInTheDocument();
+  });
+
+  it("centers the welcome state when configured explicitly", () => {
+    mockEmptyChat();
+
+    const { container } = render(
       <TestWrapper>
         <StaticFeatureConfigProvider
           config={{
@@ -578,46 +604,47 @@ describe("ChatPage", () => {
       </TestWrapper>,
     );
 
+    expect(
+      container.querySelector('[data-ui="chat-empty-state-centered-shell"]'),
+    ).not.toBeNull();
+    expect(screen.getByTestId("welcome-screen")).toBeInTheDocument();
+    expect(screen.queryByTestId("message-list")).not.toBeInTheDocument();
+  });
+
+  it("bottom-aligns the welcome state when configured", () => {
+    mockEmptyChat();
+
+    const { container } = render(
+      <TestWrapper>
+        <StaticFeatureConfigProvider
+          config={{
+            chatInput: {
+              autofocus: true,
+              emptyStateLayout: "bottom",
+              showUsageAdvisory: true,
+            },
+          }}
+        >
+          <ChatPageStructure>
+            <div />
+          </ChatPageStructure>
+        </StaticFeatureConfigProvider>
+      </TestWrapper>,
+    );
+
+    expect(
+      container.querySelector('[data-ui="chat-empty-state-bottom-shell"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-ui="chat-empty-state-centered-shell"]'),
+    ).toBeNull();
     expect(screen.getByTestId("welcome-screen")).toBeInTheDocument();
     expect(screen.getByTestId("chat-input")).toBeInTheDocument();
     expect(screen.queryByTestId("message-list")).not.toBeInTheDocument();
   });
 
   it("falls back to the message list once a first send is pending", () => {
-    (useChatContext as unknown as ReturnType<typeof vi.fn>).mockImplementation(
-      () => ({
-        chats: [],
-        currentChatId: "test-chat-id",
-        isHistoryLoading: false,
-        historyError: null,
-        createNewChat: vi.fn(),
-        archiveChat: vi.fn(),
-        navigateToChat: vi.fn(),
-        refetchHistory: vi.fn(),
-        pinnedChats: [],
-        pinChat: vi.fn(),
-        messages: {},
-        messageOrder: [],
-        isStreaming: false,
-        isPendingResponse: true,
-        streamingContent: null,
-        isMessagingLoading: false,
-        messagingError: null,
-        sendMessage: vi.fn(),
-        cancelMessage: vi.fn(),
-        refetchMessages: vi.fn(),
-        uploadFiles: vi.fn(),
-        isUploading: false,
-        uploadError: null,
-        uploadedFiles: [],
-        clearUploadedFiles: vi.fn(),
-        isLoading: false,
-        error: null,
-        silentChatId: null,
-        newChatCounter: 0,
-        mountKey: "test-mount-key",
-      }),
-    );
+    mockEmptyChat({ isPendingResponse: true });
 
     render(
       <TestWrapper>
