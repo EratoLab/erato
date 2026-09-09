@@ -75,6 +75,20 @@ export async function parseDroppedFiles(
   return { emails, nonEmail };
 }
 
+/**
+ * Whether `parseDroppedFiles` would expand this file into a staged email
+ * instead of uploading its bytes. `.msg` only qualifies with a fetcher, which
+ * mirrors the branch below. Callers gate the pre-upload size check on this:
+ * an expanded email is trimmable, so refusing it on size costs the user their
+ * only route to a version that fits.
+ */
+export function isExpandableEmailFile(
+  file: File,
+  options: { hasFetcher: boolean },
+): boolean {
+  return isEmlFile(file) || (options.hasFetcher && isMsgFile(file));
+}
+
 function isMsgFile(file: File): boolean {
   if (file.type === "application/vnd.ms-outlook") {
     return true;

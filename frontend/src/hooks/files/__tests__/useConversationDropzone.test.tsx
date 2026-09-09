@@ -7,6 +7,7 @@ import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { UploadTooLargeError } from "../errors";
 import { useConversationDropzone } from "../useConversationDropzone";
+import { useFileUploadStore } from "../useFileUploadStore";
 
 import type { UploadError } from "../errors";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -59,6 +60,9 @@ describe("useConversationDropzone", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // The hook's default error sink is the shared store; without this an
+    // error set by one case leaks into the next.
+    useFileUploadStore.getState().reset();
     mockUploadFiles = vi.fn(() =>
       Promise.resolve([makeUploadedItem("test.bin")]),
     );
@@ -83,7 +87,7 @@ describe("useConversationDropzone", () => {
       expect(mockUploadFiles).toHaveBeenCalledWith([file]);
     });
 
-    it("does not call onError when no onError is provided", () => {
+    it("falls back to the shared upload store when no onError is given", () => {
       renderHook(() =>
         useConversationDropzone({
           uploadFiles: mockUploadFiles,
@@ -91,7 +95,6 @@ describe("useConversationDropzone", () => {
         }),
       );
 
-      // Simulate a dropzone size rejection even without maxSize configured
       const rejection = {
         file: makeFileWithSize("big.bin", LIMIT + 1),
         errors: [{ code: "file-too-large", message: "File is too large" }],
@@ -100,14 +103,17 @@ describe("useConversationDropzone", () => {
         capturedOnDrop([], [rejection]);
       });
 
-      // Nothing should happen — no uploadFiles call, no error
+      // The default sink is the store the composer's alert renders, so the
+      // rejection has to land there rather than nowhere.
       expect(mockUploadFiles).not.toHaveBeenCalled();
-      expect(mockOnError).not.toHaveBeenCalled();
+      const storeError = useFileUploadStore.getState().error;
+      expect(storeError).toBeInstanceOf(UploadTooLargeError);
+      expect(storeError?.message).toContain("big.bin");
     });
   });
 
   describe("with maxSize and onError", () => {
-    it("passes maxSize to useDropzone", () => {
+    it("rejects an oversized file through the validator", () => {
       renderHook(() =>
         useConversationDropzone({
           uploadFiles: mockUploadFiles,
@@ -117,8 +123,33 @@ describe("useConversationDropzone", () => {
         }),
       );
 
-      const lastCall = vi.mocked(useDropzone).mock.calls.at(-1)?.[0];
-      expect(lastCall?.maxSize).toBe(LIMIT);
+      const validator = vi.mocked(useDropzone).mock.calls.at(-1)?.[0]
+        ?.validator;
+
+      expect(validator?.(makeFileWithSize("ok.bin", LIMIT))).toBeNull();
+      expect(validator?.(makeFileWithSize("big.bin", LIMIT + 1))).toMatchObject({
+        code: "file-too-large",
+      });
+    });
+
+    it("spares a file the isSizeExempt predicate accepts", () => {
+      renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          maxSize: LIMIT,
+          onError: mockOnError,
+          isSizeExempt: (file) => file.name.endsWith(".eml"),
+        }),
+      );
+
+      const validator = vi.mocked(useDropzone).mock.calls.at(-1)?.[0]
+        ?.validator;
+
+      expect(validator?.(makeFileWithSize("thread.eml", LIMIT + 1))).toBeNull();
+      expect(validator?.(makeFileWithSize("big.bin", LIMIT + 1))).toMatchObject({
+        code: "file-too-large",
+      });
     });
 
     it("calls onError with UploadTooLargeError when a file-too-large rejection arrives", () => {

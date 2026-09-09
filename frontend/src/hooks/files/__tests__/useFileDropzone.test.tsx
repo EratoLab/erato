@@ -14,7 +14,7 @@ import { useUploadFeature } from "@/providers/FeatureConfigProvider";
 import { makeFileWithSize } from "@/test/fileFixtures";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
-import { UploadTooLargeError } from "../errors";
+import { UnsupportedFileTypeError, UploadTooLargeError } from "../errors";
 import { useFileDropzone } from "../useFileDropzone";
 import { useFileUploadStore } from "../useFileUploadStore";
 
@@ -485,7 +485,14 @@ describe("useFileDropzone", () => {
         useFileDropzone({ chatId: "existing-chat-id" }),
       );
 
-      const oversizedFile = makeFileWithSize("big.bin", CUSTOM_LIMIT + 1);
+      // A supported type, so the size rule is what this asserts on. An
+      // unsupported oversized file reports the type instead — shrinking it
+      // would not have helped.
+      const oversizedFile = makeFileWithSize(
+        "big.pdf",
+        CUSTOM_LIMIT + 1,
+        "application/pdf",
+      );
 
       await act(async () => {
         await result.current.uploadFiles([oversizedFile]);
@@ -493,6 +500,7 @@ describe("useFileDropzone", () => {
 
       expect(result.current.error).toBeInstanceOf(UploadTooLargeError);
       expect(result.current.error?.message).toContain("15 MiB");
+      expect(result.current.error?.message).toContain("big.pdf");
     });
 
     it("accepts a file exactly at the limit", async () => {
@@ -528,8 +536,8 @@ describe("useFileDropzone", () => {
       );
 
       const files = [
-        makeFileWithSize("ok.bin", CUSTOM_LIMIT),
-        makeFileWithSize("toobig.bin", CUSTOM_LIMIT + 1),
+        makeFileWithSize("ok.pdf", CUSTOM_LIMIT, "application/pdf"),
+        makeFileWithSize("toobig.pdf", CUSTOM_LIMIT + 1, "application/pdf"),
       ];
 
       await act(async () => {
@@ -538,6 +546,45 @@ describe("useFileDropzone", () => {
 
       expect(mockFetchUploadFile).not.toHaveBeenCalled();
       expect(result.current.error).toBeInstanceOf(UploadTooLargeError);
+    });
+
+    it("ignores an oversized file the maxFiles trim already discarded", async () => {
+      const mockFetchUploadFile = vi.mocked(fetchUploadFile);
+      mockFetchUploadFile.mockResolvedValue({
+        files: [createMockUploadedFile("file1", "ok.pdf")],
+      });
+
+      const { result } = renderHook(() =>
+        useFileDropzone({
+          chatId: "existing-chat-id",
+          multiple: true,
+          maxFiles: 1,
+        }),
+      );
+
+      await act(async () => {
+        await result.current.uploadFiles([
+          makeFileWithSize("ok.pdf", CUSTOM_LIMIT, "application/pdf"),
+          makeFileWithSize("toobig.pdf", CUSTOM_LIMIT + 1, "application/pdf"),
+        ]);
+      });
+
+      expect(result.current.error).toBeNull();
+      expect(mockFetchUploadFile).toHaveBeenCalledTimes(1);
+    });
+
+    it("reports the unsupported type, not the size, when a file fails both", async () => {
+      const { result } = renderHook(() =>
+        useFileDropzone({ chatId: "existing-chat-id" }),
+      );
+
+      await act(async () => {
+        await result.current.uploadFiles([
+          makeFileWithSize("big.bin", CUSTOM_LIMIT + 1),
+        ]);
+      });
+
+      expect(result.current.error).toBeInstanceOf(UnsupportedFileTypeError);
     });
 
     it("does not set isUploading to true when files are rejected by preflight", async () => {

@@ -39,6 +39,13 @@ interface UseConversationDropzoneOptions {
    * the user without waiting for the upload hook's own preflight.
    */
   onError?: (error: UploadError) => void;
+  /**
+   * Files this predicate accepts skip the `maxSize` gate. For a file the drop
+   * handler expands rather than uploads — an .eml whose attachments the user
+   * can still drop — refusing it here costs them the only route to a version
+   * that fits. Whatever such a file ultimately uploads is still preflighted.
+   */
+  isSizeExempt?: (file: File) => boolean;
 }
 
 interface ConversationDropzoneBindings {
@@ -66,9 +73,26 @@ export function useConversationDropzone({
   maxSize,
   maxSizeFormatted,
   onError,
+  isSizeExempt,
 }: UseConversationDropzoneOptions): ConversationDropzoneBindings {
   const setStoreError = useFileUploadStore((state) => state.setError);
   const reportError = onError ?? setStoreError;
+
+  // The size rule runs as a per-file validator rather than react-dropzone's
+  // flat `maxSize` so `isSizeExempt` can spare individual files.
+  const validateSize = useCallback(
+    (file: File) => {
+      if (maxSize === undefined || file.size <= maxSize) return null;
+      if (isSizeExempt?.(file)) return null;
+      return {
+        code: "file-too-large",
+        // Never shown: the drop handler builds the localized message.
+        // eslint-disable-next-line lingui/no-unlocalized-strings
+        message: "File is larger than the configured maximum",
+      };
+    },
+    [maxSize, isSizeExempt],
+  );
   const handleDrop = useCallback(
     (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
       // Surface file-too-large rejections immediately so the owning component
@@ -115,7 +139,7 @@ export function useConversationDropzone({
       accept,
       multiple: true,
       disabled: isUploading,
-      maxSize,
+      validator: validateSize,
       noClick: true,
       noKeyboard: true,
     });

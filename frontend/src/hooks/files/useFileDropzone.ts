@@ -233,21 +233,6 @@ export function useFileDropzone({
     async (files: File[]) => {
       if (disabled || isUploading || files.length === 0) return;
 
-      // Preflight: reject the entire batch if any file exceeds the configured
-      // per-file limit. This guard runs before setUploading, silent-chat
-      // creation, FormData construction, or any network request so that
-      // oversized files never reach the backend.
-      const sizeValidation = validateFileSizes(files, maxSizeBytes);
-      if (!sizeValidation.valid) {
-        setError(
-          new UploadTooLargeError(
-            maxSizeFormatted,
-            sizeValidation.oversizedFiles.map((file) => file.name),
-          ),
-        );
-        return;
-      }
-
       let uploadedItems: FileUploadItem[] | undefined;
 
       try {
@@ -271,6 +256,20 @@ export function useFileDropzone({
         }
 
         const filesToUpload = files.slice(0, multiple ? maxFiles : 1);
+
+        // Preflight the batch that is actually going to be sent, after the
+        // type check and the `maxFiles` trim: an oversized file that would
+        // have been dropped anyway must not fail the whole send, and a file
+        // the AI cannot read should say so rather than report its size.
+        // Runs before setUploading, silent-chat creation, FormData or any
+        // network call, so oversized bytes never reach the backend.
+        const sizeValidation = validateFileSizes(filesToUpload, maxSizeBytes);
+        if (!sizeValidation.valid) {
+          throw new UploadTooLargeError(
+            maxSizeFormatted,
+            sizeValidation.oversizedFiles.map((file) => file.name),
+          );
+        }
 
         let uploadChatId = chatId;
         uploadChatId ??= await resolveInFlightNewChatId();

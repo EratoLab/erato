@@ -16,7 +16,10 @@ export {
 export { ApiProvider } from "@/components/providers/ApiProvider";
 export { GenerationStatusPoller } from "@/components/providers/GenerationStatusPoller";
 export * from "@/components/ui/Chat";
-export { ChatInputControlsProvider } from "@/components/ui/Chat/ChatInputControlsContext";
+export {
+  ChatInputControlsProvider,
+  useChatInputControls,
+} from "@/components/ui/Chat/ChatInputControlsContext";
 export {
   DelegatedRunsSection,
   type DelegatedRunsSectionProps,

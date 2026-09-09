@@ -1,6 +1,5 @@
 import {
   useConversationDropzone,
-  useFileUploadStore,
   usePersistedState,
   useUploadFeature,
   type FileUploadItem,
@@ -35,7 +34,10 @@ import {
 } from "./utils/graphRequestTimeout";
 import { buildOutlookArtifact } from "./utils/outlookClientActions";
 import { newestSchedulingSignalAt } from "./utils/outlookScheduleTool";
-import { parseDroppedFiles } from "./utils/parseDroppedFiles";
+import {
+  isExpandableEmailFile,
+  parseDroppedFiles,
+} from "./utils/parseDroppedFiles";
 import { parseEmlBytes } from "./utils/parsedEmail";
 
 import type { FetchOutlookMessageBytesResult } from "./utils/fetchOutlookMessage";
@@ -212,7 +214,15 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
   );
   const emailDropMimeTypes = messageFetcher ? EMAIL_MIME_TYPES : EML_MIME_TYPES;
   const { maxSizeBytes, maxSizeFormatted } = useUploadFeature();
-  const { setError: setUploadError } = useFileUploadStore();
+  // A dropped email is staged and trimmable, so the size gate belongs at send
+  // time on the trimmed bytes. Without this a big thread is refused outright
+  // in the hosts that deliver it as a File, while the same thread arriving
+  // through the Office.js drop path stays recoverable.
+  const isSizeExempt = useCallback(
+    (file: File) =>
+      isExpandableEmailFile(file, { hasFetcher: messageFetcher != null }),
+    [messageFetcher],
+  );
   const dropzone = useConversationDropzone({
     uploadFiles: uploadFilesWithEmailExpansion,
     onUploaded: (uploaded: FileUploadItem[]) =>
@@ -222,7 +232,7 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
     isUploading: controller.isUploading,
     maxSize: maxSizeBytes,
     maxSizeFormatted,
-    onError: setUploadError,
+    isSizeExempt,
   });
 
   const handleOutlookMailListDrop = useCallback(

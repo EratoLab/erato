@@ -6,6 +6,7 @@ import {
   fetchUploadFile,
   getIdToken,
   isUploadTooLarge,
+  useChatInputControls,
   useFileUploadStore,
   useUploadFeature,
   validateFileSizes,
@@ -280,6 +281,28 @@ export const AddinChatInput = forwardRef<
   // renders it and dismissal clears it. A local copy merged into `uploadError`
   // would outlive its own banner and mask every later upload error.
   const setUploadStoreError = useFileUploadStore((state) => state.setError);
+  // The composer empties itself the moment it hands off, before this async
+  // handler has resolved the files it needs to size-check. Any path that
+  // declines to dispatch therefore has to put the draft back.
+  const chatInputControls = useChatInputControls();
+  const restoreComposerDraft = useCallback(
+    (message: string, inputFileIds?: string[]) => {
+      if (message) {
+        chatInputControls.setDraftMessage(message, { focus: true });
+      }
+      if (!inputFileIds?.length) return;
+      // `handleRemoveAllFiles` only clears the composer's own state, so the
+      // store still holds the items these ids came from.
+      const ids = new Set(inputFileIds);
+      const files = useFileUploadStore
+        .getState()
+        .uploadedFiles.filter((file) => ids.has(file.id));
+      if (files.length > 0) {
+        chatInputControls.addUploadedFiles(files);
+      }
+    },
+    [chatInputControls],
+  );
   // Drop-staged emails are always user-driven, so they bypass the
   // `showSuggestedEmailSource` gate (which is for the auto-suggest of the
   // currently-open email when the chat is still fresh). Without this the
@@ -838,6 +861,9 @@ export const AddinChatInput = forwardRef<
       setUploadStoreError(null);
       let resolvedFileIds: string[] = [];
       let uploadFailed = false;
+      // Held outside the try so the 413 branch can name the same files the
+      // client-side rejection would have named.
+      let attemptedFileNames: string[] = [];
 
       try {
         const filesToUpload = await resolveSelectedFilesForSend();
@@ -868,22 +894,23 @@ export const AddinChatInput = forwardRef<
         // received. The chips stay so the user can dismiss the offender and
         // retry, and the draft marker is rolled back so the retry is not
         // de-duped as an already-sent draft.
-        if (globalMaxSizeBytes > 0) {
-          const sizeValidation = validateFileSizes(
-            filesToUpload,
-            globalMaxSizeBytes,
+        const sizeValidation = validateFileSizes(
+          filesToUpload,
+          globalMaxSizeBytes,
+        );
+        if (!sizeValidation.valid) {
+          setUploadStoreError(
+            new UploadTooLargeError(
+              maxSizeFormatted,
+              sizeValidation.oversizedFiles.map((file) => file.name),
+            ),
           );
-          if (!sizeValidation.valid) {
-            setUploadStoreError(
-              new UploadTooLargeError(
-                maxSizeFormatted,
-                sizeValidation.oversizedFiles.map((file) => file.name),
-              ),
-            );
-            lastSentDraftFingerprintRef.current = previousDraftFingerprint;
-            return;
-          }
+          lastSentDraftFingerprintRef.current = previousDraftFingerprint;
+          restoreComposerDraft(message, inputFileIds);
+          return;
         }
+
+        attemptedFileNames = filesToUpload.map((file) => file.name);
 
         const formData = new FormData();
         filesToUpload.forEach((file) => {
@@ -903,7 +930,9 @@ export const AddinChatInput = forwardRef<
       } catch (error) {
         uploadFailed = true;
         if (isUploadTooLarge(error)) {
-          setUploadStoreError(new UploadTooLargeError(maxSizeFormatted));
+          setUploadStoreError(
+            new UploadTooLargeError(maxSizeFormatted, attemptedFileNames),
+          );
         } else {
           console.warn(
             "Failed to upload Outlook email source files, sending without them:",
@@ -954,6 +983,7 @@ export const AddinChatInput = forwardRef<
       onEmailSourceDropsSent,
       replyFromReadAvailable,
       resolveSelectedFilesForSend,
+      restoreComposerDraft,
       scheduleFacetAvailable,
       setUploadStoreError,
       shouldUseSuggestedEmailSource,
