@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 
-import { UploadTooLargeError } from "../errors";
+import { UploadTooLargeError, isUploadTooLarge } from "../errors";
 
 /**
  * The e2e suite asserts on substrings of this message. A singular rejection
@@ -29,5 +29,53 @@ describe("UploadTooLargeError message", () => {
 
     expect(error.message).toBe("File is too large. Maximum size: 15 MB.");
     expect(error.filenames).toEqual([]);
+  });
+});
+
+describe("isUploadTooLarge", () => {
+  const originalAgent = navigator.userAgent;
+
+  afterEach(() => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue(originalAgent);
+    vi.restoreAllMocks();
+  });
+
+  it("matches a numeric 413", () => {
+    expect(isUploadTooLarge({ status: 413, payload: "" })).toBe(true);
+  });
+
+  it("matches a string 413", () => {
+    expect(isUploadTooLarge({ status: "413", payload: "" })).toBe(true);
+  });
+
+  it("ignores unrelated errors", () => {
+    expect(isUploadTooLarge({ status: 500, payload: "" })).toBe(false);
+    expect(isUploadTooLarge(new Error("boom"))).toBe(false);
+    expect(isUploadTooLarge(null)).toBe(false);
+    expect(isUploadTooLarge(undefined)).toBe(false);
+    expect(isUploadTooLarge("413")).toBe(false);
+  });
+
+  it("treats an opaque Firefox NetworkError as too-large", () => {
+    // Firefox reports a proxy cutting off an oversized body as a bare
+    // NetworkError with no status, so the browser sniff is the only signal.
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue(
+      "Mozilla/5.0 (Macintosh) Gecko/20100101 Firefox/128.0",
+    );
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    expect(isUploadTooLarge({ message: "NetworkError when fetching" })).toBe(
+      true,
+    );
+  });
+
+  it("does not apply the NetworkError fallback outside Firefox", () => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue(
+      "Mozilla/5.0 (Macintosh) AppleWebKit/537.36 Chrome/120.0 Safari/537.36",
+    );
+
+    expect(isUploadTooLarge({ message: "NetworkError when fetching" })).toBe(
+      false,
+    );
   });
 });

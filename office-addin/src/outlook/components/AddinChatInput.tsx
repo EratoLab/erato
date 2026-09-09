@@ -49,6 +49,7 @@ import {
   isSchedulingThreadFresh,
   toLocalOffsetIso,
 } from "../utils/outlookScheduleTool";
+import { restoreComposerDraft } from "../utils/restoreComposerDraft";
 
 function validateAttachment(
   filename: string,
@@ -285,22 +286,14 @@ export const AddinChatInput = forwardRef<
   // handler has resolved the files it needs to size-check. Any path that
   // declines to dispatch therefore has to put the draft back.
   const chatInputControls = useChatInputControls();
-  const restoreComposerDraft = useCallback(
-    (message: string, inputFileIds?: string[]) => {
-      if (message) {
-        chatInputControls.setDraftMessage(message, { focus: true });
-      }
-      if (!inputFileIds?.length) return;
-      // `handleRemoveAllFiles` only clears the composer's own state, so the
-      // store still holds the items these ids came from.
-      const ids = new Set(inputFileIds);
-      const files = useFileUploadStore
-        .getState()
-        .uploadedFiles.filter((file) => ids.has(file.id));
-      if (files.length > 0) {
-        chatInputControls.addUploadedFiles(files);
-      }
-    },
+  const restoreDraft = useCallback(
+    (message: string, inputFileIds?: string[]) =>
+      restoreComposerDraft(
+        chatInputControls,
+        useFileUploadStore.getState().uploadedFiles,
+        message,
+        inputFileIds,
+      ),
     [chatInputControls],
   );
   // Drop-staged emails are always user-driven, so they bypass the
@@ -906,7 +899,7 @@ export const AddinChatInput = forwardRef<
             ),
           );
           lastSentDraftFingerprintRef.current = previousDraftFingerprint;
-          restoreComposerDraft(message, inputFileIds);
+          restoreDraft(message, inputFileIds);
           return;
         }
 
@@ -983,7 +976,7 @@ export const AddinChatInput = forwardRef<
       onEmailSourceDropsSent,
       replyFromReadAvailable,
       resolveSelectedFilesForSend,
-      restoreComposerDraft,
+      restoreDraft,
       scheduleFacetAvailable,
       setUploadStoreError,
       shouldUseSuggestedEmailSource,

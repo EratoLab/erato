@@ -402,6 +402,52 @@ describe("ChatInput", () => {
     expect(useFileUploadStore.getState().error).toBeNull();
   });
 
+  it("routes pasted images through the preflighted uploadFiles", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    mockUseChatInputHandlers.mockReturnValue({
+      attachedFiles: [],
+      fileError: null,
+      setFileError: vi.fn(),
+      handleFilesUploaded: vi.fn(),
+      handleRemoveFile: vi.fn(),
+      handleRemoveAllFiles: vi.fn(),
+      setAttachedFiles: vi.fn(),
+      createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
+    });
+
+    const uploadFiles = vi.fn(async (files: File[]) => {
+      void files;
+      return [];
+    });
+    const pasted = new File([], "screenshot.png", { type: "image/png" });
+    Object.defineProperty(pasted, "size", { value: 60 * 1024 * 1024 });
+
+    const { i18n } = await import("@lingui/core");
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={vi.fn()} uploadFiles={uploadFiles} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    fireEvent.paste(screen.getByRole("textbox"), {
+      clipboardData: {
+        items: [{ kind: "file", type: "image/png", getAsFile: () => pasted }],
+      },
+    });
+
+    // The size gate lives in the injected uploadFiles, so what matters here is
+    // that paste goes through it rather than reaching the API another way.
+    expect(uploadFiles).toHaveBeenCalledTimes(1);
+    expect(uploadFiles.mock.calls[0][0]).toHaveLength(1);
+  });
+
   it("re-focuses the chat textarea when a response finishes streaming", async () => {
     const queryClient = new QueryClient({
       defaultOptions: {

@@ -123,13 +123,16 @@ describe("useConversationDropzone", () => {
         }),
       );
 
-      const validator = vi.mocked(useDropzone).mock.calls.at(-1)?.[0]
-        ?.validator;
+      const validator = vi
+        .mocked(useDropzone)
+        .mock.calls.at(-1)?.[0]?.validator;
 
       expect(validator?.(makeFileWithSize("ok.bin", LIMIT))).toBeNull();
-      expect(validator?.(makeFileWithSize("big.bin", LIMIT + 1))).toMatchObject({
-        code: "file-too-large",
-      });
+      expect(validator?.(makeFileWithSize("big.bin", LIMIT + 1))).toMatchObject(
+        {
+          code: "file-too-large",
+        },
+      );
     });
 
     it("spares a file the isSizeExempt predicate accepts", () => {
@@ -143,13 +146,16 @@ describe("useConversationDropzone", () => {
         }),
       );
 
-      const validator = vi.mocked(useDropzone).mock.calls.at(-1)?.[0]
-        ?.validator;
+      const validator = vi
+        .mocked(useDropzone)
+        .mock.calls.at(-1)?.[0]?.validator;
 
       expect(validator?.(makeFileWithSize("thread.eml", LIMIT + 1))).toBeNull();
-      expect(validator?.(makeFileWithSize("big.bin", LIMIT + 1))).toMatchObject({
-        code: "file-too-large",
-      });
+      expect(validator?.(makeFileWithSize("big.bin", LIMIT + 1))).toMatchObject(
+        {
+          code: "file-too-large",
+        },
+      );
     });
 
     it("calls onError with UploadTooLargeError when a file-too-large rejection arrives", () => {
