@@ -192,6 +192,10 @@ vi.mock("@/components/ui/Chat/ChatInput", () => ({
 
 vi.mock("@/components/ui/WelcomeScreen", () => ({
   WelcomeScreen: () => <div data-testid="welcome-screen">Welcome</div>,
+  WelcomeScreenUpper: () => <div data-testid="welcome-screen">Welcome</div>,
+  WelcomeScreenLower: () => (
+    <div data-testid="welcome-screen-lower">Welcome details</div>
+  ),
 }));
 
 vi.mock("@/components/ui/Feedback/ChatErrorBoundary", () => ({
@@ -578,9 +582,48 @@ describe("ChatPage", () => {
     expect(
       container.querySelector('[data-ui="chat-empty-state-centered-shell"]'),
     ).not.toBeNull();
-    expect(screen.getByTestId("welcome-screen")).toBeInTheDocument();
     expect(screen.getByTestId("chat-input")).toBeInTheDocument();
     expect(screen.queryByTestId("message-list")).not.toBeInTheDocument();
+
+    const above = container.querySelector('[data-ui="welcome-above"]')!;
+    const below = container.querySelector('[data-ui="welcome-below"]')!;
+    expect(above).toContainElement(screen.getByTestId("welcome-screen"));
+    const lower = screen.getByTestId("welcome-screen-lower");
+    expect(below).toContainElement(lower);
+    const advisory = below.querySelector('[data-ui="chat-usage-advisory"]')!;
+    expect(
+      advisory.compareDocumentPosition(lower) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("keeps only the advisory below the composer when a welcome override is registered", () => {
+    mockEmptyChat();
+    function WelcomeOverride() {
+      return <div data-testid="welcome-override">Override</div>;
+    }
+    componentRegistry.ChatWelcomeScreen = WelcomeOverride;
+
+    const { container } = render(
+      <TestWrapper>
+        <StaticFeatureConfigProvider>
+          <ChatPageStructure>
+            <div />
+          </ChatPageStructure>
+        </StaticFeatureConfigProvider>
+      </TestWrapper>,
+    );
+
+    const above = container.querySelector('[data-ui="welcome-above"]')!;
+    const below = container.querySelector('[data-ui="welcome-below"]')!;
+    expect(above).toContainElement(screen.getByTestId("welcome-override"));
+    expect(screen.queryByTestId("welcome-screen")).toBeNull();
+    expect(screen.queryByTestId("welcome-screen-lower")).toBeNull();
+    expect(below.children).toHaveLength(1);
+    expect(below.firstElementChild).toHaveAttribute(
+      "data-ui",
+      "chat-usage-advisory",
+    );
   });
 
   it("centers the welcome state when configured explicitly", () => {
@@ -638,9 +681,17 @@ describe("ChatPage", () => {
     expect(
       container.querySelector('[data-ui="chat-empty-state-centered-shell"]'),
     ).toBeNull();
-    expect(screen.getByTestId("welcome-screen")).toBeInTheDocument();
     expect(screen.getByTestId("chat-input")).toBeInTheDocument();
     expect(screen.queryByTestId("message-list")).not.toBeInTheDocument();
+
+    const above = container.querySelector('[data-ui="welcome-above"]')!;
+    expect(above).toContainElement(screen.getByTestId("welcome-screen"));
+    expect(above).toContainElement(screen.getByTestId("welcome-screen-lower"));
+    expect(
+      container
+        .querySelector('[data-ui="welcome-below"]')!
+        .querySelector('[data-testid="welcome-screen-lower"]'),
+    ).toBeNull();
   });
 
   it("falls back to the message list once a first send is pending", () => {

@@ -1,8 +1,8 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-condition */
 "use client";
 
 import { t } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
+import clsx from "clsx";
 import { useEffect, useState } from "react";
 import Markdown from "react-markdown";
 
@@ -17,45 +17,36 @@ export interface WelcomeScreenProps {
   className?: string;
 }
 
-export function WelcomeScreen({ className = "" }: WelcomeScreenProps) {
-  const { isCustomTheme } = useTheme();
-  const { textAlignment, flexAlignment, justifyAlignment } =
-    usePageAlignment("headers");
-  const [branding, setBranding] = useState<{
-    enabled: boolean;
-    logoSize: "small" | "medium" | "large";
-  } | null>(null);
+type WelcomeBranding = {
+  enabled: boolean;
+  logoSize: "small" | "medium" | "large";
+};
 
-  // Size mapping for logo dimensions
-  const logoSizes = {
-    small: { width: 150, height: 50 },
-    medium: { width: 240, height: 80 },
-    large: { width: 320, height: 100 },
-  };
+const logoSizes: Record<
+  WelcomeBranding["logoSize"],
+  { width: number; height: number }
+> = {
+  small: { width: 150, height: 50 },
+  medium: { width: 240, height: 80 },
+  large: { width: 320, height: 100 },
+};
+
+function useWelcomeBranding() {
+  const { isCustomTheme } = useTheme();
+  const [branding, setBranding] = useState<WelcomeBranding | null>(null);
 
   useEffect(() => {
-    // Only load branding if we have a custom theme
     if (!isCustomTheme) return;
 
-    // Get the customer name from environment variable
     const customerName = env().themeCustomerName;
     if (!customerName) return;
 
     const loadBranding = async () => {
       try {
-        // Construct path with the folder name
         // eslint-disable-next-line lingui/no-unlocalized-strings
         const themePath = `${env().commonPublicBasePath}/custom-theme/${customerName}/theme.json`;
-
-        // Load the theme data
         const themeData = await loadThemeFromPath(themePath);
-        if (!themeData?.branding?.welcomeScreen) {
-          setBranding(null);
-          return;
-        }
-
-        // Set the branding data
-        setBranding(themeData.branding.welcomeScreen);
+        setBranding(themeData?.branding?.welcomeScreen ?? null);
       } catch (error) {
         console.error("Error loading welcome screen branding:", error);
         setBranding(null);
@@ -65,18 +56,77 @@ export function WelcomeScreen({ className = "" }: WelcomeScreenProps) {
     void loadBranding();
   }, [isCustomTheme]);
 
-  // Get logo dimensions based on size
-  const logoSize = branding?.logoSize
-    ? logoSizes[branding.logoSize] || logoSizes.medium
+  // theme.json is customer-authored, so an unknown size still needs a fallback.
+  const logoSize = branding?.enabled
+    ? // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      (logoSizes[branding.logoSize] ?? logoSizes.medium)
     : null;
+
+  return { logoSize };
+}
+
+const markdownComponents = {
+  li: ({ ...props }) => <li className="list-disc" {...props} />,
+  p: ({ ...props }) => <p className="mb-4 first:mt-0" {...props} />,
+  h1: ({ children, ...props }) => (
+    <h1
+      className="mb-3 mt-6 text-xl font-bold text-theme-fg-primary first:mt-0"
+      {...props}
+    >
+      {children}
+    </h1>
+  ),
+  h2: ({ children, ...props }) => (
+    <h2
+      className="mb-3 mt-6 text-lg font-semibold text-theme-fg-primary first:mt-0"
+      {...props}
+    >
+      {children}
+    </h2>
+  ),
+  h3: ({ children, ...props }) => (
+    <h3
+      className="mb-2 mt-4 text-base font-semibold text-theme-fg-secondary first:mt-0"
+      {...props}
+    >
+      {children}
+    </h3>
+  ),
+  hr: ({ ...props }) => (
+    <hr className="my-4 border-t border-theme-border" {...props} />
+  ),
+  a: ({ href, children, ...props }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="theme-transition text-theme-fg-accent underline hover:opacity-40"
+      {...props}
+    >
+      {children}
+    </a>
+  ),
+} satisfies React.ComponentProps<typeof Markdown>["components"];
+
+/** Customer logo and the welcome heading; sits above the composer. */
+export function WelcomeScreenUpper({ className = "" }: WelcomeScreenProps) {
+  const { containerClasses, textAlignment, flexAlignment, justifyAlignment } =
+    usePageAlignment("headers");
+  const { logoSize } = useWelcomeBranding();
 
   return (
     <div
-      className={`flex flex-col ${flexAlignment} ${justifyAlignment} p-12 ${className}`}
+      className={clsx(
+        "flex w-full flex-col px-4",
+        containerClasses,
+        flexAlignment,
+        justifyAlignment,
+        className,
+      )}
       data-testid="welcome-screen-default"
     >
-      {branding?.enabled && logoSize && (
-        <div className={`mb-8 ${flexAlignment}`}>
+      {logoSize && (
+        <div className={clsx("mb-4 flex", justifyAlignment)}>
           <Logo
             width={logoSize.width}
             height={logoSize.height}
@@ -89,62 +139,45 @@ export function WelcomeScreen({ className = "" }: WelcomeScreenProps) {
       )}
 
       <h1
-        className={`mb-4 text-2xl font-bold text-theme-fg-primary ${textAlignment}`}
+        className={clsx(
+          "text-2xl font-bold text-theme-fg-primary",
+          textAlignment,
+        )}
       >
         <Trans id="branding.welcomeScreen.title">Welcome to AI Assistant</Trans>
       </h1>
+    </div>
+  );
+}
 
-      <h2 className={`mb-6 text-xl text-theme-fg-secondary ${textAlignment}`}>
+/** Subtitle, Markdown description and starter prompts; sits below the composer. */
+export function WelcomeScreenLower({ className = "" }: WelcomeScreenProps) {
+  const { textAlignment, flexAlignment, justifyAlignment } =
+    usePageAlignment("headers");
+
+  return (
+    <div
+      className={clsx(
+        "mx-auto mt-4 flex w-full max-w-[var(--theme-layout-chat-input-max-width)] flex-col px-4 sm:mt-6",
+        flexAlignment,
+        justifyAlignment,
+        className,
+      )}
+      data-testid="welcome-screen-lower"
+    >
+      <h2
+        className={clsx(
+          "mb-2 text-lg font-medium text-theme-fg-secondary",
+          textAlignment,
+        )}
+      >
         <Trans id="branding.welcomeScreen.subtitle">
           Get expert help with your questions
         </Trans>
       </h2>
 
-      <div className={`text-lg text-theme-fg-muted ${textAlignment}`}>
-        <Markdown
-          components={{
-            li: ({ ...props }) => <li className="list-disc" {...props} />,
-            p: ({ ...props }) => <p className="mb-4 first:mt-0" {...props} />,
-            h1: ({ children, ...props }) => (
-              <h1
-                className="mb-3 mt-6 text-2xl font-bold text-theme-fg-primary first:mt-0"
-                {...props}
-              >
-                {children}
-              </h1>
-            ),
-            h2: ({ children, ...props }) => (
-              <h2
-                className="mb-3 mt-6 text-xl font-semibold text-theme-fg-primary first:mt-0"
-                {...props}
-              >
-                {children}
-              </h2>
-            ),
-            h3: ({ children, ...props }) => (
-              <h3
-                className="mb-2 mt-4 text-lg font-semibold text-theme-fg-secondary first:mt-0"
-                {...props}
-              >
-                {children}
-              </h3>
-            ),
-            hr: ({ ...props }) => (
-              <hr className="my-4 border-t border-theme-border" {...props} />
-            ),
-            a: ({ href, children, ...props }) => (
-              <a
-                href={href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="theme-transition text-theme-fg-accent underline hover:opacity-40"
-                {...props}
-              >
-                {children}
-              </a>
-            ),
-          }}
-        >
+      <div className={clsx("text-base text-theme-fg-muted", textAlignment)}>
+        <Markdown components={markdownComponents}>
           {t({
             id: "branding.welcomeScreen.description",
             message:
@@ -154,6 +187,16 @@ export function WelcomeScreen({ className = "" }: WelcomeScreenProps) {
       </div>
 
       <StarterPromptsSection className="mt-4" />
+    </div>
+  );
+}
+
+/** Both parts stacked; the shape a whole-welcome override replaces. */
+export function WelcomeScreen({ className = "" }: WelcomeScreenProps) {
+  return (
+    <div className={clsx("flex w-full flex-col", className)}>
+      <WelcomeScreenUpper />
+      <WelcomeScreenLower />
     </div>
   );
 }

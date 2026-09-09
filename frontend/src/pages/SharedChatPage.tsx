@@ -224,7 +224,10 @@ export default function SharedChatPage() {
           className="size-full w-full"
           showAvatars={true}
           showTimestamps={true}
-          emptyStateComponent={<ChatEmptyState variant="chat" />}
+          emptyStateComponent={<ChatEmptyState variant="chat" part="upper" />}
+          emptyStateBelowComponent={
+            <ChatEmptyState variant="chat" part="lower" />
+          }
           userMessageProfile={sharedOwnerProfile}
           readOnly={true}
         />
