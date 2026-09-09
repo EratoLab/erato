@@ -1,5 +1,4 @@
 // File upload components
-export { FileUpload } from "./FileUpload";
 export { FileUploadButton } from "./FileUploadButton";
 export { FilePreviewButton } from "./FilePreviewButton";
 export { FileUploadProgress } from "./FileUploadProgress";
@@ -14,7 +13,6 @@ export { FilePreviewLoading } from "./FilePreviewLoading";
 export { FileUploadLoading, FileUploadError } from "./FileUploadStates";
 
 // Re-export types for external usage
-export type { FileUploadProps } from "./FileUpload";
 export type { FileUploadButtonProps } from "./FileUploadButton";
 export type {
   FileUploadItemWithSize,

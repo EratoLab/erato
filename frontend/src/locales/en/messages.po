@@ -4325,16 +4325,16 @@ msgstr "1 shared file"
 #~ msgstr "1 step"
 
 #: src/components/ui/FileUpload/FileUpload.tsx
-msgid "Accepted types:"
-msgstr "Accepted types:"
+#~ msgid "Accepted types:"
+#~ msgstr "Accepted types:"
 
 #: src/components/ui/Chat/ChatInput.tsx
 #~ msgid "Action required — the assistant is waiting for your approval"
 #~ msgstr "Action required — the assistant is waiting for your approval"
 
 #: src/components/ui/FileUpload/FileUpload.tsx
-msgid "All file types accepted"
-msgstr "All file types accepted"
+#~ msgid "All file types accepted"
+#~ msgstr "All file types accepted"
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "And"
@@ -4624,8 +4624,8 @@ msgid "Choose audio mode"
 msgstr "Choose audio mode"
 
 #: src/components/ui/FileUpload/FileUpload.tsx
-msgid "Clear All"
-msgstr "Clear All"
+#~ msgid "Clear All"
+#~ msgstr "Clear All"
 
 #: src/pages/SearchPage.tsx
 msgid "Clear search"
@@ -4852,12 +4852,12 @@ msgid "Download File"
 msgstr "Download File"
 
 #: src/components/ui/FileUpload/FileUpload.tsx
-msgid "Drag files here or click to upload"
-msgstr "Drag files here or click to upload"
+#~ msgid "Drag files here or click to upload"
+#~ msgstr "Drag files here or click to upload"
 
 #: src/components/ui/FileUpload/FileUpload.tsx
-msgid "Drop files to upload..."
-msgstr "Drop files to upload..."
+#~ msgid "Drop files to upload..."
+#~ msgstr "Drop files to upload..."
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 #~ msgid "echo cancellation: {0}"
@@ -5543,8 +5543,8 @@ msgstr "Skipped"
 #~ msgstr "Some default files are inaccessible due to missing permissions."
 
 #: src/components/ui/FileUpload/FileUpload.tsx
-msgid "Some files won't be accepted..."
-msgstr "Some files won't be accepted..."
+#~ msgid "Some files won't be accepted..."
+#~ msgstr "Some files won't be accepted..."
 
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
 msgid "Something went wrong"
@@ -5817,12 +5817,12 @@ msgstr "Unknown sender"
 #~ msgstr "Updated {updatedRelativeTime}"
 
 #: src/components/ui/FileUpload/FileUpload.tsx
-msgid "Upload Files"
-msgstr "Upload Files"
+#~ msgid "Upload Files"
+#~ msgstr "Upload Files"
 
 #: src/components/ui/FileUpload/FileUpload.tsx
-msgid "Uploaded Files"
-msgstr "Uploaded Files"
+#~ msgid "Uploaded Files"
+#~ msgstr "Uploaded Files"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Uploading"
