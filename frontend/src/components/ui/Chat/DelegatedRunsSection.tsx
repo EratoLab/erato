@@ -23,6 +23,7 @@ import {
 } from "@/utils/chatHistoryGrouping";
 
 import { ChatAttentionStatusDot } from "./ChatAttentionStatusDot";
+import { Card } from "../Container/Card";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { Button } from "../Controls/Button";
 import { Collapse } from "../Controls/Collapse";
@@ -32,6 +33,14 @@ import { MessageTimestamp } from "../Message/MessageTimestamp";
 import { OpenNewWindowIcon, CloseIcon } from "../icons";
 
 import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type React from "react";
+
+// The bar belongs to the message family, not to the card family, and its
+// corner has to keep reading the token the composer and the messages beside
+// it read.
+const MESSAGE_CORNER_CARD_STYLE = {
+  "--card-radius": "var(--theme-radius-message)",
+} as React.CSSProperties;
 
 /**
  * Checked-off runs, deliberately per-device: a run's outcome is a property
@@ -304,9 +313,13 @@ export const DelegatedRunsSection = memo<DelegatedRunsSectionProps>(
         // read as one surface.
         className="mx-auto w-full px-2 pt-2 sm:px-4"
         style={{ maxWidth: "var(--theme-layout-chat-input-max-width)" }}
-        data-ui="delegated-runs-section"
       >
-        <div className="rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-primary">
+        <Card
+          variant="surface"
+          size="none"
+          data-ui="delegated-runs-section"
+          style={MESSAGE_CORNER_CARD_STYLE}
+        >
           <button
             type="button"
             onClick={() => setIsExpanded((expanded) => !expanded)}
@@ -353,7 +366,7 @@ export const DelegatedRunsSection = memo<DelegatedRunsSectionProps>(
                 ))}
             </div>
           </Collapse>
-        </div>
+        </Card>
       </div>
     );
   },

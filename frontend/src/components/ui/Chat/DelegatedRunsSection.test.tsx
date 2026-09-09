@@ -309,8 +309,11 @@ describe("DelegatedRunsSection", () => {
     const section = container.querySelector(
       '[data-ui="delegated-runs-section"]',
     );
-    expect(section).toHaveClass("w-full");
-    expect(section).toHaveStyle({
+    // The hook marks the framed bar; the width channel is the wrapper it
+    // sits in.
+    const widthWrapper = section!.parentElement;
+    expect(widthWrapper).toHaveClass("w-full");
+    expect(widthWrapper).toHaveStyle({
       maxWidth: "var(--theme-layout-chat-input-max-width)",
     });
   });

@@ -499,7 +499,16 @@ function HubLandingView({
         !showSearchResults &&
         sortedVersions.length > 0 && (
           <div className="space-y-8">
-            <section className="rounded-xl border border-theme-info-border bg-theme-info-bg p-6">
+            <Card
+              variant="surface"
+              as="section"
+              tone="info"
+              size="lg"
+              // The tone paints through variables, and variables inherit: the
+              // cards inside would wear this section's colours unless the body
+              // hands the family's own back at the boundary.
+              bodyClassName="[--card-bg:var(--theme-bg-primary)] [--card-border:var(--theme-border)]"
+            >
               <div className="mb-4">
                 <div className="flex items-center gap-2">
                   <span aria-hidden="true">✨</span>
@@ -533,14 +542,17 @@ function HubLandingView({
                   ))}
                 </div>
               ) : (
-                <p className="rounded-lg border border-theme-border bg-theme-bg-primary p-4 text-sm text-theme-fg-secondary">
+                <Card
+                  variant="surface"
+                  className="text-sm text-theme-fg-secondary"
+                >
                   {t({
                     id: "assistantHub.featured.empty",
                     message: "No assistants are featured yet.",
                   })}
-                </p>
+                </Card>
               )}
-            </section>
+            </Card>
 
             {categories.length > 0 && (
               <section>

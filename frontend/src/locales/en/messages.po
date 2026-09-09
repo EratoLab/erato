@@ -3340,8 +3340,8 @@ msgstr "{name} {version} is ready to use."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
-msgid "preferences.dialog.desktopSidecar.description"
-msgstr "Check the connection to the Erato Desktop Sidecar on this computer."
+#~ msgid "preferences.dialog.desktopSidecar.description"
+#~ msgstr "Check the connection to the Erato Desktop Sidecar on this computer."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx

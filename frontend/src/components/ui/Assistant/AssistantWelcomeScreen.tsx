@@ -3,6 +3,7 @@ import clsx from "clsx";
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
+import { Card } from "@/components/ui/Container/Card";
 import { Button } from "@/components/ui/Controls/Button";
 import { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
 import { SegmentedControl } from "@/components/ui/Controls/SegmentedControl";
@@ -395,8 +396,10 @@ export function AssistantWelcomeLower({
                 {visibleChats.slice(0, PAST_CHAT_PREVIEW_COUNT).map((chat) => {
                   const origin = originLabel(chat);
                   return (
-                    <a
+                    <Card
                       key={chat.id}
+                      variant="interactive"
+                      as="a"
                       href={getChatUrl(chat.id, assistant.id)}
                       onClick={(e) => {
                         if (e.metaKey || e.ctrlKey) return;
@@ -404,7 +407,9 @@ export function AssistantWelcomeLower({
                         handleChatSelect(chat.id);
                       }}
                       data-ui="assistant-past-chat-card"
-                      className="block rounded-[var(--theme-radius-shell)] bg-theme-bg-primary p-4 text-left transition-all hover:bg-theme-bg-hover"
+                      // The row separates itself from the pane by fill alone.
+                      bordered={false}
+                      className="block text-left"
                     >
                       <div className="flex items-center justify-between gap-4">
                         <h3 className="flex-1 truncate font-medium text-theme-fg-primary">
@@ -468,7 +473,7 @@ export function AssistantWelcomeLower({
                           {origin}
                         </p>
                       )}
-                    </a>
+                    </Card>
                   );
                 })}
               </div>

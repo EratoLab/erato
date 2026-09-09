@@ -3340,8 +3340,8 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
-msgid "preferences.dialog.desktopSidecar.description"
-msgstr ""
+#~ msgid "preferences.dialog.desktopSidecar.description"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx

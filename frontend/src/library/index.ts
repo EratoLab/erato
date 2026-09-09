@@ -81,7 +81,6 @@ export {
 } from "@/components/ui/Message/ActionConfirmationCard";
 export { AppearanceTabContent } from "@/components/ui/Settings/AppearanceTabContent";
 export { AudioInputTabContent } from "@/components/ui/Settings/AudioInputTabContent";
-export { DesktopSidecarTabContent } from "@/components/ui/Settings/DesktopSidecarTabContent";
 export { TextSizeSetting } from "@/components/ui/Settings/TextSizeSetting";
 export {
   EntityRow,

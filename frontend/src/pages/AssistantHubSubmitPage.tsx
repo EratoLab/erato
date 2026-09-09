@@ -608,21 +608,31 @@ export default function AssistantHubSubmitPage() {
                       <span className="ml-1 text-theme-error-fg">*</span>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {config.categories.map((category) => (
-                        <button
-                          key={category.id}
-                          type="button"
-                          className={clsx(
-                            "focus-ring theme-transition rounded border px-3 py-2 text-sm",
-                            categoryIds.includes(category.id)
-                              ? "border-theme-border-focus bg-theme-bg-selected text-theme-fg-primary"
-                              : "border-theme-border bg-theme-bg-secondary text-theme-fg-secondary hover:bg-theme-bg-hover",
-                          )}
-                          onClick={() => toggleCategory(category.id)}
-                        >
-                          {category.display_name}
-                        </button>
-                      ))}
+                      {config.categories.map((category) => {
+                        const selected = categoryIds.includes(category.id);
+
+                        return (
+                          <Card
+                            key={category.id}
+                            variant="selectable"
+                            control="none"
+                            as="button"
+                            selected={selected}
+                            onClick={() => toggleCategory(category.id)}
+                            // A chip is padded by its text, not by an inset the
+                            // family has a step for.
+                            size="none"
+                            className={
+                              selected
+                                ? "text-theme-fg-primary"
+                                : "text-theme-fg-secondary"
+                            }
+                            bodyClassName="px-3 py-2 text-sm"
+                          >
+                            {category.display_name}
+                          </Card>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
