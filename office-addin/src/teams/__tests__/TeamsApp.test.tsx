@@ -449,7 +449,8 @@ describe("Teams personal tab composition", () => {
     await screen.findByTestId("teams-message-list");
 
     const options = spies.createEntraNaaAuthSource.mock.calls.at(0)?.at(0) as
-      { resolveLoginHint: LoginHintResolver } | undefined;
+      | { resolveLoginHint: LoginHintResolver }
+      | undefined;
     await expect(options?.resolveLoginHint()).resolves.toBe(
       MOCK_TEAMS_LOGIN_HINT,
     );

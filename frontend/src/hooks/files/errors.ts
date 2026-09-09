@@ -8,16 +8,18 @@ export class UploadTooLargeError extends Error {
 
   constructor(maxSizeFormatted?: string, filenames: string | string[] = []) {
     const filenameArray = Array.isArray(filenames) ? filenames : [filenames];
-    // Use the runtime API with string ID for i18n
-    // The message catalog is populated by lingui extract from other source files
-    // When maxSizeFormatted is not provided, use a fallback indicator
+    // These `i18n._("<literal>")` calls are themselves the extraction anchor —
+    // lingui reads the explicit ID straight off the call, so no macro is needed.
     const maxSize = maxSizeFormatted ?? "—";
     // Naming the offenders is the difference between a user who can act and one
     // who re-picks the same file; fall back when the caller only knows the batch.
+    // `count` drives an ICU plural so locales with more than two forms (pl) can
+    // inflect properly instead of carrying a "file(s)" parenthetical.
     const message =
       filenameArray.length > 0
         ? i18n._("upload.error.tooLargeNamed", {
             maxSize,
+            count: filenameArray.length,
             filenames: filenameArray.join(", "),
           })
         : i18n._("upload.error.tooLarge", { maxSize });
