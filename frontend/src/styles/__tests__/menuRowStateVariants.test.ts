@@ -34,13 +34,28 @@ async function compileUtilities(): Promise<string> {
   return result.css;
 }
 
+// Walks the compiled rules rather than matching the stylesheet text, and
+// compares against the selector with its CSS escapes stripped. Escaping the
+// class name on the way in instead would mean hand-rolling the very escaping
+// this test exists to check, and a partial one (colons but not backslashes)
+// is what the scanner rightly objects to.
 function selectorFor(css: string, className: string): string {
-  const escaped = className.replace(/[:]/g, "\\\\$&");
-  const match = new RegExp(`\\.${escaped}[^{]*\\{`).exec(css);
+  const wanted = `.${className}`;
+  let found: string | undefined;
 
-  expect(match, `no rule emitted for .${className}`).not.toBeNull();
+  postcss.parse(css).walkRules((rule) => {
+    if (found !== undefined) {
+      return;
+    }
+    const unescaped = rule.selector.replace(/\\/g, "");
+    if (unescaped === wanted || unescaped.startsWith(`${wanted}[`)) {
+      found = rule.selector;
+    }
+  });
 
-  return match![0].replace(/\s*\{$/, "").trim();
+  expect(found, `no rule emitted for .${className}`).toBeDefined();
+
+  return found!;
 }
 
 describe("menu row state variants", () => {
@@ -55,14 +70,15 @@ describe("menu row state variants", () => {
     // (0,2,0): the class plus the attribute the row states on the same
     // element. Two of them beat one whatever order the sheet emits them in,
     // which is exactly the guarantee the deleted workaround was buying.
-    for (const utility of [
-      "aria-expanded:text-theme-fg-primary",
-      "aria-expanded:bg-theme-bg-hover",
-    ]) {
-      expect(selectorFor(css, utility)).toBe(
-        `.${utility.replace(/:/g, "\\:")}[aria-expanded="true"]`,
-      );
-    }
+    // Spelled out rather than derived: deriving the expected selector with the
+    // same escaping the assertion is checking would let both sides drift
+    // together and still agree.
+    expect(selectorFor(css, "aria-expanded:text-theme-fg-primary")).toBe(
+      '.aria-expanded\\:text-theme-fg-primary[aria-expanded="true"]',
+    );
+    expect(selectorFor(css, "aria-expanded:bg-theme-bg-hover")).toBe(
+      '.aria-expanded\\:bg-theme-bg-hover[aria-expanded="true"]',
+    );
 
     // The expanded surface is the same token the row paints on hover, so an
     // open submenu row and a hovered row read alike.
