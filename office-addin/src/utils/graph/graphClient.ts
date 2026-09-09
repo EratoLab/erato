@@ -10,6 +10,22 @@
 
 export const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
 
+/**
+ * Root segment for the mailbox an item actually lives in. `/me` always resolves
+ * to the signed-in user's own store, so an item opened out of a shared mailbox
+ * has to be addressed through its owner's `/users/{owner}` root instead.
+ *
+ * The address arrives from the host and goes into a path segment, so it is
+ * percent-encoded. The character that makes this load-bearing is `#`: every
+ * B2B guest carries one (`someone_partner.com#EXT#@tenant.onmicrosoft.com`),
+ * and unencoded it truncates the URL at the fragment, leaving Graph to
+ * resolve a bare domain and answer 404.
+ */
+export function mailboxRoot(owner?: string | null): string {
+  if (!owner) return `${GRAPH_BASE}/me`;
+  return `${GRAPH_BASE}/users/${encodeURIComponent(owner)}`;
+}
+
 /** Upper bound on an honored `Retry-After`, so a bad header can't hang us. */
 export const MAX_RETRY_AFTER_SECONDS = 10;
 

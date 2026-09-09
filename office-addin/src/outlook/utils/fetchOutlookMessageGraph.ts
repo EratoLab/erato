@@ -9,15 +9,16 @@
  * This is the Microsoft-365 / Exchange-Online path. It is the blessed
  * replacement for the legacy callback-token + Outlook REST v2.0 route (shut
  * off for Microsoft 365 tenants in October 2025); on-prem mailboxes use the
- * EWS SOAP backend in `./fetchOutlookMessageEws.ts` instead. Callers
- * provide an `acquireGraphToken` function bound to the `Mail.Read` scope via
- * MSAL NAA; see `OutlookAddinChat.tsx` for the wiring.
+ * EWS SOAP backend in `./fetchOutlookMessageEws.ts` instead. Callers provide
+ * an `acquireGraphToken` function via MSAL NAA, bound to `Mail.Read` for the
+ * signed-in user's own mailbox or `Mail.Read.Shared` when an `owner` roots the
+ * requests elsewhere; see `OutlookAddinChat.tsx` for the wiring.
  */
 
 import {
-  GRAPH_BASE,
   escapeODataString,
   graphFetch,
+  mailboxRoot,
   makeGraphTokenSource,
   retryAfterMs,
   runWithConcurrency,
@@ -46,6 +47,17 @@ export type {
   GraphTransport,
 } from "../../utils/graph/graphClient";
 
+/**
+ * Request options plus the mailbox the item lives in. `owner` is the SMTP
+ * address of the shared mailbox / delegator the item belongs to (see
+ * `OutlookSharedContext`); omitted or null it addresses the signed-in user's
+ * own store. Every URL in this module is rooted through {@link mailboxRoot},
+ * so a caller that never supplies an owner keeps the plain `/me` behavior.
+ */
+export interface GraphMailboxRequestOptions extends GraphRequestOptions {
+  owner?: string | null;
+}
+
 interface GraphMessageMetadata {
   id?: string;
   subject?: string;
@@ -72,7 +84,7 @@ export interface FetchOutlookMessageBytesResult {
 export async function fetchOutlookMessageFilesViaGraph(
   ewsItemId: string,
   acquireToken: AcquireGraphToken,
-  options: GraphRequestOptions = {},
+  options: GraphMailboxRequestOptions = {},
 ): Promise<FetchOutlookMessageResult> {
   const { bytes, subject, internetMessageId } =
     await fetchOutlookMessageBytesViaGraph(ewsItemId, acquireToken, options);
@@ -86,7 +98,7 @@ export async function fetchOutlookMessageFilesViaGraph(
 export async function fetchOutlookMessageBytesViaGraph(
   ewsItemId: string,
   acquireToken: AcquireGraphToken,
-  options: GraphRequestOptions = {},
+  options: GraphMailboxRequestOptions = {},
 ): Promise<FetchOutlookMessageBytesResult> {
   const restId = convertEwsIdToGraphId(ewsItemId);
   const tokenSource = makeGraphTokenSource(acquireToken);
@@ -123,7 +135,7 @@ export interface ParentMessageMetadata {
 export async function fetchParentMessageInConversationViaGraph(
   conversationId: string,
   acquireToken: AcquireGraphToken,
-  options: GraphRequestOptions = {},
+  options: GraphMailboxRequestOptions = {},
 ): Promise<ParentMessageMetadata | null> {
   try {
     const tokenSource = makeGraphTokenSource(acquireToken);
@@ -135,7 +147,7 @@ export async function fetchParentMessageInConversationViaGraph(
     // We instead pull the most recent ~thread-worth of messages and pick
     // the latest non-draft client-side.
     const filter = `conversationId eq '${escapeODataString(conversationId)}'`;
-    const url = `${GRAPH_BASE}/me/messages?$filter=${encodeURIComponent(filter)}&$top=20&$select=id,subject,from,receivedDateTime,isDraft`;
+    const url = `${mailboxRoot(options.owner)}/messages?$filter=${encodeURIComponent(filter)}&$top=20&$select=id,subject,from,receivedDateTime,isDraft`;
     const response = await graphFetch(
       url,
       tokenSource,
@@ -239,10 +251,20 @@ export interface GraphConversationMessage {
   attachments?: GraphAttachment[];
 }
 
-export interface FetchConversationOptions {
+export interface FetchConversationOptions extends GraphRequestOptions {
   transport?: GraphTransport;
-  signal?: AbortSignal;
 }
+
+/**
+ * What the conversation backing actually receives. Deliberately NOT the
+ * exported {@link FetchConversationOptions}: that one crosses the
+ * backend-agnostic seam in `fetchOutlookMessage.ts`, and a call site able to
+ * pass an `owner` there would have it silently dropped on the EWS and sidecar
+ * backings — and overridden on this one, since the factory binds the mailbox
+ * itself.
+ */
+type GraphConversationOptions = FetchConversationOptions &
+  GraphMailboxRequestOptions;
 
 /**
  * Outcome of a conversation fetch — distinguishes the three cases the caller
@@ -273,7 +295,7 @@ const ITEM_ENRICH_CONCURRENCY = 5;
 export async function fetchConversationMessagesViaGraph(
   conversationId: string,
   acquireToken: AcquireGraphToken,
-  options: FetchConversationOptions = {},
+  options: GraphConversationOptions = {},
 ): Promise<FetchConversationResult> {
   const transport = options.transport ?? globalThis.fetch.bind(globalThis);
   const tokenSource = makeGraphTokenSource(acquireToken);
@@ -316,7 +338,7 @@ export async function fetchConversationMessagesViaGraph(
 
   const messages: GraphConversationMessage[] = [];
   let nextUrl: string | null =
-    `${GRAPH_BASE}/me/messages?$filter=${encodeURIComponent(filter)}&$top=${CONVERSATION_PAGE_SIZE}&$select=${select}&$expand=${expand}`;
+    `${mailboxRoot(options.owner)}/messages?$filter=${encodeURIComponent(filter)}&$top=${CONVERSATION_PAGE_SIZE}&$select=${select}&$expand=${expand}`;
   let pages = 0;
   let state: ConversationFetchState = "ok";
 
@@ -376,6 +398,7 @@ export async function fetchConversationMessagesViaGraph(
   if (messages.length > 0) {
     await enrichItemAttachments(
       messages,
+      options.owner,
       tokenSource,
       transport,
       options.signal,
@@ -395,6 +418,7 @@ export async function fetchConversationMessagesViaGraph(
  */
 async function enrichItemAttachments(
   messages: GraphConversationMessage[],
+  owner: string | null | undefined,
   tokenSource: GraphTokenSource,
   transport: GraphTransport,
   signal: AbortSignal | undefined,
@@ -412,6 +436,7 @@ async function enrichItemAttachments(
           messageId,
           attachmentId,
           attachment,
+          owner,
           tokenSource,
           transport,
           signal,
@@ -428,11 +453,12 @@ async function enrichOneItemAttachment(
   messageId: string,
   attachmentId: string,
   attachment: GraphAttachment,
+  owner: string | null | undefined,
   tokenSource: GraphTokenSource,
   transport: GraphTransport,
   signal: AbortSignal | undefined,
 ): Promise<void> {
-  const url = `${GRAPH_BASE}/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}/$value`;
+  const url = `${mailboxRoot(owner)}/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}/$value`;
   try {
     let response = await graphFetch(
       url,
@@ -495,7 +521,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 export async function fetchOutlookMessageFilesByInternetMessageIdViaGraph(
   internetMessageId: string,
   acquireToken: AcquireGraphToken,
-  options: GraphRequestOptions = {},
+  options: GraphMailboxRequestOptions = {},
 ): Promise<FetchOutlookMessageResult | null> {
   const result = await fetchOutlookMessageBytesByInternetMessageIdViaGraph(
     internetMessageId,
@@ -515,7 +541,7 @@ export async function fetchOutlookMessageFilesByInternetMessageIdViaGraph(
 export async function fetchOutlookMessageBytesByInternetMessageIdViaGraph(
   internetMessageId: string,
   acquireToken: AcquireGraphToken,
-  options: GraphRequestOptions = {},
+  options: GraphMailboxRequestOptions = {},
 ): Promise<FetchOutlookMessageBytesResult | null> {
   const tokenSource = makeGraphTokenSource(acquireToken);
   const match = await findMessageByInternetMessageId(
@@ -545,9 +571,9 @@ function convertEwsIdToGraphId(ewsItemId: string): string {
 async function fetchMessageMetadataById(
   messageId: string,
   tokenSource: GraphTokenSource,
-  options: GraphRequestOptions = {},
+  options: GraphMailboxRequestOptions = {},
 ): Promise<GraphMessageMetadata> {
-  const url = `${GRAPH_BASE}/me/messages/${encodeURIComponent(messageId)}?$select=subject,internetMessageId`;
+  const url = `${mailboxRoot(options.owner)}/messages/${encodeURIComponent(messageId)}?$select=subject,internetMessageId`;
   const response = await graphFetch(
     url,
     tokenSource,
@@ -565,9 +591,9 @@ async function fetchMessageMetadataById(
 async function fetchMessageRawMimeById(
   messageId: string,
   tokenSource: GraphTokenSource,
-  options: GraphRequestOptions = {},
+  options: GraphMailboxRequestOptions = {},
 ): Promise<ArrayBuffer> {
-  const url = `${GRAPH_BASE}/me/messages/${encodeURIComponent(messageId)}/$value`;
+  const url = `${mailboxRoot(options.owner)}/messages/${encodeURIComponent(messageId)}/$value`;
   const response = await graphFetch(
     url,
     tokenSource,
@@ -585,10 +611,10 @@ async function fetchMessageRawMimeById(
 async function findMessageByInternetMessageId(
   internetMessageId: string,
   tokenSource: GraphTokenSource,
-  options: GraphRequestOptions = {},
+  options: GraphMailboxRequestOptions = {},
 ): Promise<GraphMessageMetadata | null> {
   const filter = `internetMessageId eq '${escapeODataString(internetMessageId)}'`;
-  const url = `${GRAPH_BASE}/me/messages?$filter=${encodeURIComponent(filter)}&$top=1&$select=id,subject,internetMessageId`;
+  const url = `${mailboxRoot(options.owner)}/messages?$filter=${encodeURIComponent(filter)}&$top=1&$select=id,subject,internetMessageId`;
   const response = await graphFetch(
     url,
     tokenSource,

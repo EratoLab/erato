@@ -13,6 +13,30 @@ import {
 
 type Mailbox = ReturnType<typeof installMockMailbox>;
 type ContextValue = ReturnType<typeof useOutlookMailItem>;
+// `delegatePermissions` is a host enum the Office mock does not carry, so the
+// mocked result stays loosely typed rather than reconstructing it.
+type SharedPropertiesCallback = (result: Office.AsyncResult<unknown>) => void;
+
+function sharedProperties(overrides: Record<string, unknown> = {}) {
+  return {
+    owner: "team@x",
+    targetRestUrl: "https://outlook.office.com/api",
+    targetMailbox: "team@x",
+    delegatePermissions: 3,
+    ...overrides,
+  };
+}
+
+function sharedPropertiesSucceeded(overrides: Record<string, unknown> = {}) {
+  return (cb: SharedPropertiesCallback) =>
+    cb(createMockAsyncResult(sharedProperties(overrides)));
+}
+
+// Outlook reports "not a shared folder or mailbox" by failing the callback.
+function sharedPropertiesFailed() {
+  return (cb: SharedPropertiesCallback) =>
+    cb(createMockAsyncResult(undefined, "failed"));
+}
 
 function makeReadItem(overrides: Record<string, unknown> = {}) {
   return {
@@ -246,6 +270,102 @@ describe("OutlookMailItemProvider", () => {
       handler();
     });
     expect(captured?.hasItemChangedFired).toBe(true);
+  });
+
+  // Hosts that predate Mailbox 1.8 expose no method at all; the provider must
+  // settle to "not shared" rather than sit loading forever.
+  it("reports no shared context when the host lacks the API", async () => {
+    mailbox.item = makeReadItem();
+    await renderProvider();
+
+    expect(captured?.sharedContext).toBeNull();
+    expect(captured?.isLoadingSharedContext).toBe(false);
+  });
+
+  // A failed callback is the documented "not shared" answer, so it must stay
+  // silent — a warning here would fire on every ordinary message.
+  it("treats a failed shared-properties callback as not shared, silently", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    mailbox.item = makeReadItem({
+      getSharedPropertiesAsync: sharedPropertiesFailed(),
+    });
+    await renderProvider();
+
+    expect(captured?.sharedContext).toBeNull();
+    expect(captured?.isLoadingSharedContext).toBe(false);
+    expect(warn).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    warn.mockRestore();
+    error.mockRestore();
+  });
+
+  it("exposes the shared context of an item in a shared mailbox", async () => {
+    mailbox.item = makeReadItem({
+      getSharedPropertiesAsync: sharedPropertiesSucceeded(),
+    });
+    await renderProvider();
+
+    expect(captured?.sharedContext).toEqual({
+      owner: "team@x",
+      targetMailbox: "team@x",
+      delegatePermissions: 3,
+    });
+    expect(captured?.isLoadingSharedContext).toBe(false);
+  });
+
+  // Appointment compose serves the API too — the shared read sits above the
+  // early-return that keeps appointment attachments out of email context.
+  it("reads the shared context of an appointment compose without touching its attachments", async () => {
+    const getAttachmentsAsync = vi.fn((cb: (r: unknown) => void) =>
+      cb(createMockAsyncResult([{ id: "a1", name: "agenda.pdf" }])),
+    );
+    mailbox.item = makeAppointmentCompose({
+      getAttachmentsAsync,
+      getSharedPropertiesAsync: sharedPropertiesSucceeded({
+        owner: "boss@x",
+        targetMailbox: null,
+      }),
+    });
+    await renderProvider();
+
+    expect(captured?.sharedContext).toEqual({
+      owner: "boss@x",
+      targetMailbox: null,
+      delegatePermissions: 3,
+    });
+    expect(getAttachmentsAsync).not.toHaveBeenCalled();
+    expect(captured?.attachments).toEqual([]);
+  });
+
+  // A pinned pane navigating A → B while A's call is still in flight: the late
+  // answer belongs to an item that is no longer selected.
+  it("discards a shared-context result that lands after navigating away", async () => {
+    let respondForA: SharedPropertiesCallback | undefined;
+    mailbox.item = makeReadItem({
+      getSharedPropertiesAsync: (cb: SharedPropertiesCallback) => {
+        respondForA = cb;
+      },
+    });
+    await renderProvider();
+    expect(captured?.sharedContext).toBeNull();
+
+    const handler = mailbox.addHandlerAsync.mock.calls[0][1] as () => void;
+    mailbox.item = makeReadItem({
+      internetMessageId: "<read-2@x>",
+      getSharedPropertiesAsync: sharedPropertiesSucceeded({ owner: "b@x" }),
+    });
+    await act(async () => {
+      handler();
+    });
+    expect(captured?.sharedContext?.owner).toBe("b@x");
+
+    await act(async () => {
+      respondForA?.(createMockAsyncResult(sharedProperties({ owner: "a@x" })));
+    });
+
+    expect(captured?.sharedContext?.owner).toBe("b@x");
+    expect(captured?.isLoadingSharedContext).toBe(false);
   });
 
   // Mailbox.removeHandlerAsync removes ALL handlers for the event type; its
