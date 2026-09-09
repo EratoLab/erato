@@ -1,8 +1,10 @@
 import clsx from "clsx";
 
+import { Card } from "../Container/Card";
+
 import type { ReactNode } from "react";
 
-interface RadioCardProps {
+export interface RadioCardProps {
   id?: string;
   name: string;
   value: string;
@@ -40,6 +42,10 @@ interface RadioCardProps {
  * Native `<input type="radio">` underneath, so browsers handle arrow-key
  * navigation and form semantics for free. Group the cards inside a
  * `role="radiogroup"` container or a `<fieldset>` with `<legend>`.
+ *
+ * Border and fill come from the card skin, keyed on the `data-selected` the
+ * frame reports: the chosen card keeps its own tint under the pointer, and a
+ * theme retunes resting and chosen colours apart.
  */
 export function RadioCard({
   id,
@@ -58,23 +64,9 @@ export function RadioCard({
   const inputId = id ?? `radiocard-${name}-${value}`;
   const hideRadio = Boolean(icon);
 
-  const cardClasses = clsx(
-    // The hover fill sits on the inner label, so the card clips it to its
-    // rounded border.
-    "option-card-geometry theme-transition overflow-hidden border",
-    // eslint-disable-next-line lingui/no-unlocalized-strings -- Tailwind has-selector for keyboard focus
-    "[&:has(input:focus-visible)]:ring-2 [&:has(input:focus-visible)]:ring-theme-focus",
-    checked
-      ? "border-theme-border-focus bg-theme-bg-selected"
-      : "border-theme-border bg-theme-bg-primary",
-    disabled && "opacity-60",
-  );
-
   const rowClasses = clsx(
     "relative flex items-start gap-3",
     disabled ? "cursor-not-allowed" : "cursor-pointer",
-    // Hover is lighter than the selected tint, so a checked card keeps its fill.
-    !disabled && !checked && "hover:bg-theme-bg-hover",
     size === "md" ? "p-4" : "p-3",
   );
 
@@ -89,10 +81,20 @@ export function RadioCard({
   );
 
   return (
-    <div
-      className={cardClasses}
+    <Card
+      variant="selectable"
+      control="radio"
+      as="div"
       data-ui="option-card"
-      data-selected={checked || undefined}
+      selected={checked}
+      disabled={disabled}
+      // The label keeps the inset so the whole card stays one click target:
+      // the radio is an overlay on the label's own box, and an inset on the
+      // body wrapper would leave a dead rim of card around it.
+      size="none"
+      // A theme that paints the label row has nothing of its own to round
+      // against, so the frame clips it to the corner.
+      className="option-card-geometry overflow-hidden"
     >
       <label htmlFor={inputId} className={rowClasses}>
         <input
@@ -137,13 +139,16 @@ export function RadioCard({
         </div>
       </label>
       {checked && children ? (
+        // Its bottom corners resolve against the body wrapper rather than the
+        // frame, and land on the frame's own only because the wrapper is
+        // inset by nothing.
         <div
-          className="border-t border-theme-border"
+          className="card-section border-t border-theme-border"
           data-ui="option-card-details"
         >
           {children}
         </div>
       ) : null}
-    </div>
+    </Card>
   );
 }

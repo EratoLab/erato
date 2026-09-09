@@ -458,6 +458,10 @@ describe("UserPreferencesDialog", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "MCP & Apps" }));
 
+    // A closed row holds no details at all, so the description is reached
+    // through the disclosure.
+    fireEvent.click(await screen.findByRole("button", { name: /notion/ }));
+
     expect(
       await screen.findByText(
         "Authorization is required before this server can be used.",
@@ -590,6 +594,8 @@ describe("UserPreferencesDialog", () => {
     renderDialog();
 
     fireEvent.click(screen.getByRole("tab", { name: "MCP & Apps" }));
+    // Disconnect lives in the row's details, which a closed row does not hold.
+    fireEvent.click(await screen.findByRole("button", { name: /notion/ }));
     await screen.findByRole("button", { name: "Disconnect" });
 
     fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));

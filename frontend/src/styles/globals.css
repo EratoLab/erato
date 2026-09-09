@@ -624,15 +624,6 @@ body {
     position: absolute;
   }
 
-  /* Selectable option cards and their icon tiles read one token. The tile is
-     not derived from the card corner: card padding exceeds the card radius
-     for every shipped theme, so radius-minus-padding would square it. A theme
-     re-declares --theme-radius-control on [data-ui="option-card"] to move
-     card and tile together. */
-  .option-card-geometry {
-    border-radius: var(--theme-radius-control);
-  }
-
   /* The card family. A card is a frame carrying .card-geometry and one inset,
      wrapping a body that carries .card-body-geometry. The body — not the frame
      — publishes what a card nested inside derives from: a frame that both read
@@ -704,6 +695,22 @@ body {
   .card-section:where(:last-child) {
     border-end-start-radius: var(--card-radius);
     border-end-end-radius: var(--card-radius);
+  }
+
+  /* Selectable option cards and their icon tiles read one token. The tile is
+     not derived from the card corner: card padding exceeds the card radius
+     for every shipped theme, so radius-minus-padding would square it. A theme
+     re-declares --theme-radius-control on [data-ui="option-card"] to move
+     card and tile together.
+
+     It follows the family rather than preceding it because both heads are a
+     single class, so source order alone decides which --card-radius the option
+     card reads. The corner is painted here as well: the icon tile wears this
+     class on its own and is no card. */
+  .option-card-geometry {
+    --card-radius: var(--theme-radius-control);
+
+    border-radius: var(--card-radius);
   }
 
   .modal-section-geometry {
