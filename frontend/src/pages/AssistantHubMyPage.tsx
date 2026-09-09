@@ -5,6 +5,7 @@ import { Star } from "iconoir-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import { Card } from "@/components/ui/Container/Card";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
@@ -172,7 +173,7 @@ function AssistantHubSubmittedReviewsSection({
   ratingMode?: string;
 }) {
   return (
-    <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
+    <Card variant="surface" as="section" size="lg">
       <h2 className="text-lg font-semibold text-theme-fg-primary">
         {t({
           id: "assistantHub.my.submittedReviews.title",
@@ -195,7 +196,11 @@ function AssistantHubSubmittedReviewsSection({
             })}
           </p>
         ) : (
-          <div className="divide-y divide-theme-border rounded-lg border border-theme-border">
+          <Card
+            variant="surface"
+            size="none"
+            bodyClassName="divide-y divide-theme-border"
+          >
             {reviews.map((review) => (
               <AssistantHubSubmittedReviewItem
                 key={review.id}
@@ -203,10 +208,10 @@ function AssistantHubSubmittedReviewsSection({
                 ratingMode={ratingMode}
               />
             ))}
-          </div>
+          </Card>
         )}
       </div>
-    </section>
+    </Card>
   );
 }
 
@@ -509,7 +514,7 @@ export default function AssistantHubMyPage() {
                 ratingMode={config?.rating_mode}
               />
 
-              <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
+              <Card variant="surface" as="section" size="lg">
                 <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -617,7 +622,7 @@ export default function AssistantHubMyPage() {
                     </p>
                   )}
                 </div>
-              </section>
+              </Card>
             </div>
           )}
 
@@ -633,10 +638,7 @@ export default function AssistantHubMyPage() {
                 visibleVersions.length < group.versions.length;
 
               return (
-                <section
-                  key={group.hubAssistantId}
-                  className="rounded-lg border border-theme-border bg-theme-bg-primary p-4"
-                >
+                <Card key={group.hubAssistantId} variant="surface" as="section">
                   <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div>
                       <h2 className="text-base font-semibold text-theme-fg-primary">
@@ -719,7 +721,7 @@ export default function AssistantHubMyPage() {
                       </Button>
                     </div>
                   )}
-                </section>
+                </Card>
               );
             })}
         </div>

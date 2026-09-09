@@ -3,7 +3,16 @@ import clsx from "clsx";
 
 import { useToolCallSettings } from "@/hooks/useToolCallSettings";
 
+import { Card } from "../Container/Card";
+
 import type React from "react";
+
+// This panel has always sat a step deeper than the card family's resting
+// colours, so both channels are held to the pair it already wore.
+const PANEL_CARD_STYLE = {
+  "--card-bg": "var(--theme-bg-tertiary)",
+  "--card-border": "var(--theme-border-primary)",
+} as React.CSSProperties;
 
 export interface ToolCallSettingsProps {
   className?: string;
@@ -25,12 +34,12 @@ export const ToolCallSettings: React.FC<ToolCallSettingsProps> = ({
     useToolCallSettings();
 
   return (
-    <div
-      className={clsx(
-        "space-y-3 rounded-lg border border-theme-border-primary p-3",
-        "bg-theme-bg-tertiary",
-        className,
-      )}
+    <Card
+      variant="surface"
+      size="sm"
+      className={className}
+      bodyClassName="space-y-3"
+      style={PANEL_CARD_STYLE}
     >
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium text-theme-fg-primary">
@@ -95,6 +104,6 @@ export const ToolCallSettings: React.FC<ToolCallSettingsProps> = ({
       <div className="text-xs text-theme-fg-muted">
         {t`Tool calls show how the assistant used external tools to generate responses.`}
       </div>
-    </div>
+    </Card>
   );
 };

@@ -4,12 +4,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/Input/Input";
 import { useFuzzySearch } from "@/hooks/search/useFuzzySearch";
 
+import { Card } from "../Container/Card";
 import { Row } from "../Controls/Row";
 import { ModalBase } from "../Modal/ModalBase";
 
 import type { MentionableAssistant } from "@/hooks/chat/useMentionableAssistants";
+import type React from "react";
 
 const SEARCH_KEYS = ["name", "description"];
+
+// The well has never painted a fill of its own — it sits on the modal shell —
+// and the card skin's default would give it one.
+const UNFILLED_CARD_STYLE = {
+  "--card-bg": "transparent",
+} as React.CSSProperties;
 
 export interface AssistantBrowserModalProps {
   isOpen: boolean;
@@ -92,7 +100,12 @@ export function AssistantBrowserModal({
         />
       </div>
 
-      <div className="max-h-64 overflow-y-auto rounded-lg border border-theme-border">
+      <Card
+        variant="surface"
+        size="none"
+        className="max-h-64 overflow-y-auto"
+        style={UNFILLED_CARD_STYLE}
+      >
         {matches.length === 0 ? (
           <div className="py-8 text-center">
             <p className="text-sm text-theme-fg-muted">
@@ -132,7 +145,7 @@ export function AssistantBrowserModal({
             ))}
           </div>
         )}
-      </div>
+      </Card>
     </ModalBase>
   );
 }

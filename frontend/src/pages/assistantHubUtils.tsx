@@ -305,46 +305,50 @@ export function AssistantHubDiff({
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-theme-border">
-      <div className="divide-y divide-theme-border">
-        {changes.map((change) => {
-          return (
-            <div
-              key={change.field}
-              className="grid gap-3 bg-theme-bg-primary p-4 md:grid-cols-[180px_1fr]"
-            >
-              <div className="text-sm font-medium text-theme-fg-primary">
-                {normalizeDiffLabel(change.field)}
+    // The frame paints the fill and the rows stay transparent, so the corner
+    // rounds without a clip over them.
+    <Card
+      variant="surface"
+      size="none"
+      bodyClassName="divide-y divide-theme-border"
+    >
+      {changes.map((change) => {
+        return (
+          <div
+            key={change.field}
+            className="grid gap-3 p-4 md:grid-cols-[180px_1fr]"
+          >
+            <div className="text-sm font-medium text-theme-fg-primary">
+              {normalizeDiffLabel(change.field)}
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <div className="mb-1 text-xs font-medium uppercase text-theme-fg-muted">
+                  {t({
+                    id: "assistantHub.diff.previous",
+                    message: "Previous",
+                  })}
+                </div>
+                <pre className="whitespace-pre-wrap break-words rounded bg-theme-bg-secondary p-3 text-sm text-theme-fg-secondary">
+                  {formatDiffValue(change.before, change.field)}
+                </pre>
               </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <div>
-                  <div className="mb-1 text-xs font-medium uppercase text-theme-fg-muted">
-                    {t({
-                      id: "assistantHub.diff.previous",
-                      message: "Previous",
-                    })}
-                  </div>
-                  <pre className="whitespace-pre-wrap break-words rounded bg-theme-bg-secondary p-3 text-sm text-theme-fg-secondary">
-                    {formatDiffValue(change.before, change.field)}
-                  </pre>
+              <div>
+                <div className="mb-1 text-xs font-medium uppercase text-theme-fg-muted">
+                  {t({
+                    id: "assistantHub.diff.current",
+                    message: "Current",
+                  })}
                 </div>
-                <div>
-                  <div className="mb-1 text-xs font-medium uppercase text-theme-fg-muted">
-                    {t({
-                      id: "assistantHub.diff.current",
-                      message: "Current",
-                    })}
-                  </div>
-                  <pre className="whitespace-pre-wrap break-words rounded bg-theme-bg-secondary p-3 text-sm text-theme-fg-primary">
-                    {formatDiffValue(change.after, change.field)}
-                  </pre>
-                </div>
+                <pre className="whitespace-pre-wrap break-words rounded bg-theme-bg-secondary p-3 text-sm text-theme-fg-primary">
+                  {formatDiffValue(change.after, change.field)}
+                </pre>
               </div>
             </div>
-          );
-        })}
-      </div>
-    </div>
+          </div>
+        );
+      })}
+    </Card>
   );
 }
 
@@ -600,7 +604,7 @@ export function AssistantHubVersionOverviewSection({
       : (version.assistant.description ?? "");
 
   return (
-    <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
+    <Card variant="surface" as="section" size="lg">
       <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
         <div
           className="flex min-w-0 items-center gap-4"
@@ -705,7 +709,7 @@ export function AssistantHubVersionOverviewSection({
           ))}
         </div>
       )}
-    </section>
+    </Card>
   );
 }
 
@@ -747,7 +751,7 @@ export function AssistantHubVersionConfigurationSection({
   );
 
   return (
-    <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
+    <Card variant="surface" as="section" size="lg">
       <h2 className="mb-4 text-lg font-semibold text-theme-fg-primary">
         {t({
           id: "assistantHub.detail.configuration",
@@ -842,7 +846,7 @@ export function AssistantHubVersionConfigurationSection({
           {version.assistant.prompt}
         </pre>
       </div>
-    </section>
+    </Card>
   );
 }
 

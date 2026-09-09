@@ -1,12 +1,20 @@
 import { t } from "@lingui/core/macro";
 import { memo, useMemo } from "react";
 
+import { Card } from "@/components/ui/Container/Card";
 import { Button } from "@/components/ui/Controls/Button";
 import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 
 import type { ShareGrant } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { OrganizationMember } from "@/types/sharing";
+import type React from "react";
+
+// The well has never painted a fill of its own — it sits on whatever surface
+// the dialog around it draws — and the card skin's default would give it one.
+const UNFILLED_CARD_STYLE = {
+  "--card-bg": "transparent",
+} as React.CSSProperties;
 
 interface ShareGrantsListProps {
   grants: ShareGrant[];
@@ -68,8 +76,14 @@ export const ShareGrantsList = memo<ShareGrantsListProps>(
     }
 
     return (
-      <div
-        className={`divide-y divide-theme-border rounded-lg border border-theme-border ${className}`}
+      <Card
+        variant="surface"
+        size="none"
+        className={className}
+        // The rows are children of the card's body, so the hairlines between
+        // them have to be drawn there rather than on the frame.
+        bodyClassName="divide-y divide-theme-border"
+        style={UNFILLED_CARD_STYLE}
       >
         {grants.map((grant) => (
           <GrantRow
@@ -80,7 +94,7 @@ export const ShareGrantsList = memo<ShareGrantsListProps>(
             subjectLookup={subjectLookup}
           />
         ))}
-      </div>
+      </Card>
     );
   },
 );

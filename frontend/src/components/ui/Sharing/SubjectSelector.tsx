@@ -3,6 +3,7 @@ import { useLingui } from "@lingui/react";
 import { useMemo, useState, memo } from "react";
 import { useDebounce } from "use-debounce";
 
+import { Card } from "@/components/ui/Container/Card";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { Input } from "@/components/ui/Input/Input";
@@ -14,6 +15,14 @@ import {
 
 import type { ShareGrant } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { OrganizationMember } from "@/types/sharing";
+import type React from "react";
+
+// The results well has never painted a fill of its own — it sits on whatever
+// surface the dialog around it draws — and the card skin's default would give
+// it one.
+const UNFILLED_CARD_STYLE = {
+  "--card-bg": "transparent",
+} as React.CSSProperties;
 
 /** Filter type for subject selector */
 export type SubjectTypeFilter = "all" | "user" | "group";
@@ -184,7 +193,12 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
 
       // Results list
       return (
-        <div className="max-h-64 overflow-y-auto rounded-lg border border-theme-border">
+        <Card
+          variant="surface"
+          size="none"
+          className="max-h-64 overflow-y-auto"
+          style={UNFILLED_CARD_STYLE}
+        >
           {/* Loading state */}
           {(isLoading || isSearching) && filteredSubjects.length === 0 && (
             <div className="py-8 text-center">
@@ -262,7 +276,7 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
               </div>
             </>
           )}
-        </div>
+        </Card>
       );
     };
 

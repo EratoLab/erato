@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { AssistantForm } from "@/components/ui/Assistant/AssistantForm";
+import { Card } from "@/components/ui/Container/Card";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
@@ -303,7 +304,7 @@ export default function AssistantEditPage() {
             </Button>
           </div>
 
-          <div className="rounded-lg border border-theme-border bg-theme-bg-primary p-8">
+          <Card variant="surface" size="xl">
             <AssistantForm
               mode="edit"
               assistantId={id}
@@ -318,7 +319,7 @@ export default function AssistantEditPage() {
               onSubmit={handleSubmit}
               onCancel={handleCancel}
             />
-          </div>
+          </Card>
         </div>
       </div>
 

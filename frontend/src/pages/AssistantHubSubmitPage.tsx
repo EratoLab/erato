@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import { Card } from "@/components/ui/Container/Card";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
@@ -505,7 +506,7 @@ export default function AssistantHubSubmitPage() {
 
           {!isLoading && assistant && config?.enabled && (
             <>
-              <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
+              <Card variant="surface" as="section" size="lg">
                 <h2 className="mb-2 text-lg font-semibold text-theme-fg-primary">
                   {assistant.name}
                 </h2>
@@ -516,9 +517,14 @@ export default function AssistantHubSubmitPage() {
                       "Submission clones the assistant into an immutable snapshot. Future edits to the draft assistant will not change this hub version.",
                   })}
                 </p>
-              </section>
+              </Card>
 
-              <section className="space-y-5 rounded-lg border border-theme-border bg-theme-bg-primary p-6">
+              <Card
+                variant="surface"
+                as="section"
+                size="lg"
+                bodyClassName="space-y-5"
+              >
                 <FormField
                   label={t({
                     id: "assistantHub.submit.description",
@@ -678,9 +684,9 @@ export default function AssistantHubSubmitPage() {
                     }
                   />
                 </FormField>
-              </section>
+              </Card>
 
-              <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
+              <Card variant="surface" as="section" size="lg">
                 <h2 className="mb-2 text-lg font-semibold text-theme-fg-primary">
                   {t({
                     id: "assistantHub.submit.audience",
@@ -698,9 +704,9 @@ export default function AssistantHubSubmitPage() {
                   selectedIds={selectedAudience.map((subject) => subject.id)}
                   onToggleSubject={toggleAudienceSubject}
                 />
-              </section>
+              </Card>
 
-              <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
+              <Card variant="surface" as="section" size="lg">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                   <h2 className="text-lg font-semibold text-theme-fg-primary">
                     {t({
@@ -740,7 +746,7 @@ export default function AssistantHubSubmitPage() {
                     })}
                   </p>
                 )}
-              </section>
+              </Card>
 
               <div className="flex justify-end gap-3">
                 <Button

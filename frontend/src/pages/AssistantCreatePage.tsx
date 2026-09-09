@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { AssistantForm } from "@/components/ui/Assistant/AssistantForm";
+import { Card } from "@/components/ui/Container/Card";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { usePageAlignment } from "@/hooks/ui";
 import {
@@ -109,7 +110,7 @@ export default function AssistantCreatePage() {
       {/* Content */}
       <div className={clsx("flex-1 overflow-auto", horizontalPadding)}>
         <div className={clsx("py-6", containerClasses)}>
-          <div className="rounded-lg border border-theme-border bg-theme-bg-primary p-8">
+          <Card variant="surface" size="xl">
             <AssistantForm
               mode="create"
               availableModels={availableModels}
@@ -119,7 +120,7 @@ export default function AssistantCreatePage() {
               onSubmit={handleSubmit}
               onCancel={handleCancel}
             />
-          </div>
+          </Card>
         </div>
       </div>
     </div>
