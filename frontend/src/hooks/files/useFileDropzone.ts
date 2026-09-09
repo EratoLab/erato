@@ -322,7 +322,10 @@ export function useFileDropzone({
 
           // Check for fetch-like error with status
           if (isUploadTooLarge(uploadError)) {
-            throw new UploadTooLargeError(maxSizeFormatted);
+            throw new UploadTooLargeError(
+              maxSizeFormatted,
+              filesToUpload.map((file) => file.name),
+            );
           }
 
           // Fallback to unknown error

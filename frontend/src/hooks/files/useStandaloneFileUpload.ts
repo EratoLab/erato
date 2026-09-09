@@ -108,7 +108,10 @@ export function useStandaloneFileUpload(): UseStandaloneFileUploadResult {
 
           // Check for file too large error
           if (isUploadTooLarge(uploadError)) {
-            throw new UploadTooLargeError(maxSizeFormatted);
+            throw new UploadTooLargeError(
+              maxSizeFormatted,
+              files.map((file) => file.name),
+            );
           }
 
           // Fallback to unknown error
