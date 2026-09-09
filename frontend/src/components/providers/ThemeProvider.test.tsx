@@ -598,7 +598,9 @@ describe("ThemeProvider", () => {
     const AssetProbe = () => {
       const { assetPaths } = useTheme();
       return (
-        <div data-testid="avatar-path">{assetPaths.assistantAvatar ?? "none"}</div>
+        <div data-testid="avatar-path">
+          {assetPaths.assistantAvatar ?? "none"}
+        </div>
       );
     };
 
@@ -703,15 +705,16 @@ describe("ThemeProvider", () => {
         expect(screen.getByTestId("avatar-path")).toHaveTextContent("none");
       });
 
-      expect(
-        requestedUrls().filter((url) => url === AVATAR_URL),
-      ).toHaveLength(1);
+      expect(requestedUrls().filter((url) => url === AVATAR_URL)).toHaveLength(
+        1,
+      );
     });
 
     it("does not let a light sidebar logo override stand in for the dark one", async () => {
       // A deployment may set only the light variable while shipping the dark
       // file beside theme.json; dark mode must still find that file.
-      const DARK_LOGO_URL = "/public/common/custom-theme/acme/sidebar-logo-dark.svg";
+      const DARK_LOGO_URL =
+        "/public/common/custom-theme/acme/sidebar-logo-dark.svg";
       localStorage.setItem(THEME_MODE_LOCAL_STORAGE_KEY, "dark");
       mockEnv.mockReturnValue(
         createMockEnv({

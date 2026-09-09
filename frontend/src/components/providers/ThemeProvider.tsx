@@ -177,11 +177,7 @@ const resolveThemeAssetPath = async (
     return resolveDeclaredAssetPath(declaredPath, resolvedThemeConfigPath);
   }
 
-  const conventionPath = getConventionAssetPath(
-    key,
-    themeConfig?.name,
-    isDark,
-  );
+  const conventionPath = getConventionAssetPath(key, themeConfig?.name, isDark);
   if (!conventionPath) return null;
 
   if (await probeAssetOnce(conventionPath)) return conventionPath;
@@ -655,9 +651,7 @@ export function ThemeProvider({
       );
 
       if (!isMounted) return;
-      setAssetPaths(
-        Object.fromEntries(entries) as unknown as ThemeAssetPaths,
-      );
+      setAssetPaths(Object.fromEntries(entries) as unknown as ThemeAssetPaths);
     };
 
     void resolveAll();

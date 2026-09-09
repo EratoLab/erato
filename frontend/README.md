@@ -361,11 +361,11 @@ without having to go looking:
 
 Each key accepts three states:
 
-| Value                | Meaning                                                                     |
-| -------------------- | --------------------------------------------------------------------------- |
-| `{ "path": "..." }`  | The pack ships this asset. Used as-is, with no existence check.              |
-| `null`               | The pack deliberately does not ship it. Never requested.                     |
-| key omitted          | Fall back to the filename convention below, checked once per page load.      |
+| Value               | Meaning                                                                 |
+| ------------------- | ----------------------------------------------------------------------- |
+| `{ "path": "..." }` | The pack ships this asset. Used as-is, with no existence check.         |
+| `null`              | The pack deliberately does not ship it. Never requested.                |
+| key omitted         | Fall back to the filename convention below, checked once per page load. |
 
 Set a key to `null` when your pack does not include that asset — that is what
 stops the browser from requesting a file that was never there:

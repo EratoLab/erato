@@ -30,7 +30,8 @@ export const Avatar = React.memo<AvatarProps>(
 
     // Compute assistant avatar path once
     const assistantAvatarPath = useMemo(() => {
-      if (typeof userOrAssistant === "undefined" || userOrAssistant) return null;
+      if (typeof userOrAssistant === "undefined" || userOrAssistant)
+        return null;
 
       // The provider is the only place that knows whether the asset actually
       // exists, so trust its answer -- including a deliberate null. Falling
