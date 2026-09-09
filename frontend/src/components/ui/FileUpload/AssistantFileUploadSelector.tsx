@@ -288,6 +288,17 @@ export const AssistantFileUploadSelector: React.FC<
               className={className}
             />
           )}
+          {maxSizeFormatted && (
+            <p
+              className="mt-1 text-xs text-[var(--theme-fg-muted)]"
+              data-testid="assistant-upload-max-size"
+            >
+              {t({
+                id: "upload.maxSizeHint",
+                message: `Maximum file size: ${maxSizeFormatted}`,
+              })}
+            </p>
+          )}
         </>
       ) : (
         <FileUploadButton

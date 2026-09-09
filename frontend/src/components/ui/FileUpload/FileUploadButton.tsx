@@ -1,5 +1,5 @@
 import { t } from "@lingui/core/macro";
-import { memo, Suspense } from "react";
+import { memo, Suspense, useId } from "react";
 import { useDropzone } from "react-dropzone";
 import { ErrorBoundary } from "react-error-boundary";
 
@@ -74,6 +74,7 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
     onError,
   }) => {
     const { maxSizeBytes, maxSizeFormatted } = useUploadFeature();
+    const maxSizeHintId = useId();
     const setStoreError = useFileUploadStore((state) => state.setError);
     const reportError = onError ?? setStoreError;
 
@@ -120,6 +121,17 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
       return <FileUploadError error={uploadError} className={className} />;
     }
 
+    // The limit rides a description rather than the accessible name: the name
+    // is what tests and screen-reader users address the button by, and it
+    // should stay the action. Icon-only gets it as a tooltip too, having no
+    // room to show it.
+    const maxSizeHint = maxSizeFormatted
+      ? t({
+          id: "upload.maxSizeHint",
+          message: `Maximum file size: ${maxSizeFormatted}`,
+        })
+      : null;
+
     return (
       <div {...getRootProps({ className: "contents" })}>
         <input {...getInputProps()} />
@@ -139,10 +151,23 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
           onClick={open}
           disabled={disabled || isUploading}
           aria-label={iconOnly ? label : undefined}
+          aria-describedby={maxSizeHint ? maxSizeHintId : undefined}
+          title={iconOnly ? (maxSizeHint ?? undefined) : undefined}
           icon={<PlusIcon className="size-5" />}
         >
           {!iconOnly && <span>{label}</span>}
         </Button>
+        {maxSizeHint && (
+          <span
+            id={maxSizeHintId}
+            className={
+              iconOnly ? "sr-only" : "text-xs text-[var(--theme-fg-muted)]"
+            }
+            data-testid="file-upload-max-size"
+          >
+            {maxSizeHint}
+          </span>
+        )}
       </div>
     );
   },

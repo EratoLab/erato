@@ -4195,6 +4195,13 @@ msgstr ""
 msgid "upload.error.unsupportedFileType"
 msgstr "Type(s) de fichier non pris en charge : {filenames}"
 
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/Chat.tsx
+#: src/components/ui/FileUpload/AssistantFileUploadSelector.tsx
+#: src/components/ui/FileUpload/FileUploadButton.tsx
+msgid "upload.maxSizeHint"
+msgstr "Taille de fichier maximale : {maxSizeFormatted}"
+
 # ==============================
 # Unstable IDs
 # ==============================

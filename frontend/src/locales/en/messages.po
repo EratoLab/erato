@@ -4195,6 +4195,13 @@ msgstr "An unknown error occurred during upload. Please reload the page and try 
 msgid "upload.error.unsupportedFileType"
 msgstr "Unsupported file type(s): {filenames}"
 
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/Chat.tsx
+#: src/components/ui/FileUpload/AssistantFileUploadSelector.tsx
+#: src/components/ui/FileUpload/FileUploadButton.tsx
+msgid "upload.maxSizeHint"
+msgstr "Maximum file size: {maxSizeFormatted}"
+
 # ==============================
 # Unstable IDs
 # ==============================

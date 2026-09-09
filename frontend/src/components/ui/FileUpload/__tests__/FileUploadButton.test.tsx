@@ -61,6 +61,27 @@ describe("FileUploadButton", () => {
     expect(button.className).toContain("btn-geometry-icon-sm");
   });
 
+  it("describes the configured limit without changing the accessible name", () => {
+    render(<FileUploadButton label="Attach" iconOnly />);
+
+    // The name stays the action; the limit is a description and a tooltip.
+    const button = screen.getByRole("button", { name: "Attach" });
+    const hint = screen.getByTestId("file-upload-max-size");
+
+    expect(hint).toHaveTextContent("Maximum file size: 20 MB");
+    expect(button).toHaveAttribute("aria-describedby", hint.id);
+    expect(button).toHaveAttribute("title", "Maximum file size: 20 MB");
+  });
+
+  it("shows the limit as visible text when the button carries a label", () => {
+    render(<FileUploadButton label="Attach files" iconOnly={false} />);
+
+    const hint = screen.getByTestId("file-upload-max-size");
+
+    expect(hint).toHaveTextContent("Maximum file size: 20 MB");
+    expect(hint.className).not.toContain("sr-only");
+  });
+
   it("uses control geometry and renders the label when not icon-only", () => {
     render(<FileUploadButton label="Attach files" iconOnly={false} />);
 
