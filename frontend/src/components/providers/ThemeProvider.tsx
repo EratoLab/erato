@@ -9,15 +9,21 @@ import {
   useState,
 } from "react";
 
+import { env } from "@/app/env";
 import { defaultTheme, darkTheme } from "@/config/theme";
 import {
   defaultThemeConfig,
   loadResolvedThemeConfig,
+  resolveDeclaredAssetPath,
   resolveIconPaths,
 } from "@/config/themeConfig";
+import { debugLog } from "@/utils/debugLogger";
 import {
+  checkFileExists,
   mergeThemeWithOverrides,
+  THEME_ASSET_KEYS,
   type CustomThemeConfig,
+  type ThemeAssetKey,
 } from "@/utils/themeUtils";
 
 import type { Theme } from "@/config/theme";
@@ -66,6 +72,127 @@ type ThemeContextType = {
     actions?: Record<string, string>;
     navigation?: Record<string, string>;
   };
+  /**
+   * Resolved locations of the optional theme assets, or null when the active
+   * theme does not provide one. Already accounts for the current light/dark
+   * mode, so consumers can render the value directly.
+   */
+  assetPaths: ThemeAssetPaths;
+};
+
+/** Resolved location of each optional theme asset, or null when unavailable. */
+export type ThemeAssetPaths = Record<ThemeAssetKey, string | null>;
+
+const EMPTY_ASSET_PATHS: ThemeAssetPaths = {
+  assistantAvatar: null,
+  sidebarLogo: null,
+};
+
+/**
+ * Existence probes for convention-located assets, keyed by URL.
+ *
+ * Module-level so a missing asset costs one request per page load rather than
+ * one per component mount. Promises (not booleans) are cached so concurrent
+ * callers share a single in-flight request.
+ */
+const assetProbeCache = new Map<string, Promise<boolean>>();
+
+const probeAssetOnce = (url: string): Promise<boolean> => {
+  const cached = assetProbeCache.get(url);
+  if (cached) return cached;
+
+  const probe = checkFileExists(url);
+  assetProbeCache.set(url, probe);
+  return probe;
+};
+
+/** Exported for tests; resets the per-page probe memoisation. */
+export const __resetThemeAssetProbeCache = () => {
+  assetProbeCache.clear();
+};
+
+/**
+ * Environment overrides win over everything: an operator setting these is
+ * asserting the file is there, so no existence check is performed.
+ *
+ * Each mode reads only its own variable. A light-mode override deliberately
+ * does not stand in for a missing dark one, so a deployment that sets
+ * `VITE_SIDEBAR_LOGO_PATH` while shipping `sidebar-logo-dark.svg` beside
+ * `theme.json` keeps getting the dark file in dark mode.
+ */
+const getAssetEnvOverride = (
+  key: ThemeAssetKey,
+  isDark: boolean,
+): string | null => {
+  const { themeAssistantAvatarPath, sidebarLogoPath, sidebarLogoDarkPath } =
+    env();
+
+  // The assistant avatar has a single variable covering both modes.
+  if (key === "assistantAvatar") return themeAssistantAvatarPath;
+  return isDark ? sidebarLogoDarkPath : sidebarLogoPath;
+};
+
+const getConventionAssetPath = (
+  key: ThemeAssetKey,
+  themeName: string | undefined,
+  isDark: boolean,
+): string | null =>
+  key === "assistantAvatar"
+    ? defaultThemeConfig.getAssistantAvatarPath(themeName)
+    : defaultThemeConfig.getSidebarLogoPath(themeName, isDark);
+
+/**
+ * Works out where an optional asset lives, in precedence order:
+ *
+ * 1. environment override -- trusted, never probed
+ * 2. `theme.json` declares it -- trusted, never probed
+ * 3. `theme.json` declares it as `null` -- deliberately absent, never requested
+ * 4. neither -- fall back to the filename convention, probed once
+ *
+ * The gap between (3) and (4) is why this reads `key in assets` rather than
+ * testing the value for truthiness: collapsing `null` into "undeclared" would
+ * reintroduce the very request the declaration exists to prevent.
+ */
+const resolveThemeAssetPath = async (
+  key: ThemeAssetKey,
+  options: {
+    themeConfig: CustomThemeConfig | null;
+    resolvedThemeConfigPath: string | null;
+    isDark: boolean;
+  },
+): Promise<string | null> => {
+  const { themeConfig, resolvedThemeConfigPath, isDark } = options;
+
+  const envOverride = getAssetEnvOverride(key, isDark);
+  if (envOverride) return envOverride;
+
+  const assets = themeConfig?.assets;
+  if (assets && key in assets) {
+    const declaration = assets[key];
+    // Explicit `null` means "this pack does not ship it" -- stop here.
+    if (!declaration) return null;
+
+    const declaredPath =
+      isDark && declaration.darkPath ? declaration.darkPath : declaration.path;
+    return resolveDeclaredAssetPath(declaredPath, resolvedThemeConfigPath);
+  }
+
+  const conventionPath = getConventionAssetPath(
+    key,
+    themeConfig?.name,
+    isDark,
+  );
+  if (!conventionPath) return null;
+
+  if (await probeAssetOnce(conventionPath)) return conventionPath;
+
+  debugLog(
+    "UI",
+    `Optional theme asset "${key}" was not found at ${conventionPath}. ` +
+      `Add "assets": { "${key}": { "path": "./..." } } to theme.json to point at it, ` +
+      `or "assets": { "${key}": null } to stop looking for it.`,
+  );
+  return null;
 };
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -413,6 +540,13 @@ export function ThemeProvider({
     actions?: Record<string, string>;
     navigation?: Record<string, string>;
   }>();
+  const [assetPaths, setAssetPaths] =
+    useState<ThemeAssetPaths>(EMPTY_ASSET_PATHS);
+  // Optional assets must not be resolved until the theme load has settled:
+  // before then `customThemeConfig` is still null, so a pack that declares an
+  // asset as absent would be indistinguishable from one that declares nothing
+  // and we would fire the very request the declaration exists to prevent.
+  const [isThemeLoadSettled, setIsThemeLoadSettled] = useState(false);
   const [systemThemeOverride, setSystemThemeOverride] = useState<
     "light" | "dark" | null
   >(null);
@@ -427,8 +561,11 @@ export function ThemeProvider({
       setResolvedThemeConfigPath(null);
       setIsCustomTheme(false);
       setIconMappings(undefined);
+      setIsThemeLoadSettled(true);
       return;
     }
+
+    setIsThemeLoadSettled(false);
 
     const loadTheme = async () => {
       const loadedTheme = await loadResolvedThemeConfig(defaultThemeConfig);
@@ -446,6 +583,7 @@ export function ThemeProvider({
         // instead of themeConfig.name (e.g., "ACME Theme") which is the display name
         const resolvedIcons = resolveIconPaths(themeConfig.icons, undefined);
         setIconMappings(resolvedIcons);
+        setIsThemeLoadSettled(true);
         return;
       }
 
@@ -453,6 +591,7 @@ export function ThemeProvider({
       setResolvedThemeConfigPath(null);
       setIsCustomTheme(false);
       setIconMappings(undefined);
+      setIsThemeLoadSettled(true);
     };
 
     void loadTheme();
@@ -491,6 +630,48 @@ export function ThemeProvider({
       removeThemeStylesheets();
     };
   }, [customThemeConfig, enableCustomTheme, resolvedThemeConfigPath]);
+
+  // Resolve the optional theme assets once per theme/mode, so consumers can
+  // render a path without each one probing for the file itself.
+  useEffect(() => {
+    if (!isThemeLoadSettled) return;
+
+    let isMounted = true;
+    const isDark = effectiveTheme === "dark";
+
+    const resolveAll = async () => {
+      const entries = await Promise.all(
+        THEME_ASSET_KEYS.map(
+          async (key) =>
+            [
+              key,
+              await resolveThemeAssetPath(key, {
+                themeConfig: enableCustomTheme ? customThemeConfig : null,
+                resolvedThemeConfigPath,
+                isDark,
+              }),
+            ] as const,
+        ),
+      );
+
+      if (!isMounted) return;
+      setAssetPaths(
+        Object.fromEntries(entries) as unknown as ThemeAssetPaths,
+      );
+    };
+
+    void resolveAll();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    customThemeConfig,
+    effectiveTheme,
+    enableCustomTheme,
+    isThemeLoadSettled,
+    resolvedThemeConfigPath,
+  ]);
 
   // Listen for system preference changes when in system mode
   useEffect(() => {
@@ -611,6 +792,7 @@ export function ThemeProvider({
     effectiveTheme,
     setSystemThemeOverride,
     iconMappings,
+    assetPaths,
   };
 
   return (
@@ -626,4 +808,16 @@ export function useTheme() {
     throw new Error("useTheme must be used within a ThemeProvider");
   }
   return context;
+}
+
+/**
+ * Theme context when a provider is present, `undefined` otherwise.
+ *
+ * Ubiquitous leaf components (avatars, for instance) get rendered in tests and
+ * stories without a provider, and throwing there would be the wrong trade: a
+ * component that merely wants to *style* itself should not hard-require the
+ * provider.
+ */
+export function useOptionalTheme() {
+  return useContext(ThemeContext);
 }

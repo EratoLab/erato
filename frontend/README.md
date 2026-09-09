@@ -324,7 +324,9 @@ public/custom-theme/my-company/
 ├── theme.css              # Optional, loaded after fonts.css
 ├── logo.svg
 ├── logo-dark.svg
-└── assistant-avatar.svg
+├── assistant-avatar.svg    # Optional, see "Optional Assets"
+├── sidebar-logo.svg        # Optional, see "Optional Assets"
+└── sidebar-logo-dark.svg   # Optional, see "Optional Assets"
 ```
 
 When `VITE_THEME_CONFIG_PATH` points at a specific `theme.json`, `fonts.css` and `theme.css` are resolved relative to that resolved file path. Otherwise they follow the active theme pack directory from `VITE_THEME_PATH`, `VITE_CUSTOMER_NAME`, or the default `/custom-theme/` location.
@@ -339,6 +341,46 @@ You can also provide custom logos for your theme:
    - `/custom-theme/{customer-name}/logo.svg` - Main logo
    - `/custom-theme/{customer-name}/logo-dark.svg` - Dark mode logo (optional)
 
+### Optional Assets
+
+The assistant avatar and the sidebar logo are optional: a theme pack may ship
+them or not. Declare them in `theme.json` so the app knows which case applies
+without having to go looking:
+
+```json
+{
+  "assets": {
+    "assistantAvatar": { "path": "./assistant-avatar.svg" },
+    "sidebarLogo": {
+      "path": "./sidebar-logo.svg",
+      "darkPath": "./sidebar-logo-dark.svg"
+    }
+  }
+}
+```
+
+Each key accepts three states:
+
+| Value                | Meaning                                                                     |
+| -------------------- | --------------------------------------------------------------------------- |
+| `{ "path": "..." }`  | The pack ships this asset. Used as-is, with no existence check.              |
+| `null`               | The pack deliberately does not ship it. Never requested.                     |
+| key omitted          | Fall back to the filename convention below, checked once per page load.      |
+
+Set a key to `null` when your pack does not include that asset — that is what
+stops the browser from requesting a file that was never there:
+
+```json
+{
+  "assets": { "assistantAvatar": null, "sidebarLogo": null }
+}
+```
+
+`darkPath` is optional and falls back to `path`. Declared paths follow the same
+rules as `icons`: `./file.svg` (or a bare `file.svg`) resolves against the theme
+pack directory, `/file.svg` is treated as deployment-absolute, and absolute URLs
+are used verbatim.
+
 ### Custom Assistant Avatar
 
 You can customize the assistant's avatar image to match your branding:
@@ -349,7 +391,8 @@ You can customize the assistant's avatar image to match your branding:
 
    - `/custom-theme/{customer-name}/assistant-avatar.svg` - Assistant avatar image
 
-   The avatar will be automatically detected and loaded when available.
+   When the file is not declared under `assets`, it is checked for once per page
+   load and used when present.
 
 2. **Using Environment Variables**:
 
