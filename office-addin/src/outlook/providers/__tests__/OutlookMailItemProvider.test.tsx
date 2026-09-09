@@ -4,7 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockAsyncResult } from "../../../test/helpers/asyncResult";
 import {
   installMockMailbox,
+  installMultiSelectSupport,
   uninstallMockMailbox,
+  uninstallMultiSelectSupport,
 } from "../../../test/mocks/outlook/mailbox";
 import {
   OutlookMailItemProvider,
@@ -86,6 +88,17 @@ function makeAppointmentCompose(overrides: Record<string, unknown> = {}) {
     },
     getAttachmentsAsync: (cb: (r: unknown) => void) =>
       cb(createMockAsyncResult([])),
+    ...overrides,
+  };
+}
+
+function makeSelectedItem(overrides: Record<string, unknown> = {}) {
+  return {
+    conversationId: "conv-thread",
+    itemId: "sel-1",
+    itemMode: "read",
+    itemType: "message",
+    subject: "Quarterly report",
     ...overrides,
   };
 }
@@ -263,5 +276,187 @@ describe("OutlookMailItemProvider", () => {
     for (const call of mailbox.removeHandlerAsync.mock.calls) {
       expect(call[1]).toBeUndefined();
     }
+  });
+
+  // Clicking a collapsed conversation header on OWA / new Outlook selects every
+  // message in the stack, so the host reports no `mailbox.item` at all even
+  // though a thread is genuinely selected — the live selection is the only
+  // place that context still exists.
+  describe("selection probe", () => {
+    function answerWithSelection(details: unknown[]) {
+      mailbox.getSelectedItemsAsync.mockImplementation((callback) =>
+        callback(createMockAsyncResult(details)),
+      );
+    }
+
+    beforeEach(() => {
+      // The capability guard is read inside the read effect, so the host shape
+      // has to be in place before the first render.
+      installMultiSelectSupport();
+    });
+
+    afterEach(() => {
+      uninstallMultiSelectSupport();
+    });
+
+    it("summarises the selected conversation when the host reports no item", async () => {
+      mailbox.item = null;
+      answerWithSelection([
+        makeSelectedItem(),
+        makeSelectedItem({ itemId: "sel-2" }),
+      ]);
+
+      await renderProvider();
+
+      expect(captured?.selectedConversation).toEqual({
+        conversationId: "conv-thread",
+        itemId: "sel-1",
+        messageCount: 2,
+      });
+      // A conversation names no single message, so nothing may stand in for
+      // one: item-bound executors (reply) have to keep failing closed.
+      expect(captured?.mailItem).toBeNull();
+      expect(captured?.itemIdentity).toBeNull();
+    });
+
+    // Exchange SE regression lock: SE caps at Mailbox 1.5, far below what the
+    // probe needs, and the shared Office stub models it by leaving
+    // `context.requirements` undefined. A capability question the host cannot
+    // answer at all must count as unsupported — no Office call may be issued.
+    it("issues no probe on a host that reports no requirement sets", async () => {
+      uninstallMultiSelectSupport();
+      mailbox.item = null;
+      answerWithSelection([makeSelectedItem()]);
+
+      await renderProvider();
+
+      expect(mailbox.getSelectedItemsAsync).not.toHaveBeenCalled();
+      expect(captured?.selectedConversation).toBeNull();
+    });
+
+    // `getSelectedItemsAsync` itself is Mailbox 1.13, but the only field the
+    // probe consumes — `SelectedItemDetails.conversationId` — is 1.14, so a
+    // 1.13 host would answer with entries that summarise to nothing. The
+    // shared helper reports every set as supported, hence the local stub.
+    it("does not probe a host that stops short of Mailbox 1.14", async () => {
+      // Answers "supported" for everything except the set the probe requires.
+      (Office.context as unknown as Record<string, unknown>).requirements = {
+        isSetSupported: (set: string, version: string) =>
+          !(set === "Mailbox" && version === "1.14"),
+      };
+      mailbox.item = null;
+      answerWithSelection([makeSelectedItem()]);
+
+      await renderProvider();
+
+      expect(mailbox.getSelectedItemsAsync).not.toHaveBeenCalled();
+      expect(captured?.selectedConversation).toBeNull();
+    });
+
+    it("clears the conversation when a later probe fails", async () => {
+      mailbox.item = null;
+      answerWithSelection([makeSelectedItem()]);
+      await renderProvider();
+      expect(captured?.selectedConversation).not.toBeNull();
+
+      // Nothing pre-clears on the probe path — that would blink the pane on
+      // every header click — so a failed answer has to commit the null itself
+      // or the previous thread stays mounted for good.
+      mailbox.getSelectedItemsAsync.mockImplementation((callback) =>
+        callback(
+          createMockAsyncResult([], "failed", {
+            message: "The operation failed.",
+            code: "5001",
+          }),
+        ),
+      );
+      const handler = mailbox.addHandlerAsync.mock.calls[0][1] as () => void;
+      await act(async () => {
+        handler();
+      });
+
+      expect(captured?.selectedConversation).toBeNull();
+      expect(captured?.mailItem).toBeNull();
+    });
+
+    // Pins the raw-item gate: an appointment in read/attendee mode narrows to
+    // "no supported item", but the host does have an item open — probing there
+    // would mount a mail conversation while a calendar item is on screen.
+    it("never probes while an appointment read item is open", async () => {
+      mailbox.item = makeReadItem({ itemType: "appointment" });
+      answerWithSelection([makeSelectedItem()]);
+
+      await renderProvider();
+
+      expect(mailbox.getSelectedItemsAsync).not.toHaveBeenCalled();
+      expect(captured?.selectedConversation).toBeNull();
+      expect(captured?.mailItem).toBeNull();
+    });
+
+    it("clears the conversation once a real item is selected", async () => {
+      mailbox.item = null;
+      answerWithSelection([makeSelectedItem()]);
+      await renderProvider();
+      expect(captured?.selectedConversation).not.toBeNull();
+
+      const handler = mailbox.addHandlerAsync.mock.calls[0][1] as () => void;
+      mailbox.item = makeReadItem();
+      await act(async () => {
+        handler();
+      });
+
+      expect(captured?.selectedConversation).toBeNull();
+      expect(captured?.mailItem?.internetMessageId).toBe("<read-1@x>");
+    });
+
+    // The probe outlives the selection that started it: a host can answer after
+    // the user has already opened a message, and that late answer must lose.
+    it("discards a probe answer that lands after a real item is selected", async () => {
+      mailbox.item = null;
+      // Hold the probe open — the mock never answers on its own.
+      mailbox.getSelectedItemsAsync.mockImplementation(() => {});
+      await renderProvider();
+
+      const handler = mailbox.addHandlerAsync.mock.calls[0][1] as () => void;
+      mailbox.item = makeReadItem();
+      await act(async () => {
+        handler();
+      });
+
+      const answerProbe = mailbox.getSelectedItemsAsync.mock.calls[0][0];
+      await act(async () => {
+        answerProbe(createMockAsyncResult([makeSelectedItem()]));
+      });
+
+      expect(captured?.selectedConversation).toBeNull();
+      expect(captured?.mailItem?.internetMessageId).toBe("<read-1@x>");
+    });
+
+    // Deliberate trade-off, pinned here because every FINAL state is identical
+    // either way and only the intermediate frame differs: header → header keeps
+    // the previous conversation staged until the host answers, rather than
+    // blanking the pane on every header click. Bounded by the probe round-trip
+    // (SELECTED_ITEMS_TIMEOUT_MS worst case) — a late answer from the earlier
+    // probe still loses, per the test above.
+    it("keeps the previous conversation staged while the next probe is in flight", async () => {
+      mailbox.item = null;
+      answerWithSelection([makeSelectedItem()]);
+      await renderProvider();
+      expect(captured?.selectedConversation?.conversationId).toBe(
+        "conv-thread",
+      );
+
+      // Hold the second probe open: the host reports no item for a header
+      // click, so the effect re-enters the same branch with nothing to swap in.
+      mailbox.getSelectedItemsAsync.mockImplementation(() => {});
+      const handler = mailbox.addHandlerAsync.mock.calls[0][1] as () => void;
+      await act(async () => {
+        handler();
+      });
+
+      expect(captured?.selectedConversation?.conversationId).toBe(
+        "conv-thread",
+      );
+    });
   });
 });

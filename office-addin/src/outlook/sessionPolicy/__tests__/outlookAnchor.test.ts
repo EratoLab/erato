@@ -5,10 +5,13 @@ import {
   composeInheritsAnchorsEqual,
   isMessageRead,
   outlookAnchorFromItem,
+  outlookAnchorFromSelectedConversation,
   resolveSupportedMailboxItem,
   strictAnchorsEqual,
+  summarizeSelectedConversation,
 } from "../outlookAnchor";
 
+import type { OutlookSelectedConversation } from "../outlookAnchor";
 import type { OutlookSessionAnchor } from "../types";
 
 const read = (conv: string | null): OutlookSessionAnchor => ({
@@ -214,5 +217,158 @@ describe("outlookAnchorFromItem", () => {
     const second = outlookAnchorFromItem(appointmentComposeItem("series-1"));
     expect(first?.itemIdentity).not.toBe(second?.itemIdentity);
     expect(strictAnchorsEqual(first, second)).toBe(false);
+  });
+});
+
+// Minimal selection shapes — `Office.SelectedItemDetails` carries a dozen
+// fields the summariser never reads. `conversationId` is typed non-optional
+// but only arrives with Mailbox 1.14, so the fixture can leave it out.
+const selectedMessage = (
+  itemId: string,
+  conv: string | null,
+  overrides: { itemMode?: string; itemType?: string } = {},
+) =>
+  ({
+    itemId,
+    itemMode: "read",
+    itemType: "message",
+    ...(conv === null ? {} : { conversationId: conv }),
+    ...overrides,
+  }) as unknown as Office.SelectedItemDetails;
+
+// Clicking a collapsed thread header selects every message in the stack. The
+// host decides the order (Office.js only promises "the order in which messages
+// were selected"), so "m-3" stands in for whatever entry it happens to list
+// first — the summariser is only ever asked to take that one.
+const threadHeaderSelection = [
+  selectedMessage("m-3", "T1"),
+  selectedMessage("m-2", "T1"),
+  selectedMessage("m-1", "T1"),
+];
+
+const conversationSelection = (conv: string): OutlookSelectedConversation => ({
+  conversationId: conv,
+  itemId: "m-3",
+  messageCount: 3,
+});
+
+describe("summarizeSelectedConversation", () => {
+  it("returns null when there is no selection to summarise", () => {
+    expect(summarizeSelectedConversation(null)).toBeNull();
+    expect(summarizeSelectedConversation(undefined)).toBeNull();
+    expect(summarizeSelectedConversation([])).toBeNull();
+  });
+
+  it("summarises a whole-thread selection, keeping the host's first entry", () => {
+    expect(summarizeSelectedConversation(threadHeaderSelection)).toEqual({
+      conversationId: "T1",
+      itemId: "m-3",
+      messageCount: 3,
+    });
+  });
+
+  it("compares itemMode/itemType case-insensitively", () => {
+    expect(
+      summarizeSelectedConversation([
+        selectedMessage("m-1", "T1", { itemMode: "Read", itemType: "Message" }),
+      ]),
+    ).toEqual({ conversationId: "T1", itemId: "m-1", messageCount: 1 });
+  });
+
+  it("keeps meaning message when the host omits itemType", () => {
+    const withoutItemType = {
+      itemId: "m-1",
+      itemMode: "read",
+      conversationId: "T1",
+    } as unknown as Office.SelectedItemDetails;
+    expect(summarizeSelectedConversation([withoutItemType])).toEqual({
+      conversationId: "T1",
+      itemId: "m-1",
+      messageCount: 1,
+    });
+  });
+
+  it("returns null when the entries span more than one conversation", () => {
+    expect(
+      summarizeSelectedConversation([
+        selectedMessage("m-1", "T1"),
+        selectedMessage("m-2", "T2"),
+      ]),
+    ).toBeNull();
+  });
+
+  it("returns null when the host reports no conversationId", () => {
+    // `conversationId` only exists from Mailbox 1.14, so its absence doubles
+    // as the version gate: a 1.13 host can list the selection but cannot name
+    // the thread, and an unnamed thread must never anchor a session.
+    expect(
+      summarizeSelectedConversation([
+        selectedMessage("m-1", null),
+        selectedMessage("m-2", null),
+      ]),
+    ).toBeNull();
+    expect(
+      summarizeSelectedConversation([
+        selectedMessage("m-1", "T1"),
+        selectedMessage("m-2", null),
+      ]),
+    ).toBeNull();
+  });
+
+  it("returns null when any entry is not in read mode", () => {
+    expect(
+      summarizeSelectedConversation([
+        selectedMessage("m-1", "T1"),
+        selectedMessage("m-2", "T1", { itemMode: "compose" }),
+      ]),
+    ).toBeNull();
+    const withoutItemMode = {
+      itemId: "m-1",
+      itemType: "message",
+      conversationId: "T1",
+    } as unknown as Office.SelectedItemDetails;
+    expect(summarizeSelectedConversation([withoutItemMode])).toBeNull();
+  });
+
+  it("returns null when any entry is an appointment", () => {
+    expect(
+      summarizeSelectedConversation([
+        selectedMessage("m-1", "T1"),
+        selectedMessage("m-2", "T1", { itemType: "appointment" }),
+      ]),
+    ).toBeNull();
+  });
+});
+
+describe("outlookAnchorFromSelectedConversation", () => {
+  it("derives a read anchor and never mints an item identity", () => {
+    const anchor = outlookAnchorFromSelectedConversation(
+      conversationSelection("T1"),
+    );
+    expect(anchor).toEqual({ conversationId: "T1", isCompose: false });
+    // Nothing in a header selection names a single message, so item-bound
+    // executors (reply, insert) must keep failing closed on a null identity.
+    expect(anchor.itemIdentity).toBeUndefined();
+  });
+
+  it("compares equal to the read anchor of a message in that conversation", () => {
+    // This is the assertion that proves the change introduces no spurious
+    // ask-toasts: clicking the header of the thread you are already reading
+    // resumes silently, while another thread's header stays a real context
+    // change. It CANNOT prove that a real host reports `conversationId` in
+    // the same format from `getSelectedItemsAsync` as from `mailbox.item` —
+    // that needs a live check on OWA / new Outlook on Windows.
+    expect(
+      strictAnchorsEqual(
+        outlookAnchorFromSelectedConversation(conversationSelection("T1")),
+        outlookAnchorFromItem(readItem("T1")),
+      ),
+    ).toBe(true);
+    expect(
+      strictAnchorsEqual(
+        outlookAnchorFromSelectedConversation(conversationSelection("T1")),
+        outlookAnchorFromItem(readItem("T2")),
+      ),
+    ).toBe(false);
   });
 });

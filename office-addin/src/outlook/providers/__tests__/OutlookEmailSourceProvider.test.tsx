@@ -7,6 +7,7 @@ import {
   useOutlookEmailSource,
 } from "../OutlookEmailSourceProvider";
 
+import type { OutlookSelectedConversation } from "../../sessionPolicy";
 import type { OutlookMessageFetcher } from "../../utils/fetchOutlookMessage";
 import type { ParsedThread, ThreadMessage } from "../../utils/parsedThread";
 
@@ -109,6 +110,8 @@ describe("OutlookEmailSourceProvider — current-thread emailBodyFile", () => {
         subject: "Project kickoff",
         isComposeMode: false,
       },
+      // An item is open, so the host never reports a bare selection.
+      selectedConversation: null,
       attachments: [],
       isLoadingAttachments: false,
       getAttachmentFile: vi.fn(),
@@ -206,7 +209,9 @@ describe("OutlookEmailSourceProvider — current-thread emailBodyFile", () => {
 });
 
 describe("OutlookEmailSourceProvider — compose reply-context via the dispatched fetcher", () => {
-  function primeComposeMode() {
+  function primeComposeMode(
+    selectedConversation: OutlookSelectedConversation | null = null,
+  ) {
     mockUseOutlookMailItem.mockReturnValue({
       itemIdentity: "id-2",
       // No itemId but a conversationId => the compose reply-context path.
@@ -217,6 +222,7 @@ describe("OutlookEmailSourceProvider — compose reply-context via the dispatche
         subject: "Re: Project kickoff",
         isComposeMode: true,
       },
+      selectedConversation,
       attachments: [],
       isLoadingAttachments: false,
       getAttachmentFile: vi.fn(),
@@ -275,6 +281,127 @@ describe("OutlookEmailSourceProvider — compose reply-context via the dispatche
     );
     expect(captured!.isLoadingParentReplyContext).toBe(false);
   });
+
+  // A draft has a conversationId but no itemId, which is exactly the shape the
+  // header-selection fallback fills in — so an unconsumed selection could
+  // otherwise lend the draft an itemId, flipping it out of the compose
+  // reply-context path and into a read-mode thread fetch.
+  it("ignores a lingering header selection while a draft is open", async () => {
+    primeComposeMode({
+      conversationId: "leaked-conv",
+      itemId: "leaked-item",
+      messageCount: 4,
+    });
+    const fetchParentMessageInConversation = vi.fn(async () => ({
+      subject: "Re: Project kickoff",
+      fromName: "Alice",
+      fromAddress: "alice@x",
+    }));
+    mockUseOutlookMessageFetcher.mockReturnValue({
+      fetcher: {
+        fetchParentMessageInConversation,
+      } as unknown as OutlookMessageFetcher,
+      unavailableReason: null,
+    });
+
+    renderProvider();
+
+    expect(mockUseCurrentThread).toHaveBeenCalledWith(null, "conv-9", null);
+    await waitFor(() => {
+      expect(fetchParentMessageInConversation).toHaveBeenCalledWith(
+        "conv-9",
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+    });
+  });
+});
+
+describe("OutlookEmailSourceProvider — collapsed conversation header selection", () => {
+  const headerSelection: OutlookSelectedConversation = {
+    conversationId: "conv-1",
+    itemId: "item-9",
+    messageCount: 3,
+  };
+
+  function primeHeaderSelection(
+    selectedConversation: OutlookSelectedConversation | null,
+  ) {
+    const fetchConversationMessages = vi.fn();
+    mockUseOutlookMailItem.mockReturnValue({
+      // A header click selects every message in the stack, so the host resolves
+      // no single item: no identity, no mailItem — only the selection. The
+      // attachments here belong to no reachable item and must stay unstaged.
+      itemIdentity: null,
+      mailItem: null,
+      selectedConversation,
+      attachments: [
+        {
+          id: "att-1",
+          name: "Deck.pdf",
+          isInline: false,
+          attachmentType: "file",
+          size: 700,
+        },
+      ],
+      isLoadingAttachments: true,
+      getAttachmentFile: vi.fn(),
+    });
+    mockUseOutlookMessageFetcher.mockReturnValue({
+      fetcher: {
+        fetchConversationMessages,
+      } as unknown as OutlookMessageFetcher,
+      unavailableReason: null,
+    });
+    return fetchConversationMessages;
+  }
+
+  it("fetches and stages the conversation the host selection names when there is no mail item", () => {
+    const fetchConversationMessages = primeHeaderSelection(headerSelection);
+    mockUseCurrentThread.mockReturnValue({
+      thread: makeThread(),
+      isLoading: false,
+      error: false,
+    });
+
+    renderProvider();
+
+    expect(mockUseCurrentThread).toHaveBeenCalledWith(
+      "item-9",
+      "conv-1",
+      fetchConversationMessages,
+    );
+    expect(captured!.stagedEmails).toHaveLength(1);
+    expect(captured!.stagedEmails[0]).toMatchObject({
+      source: "current-thread",
+      key: "current-thread:conv-1",
+    });
+    expect(captured!.hasSelectedEmailSource).toBe(true);
+    expect(captured!.emailBodyFile).not.toBeNull();
+    // The selection names a conversation, never an item, so the item-bound
+    // Office.js attachment list stays out of reach — the thread .eml carries
+    // the attachments instead.
+    expect(captured!.selectedAttachmentItems).toEqual([]);
+    expect(captured!.isLoadingAttachments).toBe(false);
+  });
+
+  it("stays fail-closed when the host reports neither an item nor a selection", () => {
+    const fetchConversationMessages = primeHeaderSelection(null);
+    mockUseCurrentThread.mockReturnValue({
+      thread: null,
+      isLoading: false,
+      error: false,
+    });
+
+    renderProvider();
+
+    expect(mockUseCurrentThread).toHaveBeenCalledWith(
+      null,
+      null,
+      fetchConversationMessages,
+    );
+    expect(captured!.stagedEmails).toEqual([]);
+    expect(captured!.hasSelectedEmailSource).toBe(false);
+  });
 });
 
 describe("OutlookEmailSourceProvider — appointment isolation", () => {
@@ -290,6 +417,7 @@ describe("OutlookEmailSourceProvider — appointment isolation", () => {
         subject: "Planning session",
         isComposeMode: true,
       },
+      selectedConversation: null,
       attachments: [
         {
           id: "agenda",
@@ -326,5 +454,51 @@ describe("OutlookEmailSourceProvider — appointment isolation", () => {
     });
     expect(files).toEqual([]);
     expect(getAttachmentFile).not.toHaveBeenCalled();
+  });
+
+  it("still refuses to fetch a conversation for an open appointment once a live selection can supply one", () => {
+    const fetchConversationMessages = vi.fn();
+    mockUseOutlookMailItem.mockReturnValue({
+      itemIdentity: "appointment:2",
+      mailItem: {
+        itemKind: "appointment",
+        itemId: "saved-appointment",
+        conversationId: "must-not-be-used",
+        subject: "Planning session",
+        isComposeMode: true,
+      },
+      // A stale selection the provider must ignore outright: an open
+      // appointment is an open item, so the header-selection fallback is off
+      // and this conversation may never be staged as email context.
+      selectedConversation: {
+        conversationId: "leaked-conv",
+        itemId: "leaked-item",
+        messageCount: 2,
+      },
+      attachments: [],
+      isLoadingAttachments: false,
+      getAttachmentFile: vi.fn(),
+    });
+    mockUseCurrentThread.mockReturnValue({
+      thread: null,
+      isLoading: false,
+      error: false,
+    });
+    mockUseOutlookMessageFetcher.mockReturnValue({
+      fetcher: {
+        fetchConversationMessages,
+      } as unknown as OutlookMessageFetcher,
+      unavailableReason: null,
+    });
+
+    renderProvider();
+
+    expect(mockUseCurrentThread).toHaveBeenCalledWith(
+      null,
+      null,
+      fetchConversationMessages,
+    );
+    expect(captured!.stagedEmails).toEqual([]);
+    expect(captured!.hasSelectedEmailSource).toBe(false);
   });
 });

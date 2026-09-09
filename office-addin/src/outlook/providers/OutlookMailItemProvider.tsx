@@ -15,6 +15,8 @@ import {
   isAppointmentCompose,
   isMessageRead,
   resolveSupportedMailboxItem,
+  summarizeSelectedConversation,
+  type OutlookSelectedConversation,
   type SupportedOutlookItem,
 } from "../sessionPolicy";
 
@@ -64,6 +66,12 @@ export interface OutlookMailItemData {
 interface OutlookMailItemContextValue {
   itemIdentity: string | null;
   mailItem: OutlookMailItemData | null;
+  // The conversation named by the LIVE host selection when no item is open at
+  // all. Clicking a collapsed conversation header on OWA / new Outlook selects
+  // every message in the stack, which leaves `mailbox.item` null even though a
+  // thread is genuinely selected. Null on hosts below Mailbox 1.14, and
+  // whenever any item is open, appointment read included.
+  selectedConversation: OutlookSelectedConversation | null;
   attachments: OutlookAttachmentData[];
   isLoading: boolean;
   isLoadingAttachments: boolean;
@@ -81,6 +89,7 @@ interface OutlookMailItemContextValue {
 const OutlookMailItemContext = createContext<OutlookMailItemContextValue>({
   itemIdentity: null,
   mailItem: null,
+  selectedConversation: null,
   attachments: [],
   isLoading: true,
   isLoadingAttachments: false,
@@ -396,6 +405,32 @@ export const EMPTY_APPOINTMENT_SNAPSHOT: AppointmentComposeSnapshot = {
 // hanging the caller — at send time that would hold the user's message.
 const APPOINTMENT_READ_TIMEOUT_MS = 5_000;
 
+// The probe leaves the previous selection in place until the host answers, so
+// a dropped callback must not be allowed to pin it forever.
+const SELECTED_ITEMS_TIMEOUT_MS = 5_000;
+
+/**
+ * Whether the host can answer a live-selection probe. Gated on Mailbox **1.14**
+ * rather than the 1.13 that introduced `getSelectedItemsAsync`, because the
+ * only field the probe consumes — `SelectedItemDetails.conversationId` — is
+ * 1.14. Exchange SE caps at Mailbox 1.5, so this returns false and no Office
+ * call is ever issued there. The method is checked separately: a host can
+ * report the requirement set without shipping the API.
+ */
+function isSelectedItemsProbeSupported(): boolean {
+  try {
+    if (typeof Office === "undefined" || !Office.context?.requirements) {
+      return false;
+    }
+    return (
+      Office.context.requirements.isSetSupported("Mailbox", "1.14") &&
+      typeof Office.context.mailbox?.getSelectedItemsAsync === "function"
+    );
+  } catch {
+    return false;
+  }
+}
+
 function readOptionalProperty<TRaw, TValue>(
   property:
     | {
@@ -543,6 +578,8 @@ export function OutlookMailItemProvider({
 }) {
   const [itemIdentity, setItemIdentity] = useState<string | null>(null);
   const [mailItem, setMailItem] = useState<OutlookMailItemData | null>(null);
+  const [selectedConversation, setSelectedConversation] =
+    useState<OutlookSelectedConversation | null>(null);
   const [attachments, setAttachments] = useState<OutlookAttachmentData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingAttachments, setIsLoadingAttachments] = useState(true);
@@ -586,7 +623,8 @@ export function OutlookMailItemProvider({
   useEffect(() => {
     // Organizer appointment compose is a first-class surface. Appointment
     // attendee/read items still resolve to neutral context and fail closed.
-    const item = resolveSupportedMailboxItem(Office.context.mailbox.item);
+    const rawItem = Office.context.mailbox.item;
+    const item = resolveSupportedMailboxItem(rawItem);
     const selectionVersion = selectionVersionRef.current + 1;
     selectionVersionRef.current = selectionVersion;
     currentItemRef.current = item;
@@ -618,9 +656,30 @@ export function OutlookMailItemProvider({
       setAttachments([]);
       setIsLoading(false);
       setIsLoadingAttachments(false);
+      // `!rawItem`, not `!item`: an appointment in read/attendee mode narrows
+      // to null too, and probing there would leave a message conversation
+      // mounted while a calendar item is open.
+      if (!rawItem && isSelectedItemsProbeSupported()) {
+        void callOfficeAsync<Office.SelectedItemDetails[]>(
+          (callback) => Office.context.mailbox.getSelectedItemsAsync(callback),
+          { timeoutMs: SELECTED_ITEMS_TIMEOUT_MS },
+        )
+          .then(summarizeSelectedConversation)
+          // Silent on purpose: a pinned pane with nothing selected is a normal,
+          // frequent state that hosts report as a failure here (new Outlook on
+          // Mac answers with error 5001), so warning would only spam.
+          .catch(() => null)
+          .then((selection) => {
+            if (!canCommit()) return;
+            setSelectedConversation(selection);
+          });
+      } else {
+        setSelectedConversation(null);
+      }
       return;
     }
 
+    setSelectedConversation(null);
     setAttachments([]);
     if (isAppointmentCompose(item)) {
       // Appointment attachments must never surface as email context — the
@@ -763,6 +822,7 @@ export function OutlookMailItemProvider({
       value={{
         itemIdentity,
         mailItem,
+        selectedConversation,
         attachments,
         isLoading,
         isLoadingAttachments,
