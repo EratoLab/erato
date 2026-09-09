@@ -181,6 +181,44 @@ describe("Row", () => {
     expect(row.className).not.toContain("gap-");
   });
 
+  it("emits the list geometry, its own hook and a focus-visible ring", () => {
+    render(
+      <Row variant="list" data-testid="list-row">
+        Pirate
+      </Row>,
+    );
+
+    const row = screen.getByTestId("list-row");
+
+    expect(row).toHaveClass("list-row-geometry", "flex", "focus-ring-inset");
+    expect(row).toHaveAttribute("data-ui", "list-row");
+    // A plain list has no roving walk, so the menu's `:focus` recipe would put
+    // an active surface on a row the user merely tabbed past.
+    expect(row.className).not.toContain("focus:ring-1");
+    expect(row.className).toContain("hover:bg-theme-bg-hover");
+    // Cross axis belongs to the site: these rows stack their lines.
+    expect(row.className).not.toContain("items-");
+    expect(row.className).not.toContain("px-");
+  });
+
+  it("keeps the list row out of the roving walk", () => {
+    render(
+      <>
+        <Row variant="list" data-testid="list-row">
+          Pirate
+        </Row>
+        <Row variant="menu" role="menuitem">
+          Rename
+        </Row>
+      </>,
+    );
+
+    // `data-row-item` is how the menus find their navigable rows. A list row
+    // shares the primitive but not the menu, and must never be walked into.
+    expect(document.querySelectorAll(`[data-row-item]`)).toHaveLength(1);
+    expect(screen.getByTestId("list-row")).not.toHaveAttribute("data-row-item");
+  });
+
   it("never writes an inline style", () => {
     render(
       <>

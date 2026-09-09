@@ -977,6 +977,16 @@ body {
   background-color: var(--theme-shell-sidebar-selected);
 }
 
+/* Rows in a plain vertical list — the mention browser today, the pickers once
+   their frame-with-a-checkbox shape has a variant. Radius only: these rows sit
+   in wells with very different padding, so the site keeps its own. They read
+   radius.control rather than radius.shell because they are choices with a
+   selected state, which is the same reason the option cards beside them do.
+   Unlayered, so a customer theme.css rule wins without a specificity fight. */
+.list-row-geometry {
+  border-radius: var(--theme-radius-control);
+}
+
 /* Drag affordance on the expanded sidebar's right edge. The cursor is
    iconoir's HorizontalSplit serialized as a data URI (SVG cursors don't
    inherit CSS color, so the stroke is baked per theme); the ew-resize keyword
