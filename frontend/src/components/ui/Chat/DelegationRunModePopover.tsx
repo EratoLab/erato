@@ -3,9 +3,10 @@ import { useEffect, useRef } from "react";
 
 import { useRovingMenuFocus } from "@/hooks/ui/useRovingMenuFocus";
 
-import { ADD_MENU_ITEM_SELECTOR, AddMenuActionRow } from "./ChatInputAddMenu";
+import { ADD_MENU_ITEM_SELECTOR } from "./ChatInputAddMenu";
 import { AnchoredPopover } from "../Controls/AnchoredPopover";
 import { PopoverChrome, PopoverSectionHeader } from "../Controls/PopoverPanel";
+import { Row } from "../Controls/Row";
 
 import type { DelegationRunMode } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -124,31 +125,43 @@ export function DelegationRunModePopover({
             message: "How should mentioned assistants run?",
           })}
         </PopoverSectionHeader>
-        <AddMenuActionRow
-          label={t({
-            id: "chatInput.delegationRunMode.wait.label",
-            message: "Wait for the answer",
-          })}
+        {/* Both rows always carry a second line, so the body goes through
+            Row's `description` slot rather than being written out. The testid
+            has to land on the row itself: the focus effect above queries it
+            and focuses whatever it finds. */}
+        <Row
+          variant="menu"
+          role="menuitem"
+          tabIndex={-1}
+          data-testid="chat-input-delegation-run-mode-wait"
+          onClick={() => onChoose(undefined)}
           description={t({
             id: "chatInput.delegationRunMode.wait.description",
             message: "The answer arrives in this conversation.",
           })}
-          testId="chat-input-delegation-run-mode-wait"
-          onActivate={() => onChoose(undefined)}
-        />
-        <AddMenuActionRow
-          label={t({
-            id: "chatInput.delegationRunMode.background.label",
-            message: "Run in the background",
+        >
+          {t({
+            id: "chatInput.delegationRunMode.wait.label",
+            message: "Wait for the answer",
           })}
+        </Row>
+        <Row
+          variant="menu"
+          role="menuitem"
+          tabIndex={-1}
+          data-testid="chat-input-delegation-run-mode-background"
+          onClick={() => onChoose("background")}
           description={t({
             id: "chatInput.delegationRunMode.background.description",
             message:
               "The answer will not arrive in this conversation; it stays in a separate chat.",
           })}
-          testId="chat-input-delegation-run-mode-background"
-          onActivate={() => onChoose("background")}
-        />
+        >
+          {t({
+            id: "chatInput.delegationRunMode.background.label",
+            message: "Run in the background",
+          })}
+        </Row>
       </PopoverChrome>
     </AnchoredPopover>
   );

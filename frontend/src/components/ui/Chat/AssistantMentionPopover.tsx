@@ -3,9 +3,10 @@ import { useCallback, useEffect, useImperativeHandle, useRef } from "react";
 
 import { useRovingMenuFocus } from "@/hooks/ui/useRovingMenuFocus";
 
-import { ADD_MENU_ITEM_SELECTOR, AddMenuActionRow } from "./ChatInputAddMenu";
+import { ADD_MENU_ITEM_SELECTOR } from "./ChatInputAddMenu";
 import { AnchoredPopover } from "../Controls/AnchoredPopover";
 import { PopoverChrome, PopoverSeparator } from "../Controls/PopoverPanel";
+import { Row } from "../Controls/Row";
 
 import type { MentionableAssistant } from "@/hooks/chat/useMentionableAssistants";
 import type { KeyboardEvent as ReactKeyboardEvent, Ref } from "react";
@@ -162,23 +163,45 @@ export function AssistantMentionPopover({
         dataUi="chat-input-mention-menu-content"
       >
         {assistants.map((assistant) => (
-          <AddMenuActionRow
+          <Row
             key={assistant.id}
-            label={assistant.name}
-            description={assistant.description}
-            testId={`chat-input-mention-option-${assistant.id}`}
-            onActivate={() => onSelect(assistant)}
-          />
+            variant="menu"
+            role="menuitem"
+            tabIndex={-1}
+            data-testid={`chat-input-mention-option-${assistant.id}`}
+            onClick={() => onSelect(assistant)}
+          >
+            {/* The body is written out rather than handed to Row's
+                `description` slot: the name truncates whether or not the
+                assistant has a description, and Row drops the wrapper when
+                there is none. */}
+            <span className="min-w-0 flex-1">
+              <span className="block truncate">{assistant.name}</span>
+              {assistant.description && (
+                <span className="block truncate text-xs text-theme-fg-muted">
+                  {assistant.description}
+                </span>
+              )}
+            </span>
+          </Row>
         ))}
         <PopoverSeparator />
-        <AddMenuActionRow
-          label={t({
-            id: "chatInput.mentions.browse",
-            message: "Browse assistants…",
-          })}
-          testId="chat-input-mention-browse"
-          onActivate={onBrowse}
-        />
+        <Row
+          variant="menu"
+          role="menuitem"
+          tabIndex={-1}
+          data-testid="chat-input-mention-browse"
+          onClick={onBrowse}
+        >
+          <span className="min-w-0 flex-1">
+            <span className="block truncate">
+              {t({
+                id: "chatInput.mentions.browse",
+                message: "Browse assistants…",
+              })}
+            </span>
+          </span>
+        </Row>
       </PopoverChrome>
     </AnchoredPopover>
   );

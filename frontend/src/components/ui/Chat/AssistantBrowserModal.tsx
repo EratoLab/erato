@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/Input/Input";
 import { useFuzzySearch } from "@/hooks/search/useFuzzySearch";
 
+import { Row } from "../Controls/Row";
 import { ModalBase } from "../Modal/ModalBase";
 
 import type { MentionableAssistant } from "@/hooks/chat/useMentionableAssistants";
@@ -102,14 +103,17 @@ export function AssistantBrowserModal({
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-theme-border">
+          // Inset by the row corner rather than divided by hairlines: once a
+          // row paints a rounded hover fill, a full-bleed rule between two of
+          // them cuts across the corner it just drew.
+          <div className="flex flex-col gap-0.5 p-1">
             {matches.map((assistant) => (
-              <button
+              <Row
                 key={assistant.id}
-                type="button"
+                variant="list"
                 onClick={() => handleSelect(assistant)}
                 data-testid={`chat-input-mention-browse-option-${assistant.id}`}
-                className="theme-transition focus-ring-tight flex w-full flex-col items-start gap-1 px-4 py-3 text-left hover:bg-theme-bg-hover"
+                className="w-full flex-col items-start gap-1 px-3 py-2"
               >
                 <span className="w-full truncate font-medium text-theme-fg-primary">
                   {assistant.name}
@@ -124,7 +128,7 @@ export function AssistantBrowserModal({
                     {assistant.ownerEmail}
                   </span>
                 )}
-              </button>
+              </Row>
             ))}
           </div>
         )}

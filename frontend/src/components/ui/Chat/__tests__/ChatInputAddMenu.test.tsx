@@ -1,6 +1,7 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { Row } from "../../Controls/Row";
 import { ChatInputAddMenu } from "../ChatInputAddMenu";
 
 /**
@@ -68,5 +69,177 @@ describe("ChatInputAddMenu", () => {
     render(<ChatInputAddMenu fileSources={fileSources} disabled />);
 
     expect(screen.getByTestId("chat-input-add-menu-trigger")).toBeDisabled();
+  });
+
+  /**
+   * `extraContent` is a seam an out-of-repo host can fill with its own markup,
+   * so the injected row here is a raw button carrying the row marker by hand
+   * rather than a `Row`. It must take its place in the walk by document order,
+   * not by where it sits in the selector.
+   *
+   * The same walk pins which rows drop out: a natively-disabled row is skipped,
+   * an `aria-disabled` one is not. An unavailable tool has to stay reachable to
+   * say why it is unavailable.
+   */
+  it("roves over injected and own rows in document order, skipping only natively-disabled ones", () => {
+    render(
+      <ChatInputAddMenu
+        fileSources={[
+          { id: "upload", label: "Upload from Computer", onSelect: vi.fn() },
+          {
+            id: "cloud",
+            label: "Sharepoint",
+            onSelect: vi.fn(),
+            disabled: true,
+          },
+        ]}
+        extraContent={() => (
+          <button
+            type="button"
+            role="menuitem"
+            tabIndex={-1}
+            data-row-item=""
+            data-testid="injected-row"
+          >
+            Email thread
+          </button>
+        )}
+        tools={[
+          {
+            id: "search",
+            label: "Web search",
+            checked: false,
+            onToggle: vi.fn(),
+          },
+          {
+            id: "code",
+            label: "Code interpreter",
+            checked: false,
+            disabled: true,
+            onToggle: vi.fn(),
+          },
+        ]}
+      />,
+    );
+
+    // detail 1 is a pointer open, which leaves focus on the panel; a
+    // keyboard open would have focused the first row already.
+    fireEvent.click(screen.getByTestId("chat-input-add-menu-trigger"), {
+      detail: 1,
+    });
+    const menu = screen.getByRole("menu");
+
+    // The unavailable tool announces itself rather than vanishing from the
+    // keyboard walk; the unavailable file source is natively disabled and does.
+    expect(screen.getByTestId("chat-input-add-menu-tool-code")).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(screen.getByText("Sharepoint").closest("button")).toBeDisabled();
+
+    const walk: (string | null)[] = [];
+    for (let step = 0; step < 4; step += 1) {
+      fireEvent.keyDown(menu, { key: "ArrowDown" });
+      walk.push(
+        (document.activeElement as HTMLElement | null)?.textContent ?? null,
+      );
+    }
+
+    expect(walk).toEqual([
+      "Upload from Computer",
+      "Email thread",
+      "Web search",
+      "Code interpreter",
+    ]);
+  });
+
+  /**
+   * The add-in injects status lines — "Loading email thread…", a persistent
+   * thread-load error — as non-interactive `Row`s. They render as plain divs
+   * with no role and no tab stop, so `.focus()` on one does nothing: were they
+   * in the selector, the walk would recompute the same index on every key and
+   * never move again, and the error line would wall off the menu for good.
+   */
+  it("steps over non-interactive rows instead of stalling on them", () => {
+    render(
+      <ChatInputAddMenu
+        fileSources={[
+          { id: "upload", label: "Upload from Computer", onSelect: vi.fn() },
+        ]}
+        extraContent={() => (
+          <>
+            <Row variant="menu" as="div" interactive={false} tone="muted">
+              Loading email thread...
+            </Row>
+            <Row variant="menu" role="menuitem" tabIndex={-1}>
+              Email thread
+            </Row>
+          </>
+        )}
+        tools={[
+          {
+            id: "search",
+            label: "Web search",
+            checked: false,
+            onToggle: vi.fn(),
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("chat-input-add-menu-trigger"), {
+      detail: 1,
+    });
+    const menu = screen.getByRole("menu");
+
+    const walk: (string | null)[] = [];
+    for (let step = 0; step < 4; step += 1) {
+      fireEvent.keyDown(menu, { key: "ArrowDown" });
+      walk.push(
+        (document.activeElement as HTMLElement | null)?.textContent ?? null,
+      );
+    }
+
+    expect(walk).toEqual([
+      "Upload from Computer",
+      "Email thread",
+      "Web search",
+      "Upload from Computer",
+    ]);
+  });
+
+  /**
+   * The worst shape is a menu whose first panel child is a status line: with
+   * uploads unavailable the host passes no file sources at all, so a keyboard
+   * open would aim `initialFocusSelector` at something that cannot take focus
+   * and the menu would open with focus nowhere.
+   */
+  it("opens on the first navigable row when a status line comes first", async () => {
+    render(
+      <ChatInputAddMenu
+        fileSources={[]}
+        extraContent={() => (
+          <>
+            <Row variant="menu" as="div" interactive={false} tone="error">
+              Couldn&apos;t load this conversation from the server.
+            </Row>
+            <Row variant="menu" role="menuitem" tabIndex={-1}>
+              Email thread
+            </Row>
+          </>
+        )}
+      />,
+    );
+
+    // detail 0 is a keyboard activation, which focuses the first row on open.
+    fireEvent.click(screen.getByTestId("chat-input-add-menu-trigger"), {
+      detail: 0,
+    });
+
+    await waitFor(() => {
+      expect((document.activeElement as HTMLElement | null)?.textContent).toBe(
+        "Email thread",
+      );
+    });
   });
 });

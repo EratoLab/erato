@@ -20,6 +20,7 @@ import { createLogger } from "@/utils/debugLogger";
 import { ChatAttentionStatusDot } from "./ChatAttentionStatusDot";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { DropdownMenu } from "../Controls/DropdownMenu";
+import { Row } from "../Controls/Row";
 import { SpinnerIcon } from "../Feedback/SpinnerIcon";
 import {
   EditIcon,
@@ -213,18 +214,17 @@ const ChatHistoryListItem = memo<{
             message: "Pin",
           });
     const rowBody = (
-      <InteractiveContainer
-        useDiv={true}
-        showFocusRing={false}
+      // Row owns the row geometry, the selected fill and the hover tint; the
+      // column flow stays here because the sidebar variant sets no axis.
+      <Row
+        variant="sidebar"
+        as="div"
+        selected={isActive}
         className={clsx(
-          "sidebar-content-col-geometry sidebar-trailing-col-geometry sidebar-row-geometry theme-transition flex flex-col py-1.5 pb-3.5 text-left",
-          isActive
-            ? "sidebar-row-selected"
-            : "hover:bg-[var(--theme-shell-sidebar-hover)]",
+          "sidebar-content-col-geometry sidebar-trailing-col-geometry flex-col py-1.5 pb-3.5",
           layout === "compact" ? "gap-0.5" : "gap-1",
         )}
         data-chat-id={session.id}
-        data-selected={isActive || undefined}
         data-ui="chat-history-item"
       >
         <div className="flex items-center justify-between gap-2">
@@ -350,7 +350,7 @@ const ChatHistoryListItem = memo<{
             )}
           </>
         )}
-      </InteractiveContainer>
+      </Row>
     );
 
     // A host without the web app's chat routes (the add-in pane) has no tab
@@ -517,12 +517,18 @@ export const ChatHistoryListSkeleton = ({
     className="flex w-full min-w-0 flex-col gap-1"
   >
     {/* Container and row geometry mirror the real list exactly (inset comes
-        from the host wrapper) so nothing shifts when loading finishes. */}
+        from the host wrapper) so nothing shifts when loading finishes. The
+        mirror is the same component, so it cannot drift; `flex-col` is the
+        site's, as on the real row, because Row sets no axis. */}
     {Array.from({ length: 5 }, (_, i) => (
-      <div
+      <Row
         key={i}
+        variant="sidebar"
+        as="div"
+        interactive={false}
+        selected
         data-testid="chat-history-skeleton-item"
-        className="sidebar-content-col-geometry sidebar-row-geometry sidebar-row-selected w-full py-1.5 pb-3.5 pr-1.5"
+        className="sidebar-content-col-geometry flex-col py-1.5 pb-3.5 pr-1.5"
       >
         <div className="flex w-full items-center justify-between gap-2">
           <div className="h-5 w-2/3 animate-pulse rounded bg-theme-bg-accent" />
@@ -531,7 +537,7 @@ export const ChatHistoryListSkeleton = ({
         {layout !== "compact" && (
           <div className="mt-2 h-4 w-4/5 animate-pulse rounded bg-theme-bg-accent" />
         )}
-      </div>
+      </Row>
     ))}
   </div>
 );

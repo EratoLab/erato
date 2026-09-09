@@ -21,6 +21,7 @@ import {
   PopoverSectionHeader,
   PopoverSeparator,
 } from "./PopoverPanel";
+import { Row } from "./Row";
 import { ConfirmationDialog } from "../Modal/ConfirmationDialog";
 import { MoreVertical, CheckIcon } from "../icons";
 
@@ -74,7 +75,10 @@ export interface DropdownMenuProps {
 }
 
 // Navigable rows for roving focus and initial keyboard focus; natively-disabled
-// items are skipped so arrow keys land only on actionable rows.
+// items are skipped so arrow keys land only on actionable rows. Deliberately
+// keyed on the role and not on Row's `data-row-item`: only rows this menu built
+// are navigable, and `useClickOutside` reads the same role, so the contract
+// stays in one place.
 // eslint-disable-next-line lingui/no-unlocalized-strings -- CSS selector, not user-facing
 const MENU_ITEM_SELECTOR = '[role="menuitem"]:not(:disabled)';
 
@@ -88,48 +92,45 @@ const MenuItem = memo(
     onSelect: (e: React.MouseEvent) => void;
     noWrap?: boolean;
   }) => (
-    <button
-      className={clsx(
-        "dropdown-item-geometry",
-        "w-full text-left text-sm",
-        "flex items-center gap-2",
-        "theme-transition",
-        "disabled:cursor-not-allowed disabled:opacity-50",
-        // Keyboard-active row: soft rounded highlight with a faint 1px inset
-        // border — deliberately lighter than hover/selected and free of the
-        // old 2px focus ring, so an arrowed-to item reads as "active" not
-        // "pre-selected" (ERMAIN-467).
-        "focus:outline-none focus:ring-1 focus:ring-inset",
-        noWrap && "whitespace-nowrap",
-        item.variant === "danger"
-          ? "text-theme-error-fg hover:bg-theme-error-bg focus:bg-theme-error-bg focus:ring-theme-error-border"
-          : "text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary focus:bg-theme-bg-hover focus:text-theme-fg-primary focus:ring-theme-border-dropdown",
-      )}
+    <Row
+      variant="menu"
+      tone={item.variant === "danger" ? "error" : "neutral"}
+      className={noWrap ? "whitespace-nowrap" : undefined}
       onClick={onSelect}
       disabled={item.disabled}
       role="menuitem"
       tabIndex={-1}
-      type="button"
+      leading={
+        item.icon && (
+          <span className="size-4 shrink-0" aria-hidden="true">
+            {item.icon}
+          </span>
+        )
+      }
+      // A shortcut and a check are both end-of-row marks, and Row hands the
+      // end of the row to one node. `checked` here is a tick, not state: the
+      // row stays a `menuitem`, on which `aria-checked` would be invalid.
+      trailing={
+        item.shortcut || item.checked ? (
+          <>
+            {item.shortcut && (
+              <span className="text-xs text-theme-fg-muted">
+                {item.shortcut}
+              </span>
+            )}
+            {item.checked && (
+              <span className="text-theme-fg-primary">
+                <CheckIcon className="size-4" />
+              </span>
+            )}
+          </>
+        ) : undefined
+      }
     >
-      {item.icon && (
-        <span className="size-4 shrink-0" aria-hidden="true">
-          {item.icon}
-        </span>
-      )}
       <span className={clsx("flex-1", noWrap && "whitespace-nowrap")}>
         {item.label}
       </span>
-      {item.shortcut && (
-        <span className="ml-auto text-xs text-theme-fg-muted">
-          {item.shortcut}
-        </span>
-      )}
-      {item.checked && (
-        <span className="ml-auto text-theme-fg-primary">
-          <CheckIcon className="size-4" />
-        </span>
-      )}
-    </button>
+    </Row>
   ),
 );
 

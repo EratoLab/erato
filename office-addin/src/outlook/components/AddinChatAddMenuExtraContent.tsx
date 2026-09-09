@@ -1,4 +1,8 @@
-import { PopoverSectionHeader, useChatContext } from "@erato/frontend/library";
+import {
+  PopoverSectionHeader,
+  Row,
+  useChatContext,
+} from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useCallback, useMemo, useState } from "react";
 
@@ -7,12 +11,6 @@ import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 
 import type { ChatAddMenuExtraContentProps } from "@erato/frontend/library";
-
-// Same row recipe as the shared "+" menu / DropdownMenu item channel, so
-// customer themes retune these injected rows together with every other menu.
-const rowClassName =
-  "dropdown-item-geometry theme-transition flex w-full items-start justify-between gap-2 text-left text-sm text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary focus:bg-theme-bg-hover focus:text-theme-fg-primary focus:outline-none focus:ring-1 focus:ring-inset focus:ring-theme-border-dropdown disabled:cursor-not-allowed disabled:opacity-50";
-const infoRowClassName = "dropdown-item-geometry text-xs";
 
 function formatFileSize(size: number): string {
   if (!Number.isFinite(size) || size <= 0) {
@@ -166,33 +164,45 @@ export function AddinChatAddMenuExtraContent({
       </PopoverSectionHeader>
 
       {isLoadingEmailBody && (
-        <div className={`${infoRowClassName} text-theme-fg-muted`}>
+        <Row
+          variant="menu"
+          as="div"
+          interactive={false}
+          tone="muted"
+          className="text-xs"
+        >
           {t({
             id: "officeAddin.fileSource.loadingEmailThread",
             message: "Loading email thread...",
           })}
-        </div>
+        </Row>
       )}
 
       {!isLoadingEmailBody && emailThreadLoadError && (
-        <div className={`${infoRowClassName} text-theme-error-fg`}>
+        <Row
+          variant="menu"
+          as="div"
+          interactive={false}
+          tone="error"
+          className="text-xs"
+        >
           {t({
             id: "officeAddin.fileSource.emailThreadLoadError",
             message:
               "Couldn't load this conversation from the server. Some messages or attachments may be missing — try reopening the item.",
           })}
-        </div>
+        </Row>
       )}
 
       {emailBodyFile &&
         (() => {
           const isAlreadyAdded = isSuggestionEligible && !isEmailBodyDismissed;
           return (
-            <button
-              type="button"
+            <Row
+              variant="menu"
+              align="start"
               role="menuitem"
               tabIndex={-1}
-              data-add-menu-item=""
               onClick={handleSelectEmailBody}
               disabled={
                 isBusy ||
@@ -202,9 +212,20 @@ export function AddinChatAddMenuExtraContent({
               }
               title={emailBodyFile.name}
               data-testid="addin-add-menu-email-thread"
-              className={rowClassName}
+              trailing={
+                <span className="shrink-0 text-xs text-theme-fg-muted">
+                  {isThreadEmlStale
+                    ? t({
+                        id: "officeAddin.fileSource.updatingThread",
+                        message: "Updating…",
+                      })
+                    : formatFileSize(emailBodyFile.size)}
+                </span>
+              }
             >
-              <div className="min-w-0">
+              {/* The body takes the row's free space so a long name truncates
+                  rather than pushing at the size text after it. */}
+              <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">
                   {t({
                     id: "officeAddin.fileSource.emailThread",
@@ -220,25 +241,23 @@ export function AddinChatAddMenuExtraContent({
                     : emailBodyFile.name}
                 </div>
               </div>
-              <span className="shrink-0 text-xs text-theme-fg-muted">
-                {isThreadEmlStale
-                  ? t({
-                      id: "officeAddin.fileSource.updatingThread",
-                      message: "Updating…",
-                    })
-                  : formatFileSize(emailBodyFile.size)}
-              </span>
-            </button>
+            </Row>
           );
         })()}
 
       {isLoadingAttachments && (
-        <div className={`${infoRowClassName} text-theme-fg-muted`}>
+        <Row
+          variant="menu"
+          as="div"
+          interactive={false}
+          tone="muted"
+          className="text-xs"
+        >
           {t({
             id: "officeAddin.fileSource.loadingAttachments",
             message: "Loading attachments...",
           })}
-        </div>
+        </Row>
       )}
 
       {selectableAttachments.map((attachment) => {
@@ -249,12 +268,12 @@ export function AddinChatAddMenuExtraContent({
           !dismissedAttachmentIds.includes(attachment.id);
 
         return (
-          <button
+          <Row
             key={attachment.id}
-            type="button"
+            variant="menu"
+            align="start"
             role="menuitem"
             tabIndex={-1}
-            data-add-menu-item=""
             onClick={() => handleSelectAttachment(attachment.id)}
             disabled={
               isBusy ||
@@ -265,9 +284,13 @@ export function AddinChatAddMenuExtraContent({
             }
             title={attachment.name}
             data-testid={`addin-add-menu-attachment-${attachment.id}`}
-            className={rowClassName}
+            trailing={
+              <span className="shrink-0 text-xs text-theme-fg-muted">
+                {formatFileSize(attachment.size)}
+              </span>
+            }
           >
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-medium">
                 {attachment.name}
               </div>
@@ -290,10 +313,7 @@ export function AddinChatAddMenuExtraContent({
                       })}
               </div>
             </div>
-            <span className="shrink-0 text-xs text-theme-fg-muted">
-              {formatFileSize(attachment.size)}
-            </span>
-          </button>
+          </Row>
         );
       })}
     </>

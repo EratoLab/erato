@@ -322,6 +322,17 @@ describe("ChatHistoryFilterMenu", () => {
     expect(row).toHaveClass("dropdown-item-geometry");
 
     fireEvent.click(row);
+    // A row whose flyout is up stays lit. The pair that does it is part of the
+    // row primitive's recipe, so no call site has to out-specify the row's own
+    // resting colour. That the pair outranks that resting colour is compiled
+    // and checked in `styles/__tests__/menuRowStateVariants.test.ts`; that the
+    // surface it paints is the panel's hover colour is a Row play story, which
+    // runs in Storybook and not in CI.
+    expect(row).toHaveAttribute("aria-expanded", "true");
+    expect(row).toHaveClass(
+      "aria-expanded:bg-theme-bg-hover",
+      "aria-expanded:text-theme-fg-primary",
+    );
     const submenu = screen.getByTestId("chat-history-filter-menu-submenu");
     expect(submenu).toHaveClass("anchored-popover-skin");
     expect(submenu).toHaveClass("dropdown-panel-chrome-geometry");

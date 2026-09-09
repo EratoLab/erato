@@ -1,5 +1,6 @@
 import {
   MessageTimestamp,
+  Row,
   toast,
   type ToastAction,
 } from "@erato/frontend/library";
@@ -41,11 +42,6 @@ const defaultChatTitle = () =>
     id: "officeAddin.sessionAsk.untitledChat",
     message: "Untitled chat",
   });
-
-const sidebarRowStyle = {
-  minHeight: "var(--theme-spacing-sidebar-row-height)",
-  borderRadius: "var(--theme-radius-shell)",
-} as const;
 
 /**
  * Show the "switched conversation, what now?" toast. Three actions:
@@ -141,16 +137,21 @@ function RecentChatPicker({ chats, onPick }: RecentChatPickerProps) {
       {chats.map((chat) => {
         const title = chat.title?.trim() || defaultChatTitle();
         return (
-          <button
+          // The focus ring moves inside the row here: the sidebar variant
+          // draws `focus-ring-inset`, replacing the outset 2px ring this site
+          // used to spell out. It is the same width and colour, and the row
+          // sits flush against the left edge of a container that computes
+          // `overflow-x: auto`, so the outset half of the old ring was clipped
+          // on that side anyway.
+          <Row
             key={chat.id}
-            type="button"
+            variant="sidebar"
             onClick={() => {
               onPick(chat.id);
               dismissPicker();
             }}
             title={title}
-            style={sidebarRowStyle}
-            className="theme-transition flex w-full flex-col gap-0.5 px-3 py-1.5 text-left hover:bg-[var(--theme-shell-sidebar-hover)] focus-visible:bg-[var(--theme-shell-sidebar-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus"
+            className="flex-col gap-0.5 px-3 py-1.5 focus-visible:bg-[var(--theme-shell-sidebar-hover)]"
           >
             <span className="truncate text-sm font-medium text-theme-fg-primary">
               {title}
@@ -160,7 +161,7 @@ function RecentChatPicker({ chats, onPick }: RecentChatPickerProps) {
                 <MessageTimestamp createdAt={new Date(chat.lastMessageAt)} />
               </span>
             ) : null}
-          </button>
+          </Row>
         );
       })}
     </div>

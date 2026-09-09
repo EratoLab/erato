@@ -3,6 +3,7 @@ export * from "./AnchoredPopover";
 export * from "./RadioCard";
 export * from "./DropdownMenu";
 export * from "./PopoverPanel";
+export * from "./Row";
 export * from "./SegmentedControl";
 export * from "./Tooltip";
 export * from "./UserProfileDropdown";

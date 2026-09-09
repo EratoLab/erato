@@ -1,3 +1,9 @@
+// The add-in ships no Tailwind build: every utility it renders has to have been
+// emitted into this stylesheet by the host build, which scans `src/` for the
+// literal strings (see the content glob in frontend/tailwind.config.ts). Rows
+// no longer rely on that coincidence — they render the host's `Row`, so their
+// geometry, hover and focus recipes arrive with the component and a host edit
+// cannot leave a copied string behind with nothing emitting its classes.
 import "@erato/frontend/library.css";
 import "./styles.css";
 import { applyComponentKitRegistrations } from "@erato/frontend/library";

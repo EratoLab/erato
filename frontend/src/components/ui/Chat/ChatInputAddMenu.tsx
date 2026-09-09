@@ -19,6 +19,7 @@ import {
   PopoverSectionHeader,
   PopoverSeparator,
 } from "../Controls/PopoverPanel";
+import { Row, ROW_ITEM_SELECTOR } from "../Controls/Row";
 import { SpinnerIcon } from "../Feedback/SpinnerIcon";
 import { CheckIcon, PlusIcon } from "../icons";
 
@@ -114,72 +115,16 @@ export interface ChatInputAddMenuProps {
 // visible for a beat before the menu dismisses.
 const CLOSE_ON_SELECT_DELAY_MS = 100;
 
-// Rows share DropdownMenu's item channel — geometry class, typography and
-// hover/focus colors — so customer themes retune every menu surface together.
-const rowClassName =
-  "dropdown-item-geometry theme-transition flex w-full items-center gap-2 text-left text-sm text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary focus:bg-theme-bg-hover focus:text-theme-fg-primary focus:outline-none focus:ring-1 focus:ring-inset focus:ring-theme-border-dropdown";
-
 // CSS selector for the menu's navigable rows; natively-disabled rows are
 // excluded from roving focus (aria-disabled tool rows stay reachable).
-// eslint-disable-next-line lingui/no-unlocalized-strings -- CSS selector, not user-facing
-export const ADD_MENU_ITEM_SELECTOR = "[data-add-menu-item]:not([disabled])";
-
-export interface AddMenuActionRowProps {
-  label: React.ReactNode;
-  /** Optional secondary line (e.g. file size, assistant description). */
-  description?: React.ReactNode;
-  icon?: React.ReactNode;
-  disabled?: boolean;
-  testId?: string;
-  onActivate: () => void;
-}
-
-/**
- * One activatable menu row. Exported so surfaces outside this menu — the
- * composer's mention picker — present identical rows without re-deriving the
- * item channel or the roving-focus contract.
- */
-export function AddMenuActionRow({
-  label,
-  description,
-  icon,
-  disabled = false,
-  testId,
-  onActivate,
-}: AddMenuActionRowProps) {
-  return (
-    <button
-      type="button"
-      role="menuitem"
-      tabIndex={-1}
-      data-add-menu-item=""
-      onClick={onActivate}
-      disabled={disabled}
-      data-testid={testId}
-      className={clsx(
-        rowClassName,
-        "disabled:cursor-not-allowed disabled:opacity-50",
-      )}
-    >
-      {icon && (
-        <span
-          className="flex size-5 shrink-0 items-center justify-center"
-          aria-hidden="true"
-        >
-          {icon}
-        </span>
-      )}
-      <span className="min-w-0 flex-1">
-        <span className="block truncate">{label}</span>
-        {description && (
-          <span className="block truncate text-xs text-theme-fg-muted">
-            {description}
-          </span>
-        )}
-      </span>
-    </button>
-  );
-}
+//
+// Every navigable row here is a `Row`, injected ones included, so the shared
+// row marker is the whole selector — and a `Row` that only presents, like the
+// add-in's "loading…" lines, carries no marker and stays out of the walk.
+// Re-exported under the menu's own name because the
+// surfaces that reuse this menu's roving contract — the mention picker, the
+// run-mode picker — address it that way.
+export { ROW_ITEM_SELECTOR as ADD_MENU_ITEM_SELECTOR };
 
 /**
  * Unified "+" menu for the chat input. Presentational and prop-driven so it
@@ -216,7 +161,7 @@ export function ChatInputAddMenu({
   useRovingMenuFocus({
     containerRef: panelRef,
     enabled: isOpen,
-    itemSelector: ADD_MENU_ITEM_SELECTOR,
+    itemSelector: ROW_ITEM_SELECTOR,
   });
 
   const cancelPendingClose = useCallback(() => {
@@ -256,14 +201,14 @@ export function ChatInputAddMenu({
   useEffect(() => () => clearTimeout(closeTimerRef.current), []);
 
   const renderActionRow = (item: AddMenuActionItem, testId: string) => (
-    <AddMenuActionRow
+    <Row
       key={item.id}
-      label={item.label}
-      description={item.description}
-      icon={item.icon}
+      variant="menu"
+      role="menuitem"
+      tabIndex={-1}
       disabled={isBusy || item.disabled}
-      testId={testId}
-      onActivate={() => {
+      data-testid={testId}
+      onClick={() => {
         // A pending close means a selection already ran; the row stays
         // mounted through the close delay, so swallow re-activations.
         if (closeTimerRef.current !== undefined) {
@@ -276,7 +221,29 @@ export function ChatInputAddMenu({
         }
         closeAfterSelect();
       }}
-    />
+      leading={
+        item.icon && (
+          <span
+            className="flex size-5 shrink-0 items-center justify-center"
+            aria-hidden="true"
+          >
+            {item.icon}
+          </span>
+        )
+      }
+    >
+      {/* The body is written out rather than handed to Row's `description`
+          slot: the label truncates whether or not a second line follows, and
+          Row drops the wrapper when there is no description. */}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">{item.label}</span>
+        {item.description && (
+          <span className="block truncate text-xs text-theme-fg-muted">
+            {item.description}
+          </span>
+        )}
+      </span>
+    </Row>
   );
 
   const renderExtraSection = (section: AddMenuSection) => {
@@ -353,37 +320,40 @@ export function ChatInputAddMenu({
           {tools.map((tool) => {
             const toolDisabled = isBusy || tool.disabled;
             return (
-              <button
+              <Row
                 key={tool.id}
-                type="button"
+                variant="menu"
                 role="menuitemcheckbox"
-                aria-checked={tool.checked}
-                aria-disabled={toolDisabled ? true : undefined}
+                checked={tool.checked}
+                // An unavailable tool still explains itself, so it stays in
+                // the tab order and in the roving walk; only the activation
+                // goes away.
+                disabled={toolDisabled}
+                disabledMode="aria"
                 tabIndex={-1}
-                data-add-menu-item=""
                 onClick={toolDisabled ? undefined : tool.onToggle}
                 data-testid={`chat-input-add-menu-tool-${tool.id}`}
-                className={clsx(
-                  rowClassName,
-                  "aria-disabled:cursor-not-allowed aria-disabled:opacity-50",
-                )}
+                leading={
+                  tool.icon && (
+                    <span
+                      className="flex size-5 shrink-0 items-center justify-center"
+                      aria-hidden="true"
+                    >
+                      {tool.icon}
+                    </span>
+                  )
+                }
+                trailing={
+                  <CheckIcon
+                    className={clsx(
+                      "size-4 shrink-0 text-theme-fg-primary transition-opacity",
+                      tool.checked ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                }
               >
-                {tool.icon && (
-                  <span
-                    className="flex size-5 shrink-0 items-center justify-center"
-                    aria-hidden="true"
-                  >
-                    {tool.icon}
-                  </span>
-                )}
                 <span className="min-w-0 flex-1 truncate">{tool.label}</span>
-                <CheckIcon
-                  className={clsx(
-                    "size-4 shrink-0 text-theme-fg-primary transition-opacity",
-                    tool.checked ? "opacity-100" : "opacity-0",
-                  )}
-                />
-              </button>
+              </Row>
             );
           })}
         </div>
@@ -408,7 +378,7 @@ export function ChatInputAddMenu({
       ariaHasPopup="menu"
       role="menu"
       preferredOrientation={{ vertical: "top", horizontal: "left" }}
-      initialFocusSelector={ADD_MENU_ITEM_SELECTOR}
+      initialFocusSelector={ROW_ITEM_SELECTOR}
       width="wide"
       dataUi="chat-input-add-menu"
       // `relative` is the only styling this needs beyond the shared Button:

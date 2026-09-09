@@ -12,7 +12,6 @@ export type ButtonVariant =
   | "ghost"
   | "icon-only"
   | "sidebar-icon"
-  | "list-item"
   | "link"
   | "danger";
 
@@ -86,8 +85,6 @@ const VARIANT_STYLES = {
   // makes the hover state invisible on sidebar surfaces.
   "sidebar-icon":
     "text-theme-fg-secondary hover:bg-[var(--theme-shell-sidebar-hover)] hover:text-theme-fg-primary theme-transition",
-  "list-item":
-    "w-full text-sm text-left text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary theme-transition",
   "icon-only":
     "text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary theme-transition",
   // Text-only, inline link affordance — no background or control geometry.
@@ -219,12 +216,6 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       return {};
     }, [explicitRole, ariaChecked, ariaPressed]);
 
-    // Memoize role determination
-    const role = useMemo(
-      () => explicitRole ?? (variant === "list-item" ? "menuitem" : undefined),
-      [explicitRole, variant],
-    );
-
     // Validate props in development
     React.useEffect(() => {
       validateProps(props);
@@ -242,15 +233,13 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           "flex touch-manipulation items-center gap-2",
           "focus-ring",
           VARIANT_STYLES[variant],
-          variant === "list-item"
-            ? "btn-geometry-list-item"
-            : usesIconGeometry
-              ? ICON_SIZE_STYLES[size]
-              : // Link is a text affordance — it intentionally carries no control
-                // geometry (no padding, min-height, or radius).
-                variant === "link"
-                ? ""
-                : CONTROL_SIZE_STYLES[size],
+          usesIconGeometry
+            ? ICON_SIZE_STYLES[size]
+            : // Link is a text affordance — it intentionally carries no control
+              // geometry (no padding, min-height, or radius).
+              variant === "link"
+              ? ""
+              : CONTROL_SIZE_STYLES[size],
           // Reads the token rather than Tailwind's hardcoded 9999px, so
           // `radius.pill` in theme.json actually reaches pill buttons.
           shape === "pill" && "rounded-[var(--theme-radius-pill)]",
@@ -298,19 +287,17 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           // (not the raw props), so theme.css can target "every icon control
           // in this surface" without naming private btn-geometry-* classes.
           data-geometry={
-            variant === "list-item"
-              ? "list-item"
-              : variant === "link"
-                ? "link"
-                : usesIconGeometry
-                  ? `icon-${size}`
-                  : size
+            variant === "link"
+              ? "link"
+              : usesIconGeometry
+                ? `icon-${size}`
+                : size
           }
           data-variant={variant}
           {...ariaState}
           aria-label={ariaLabel}
           className={buttonClasses}
-          role={role}
+          role={explicitRole}
           {...props}
           disabled={isDisabled}
           aria-busy={loading || busy || undefined}
