@@ -4223,7 +4223,7 @@ msgstr ""
 #~ msgid "{0} messages could not be loaded."
 #~ msgstr "Nie udało się wczytać {0} wiadomości."
 
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+#: src/components/ui/FileUpload/ThreadMessageCard.tsx
 msgid "{attachmentCount} files"
 msgstr ""
 
@@ -4299,7 +4299,7 @@ msgstr "• Użyj \"Resetuj do wykrywania przeglądarki\" aby przetestować świ
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/components/ui/FilePreview/EmlPreview.tsx
 #: src/components/ui/FileUpload/AttachmentTileList.tsx
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+#: src/components/ui/FileUpload/ThreadMessageCard.tsx
 msgid "1 file"
 msgstr "1 plik"
 
@@ -5049,7 +5049,7 @@ msgstr "W trakcie"
 msgid "Include"
 msgstr "Dołącz"
 
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+#: src/components/ui/FileUpload/ThreadMessageCard.tsx
 msgid "Include message"
 msgstr "Uwzględnij wiadomość"
 
@@ -5727,7 +5727,7 @@ msgstr "Ta wiadomość używa {percentUsed}% dostępnego limitu tokenów ({total
 msgid "To"
 msgstr ""
 
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+#: src/components/ui/FileUpload/ThreadMessageCard.tsx
 msgid "Toggle attachments"
 msgstr "Przełącz załączniki"
 

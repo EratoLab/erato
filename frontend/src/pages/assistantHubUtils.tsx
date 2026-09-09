@@ -5,6 +5,7 @@ import { useMemo } from "react";
 
 import { getFacetDisplayName } from "@/components/ui/Chat/FacetSelector";
 import { ModelSelectorOptionContent } from "@/components/ui/Chat/ModelSelector";
+import { Card } from "@/components/ui/Container/Card";
 import { Button } from "@/components/ui/Controls/Button";
 import { FileTextIcon, ResolvedIcon } from "@/components/ui/icons";
 import {
@@ -525,32 +526,46 @@ export function AssistantHubVersionCard({
   );
   const content = showStatusBadge ? managementContent : publicContent;
 
-  if (onOpen && actions == null) {
-    return (
-      <button
-        type="button"
-        className="focus-ring theme-transition group flex size-full flex-col rounded-lg border border-theme-border bg-theme-bg-primary p-4 text-left hover:border-theme-border-focus hover:bg-theme-bg-hover"
-        onClick={onOpen}
-      >
-        {content}
-      </button>
-    );
-  }
+  // With nothing to act on, the frame itself opens the version; with actions it
+  // cannot, because they would be buttons nested in the click target.
+  const framedAsButton = onOpen != null && actions == null;
 
   return (
-    <div className="h-full rounded-lg border border-theme-border bg-theme-bg-primary p-4">
-      <div className="flex h-full flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <button
-          type="button"
-          className="flex min-w-0 flex-1 flex-col text-left"
-          onClick={onOpen}
-          disabled={!onOpen}
-        >
-          {content}
-        </button>
-        <div className="flex shrink-0 flex-wrap gap-2">{actions}</div>
-      </div>
-    </div>
+    <Card
+      variant={framedAsButton ? "interactive" : "surface"}
+      as={framedAsButton ? "button" : "div"}
+      data-ui="assistant-hub-version-card"
+      onClick={framedAsButton ? onOpen : undefined}
+      className={
+        framedAsButton ? "flex size-full flex-col text-left" : "h-full"
+      }
+      // The actions sit beside the content from `md` up and under it below,
+      // which no band above or below the body reproduces, so they stay in the
+      // body's own row rather than going to the card's action slot. The
+      // content's trailing block is pinned with `mt-auto`, so whichever column
+      // holds it has to be the one that fills the card.
+      bodyClassName={
+        framedAsButton
+          ? "flex flex-1 flex-col"
+          : "flex h-full flex-col gap-4 md:flex-row md:items-start md:justify-between"
+      }
+    >
+      {framedAsButton ? (
+        content
+      ) : (
+        <>
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 flex-col text-left"
+            onClick={onOpen}
+            disabled={!onOpen}
+          >
+            {content}
+          </button>
+          <div className="flex shrink-0 flex-wrap gap-2">{actions}</div>
+        </>
+      )}
+    </Card>
   );
 }
 

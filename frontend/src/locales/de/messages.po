@@ -4223,7 +4223,7 @@ msgstr "{0, plural, one {# Anhang bereit zum Senden} other {# Anhänge bereit zu
 #~ msgid "{0} messages could not be loaded."
 #~ msgstr "{0} Nachrichten konnten nicht geladen werden."
 
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+#: src/components/ui/FileUpload/ThreadMessageCard.tsx
 msgid "{attachmentCount} files"
 msgstr ""
 
@@ -4299,7 +4299,7 @@ msgstr "• \"Auf Browsererkennung zurücksetzen\" verwenden, um die Erkennung n
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/components/ui/FilePreview/EmlPreview.tsx
 #: src/components/ui/FileUpload/AttachmentTileList.tsx
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+#: src/components/ui/FileUpload/ThreadMessageCard.tsx
 msgid "1 file"
 msgstr "1 Datei"
 
@@ -5049,7 +5049,7 @@ msgstr "In Bearbeitung"
 msgid "Include"
 msgstr "Einbeziehen"
 
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+#: src/components/ui/FileUpload/ThreadMessageCard.tsx
 msgid "Include message"
 msgstr "Nachricht einbeziehen"
 
@@ -5727,7 +5727,7 @@ msgstr "Diese Nachricht verwendet {percentUsed}% des verfügbaren Token-Limits (
 msgid "To"
 msgstr ""
 
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+#: src/components/ui/FileUpload/ThreadMessageCard.tsx
 msgid "Toggle attachments"
 msgstr "Anhänge umschalten"
 

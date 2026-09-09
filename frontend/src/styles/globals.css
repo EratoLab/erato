@@ -1170,26 +1170,27 @@ body {
   background-color: var(--theme-border-divider);
 }
 
-/* Attachment group frames and the thread cards inside them. The frame reads
-   the input radius like the app's other framed cards; a card inside derives
-   its corner from the frame radius minus the frame inset, so the two stay
-   concentric for any theme value. Unlayered so a theme.css rule can retune
-   any of it through the data-ui hooks. A sticky-header group clips to the
-   frame (overflow: clip creates no scroll container, so the header still
-   sticks to the outer scroll region) while header and items stay square
-   inside it, so nothing shows through a corner once the frame's top has
-   scrolled away. */
+/* Attachment group frames and the thread cards inside them. Both are cards, so
+   the corner and the surface come from the card family; what is left here is
+   the input radius the group reads instead of the card one, the padding the
+   two group layouts need, and the two tile radii a chip reads. Held outside
+   @layer components and after the utilities on purpose — that position is what
+   lets a customer theme.css retune any of it through the data-ui hooks, and it
+   is also what keeps the padding out of reach of a caller's utility, which the
+   sticky layout below depends on. A sticky-header group clips to the frame
+   (overflow: clip creates no scroll container, so the header still sticks to
+   the outer scroll region) while header and items stay square inside it, so
+   nothing shows through a corner once the frame's top has scrolled away. */
 .attachment-group-geometry {
-  --attachment-group-inset: 0.75rem;
-  border-radius: var(--theme-radius-input);
+  --card-radius: var(--theme-radius-input);
 }
 
 .attachment-group-frame-geometry {
-  padding: var(--attachment-group-inset);
+  padding: var(--card-inset);
 }
 
 .attachment-group-header-geometry {
-  padding: var(--attachment-group-inset) var(--attachment-group-inset) 0.5rem;
+  padding: var(--card-inset) var(--card-inset) 0.5rem;
 }
 
 /* Collapsed, the frame's own bottom border closes the card. */
@@ -1198,28 +1199,33 @@ body {
 }
 
 .attachment-group-items-geometry {
-  padding: 0.5rem var(--attachment-group-inset) var(--attachment-group-inset);
+  padding: 0.5rem var(--card-inset) var(--card-inset);
 }
 
-/* The thread card derives from the group frame, and the attachment tiles
-   inside it derive from the card in turn (the tile reads
-   --attachment-tile-radius with the base radius as its fallback elsewhere).
-   The floors keep a deep nest from squaring off entirely. */
+/* A sticky element travels inside its own containing block, and the band a
+   card wraps a header slot in is exactly as tall as the header, which would
+   pin it in place. The band steps out of the flow so the header sticks to the
+   frame, as it did before the group became a card. */
+[data-ui="attachment-group"] > [data-ui="card-header"] {
+  display: contents;
+}
+
+/* Attachment tiles derive from the thread card, which derives from the group
+   frame in turn (a tile reads --attachment-tile-radius with the base radius as
+   its fallback elsewhere). Both floors are what a stock theme actually
+   renders, not a guard against exotic ones: the group corner is 1rem and its
+   inset 0.75rem, so the card lands on 0.25rem and both derivations below go
+   negative. Replacing them with the family's plain max(0px, …) squares every
+   chip and every icon plate inside a thread. */
 .thread-message-card-geometry {
-  --thread-message-card-radius: max(
-    0px,
-    var(--theme-radius-input) - var(--attachment-group-inset, 0.75rem)
-  );
-  --thread-message-card-inset: 0.5rem;
   --attachment-tile-radius: max(
     0.25rem,
-    var(--thread-message-card-radius) - var(--thread-message-card-inset)
+    var(--card-radius) - var(--card-inset)
   );
   --attachment-tile-icon-radius: max(
     0.125rem,
     var(--attachment-tile-radius) - 0.5rem
   );
-  border-radius: var(--thread-message-card-radius);
 }
 
 /* Preferences → Appearance → Text size. Percent, not px, so the browser's own

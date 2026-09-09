@@ -5,6 +5,7 @@ import { formatDistanceToNow } from "date-fns";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 
+import { Card } from "@/components/ui/Container/Card";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { Button } from "@/components/ui/Controls/Button";
 import { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
@@ -266,10 +267,12 @@ function CategoryTile({
   onOpen: () => void;
 }) {
   return (
-    <button
-      type="button"
+    <Card
+      variant="interactive"
+      as="button"
+      data-ui="assistant-category-tile"
       onClick={onOpen}
-      className="focus-ring theme-transition group rounded-[var(--theme-radius-shell)] border border-theme-border bg-theme-bg-primary p-4 text-left hover:border-theme-border-focus hover:bg-theme-bg-hover"
+      className="group text-left"
     >
       <div className="mb-4 flex size-10 items-center justify-center rounded bg-theme-bg-secondary text-theme-fg-secondary group-hover:text-theme-fg-primary">
         <ResolvedIcon
@@ -292,7 +295,7 @@ function CategoryTile({
               message: `${count} assistants`,
             })}
       </p>
-    </button>
+    </Card>
   );
 }
 
@@ -670,118 +673,116 @@ function AssistantListCard({
   );
 
   return (
-    <div
+    <Card
+      variant="surface"
       data-ui="assistant-list-card"
       data-testid="assistant-list-item"
-      className="rounded-[var(--theme-radius-card)] border border-theme-border bg-theme-bg-primary p-4"
+      bodyClassName="flex flex-col gap-4 md:flex-row md:items-start md:justify-between"
     >
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <button
-          type="button"
-          className="min-w-0 flex-1 text-left"
-          onClick={onStartChat}
-          disabled={isArchived}
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-base font-semibold text-theme-fg-primary">
-              {assistant.name}
-            </h3>
-            {hubStatus && (
-              <span className={getOwnedAssistantStatusClassName(hubStatus)}>
-                {getOwnedAssistantStatusLabel(hubStatus)}
-              </span>
-            )}
-          </div>
-          {assistant.description && (
-            <p className="mt-2 line-clamp-2 text-sm text-theme-fg-secondary">
-              {assistant.description}
-            </p>
-          )}
-          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-theme-fg-muted">
-            <span className="inline-flex min-h-6 items-center">
-              {t({
-                id: "assistants.card.updated",
-                message: `Updated ${updatedRelativeTime}`,
-              })}
+      <button
+        type="button"
+        className="min-w-0 flex-1 text-left"
+        onClick={onStartChat}
+        disabled={isArchived}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-base font-semibold text-theme-fg-primary">
+            {assistant.name}
+          </h3>
+          {hubStatus && (
+            <span className={getOwnedAssistantStatusClassName(hubStatus)}>
+              {getOwnedAssistantStatusLabel(hubStatus)}
             </span>
-          </div>
-        </button>
-        {!isArchived && (
-          <div className="flex shrink-0 flex-wrap gap-2">
-            {assistant.can_edit && (
-              <DropdownMenu
-                items={[
-                  ...(enabled && usageViewEnabled
-                    ? [
-                        {
-                          label: t({
-                            id: "assistant.usage.title",
-                            message: "Assistants usage view",
-                          }),
-                          onClick: () =>
-                            navigate(`/assistants/${assistant.id}/usage`),
-                        },
-                      ]
-                    : []),
-                  {
-                    label: t({
-                      id: "sharing.action.share",
-                      message: "Share",
-                    }),
-                    icon: <ShareIcon className="size-4" />,
-                    onClick: onShare,
-                  },
-                  {
-                    label: t({
-                      id: "assistants.action.edit",
-                      message: "Edit",
-                    }),
-                    icon: <EditIcon className="size-4" />,
-                    onClick: onEdit,
-                  },
-                  ...(hubEnabled
-                    ? [
-                        {
-                          label: t({
-                            id: "assistantHub.action.submit",
-                            message: "Submit to Hub",
-                          }),
-                          icon: <CheckCircleIcon className="size-4" />,
-                          onClick: onSubmitToHub,
-                        },
-                      ]
-                    : []),
-                  {
-                    label: t({
-                      id: "assistants.action.archive",
-                      message: "Archive",
-                    }),
-                    icon: <LogOutIcon className="size-4" />,
-                    onClick: onArchive,
-                    confirmAction: true,
-                    confirmTitle: t({
-                      id: "assistants.archive.confirmTitle",
-                      message: "Confirm Archive",
-                    }),
-                    confirmMessage: t({
-                      id: "assistants.archive.confirmMessage",
-                      message:
-                        "Are you sure you want to archive this assistant?",
-                    }),
-                  },
-                ]}
-              />
-            )}
-            <Button variant="secondary" size="sm" onClick={onStartChat}>
-              {t({
-                id: "assistants.action.newChat",
-                message: "New Chat",
-              })}
-            </Button>
-          </div>
+          )}
+        </div>
+        {assistant.description && (
+          <p className="mt-2 line-clamp-2 text-sm text-theme-fg-secondary">
+            {assistant.description}
+          </p>
         )}
-      </div>
-    </div>
+        <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-theme-fg-muted">
+          <span className="inline-flex min-h-6 items-center">
+            {t({
+              id: "assistants.card.updated",
+              message: `Updated ${updatedRelativeTime}`,
+            })}
+          </span>
+        </div>
+      </button>
+      {!isArchived && (
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {assistant.can_edit && (
+            <DropdownMenu
+              items={[
+                ...(enabled && usageViewEnabled
+                  ? [
+                      {
+                        label: t({
+                          id: "assistant.usage.title",
+                          message: "Assistants usage view",
+                        }),
+                        onClick: () =>
+                          navigate(`/assistants/${assistant.id}/usage`),
+                      },
+                    ]
+                  : []),
+                {
+                  label: t({
+                    id: "sharing.action.share",
+                    message: "Share",
+                  }),
+                  icon: <ShareIcon className="size-4" />,
+                  onClick: onShare,
+                },
+                {
+                  label: t({
+                    id: "assistants.action.edit",
+                    message: "Edit",
+                  }),
+                  icon: <EditIcon className="size-4" />,
+                  onClick: onEdit,
+                },
+                ...(hubEnabled
+                  ? [
+                      {
+                        label: t({
+                          id: "assistantHub.action.submit",
+                          message: "Submit to Hub",
+                        }),
+                        icon: <CheckCircleIcon className="size-4" />,
+                        onClick: onSubmitToHub,
+                      },
+                    ]
+                  : []),
+                {
+                  label: t({
+                    id: "assistants.action.archive",
+                    message: "Archive",
+                  }),
+                  icon: <LogOutIcon className="size-4" />,
+                  onClick: onArchive,
+                  confirmAction: true,
+                  confirmTitle: t({
+                    id: "assistants.archive.confirmTitle",
+                    message: "Confirm Archive",
+                  }),
+                  confirmMessage: t({
+                    id: "assistants.archive.confirmMessage",
+                    message: "Are you sure you want to archive this assistant?",
+                  }),
+                },
+              ]}
+            />
+          )}
+          <Button variant="secondary" size="sm" onClick={onStartChat}>
+            {t({
+              id: "assistants.action.newChat",
+              message: "New Chat",
+            })}
+          </Button>
+        </div>
+      )}
+    </Card>
   );
 }
 

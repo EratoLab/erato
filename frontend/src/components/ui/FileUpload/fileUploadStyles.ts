@@ -17,8 +17,6 @@ export const FILE_PREVIEW_STYLES = {
     bar: "h-full bg-[var(--theme-action-primary-bg)] transition-all duration-300 ease-in-out",
   },
   group: {
-    container:
-      "attachment-group-geometry attachment-group-frame-geometry border border-[var(--theme-border)] bg-[var(--theme-bg-primary)]",
     header: "mb-2 flex min-w-0 items-start gap-2",
     title: "truncate text-sm font-medium text-[var(--theme-fg-secondary)]",
     meta: "text-xs text-[var(--theme-fg-muted)]",

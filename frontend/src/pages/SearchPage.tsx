@@ -7,6 +7,7 @@ import { useDebounce } from "use-debounce";
 
 import { ChatShareDialog } from "@/components/ui/Chat/ChatShareDialog";
 import { EditChatTitleDialog } from "@/components/ui/Chat/EditChatTitleDialog";
+import { Card } from "@/components/ui/Container/Card";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { Button } from "@/components/ui/Controls/Button";
 import { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
@@ -325,9 +326,11 @@ export default function SearchPage() {
 
               <div className="grid gap-3">
                 {searchResults.map((result) => (
-                  <a
+                  <Card
                     key={result.id}
-                    href={`/chat/${result.chatId}`}
+                    variant="interactive"
+                    as="a"
+                    href={getChatUrl(result.chatId)}
                     data-ui="search-result-card"
                     onClick={(e) => {
                       // Allow cmd/ctrl-click to open in new tab
@@ -341,103 +344,101 @@ export default function SearchPage() {
                       e.preventDefault();
                       handleResultClick(result);
                     }}
-                    className="block cursor-pointer rounded-[var(--theme-radius-card)] border border-theme-border bg-theme-bg-primary p-4 transition-all hover:border-theme-border-focus hover:bg-theme-bg-hover focus:bg-theme-bg-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus"
+                    className="block"
+                    bodyClassName="flex items-center gap-4"
                     aria-label={result.chatTitle}
                   >
-                    <div className="flex items-center gap-4">
-                      <h3 className="line-clamp-1 min-w-0 flex-1 font-medium text-theme-fg-primary">
-                        {result.chatTitle}
-                      </h3>
-                      <div className="shrink-0 text-xs text-theme-fg-muted">
-                        <MessageTimestamp
-                          createdAt={new Date(result.timestamp)}
-                        />
-                      </div>
-                      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent anchor navigation from menu clicks */}
-                      <div
-                        className="shrink-0"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                        }}
-                      >
-                        <DropdownMenu
-                          items={[
-                            ...(pinnedChatsEnabled
-                              ? [
-                                  {
-                                    label: result.isPinned
-                                      ? t({
-                                          id: "chat.history.menu.unpin",
-                                          message: "Unpin",
-                                        })
-                                      : pinnedChatsCount >= pinnedChatsLimit
-                                        ? t({
-                                            id: "chat.history.menu.pinLimitReached",
-                                            message: "Pin limit reached",
-                                          })
-                                        : t({
-                                            id: "chat.history.menu.pin",
-                                            message: "Pin",
-                                          }),
-                                    icon: result.isPinned ? (
-                                      <PinSlashIcon className="size-4" />
-                                    ) : (
-                                      <PinIcon className="size-4" />
-                                    ),
-                                    onClick: () => {
-                                      void handlePinResult(
-                                        result.chatId,
-                                        !result.isPinned,
-                                      );
-                                    },
-                                    disabled:
-                                      !result.canEdit ||
-                                      (!result.isPinned &&
-                                        pinnedChatsCount >= pinnedChatsLimit),
-                                  },
-                                ]
-                              : []),
-                            ...(chatSharingEnabled
-                              ? [
-                                  {
-                                    label: t({
-                                      id: "chat.share.button",
-                                      message: "Share",
-                                    }),
-                                    icon: <ShareIcon className="size-4" />,
-                                    onClick: () =>
-                                      setShareDialogChatId(result.chatId),
-                                    disabled: !result.canEdit,
-                                  },
-                                ]
-                              : []),
-                            {
-                              label: t({
-                                id: "chat.history.menu.rename",
-                                message: "Rename",
-                              }),
-                              icon: <EditIcon className="size-4" />,
-                              onClick: () =>
-                                setTitleDialogChatId(result.chatId),
-                              disabled: !result.canEdit,
-                            },
-                            {
-                              label: t`Remove`,
-                              icon: <Trash className="size-4" />,
-                              variant: "danger",
-                              onClick: () => {
-                                void handleArchiveResult(result.chatId);
-                              },
-                              confirmAction: true,
-                              confirmTitle: t`Confirm Removal`,
-                              confirmMessage: t`Are you sure you want to remove this chat?`,
-                            },
-                          ]}
-                        />
-                      </div>
+                    <h3 className="line-clamp-1 min-w-0 flex-1 font-medium text-theme-fg-primary">
+                      {result.chatTitle}
+                    </h3>
+                    <div className="shrink-0 text-xs text-theme-fg-muted">
+                      <MessageTimestamp
+                        createdAt={new Date(result.timestamp)}
+                      />
                     </div>
-                  </a>
+                    {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent anchor navigation from menu clicks */}
+                    <div
+                      className="shrink-0"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                    >
+                      <DropdownMenu
+                        items={[
+                          ...(pinnedChatsEnabled
+                            ? [
+                                {
+                                  label: result.isPinned
+                                    ? t({
+                                        id: "chat.history.menu.unpin",
+                                        message: "Unpin",
+                                      })
+                                    : pinnedChatsCount >= pinnedChatsLimit
+                                      ? t({
+                                          id: "chat.history.menu.pinLimitReached",
+                                          message: "Pin limit reached",
+                                        })
+                                      : t({
+                                          id: "chat.history.menu.pin",
+                                          message: "Pin",
+                                        }),
+                                  icon: result.isPinned ? (
+                                    <PinSlashIcon className="size-4" />
+                                  ) : (
+                                    <PinIcon className="size-4" />
+                                  ),
+                                  onClick: () => {
+                                    void handlePinResult(
+                                      result.chatId,
+                                      !result.isPinned,
+                                    );
+                                  },
+                                  disabled:
+                                    !result.canEdit ||
+                                    (!result.isPinned &&
+                                      pinnedChatsCount >= pinnedChatsLimit),
+                                },
+                              ]
+                            : []),
+                          ...(chatSharingEnabled
+                            ? [
+                                {
+                                  label: t({
+                                    id: "chat.share.button",
+                                    message: "Share",
+                                  }),
+                                  icon: <ShareIcon className="size-4" />,
+                                  onClick: () =>
+                                    setShareDialogChatId(result.chatId),
+                                  disabled: !result.canEdit,
+                                },
+                              ]
+                            : []),
+                          {
+                            label: t({
+                              id: "chat.history.menu.rename",
+                              message: "Rename",
+                            }),
+                            icon: <EditIcon className="size-4" />,
+                            onClick: () => setTitleDialogChatId(result.chatId),
+                            disabled: !result.canEdit,
+                          },
+                          {
+                            label: t`Remove`,
+                            icon: <Trash className="size-4" />,
+                            variant: "danger",
+                            onClick: () => {
+                              void handleArchiveResult(result.chatId);
+                            },
+                            confirmAction: true,
+                            confirmTitle: t`Confirm Removal`,
+                            confirmMessage: t`Are you sure you want to remove this chat?`,
+                          },
+                        ]}
+                      />
+                    </div>
+                  </Card>
                 ))}
               </div>
 

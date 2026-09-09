@@ -4223,7 +4223,7 @@ msgstr ""
 #~ msgid "{0} messages could not be loaded."
 #~ msgstr "No se pudieron cargar {0} mensajes."
 
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+#: src/components/ui/FileUpload/ThreadMessageCard.tsx
 msgid "{attachmentCount} files"
 msgstr ""
 
@@ -4299,7 +4299,7 @@ msgstr "• Use \"Restablecer a detección del navegador\" para probar detecció
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/components/ui/FilePreview/EmlPreview.tsx
 #: src/components/ui/FileUpload/AttachmentTileList.tsx
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+#: src/components/ui/FileUpload/ThreadMessageCard.tsx
 msgid "1 file"
 msgstr "1 archivo"
 
@@ -5049,7 +5049,7 @@ msgstr "En progreso"
 msgid "Include"
 msgstr "Incluir"
 
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+#: src/components/ui/FileUpload/ThreadMessageCard.tsx
 msgid "Include message"
 msgstr "Incluir mensaje"
 
@@ -5727,7 +5727,7 @@ msgstr "Este mensaje está usando {percentUsed}% del límite de tokens disponibl
 msgid "To"
 msgstr ""
 
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+#: src/components/ui/FileUpload/ThreadMessageCard.tsx
 msgid "Toggle attachments"
 msgstr "Alternar adjuntos"
 
