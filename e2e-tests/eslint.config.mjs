@@ -11,7 +11,11 @@ export default [
     ],
   },
   {
-    files: ["tests/**/*.ts", "storybook-welcome-layout/**/*.ts"],
+    files: [
+      "tests/**/*.ts",
+      "storybook-welcome-layout/**/*.ts",
+      "storybook-chip-retune/**/*.ts",
+    ],
     languageOptions: { parser: tsParser },
     plugins: { playwright },
     rules: {
