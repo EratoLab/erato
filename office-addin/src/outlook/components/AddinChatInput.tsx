@@ -851,7 +851,12 @@ export const AddinChatInput = forwardRef<
       }
 
       setIsUploadingEmail(true);
-      setUploadStoreError(null);
+      // A previous blocked send left its own alert up; a fresh send takes it
+      // down. Anything else in the store — an unsupported-type error from an
+      // earlier drop, say — belongs to the composer and stays until dismissed.
+      if (useFileUploadStore.getState().error instanceof UploadTooLargeError) {
+        setUploadStoreError(null);
+      }
       let resolvedFileIds: string[] = [];
       let uploadFailed = false;
       // Held outside the try so the 413 branch can name the same files the

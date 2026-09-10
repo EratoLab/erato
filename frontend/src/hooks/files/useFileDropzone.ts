@@ -261,8 +261,10 @@ export function useFileDropzone({
         // type check and the `maxFiles` trim: an oversized file that would
         // have been dropped anyway must not fail the whole send, and a file
         // the AI cannot read should say so rather than report its size.
-        // Runs before setUploading, silent-chat creation, FormData or any
-        // network call, so oversized bytes never reach the backend.
+        // Runs before silent-chat creation, FormData or any network call, so
+        // oversized bytes never reach the backend. `setUploading(true)` has
+        // already fired, but nothing awaits between it and this throw, so the
+        // flag is back to false in `finally` before React renders.
         const sizeValidation = validateFileSizes(filesToUpload, maxSizeBytes);
         if (!sizeValidation.valid) {
           throw new UploadTooLargeError(
