@@ -3193,6 +3193,16 @@ msgstr "Micrófono"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/AudioInputTabContent.tsx
+msgid "preferences.dialog.audio.input.notConnected"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/AudioInputTabContent.tsx
+msgid "preferences.dialog.audio.input.notConnectedHint"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/AudioInputTabContent.tsx
 msgid "preferences.dialog.audio.input.persisted"
 msgstr "Esta selección se guarda localmente en este navegador."
 
@@ -3215,6 +3225,11 @@ msgstr "Se denegó el acceso al micrófono, por lo que no se pueden mostrar los 
 #: src/components/ui/Settings/AudioInputTabContent.tsx
 msgid "preferences.dialog.audio.input.revealHint"
 msgstr "Para mostrar los nombres de tus dispositivos, actualiza los dispositivos o inicia la prueba del micrófono de abajo."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/AudioInputTabContent.tsx
+msgid "preferences.dialog.audio.input.storedDevice"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/GuidedMicCheck.tsx

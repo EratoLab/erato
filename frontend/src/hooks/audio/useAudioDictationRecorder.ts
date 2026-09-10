@@ -15,6 +15,7 @@ import { useThrottledCallback } from "use-debounce";
 // share the same ESM contract on the file format side, so the worker
 // pipeline output is valid as an AudioWorklet module.
 import { createRicky0123VadEngine } from "@/lib/voice-runtime";
+import { useAudioInputDeviceStore } from "@/state/audioInputDeviceStore";
 import { createLogger } from "@/utils/debugLogger";
 
 import {
@@ -42,7 +43,6 @@ import {
   type SpeechOnsetController,
 } from "./onsetFlipController";
 import { useAudioContextInterruptionRecovery } from "./useAudioContextInterruptionRecovery";
-import { useAudioInputDevicePreference } from "./useAudioInputDevicePreference";
 import { useMediaStreamTrackWatchdog } from "./useMediaStreamTrackWatchdog";
 
 import type { VoiceVadEngine } from "@/lib/voice-runtime";
@@ -269,10 +269,9 @@ export function useAudioDictationRecorder({
    */
   const isMounted = useMountedState();
   const startInFlightRef = useRef(false);
-  const { selectedAudioInputDeviceId, setSelectedAudioInputDeviceId } =
-    useAudioInputDevicePreference({
-      enabled,
-    });
+  const selectedAudioInputDeviceId = useAudioInputDeviceStore(
+    (state) => state.selectedDeviceId,
+  );
 
   // Capture-track device-loss watchdog (ERMAIN-390). The inline handler
   // references `stopDictation`, which is defined further down — fine, it's a
@@ -774,22 +773,17 @@ export function useAudioDictationRecorder({
             : baseAudioConstraints,
         });
       } catch (firstError) {
-        // Belt-and-braces alongside the auto-clear-on-enumerate logic:
-        // even after we've validated the stored deviceId against the
-        // enumerated list, a Bluetooth disconnect (or any other device
-        // change) can race between enumeration and `getUserMedia`. On
-        // OverconstrainedError, retry once with the system-default mic
-        // and clear the stale stored id so the dropdown reflects
-        // reality and subsequent sessions don't keep hitting it.
+        // The stored device can be gone at capture time (Bluetooth drop or
+        // profile switch): use the system default for this session only.
         if (
           selectedAudioInputDeviceId &&
           firstError instanceof DOMException &&
-          firstError.name === "OverconstrainedError"
+          (firstError.name === "OverconstrainedError" ||
+            firstError.name === "NotFoundError")
         ) {
           stream = await mediaDevices.getUserMedia({
             audio: baseAudioConstraints,
           });
-          setSelectedAudioInputDeviceId("");
         } else {
           throw firstError;
         }
@@ -1109,7 +1103,6 @@ export function useAudioDictationRecorder({
     maxRecordingDurationSeconds,
     selectedAudioInputDeviceId,
     setDictationBarsThrottled,
-    setSelectedAudioInputDeviceId,
     startLiveDictationSession,
     stopDictation,
     stopVadEngine,
