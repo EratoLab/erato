@@ -133,6 +133,7 @@ enum ServerControlFrame {
         file_upload_id: String,
         chunk_index: usize,
         error: String,
+        error_code: AudioTranscriptionErrorCode,
         audio_transcription: AudioTranscriptionMetadata,
     },
     Completed {
@@ -176,10 +177,88 @@ enum DictationServerControlFrame {
         chunk_index: usize,
         transcript: String,
     },
+    ChunkFailed {
+        chunk_index: usize,
+        error: String,
+        error_code: AudioTranscriptionErrorCode,
+    },
     Completed,
     Error {
         error: String,
     },
+}
+
+/// Why a chunk could not be transcribed, in a form the client can translate and the
+/// user can quote. The snake_case literals are part of the socket protocol.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum AudioTranscriptionErrorCode {
+    ProviderContentBlocked,
+    ProviderError,
+    TranscriptionFailed,
+}
+
+impl AudioTranscriptionErrorCode {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::ProviderContentBlocked => "provider_content_blocked",
+            Self::ProviderError => "provider_error",
+            Self::TranscriptionFailed => "transcription_failed",
+        }
+    }
+}
+
+/// Provider-side transcription failure. The raw response is logged where it is
+/// classified; the Display text is the short, user-safe message sent to the client.
+#[derive(Debug)]
+struct AudioTranscriptionProviderError {
+    code: AudioTranscriptionErrorCode,
+    block_reason: Option<String>,
+}
+
+impl AudioTranscriptionProviderError {
+    fn from_response_body(response_body: &serde_json::Value) -> Self {
+        let block_reason = response_body
+            .pointer("/promptFeedback/blockReason")
+            .and_then(|value| value.as_str())
+            .map(str::to_string);
+        Self {
+            code: if block_reason.is_some() {
+                AudioTranscriptionErrorCode::ProviderContentBlocked
+            } else {
+                AudioTranscriptionErrorCode::ProviderError
+            },
+            block_reason,
+        }
+    }
+}
+
+impl std::fmt::Display for AudioTranscriptionProviderError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match (self.code, self.block_reason.as_deref()) {
+            (AudioTranscriptionErrorCode::ProviderContentBlocked, Some(reason)) => write!(
+                f,
+                "The AI provider's content filter blocked this passage (reason: {reason})"
+            ),
+            (AudioTranscriptionErrorCode::ProviderContentBlocked, None) => {
+                write!(f, "The AI provider's content filter blocked this passage")
+            }
+            _ => write!(f, "The AI provider could not transcribe this passage"),
+        }
+    }
+}
+
+impl std::error::Error for AudioTranscriptionProviderError {}
+
+/// Maps any transcription failure to a protocol code and a short message.
+fn classify_transcription_failure(error: &Report) -> (AudioTranscriptionErrorCode, String) {
+    match error.downcast_ref::<AudioTranscriptionProviderError>() {
+        Some(provider_error) => (provider_error.code, provider_error.to_string()),
+        None => (
+            AudioTranscriptionErrorCode::TranscriptionFailed,
+            "This passage could not be transcribed".to_string(),
+        ),
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -485,14 +564,37 @@ async fn handle_dictation_audio_bytes(
     let ack = DictationServerControlFrame::ChunkAck {
         chunk_index: pending.chunk_index,
     };
-    let transcribed_chunk = transcribe_audio_chunk_with_retry(
+    let transcribed_chunk = match transcribe_audio_chunk_with_retry(
         app_state,
         audio_feature,
         Some(chat_provider_headers_context),
         &pending,
         validated_chunk.provider_audio_bytes,
     )
-    .await?;
+    .await
+    {
+        Ok(transcribed_chunk) => transcribed_chunk,
+        Err(error) => {
+            let (error_code, error_message) = classify_transcription_failure(&error);
+            warn!(
+                chunk_index = pending.chunk_index,
+                error_code = error_code.as_str(),
+                error = %error,
+                "Audio dictation chunk failed; continuing with the next chunk"
+            );
+            // The passage is lost either way; stay in step with the client so the
+            // chunks after it are still transcribed instead of failing on their index.
+            *next_chunk_index += 1;
+            return Ok(vec![
+                ack,
+                DictationServerControlFrame::ChunkFailed {
+                    chunk_index: pending.chunk_index,
+                    error: error_message,
+                    error_code,
+                },
+            ]);
+        }
+    };
     *next_chunk_index += 1;
 
     Ok(vec![
@@ -826,11 +928,13 @@ async fn handle_audio_bytes(
     {
         Ok(transcribed_chunk) => transcribed_chunk,
         Err(error) => {
+            let (error_code, error_message) = classify_transcription_failure(&error);
             warn!(
                 file_upload_id = %session.file_upload.id,
                 chunk_index = pending.chunk_index,
                 byte_start,
                 byte_end,
+                error_code = error_code.as_str(),
                 error = %error,
                 "Audio transcription chunk failed"
             );
@@ -842,12 +946,12 @@ async fn handle_audio_bytes(
                     byte_start: Some(byte_start),
                     byte_end: Some(byte_end),
                     transcript: None,
-                    error: Some(error.to_string()),
+                    error: Some(error_message.clone()),
                     attempts: app_state.config.audio_transcription.max_attempts,
                 },
             );
             session.metadata.status = "failed".to_string();
-            session.metadata.error = Some(error.to_string());
+            session.metadata.error = Some(error_message.clone());
             session.metadata.progress = Some(progress_for_metadata(&session.metadata));
             persist_session_metadata(app_state, session).await?;
             return Ok(vec![
@@ -855,7 +959,8 @@ async fn handle_audio_bytes(
                 ServerControlFrame::ChunkFailed {
                     file_upload_id: session.file_upload.id.to_string(),
                     chunk_index: pending.chunk_index,
-                    error: error.to_string(),
+                    error: error_message,
+                    error_code,
                     audio_transcription: session.metadata.clone(),
                 },
             ]);
@@ -1559,12 +1664,48 @@ async fn transcribe_audio_chunk_genai(
     );
     let chat_options = ChatOptions::default()
         .with_capture_content(true)
+        .with_capture_raw_body(true)
         .with_temperature(0.0)
         .with_reasoning_effort(reasoning_effort)
         .with_max_tokens(max_output_tokens);
-    let response = client
+    let response = match client
         .exec_chat("PLACEHOLDER_MODEL", chat_request, Some(&chat_options))
-        .await?;
+        .await
+    {
+        Ok(response) => response,
+        Err(genai::Error::ChatResponseGeneration {
+            model_iden,
+            response_body,
+            cause,
+            ..
+        }) => {
+            // The default rendering of this error embeds the whole request payload,
+            // including the base64 audio. Log the provider's raw response and the cause
+            // on their own; only the classification travels to the client.
+            let provider_error =
+                AudioTranscriptionProviderError::from_response_body(&response_body);
+            warn!(
+                chunk_index = pending.chunk_index,
+                model = %model_iden,
+                error_code = provider_error.code.as_str(),
+                cause = %cause,
+                response_body = %response_body,
+                "Audio transcription provider returned an unusable response"
+            );
+            return Err(Report::new(provider_error));
+        }
+        Err(error) => {
+            warn!(
+                chunk_index = pending.chunk_index,
+                error = %error,
+                "Audio transcription provider call failed"
+            );
+            return Err(Report::new(AudioTranscriptionProviderError {
+                code: AudioTranscriptionErrorCode::ProviderError,
+                block_reason: None,
+            }));
+        }
+    };
     let transcript = response.first_text().unwrap_or_default().trim().to_string();
     let transcript = if is_punctuation_only_transcript(&transcript) {
         if !transcript.is_empty() {
@@ -1735,6 +1876,14 @@ async fn retry_failed_chunks(
                 );
             }
             Err(error) => {
+                let (error_code, error_message) = classify_transcription_failure(&error);
+                warn!(
+                    file_upload_id = %session.file_upload.id,
+                    chunk_index = chunk.index,
+                    error_code = error_code.as_str(),
+                    error = %error,
+                    "Audio transcription chunk retry failed"
+                );
                 update_chunk_status(
                     &mut session.metadata,
                     ChunkStatusUpdate {
@@ -1743,19 +1892,20 @@ async fn retry_failed_chunks(
                         byte_start: Some(byte_start),
                         byte_end: Some(byte_end),
                         transcript: None,
-                        error: Some(error.to_string()),
+                        error: Some(error_message.clone()),
                         attempts: chunk.attempts
                             + app_state.config.audio_transcription.max_attempts,
                     },
                 );
                 session.metadata.status = "failed".to_string();
-                session.metadata.error = Some(error.to_string());
+                session.metadata.error = Some(error_message.clone());
                 session.metadata.progress = Some(progress_for_metadata(&session.metadata));
                 persist_session_metadata(app_state, session).await?;
                 return Ok(ServerControlFrame::ChunkFailed {
                     file_upload_id: session.file_upload.id.to_string(),
                     chunk_index: chunk.index,
-                    error: error.to_string(),
+                    error: error_message,
+                    error_code,
                     audio_transcription: session.metadata.clone(),
                 });
             }
@@ -1803,6 +1953,86 @@ fn audio_transcription_reasoning_effort(provider_kind: &str, model_name: &str) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn audio_transcription_error_codes_use_protocol_literals() {
+        for (code, literal) in [
+            (
+                AudioTranscriptionErrorCode::ProviderContentBlocked,
+                "provider_content_blocked",
+            ),
+            (AudioTranscriptionErrorCode::ProviderError, "provider_error"),
+            (
+                AudioTranscriptionErrorCode::TranscriptionFailed,
+                "transcription_failed",
+            ),
+        ] {
+            assert_eq!(serde_json::to_value(code).unwrap(), literal);
+            assert_eq!(code.as_str(), literal);
+        }
+    }
+
+    #[test]
+    fn classifies_prompt_blocks_from_the_provider_response_body() {
+        let blocked = AudioTranscriptionProviderError::from_response_body(&serde_json::json!({
+            "promptFeedback": {
+                "blockReason": "SAFETY",
+                "blockReasonMessage": "The prompt is blocked due to safety"
+            },
+            "usageMetadata": {"promptTokenCount": 451}
+        }));
+        assert_eq!(
+            blocked.code,
+            AudioTranscriptionErrorCode::ProviderContentBlocked
+        );
+        assert_eq!(blocked.block_reason.as_deref(), Some("SAFETY"));
+        let (code, message) = classify_transcription_failure(&Report::new(blocked));
+        assert_eq!(code, AudioTranscriptionErrorCode::ProviderContentBlocked);
+        assert!(message.contains("SAFETY"));
+
+        let other = AudioTranscriptionProviderError::from_response_body(
+            &serde_json::json!({"candidates": []}),
+        );
+        assert_eq!(other.code, AudioTranscriptionErrorCode::ProviderError);
+
+        let (code, message) =
+            classify_transcription_failure(&eyre::eyre!("hallucination_loop_detected"));
+        assert_eq!(code, AudioTranscriptionErrorCode::TranscriptionFailed);
+        assert!(!message.contains("hallucination"));
+    }
+
+    #[test]
+    fn serializes_audio_transcription_chunk_failure_with_error_code() {
+        let frame = ServerControlFrame::ChunkFailed {
+            file_upload_id: "upload-1".to_string(),
+            chunk_index: 1,
+            error: "The AI provider could not transcribe this passage".to_string(),
+            error_code: AudioTranscriptionErrorCode::ProviderError,
+            audio_transcription: AudioTranscriptionMetadata::default(),
+        };
+
+        let value = serde_json::to_value(frame).expect("transcription frame should serialize");
+        assert_eq!(value["type"], "chunk_failed");
+        assert_eq!(value["file_upload_id"], "upload-1");
+        assert_eq!(value["error_code"], "provider_error");
+        assert!(value.get("audio_transcription").is_some());
+    }
+
+    #[test]
+    fn serializes_audio_dictation_chunk_failure_with_error_code() {
+        let frame = DictationServerControlFrame::ChunkFailed {
+            chunk_index: 3,
+            error: "The AI provider's content filter blocked this passage (reason: SAFETY)"
+                .to_string(),
+            error_code: AudioTranscriptionErrorCode::ProviderContentBlocked,
+        };
+
+        let value = serde_json::to_value(frame).expect("dictation frame should serialize");
+        assert_eq!(value["type"], "chunk_failed");
+        assert_eq!(value["chunk_index"], 3);
+        assert_eq!(value["error_code"], "provider_content_blocked");
+        assert!(value.get("file_upload_id").is_none());
+    }
 
     #[test]
     fn gemini_3_audio_uses_a_supported_thinking_level() {

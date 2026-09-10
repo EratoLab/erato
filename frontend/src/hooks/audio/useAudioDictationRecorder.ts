@@ -36,6 +36,7 @@ import {
   type AudioDictationDiagnostics,
 } from "./audio-pcm-codec";
 import { getAudioEnvironment } from "./audioEnvironment";
+import { describeAudioTranscriptionFailure } from "./audioTranscriptionErrors";
 import { PRE_SPEECH_SILENCE_PRIMER_MS } from "./audioTuning";
 import {
   createSpeechOnsetController,
@@ -586,8 +587,29 @@ export function useAudioDictationRecorder({
               transcript: frame.transcript ?? "",
             });
           }
+          if (frame.type === "chunk_failed") {
+            // Resolve the index with an empty transcript so the ordered append
+            // in the consumer is not held back by the lost passage.
+            onTranscriptChunkRef.current({
+              chunkIndex: frame.chunk_index,
+              transcript: "",
+            });
+            setDictationError(
+              describeAudioTranscriptionFailure(frame, {
+                fallback: t`Audio dictation failed.`,
+                passageStartMs:
+                  frame.chunk_index *
+                  (liveSessionRef.current?.chunkDurationMs ??
+                    DEFAULT_AUDIO_DICTATION_CHUNK_DURATION_MS),
+              }),
+            );
+          }
           if (frame.type === "error") {
-            setDictationError(frame.error ?? t`Audio dictation failed.`);
+            setDictationError(
+              describeAudioTranscriptionFailure(frame, {
+                fallback: t`Audio dictation failed.`,
+              }),
+            );
           }
         } catch {
           setDictationError(t`Could not read audio dictation response.`);
