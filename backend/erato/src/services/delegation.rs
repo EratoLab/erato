@@ -883,42 +883,87 @@ async fn discard_unstarted_delegated_chat(
 /// awaited run streams its progress onto the parent's tool part and returns
 /// the result envelope; a background run returns at launch and the child
 /// finishes on its own. `Err` is a refusal message for the model — the caller
-/// refuses the call, never the turn.
-pub(crate) async fn dispatch_delegate_tool_call(
+/// The target a delegation is launched against. The two offer routes differ
+/// only here; everything from the launch onwards is shared between them.
+pub(crate) enum DelegationTargetSpec {
+    /// The @-mention route: a specific assistant, already checked against the
+    /// targets offered on this turn.
+    Assistant(Uuid),
+    /// The task route: the model planned the sub-task itself, and the child is
+    /// scoped by facets rather than bound to an assistant.
+    #[allow(dead_code)]
+    Task { facet_ids: Vec<String> },
+}
+
+/// The parsed `delegate_*` arguments a launch works from, independent of which
+/// tool produced them.
+pub(crate) struct DelegateBrief {
+    pub task: String,
+    pub expected_output: Option<String>,
+    pub constraints: Option<String>,
+    pub file_ids: Option<Vec<String>>,
+    pub include_conversation_context: bool,
+}
+
+/// A child run that has been started but not yet awaited.
+///
+/// Holding one of these is what makes bounded fan-out possible later: several
+/// can be in flight before anything blocks on the first.
+pub(crate) struct LaunchedDelegation {
+    pub child_chat_id: Uuid,
+    pub child_task: std::sync::Arc<crate::services::background_tasks::StreamingTask>,
+    /// `None` once the task route lands a child on the bare model.
+    pub assistant_id: Option<Uuid>,
+    /// The name to show for the target; `None` for a bare task child.
+    pub target_name: Option<String>,
+    pub route: crate::models::chat::DelegateRoute,
+    handle: tokio::task::JoinHandle<Result<(), eyre::Report>>,
+    child_rx: tokio::sync::broadcast::Receiver<crate::services::background_tasks::StreamingEvent>,
+    spawned_at: sea_orm::prelude::DateTimeWithTimeZone,
+    /// Start of the whole dispatch, not of the child: the trace the parent sees
+    /// measures from the moment the tool call was picked up.
+    dispatch_started: std::time::Instant,
+}
+
+/// What a launch settled into.
+pub(crate) enum LaunchOutcome {
+    /// The run is in flight; the caller owns awaiting it.
+    Launched(LaunchedDelegation),
+    /// A background run: the launch is the whole story and nothing is awaited.
+    Dispatched {
+        assistant_id: Uuid,
+        assistant_name: String,
+        delegate_chat_id: Uuid,
+    },
+}
+
+/// Start a delegated child run and return without awaiting it.
+///
+/// `run_mode` is a parameter rather than being read from the dispatch context:
+/// the mention route passes the turn's mode straight through, while the task
+/// route chooses per call.
+pub(crate) async fn launch_delegation(
     app_state: &AppState,
     policy: &PolicyEngine,
     context: &crate::server::api::v1beta::message_streaming::DelegationDispatchContext<'_>,
-    tool_call: &genai::chat::ToolCall,
-    parent: Option<DelegationParentStream<'_>>,
-) -> Result<DelegationDispatchOutcome, String> {
+    target: DelegationTargetSpec,
+    run_mode: DelegationRunMode,
+    brief: DelegateBrief,
+) -> Result<LaunchOutcome, String> {
     use sea_orm::EntityTrait;
 
     let dispatch_started = std::time::Instant::now();
-    let parent_task = parent.map(|parent| parent.task);
     let config = app_state.config.delegation.clone();
-    if !config.assistants.enabled {
-        return Err("Assistant delegation is not enabled.".to_string());
-    }
-
-    let args: DelegateToolArgs = serde_json::from_value(tool_call.fn_arguments.clone())
-        .map_err(|error| format!("Invalid delegate_to_assistant arguments: {error}"))?;
-    if args.task.trim().is_empty() {
-        return Err("The 'task' argument must not be empty.".to_string());
-    }
-    let assistant_id = Uuid::parse_str(&args.assistant_id)
-        .map_err(|_| format!("Invalid assistant id '{}'.", args.assistant_id))?;
-    if !context
-        .targets
-        .iter()
-        .any(|target| target.id == assistant_id)
-    {
-        return Err(format!(
-            "Assistant {assistant_id} was not offered for delegation on this turn."
-        ));
-    }
+    let assistant_id = match target {
+        DelegationTargetSpec::Assistant(assistant_id) => assistant_id,
+        // 2.3 fills this in; until then the offer path cannot produce it.
+        DelegationTargetSpec::Task { .. } => {
+            return Err("task route not available".to_string());
+        }
+    };
 
     let mut file_ids: Vec<Uuid> = Vec::new();
-    for raw_id in args.file_ids.iter().flatten() {
+    for raw_id in brief.file_ids.iter().flatten() {
         let file_id =
             Uuid::parse_str(raw_id).map_err(|_| format!("Invalid file id '{raw_id}'."))?;
         if !context.offered_file_ids.contains(&file_id) {
@@ -966,9 +1011,7 @@ pub(crate) async fn dispatch_delegate_tool_call(
     // never the turn: the per-generation counter first, because a launch made
     // moments ago by this same turn is not yet visible as a running
     // generation; then the owner-wide count of live runs.
-    if context.run_mode == DelegationRunMode::Background
-        && config.max_concurrent_background_runs > 0
-    {
+    if run_mode == DelegationRunMode::Background && config.max_concurrent_background_runs > 0 {
         let cap = config.max_concurrent_background_runs;
         if context
             .background_dispatches
@@ -1013,12 +1056,12 @@ pub(crate) async fn dispatch_delegate_tool_call(
         adopted_at: None,
         legacy_expected_output: None,
         legacy_constraints: None,
-        run_mode: (context.run_mode == DelegationRunMode::Background)
+        run_mode: (run_mode == DelegationRunMode::Background)
             .then_some(DelegationRunMode::Background),
     };
     let task = crate::models::chat::TaskSpec {
-        expected_output: bounded_brief_field(args.expected_output.as_deref()),
-        constraints: bounded_brief_field(args.constraints.as_deref()),
+        expected_output: bounded_brief_field(brief.expected_output.as_deref()),
+        constraints: bounded_brief_field(brief.constraints.as_deref()),
         route: crate::models::chat::DelegateRoute::Assistant,
         ..crate::models::chat::TaskSpec::default()
     };
@@ -1030,7 +1073,7 @@ pub(crate) async fn dispatch_delegate_tool_call(
         Some(assistant_id),
         provenance,
         Some(task),
-        delegated_chat_title(&args.task),
+        delegated_chat_title(&brief.task),
     )
     .await
     .map_err(|error| {
@@ -1041,7 +1084,7 @@ pub(crate) async fn dispatch_delegate_tool_call(
     // The lease comes before any other pre-run work: the archive cascade spares
     // a run whose generation has not finished, and seeding a long conversation
     // into the child takes long enough for an archive to land in between.
-    let (mut child_rx, child_task) = app_state
+    let (child_rx, child_task) = app_state
         .background_tasks
         .start_task(child_chat.id, Uuid::new_v4())
         .await;
@@ -1052,7 +1095,7 @@ pub(crate) async fn dispatch_delegate_tool_call(
         context,
         child_chat.id,
         &file_ids,
-        args.include_conversation_context,
+        brief.include_conversation_context,
     )
     .await
     {
@@ -1067,7 +1110,7 @@ pub(crate) async fn dispatch_delegate_tool_call(
     // directive is rendered into the child's turns at composition time from
     // the provenance written above — a message a person opens should not be
     // one written for a model.
-    let child_user_message = args.task.trim().to_string();
+    let child_user_message = brief.task.trim().to_string();
 
     let child_request =
         crate::server::api::v1beta::message_streaming::MessageSubmitRequest::for_delegated_run(
@@ -1094,19 +1137,62 @@ pub(crate) async fn dispatch_delegate_tool_call(
     // launch shape and that is also the model's permanent memory of the
     // call when the turn is replayed. How the run went is read off the run
     // itself, not off the parent turn.
-    if context.run_mode == DelegationRunMode::Background {
+    if run_mode == DelegationRunMode::Background {
         context
             .background_dispatches
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         drop(child_rx);
         drop(handle);
-        return Ok(DelegationDispatchOutcome::Dispatched {
+        return Ok(LaunchOutcome::Dispatched {
             assistant_id,
             assistant_name: assistant.name,
             delegate_chat_id: child_chat.id,
         });
     }
-    let mut handle = handle;
+
+    Ok(LaunchOutcome::Launched(LaunchedDelegation {
+        child_chat_id: child_chat.id,
+        child_task,
+        assistant_id: Some(assistant_id),
+        target_name: Some(assistant.name),
+        route: crate::models::chat::DelegateRoute::Assistant,
+        handle,
+        child_rx,
+        spawned_at,
+        dispatch_started,
+    }))
+}
+
+/// Await a launched child run, tapping its trace onto the parent stream.
+///
+/// Every `select!` arm of the original dispatch loop is preserved here: the
+/// join, the run-timeout classification, the parent-abort forwarding with its
+/// grace period, and the trace tap.
+pub(crate) async fn await_delegation(
+    app_state: &AppState,
+    launched: LaunchedDelegation,
+    parent: Option<DelegationParentStream<'_>>,
+    tool_call: &genai::chat::ToolCall,
+) -> DelegationDispatchOutcome {
+    let LaunchedDelegation {
+        child_chat_id,
+        child_task,
+        assistant_id,
+        target_name,
+        route: _route,
+        mut handle,
+        mut child_rx,
+        spawned_at,
+        dispatch_started,
+    } = launched;
+
+    let config = app_state.config.delegation.clone();
+    let parent_task = parent.map(|parent| parent.task);
+    // The envelope and the progress frames still carry a plain `Uuid` and a
+    // plain name; 2.2 widens both for bare task children. On this route the
+    // launch always resolved an assistant, so neither fallback is reachable.
+    let assistant_id = assistant_id.unwrap_or_else(Uuid::nil);
+    let target_name = target_name.unwrap_or_default();
 
     let mut trace = DelegationTraceCollector::new(dispatch_started);
     let mut progress = DelegationProgressEmitter {
@@ -1115,8 +1201,8 @@ pub(crate) async fn dispatch_delegate_tool_call(
         tool_name: tool_call.fn_name.clone(),
         input: tool_call.fn_arguments.clone(),
         assistant_id,
-        assistant_name: assistant.name.clone(),
-        delegate_chat_id: child_chat.id,
+        assistant_name: target_name.clone(),
+        delegate_chat_id: child_chat_id,
         sent_version: 0,
         last_frame_at: None,
     };
@@ -1148,7 +1234,7 @@ pub(crate) async fn dispatch_delegate_tool_call(
                     // at the next stream chunk or turn boundary; until then it
                     // winds down detached.
                     tracing::warn!(
-                        child_chat_id = %child_chat.id,
+                        child_chat_id = %child_chat_id,
                         "Delegated child did not stop within the abort grace; detaching"
                     );
                 }
@@ -1158,7 +1244,7 @@ pub(crate) async fn dispatch_delegate_tool_call(
                 child_task.request_abort();
                 if tokio::time::timeout(CHILD_ABORT_GRACE, &mut handle).await.is_err() {
                     tracing::warn!(
-                        child_chat_id = %child_chat.id,
+                        child_chat_id = %child_chat_id,
                         "Delegated child did not stop within the timeout grace; detaching"
                     );
                 }
@@ -1174,7 +1260,7 @@ pub(crate) async fn dispatch_delegate_tool_call(
                     }
                 }
                 Err(RecvError::Lagged(skipped)) => tracing::debug!(
-                    child_chat_id = %child_chat.id,
+                    child_chat_id = %child_chat_id,
                     skipped,
                     "Delegation progress tap fell behind the child"
                 ),
@@ -1199,20 +1285,85 @@ pub(crate) async fn dispatch_delegate_tool_call(
     trace.finish();
     progress.flush(&trace).await;
 
-    Ok(DelegationDispatchOutcome::Completed {
+    DelegationDispatchOutcome::Completed {
         envelope: build_result_envelope(
             app_state,
-            child_chat.id,
+            child_chat_id,
             child_task.message_id(),
             spawned_at,
             assistant_id,
-            assistant.name,
+            target_name,
             status,
             config.result_max_chars,
         )
         .await,
         trace: trace.snapshot(),
-    })
+    }
+}
+
+/// Dispatch one `delegate_to_assistant` tool call: launch the child, then await
+/// it. Splitting the two halves changes no behaviour on this route - notably no
+/// event is emitted at launch, so the parent's first `tool_call_update` still
+/// carries a non-empty local trace.
+pub(crate) async fn dispatch_delegate_tool_call(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    context: &crate::server::api::v1beta::message_streaming::DelegationDispatchContext<'_>,
+    tool_call: &genai::chat::ToolCall,
+    parent: Option<DelegationParentStream<'_>>,
+) -> Result<DelegationDispatchOutcome, String> {
+    if !app_state.config.delegation.assistants.enabled {
+        return Err("Assistant delegation is not enabled.".to_string());
+    }
+
+    let args: DelegateToolArgs = serde_json::from_value(tool_call.fn_arguments.clone())
+        .map_err(|error| format!("Invalid delegate_to_assistant arguments: {error}"))?;
+    if args.task.trim().is_empty() {
+        return Err("The 'task' argument must not be empty.".to_string());
+    }
+    let assistant_id = Uuid::parse_str(&args.assistant_id)
+        .map_err(|_| format!("Invalid assistant id '{}'.", args.assistant_id))?;
+    if !context
+        .targets
+        .iter()
+        .any(|target| target.id == assistant_id)
+    {
+        return Err(format!(
+            "Assistant {assistant_id} was not offered for delegation on this turn."
+        ));
+    }
+
+    let brief = DelegateBrief {
+        task: args.task,
+        expected_output: args.expected_output,
+        constraints: args.constraints,
+        file_ids: args.file_ids,
+        include_conversation_context: args.include_conversation_context,
+    };
+
+    match launch_delegation(
+        app_state,
+        policy,
+        context,
+        DelegationTargetSpec::Assistant(assistant_id),
+        context.run_mode,
+        brief,
+    )
+    .await?
+    {
+        LaunchOutcome::Dispatched {
+            assistant_id,
+            assistant_name,
+            delegate_chat_id,
+        } => Ok(DelegationDispatchOutcome::Dispatched {
+            assistant_id,
+            assistant_name,
+            delegate_chat_id,
+        }),
+        LaunchOutcome::Launched(launched) => {
+            Ok(await_delegation(app_state, launched, parent, tool_call).await)
+        }
+    }
 }
 
 #[cfg(test)]
