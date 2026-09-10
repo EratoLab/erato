@@ -376,12 +376,12 @@ const EmlPreviewBody: React.FC<{
               title={parsed.subject ?? t`Email preview`}
               sandbox=""
               srcDoc={sanitizedHtml}
-              className="h-[60vh] w-full rounded border border-[var(--theme-border-attachment)] bg-white"
+              className="card-geometry h-[60vh] w-full border border-[var(--theme-border-attachment)] bg-white"
             />
           ) : (
             <pre
               data-testid="eml-preview-text"
-              className="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-accent)] p-3 text-sm text-[var(--theme-fg-primary)]"
+              className="card-geometry max-h-[60vh] overflow-auto whitespace-pre-wrap border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-accent)] p-3 text-sm text-[var(--theme-fg-primary)]"
             >
               {parsed.text || t`(no body)`}
             </pre>
@@ -563,12 +563,12 @@ const ThreadMessageSection: React.FC<{
   return (
     <div
       data-testid="eml-thread-message"
-      className="rounded border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-primary)]"
+      className="card-geometry border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-primary)]"
     >
       <button
         type="button"
         onClick={() => setExpanded((value) => !value)}
-        className="flex w-full items-start gap-2 p-3 text-left"
+        className="card-section focus-ring-inset flex w-full items-start gap-2 p-3 text-left"
         aria-expanded={expanded}
         aria-controls={panelId}
       >
@@ -614,12 +614,12 @@ const ThreadMessageSection: React.FC<{
               title={message.subject ?? t`Email`}
               sandbox=""
               srcDoc={sanitizedHtml}
-              className="h-[40vh] w-full rounded border border-[var(--theme-border-attachment)] bg-white"
+              className="card-geometry h-[40vh] w-full border border-[var(--theme-border-attachment)] bg-white"
             />
           ) : message.text ? (
             <pre
               data-testid="eml-thread-message-text"
-              className="max-h-[40vh] overflow-auto whitespace-pre-wrap rounded border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-accent)] p-3 text-sm text-[var(--theme-fg-primary)]"
+              className="card-geometry max-h-[40vh] overflow-auto whitespace-pre-wrap border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-accent)] p-3 text-sm text-[var(--theme-fg-primary)]"
             >
               {message.text}
             </pre>
@@ -649,7 +649,7 @@ const EmlHeader: React.FC<{
   date: string | null;
 }> = ({ subject, from, to, cc, date }) => {
   return (
-    <div className="flex items-start gap-3 rounded border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-primary)] p-3">
+    <div className="card-geometry flex items-start gap-3 border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-primary)] p-3">
       <div className="mt-0.5 shrink-0 text-[var(--theme-fg-muted)]">
         <MailIcon className="size-5" aria-hidden="true" />
       </div>
