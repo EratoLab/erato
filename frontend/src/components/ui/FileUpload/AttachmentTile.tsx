@@ -85,11 +85,12 @@ const RemoveButton: React.FC<{
       onRemove();
     }}
     disabled={disabled}
+    data-ui="attachment-remove"
     aria-label={`${t({ id: "common.remove", message: "Remove" })} ${filename}`}
     className={clsx(
       // Overhangs just far enough to clear the tile's own content without
       // reaching into the neighbouring tile across the gap.
-      "absolute -right-1 -top-1 z-10 inline-flex size-5 items-center justify-center rounded-full",
+      "attachment-badge-geometry absolute -right-1 -top-1 z-10 inline-flex size-5 items-center justify-center",
       "border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] text-[var(--theme-fg-muted)] shadow-sm",
       "hover:text-[var(--theme-fg-primary)] disabled:cursor-not-allowed",
       // Hidden until the tile is hovered or holds focus, so a staged row stays
@@ -166,6 +167,8 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
       alt={onActivate ? "" : filename}
       onError={() => setImageFailed(true)}
       data-ui="attachment-tile"
+      data-variant="tile"
+      data-media="image"
       style={
         expanded
           ? {
@@ -175,7 +178,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
           : { width: geometry.mediaSize, height: geometry.mediaSize }
       }
       className={clsx(
-        "rounded-[var(--attachment-tile-radius,var(--theme-radius-base))] border [border-color:var(--theme-border-media)]",
+        "attachment-tile-geometry border [border-color:var(--theme-border-media)]",
         // Cropping is right for a thumbnail standing in for the file, wrong
         // once the point is seeing what the image actually contains.
         expanded ? "w-full object-contain" : "object-cover",
@@ -184,24 +187,21 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
   ) : (
     <div
       data-ui="attachment-tile"
+      data-variant="tile"
+      data-media="document"
       className={clsx(
-        "flex w-full items-center gap-2 rounded-[var(--attachment-tile-radius,var(--theme-radius-base))] border p-2 text-left",
+        "attachment-tile-geometry flex w-full items-center gap-2 border p-2 text-left",
         "border-[var(--theme-border)] bg-[var(--theme-bg-secondary)]",
         onActivate &&
           "transition-colors group-hover:border-[var(--theme-border-focus)] group-hover:bg-[var(--theme-bg-accent)]",
       )}
     >
       <span
+        data-ui="attachment-tile-icon"
         className={clsx(
           geometry.iconBox,
-          "flex shrink-0 items-center justify-center rounded-[var(--attachment-tile-icon-radius,var(--theme-radius-base))]",
+          "attachment-tile-icon-geometry attachment-tile-icon-skin flex shrink-0 items-center justify-center",
         )}
-        // The per-type colour already lives in FILE_TYPES; a tinted plate is
-        // what makes it readable at tile size without shouting.
-        style={{
-          backgroundColor: `color-mix(in srgb, ${iconColor} 12%, transparent)`,
-          color: iconColor,
-        }}
       >
         <ResolvedIcon iconId={iconId} className={geometry.icon} aria-hidden />
       </span>
@@ -226,7 +226,17 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
         isMedia ? (expanded ? "w-full" : "shrink-0") : "min-w-0",
         className,
       )}
-      style={isMedia ? undefined : { maxWidth: geometry.docMaxWidth }}
+      style={
+        {
+          ...(isMedia ? undefined : { maxWidth: geometry.docMaxWidth }),
+          // The per-type colour already lives in FILE_TYPES; a tinted plate is
+          // what makes it readable at tile size without shouting. It is handed
+          // to the plate as a variable from here rather than declared on the
+          // plate itself, where an inline value would outrank the theme rule
+          // the hook exists to accept.
+          "--attachment-tile-icon-tint": iconColor,
+        } as React.CSSProperties
+      }
       data-filetype={fileType}
     >
       {onActivate ? (
@@ -238,7 +248,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
           title={filename}
           aria-label={`${activateLabel ?? t({ id: "chat.file.preview_attachment", message: "Preview attachment" })} ${filename}, ${metaLabel}`}
           className={clsx(
-            "block w-full cursor-pointer rounded-[var(--attachment-tile-radius,var(--theme-radius-base))] text-left",
+            "attachment-tile-geometry block w-full cursor-pointer text-left",
             "focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus focus-visible:ring-offset-2",
             isMedia && "hover:opacity-90",
           )}

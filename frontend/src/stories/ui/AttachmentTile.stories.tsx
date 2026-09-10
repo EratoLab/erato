@@ -230,7 +230,13 @@ export const LongFilenames: Story = {
   },
 };
 
-/** Every configured type, to check the per-type icon colour actually lands. */
+/**
+ * Every configured type, to check the per-type icon colour actually lands. The
+ * colour reaches the plate as `--attachment-tile-icon-tint` on the chip wrapper,
+ * diluted into a fill by a rule rather than written inline, so this is the only
+ * place the whole channel is visible at once: a broken rule paints every plate
+ * here transparent while the components still emit every hook a test can see.
+ */
 export const AllFileTypes: Story = {
   args: { items: [] },
   render: () => {

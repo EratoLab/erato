@@ -115,3 +115,48 @@ describe("attachment group and thread card channels", () => {
     expect(ruleBody(".thread-message-card-geometry")).not.toContain("max(0px");
   });
 });
+
+describe("attachment chip channels", () => {
+  // The other half of the derivation above. A chip reads what a frame around
+  // it declares, so the two are one contract: a default on either read below
+  // would shadow the card's value, and every probe that measures a chip
+  // standing on its own would keep passing while the retune moved nothing.
+  it("reads both tile corners without declaring either", () => {
+    declares(
+      ".attachment-tile-geometry",
+      "border-radius",
+      "var(--attachment-tile-radius, var(--theme-radius-base))",
+    );
+    // A read names the variable before a comma; only a declaration follows it
+    // with a colon.
+    expect(ruleBody(".attachment-tile-geometry")).not.toContain(
+      "--attachment-tile-radius:",
+    );
+
+    declares(
+      ".attachment-tile-icon-geometry",
+      "border-radius",
+      "var(--attachment-tile-icon-radius, var(--theme-radius-base))",
+    );
+    expect(ruleBody(".attachment-tile-icon-geometry")).not.toContain(
+      "--attachment-tile-icon-radius:",
+    );
+  });
+
+  it("keeps the corner badge a circle no radius token can square", () => {
+    declares(".attachment-badge-geometry", "border-radius", "50%");
+  });
+
+  it("dilutes the icon plate's tint rather than pinning a colour", () => {
+    declares(
+      ".attachment-tile-icon-skin",
+      "color",
+      "var(--attachment-tile-icon-tint)",
+    );
+    declares(
+      ".attachment-tile-icon-skin",
+      "background-color",
+      "color-mix(in srgb, var(--attachment-tile-icon-tint) 12%, transparent)",
+    );
+  });
+});

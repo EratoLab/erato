@@ -809,6 +809,33 @@ body {
     gap: var(--theme-spacing-control-gap);
   }
 
+  /* The attachment chip family. Every corner here is a read: a chip takes its
+     radius from the frame around it — a thread card declares both variables,
+     in the unlayered block far below — and falls back to the base radius when
+     it stands on its own in the composer. A default declared here instead
+     would shadow the frame's value, so a card that reshapes its chips would
+     move nothing, while a probe measuring a chip outside a card still passes. */
+  .attachment-tile-geometry {
+    border-radius: var(--attachment-tile-radius, var(--theme-radius-base));
+  }
+
+  .attachment-tile-icon-geometry {
+    border-radius: var(--attachment-tile-icon-radius, var(--theme-radius-base));
+  }
+
+  /* A corner badge holds an icon and no label, so it is an intrinsic circle
+     like .avatar-geometry above rather than a capsule: a theme softening the
+     pill radius must not square it. */
+  .attachment-badge-geometry {
+    border-radius: 50%;
+  }
+
+  /* A notice stands in a row of chips, so it takes the chip corner rather than
+     a token of its own and follows a card that reshapes them. */
+  .attachment-notice-geometry {
+    border-radius: var(--attachment-tile-radius, var(--theme-radius-base));
+  }
+
   /* The spinner ring. --spinner-* are private to this family rather than
      --theme-* names, which ThemeProvider emits as literals on :root and would
      therefore overwrite. They are read with fallbacks and never declared here:
@@ -1000,6 +1027,23 @@ body {
    law for every card that ever opens. It exists to name the channel. */
 .card-skin[data-expanded] {
   --card-shadow: var(--card-expanded-shadow, none);
+}
+
+/* The tinted plate behind a file-type glyph. The per-type colour arrives from
+   the call site as --attachment-tile-icon-tint on the chip wrapper and is
+   diluted into a fill here; the inline background-color and color this
+   replaces outranked every rule, which made the tint the one part of a chip no
+   theme could reach. Read without a fallback, like the dropdown row corner:
+   every plate is drawn by the tile, which always sets the variable, and a
+   fallback would let a plate that escaped it look right while silently
+   missing its tint. */
+.attachment-tile-icon-skin {
+  color: var(--attachment-tile-icon-tint);
+  background-color: color-mix(
+    in srgb,
+    var(--attachment-tile-icon-tint) 12%,
+    transparent
+  );
 }
 
 /* The sidebar's own width stays inline — it is computed from slim/expanded

@@ -236,7 +236,7 @@ interface SelectableAttachmentRowProps {
 }
 
 const SELECTABLE_ROW_CLASS =
-  "flex w-full items-center gap-2 rounded-[var(--attachment-tile-radius,var(--theme-radius-base))] border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-2";
+  "attachment-tile-geometry flex w-full items-center gap-2 border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-2";
 
 const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
   file,
@@ -297,7 +297,7 @@ const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
         <InteractiveContainer
           onClick={onPreview}
           useDiv={true}
-          className="min-w-0 flex-1 cursor-pointer rounded-[var(--attachment-tile-radius,var(--theme-radius-base))] hover:bg-theme-bg-accent"
+          className="attachment-tile-geometry min-w-0 flex-1 cursor-pointer hover:bg-theme-bg-accent"
           aria-label={`${t({ id: "chat.file.preview_attachment", message: "Preview attachment" })} ${filename}`}
         >
           {chip}
