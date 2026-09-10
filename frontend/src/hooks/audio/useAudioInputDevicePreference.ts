@@ -27,8 +27,11 @@ export function useAudioInputDevicePreference({
   const selectedAudioInputDeviceId = useAudioInputDeviceStore(
     (state) => state.selectedDeviceId,
   );
-  const setSelectedDeviceIdInStore = useAudioInputDeviceStore(
-    (state) => state.setSelectedDeviceId,
+  const selectedAudioInputDeviceLabel = useAudioInputDeviceStore(
+    (state) => state.selectedDeviceLabel,
+  );
+  const setSelectedDeviceInStore = useAudioInputDeviceStore(
+    (state) => state.setSelectedDevice,
   );
 
   const [audioInputDevices, setAudioInputDevices] = useState<
@@ -46,17 +49,20 @@ export function useAudioInputDevicePreference({
   // stream is live. Consumers use it to show a "start the test to see
   // device names" hint and to know labels are still placeholders.
   const [hasResolvedLabels, setHasResolvedLabels] = useState(false);
+  // Pre-permission enumeration is one placeholder with an empty deviceId,
+  // so a stored id cannot be judged against it.
+  const [hasResolvedDeviceIds, setHasResolvedDeviceIds] = useState(false);
   // True when the on-demand label reveal (see `revealAudioInputDeviceLabels`)
   // was blocked because the user denied the microphone permission prompt.
   // Drives a tailored, non-error hint — the device list still works on the
   // system default; only the human-readable names are unavailable.
   const [labelRevealDenied, setLabelRevealDenied] = useState(false);
 
-  const setSelectedAudioInputDeviceId = useCallback(
-    (deviceId: string) => {
-      setSelectedDeviceIdInStore(deviceId);
+  const setSelectedAudioInputDevice = useCallback(
+    (deviceId: string, label = "") => {
+      setSelectedDeviceInStore(deviceId, label);
     },
-    [setSelectedDeviceIdInStore],
+    [setSelectedDeviceInStore],
   );
 
   const refreshAudioInputDevices = useCallback(async () => {
@@ -91,9 +97,14 @@ export function useAudioInputDevicePreference({
         });
       setAudioInputDevices(audioInputs);
       setHasResolvedLabels(sawRealLabel);
+      setHasResolvedDeviceIds(
+        audioInputs.length > 0 &&
+          audioInputs.every((device) => device.deviceId !== ""),
+      );
     } catch {
       setAudioInputDevices([]);
       setHasResolvedLabels(false);
+      setHasResolvedDeviceIds(false);
       setAudioInputDeviceError(t`Could not load audio input devices.`);
     } finally {
       setIsLoadingAudioInputDevices(false);
@@ -177,31 +188,6 @@ export function useAudioInputDevicePreference({
     };
   }, [enabled, refreshAudioInputDevices]);
 
-  // Auto-clear a stale stored deviceId. Whenever a fresh enumeration
-  // produces a non-empty device list (initial load, devicechange,
-  // manual refresh) and our persisted `selectedAudioInputDeviceId`
-  // isn't in it, drop the selection so the next `getUserMedia` call
-  // falls back to the system default instead of throwing
-  // `OverconstrainedError`. Triggers on Bluetooth disconnect, USB
-  // unplug, browser-side deviceId rotation, profile changes, etc.
-  // We guard on `audioInputDevices.length > 0` so a pre-permission
-  // enumeration (which returns an empty list on some browsers)
-  // doesn't wipe a still-valid selection.
-  useEffect(() => {
-    if (!selectedAudioInputDeviceId) return;
-    if (audioInputDevices.length === 0) return;
-    const stillAvailable = audioInputDevices.some(
-      (device) => device.deviceId === selectedAudioInputDeviceId,
-    );
-    if (!stillAvailable) {
-      setSelectedAudioInputDeviceId("");
-    }
-  }, [
-    audioInputDevices,
-    selectedAudioInputDeviceId,
-    setSelectedAudioInputDeviceId,
-  ]);
-
   const selectedAudioInputDevice = useMemo(
     () =>
       audioInputDevices.find(
@@ -213,6 +199,7 @@ export function useAudioInputDevicePreference({
   return {
     audioInputDeviceError,
     audioInputDevices,
+    hasResolvedDeviceIds,
     hasResolvedLabels,
     isLoadingAudioInputDevices,
     labelRevealDenied,
@@ -220,6 +207,7 @@ export function useAudioInputDevicePreference({
     revealAudioInputDeviceLabels,
     selectedAudioInputDevice,
     selectedAudioInputDeviceId,
-    setSelectedAudioInputDeviceId,
+    selectedAudioInputDeviceLabel,
+    setSelectedAudioInputDevice,
   };
 }

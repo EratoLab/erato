@@ -1,12 +1,10 @@
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useAudioInputDeviceStore } from "@/state/audioInputDeviceStore";
+
 import { getAudioLevelBarsFromTimeDomainData } from "../audio-pcm-codec";
 import { useAudioDictationRecorder } from "../useAudioDictationRecorder";
-
-vi.mock("../useAudioInputDevicePreference", () => ({
-  useAudioInputDevicePreference: () => ({ selectedAudioInputDeviceId: "" }),
-}));
 
 vi.mock("../audio-dictation-worklet.ts?worker&url", () => ({
   default: "blob:mock-audio-dictation-worklet",
@@ -305,6 +303,10 @@ describe("useAudioDictationRecorder", () => {
     MockAudioWorkletNode.instances.length = 0;
     vadMock.engines.length = 0;
     vadMock.createRicky0123VadEngine.mockClear();
+    useAudioInputDeviceStore.setState({
+      selectedDeviceId: "",
+      selectedDeviceLabel: "",
+    });
 
     Object.defineProperty(navigator, "mediaDevices", {
       configurable: true,
@@ -341,6 +343,36 @@ describe("useAudioDictationRecorder", () => {
       permission.resolve(new MockMediaStream());
       await permission.promise;
     });
+  });
+
+  it("falls back to the system default for the session when the stored microphone cannot be opened", async () => {
+    useAudioInputDeviceStore.setState({
+      selectedDeviceId: "mic-airpods",
+      selectedDeviceLabel: "AirPods (Bluetooth)",
+    });
+    const getUserMedia = vi
+      .fn<
+        (constraints: MediaStreamConstraints) => Promise<MockMediaStream>
+      >(async () => new MockMediaStream())
+      .mockRejectedValueOnce(new DOMException("gone", "OverconstrainedError"));
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia },
+    });
+    const { result } = renderDictationHook();
+
+    await act(async () => {
+      result.current.toggleDictation();
+    });
+    await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(2));
+
+    expect(getUserMedia.mock.calls[0][0]).toMatchObject({
+      audio: { deviceId: { exact: "mic-airpods" } },
+    });
+    expect(getUserMedia.mock.calls[1][0].audio).not.toHaveProperty("deviceId");
+    expect(useAudioInputDeviceStore.getState().selectedDeviceId).toBe(
+      "mic-airpods",
+    );
   });
 
   it("clears starting state when the socket closes before session state", async () => {

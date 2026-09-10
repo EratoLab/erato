@@ -3193,6 +3193,16 @@ msgstr "Microphone"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/AudioInputTabContent.tsx
+msgid "preferences.dialog.audio.input.notConnected"
+msgstr "{storedDeviceLabel} (not connected)"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/AudioInputTabContent.tsx
+msgid "preferences.dialog.audio.input.notConnectedHint"
+msgstr "{storedDeviceLabel} is not connected. Recordings use the system default microphone until it is available again."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/AudioInputTabContent.tsx
 msgid "preferences.dialog.audio.input.persisted"
 msgstr "This selection is saved locally in this browser."
 
@@ -3215,6 +3225,11 @@ msgstr "Microphone access was denied, so device names can't be shown. You can st
 #: src/components/ui/Settings/AudioInputTabContent.tsx
 msgid "preferences.dialog.audio.input.revealHint"
 msgstr "To show your device names, refresh devices or start the microphone test below."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/AudioInputTabContent.tsx
+msgid "preferences.dialog.audio.input.storedDevice"
+msgstr "Selected microphone"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/GuidedMicCheck.tsx

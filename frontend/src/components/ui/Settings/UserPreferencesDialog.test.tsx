@@ -178,7 +178,10 @@ function renderDialog({
 
 beforeEach(() => {
   sessionStorage.clear();
-  useAudioInputDeviceStore.setState({ selectedDeviceId: "" });
+  useAudioInputDeviceStore.setState({
+    selectedDeviceId: "",
+    selectedDeviceLabel: "",
+  });
   localStorageValues.clear();
   vi.stubGlobal("localStorage", {
     getItem: vi.fn((key: string) => localStorageValues.get(key) ?? null),
@@ -367,6 +370,93 @@ describe("UserPreferencesDialog", () => {
     });
 
     expect(screen.queryByRole("tab", { name: "Data" })).not.toBeInTheDocument();
+  });
+
+  it("shows a stored microphone that is not listed as not connected and keeps it", async () => {
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        enumerateDevices: vi.fn(async () => [
+          {
+            deviceId: "mic-built-in",
+            groupId: "group-1",
+            kind: "audioinput",
+            label: "Built-in Microphone",
+            toJSON: () => ({}),
+          },
+        ]),
+      },
+    });
+    useAudioInputDeviceStore.setState({
+      selectedDeviceId: "mic-airpods",
+      selectedDeviceLabel: "AirPods (Bluetooth)",
+    });
+
+    renderDialog({ audioTranscriptionEnabled: true });
+    fireEvent.click(screen.getByRole("tab", { name: "Audio" }));
+
+    const audioPanel = await screen.findByRole("tabpanel", { name: "Audio" });
+    const trigger = await within(audioPanel).findByTestId(
+      "audio-input-dropdown-trigger",
+    );
+    await waitFor(() =>
+      expect(trigger).toHaveTextContent("AirPods (Bluetooth) (not connected)"),
+    );
+    expect(
+      within(audioPanel).getByTestId("audio-input-not-connected"),
+    ).toBeInTheDocument();
+    expect(useAudioInputDeviceStore.getState().selectedDeviceId).toBe(
+      "mic-airpods",
+    );
+
+    fireEvent.click(trigger);
+    expect(
+      await screen.findByRole("menuitem", {
+        name: "AirPods (Bluetooth) (not connected)",
+      }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("menuitem", { name: "Built-in Microphone" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not call a stored microphone missing while device ids are still placeholders", async () => {
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        enumerateDevices: vi.fn(async () => [
+          {
+            deviceId: "",
+            groupId: "",
+            kind: "audioinput",
+            label: "",
+            toJSON: () => ({}),
+          },
+        ]),
+      },
+    });
+    useAudioInputDeviceStore.setState({
+      selectedDeviceId: "mic-airpods",
+      selectedDeviceLabel: "AirPods (Bluetooth)",
+    });
+
+    renderDialog({ audioTranscriptionEnabled: true });
+    fireEvent.click(screen.getByRole("tab", { name: "Audio" }));
+
+    const audioPanel = await screen.findByRole("tabpanel", { name: "Audio" });
+    await waitFor(() =>
+      expect(
+        within(audioPanel).getByTestId("audio-input-diagnostics"),
+      ).toHaveTextContent("1"),
+    );
+    const trigger = within(audioPanel).getByTestId(
+      "audio-input-dropdown-trigger",
+    );
+    expect(trigger).toHaveTextContent("AirPods (Bluetooth)");
+    expect(trigger).not.toHaveTextContent("not connected");
+    expect(
+      within(audioPanel).queryByTestId("audio-input-not-connected"),
+    ).toBeNull();
   });
 
   it("shows an Audio tab when audio transcription is enabled and persists the selected microphone", async () => {

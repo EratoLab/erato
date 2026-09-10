@@ -45,7 +45,9 @@ migrateLegacyAudioInputDeviceId();
 
 export interface AudioInputDeviceState {
   selectedDeviceId: string;
-  setSelectedDeviceId: (deviceId: string) => void;
+  /** Captured at selection time so an unplugged device can still be named. */
+  selectedDeviceLabel: string;
+  setSelectedDevice: (deviceId: string, label: string) => void;
 }
 
 export const useAudioInputDeviceStore = create<AudioInputDeviceState>()(
@@ -53,11 +55,15 @@ export const useAudioInputDeviceStore = create<AudioInputDeviceState>()(
     persist(
       (set) => ({
         selectedDeviceId: "",
-        setSelectedDeviceId: (deviceId) =>
+        selectedDeviceLabel: "",
+        setSelectedDevice: (deviceId, label) =>
           set(
-            { selectedDeviceId: deviceId },
+            {
+              selectedDeviceId: deviceId,
+              selectedDeviceLabel: deviceId ? label : "",
+            },
             false,
-            "audioInputDevice/setSelectedDeviceId",
+            "audioInputDevice/setSelectedDevice",
           ),
       }),
       {
@@ -92,7 +98,10 @@ export const useAudioInputDeviceStore = create<AudioInputDeviceState>()(
             }
           },
         })),
-        partialize: (state) => ({ selectedDeviceId: state.selectedDeviceId }),
+        partialize: (state) => ({
+          selectedDeviceId: state.selectedDeviceId,
+          selectedDeviceLabel: state.selectedDeviceLabel,
+        }),
       },
     ),
     {

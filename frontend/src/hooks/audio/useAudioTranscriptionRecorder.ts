@@ -10,6 +10,7 @@ import {
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
 import { createRicky0123VadEngine } from "@/lib/voice-runtime";
+import { useAudioInputDeviceStore } from "@/state/audioInputDeviceStore";
 import { createLogger } from "@/utils/debugLogger";
 
 // `?worker&url` routes the worklet through Vite's worker bundling
@@ -32,7 +33,6 @@ import {
   type SpeechOnsetController,
 } from "./onsetFlipController";
 import { useAudioContextInterruptionRecovery } from "./useAudioContextInterruptionRecovery";
-import { useAudioInputDevicePreference } from "./useAudioInputDevicePreference";
 import { useMediaStreamTrackWatchdog } from "./useMediaStreamTrackWatchdog";
 
 import type {
@@ -451,8 +451,9 @@ export function useAudioTranscriptionRecorder({
   /** Mounted getter for the awaits in startAudioRecording and the
    *  deferred finalization — mirrors useAudioDictationRecorder. */
   const isMounted = useMountedState();
-  const { selectedAudioInputDeviceId, setSelectedAudioInputDeviceId } =
-    useAudioInputDevicePreference();
+  const selectedAudioInputDeviceId = useAudioInputDeviceStore(
+    (state) => state.selectedDeviceId,
+  );
 
   // Capture-track device-loss watchdog (ERMAIN-390). The inline handler
   // references `stopAudioRecording`, which is defined further down — fine,
@@ -1279,19 +1280,17 @@ export function useAudioTranscriptionRecorder({
             : baseAudioConstraints,
         });
       } catch (firstError) {
-        // A stored deviceId can go stale between enumeration and
-        // getUserMedia (e.g. a Bluetooth disconnect). On
-        // OverconstrainedError, retry once with the system-default mic
-        // and clear the stale stored id — mirrors the dictation recorder.
+        // The stored device can be gone at capture time (Bluetooth drop or
+        // profile switch): use the system default for this session only.
         if (
           selectedAudioInputDeviceId &&
           firstError instanceof DOMException &&
-          firstError.name === "OverconstrainedError"
+          (firstError.name === "OverconstrainedError" ||
+            firstError.name === "NotFoundError")
         ) {
           stream = await mediaDevices.getUserMedia({
             audio: baseAudioConstraints,
           });
-          setSelectedAudioInputDeviceId("");
         } else {
           throw firstError;
         }
@@ -1637,7 +1636,6 @@ export function useAudioTranscriptionRecorder({
     startLiveAudioTranscriptionSession,
     flushLiveAudioSamples,
     selectedAudioInputDeviceId,
-    setSelectedAudioInputDeviceId,
     setRecordingBarsThrottled,
     stopVadEngine,
     vadAutoStopEnabled,

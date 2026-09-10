@@ -9,6 +9,8 @@ import {
   type Mock,
 } from "vitest";
 
+import { useAudioInputDeviceStore } from "@/state/audioInputDeviceStore";
+
 import { useAudioInputDevicePreference } from "../useAudioInputDevicePreference";
 
 type FakeStream = { getTracks: () => { stop: () => void }[] };
@@ -133,5 +135,130 @@ describe("useAudioInputDevicePreference — revealAudioInputDeviceLabels", () =>
     expect(result.current.audioInputDeviceError).toBeNull();
     expect(result.current.audioInputDevices).toHaveLength(1);
     expect(trackStop).not.toHaveBeenCalled();
+  });
+});
+
+describe("useAudioInputDevicePreference — stored selection survives list churn", () => {
+  const PLACEHOLDER: FakeDevice[] = [
+    { kind: "audioinput", deviceId: "", label: "" },
+  ];
+  const REAL: FakeDevice[] = [
+    {
+      kind: "audioinput",
+      deviceId: "mic-airpods",
+      label: "AirPods (Bluetooth)",
+    },
+    {
+      kind: "audioinput",
+      deviceId: "mic-builtin",
+      label: "Built-in Microphone",
+    },
+  ];
+  let devices: FakeDevice[];
+  let deviceChangeListeners: Array<() => void>;
+
+  const fireDeviceChange = () => {
+    for (const listener of deviceChangeListeners) listener();
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    useAudioInputDeviceStore.setState({
+      selectedDeviceId: "",
+      selectedDeviceLabel: "",
+    });
+    devices = REAL;
+    deviceChangeListeners = [];
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: vi.fn(async () => ({ getTracks: () => [] })),
+        enumerateDevices: vi.fn(async () => devices),
+        addEventListener: vi.fn((_type: string, listener: () => void) => {
+          deviceChangeListeners.push(listener);
+        }),
+        removeEventListener: vi.fn(),
+      },
+    });
+  });
+
+  it("keeps a selection made after the permission grant while another instance still holds the pre-permission placeholder", async () => {
+    devices = PLACEHOLDER;
+    const stale = renderHook(() => useAudioInputDevicePreference());
+    await waitFor(() =>
+      expect(stale.result.current.audioInputDevices).toHaveLength(1),
+    );
+    expect(stale.result.current.hasResolvedDeviceIds).toBe(false);
+
+    devices = REAL;
+    const prefs = renderHook(() => useAudioInputDevicePreference());
+    await waitFor(() =>
+      expect(prefs.result.current.hasResolvedDeviceIds).toBe(true),
+    );
+
+    act(() => {
+      prefs.result.current.setSelectedAudioInputDevice(
+        "mic-airpods",
+        "AirPods (Bluetooth)",
+      );
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(useAudioInputDeviceStore.getState()).toMatchObject({
+      selectedDeviceId: "mic-airpods",
+      selectedDeviceLabel: "AirPods (Bluetooth)",
+    });
+    expect(stale.result.current.selectedAudioInputDeviceId).toBe("mic-airpods");
+  });
+
+  it("keeps the selection across an enumeration that omits the device", async () => {
+    const { result } = renderHook(() => useAudioInputDevicePreference());
+    await waitFor(() =>
+      expect(result.current.audioInputDevices).toHaveLength(2),
+    );
+    act(() => {
+      result.current.setSelectedAudioInputDevice(
+        "mic-airpods",
+        "AirPods (Bluetooth)",
+      );
+    });
+
+    devices = REAL.filter((device) => device.deviceId !== "mic-airpods");
+    act(fireDeviceChange);
+    await waitFor(() =>
+      expect(result.current.audioInputDevices).toHaveLength(1),
+    );
+    expect(result.current.selectedAudioInputDevice).toBeNull();
+    expect(result.current.selectedAudioInputDeviceId).toBe("mic-airpods");
+
+    devices = REAL;
+    act(fireDeviceChange);
+    await waitFor(() =>
+      expect(result.current.selectedAudioInputDevice?.label).toBe(
+        "AirPods (Bluetooth)",
+      ),
+    );
+    expect(useAudioInputDeviceStore.getState().selectedDeviceId).toBe(
+      "mic-airpods",
+    );
+  });
+
+  it("drops the stored label together with the id", () => {
+    const { result } = renderHook(() => useAudioInputDevicePreference());
+    act(() => {
+      result.current.setSelectedAudioInputDevice(
+        "mic-airpods",
+        "AirPods (Bluetooth)",
+      );
+    });
+    act(() => {
+      result.current.setSelectedAudioInputDevice("");
+    });
+    expect(useAudioInputDeviceStore.getState()).toMatchObject({
+      selectedDeviceId: "",
+      selectedDeviceLabel: "",
+    });
   });
 });

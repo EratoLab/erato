@@ -32,13 +32,15 @@ export function AudioInputTabContent({ isActive }: AudioInputTabContentProps) {
   const {
     audioInputDeviceError,
     audioInputDevices,
+    hasResolvedDeviceIds,
     hasResolvedLabels,
     isLoadingAudioInputDevices,
     labelRevealDenied,
     refreshAudioInputDevices,
     revealAudioInputDeviceLabels,
     selectedAudioInputDeviceId,
-    setSelectedAudioInputDeviceId,
+    selectedAudioInputDeviceLabel,
+    setSelectedAudioInputDevice,
   } = useAudioInputDevicePreference();
   const [isAudioInputDropdownOpen, setIsAudioInputDropdownOpen] =
     useState(false);
@@ -56,14 +58,45 @@ export function AudioInputTabContent({ isActive }: AudioInputTabContentProps) {
     id: "preferences.dialog.audio.input.default",
     message: "System default microphone",
   });
+  const listedSelectedDevice = audioInputDevices.find(
+    (device) => device.deviceId === selectedAudioInputDeviceId,
+  );
+  const storedDeviceLabel =
+    selectedAudioInputDeviceLabel ||
+    t({
+      id: "preferences.dialog.audio.input.storedDevice",
+      message: "Selected microphone",
+    });
+  const isSelectedDeviceUnlisted =
+    selectedAudioInputDeviceId !== "" && listedSelectedDevice === undefined;
+  // Only a resolved (post-permission) list can say a device is really gone.
+  const isSelectedDeviceMissing =
+    isSelectedDeviceUnlisted && hasResolvedDeviceIds;
+  const storedDeviceDisplayLabel = isSelectedDeviceMissing
+    ? t({
+        id: "preferences.dialog.audio.input.notConnected",
+        message: `${storedDeviceLabel} (not connected)`,
+      })
+    : storedDeviceLabel;
   const audioInputItems = useMemo<DropdownMenuItem[]>(
     () => [
       {
         id: "audio-input-default",
         label: audioInputDefaultLabel,
         checked: selectedAudioInputDeviceId === "",
-        onClick: () => setSelectedAudioInputDeviceId(""),
+        onClick: () => setSelectedAudioInputDevice(""),
       },
+      ...(isSelectedDeviceUnlisted
+        ? [
+            {
+              id: "audio-input-stored",
+              label: storedDeviceDisplayLabel,
+              checked: true,
+              disabled: true,
+              onClick: () => {},
+            },
+          ]
+        : []),
       // Namespace device items under `device-` so an enumerated device whose
       // deviceId is literally "default" (Chrome/macOS returns one) can't
       // collide with the static "audio-input-default" item's React key.
@@ -71,26 +104,22 @@ export function AudioInputTabContent({ isActive }: AudioInputTabContentProps) {
         id: `audio-input-device-${device.deviceId}`,
         label: device.label,
         checked: device.deviceId === selectedAudioInputDeviceId,
-        onClick: () => setSelectedAudioInputDeviceId(device.deviceId),
+        onClick: () =>
+          setSelectedAudioInputDevice(device.deviceId, device.label),
       })),
     ],
     [
       audioInputDefaultLabel,
       audioInputDevices,
+      isSelectedDeviceUnlisted,
       selectedAudioInputDeviceId,
-      setSelectedAudioInputDeviceId,
+      setSelectedAudioInputDevice,
+      storedDeviceDisplayLabel,
     ],
   );
-  const selectedAudioInputLabel = useMemo(() => {
-    if (!selectedAudioInputDeviceId) {
-      return audioInputDefaultLabel;
-    }
-    return (
-      audioInputDevices.find(
-        (device) => device.deviceId === selectedAudioInputDeviceId,
-      )?.label ?? audioInputDefaultLabel
-    );
-  }, [audioInputDefaultLabel, audioInputDevices, selectedAudioInputDeviceId]);
+  const selectedAudioInputLabel = !selectedAudioInputDeviceId
+    ? audioInputDefaultLabel
+    : (listedSelectedDevice?.label ?? storedDeviceDisplayLabel);
 
   const inputDeviceCount = audioInputDevices.length;
 
@@ -166,6 +195,18 @@ export function AudioInputTabContent({ isActive }: AudioInputTabContentProps) {
               })}
         </Button>
       </div>
+
+      {isSelectedDeviceMissing ? (
+        <p
+          className="text-xs text-theme-fg-muted"
+          data-testid="audio-input-not-connected"
+        >
+          {t({
+            id: "preferences.dialog.audio.input.notConnectedHint",
+            message: `${storedDeviceLabel} is not connected. Recordings use the system default microphone until it is available again.`,
+          })}
+        </p>
+      ) : null}
 
       <p
         className="text-xs text-theme-fg-muted"

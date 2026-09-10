@@ -3193,6 +3193,16 @@ msgstr "Mikrofon"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/AudioInputTabContent.tsx
+msgid "preferences.dialog.audio.input.notConnected"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/AudioInputTabContent.tsx
+msgid "preferences.dialog.audio.input.notConnectedHint"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/AudioInputTabContent.tsx
 msgid "preferences.dialog.audio.input.persisted"
 msgstr "Ten wybór jest zapisywany lokalnie w tej przeglądarce."
 
@@ -3215,6 +3225,11 @@ msgstr "Odmówiono dostępu do mikrofonu, więc nie można wyświetlić nazw urz
 #: src/components/ui/Settings/AudioInputTabContent.tsx
 msgid "preferences.dialog.audio.input.revealHint"
 msgstr "Aby wyświetlić nazwy urządzeń, odśwież urządzenia lub uruchom poniżej test mikrofonu."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/AudioInputTabContent.tsx
+msgid "preferences.dialog.audio.input.storedDevice"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/GuidedMicCheck.tsx
