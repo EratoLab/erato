@@ -55,6 +55,9 @@ export { Avatar } from "@/components/ui/Feedback/Avatar";
 export { CopyErrorButton } from "@/components/ui/Feedback/CopyErrorButton";
 export { LoadingIndicator } from "@/components/ui/Feedback/LoadingIndicator";
 export { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
+export { AttachmentNotice } from "@/components/ui/FileUpload/AttachmentNotice";
+export { AttachmentTile } from "@/components/ui/FileUpload/AttachmentTile";
+export { AttachmentTileList } from "@/components/ui/FileUpload/AttachmentTileList";
 export { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
 export { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoading";
 export { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageControls";
@@ -100,4 +103,4 @@ export const ERATO_SHARED_SURFACE_VERSION = 1;
 
 // Bump on purely additive growth of the surface, so a kit can require a name
 // that exists without demanding a new major.
-export const ERATO_SHARED_SURFACE_MINOR = 3;
+export const ERATO_SHARED_SURFACE_MINOR = 4;

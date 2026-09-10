@@ -136,6 +136,28 @@ describe("AttachmentTile shapes", () => {
     },
   );
 
+  it("draws a caller's own remove control inside the chip, not as a badge", async () => {
+    await renderWithProviders(
+      <AttachmentTile
+        file={file("notes.txt")}
+        onRemove={noop}
+        removeControl={
+          <button type="button" disabled>
+            Detach
+          </button>
+        }
+      />,
+    );
+
+    // The badge is invisible until the chip is hovered, so a control handed in
+    // from outside — the kits' disabled one above all — has to sit in the row.
+    expect(document.querySelector('[data-ui="attachment-remove"]')).toBeNull();
+    const face = document.querySelector('[data-ui="attachment-tile"]');
+    expect(face).toContainElement(
+      screen.getByRole("button", { name: "Detach" }),
+    );
+  });
+
   it("reports selection and validation as presence attributes", async () => {
     await renderWithProviders(
       <>

@@ -6,13 +6,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
+import { AttachmentTile } from "@/components/ui/FileUpload/AttachmentTile";
 import { formatFileSize } from "@/components/ui/FileUpload/FilePreviewBase";
 import {
   ArrowLeftIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   MailIcon,
-  PageIcon,
 } from "@/components/ui/icons";
 import { createLogger } from "@/utils/debugLogger";
 
@@ -703,25 +703,21 @@ const EmlAttachmentList: React.FC<{
     >
       {attachments.map((att, index) => (
         <li key={`${att.filename}-${index}`} className="min-w-0">
-          <button
-            type="button"
-            onClick={() => onSelect(att)}
-            title={att.filename}
-            className="flex min-w-0 items-center gap-2 rounded-[var(--theme-radius-message)] border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-primary)] px-3 py-2 text-left shadow-sm transition-colors hover:bg-[var(--theme-bg-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-fg-accent)]"
-          >
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--theme-bg-accent)] text-[var(--theme-fg-secondary)]">
-              <PageIcon className="size-4" aria-hidden="true" />
-            </div>
-            <div className="min-w-0">
-              <div className="truncate text-sm font-medium text-[var(--theme-fg-primary)]">
-                {att.filename}
-              </div>
-              <div className="truncate text-xs text-[var(--theme-fg-muted)]">
-                {att.mimeType}
-                {att.size > 0 ? ` • ${formatFileSize(att.size)}` : ""}
-              </div>
-            </div>
-          </button>
+          <AttachmentTile
+            file={{ id: `${att.filename}-${index}`, filename: att.filename }}
+            // The line under the name is the MIME type the message declared,
+            // not the extension, and the two disagree often enough here (the
+            // octet-stream PDFs below) that a per-type glyph would contradict
+            // it. One neutral page keeps them from arguing.
+            // eslint-disable-next-line lingui/no-unlocalized-strings -- Icon registry key
+            icon="Page"
+            metaLabel={
+              att.size > 0
+                ? `${att.mimeType} · ${formatFileSize(att.size)}`
+                : att.mimeType
+            }
+            onActivate={() => onSelect(att)}
+          />
         </li>
       ))}
     </ul>

@@ -7,8 +7,7 @@ import {
   resolveComponentOverride,
 } from "@/config/componentRegistry";
 
-import { InteractiveContainer } from "../Container/InteractiveContainer";
-import { FilePreviewBase } from "../FileUpload/FilePreviewBase";
+import { AttachmentTile } from "../FileUpload/AttachmentTile";
 import { MessageTimestamp } from "../Message/MessageTimestamp";
 import { OpenNewWindowIcon } from "../icons";
 
@@ -343,32 +342,22 @@ const AssetRow: React.FC<
   };
   const resolved = resolveAsset?.(asset) ?? null;
   const preview =
-    onFilePreview && resolved ? () => onFilePreview(resolved) : null;
-  const chip = (
-    <FilePreviewBase
-      file={shown}
-      onRemove={() => {}}
-      showRemoveButton={false}
-      showSize={false}
-      showFileType={false}
-      filenameClassName="max-w-full"
-      chromeless
-    />
-  );
-
-  if (!preview) {
-    return <div className="min-w-0">{chip}</div>;
-  }
+    onFilePreview && resolved ? () => onFilePreview(resolved) : undefined;
 
   return (
-    <InteractiveContainer
-      onClick={preview}
-      fullWidth={false}
-      className="min-w-0 rounded-[var(--theme-radius-base)] text-left hover:bg-theme-bg-accent"
-      aria-label={`${t({ id: "chat.file.preview_attachment", message: "Preview attachment" })} ${label}`}
-    >
-      {chip}
-    </InteractiveContainer>
+    <AttachmentTile
+      file={shown}
+      // The message body around it already reads as a conversation, so the chip
+      // drops its frame and stands as a line in it.
+      variant="bare"
+      // An index entry carries neither a size nor anything to say about its
+      // type beyond what its name shows, so the chip is the name alone. An
+      // asset the caller cannot resolve stays inert: without activation the
+      // tile draws no control, which is what keeps it out of the tab order.
+      showType="none"
+      showSize={false}
+      onActivate={preview}
+    />
   );
 };
 

@@ -119,6 +119,13 @@ export interface AttachmentTileProps {
    */
   expandable?: boolean;
   disabled?: boolean;
+  /**
+   * Replaces the corner badge with a caller-supplied control, drawn inline at
+   * the end of the chip's contents. A thumbnail has no room for one and keeps
+   * the badge instead. Not for a chip that is itself the activation target: a
+   * control nested inside that button could not be reached.
+   */
+  removeControl?: React.ReactNode;
   className?: string;
 }
 
@@ -175,6 +182,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
   showCaption = false,
   expandable = false,
   disabled = false,
+  removeControl,
   className,
 }) => {
   const { iconMappings } = useTheme();
@@ -233,6 +241,11 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
     Boolean(previewUrl) &&
     fileType === "image" &&
     !imageFailed;
+  // The badge overhangs a corner because a tile has no room inside it; a chip
+  // wide enough to hold a control draws the caller's own where the eye already
+  // ends the row, which is also the only placement a disabled control survives
+  // (the badge is invisible until hover).
+  const inlineRemoveControl = isMedia ? null : removeControl;
   const activationName = meta
     ? `${activateLabel ?? t({ id: "chat.file.preview_attachment", message: "Preview attachment" })} ${filename}, ${meta}`
     : `${activateLabel ?? t({ id: "chat.file.preview_attachment", message: "Preview attachment" })} ${filename}`;
@@ -330,6 +343,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
       ) : (
         body
       )}
+      {inlineRemoveControl}
     </>
   );
 
@@ -387,6 +401,9 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
         className={clsx(
           "attachment-tile-geometry block w-full cursor-pointer text-left",
           "focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus focus-visible:ring-offset-2",
+          // A framed chip tints its own face on hover; a bare one has no face
+          // to tint, so the affordance has to live on the button around it.
+          variant === "bare" && "hover:bg-[var(--theme-bg-accent)]",
           isMedia && "hover:opacity-90",
         )}
       >
@@ -437,7 +454,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
         />
       )}
 
-      {onRemove && (
+      {onRemove && !inlineRemoveControl && (
         <RemoveButton
           onRemove={onRemove}
           filename={filename}

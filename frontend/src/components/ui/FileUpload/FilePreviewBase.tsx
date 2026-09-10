@@ -1,12 +1,6 @@
-import { t } from "@lingui/core/macro";
-import clsx from "clsx";
-import { useMemo } from "react";
+import { FILE_TYPES } from "@/utils/fileTypes";
 
-import { useTheme } from "@/components/providers/ThemeProvider";
-import { FILE_TYPES, getFileTypeIcon } from "@/utils/fileTypes";
-
-import { CloseIcon, ResolvedIcon } from "../icons";
-import { FILE_PREVIEW_STYLES } from "./fileUploadStyles";
+import { AttachmentTile } from "./AttachmentTile";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
@@ -202,23 +196,33 @@ export interface FilePreviewBaseProps {
   showRemoveButton?: boolean;
   /** Custom remove button component */
   removeButton?: React.ReactNode;
-  /** Maximum length of the displayed filename before truncation */
+  /**
+   * Accepted and ignored. The chip truncates against the width it is given
+   * rather than a character count, which is what keeps every chip in a row the
+   * same width whatever its name.
+   */
   filenameTruncateLength?: number;
-  /** Additional CSS classes for the filename element */
+  /**
+   * Accepted and ignored. The filename's own element belongs to the chip, and
+   * a caller reaching into it is how the chip families drift apart; `className`
+   * still reaches the chip as a whole.
+   */
   filenameClassName?: string;
   /**
    * Render without the chip chrome (border/background/radius) so a parent
-   * surface can own it — e.g. a selectable row that wraps the checkbox and
-   * preview in one chip.
+   * surface can own it.
    */
   chromeless?: boolean;
 }
 
 /**
- * Base component for displaying file previews with consistent behavior
+ * A file chip, drawn by the shared attachment tile. The component keeps its own
+ * name and module because the component kits import it directly and a flat
+ * named import fails module linking as a whole — but its anatomy, the icon
+ * plate and the filename and the type-and-size line, is the tile's, so a theme
+ * that reshapes attachment chips reshapes this one with them.
  *
- * This component can handle both browser File objects and server-side FileUploadItem objects.
- * It provides a unified interface for displaying file previews with customizable options.
+ * Handles both browser File objects and server-side FileUploadItem objects.
  */
 export const FilePreviewBase: React.FC<FilePreviewBaseProps> = ({
   file,
@@ -230,100 +234,32 @@ export const FilePreviewBase: React.FC<FilePreviewBaseProps> = ({
   showRemoveButton = true,
   removeButton,
   filenameTruncateLength: _filenameTruncateLength = 30,
-  filenameClassName = "",
+  filenameClassName: _filenameClassName = "",
   chromeless = false,
-}) => {
-  const { iconMappings } = useTheme();
-
-  // Extract file information
-  const filename = useMemo(() => getFileName(file), [file]);
-  const fileSize = useMemo(
-    () => (showSize ? getFileSize(file) : null),
-    [file, showSize],
-  );
-  const fileType = useMemo(() => getFileType(filename), [filename]);
-  const displayNameParts = useMemo(
-    () => splitFilenameForDisplay(filename),
-    [filename],
-  );
-
-  // Get the file type icon ID (with theme override) and display information
-  const iconId = useMemo(
-    () => getFileTypeIcon(fileType, iconMappings?.fileTypes),
-    [fileType, iconMappings],
-  );
-  const iconColor = useMemo(() => FILE_TYPES[fileType].iconColor, [fileType]);
-  const typeDisplayName = useMemo(
-    () => FILE_TYPES[fileType].displayName || t`File`,
-    [fileType],
-  );
-
-  // Handle removing the file
-  const handleRemove = (e?: React.MouseEvent) => {
-    // Stop event propagation if this is triggered by an event
-    if (e) {
-      e.stopPropagation();
+}) => (
+  <AttachmentTile
+    file={file}
+    // These chips sit in wrapping rows, where one that stretched would put a
+    // single file on each line.
+    variant={chromeless ? "bare" : "tile"}
+    // The family name is what this component has always shown: a `.csv` reads
+    // SPREADSHEET here, where a tile of its own would say CSV.
+    showType={showFileType ? "family" : "none"}
+    showSize={showSize}
+    disabled={disabled}
+    className={className}
+    onRemove={
+      showRemoveButton
+        ? () => {
+            if (!disabled) {
+              onRemove(file);
+            }
+          }
+        : undefined
     }
-
-    if (!disabled) {
-      onRemove(file);
-    }
-  };
-
-  return (
-    <div
-      className={`${
-        chromeless ? "flex items-center gap-2" : FILE_PREVIEW_STYLES.container
-      } ${className}`}
-      data-filetype={fileType}
-    >
-      {/* File icon */}
-      <div className="mr-2 shrink-0" style={{ color: iconColor }}>
-        <ResolvedIcon
-          iconId={iconId}
-          className={FILE_PREVIEW_STYLES.icon}
-          aria-hidden="true"
-        />
-      </div>
-
-      {/* File details */}
-      <div className="min-w-0 flex-1">
-        <div
-          className={clsx(FILE_PREVIEW_STYLES.name, filenameClassName)}
-          title={filename}
-        >
-          <span className={FILE_PREVIEW_STYLES.nameStem}>
-            {displayNameParts.stem}
-          </span>
-          {displayNameParts.extension && (
-            <span className={FILE_PREVIEW_STYLES.nameExtension}>
-              {displayNameParts.extension}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center text-xs text-[var(--theme-fg-muted)]">
-          {showFileType && <span className="uppercase">{typeDisplayName}</span>}
-          {showFileType && fileSize && <span className="mx-1">•</span>}
-          {fileSize && <span>{fileSize}</span>}
-        </div>
-      </div>
-
-      {/* Remove button */}
-      {showRemoveButton &&
-        (removeButton ?? (
-          <button
-            type="button"
-            onClick={(e) => handleRemove(e)}
-            disabled={disabled}
-            className={FILE_PREVIEW_STYLES.closeButton}
-            aria-label={`${t({ id: "common.remove", message: "Remove" })} ${filename}`}
-          >
-            <CloseIcon className="size-4" />
-          </button>
-        ))}
-    </div>
-  );
-};
+    removeControl={showRemoveButton ? removeButton : undefined}
+  />
+);
 
 // eslint-disable-next-line lingui/no-unlocalized-strings
 FilePreviewBase.displayName = "FilePreviewBase";

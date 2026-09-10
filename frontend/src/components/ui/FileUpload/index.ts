@@ -9,6 +9,7 @@ export { FileSourceSelector } from "./FileSourceSelector";
 export { CloudFilePickerModal } from "./CloudFilePickerModal";
 export { AssistantFileUploadSelector } from "./AssistantFileUploadSelector";
 export { FilePreviewLoading } from "./FilePreviewLoading";
+export { AttachmentNotice } from "./AttachmentNotice";
 
 // Shared state components
 export { FileUploadLoading, FileUploadError } from "./FileUploadStates";
@@ -16,6 +17,7 @@ export { FileUploadLoading, FileUploadError } from "./FileUploadStates";
 // Re-export types for external usage
 export type { FileUploadProps } from "./FileUpload";
 export type { FileUploadButtonProps } from "./FileUploadButton";
+export type { AttachmentNoticeProps } from "./AttachmentNotice";
 export type {
   FileUploadItemWithSize,
   LocalFilePreviewItem,

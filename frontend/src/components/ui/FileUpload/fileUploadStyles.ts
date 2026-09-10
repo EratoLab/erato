@@ -1,16 +1,10 @@
 /**
- * Styles for the file preview elements
+ * Styles for the file preview elements. A chip's own anatomy is the attachment
+ * tile's — one component's classes, rather than a shared string every caller
+ * could reassemble differently — so what is here belongs to the surfaces the
+ * tile does not draw.
  */
 export const FILE_PREVIEW_STYLES = {
-  container:
-    "flex items-center gap-2 p-2 rounded-md bg-[var(--theme-bg-secondary)] border border-[var(--theme-border)]",
-  icon: "size-5 text-[var(--theme-fg-muted)]",
-  name: "flex min-w-0 max-w-full items-baseline text-sm font-medium text-[var(--theme-fg-primary)]",
-  nameStem: "min-w-0 truncate",
-  nameExtension: "shrink-0",
-  size: "text-xs text-[var(--theme-fg-muted)]",
-  closeButton:
-    "text-[var(--theme-fg-muted)] hover:text-[var(--theme-fg-primary)] p-1 rounded-full",
   progress: {
     container:
       "w-full h-1 bg-[var(--theme-bg-primary)] rounded-full overflow-hidden",
