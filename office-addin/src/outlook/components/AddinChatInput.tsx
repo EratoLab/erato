@@ -280,13 +280,10 @@ export const AddinChatInput = forwardRef<
   } = useOutlookEmailSource();
   const { maxSizeBytes: globalMaxSizeBytes, maxSizeFormatted } =
     useUploadFeature();
-  // The shared upload store, not local state: the composer's alert already
-  // renders it and dismissal clears it. A local copy merged into `uploadError`
-  // would outlive its own banner and mask every later upload error.
+  // The composer's alert renders and clears this store; a local copy would outlive it.
   const setUploadStoreError = useFileUploadStore((state) => state.setError);
-  // The composer empties itself the moment it hands off, before this async
-  // handler has resolved the files it needs to size-check. Any path that
-  // declines to dispatch therefore has to put the draft back.
+  // The composer clears itself on handoff, before this handler can size-check;
+  // a declined send has to put the draft back.
   const chatInputControls = useChatInputControls();
   const restoreDraft = useCallback(
     (message: string, inputFileIds?: string[]) =>
@@ -814,8 +811,7 @@ export const AddinChatInput = forwardRef<
           nowIso: toLocalOffsetIso(new Date().toISOString()),
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         });
-      // Kept so a blocked send can put it back: the marker means "already sent
-      // this draft", which is false if we bail before dispatching.
+      // Rolled back on a declined send: the marker means "already sent".
       const previousDraftFingerprint = lastSentDraftFingerprintRef.current;
       if (sentDraftFingerprint !== null) {
         // Remember what we sent so an unchanged follow-up de-dupes (#4).
@@ -853,16 +849,13 @@ export const AddinChatInput = forwardRef<
       }
 
       setIsUploadingEmail(true);
-      // A previous blocked send left its own alert up; a fresh send takes it
-      // down. Anything else in the store — an unsupported-type error from an
-      // earlier drop, say — belongs to the composer and stays until dismissed.
+      // Only this path's own alert is cleared; anything else stays until dismissed.
       if (useFileUploadStore.getState().error instanceof UploadTooLargeError) {
         setUploadStoreError(null);
       }
       let resolvedFileIds: string[] = [];
       let uploadFailed = false;
-      // Held outside the try so the 413 branch can name the same files the
-      // client-side rejection would have named.
+      // Outside the try so the 413 branch can name the files.
       let attemptedFileNames: string[] = [];
 
       try {
@@ -888,12 +881,8 @@ export const AddinChatInput = forwardRef<
           return;
         }
 
-        // Preflight: block the send outright when a staged file is oversized.
-        // Unlike a post-hoc 413 (bytes already spent), this is knowable before
-        // dispatch — sending anyway would answer from context the model never
-        // received. The chips stay so the user can dismiss the offender and
-        // retry, and the draft marker is rolled back so the retry is not
-        // de-duped as an already-sent draft.
+        // Sending anyway would answer from context the model never received.
+        // Chips stay so the user can drop the offender and retry.
         const sizeValidation = validateFileSizes(
           filesToUpload,
           globalMaxSizeBytes,
@@ -929,9 +918,7 @@ export const AddinChatInput = forwardRef<
         resolvedFileIds = result.files.map((file) => file.id);
       } catch (error) {
         if (error instanceof EmailTrimError) {
-          // The user unchecked parts of this email and they could not be cut
-          // out. The untrimmed original would ship exactly what they removed,
-          // so nothing goes out: the draft comes back and the chips stay.
+          // The untrimmed original would ship what the user removed.
           setUploadStoreError(
             new UploadUnknownError(
               t({

@@ -76,11 +76,8 @@ export async function parseDroppedFiles(
 }
 
 /**
- * Whether `parseDroppedFiles` would expand this file into a staged email
- * instead of uploading its bytes. `.msg` only qualifies with a fetcher, which
- * mirrors the branch below. Callers gate the pre-upload size check on this:
- * an expanded email is trimmable, so refusing it on size costs the user their
- * only route to a version that fits.
+ * Whether the drop handler stages this file as an email rather than uploading
+ * it (`.msg` needs a fetcher). Staged emails are trimmable, so they skip the size gate.
  */
 export function isExpandableEmailFile(
   file: File,

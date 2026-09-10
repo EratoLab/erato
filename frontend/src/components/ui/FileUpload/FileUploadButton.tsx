@@ -47,11 +47,8 @@ export interface FileUploadButtonProps {
   /** Any error that occurred during file upload */
   uploadError?: Error | null;
   /**
-   * Overrides where a selection-time validation error (e.g. file-too-large) is
-   * reported. Defaults to the shared upload store that the composer's alert
-   * renders. `maxSize` keeps rejected files out of `acceptedFiles`, so
-   * `performFileUpload` never sees them and cannot report them — without a sink
-   * here the file would vanish with no feedback at all.
+   * Where a selection-time rejection is reported; defaults to the shared upload
+   * store. `performFileUpload` never sees rejected files, so this is the only sink.
    */
   onError?: (error: UploadError) => void;
 }
@@ -81,8 +78,7 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
     // Setup react-dropzone
     const { getRootProps, getInputProps, open } = useDropzone({
       onDrop: (acceptedFiles, rejectedFiles) => {
-        // Surface file-too-large rejections immediately so the parent error
-        // state is updated even before the upload hook's own preflight runs.
+        // Rejected files never reach the upload preflight; report them here.
         if (rejectedFiles.length > 0) {
           const oversized = oversizedRejectionNames(rejectedFiles);
           if (oversized.length > 0) {
@@ -121,10 +117,7 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
       return <FileUploadError error={uploadError} className={className} />;
     }
 
-    // The limit rides a description rather than the accessible name: the name
-    // is what tests and screen-reader users address the button by, and it
-    // should stay the action. Icon-only gets it as a tooltip too, having no
-    // room to show it.
+    // A description, not part of the accessible name; icon-only also gets a tooltip.
     const maxSizeHint = maxSizeFormatted
       ? t({
           id: "upload.maxSizeHint",

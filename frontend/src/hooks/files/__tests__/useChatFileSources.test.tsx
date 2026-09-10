@@ -1,7 +1,3 @@
-/**
- * Regression tests for useChatFileSources — specifically the onSelectFiles
- * (handleSelectedFiles) path that accepts already-resolved File objects.
- */
 import { renderHook, act, cleanup } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 

@@ -43,11 +43,8 @@ export async function parseEmlBytes(
 ): Promise<ParsedEmail | null> {
   let parsed;
   try {
-    // A forwarded email must stay one attachment. Left to its default,
-    // postal-mime inlines a disposition-less message/rfc822 part and hoists
-    // its attachments into this list, while the trim walker still sees the
-    // nested message as a single leaf — so the indices the chips dismiss no
-    // longer name the parts the trim removes.
+    // By default postal-mime hoists a forwarded email's attachments into this
+    // list while the trim walker sees one leaf, so dismissal indices diverge.
     parsed = await PostalMime.parse(bytes, { rfc822Attachments: true });
   } catch (error) {
     console.warn("[parsedEmail] postal-mime failed to parse bytes:", error);
@@ -83,11 +80,7 @@ export async function parseEmlBytes(
   };
 }
 
-/**
- * A forwarded email arrives as a message/rfc822 part that usually carries no
- * filename. Name it after its own subject so the row reads as the email it
- * is, rather than as "attachment".
- */
+/** A forwarded email usually has no filename; name it after its subject. */
 async function nestedMessageName(
   attachment: Attachment,
 ): Promise<string | null> {

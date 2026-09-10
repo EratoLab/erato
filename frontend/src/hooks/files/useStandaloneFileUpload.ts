@@ -61,8 +61,6 @@ export function useStandaloneFileUpload(): UseStandaloneFileUploadResult {
     async (files: File[]) => {
       if (isUploading || files.length === 0) return;
 
-      // Preflight: reject the entire batch if any file exceeds the configured
-      // per-file limit before constructing FormData or making any network request.
       const sizeValidation = validateFileSizes(files, maxSizeBytes);
       if (!sizeValidation.valid) {
         setError(

@@ -214,10 +214,7 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
   );
   const emailDropMimeTypes = messageFetcher ? EMAIL_MIME_TYPES : EML_MIME_TYPES;
   const { maxSizeBytes, maxSizeFormatted } = useUploadFeature();
-  // A dropped email is staged and trimmable, so the size gate belongs at send
-  // time on the trimmed bytes. Without this a big thread is refused outright
-  // in the hosts that deliver it as a File, while the same thread arriving
-  // through the Office.js drop path stays recoverable.
+  // Dropped emails are staged and trimmable; their size is checked on the trimmed bytes at send.
   const isSizeExempt = useCallback(
     (file: File) =>
       isExpandableEmailFile(file, { hasFetcher: messageFetcher != null }),

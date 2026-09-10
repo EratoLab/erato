@@ -4,17 +4,13 @@ import { trimEmlAttachments } from "./trimEmlAttachments";
 export class EmailTrimError extends Error {
   constructor(public readonly filename: string) {
     super(`Could not trim dismissed attachments from ${filename}`);
-
     this.name = "EmailTrimError";
   }
 }
 
 /**
- * Cuts the dismissed attachment leaves out of a staged email's original
- * bytes.
- *
- * Never falls back to the untrimmed file. The user unchecked those parts;
- * an email that cannot honour that must not be sent at all.
+ * Cuts dismissed attachments out of a staged email's bytes. Never falls back
+ * to the untrimmed file: an email that cannot honour the dismissal is not sent.
  */
 export async function trimRawEmlBytes(
   rawEmlFile: File,

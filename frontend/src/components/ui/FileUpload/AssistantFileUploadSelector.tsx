@@ -116,8 +116,7 @@ export const AssistantFileUploadSelector: React.FC<
     getInputProps,
   } = useDropzone({
     onDrop: (acceptedFiles, rejectedFiles) => {
-      // Surface file-too-large rejections here: `maxSize` keeps them out of
-      // `acceptedFiles`, so the upload hook's preflight never sees them.
+      // Rejected files never reach the upload preflight; report them here.
       if (rejectedFiles.length > 0) {
         const oversized = oversizedRejectionNames(rejectedFiles);
         if (oversized.length > 0) {
@@ -311,8 +310,7 @@ export const AssistantFileUploadSelector: React.FC<
           performFileUpload={uploadFiles}
           isUploading={isProcessing}
           uploadError={null}
-          // This selector renders `combinedError`, not the shared upload store,
-          // so the button's default store sink would land where nothing reads it.
+          // This selector renders `combinedError`, not the shared store.
           onError={setCloudLinkError}
           onFilesUploaded={onFilesUploaded}
         />

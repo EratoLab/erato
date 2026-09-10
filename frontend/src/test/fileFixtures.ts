@@ -1,9 +1,6 @@
 /**
- * Builds a File that reports `size` without allocating it.
- *
- * Upload-limit tests need files around a multi-MiB boundary. Backing those with
- * real buffers makes `toHaveBeenCalledWith` deep-equal every byte, which took
- * seconds per assertion and tripped vitest's 5s timeout in CI.
+ * A File that reports `size` without allocating it: real multi-MiB buffers make
+ * `toHaveBeenCalledWith` deep-equal every byte and time out in CI.
  */
 export function makeFileWithSize(
   name: string,

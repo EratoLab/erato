@@ -145,9 +145,7 @@ export function useChatFileSources({
         return;
       }
 
-      // Preflight: reject the entire batch if any file exceeds the configured
-      // per-file limit. This covers the `onSelectFiles` path used by
-      // host/custom components that supply already-resolved File objects.
+      // Guards the `onSelectFiles` path, where hosts hand in already-resolved Files.
       const sizeValidation = validateFileSizes(files, maxSizeBytes);
       if (!sizeValidation.valid) {
         setError(

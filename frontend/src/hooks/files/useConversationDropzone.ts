@@ -22,28 +22,15 @@ interface UseConversationDropzoneOptions {
    */
   extraAcceptMimeTypes?: Record<string, string[]>;
   isUploading?: boolean;
-  /**
-   * Maximum file size in bytes. When provided, react-dropzone rejects
-   * oversized files before they reach `uploadFiles`. Pair with `onError` to
-   * surface the rejection to the user. Read from `useUploadFeature()`.
-   */
+  /** Per-file limit in bytes, from `useUploadFeature()`. */
   maxSize?: number;
-  /**
-   * Human-readable formatted maximum size (e.g. "20 MB"). Included in the
-   * `UploadTooLargeError` passed to `onError` when a file exceeds `maxSize`.
-   */
+  /** Formatted limit for the too-large message. */
   maxSizeFormatted?: string;
-  /**
-   * Called when the dropzone rejects a file (e.g. file-too-large). Use this
-   * to route errors into the owning upload-error state so they are visible to
-   * the user without waiting for the upload hook's own preflight.
-   */
+  /** Where rejections are reported; defaults to the shared upload store. */
   onError?: (error: UploadError) => void;
   /**
-   * Files this predicate accepts skip the `maxSize` gate. For a file the drop
-   * handler expands rather than uploads — an .eml whose attachments the user
-   * can still drop — refusing it here costs them the only route to a version
-   * that fits. Whatever such a file ultimately uploads is still preflighted.
+   * Skips the size gate for files the handler stages rather than uploads
+   * (an .eml the user can still trim). Their uploads are preflighted later.
    */
   isSizeExempt?: (file: File) => boolean;
 }
@@ -78,14 +65,9 @@ export function useConversationDropzone({
   const setStoreError = useFileUploadStore((state) => state.setError);
   const reportError = onError ?? setStoreError;
 
-  // The size rule runs as a per-file validator rather than react-dropzone's
-  // flat `maxSize` so `isSizeExempt` can spare individual files.
-  //
-  // Only a size known to exceed the limit rejects. During a drag the browser
-  // exposes `DataTransferItem`s with no `size`, and react-dropzone runs this
-  // same validator to decide `isDragAccept` — treating an unknown size as
-  // oversized would hide the drop overlay for every drag. This mirrors
-  // react-dropzone's own `fileMatchSize`, which skips undefined sizes.
+  // A validator instead of `maxSize` so `isSizeExempt` can spare files.
+  // Only a known size rejects: dragenter runs this on `DataTransferItem`s
+  // that carry none, and rejecting those hides the drop overlay.
   const validateSize = useCallback(
     (file: File) => {
       if (maxSize === undefined) return null;
@@ -102,19 +84,13 @@ export function useConversationDropzone({
   );
   const handleDrop = useCallback(
     (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
-      // Surface file-too-large rejections immediately so the owning component
-      // updates its error state before the upload hook's own preflight fires.
-      // `maxSize` keeps these files out of `acceptedFiles`, so the preflight
-      // never sees them — reporting here is the only chance to tell the user.
+      // Rejected files never reach the upload preflight; report them here.
       let files = acceptedFiles;
       if (rejectedFiles.length > 0) {
         const oversized = oversizedRejectionNames(rejectedFiles);
         if (oversized.length > 0) {
           reportError(new UploadTooLargeError(maxSizeFormatted, oversized));
-          // Uploads stay atomic, so accepted siblings are withheld — except
-          // the size-exempt ones, which the handler stages rather than
-          // transmits. Abandoning those would lose an email the user could
-          // still trim to fit because a PDF beside it was too big.
+          // Uploads stay atomic; exempt files are staged, not sent, so they go on.
           files = isSizeExempt ? acceptedFiles.filter(isSizeExempt) : [];
         }
       }

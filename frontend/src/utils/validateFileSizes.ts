@@ -1,11 +1,4 @@
-/**
- * Pure preflight validator for file upload size limits.
- *
- * Checks each file independently against the configured per-file upload limit.
- * A file exactly equal to the limit is valid; `size > maxSizeBytes` is invalid.
- * The caller must NOT hard-code any size constant; read `maxSizeBytes` from
- * `useUploadFeature()` / `FeatureConfigProvider` and pass it here.
- */
+/** Per-file size preflight. Exactly at the limit is valid. Limit comes from `useUploadFeature()`. */
 
 export interface ValidFileSizes {
   valid: true;
@@ -19,13 +12,7 @@ export interface InvalidFileSizes {
 
 export type FileSizeValidation = ValidFileSizes | InvalidFileSizes;
 
-/**
- * Validates that every file in a batch is within the configured per-file limit.
- *
- * If ANY file exceeds the limit the entire batch is considered invalid and its
- * oversized members are returned so callers can include filenames in error
- * messages. No network or side-effect code is triggered here.
- */
+/** One oversized file fails the whole batch; the offenders are returned for the message. */
 export function validateFileSizes(
   files: File[],
   maxSizeBytes: number,
@@ -37,18 +24,13 @@ export function validateFileSizes(
   return { valid: false, oversizedFiles };
 }
 
-/** Structural shape of a react-dropzone rejection, kept local so this stays dependency-free. */
+/** Structural react-dropzone rejection, kept local to avoid the dependency. */
 interface SizeRejection {
   file: { name: string };
   errors: readonly { code: string }[];
 }
 
-/**
- * Names of the dropzone rejections that failed the size rule specifically.
- *
- * react-dropzone rejects for several reasons at once; only the size ones belong
- * in an `UploadTooLargeError`.
- */
+/** A rejection can carry several reasons; only the size ones belong in the too-large error. */
 export function oversizedRejectionNames(
   rejections: readonly SizeRejection[],
 ): string[] {
