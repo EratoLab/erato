@@ -232,11 +232,9 @@ export const LongFilenames: Story = {
 };
 
 /**
- * Every configured type, to check the per-type icon colour actually lands. The
- * colour reaches the plate as `--attachment-tile-icon-tint` on the chip wrapper,
- * diluted into a fill by a rule rather than written inline, so this is the only
- * place the whole channel is visible at once: a broken rule paints every plate
- * here transparent while the components still emit every hook a test can see.
+ * Every configured type, to check the per-type icon tint lands. A broken rule
+ * paints every plate here transparent while the hooks a test sees stay intact,
+ * so this is the only place the whole channel is visible at once.
  */
 export const AllFileTypes: Story = {
   args: { items: [] },
@@ -264,13 +262,9 @@ const longName =
   "FY2026-enterprise-rollout-supporting-documentation-and-implementation-notes-final-review-v12.pdf";
 
 /**
- * The row form: the chip stretched across a list, where a leading checkbox and
- * a validation line have somewhere to sit. With nothing else to activate, the
- * whole row is one `label`, so a click anywhere in it reaches the box.
- *
- * These carry no type line, so the extension pins itself beside a stem that
- * truncates — as it does under a family line too. Only the composer stories
- * above, whose line is the extension, leave the name whole to truncate plainly.
+ * The row form, with a leading checkbox and a validation line. Nothing else is
+ * activatable, so the whole row is one `label`. With no type line, the
+ * extension pins itself beside a truncating stem.
  */
 export const SelectableRows: Story = {
   args: { items: [] },
@@ -303,9 +297,8 @@ export const SelectableRows: Story = {
 };
 
 /**
- * The same rows with a preview to open. The checkbox and the body stop sharing
- * one control: a `label` around both would forward a body click to the box, so
- * opening the preview would deselect the file in the same gesture.
+ * The same rows with a preview to open. A `label` around both would forward a
+ * body click to the box, deselecting the file while opening it.
  */
 export const SelectableRowsWithPreview: Story = {
   args: { items: [] },
@@ -331,11 +324,7 @@ export const SelectableRowsWithPreview: Story = {
   ),
 };
 
-/**
- * The bare form: no frame, no fill and no corner of its own, for a surface that
- * draws its own chrome around the chip's contents. The dashed box is this
- * story's, standing in for that surface.
- */
+/** The bare form, for a surface drawing its own chrome. The dashed box is that surface. */
 export const BareChips: Story = {
   args: { items: [] },
   render: () => (
@@ -363,10 +352,8 @@ export const BareChips: Story = {
 };
 
 /**
- * The three readings of the type line on one file. `extension` tells a `.csv`
- * from an `.xlsx`, both of which are Spreadsheet; `family` calls both by the
- * coarser name; `none` drops the line. Only the first ends in the extension, so
- * it is also the only one whose filename stops pinning its own tail.
+ * The three type-line readings on one file. Only `extension` ends in the
+ * extension, so it is the only one whose filename stops pinning its own tail.
  */
 export const TypeLines: Story = {
   args: { items: [] },
@@ -391,10 +378,8 @@ export const TypeLines: Story = {
 };
 
 /**
- * The notice standing where a chip would: something to say about the group
- * around it, or a placeholder for an attachment still arriving. Tone moves the
- * frame, the glyph and the label together, and the bare form keeps the
- * deliberate centred-spinner shape a group uses inside its own frame.
+ * The notice standing where a chip would. Tone moves frame, glyph and label
+ * together; the bare form keeps the centred-spinner shape a group uses.
  */
 export const Notices: Story = {
   args: { items: [] },

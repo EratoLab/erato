@@ -1,13 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// The attachment chip takes its corner from `--attachment-tile-radius`, which
-// it reads and never declares — only a frame around it declares it. jsdom
-// loads no CSS, so the unit suites can only assert the rule text; this is the
-// measurement that a declaration on the chip would break. It has to be a pair:
-// a default on `.attachment-tile-geometry` shadows what the card declares, so
-// a chip standing on its own still lands on exactly the corner it should have
-// and the outside case below stays green — only the inside one drops to the
-// base corner and catches it. Neither half means anything alone.
+// The chip reads `--attachment-tile-radius` and never declares it; only a frame
+// does. jsdom loads no CSS, so this is where that is actually measured. Both
+// halves are needed: a default on `.attachment-tile-geometry` leaves the outside
+// case green and drops only the inside one.
 
 const TILE = '[data-ui="attachment-tile"]';
 const ICON = '[data-ui="attachment-tile-icon"]';
@@ -16,16 +12,13 @@ const CARD = '[data-ui="thread-message-card"]';
 const GROUP = '[data-ui="attachment-group"]';
 const THEME_LINK = 'link[data-theme-styles="true"]';
 
-// The pack under test: `themes/open-webui-like/theme.css:97-100` declares
-// `--attachment-tile-radius: var(--theme-radius-pill)` on the thread card, and
-// theme.json puts `radius.pill` at 9999px and `radius.base` at 0.75rem.
+// The pack declares `--attachment-tile-radius: var(--theme-radius-pill)` on the
+// thread card, with `radius.pill` at 9999px and `radius.base` at 0.75rem.
 const THEME = "open-webui-like";
 const PILL = "9999px";
 const BASE = "12px";
-// The chips inside a thread card also get `padding-inline: 1rem` from the same
-// stylesheet, and nothing else in the app sets it. It is the one measurement
-// that separates "the retune did not reach the chip" from "the theme never
-// loaded", which otherwise both read as the base corner.
+// Only that stylesheet sets this, so it separates "the retune missed the chip"
+// from "the theme never loaded" — which otherwise both read as the base corner.
 const THEME_ONLY_PADDING = "16px";
 
 const openStory = async (page: Page, story: string, ready: string) => {
@@ -71,9 +64,7 @@ test.describe("attachment chip under the open-webui-like retune", () => {
     console.log(`inside a thread card: chip ${tile}`);
     expect(tile).toBe(PILL);
 
-    // The icon plate derives from the chip corner, so the retune reaches it
-    // through two hops without naming it. At a pill corner the derivation
-    // lands far past half the plate, which is what makes it a circle.
+    // The plate derives from the chip corner, so the retune reaches it unnamed.
     const plate = page.locator(`${CARD} ${ICON}`).first();
     const icon = await radiusOf(page, `${CARD} ${ICON}`);
     const box = await plate.boundingBox();
@@ -84,9 +75,7 @@ test.describe("attachment chip under the open-webui-like retune", () => {
   test("the same chip outside one stays on the base corner", async ({
     page,
   }) => {
-    // Not a bare chip: these sit in the attachment group frame, which declares
-    // its own `--card-radius` and no tile corner. So this also says the frame
-    // above the thread card does not leak one.
+    // These sit in the group frame, so this also says that frame leaks no corner.
     await openStory(
       page,
       "ui-groupedfileattachmentspreview--collapsed",

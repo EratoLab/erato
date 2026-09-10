@@ -34,13 +34,9 @@ const file = (filename: string): LocalFilePreviewItem => ({
   filename,
 });
 
-// jsdom loads no stylesheet, so a corner is only visible here as the class
-// that carries it, and a tint only as the variable handed to it. What these
-// assert is the reachable half: every hook a theme keys on is emitted, no chip
-// corner is a Tailwind utility again, and the per-type colour still reaches the
-// channel that replaced the inline style. Whether the rule on the other end
-// paints it is a computed-style question, and the `AllFileTypes` story is where
-// that is measured.
+// jsdom loads no stylesheet, so these assert the reachable half: every hook is
+// emitted, no chip corner is a Tailwind utility, and the per-type colour reaches
+// the channel that replaced the inline style. The browser harness measures the rest.
 describe("AttachmentTile theme hooks", () => {
   it("marks a document face and its icon plate", async () => {
     await renderWithProviders(<AttachmentTile file={file("notes.txt")} />);
@@ -55,8 +51,7 @@ describe("AttachmentTile theme hooks", () => {
       "attachment-tile-icon-geometry",
       "attachment-tile-icon-skin",
     );
-    // The tint rides the wrapper, not the plate: an inline declaration on the
-    // plate would outrank the theme rule its own hook exists to accept.
+    // The tint rides the wrapper so a theme rule on the plate still wins.
     expect(plate).not.toHaveAttribute("style");
     expect(
       document
@@ -65,9 +60,7 @@ describe("AttachmentTile theme hooks", () => {
     ).toBe(FILE_TYPES.text.iconColor);
   });
 
-  // The variable has to stay per-type, not a family-wide constant: it is the
-  // only thing left carrying the colour, and a plate whose fill never varies
-  // still satisfies every class assertion above.
+  // A plate whose fill never varies still passes every class assertion above.
   it("hands each file type its own tint", async () => {
     await renderWithProviders(
       <>
@@ -115,10 +108,8 @@ describe("AttachmentTile theme hooks", () => {
 const noop = () => {};
 
 describe("AttachmentTile shapes", () => {
-  // The hook names one chip. While the grouped preview still hand-rolls its own
-  // row around this component, a second emitter inside the first would double
-  // every `querySelectorAll` a test or a theme rule makes, and index-addressed
-  // queries would silently start reading the wrapper.
+  // One chip, one hook: a nested second emitter would double every
+  // `querySelectorAll` a theme rule or a test makes.
   it.each([["tile"], ["row"], ["bare"]] as const)(
     "emits the chip hook exactly once as a %s",
     async (variant) => {
@@ -149,8 +140,7 @@ describe("AttachmentTile shapes", () => {
       />,
     );
 
-    // The badge is invisible until the chip is hovered, so a control handed in
-    // from outside — the kits' disabled one above all — has to sit in the row.
+    // The badge hides until hover, so a caller's control has to sit in the row.
     expect(document.querySelector('[data-ui="attachment-remove"]')).toBeNull();
     const face = document.querySelector('[data-ui="attachment-tile"]');
     expect(face).toContainElement(
@@ -204,9 +194,7 @@ describe("AttachmentTile shapes", () => {
     ).toBeNull();
   });
 
-  // A label forwards every click inside it to its control, so the two
-  // affordances have to stop sharing one: activating the body would otherwise
-  // open the preview and deselect the file in the same gesture.
+  // Selectable and activatable must not share one `label`.
   it("splits the checkbox from an activatable body", async () => {
     const onToggle = vi.fn();
     const onActivate = vi.fn();
@@ -241,9 +229,8 @@ describe("AttachmentTile filename and type line", () => {
     expect(screen.getByText("CSV")).toBeInTheDocument();
   });
 
-  // Pinned beside a stem that truncates, the extension survives a long name —
-  // at the price of splitting it across two nodes, which is why the one line
-  // that already ends in the extension does without.
+  // Splitting the name costs a whole-name query, so a line already ending in
+  // the extension does without.
   it("pins the extension in its own node under a family type line", async () => {
     await renderWithProviders(
       <AttachmentTile file={file("report.csv")} showType="family" />,

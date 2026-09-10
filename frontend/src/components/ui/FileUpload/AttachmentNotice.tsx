@@ -7,30 +7,20 @@ import { ErrorIcon, InfoIcon } from "../icons";
 export type AttachmentNoticeTone = "neutral" | "error";
 
 export interface AttachmentNoticeProps {
-  /** What happened, or what is being waited for. */
   label: string;
-  /** Secondary line under the label. */
   description?: string;
   tone?: AttachmentNoticeTone;
-  /**
-   * Waiting rather than reporting: a spinner takes the glyph's place and the
-   * row reports itself busy.
-   */
+  /** Waiting rather than reporting: a spinner replaces the glyph. */
   busy?: boolean;
-  /**
-   * Drops the frame down to a centred spinner. Only the busy form has a bare
-   * reading — a notice with something to say needs the frame to stand in a row
-   * of chips.
-   */
+  /** Drops the frame to a centred spinner. Only meaningful while `busy`. */
   bare?: boolean;
   className?: string;
 }
 
 /**
- * The chip-shaped row that stands in for an attachment that is not one: a
- * status line about the group around it, or a placeholder for one still
- * loading. It takes the chip corner rather than a radius of its own, so a card
- * that reshapes its attachments reshapes this too.
+ * Stands in for an attachment that is not one: a status line, or a placeholder
+ * for one still loading. Takes the chip corner, so a card that reshapes its
+ * attachments reshapes this too.
  */
 export const AttachmentNotice = memo<AttachmentNoticeProps>(
   ({
@@ -42,11 +32,8 @@ export const AttachmentNotice = memo<AttachmentNoticeProps>(
     className,
   }) => {
     if (bare) {
-      // Keeps `attachment-loading` rather than taking the notice hook: that
-      // name is published as a theme hook and a shipped kit emits it, and this
-      // is the one form of this component that is not chip-shaped. The ring
-      // carries the wait itself here — there is no frame to make a live region
-      // out of, so nothing would announce it otherwise.
+      // Keeps the published `attachment-loading` hook, which a shipped kit
+      // emits. With no frame to be the live region, the ring carries the wait.
       return (
         <div
           className={clsx("flex w-full justify-center py-2", className)}
@@ -76,8 +63,8 @@ export const AttachmentNotice = memo<AttachmentNoticeProps>(
       >
         <span className="attachment-notice-icon-skin mr-2 shrink-0">
           {busy ? (
-            // The frame is already the live region; a ring keeping its own
-            // `role="status"` inside it would announce the same wait twice.
+            // The frame is the live region; a ring with its own role would
+            // announce the same wait twice.
             <SpinnerIcon size="md" aria-hidden />
           ) : (
             <Icon className="size-5" aria-hidden="true" />

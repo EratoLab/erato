@@ -196,17 +196,9 @@ export interface FilePreviewBaseProps {
   showRemoveButton?: boolean;
   /** Custom remove button component */
   removeButton?: React.ReactNode;
-  /**
-   * Accepted and ignored. The chip truncates against the width it is given
-   * rather than a character count, which is what keeps every chip in a row the
-   * same width whatever its name.
-   */
+  /** Accepted and ignored: the chip truncates against its width, not a count. */
   filenameTruncateLength?: number;
-  /**
-   * Accepted and ignored. The filename's own element belongs to the chip, and
-   * a caller reaching into it is how the chip families drift apart; `className`
-   * still reaches the chip as a whole.
-   */
+  /** Accepted and ignored; `className` still reaches the chip as a whole. */
   filenameClassName?: string;
   /**
    * Render without the chip chrome (border/background/radius) so a parent
@@ -216,11 +208,9 @@ export interface FilePreviewBaseProps {
 }
 
 /**
- * A file chip, drawn by the shared attachment tile. The component keeps its own
- * name and module because the component kits import it directly and a flat
- * named import fails module linking as a whole — but its anatomy, the icon
- * plate and the filename and the type-and-size line, is the tile's, so a theme
- * that reshapes attachment chips reshapes this one with them.
+ * A file chip, drawn by the shared attachment tile. Keeps its own name and
+ * module because the component kits import it directly, and a flat named import
+ * fails module linking as a whole.
  *
  * Handles both browser File objects and server-side FileUploadItem objects.
  */
@@ -239,11 +229,9 @@ export const FilePreviewBase: React.FC<FilePreviewBaseProps> = ({
 }) => (
   <AttachmentTile
     file={file}
-    // These chips sit in wrapping rows, where one that stretched would put a
-    // single file on each line.
+    // They sit in wrapping rows, where a stretched chip means one file a line.
     variant={chromeless ? "bare" : "tile"}
-    // The family name is what this component has always shown: a `.csv` reads
-    // SPREADSHEET here, where a tile of its own would say CSV.
+    // What this component has always shown: a `.csv` reads SPREADSHEET here.
     showType={showFileType ? "family" : "none"}
     showSize={showSize}
     disabled={disabled}

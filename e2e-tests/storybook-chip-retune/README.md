@@ -2,14 +2,12 @@
 
 Measures the attachment chip's corner in a real browser under the shipped
 `open-webui-like` theme, which declares `--attachment-tile-radius` on the email
-thread card. A chip inside one has to take the pill corner and a chip outside
-one has to stay on the base corner: the chip reads that variable and never
-declares it, and a default on `.attachment-tile-geometry` would shadow the
-card's value while leaving one of the two halves passing.
+thread card. A chip inside one takes the pill corner; a chip outside one stays
+on the base corner. Both halves are needed: a default on
+`.attachment-tile-geometry` would break only the first.
 
-The theme pack is not in this repository. Copy it into the Storybook static
-directory first — `frontend/public/custom-theme/` and everything under
-`frontend/public/public/` are gitignored:
+The theme pack is not in this repository, and `frontend/public/public/` is not
+tracked. Copy it into the Storybook static directory first:
 
 ```bash
 mkdir -p frontend/public/public/common/custom-theme
@@ -30,6 +28,6 @@ Run the harness from `e2e-tests/`:
 pnpm exec playwright test -c storybook-chip-retune/playwright.config.ts
 ```
 
-Set `STORYBOOK_URL` to point at a Storybook on another port. Without
-`VITE_CUSTOMER_NAME` the stylesheet never loads and every case fails on the
-missing `link[data-theme-styles]` rather than on a corner.
+Set `STORYBOOK_URL` for a Storybook on another port. Without
+`VITE_CUSTOMER_NAME` every case fails on the missing `link[data-theme-styles]`
+rather than on a corner.

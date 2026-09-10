@@ -18,49 +18,30 @@ import { CloseIcon, ResolvedIcon } from "../icons";
 
 import type React from "react";
 
-/**
- * Compact for the composer, where vertical space is the scarce resource;
- * medium for the transcript, where the tile is the only thing standing in for
- * the file's contents.
- */
 export type AttachmentTileSize = "compact" | "medium";
 
-/**
- * `tile` is the chip standing on its own: a thumbnail, or an icon pill that
- * sizes to its name. `row` stretches the same chip across a list, where a
- * leading checkbox and a validation line have somewhere to sit. `bare` drops
- * the frame so a surface that draws its own chrome can hold the contents.
- */
+/** `bare` drops the frame for a surface that draws its own chrome. */
 export type AttachmentTileVariant = "tile" | "row" | "bare";
 
 /**
- * Which reading of the type the meta line carries. `extension` distinguishes a
- * `.csv` from an `.xlsx`, both of which are "Spreadsheet"; `family` is the
- * coarser name, for a surface that would rather group than distinguish;
- * `none` drops the type from the line. Only `extension` repeats the tail of
- * the filename, so it is also the only one under which the name stops pinning
- * its own extension.
+ * `extension` separates a `.csv` from an `.xlsx` where `family` calls both
+ * "Spreadsheet". Only `extension` repeats the filename's tail, so it is also
+ * the only one under which the name stops pinning its own extension.
  */
 export type AttachmentTileTypeLabel = "extension" | "family" | "none";
 
 export interface AttachmentTileSelection {
   selected: boolean;
   onToggle: () => void;
-  /** Verb for the checkbox label. Defaults to including the file. */
   label?: string;
 }
 
 export interface AttachmentTileValidation {
   ok: boolean;
-  /** Shown under the name while `ok` is false. */
   reason?: string;
 }
 
-/**
- * Tile dimensions come from theme tokens so a customer theme can retune them;
- * the icon plate stays a class because it is proportional chrome, not a
- * dimension anyone would want to override on its own.
- */
+/** Sizes are tokens so a theme can retune them; the plate stays proportional chrome. */
 const TILE_GEOMETRY = {
   compact: {
     mediaSize: "var(--theme-layout-attachment-tile-compact-media-size)",
@@ -78,52 +59,33 @@ const TILE_GEOMETRY = {
 
 export interface AttachmentTileProps {
   file: FileResource;
-  /** Image source for the media form. Without it every file renders as a document tile. */
+  /** Without it every file renders as a document tile. */
   previewUrl?: string | null;
   size?: AttachmentTileSize;
   variant?: AttachmentTileVariant;
-  /** Presence makes the tile removable; absence renders it read-only. */
   onRemove?: () => void;
-  /** Presence makes the tile activatable — typically opening the file preview. */
   onActivate?: () => void;
-  /**
-   * Verb for the activation label. Defaults to previewing the file; an item
-   * whose activation goes somewhere else (the conversation behind a Teams
-   * transcript, say) should say so instead.
-   */
+  /** Verb for the activation label; defaults to previewing the file. */
   activateLabel?: string;
-  /** Overrides the type label under the filename, e.g. labelling an `.html` synthetic file as "Email". */
+  /** Overrides the derived type label, e.g. a synthetic `.html` file as "Email". */
   labelOverride?: string;
-  /** Presence gives the chip a leading checkbox and a selected state to report. */
   selection?: AttachmentTileSelection;
-  /** A failure marks the chip invalid and prints its reason under the name. */
   validation?: AttachmentTileValidation;
-  /**
-   * Icon id for the plate, replacing the one derived from the filename. The
-   * plate keeps its own sizing and its per-type tint either way.
-   */
+  /** Replaces the icon derived from the filename; sizing and tint are unchanged. */
   icon?: string;
-  /** Drops the icon plate, for a surface that carries the file's identity itself. */
   hideIcon?: boolean;
-  /** Replaces the whole derived meta line. An empty string removes it. */
+  /** Replaces the derived meta line. An empty string removes it. */
   metaLabel?: string;
   showType?: AttachmentTileTypeLabel;
-  /** Only locally staged files carry a size at all; this suppresses it where they do. */
   showSize?: boolean;
-  /** Filename under a media tile. Document tiles always carry their name inline. */
+  /** Filename under a media tile; document tiles carry it inline. */
   showCaption?: boolean;
-  /**
-   * Offers a middle tier between the tile and the full preview: an image grows
-   * in place, capped at the chat image bounds. Only meaningful for media —
-   * a document tile has nothing larger to show without loading a renderer.
-   */
+  /** Media only: grows the image in place, capped at the chat image bounds. */
   expandable?: boolean;
   disabled?: boolean;
   /**
-   * Replaces the corner badge with a caller-supplied control, drawn inline at
-   * the end of the chip's contents. A thumbnail has no room for one and keeps
-   * the badge instead. Not for a chip that is itself the activation target: a
-   * control nested inside that button could not be reached.
+   * Drawn inline instead of the corner badge. Not for a chip that is itself
+   * the activation target: a control nested in that button is unreachable.
    */
   removeControl?: React.ReactNode;
   className?: string;
@@ -144,13 +106,11 @@ const RemoveButton: React.FC<{
     data-ui="attachment-remove"
     aria-label={`${t({ id: "common.remove", message: "Remove" })} ${filename}`}
     className={clsx(
-      // Overhangs just far enough to clear the tile's own content without
-      // reaching into the neighbouring tile across the gap.
+      // Overhangs enough to clear its own tile without reaching the next one.
       "attachment-badge-geometry absolute -right-1 -top-1 z-10 inline-flex size-5 items-center justify-center",
       "border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] text-[var(--theme-fg-muted)] shadow-sm",
       "hover:text-[var(--theme-fg-primary)] disabled:cursor-not-allowed",
-      // Hidden until the tile is hovered or holds focus, so a staged row stays
-      // calm — but always shown where there is no hover to reveal it.
+      // Hidden until hover or focus, but always shown where there is no hover.
       "opacity-0 transition-opacity focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100",
       "[@media(hover:none)]:opacity-100",
     )}
@@ -159,10 +119,7 @@ const RemoveButton: React.FC<{
   </button>
 );
 
-/**
- * One attached file, drawn the same way wherever it appears. Images render as
- * a thumbnail; everything else as an icon pill carrying name and type.
- */
+/** One attached file: images as a thumbnail, everything else as an icon pill. */
 export const AttachmentTile: React.FC<AttachmentTileProps> = ({
   file,
   previewUrl,
@@ -197,10 +154,8 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
   );
 
   const { iconColor } = FILE_TYPES[fileType];
-  // The extension beats the family name by default: it is what distinguishes a
-  // .csv from an .xlsx, both of which are "Spreadsheet". It also frees the
-  // filename to truncate plainly, instead of pinning a tail this line already
-  // carries.
+  // The extension beats the family name: it separates a .csv from an .xlsx,
+  // both "Spreadsheet", and frees the filename to truncate plainly.
   const typeLabel = useMemo(() => {
     if (showType === "none") {
       return null;
@@ -215,8 +170,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
     const { extension } = splitFilenameForDisplay(filename);
     return extension ? extension.slice(1).toUpperCase() : familyName;
   }, [showType, labelOverride, filename, fileType]);
-  // Only locally staged files carry a size — the API type has no such field —
-  // so the separator has to survive its absence, and so does the whole line.
+  // The API type carries no size, so the separator has to survive its absence.
   const meta = useMemo(() => {
     if (metaLabel !== undefined) {
       return metaLabel;
@@ -229,31 +183,24 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
   }, [metaLabel, showSize, file, typeLabel]);
   const geometry = TILE_GEOMETRY[size];
   const invalid = validation?.ok === false;
-  // Every upload carries a `preview_url`, including PDFs and spreadsheets —
-  // it proxies the raw bytes, not a rendered thumbnail. Only an image can be
-  // pointed at an <img>, so the type gate lives here rather than asking every
-  // caller to pre-filter what it passes. Only the standalone tile shows one at
-  // all: a row lines up against its neighbours, and a selectable one has a
-  // checkbox where the picture would go.
+  // Every upload carries a `preview_url` — it proxies the raw bytes, not a
+  // thumbnail — so the image gate lives here rather than in every caller.
   const isMedia =
     variant === "tile" &&
     !selection &&
     Boolean(previewUrl) &&
     fileType === "image" &&
     !imageFailed;
-  // The badge overhangs a corner because a tile has no room inside it; a chip
-  // wide enough to hold a control draws the caller's own where the eye already
-  // ends the row, which is also the only placement a disabled control survives
-  // (the badge is invisible until hover).
+  // A tile has no room inside it for a control, so the badge overhangs a
+  // corner; a row draws the caller's inline, where a disabled one stays visible.
   const inlineRemoveControl = isMedia ? null : removeControl;
   const activationName = meta
     ? `${activateLabel ?? t({ id: "chat.file.preview_attachment", message: "Preview attachment" })} ${filename}, ${meta}`
     : `${activateLabel ?? t({ id: "chat.file.preview_attachment", message: "Preview attachment" })} ${filename}`;
 
-  // The extension earns a node of its own unless the meta line is set to name
-  // the extension itself: pinned beside a truncating stem it survives a long
-  // name, but it also splits the filename across two text nodes, and a query
-  // for the whole name joins the direct text children of one element only.
+  // Splitting the extension into its own node survives a truncating stem, but
+  // a whole-name query joins the direct text children of one element only — so
+  // the split only happens where the meta line does not already name the type.
   const nameParts = useMemo(
     () => splitFilenameForDisplay(filename),
     [filename],
@@ -347,15 +294,11 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
     </>
   );
 
-  // A `label` forwards every click inside it to its control, so a selectable
-  // chip that is also activatable would open the preview and deselect the file
-  // in one gesture. Where both exist the frame stays a plain element and the
-  // checkbox and the activatable body sit side by side.
+  // A `label` forwards clicks to its control, so a chip that is selectable and
+  // activatable would preview and deselect at once; there the frame stays plain.
   const face = isMedia ? (
-    // A thumbnail carries no caption, so the filename has to reach assistive
-    // tech some other way. Inside an activatable tile the button's own label
-    // says it, and repeating it on the image would announce it twice; standalone,
-    // the alt text is the only carrier.
+    // Inside an activatable tile the button already names the file, so alt text
+    // would announce it twice; standalone, the alt text is the only carrier.
     <img
       src={previewUrl ?? undefined}
       alt={onActivate ? "" : filename}
@@ -373,8 +316,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
       }
       className={clsx(
         "attachment-tile-geometry border [border-color:var(--theme-border-media)]",
-        // Cropping is right for a thumbnail standing in for the file, wrong
-        // once the point is seeing what the image actually contains.
+        // Cropping suits a thumbnail, not an image opened to be looked at.
         expanded ? "w-full object-contain" : "object-cover",
       )}
     />
@@ -386,13 +328,11 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
 
   let content: React.ReactNode;
   if (selection) {
-    // The chip is its own frame here: activation, where there is any, lives
-    // inside it beside the checkbox rather than wrapping both.
+    // Activation lives inside the frame, beside the checkbox, not wrapping both.
     content = face;
   } else if (onActivate) {
     content = (
-      // Opening a preview mutates nothing, so it stays available even while
-      // the surface is disabled — `disabled` gates removal only.
+      // A preview mutates nothing, so `disabled` gates removal only.
       <button
         type="button"
         onClick={onActivate}
@@ -401,8 +341,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
         className={clsx(
           "attachment-tile-geometry block w-full cursor-pointer text-left",
           "focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus focus-visible:ring-offset-2",
-          // A framed chip tints its own face on hover; a bare one has no face
-          // to tint, so the affordance has to live on the button around it.
+          // A bare chip has no face to tint, so hover lives on the button.
           variant === "bare" && "hover:bg-[var(--theme-bg-accent)]",
           isMedia && "hover:opacity-90",
         )}
@@ -411,8 +350,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
       </button>
     );
   } else {
-    // Not interactive, so it cannot hold focus — the title serves hover and
-    // the image's alt text serves assistive tech.
+    // Not interactive: the title serves hover, the alt text assistive tech.
     content = <div title={filename}>{face}</div>;
   }
 
@@ -420,10 +358,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
     <div
       className={clsx(
         "group relative",
-        // Media keeps its square; a document pill sizes to its name but never
-        // grows to fill the row — that stretch is what makes today's chips
-        // read as list rows rather than tiles, and is exactly what `row` asks
-        // for.
+        // Only `row` stretches; that width is what reads as a list row.
         variant === "row" && "w-full",
         !isMedia && "min-w-0",
         isMedia && (expanded ? "w-full" : "shrink-0"),
@@ -434,11 +369,8 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
           ...(variant === "tile" && !isMedia
             ? { maxWidth: geometry.docMaxWidth }
             : undefined),
-          // The per-type colour already lives in FILE_TYPES; a tinted plate is
-          // what makes it readable at tile size without shouting. It is handed
-          // to the plate as a variable from here rather than declared on the
-          // plate itself, where an inline value would outrank the theme rule
-          // the hook exists to accept.
+          // Handed down as a variable rather than set on the plate, where an
+          // inline value would outrank the theme rule the hook exists to accept.
           "--attachment-tile-icon-tint": iconColor,
         } as React.CSSProperties
       }
