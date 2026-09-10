@@ -4150,6 +4150,18 @@ Global tool allowlist that applies regardless of selected facets.
 tool_call_allowlist = ["web-search-mcp/*"]
 ```
 
+##### Selecting built-in `erato/*` tools
+
+The `erato` namespace is reserved for tools the backend exposes itself, and no MCP server or client tool may claim it. Built-ins are selected the same way as any other tool — by an allowlist pattern — so `erato/delegate_task`, `erato/*`, a bare `erato`, or `*` all select the task-delegation tool where it is available.
+
+Selection is opt-in: unlike the MCP allowlist, where leaving it unset means "all tools allowed", an empty tool allowlist selects no built-in at all. A built-in also stands down if a real MCP tool claims its name, matching the precedence the other synthetic tools already follow.
+
+<Callout type="warn">
+  Always pair a reserved pattern with a real MCP pattern on the same facet. Adding any pattern to a facet turns the derived MCP server filter from "no restriction" into a concrete set; if the only patterns are `erato/*` ones, that set is empty and the turn loses **every** MCP tool while the facet is selected. Write `["erato/delegate_task", "web-search-mcp/*"]`, not `["erato/delegate_task"]`.
+</Callout>
+
+Note that the `delegate_to_assistant` tool of the [`delegation.assistants`](#delegationassistants) route is **not** allowlist-gated: it is offered whenever the user's message carries validated assistant mentions. Gating it would silently disable in-chat delegation in every deployment whose facets already carry narrow allowlists.
+
 #### `experimental_facets.facet_prompt_template`
 
 {/* erato_toml_config_key: experimental_facets.facet_prompt_template */}

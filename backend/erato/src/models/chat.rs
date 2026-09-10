@@ -381,6 +381,7 @@ pub fn chat_is_delegated_run(chat: &chats::Model) -> bool {
 /// `chats.assistant_id` column NULL so its foreign key is never evaluated -
 /// writing `{}` or an explicit `null` would be the same to Postgres here, but
 /// the absent key is the shape the row-state invariant pins.
+#[allow(clippy::too_many_arguments)]
 pub async fn create_delegated_chat(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,
