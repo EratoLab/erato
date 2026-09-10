@@ -22,6 +22,35 @@ Typical "Notable changes" categories to copy & paste:
 
 -->
 
+## [Unreleased]
+
+### Notable changes
+
+#### Features and enhancements
+
+- Delegation configuration moved to a top-level `[delegation]` section, in preparation for model-planned delegated tasks. The `erato` tool namespace and the tool names `delegate_task` / `collect_tasks` are now reserved for built-in tools.
+
+#### Deprecations
+
+**`[assistants.delegation]` is deprecated; use `[delegation]` and `[delegation.assistants]`.**
+
+The table is still read until version `0.8.0`. A configuration that only sets `[assistants.delegation]` boots with a deprecation warning and behaves identically. Setting both `[assistants.delegation]` and `[delegation]` is rejected at startup — move the keys rather than duplicating them.
+
+| Deprecated key | Replacement |
+| --- | --- |
+| `assistants.delegation.enabled` | `delegation.assistants.enabled` |
+| `assistants.delegation.max_mentions_per_message` | `delegation.assistants.max_mentions_per_message` |
+| `assistants.delegation.allow_background` | `delegation.allow_background` |
+| `assistants.delegation.max_concurrent_background_runs` | `delegation.max_concurrent_background_runs` |
+| `assistants.delegation.run_timeout_seconds` | `delegation.run_timeout_seconds` |
+| `assistants.delegation.result_max_chars` | `delegation.result_max_chars` |
+| `assistants.delegation.auto_archive_after_days` | `delegation.auto_archive_after_days` |
+| `assistants.delegation.preamble` | `delegation.preamble` |
+
+Two further startup checks are new: an MCP server may no longer be given the id `erato`, and a configured client tool may no longer use the `erato` namespace or take one of the reserved tool names.
+
+The bundled k3d scenario configuration (`infrastructure/k3d/erato-local/config/erato.scenario-assistants.toml`) deliberately keeps the deprecated table for one release so the deprecation path stays covered by the end-to-end environment.
+
 ## [0.6.2] - 2026-06-26
 
 ### Notable changes

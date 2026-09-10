@@ -47,4 +47,7 @@ export function injectFrontendEnv() {
   if (import.meta.env.VITE_ASSISTANTS_DELEGATION_ALLOW_BACKGROUND === "true") {
     window.ASSISTANTS_DELEGATION_ALLOW_BACKGROUND ??= true;
   }
+  if (import.meta.env.VITE_DELEGATION_TASKS_ENABLED === "true") {
+    window.DELEGATION_TASKS_ENABLED ??= true;
+  }
 }

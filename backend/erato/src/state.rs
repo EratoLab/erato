@@ -249,10 +249,9 @@ impl AppState {
             Some(db.clone()),
             config.generation_status.clone(),
             config
-                .assistants
                 .delegation
-                .enabled
-                .then_some(config.assistants.delegation.run_timeout_seconds),
+                .any_route_enabled()
+                .then_some(config.delegation.run_timeout_seconds),
         );
 
         // Initialize the system prompt renderer
