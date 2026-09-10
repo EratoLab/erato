@@ -339,6 +339,11 @@ msgstr "Afficher la configuration de l'assistant"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "assistant.welcome.configuration.title"
+msgstr "Configuration"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "assistant.welcome.delegated.empty"
 msgstr "Aucune exécution déléguée pour le moment."
 
@@ -359,6 +364,11 @@ msgstr "Depuis une conversation sans titre"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "assistant.welcome.edit"
+msgstr "Modifier les paramètres de l'assistant"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "assistant.welcome.files.inaccessible"
 msgstr "Certains fichiers par défaut sont inaccessibles en raison de permissions insuffisantes."
 
@@ -366,6 +376,21 @@ msgstr "Certains fichiers par défaut sont inaccessibles en raison de permission
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "assistant.welcome.files.inaccessible.contact"
 msgstr "Contactez ce créateur et demandez-lui de partager les fichiers :"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "assistant.welcome.files.title"
+msgstr "Fichiers par défaut"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "assistant.welcome.history"
+msgstr "Vos conversations avec cet assistant"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "assistant.welcome.more_conversations.count"
+msgstr "{count, plural, one {Et # autre conversation...} other {Et # autres conversations...}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
@@ -381,6 +406,11 @@ msgstr "Chats"
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "assistant.welcome.segment.delegated"
 msgstr "Exécutions déléguées"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "assistant.welcome.system_prompt"
+msgstr "Prompt système"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubDetailPage.tsx
@@ -1425,6 +1455,41 @@ msgid "chat.attachment.teamsImage"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+msgid "chat.attachments.include"
+msgstr "Inclure"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/ThreadMessageCard.tsx
+msgid "chat.attachments.include_message"
+msgstr "Inclure le message"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+msgid "chat.attachments.items.count"
+msgstr "{count, plural, one {# élément} other {# éléments}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+msgid "chat.attachments.loading"
+msgstr "Chargement de la pièce jointe..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+msgid "chat.attachments.show_less"
+msgstr "Afficher moins"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+msgid "chat.attachments.show_more.count"
+msgstr "{count, plural, one {Afficher # élément de plus} other {Afficher # éléments de plus}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/ThreadMessageCard.tsx
+msgid "chat.attachments.toggle"
+msgstr "Afficher ou masquer les pièces jointes"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 msgid "chat.conversation.aria"
 msgstr "Conversation de chat"
@@ -1475,9 +1540,16 @@ msgstr "Désélectionner {facetDisplayName}"
 #~ msgstr "Erreur lors du chargement du fichier"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
-#~ msgid "chat.file.loading"
-#~ msgstr "Chargement du fichier..."
+#: src/components/ui/FileUpload/FilePreviewLoading.tsx
+msgid "chat.file.loading"
+msgstr "Chargement du fichier..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/AttachmentTile.tsx
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "chat.file.preview_attachment"
+msgstr "Aperçu de la pièce jointe"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
@@ -1508,6 +1580,11 @@ msgstr "Exécutions déléguées ({runCount})"
 #: src/components/ui/Chat/DelegatedRunsSection.tsx
 msgid "chat.history.delegatedRuns.toggleStatus"
 msgstr "Exécutions déléguées ({runCount}), {attentionLabel}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.files.count"
+msgstr "{count, plural, =0 {Aucun fichier} one {# fichier} other {# fichiers}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryFilterMenu.tsx
@@ -1660,6 +1737,24 @@ msgid "chat.history.group.unread"
 msgstr "Non lus"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/pages/SearchPage.tsx
+msgid "chat.history.loading_more"
+msgstr "Chargement..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/pages/SearchPage.tsx
+msgid "chat.history.menu.confirm_remove.message"
+msgstr "Êtes-vous sûr de vouloir supprimer ce chat ?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/pages/SearchPage.tsx
+msgid "chat.history.menu.confirm_remove.title"
+msgstr "Confirmer la suppression"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
@@ -1672,6 +1767,12 @@ msgstr "Épingler"
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.pinLimitReached"
 msgstr "Limite d’épingles atteinte"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/pages/SearchPage.tsx
+msgid "chat.history.menu.remove"
+msgstr "Supprimer"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
@@ -2478,6 +2579,13 @@ msgstr "Non défini"
 #: src/pages/AssistantHubSubmitPage.tsx
 msgid "common.preview"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/AttachmentTile.tsx
+#: src/components/ui/FileUpload/FilePreviewBase.tsx
+#: src/components/ui/FileUpload/FilePreviewButton.tsx
+msgid "common.remove"
+msgstr "Supprimer"
 
 #. js-lingui-explicit-id
 #: src/pages/assistantHubUtils.tsx
@@ -4205,10 +4313,9 @@ msgstr " Les pièces jointes représentent {fileTokensFormatted} tokens."
 msgid "(no body)"
 msgstr ""
 
-#. placeholder {0}: session.metadata?.fileCount ?? 0
 #: src/components/ui/Chat/ChatHistoryList.tsx
-msgid "{0, plural, =0 {No files} one {# file} other {# files}}"
-msgstr "{0, plural, =0 {Aucun fichier} one {# fichier} other {# fichiers}}"
+#~ msgid "{0, plural, =0 {No files} one {# file} other {# files}}"
+#~ msgstr "{0, plural, =0 {Aucun fichier} one {# fichier} other {# fichiers}}"
 
 #. placeholder {0}: queuedMessage.attachedFiles.length
 #: src/components/ui/Chat/ChatInput.tsx
@@ -4237,8 +4344,8 @@ msgid "{fileName}: {filePercentage}%"
 msgstr "{fileName} : {filePercentage}%"
 
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
-msgid "{itemCount} items"
-msgstr "{itemCount} éléments"
+#~ msgid "{itemCount} items"
+#~ msgstr "{itemCount} éléments"
 
 #: src/utils/teams/teamsSentAttachmentGroups.ts
 msgid "{sharedCount} shared files"
@@ -4296,7 +4403,6 @@ msgstr ""
 msgid "• Use \"Reset to Browser Detection\" to test fresh detection"
 msgstr ""
 
-#: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/components/ui/FilePreview/EmlPreview.tsx
 #: src/components/ui/FileUpload/AttachmentTileList.tsx
 #: src/components/ui/FileUpload/ThreadMessageCard.tsx
@@ -4304,8 +4410,8 @@ msgid "1 file"
 msgstr "1 fichier"
 
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
-msgid "1 item"
-msgstr "1 élément"
+#~ msgid "1 item"
+#~ msgstr "1 élément"
 
 #: src/components/ui/Teams/TeamsConversationView.tsx
 msgid "1 message could not be loaded."
@@ -4332,8 +4438,8 @@ msgid "All file types accepted"
 msgstr "Tous les types de fichiers acceptés"
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
-msgid "And"
-msgstr ""
+#~ msgid "And"
+#~ msgstr ""
 
 #: src/components/ui/DesktopSidecar/SidecarLocalAnswerPanel.tsx
 msgid "Answer from this device"
@@ -4362,8 +4468,8 @@ msgstr "Êtes-vous sûr de vouloir continuer ?"
 
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
-msgid "Are you sure you want to remove this chat?"
-msgstr "Êtes-vous sûr de vouloir supprimer ce chat ?"
+#~ msgid "Are you sure you want to remove this chat?"
+#~ msgstr "Êtes-vous sûr de vouloir supprimer ce chat ?"
 
 #: src/components/ui/Feedback/Avatar.tsx
 msgid "Assistant avatar"
@@ -4651,8 +4757,8 @@ msgid "Completed"
 msgstr ""
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
-msgid "Configuration"
-msgstr ""
+#~ msgid "Configuration"
+#~ msgstr ""
 
 #: src/pages/AssistantCreatePage.tsx
 #~ msgid "Configure a custom assistant with specific instructions and capabilities"
@@ -4677,8 +4783,8 @@ msgstr "Confirmer l'action"
 
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
-msgid "Confirm Removal"
-msgstr "Confirmer la suppression"
+#~ msgid "Confirm Removal"
+#~ msgstr "Confirmer la suppression"
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Context usage"
@@ -4786,7 +4892,6 @@ msgid "Date"
 msgstr ""
 
 #: src/components/ui/Assistant/AssistantForm.tsx
-#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "Default Files"
 msgstr ""
 
@@ -4876,8 +4981,8 @@ msgstr "Modifier"
 #~ msgstr ""
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
-msgid "Edit Assistant Settings"
-msgstr ""
+#~ msgid "Edit Assistant Settings"
+#~ msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Edit queued message"
@@ -5046,12 +5151,12 @@ msgid "In Progress"
 msgstr "En cours"
 
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
-msgid "Include"
-msgstr "Inclure"
+#~ msgid "Include"
+#~ msgstr "Inclure"
 
 #: src/components/ui/FileUpload/ThreadMessageCard.tsx
-msgid "Include message"
-msgstr "Inclure le message"
+#~ msgid "Include message"
+#~ msgstr "Inclure le message"
 
 #: src/components/ui/ToolCall/ToolCallInput.tsx
 #~ msgid "Input Parameters"
@@ -5107,21 +5212,19 @@ msgstr "Chargement"
 #~ msgstr ""
 
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
-msgid "Loading attachment..."
-msgstr ""
+#~ msgid "Loading attachment..."
+#~ msgstr ""
 
 #: src/components/ui/FilePreview/TeamsTranscriptPreview.tsx
 msgid "Loading conversation…"
 msgstr "Chargement de la conversation…"
 
 #: src/components/ui/FileUpload/FilePreviewLoading.tsx
-msgid "Loading file..."
-msgstr ""
+#~ msgid "Loading file..."
+#~ msgstr ""
 
-#: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/components/ui/Chat/ModelSelector.tsx
 #: src/components/ui/Message/LoadMoreButton.tsx
-#: src/pages/SearchPage.tsx
 msgid "Loading..."
 msgstr "Chargement..."
 
@@ -5175,8 +5278,8 @@ msgstr ""
 #~ msgstr ""
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
-msgid "more conversations..."
-msgstr ""
+#~ msgid "more conversations..."
+#~ msgstr ""
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "My Assistant"
@@ -5209,8 +5312,8 @@ msgid "No chats found"
 msgstr "Aucun chat trouvé"
 
 #: src/components/ui/Chat/ChatHistoryList.tsx
-msgid "No files"
-msgstr ""
+#~ msgid "No files"
+#~ msgstr ""
 
 #: src/components/ui/Message/ConversationIndicator.tsx
 msgid "No messages yet"
@@ -5292,8 +5395,8 @@ msgstr ""
 #: src/components/ui/FileUpload/AttachmentTile.tsx
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 #: src/components/ui/Teams/TeamsConversationView.tsx
-msgid "Preview attachment"
-msgstr "Aperçu de la pièce jointe"
+#~ msgid "Preview attachment"
+#~ msgstr "Aperçu de la pièce jointe"
 
 #: src/components/ui/FilePreview/FilePreviewContent.tsx
 #: src/components/ui/Modal/FilePreviewModal.tsx
@@ -5389,8 +5492,8 @@ msgstr "Contexte restant : {remainingContextPercentage}%"
 #: src/components/ui/FileUpload/FilePreviewBase.tsx
 #: src/components/ui/FileUpload/FilePreviewButton.tsx
 #: src/pages/SearchPage.tsx
-msgid "Remove"
-msgstr "Supprimer"
+#~ msgid "Remove"
+#~ msgstr "Supprimer"
 
 #: src/components/ui/FileUpload/AttachmentTileList.tsx
 msgid "Remove all"
@@ -5493,12 +5596,12 @@ msgid "Show"
 msgstr "Afficher"
 
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
-msgid "Show {hiddenCount} more items"
-msgstr "Afficher {hiddenCount} éléments de plus"
+#~ msgid "Show {hiddenCount} more items"
+#~ msgstr "Afficher {hiddenCount} éléments de plus"
 
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
-msgid "Show 1 more item"
-msgstr "Afficher 1 élément de plus"
+#~ msgid "Show 1 more item"
+#~ msgstr "Afficher 1 élément de plus"
 
 #: src/components/ui/Message/CollapsibleCodeBlock.tsx
 msgid "Show all {lineCount} lines"
@@ -5508,7 +5611,6 @@ msgstr ""
 msgid "Show details"
 msgstr "Afficher les détails"
 
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 #: src/components/ui/Message/CollapsibleCodeBlock.tsx
 msgid "Show less"
 msgstr "Afficher moins"
@@ -5633,7 +5735,6 @@ msgid "Supported Locales:"
 msgstr ""
 
 #: src/components/ui/Assistant/AssistantForm.tsx
-#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "System Prompt"
 msgstr ""
 
@@ -5728,8 +5829,8 @@ msgid "To"
 msgstr ""
 
 #: src/components/ui/FileUpload/ThreadMessageCard.tsx
-msgid "Toggle attachments"
-msgstr "Afficher ou masquer les pièces jointes"
+#~ msgid "Toggle attachments"
+#~ msgstr "Afficher ou masquer les pièces jointes"
 
 #: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "Token Limit Exceeded"
@@ -5884,5 +5985,5 @@ msgstr "Votre question : {query}"
 #~ msgstr ""
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
-msgid "Your conversations with this assistant"
-msgstr "Vos conversations avec cet assistant"
+#~ msgid "Your conversations with this assistant"
+#~ msgstr "Vos conversations avec cet assistant"

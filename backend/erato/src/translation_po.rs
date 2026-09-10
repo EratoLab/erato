@@ -554,9 +554,9 @@ msgstr ""
             json!(["Abtastrate: ", ["sampleRate"], " Hz"])
         );
         assert_eq!(
-            value["messages"]["rvEDpN"],
+            value["messages"]["chat.history.files.count"],
             json!([[
-                "0",
+                "count",
                 "plural",
                 {
                     "0": ["Keine Dateien"],

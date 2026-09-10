@@ -425,15 +425,25 @@ export default function SearchPage() {
                             disabled: !result.canEdit,
                           },
                           {
-                            label: t`Remove`,
+                            label: t({
+                              id: "chat.history.menu.remove",
+                              message: "Remove",
+                            }),
                             icon: <Trash className="size-4" />,
                             variant: "danger",
                             onClick: () => {
                               void handleArchiveResult(result.chatId);
                             },
                             confirmAction: true,
-                            confirmTitle: t`Confirm Removal`,
-                            confirmMessage: t`Are you sure you want to remove this chat?`,
+                            confirmTitle: t({
+                              id: "chat.history.menu.confirm_remove.title",
+                              message: "Confirm Removal",
+                            }),
+                            confirmMessage: t({
+                              id: "chat.history.menu.confirm_remove.message",
+                              message:
+                                "Are you sure you want to remove this chat?",
+                            }),
                           },
                         ]}
                       />
@@ -447,7 +457,10 @@ export default function SearchPage() {
                   ref={loadMoreSentinelRef}
                   className="flex justify-center py-6"
                   data-ui="search-load-more-sentinel"
-                  aria-label={t`Loading...`}
+                  aria-label={t({
+                    id: "chat.history.loading_more",
+                    message: "Loading...",
+                  })}
                 >
                   {(isFetchingNextPage || isSearching) && (
                     <SpinnerIcon size="md" aria-hidden />

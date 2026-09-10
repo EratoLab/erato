@@ -316,7 +316,7 @@ export const FilePreviewBase: React.FC<FilePreviewBaseProps> = ({
             onClick={(e) => handleRemove(e)}
             disabled={disabled}
             className={FILE_PREVIEW_STYLES.closeButton}
-            aria-label={`${t`Remove`} ${filename}`}
+            aria-label={`${t({ id: "common.remove", message: "Remove" })} ${filename}`}
           >
             <CloseIcon className="size-4" />
           </button>

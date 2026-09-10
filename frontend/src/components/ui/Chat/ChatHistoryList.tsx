@@ -1,5 +1,4 @@
-import { t } from "@lingui/core/macro";
-import { Plural } from "@lingui/react/macro";
+import { plural, t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { memo, useEffect, useMemo, useRef } from "react";
 
@@ -150,6 +149,14 @@ export interface ChatHistoryListProps {
   disableRowLinks?: boolean;
 }
 
+// The placeholder must stay `count`: component-kit catalogs merge last and
+// format this id with {count, plural, …}.
+const getFileCountLabel = (count: number) =>
+  t({
+    id: "chat.history.files.count",
+    message: plural(count, { 0: "No files", one: "# file", other: "# files" }),
+  });
+
 const ChatHistoryListItem = memo<{
   session: ChatSession;
   isActive: boolean;
@@ -213,6 +220,7 @@ const ChatHistoryListItem = memo<{
             id: "chat.history.menu.pin",
             message: "Pin",
           });
+    const fileCountLabel = getFileCountLabel(session.metadata?.fileCount ?? 0);
     const rowBody = (
       // Row owns the row geometry, the selected fill and the hover tint; the
       // column flow stays here because the sidebar variant sets no axis.
@@ -297,13 +305,22 @@ const ChatHistoryListItem = memo<{
                   ? []
                   : [
                       {
-                        label: t`Remove`,
+                        label: t({
+                          id: "chat.history.menu.remove",
+                          message: "Remove",
+                        }),
                         icon: <Trash className="size-4" />,
                         variant: "danger" as const,
                         onClick: onArchive ?? (() => {}),
                         confirmAction: true,
-                        confirmTitle: t`Confirm Removal`,
-                        confirmMessage: t`Are you sure you want to remove this chat?`,
+                        confirmTitle: t({
+                          id: "chat.history.menu.confirm_remove.title",
+                          message: "Confirm Removal",
+                        }),
+                        confirmMessage: t({
+                          id: "chat.history.menu.confirm_remove.message",
+                          message: "Are you sure you want to remove this chat?",
+                        }),
                       },
                     ]),
               ]}
@@ -328,20 +345,9 @@ const ChatHistoryListItem = memo<{
                   ? "text-theme-fg-muted"
                   : "text-theme-fg-secondary",
               )}
-              title={
-                session.metadata?.fileCount === 0
-                  ? t`No files`
-                  : session.metadata?.fileCount === 1
-                    ? t`1 file`
-                    : `${session.metadata?.fileCount ?? 0} files`
-              }
+              title={fileCountLabel}
             >
-              <Plural
-                value={session.metadata?.fileCount ?? 0}
-                _0="No files"
-                one="# file"
-                other="# files"
-              />
+              {fileCountLabel}
             </p>
             {updatedAtDate && (
               <p className="text-xs text-theme-fg-secondary">
@@ -494,7 +500,10 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
             ref={loadMoreSentinelRef}
             className="flex justify-center py-2"
             data-ui="chat-history-load-more-sentinel"
-            aria-label={t`Loading...`}
+            aria-label={t({
+              id: "chat.history.loading_more",
+              message: "Loading...",
+            })}
           >
             {isLoadingMore && <SpinnerIcon size="md" aria-hidden />}
           </div>
