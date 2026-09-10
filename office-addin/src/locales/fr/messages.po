@@ -210,6 +210,11 @@ msgid "officeAddin.chat.fileDrop.overlay.label"
 msgstr "Déposez pour téléverser"
 
 #. js-lingui-explicit-id
+#: src/core/AddinChatCore.tsx
+msgid "officeAddin.chat.fileDrop.overlay.maxSize"
+msgstr "Taille de fichier maximale : {maxSizeFormatted}"
+
+#. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
 #~ msgid "officeAddin.chat.newChat"
 #~ msgstr "Nouveau chat"
