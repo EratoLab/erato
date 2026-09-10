@@ -135,6 +135,28 @@ describe("useConversationDropzone", () => {
       );
     });
 
+    it("accepts an item whose size is unknown", () => {
+      renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          maxSize: LIMIT,
+          onError: mockOnError,
+        }),
+      );
+
+      const validator = vi
+        .mocked(useDropzone)
+        .mock.calls.at(-1)?.[0]?.validator;
+
+      // react-dropzone runs this validator on dragenter against
+      // DataTransferItems, which carry no size. Rejecting those would make
+      // `isDragAccept` false and hide the conversation drop overlay.
+      const dragItem = { name: "dragged", type: "application/pdf" } as File;
+
+      expect(validator?.(dragItem)).toBeNull();
+    });
+
     it("spares a file the isSizeExempt predicate accepts", () => {
       renderHook(() =>
         useConversationDropzone({

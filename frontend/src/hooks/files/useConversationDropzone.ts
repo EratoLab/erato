@@ -80,9 +80,16 @@ export function useConversationDropzone({
 
   // The size rule runs as a per-file validator rather than react-dropzone's
   // flat `maxSize` so `isSizeExempt` can spare individual files.
+  //
+  // Only a size known to exceed the limit rejects. During a drag the browser
+  // exposes `DataTransferItem`s with no `size`, and react-dropzone runs this
+  // same validator to decide `isDragAccept` — treating an unknown size as
+  // oversized would hide the drop overlay for every drag. This mirrors
+  // react-dropzone's own `fileMatchSize`, which skips undefined sizes.
   const validateSize = useCallback(
     (file: File) => {
-      if (maxSize === undefined || file.size <= maxSize) return null;
+      if (maxSize === undefined) return null;
+      if (!(file.size > maxSize)) return null;
       if (isSizeExempt?.(file)) return null;
       return {
         code: "file-too-large",
