@@ -4440,6 +4440,14 @@ msgstr ""
 #~ msgid "1 step"
 #~ msgstr ""
 
+#: src/hooks/audio/audioTranscriptionErrors.ts
+msgid "A passage could not be transcribed because the AI provider's content filter blocked it. This also happens with harmless speech. Please say it differently or type it."
+msgstr "Nie udało się transkrybować fragmentu, ponieważ filtr treści dostawcy AI go zablokował. Zdarza się to także przy nieszkodliwych wypowiedziach. Powiedz to inaczej lub wpisz tekst ręcznie."
+
+#: src/hooks/audio/audioTranscriptionErrors.ts
+msgid "A passage could not be transcribed. Please try again."
+msgstr "Nie udało się transkrybować fragmentu. Spróbuj ponownie."
+
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Accepted types:"
 msgstr "Akceptowane typy plików:"
@@ -5026,6 +5034,10 @@ msgstr "Koniec rozmowy"
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Error"
 msgstr "Błąd"
+
+#: src/hooks/audio/audioTranscriptionErrors.ts
+msgid "Error code: {code}"
+msgstr "Kod błędu: {code}"
 
 #: src/components/ui/ThemeApplier.tsx
 #~ msgid "Error loading theme:"
@@ -5769,6 +5781,14 @@ msgstr ""
 msgid "Test Locale Changes:"
 msgstr "Testuj zmiany języka:"
 
+#: src/hooks/audio/audioTranscriptionErrors.ts
+msgid "The AI provider could not transcribe a passage. Please try again."
+msgstr "Dostawca AI nie mógł transkrybować fragmentu. Spróbuj ponownie."
+
+#: src/hooks/audio/audioTranscriptionErrors.ts
+msgid "The AI provider could not transcribe the passage starting at {passage}. Please try again."
+msgstr "Dostawca AI nie mógł transkrybować fragmentu zaczynającego się od {passage}. Spróbuj ponownie."
+
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "The file \"{filename}\" cannot be processed by the AI and was not uploaded."
 msgstr "Plik \"{filename}\" nie może być przetworzony przez AI i nie został przesłany."
@@ -5801,6 +5821,14 @@ msgstr "Mikrofon został odłączony. Sprawdź mikrofon i ponownie rozpocznij dy
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "The microphone was disconnected. Please check your microphone and start recording again."
 msgstr "Mikrofon został odłączony. Sprawdź mikrofon i ponownie rozpocznij nagrywanie."
+
+#: src/hooks/audio/audioTranscriptionErrors.ts
+msgid "The passage starting at {passage} could not be transcribed because the AI provider's content filter blocked it. This also happens with harmless speech. Please say it differently or type it."
+msgstr "Nie udało się transkrybować fragmentu zaczynającego się od {passage}, ponieważ filtr treści dostawcy AI go zablokował. Zdarza się to także przy nieszkodliwych wypowiedziach. Powiedz to inaczej lub wpisz tekst ręcznie."
+
+#: src/hooks/audio/audioTranscriptionErrors.ts
+msgid "The passage starting at {passage} could not be transcribed. Please try again."
+msgstr "Nie udało się transkrybować fragmentu zaczynającego się od {passage}. Spróbuj ponownie."
 
 #: src/hooks/audio/useAudioInputLevelPreview.ts
 #: src/hooks/audio/useGuidedAudioCapture.ts

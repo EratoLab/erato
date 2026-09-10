@@ -27,6 +27,10 @@ import {
   resampleMonoFloat32ToPcm16,
 } from "./audio-pcm-codec";
 import { getAudioEnvironment } from "./audioEnvironment";
+import {
+  type AudioTranscriptionErrorCode,
+  describeAudioTranscriptionFailure,
+} from "./audioTranscriptionErrors";
 import { PRE_SPEECH_SILENCE_PRIMER_MS } from "./audioTuning";
 import {
   createSpeechOnsetController,
@@ -93,6 +97,7 @@ type AudioTranscriptionSocketFrame =
       file_upload_id: string;
       chunk_index: number;
       error?: string | null;
+      error_code?: AudioTranscriptionErrorCode | null;
       audio_transcription?: AudioTranscriptionMetadata;
     }
   | {
@@ -104,6 +109,7 @@ type AudioTranscriptionSocketFrame =
   | {
       type: "error";
       error?: string | null;
+      error_code?: AudioTranscriptionErrorCode | null;
     };
 
 type AudioTranscriptionChunk = {
@@ -283,7 +289,13 @@ function waitForAudioTranscriptionFrame(
         const frame = JSON.parse(event.data) as AudioTranscriptionSocketFrame;
         if (frame.type === "error") {
           cleanup();
-          reject(new Error(frame.error ?? t`Audio transcription failed.`));
+          reject(
+            new Error(
+              describeAudioTranscriptionFailure(frame, {
+                fallback: t`Audio transcription failed.`,
+              }),
+            ),
+          );
           return;
         }
 
@@ -722,8 +734,12 @@ export function useAudioTranscriptionRecorder({
               frame.audio_transcription,
             );
           }
-          if (frame.type === "error") {
-            setRecordingError(frame.error ?? t`Audio transcription failed.`);
+          if (frame.type === "chunk_failed" || frame.type === "error") {
+            setRecordingError(
+              describeAudioTranscriptionFailure(frame, {
+                fallback: t`Audio transcription failed.`,
+              }),
+            );
           }
         } catch {
           setRecordingError(t`Could not read audio transcription response.`);

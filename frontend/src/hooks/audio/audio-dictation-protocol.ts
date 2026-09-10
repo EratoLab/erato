@@ -23,6 +23,7 @@ function abortRejection(signal: AbortSignal | undefined): unknown {
   // eslint-disable-next-line lingui/no-unlocalized-strings
   return new DOMException("Aborted", "AbortError");
 }
+import type { AudioTranscriptionErrorCode } from "./audioTranscriptionErrors";
 
 export type AudioDictationSocketFrame =
   | {
@@ -40,11 +41,18 @@ export type AudioDictationSocketFrame =
       transcript?: string | null;
     }
   | {
+      type: "chunk_failed";
+      chunk_index: number;
+      error?: string | null;
+      error_code?: AudioTranscriptionErrorCode | null;
+    }
+  | {
       type: "completed";
     }
   | {
       type: "error";
       error?: string | null;
+      error_code?: AudioTranscriptionErrorCode | null;
     };
 
 export function createAudioDictationWebSocketUrl(): string {
