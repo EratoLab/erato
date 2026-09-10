@@ -1,8 +1,7 @@
 import { t } from "@lingui/core/macro";
 import { memo } from "react";
 
-import { LoadingIcon } from "../icons";
-import { FILE_PREVIEW_STYLES } from "./fileUploadStyles";
+import { AttachmentNotice } from "./AttachmentNotice";
 
 interface FilePreviewLoadingProps {
   /** Optional loading label */
@@ -13,36 +12,24 @@ interface FilePreviewLoadingProps {
   className?: string;
 }
 
+/**
+ * The framed wait standing where a file chip will be — the notice's busy form
+ * under its own name, which six preview renderers and the component kits
+ * import by this module path.
+ */
 export const FilePreviewLoading = memo<FilePreviewLoadingProps>(
   ({
     label = t({ id: "chat.file.loading", message: "Loading file..." }),
     description = t`Please wait`,
     className = "",
-  }) => {
-    return (
-      <div
-        className={`${FILE_PREVIEW_STYLES.container} ${className}`}
-        aria-live="polite"
-        aria-busy="true"
-      >
-        <div className="mr-2 shrink-0 text-[var(--theme-fg-muted)]">
-          <LoadingIcon
-            className={`${FILE_PREVIEW_STYLES.icon} animate-spin`}
-            aria-hidden="true"
-          />
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className={FILE_PREVIEW_STYLES.name}>{label}</div>
-          {description && (
-            <div className="text-xs text-[var(--theme-fg-muted)]">
-              {description}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  },
+  }) => (
+    <AttachmentNotice
+      label={label}
+      description={description}
+      busy
+      className={className}
+    />
+  ),
 );
 
 // eslint-disable-next-line lingui/no-unlocalized-strings

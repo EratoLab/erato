@@ -408,6 +408,42 @@ describe("GroupedFileAttachmentsPreview", () => {
     expect(tiles[1]).not.toHaveAttribute("data-selected");
   });
 
+  it("announces a failed attachment and still lets it be toggled", async () => {
+    const onToggle = vi.fn();
+
+    const { container } = await renderWithI18n(
+      <GroupedFileAttachmentsPreview
+        groups={[
+          {
+            id: "group-email",
+            label: "Current email",
+            items: [
+              {
+                kind: "selectableAttachment",
+                id: "file-1",
+                file: { id: "file-1", filename: "invoice.pdf", size: 2048 },
+                selected: true,
+                onToggle,
+                validation: { ok: false, reason: "Too large to attach" },
+              },
+            ],
+          },
+        ]}
+        onRemoveFile={() => {}}
+      />,
+    );
+
+    expect(
+      container.querySelector('[data-ui="attachment-tile"]'),
+    ).toHaveAttribute("data-invalid", "true");
+    expect(screen.getByText("Too large to attach")).toBeVisible();
+
+    // Failing validation warns rather than decides: the file can still be
+    // checked, so the checkbox has to stay live.
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps the selection off a preview row that owns no toggle", async () => {
     const { container } = await renderWithI18n(
       <GroupedFileAttachmentsPreview

@@ -1455,7 +1455,7 @@ msgid "chat.attachment.teamsImage"
 msgstr ""
 
 #. js-lingui-explicit-id
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+#: src/components/ui/FileUpload/AttachmentTile.tsx
 msgid "chat.attachments.include"
 msgstr "Incluir"
 
@@ -1546,7 +1546,6 @@ msgstr "Cargando archivo..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/AttachmentTile.tsx
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 #: src/components/ui/Teams/TeamsConversationView.tsx
 msgid "chat.file.preview_attachment"
 msgstr "Vista previa del archivo adjunto"
