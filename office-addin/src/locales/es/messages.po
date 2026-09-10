@@ -270,6 +270,12 @@ msgid "officeAddin.chatInput.emailThreadLoadErrorDescription"
 msgstr "Aun así, puedes enviar sin este contexto de correo electrónico."
 
 #. js-lingui-explicit-id
+#. placeholder {0}: error.filename
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.emailTrimFailed"
+msgstr "No se pudieron omitir los adjuntos desmarcados de {0}. El mensaje no se envió."
+
+#. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.expandingDroppedEmails"
 msgstr "Procesando los correos electrónicos soltados…"

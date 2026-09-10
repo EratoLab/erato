@@ -315,6 +315,7 @@ export {
 } from "@/hooks/files";
 export {
   UploadTooLargeError,
+  UploadUnknownError,
   isUploadTooLarge,
   type UploadError,
 } from "@/hooks/files/errors";

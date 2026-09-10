@@ -270,6 +270,12 @@ msgid "officeAddin.chatInput.emailThreadLoadErrorDescription"
 msgstr "Nadal możesz wysłać wiadomość bez tego kontekstu e-maila."
 
 #. js-lingui-explicit-id
+#. placeholder {0}: error.filename
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.emailTrimFailed"
+msgstr "Nie udało się pominąć odznaczonych załączników z {0}. Wiadomość nie została wysłana."
+
+#. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.expandingDroppedEmails"
 msgstr "Przetwarzanie upuszczonych e-maili…"

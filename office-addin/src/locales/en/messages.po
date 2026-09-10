@@ -270,6 +270,12 @@ msgid "officeAddin.chatInput.emailThreadLoadErrorDescription"
 msgstr "You can still send without this email context."
 
 #. js-lingui-explicit-id
+#. placeholder {0}: error.filename
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.emailTrimFailed"
+msgstr "Couldn't leave out the unchecked attachments of {0}. The message was not sent."
+
+#. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.expandingDroppedEmails"
 msgstr "Processing dropped emails…"

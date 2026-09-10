@@ -3,6 +3,7 @@ import {
   GroupedFileAttachmentsPreview,
   SpinnerIcon,
   UploadTooLargeError,
+  UploadUnknownError,
   fetchUploadFile,
   getIdToken,
   isUploadTooLarge,
@@ -50,6 +51,7 @@ import {
   toLocalOffsetIso,
 } from "../utils/outlookScheduleTool";
 import { restoreComposerDraft } from "../utils/restoreComposerDraft";
+import { EmailTrimError } from "../utils/trimRawEmlBytes";
 
 function validateAttachment(
   filename: string,
@@ -926,6 +928,22 @@ export const AddinChatInput = forwardRef<
 
         resolvedFileIds = result.files.map((file) => file.id);
       } catch (error) {
+        if (error instanceof EmailTrimError) {
+          // The user unchecked parts of this email and they could not be cut
+          // out. The untrimmed original would ship exactly what they removed,
+          // so nothing goes out: the draft comes back and the chips stay.
+          setUploadStoreError(
+            new UploadUnknownError(
+              t({
+                id: "officeAddin.chatInput.emailTrimFailed",
+                message: `Couldn't leave out the unchecked attachments of ${error.filename}. The message was not sent.`,
+              }),
+            ),
+          );
+          lastSentDraftFingerprintRef.current = previousDraftFingerprint;
+          restoreDraft(message, inputFileIds);
+          return;
+        }
         uploadFailed = true;
         if (isUploadTooLarge(error)) {
           setUploadStoreError(

@@ -270,6 +270,12 @@ msgid "officeAddin.chatInput.emailThreadLoadErrorDescription"
 msgstr "Sie können weiterhin ohne diesen E-Mail-Kontext senden."
 
 #. js-lingui-explicit-id
+#. placeholder {0}: error.filename
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.emailTrimFailed"
+msgstr "Die abgewählten Anhänge von {0} konnten nicht ausgelassen werden. Die Nachricht wurde nicht gesendet."
+
+#. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.expandingDroppedEmails"
 msgstr "Abgelegte E-Mails werden verarbeitet…"
