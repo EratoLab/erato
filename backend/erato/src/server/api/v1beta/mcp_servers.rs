@@ -128,7 +128,7 @@ pub async fn start_mcp_server_oauth(
         return Err(StatusCode::BAD_REQUEST);
     };
 
-    let redirect_uri = oauth_callback_url(&headers, &server_id)?;
+    let redirect_uri = oauth_callback_url(&headers)?;
     let authorization_url = start_oauth_authorization(
         &app_state,
         user_id,
@@ -177,7 +177,7 @@ pub async fn complete_mcp_server_oauth(
         return Err(StatusCode::BAD_REQUEST);
     };
 
-    let redirect_uri = oauth_callback_url(&headers, &server_id)?;
+    let redirect_uri = oauth_callback_url(&headers)?;
     complete_oauth_authorization(CompleteOauthAuthorizationParams {
         app_state: &app_state,
         user_id,
@@ -330,7 +330,7 @@ fn authentication_mode_name(authentication: &McpServerAuthenticationConfig) -> &
     }
 }
 
-fn oauth_callback_url(headers: &HeaderMap, server_id: &str) -> Result<String, StatusCode> {
+fn oauth_callback_url(headers: &HeaderMap) -> Result<String, StatusCode> {
     let scheme = headers
         .get("x-forwarded-proto")
         .and_then(|value| value.to_str().ok())
@@ -346,9 +346,43 @@ fn oauth_callback_url(headers: &HeaderMap, server_id: &str) -> Result<String, St
         .unwrap_or("");
 
     Ok(format!(
-        "{}://{}{}?preferencesDialog=open&preferencesTab=mcpServers&mcpOauthServerId={server_id}",
+        "{}://{}{}",
         scheme,
         host,
         prefix.trim_end_matches('/'),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn oauth_callback_uses_application_root() {
+        let mut headers = HeaderMap::new();
+        headers.insert("host", "localhost:4180".parse().unwrap());
+        assert_eq!(
+            oauth_callback_url(&headers).unwrap(),
+            "http://localhost:4180"
+        );
+        headers.insert("x-forwarded-proto", "https".parse().unwrap());
+        headers.insert("x-forwarded-host", "erato.example.com".parse().unwrap());
+        assert_eq!(
+            oauth_callback_url(&headers).unwrap(),
+            "https://erato.example.com"
+        );
+        headers.insert("x-forwarded-prefix", "/erato/".parse().unwrap());
+        assert_eq!(
+            oauth_callback_url(&headers).unwrap(),
+            "https://erato.example.com/erato"
+        );
+    }
+
+    #[test]
+    fn oauth_callback_requires_host() {
+        assert_eq!(
+            oauth_callback_url(&HeaderMap::new()),
+            Err(StatusCode::BAD_REQUEST)
+        );
+    }
 }

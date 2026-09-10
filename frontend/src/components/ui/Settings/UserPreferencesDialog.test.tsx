@@ -15,6 +15,7 @@ import {
   type ThemeMode,
 } from "@/components/providers/ThemeProvider";
 import { profileQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { getMcpOauthServerId } from "@/lib/mcpOauthCallback";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 import { useAudioInputDeviceStore } from "@/state/audioInputDeviceStore";
 
@@ -176,6 +177,7 @@ function renderDialog({
 }
 
 beforeEach(() => {
+  sessionStorage.clear();
   useAudioInputDeviceStore.setState({ selectedDeviceId: "" });
   localStorageValues.clear();
   vi.stubGlobal("localStorage", {
@@ -198,6 +200,7 @@ afterEach(() => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
   vi.useRealTimers();
+  sessionStorage.clear();
   if (typeof localStorage.clear === "function") {
     localStorage.clear();
   }
@@ -512,7 +515,8 @@ describe("UserPreferencesDialog", () => {
 
         if (url === "/api/v1beta/me/mcp_servers/notion/oauth/start") {
           return createJsonResponse({
-            authorization_url: "https://auth.example.com/oauth/authorize",
+            authorization_url:
+              "https://auth.example.com/oauth/authorize?state=notion-flow",
           });
         }
 
@@ -546,8 +550,9 @@ describe("UserPreferencesDialog", () => {
         }),
       );
       expect(window.location.href).toBe(
-        "https://auth.example.com/oauth/authorize",
+        "https://auth.example.com/oauth/authorize?state=notion-flow",
       );
+      expect(getMcpOauthServerId("notion-flow")).toBe("notion");
     });
 
     Object.defineProperty(window, "location", {

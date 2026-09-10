@@ -206,8 +206,10 @@ pub async fn start_oauth_authorization(
         .map(String::as_str)
         .collect::<Vec<_>>();
 
+    // Re-register dynamic clients when the application callback URL has changed.
     if let Some(client_config) =
         load_or_build_client_config(app_state, mcp_server_id, oauth2, redirect_uri).await?
+        && client_config.redirect_uri == redirect_uri
     {
         trace!(
             mcp_server_id,

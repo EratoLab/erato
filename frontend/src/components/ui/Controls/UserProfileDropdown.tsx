@@ -4,6 +4,10 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import {
+  clearMcpOauthCallback,
+  getMcpOauthServerId,
+} from "@/lib/mcpOauthCallback";
+import {
   useAuthFeature,
   useUserPreferencesFeature,
 } from "@/providers/FeatureConfigProvider";
@@ -26,12 +30,15 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
     const [searchParams, setSearchParams] = useSearchParams();
     const [isPreferencesDialogOpen, setIsPreferencesDialogOpen] =
       useState(false);
+    const [isMcpOauthDialog, setIsMcpOauthDialog] = useState(false);
     /* eslint-disable lingui/no-unlocalized-strings -- URL query parameter keys */
     const requestedPreferencesTab = searchParams.get("preferencesTab");
     const pendingMcpOauthCallback = useMemo(() => {
-      const serverId = searchParams.get("mcpOauthServerId");
       const code = searchParams.get("code");
       const state = searchParams.get("state");
+      const serverId =
+        (state ? getMcpOauthServerId(state) : null) ??
+        searchParams.get("mcpOauthServerId");
       if (!serverId || !code || !state) {
         return null;
       }
@@ -44,12 +51,20 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
     }, [searchParams]);
 
     useEffect(() => {
-      if (searchParams.get("preferencesDialog") === "open") {
+      if (pendingMcpOauthCallback) {
+        setIsMcpOauthDialog(true);
+      }
+      if (
+        pendingMcpOauthCallback ||
+        searchParams.get("preferencesDialog") === "open"
+      ) {
         setIsPreferencesDialogOpen(true);
       }
-    }, [searchParams]);
+    }, [pendingMcpOauthCallback, searchParams]);
 
     const clearPreferencesDialogSearchParams = useCallback(() => {
+      const state = searchParams.get("state");
+      if (state) clearMcpOauthCallback(state);
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete("preferencesDialog");
       nextParams.delete("preferencesTab");
@@ -62,10 +77,18 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
 
     const closePreferencesDialog = useCallback(() => {
       setIsPreferencesDialogOpen(false);
-      if (searchParams.get("preferencesDialog") === "open") {
+      setIsMcpOauthDialog(false);
+      if (
+        pendingMcpOauthCallback ||
+        searchParams.get("preferencesDialog") === "open"
+      ) {
         clearPreferencesDialogSearchParams();
       }
-    }, [clearPreferencesDialogSearchParams, searchParams]);
+    }, [
+      clearPreferencesDialogSearchParams,
+      pendingMcpOauthCallback,
+      searchParams,
+    ]);
     /* eslint-enable lingui/no-unlocalized-strings */
 
     // Check if logout should be shown
@@ -114,9 +137,10 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
           isOpen={isPreferencesDialogOpen}
           onClose={closePreferencesDialog}
           initialTab={
-            // "mcpServers" is the legacy param value the backend still mints
-            // in OAuth return URLs; both land on the merged tab.
-            (requestedPreferencesTab === "mcpServers" ||
+            // Keep supporting legacy OAuth return URLs.
+            (isMcpOauthDialog ||
+              pendingMcpOauthCallback ||
+              requestedPreferencesTab === "mcpServers" ||
               requestedPreferencesTab === "serversTools") &&
             mcpServersTabEnabled
               ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal tab id
