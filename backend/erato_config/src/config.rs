@@ -22,6 +22,44 @@ pub const CLIENT_ACTION_TOOL_NAME: &str = "propose_client_action";
 /// Name reserved for the synthetic assistant-delegation tool exposed by the backend.
 pub const DELEGATE_TO_ASSISTANT_TOOL_NAME: &str = "delegate_to_assistant";
 
+/// Namespace reserved for synthetic tools the backend exposes itself. Neither a
+/// client tool nor an MCP server may claim it, so `erato/<name>` always refers
+/// to a built-in.
+pub const RESERVED_TOOL_NAMESPACE: &str = "erato";
+
+/// Name reserved for the synthetic task-delegation tool.
+pub const DELEGATE_TASK_TOOL_NAME: &str = "delegate_task";
+
+/// Name reserved for the synthetic task-collection tool. Reserved by name only:
+/// async task results are delivered as turns, so nothing polls for them yet,
+/// but the name stays free for that extension.
+pub const COLLECT_TASKS_TOOL_NAME: &str = "collect_tasks";
+
+/// Tool names a configured client tool may not take.
+pub const RESERVED_TOOL_NAMES: &[&str] = &[
+    CLIENT_ACTION_TOOL_NAME,
+    DELEGATE_TO_ASSISTANT_TOOL_NAME,
+    DELEGATE_TASK_TOOL_NAME,
+    COLLECT_TASKS_TOOL_NAME,
+];
+
+/// Rejects an MCP server id that claims the reserved tool namespace. Called
+/// from both config load paths: `AppConfig::migrate` panics like its sibling
+/// load-time checks, while `McpRuntimeConfig::from_toml_sources` returns the
+/// error so an admin-panel reload keeps the previous configuration.
+pub fn validate_mcp_server_ids(
+    mcp_servers: &HashMap<String, McpServerConfig>,
+) -> Result<(), Report> {
+    if mcp_servers.contains_key(RESERVED_TOOL_NAMESPACE) {
+        return Err(eyre!(
+            "MCP server id `{}` is reserved for built-in tools.",
+            RESERVED_TOOL_NAMESPACE
+        ));
+    }
+
+    Ok(())
+}
+
 const DEFAULT_PROMPT_OPTIMIZER_PROMPT: &str = r#"
 You are Lyra, a master-level AI prompt optimization specialist.
 Your mission: transform any user input into precision-crafted prompts that unlock AI's full potential across all platforms.
@@ -206,6 +244,7 @@ impl McpRuntimeConfig {
         builder = builder.add_source(app_environment_source());
 
         let config: Self = builder.build()?.try_deserialize()?;
+        validate_mcp_server_ids(&config.mcp_servers)?;
         config.mcp_server_permissions.validate()?;
         config.mcp_servers_global.validate()?;
         Ok(config)
@@ -222,6 +261,19 @@ impl McpRuntimeConfig {
     }
 }
 
+impl AppConfig {
+    /// Tool-call budget for a single delegated task run: the explicit
+    /// `delegation.tasks.max_tool_calls_per_task` when set, otherwise the
+    /// per-message generation cap. A serde default fn cannot read a sibling
+    /// struct, so the fallback is resolved here rather than at deserialization.
+    pub fn effective_max_tool_calls_per_task(&self) -> u32 {
+        self.delegation
+            .tasks
+            .max_tool_calls_per_task
+            .unwrap_or(self.generation.max_tool_calls_per_message)
+    }
+}
+
 fn app_environment_source() -> Environment {
     Environment::default()
         .try_parsing(true)
@@ -233,6 +285,7 @@ fn app_environment_source() -> Environment {
         .with_list_parse_key("experimental_facets.priority_order")
         .with_list_parse_key("experimental_facets.tool_call_allowlist")
         .with_list_parse_key("experimental_facets.default_selected_facets")
+        .with_list_parse_key("delegation.tasks.child_facet_ids")
         .with_list_parse_key("frontend.extra_frame_ancestors")
         .with_list_parse_key("i18n.language.language_detection_priority")
         .with_list_parse_key("integrations.experimental_sharepoint.all_drives_sources")
@@ -516,6 +569,12 @@ pub struct AppConfig {
     // Assistants configuration.
     #[serde(default, alias = "experimental_assistants")]
     pub assistants: AssistantsConfig,
+
+    // Delegated runs: shared runtime keys, the @-mention route
+    // (`[delegation.assistants]`) and the model-planned task route
+    // (`[delegation.tasks]`). Replaces `[assistants.delegation]`.
+    #[serde(default)]
+    pub delegation: DelegationConfig,
 
     // Assistant hub configuration.
     #[serde(default)]
@@ -993,6 +1052,75 @@ impl AppConfig {
             panic!("Invalid assistants configuration: {}", e);
         }
 
+        if let Err(e) = validate_mcp_server_ids(&config.mcp_servers) {
+            panic!("Invalid MCP servers configuration: {}", e);
+        }
+
+        // Lift the deprecated `[assistants.delegation]` table onto `[delegation]`.
+        // Whether an operator wrote `[delegation]` cannot be observed after
+        // deserialization, so "both tables set" is detected by comparing it
+        // against its default; an operator who spells out defaults under
+        // `[delegation]` while keeping the alias silently gets the alias.
+        if let Some(legacy) = config.assistants.delegation.clone() {
+            if config.delegation != DelegationConfig::default() {
+                panic!(
+                    "Config key `assistants.delegation` is deprecated and cannot be combined with `[delegation]`. Please remove `[assistants.delegation]` and configure `[delegation]` / `[delegation.assistants]` instead."
+                );
+            }
+            tracing::warn!(
+                "Config table `[assistants.delegation]` is deprecated. Please use `[delegation]` / `[delegation.assistants]` instead."
+            );
+            config.delegation.run_timeout_seconds = legacy.run_timeout_seconds;
+            config.delegation.result_max_chars = legacy.result_max_chars;
+            config.delegation.allow_background = legacy.allow_background;
+            config.delegation.max_concurrent_background_runs =
+                legacy.max_concurrent_background_runs;
+            config.delegation.auto_archive_after_days = legacy.auto_archive_after_days;
+            config.delegation.preamble = legacy.preamble;
+            config.delegation.assistants.enabled = legacy.enabled;
+            config.delegation.assistants.max_mentions_per_message = legacy.max_mentions_per_message;
+        }
+        config.assistants.delegation = None;
+
+        // Cross-struct rule: the @-mention route needs assistants themselves.
+        // The task route deliberately carries no such coupling.
+        if config.delegation.assistants.enabled && !config.assistants.enabled {
+            panic!(
+                "Invalid delegation configuration: delegation.assistants.enabled requires assistants.enabled to be enabled"
+            );
+        }
+
+        if let Err(e) = config.delegation.validate() {
+            panic!("Invalid delegation configuration: {}", e);
+        }
+
+        // Every `child_facet_ids` entry, global or per facet, must name a
+        // configured facet.
+        for id in &config.delegation.tasks.child_facet_ids {
+            if !config.experimental_facets.facets.contains_key(id) {
+                panic!(
+                    "delegation.tasks.child_facet_ids references unknown facet '{}'.",
+                    id
+                );
+            }
+        }
+        for (facet_id, facet) in &config.experimental_facets.facets {
+            let Some(overrides) = &facet.delegation else {
+                continue;
+            };
+            let Some(ids) = &overrides.child_facet_ids else {
+                continue;
+            };
+            for id in ids {
+                if !config.experimental_facets.facets.contains_key(id) {
+                    panic!(
+                        "experimental_facets.facets.{}.delegation.child_facet_ids references unknown facet '{}'.",
+                        facet_id, id
+                    );
+                }
+            }
+        }
+
         if let Err(e) = config.assistant_hub.validate() {
             panic!("Invalid assistant hub configuration: {}", e);
         }
@@ -1100,10 +1228,16 @@ impl AppConfig {
                     tool.name
                 );
             }
-            if name == CLIENT_ACTION_TOOL_NAME || name == DELEGATE_TO_ASSISTANT_TOOL_NAME {
+            if RESERVED_TOOL_NAMES.contains(&name) {
                 panic!("Client tool named '{}' is reserved.", name);
             }
             let namespace = tool.namespace_or_default();
+            if namespace == RESERVED_TOOL_NAMESPACE {
+                panic!(
+                    "Client tool '{}' uses the reserved namespace `{}`.",
+                    name, RESERVED_TOOL_NAMESPACE
+                );
+            }
             if namespace.is_empty() || namespace != namespace.trim() {
                 panic!(
                     "Client tool '{}' has an empty or untrimmed namespace '{}'.",
@@ -2871,9 +3005,11 @@ pub struct AssistantsConfig {
     #[serde(default = "default_max_assistant_files")]
     pub max_files: usize,
 
-    // Configuration for in-chat delegation to @-mentioned assistants.
+    // **Deprecated**: Please use `delegation` / `delegation.assistants` instead.
     #[serde(default)]
-    pub delegation: AssistantsDelegationConfig,
+    #[deprecated(note = "Please use `[delegation]` / `[delegation.assistants]` instead.")]
+    #[facet(erato_config::hide_in_docs(hidden = true))]
+    pub delegation: Option<LegacyAssistantsDelegationConfig>,
 }
 
 impl Default for AssistantsConfig {
@@ -2889,17 +3025,22 @@ impl Default for AssistantsConfig {
                 default_assistant_context_file_contributor_threshold(),
             max_system_prompt_length: None,
             max_files: default_max_assistant_files(),
-            delegation: AssistantsDelegationConfig::default(),
+            delegation: None,
         }
     }
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
-pub struct AssistantsDelegationConfig {
+pub struct LegacyAssistantsDelegationConfig {
     // Whether in-chat delegation to @-mentioned assistants is enabled.
     // Requires `assistants.enabled` to also be enabled.
     // Defaults to `false`.
     #[serde(default)]
+    #[facet(erato_config::deprecated(
+        note = "Please use `delegation.assistants.enabled` instead.",
+        replacement_key = "delegation.assistants.enabled",
+        planned_removal_version = "0.8.0"
+    ))]
     pub enabled: bool,
 
     // Whether users may launch delegated runs in background mode, where the
@@ -2908,6 +3049,11 @@ pub struct AssistantsDelegationConfig {
     // this off is downgraded to `wait`, not rejected — the client-side gate is
     // UX, the server decides. Defaults to `false`.
     #[serde(default)]
+    #[facet(erato_config::deprecated(
+        note = "Please use `delegation.allow_background` instead.",
+        replacement_key = "delegation.allow_background",
+        planned_removal_version = "0.8.0"
+    ))]
     pub allow_background: bool,
 
     // Maximum number of one user's delegated background runs that may be in
@@ -2918,6 +3064,11 @@ pub struct AssistantsDelegationConfig {
     // this many background launches. `0` disables the cap.
     // Defaults to `5`.
     #[serde(default = "default_delegation_max_concurrent_background_runs")]
+    #[facet(erato_config::deprecated(
+        note = "Please use `delegation.max_concurrent_background_runs` instead.",
+        replacement_key = "delegation.max_concurrent_background_runs",
+        planned_removal_version = "0.8.0"
+    ))]
     pub max_concurrent_background_runs: usize,
 
     // Maximum wall-clock duration in seconds a delegated child run may take
@@ -2926,18 +3077,117 @@ pub struct AssistantsDelegationConfig {
     // it produced in its own chat.
     // Defaults to `600`.
     #[serde(default = "default_delegation_run_timeout_seconds")]
+    #[facet(erato_config::deprecated(
+        note = "Please use `delegation.run_timeout_seconds` instead.",
+        replacement_key = "delegation.run_timeout_seconds",
+        planned_removal_version = "0.8.0"
+    ))]
     pub run_timeout_seconds: u64,
 
     // Maximum number of assistants that can be mentioned in a single message.
     // Defaults to `3`.
     #[serde(default = "default_delegation_max_mentions_per_message")]
+    #[facet(erato_config::deprecated(
+        note = "Please use `delegation.assistants.max_mentions_per_message` instead.",
+        replacement_key = "delegation.assistants.max_mentions_per_message",
+        planned_removal_version = "0.8.0"
+    ))]
     pub max_mentions_per_message: usize,
 
     // Maximum number of characters of a delegate's final message that are
     // returned to the origin chat; longer results are truncated.
     // Defaults to `16000`.
     #[serde(default = "default_delegation_result_max_chars")]
+    #[facet(erato_config::deprecated(
+        note = "Please use `delegation.result_max_chars` instead.",
+        replacement_key = "delegation.result_max_chars",
+        planned_removal_version = "0.8.0"
+    ))]
     pub result_max_chars: usize,
+
+    // Number of days without activity after which a finished delegated run is
+    // archived, whether or not the chat that spawned it was ever archived.
+    // Archived runs are deleted by the cleanup worker after
+    // `cleanup_archived_max_age_days`, so this only has an effect if
+    // `cleanup_enabled` is `true`. `0` never archives a run automatically, and
+    // neither does a pin, an enabled share link, or a turn the user wrote into
+    // the run themselves. Defaults to `7`.
+    #[serde(default = "default_delegation_auto_archive_after_days")]
+    #[facet(erato_config::deprecated(
+        note = "Please use `delegation.auto_archive_after_days` instead.",
+        replacement_key = "delegation.auto_archive_after_days",
+        planned_removal_version = "0.8.0"
+    ))]
+    pub auto_archive_after_days: u32,
+
+    // Directive composed into every turn of a delegated chat, telling the
+    // delegate it runs as a delegated worker and where its final message ends
+    // up. It is never stored in the chat's messages, and it stops once the user
+    // writes into the run themselves — from then on the delegate is talking to
+    // them. `{{result_disposition}}` is replaced with a sentence matching the
+    // run's mode (awaited: the answer returns to the origin chat; background:
+    // the user reads it in this chat); `{{expected_output_section}}` and
+    // `{{constraints_section}}` are replaced with formatted blocks when the
+    // origin model supplies the corresponding tool arguments, and with empty
+    // strings otherwise.
+    #[serde(default = "default_delegation_preamble")]
+    #[facet(erato_config::deprecated(
+        note = "Please use `delegation.preamble` instead.",
+        replacement_key = "delegation.preamble",
+        planned_removal_version = "0.8.0"
+    ))]
+    pub preamble: String,
+}
+
+impl Default for LegacyAssistantsDelegationConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            allow_background: false,
+            max_concurrent_background_runs: default_delegation_max_concurrent_background_runs(),
+            run_timeout_seconds: default_delegation_run_timeout_seconds(),
+            max_mentions_per_message: default_delegation_max_mentions_per_message(),
+            result_max_chars: default_delegation_result_max_chars(),
+            auto_archive_after_days: default_delegation_auto_archive_after_days(),
+            preamble: default_delegation_preamble(),
+        }
+    }
+}
+
+/// Runtime configuration shared by both delegation offer routes.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct DelegationConfig {
+    // Maximum wall-clock duration in seconds a delegated child run may take
+    // before it is aborted. An awaited run is reported to the origin chat as
+    // timed out; a background run just stops, keeping whatever partial answer
+    // it produced in its own chat.
+    // Defaults to `600`.
+    #[serde(default = "default_delegation_run_timeout_seconds")]
+    pub run_timeout_seconds: u64,
+
+    // Maximum number of characters of a delegate's final message that are
+    // returned to the origin chat; longer results are truncated.
+    // Defaults to `16000`.
+    #[serde(default = "default_delegation_result_max_chars")]
+    pub result_max_chars: usize,
+
+    // Whether users may launch delegated runs in background mode, where the
+    // delegation tool returns at launch and the child result never flows back
+    // into the origin turn. A `background` request under a deployment with
+    // this off is downgraded to `wait`, not rejected - the client-side gate is
+    // UX, the server decides. Defaults to `false`.
+    #[serde(default)]
+    pub allow_background: bool,
+
+    // Maximum number of one user's delegated background runs that may be in
+    // flight at once; further background launches are refused until a run
+    // finishes. Counted over live generation leases without locking, so
+    // concurrent dispatches can briefly overshoot it - the cap exists to stop
+    // runaway fan-out, not to be exact. A single message is also capped at
+    // this many background launches. `0` disables the cap.
+    // Defaults to `5`.
+    #[serde(default = "default_delegation_max_concurrent_background_runs")]
+    pub max_concurrent_background_runs: usize,
 
     // Number of days without activity after which a finished delegated run is
     // archived, whether or not the chat that spawned it was ever archived.
@@ -2952,7 +3202,7 @@ pub struct AssistantsDelegationConfig {
     // Directive composed into every turn of a delegated chat, telling the
     // delegate it runs as a delegated worker and where its final message ends
     // up. It is never stored in the chat's messages, and it stops once the user
-    // writes into the run themselves — from then on the delegate is talking to
+    // writes into the run themselves - from then on the delegate is talking to
     // them. `{{result_disposition}}` is replaced with a sentence matching the
     // run's mode (awaited: the answer returns to the origin chat; background:
     // the user reads it in this chat); `{{expected_output_section}}` and
@@ -2961,21 +3211,189 @@ pub struct AssistantsDelegationConfig {
     // strings otherwise.
     #[serde(default = "default_delegation_preamble")]
     pub preamble: String,
+
+    // The @-mention delegation route.
+    #[serde(default)]
+    pub assistants: DelegationAssistantsConfig,
+
+    // The model-planned task route.
+    #[serde(default)]
+    pub tasks: DelegationTasksConfig,
 }
 
-impl Default for AssistantsDelegationConfig {
+impl Default for DelegationConfig {
+    fn default() -> Self {
+        Self {
+            run_timeout_seconds: default_delegation_run_timeout_seconds(),
+            result_max_chars: default_delegation_result_max_chars(),
+            allow_background: false,
+            max_concurrent_background_runs: default_delegation_max_concurrent_background_runs(),
+            auto_archive_after_days: default_delegation_auto_archive_after_days(),
+            preamble: default_delegation_preamble(),
+            assistants: DelegationAssistantsConfig::default(),
+            tasks: DelegationTasksConfig::default(),
+        }
+    }
+}
+
+impl DelegationConfig {
+    /// Whether any delegation offer route is enabled. Callers that only need
+    /// to know "does this deployment ever spawn children" use this instead of
+    /// reaching into both sub-tables.
+    pub fn any_route_enabled(&self) -> bool {
+        self.assistants.enabled || self.tasks.enabled
+    }
+
+    pub fn validate(&self) -> Result<(), Report> {
+        if self.run_timeout_seconds == 0 {
+            return Err(eyre!(
+                "delegation.run_timeout_seconds must be greater than 0"
+            ));
+        }
+
+        if self.result_max_chars == 0 {
+            return Err(eyre!("delegation.result_max_chars must be greater than 0"));
+        }
+
+        if self.preamble.trim().is_empty() {
+            return Err(eyre!("delegation.preamble cannot be empty"));
+        }
+
+        if self.assistants.max_mentions_per_message == 0 {
+            return Err(eyre!(
+                "delegation.assistants.max_mentions_per_message must be at least 1"
+            ));
+        }
+
+        if self.tasks.max_tasks_per_turn == 0 {
+            return Err(eyre!(
+                "delegation.tasks.max_tasks_per_turn must be at least 1"
+            ));
+        }
+
+        if self.tasks.max_tool_calls_per_task == Some(0) {
+            return Err(eyre!(
+                "delegation.tasks.max_tool_calls_per_task must be greater than 0 when set"
+            ));
+        }
+
+        Ok(())
+    }
+}
+
+/// The @-mention delegation route (`[delegation.assistants]`).
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct DelegationAssistantsConfig {
+    // Whether in-chat delegation to @-mentioned assistants is enabled.
+    // Requires `assistants.enabled` to also be enabled.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub enabled: bool,
+
+    // Maximum number of assistants that can be mentioned in a single message.
+    // Defaults to `3`.
+    #[serde(default = "default_delegation_max_mentions_per_message")]
+    pub max_mentions_per_message: usize,
+}
+
+impl Default for DelegationAssistantsConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            allow_background: false,
-            max_concurrent_background_runs: default_delegation_max_concurrent_background_runs(),
-            run_timeout_seconds: default_delegation_run_timeout_seconds(),
             max_mentions_per_message: default_delegation_max_mentions_per_message(),
-            result_max_chars: default_delegation_result_max_chars(),
-            auto_archive_after_days: default_delegation_auto_archive_after_days(),
-            preamble: default_delegation_preamble(),
         }
     }
+}
+
+/// The model-planned task route (`[delegation.tasks]`).
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct DelegationTasksConfig {
+    // Whether the model may plan and dispatch its own delegated tasks with the
+    // reserved `erato/delegate_task` tool. The tool is only offered when a
+    // selected facet's `tool_call_allowlist` also selects it.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub enabled: bool,
+
+    // Maximum number of tasks one origin turn may dispatch in total. A call
+    // beyond the budget is refused with a tool result; it does not end the
+    // turn. Defaults to `5`.
+    #[serde(default = "default_delegation_tasks_max_tasks_per_turn")]
+    pub max_tasks_per_turn: u32,
+
+    // Tool-call budget for one task run. Unset inherits
+    // `generation.max_tool_calls_per_message`.
+    #[serde(default)]
+    pub max_tool_calls_per_task: Option<u32>,
+
+    // Whether a task child runs with the origin chat's assistant persona
+    // (`inherit`) or on the bare model (`bare`).
+    // Defaults to `inherit`.
+    #[serde(default)]
+    pub persona: TaskPersona,
+
+    // Facets composed into every task child. Each id must name a facet under
+    // `experimental_facets.facets`. Defaults to none.
+    #[serde(default)]
+    pub child_facet_ids: Vec<String>,
+}
+
+impl Default for DelegationTasksConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            max_tasks_per_turn: default_delegation_tasks_max_tasks_per_turn(),
+            max_tool_calls_per_task: None,
+            persona: TaskPersona::default(),
+            child_facet_ids: Vec::new(),
+        }
+    }
+}
+
+/// Per-facet overrides of the `[delegation.tasks]` runtime keys. Every field
+/// is optional; `None` inherits the global value.
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct FacetDelegationOverrides {
+    #[serde(default)]
+    pub max_tasks_per_turn: Option<u32>,
+
+    #[serde(default)]
+    pub max_tool_calls_per_task: Option<u32>,
+
+    #[serde(default)]
+    pub persona: Option<TaskPersona>,
+
+    #[serde(default)]
+    pub child_facet_ids: Option<Vec<String>>,
+}
+
+/// Whether a task child speaks as the origin chat's assistant or as the bare
+/// model.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[facet(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+#[repr(C)]
+pub enum TaskPersona {
+    #[default]
+    Inherit,
+    Bare,
+}
+
+/// How a completed async task result re-enters the origin chat. `interrupt` is
+/// a reserved spelling with no implementation; it is rejected at load rather
+/// than silently accepted.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[facet(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+#[repr(C)]
+pub enum TaskScheduling {
+    Silent,
+    #[default]
+    WhenIdle,
+}
+
+fn default_delegation_tasks_max_tasks_per_turn() -> u32 {
+    5
 }
 
 fn default_delegation_max_concurrent_background_runs() -> usize {
@@ -3004,34 +3422,6 @@ fn default_delegation_preamble() -> String {
 Complete the task within this conversation: do not ask clarifying questions, do not defer work to a later turn, and do not address the end user. Finish with a final message that stands alone as the task result.
 {{expected_output_section}}{{constraints_section}}"#
         .to_string()
-}
-
-impl AssistantsDelegationConfig {
-    pub fn validate(&self) -> Result<(), Report> {
-        if self.run_timeout_seconds == 0 {
-            return Err(eyre!(
-                "assistants.delegation.run_timeout_seconds must be greater than 0"
-            ));
-        }
-
-        if self.max_mentions_per_message == 0 {
-            return Err(eyre!(
-                "assistants.delegation.max_mentions_per_message must be at least 1"
-            ));
-        }
-
-        if self.result_max_chars == 0 {
-            return Err(eyre!(
-                "assistants.delegation.result_max_chars must be greater than 0"
-            ));
-        }
-
-        if self.preamble.trim().is_empty() {
-            return Err(eyre!("assistants.delegation.preamble cannot be empty"));
-        }
-
-        Ok(())
-    }
 }
 
 fn default_assistants_enable_edit_sharing() -> bool {
@@ -3069,14 +3459,6 @@ impl AssistantsConfig {
                 self.context_file_contributor_threshold
             ));
         }
-
-        if self.delegation.enabled && !self.enabled {
-            return Err(eyre!(
-                "assistants.delegation.enabled requires assistants.enabled to be enabled"
-            ));
-        }
-
-        self.delegation.validate()?;
 
         Ok(())
     }
@@ -3503,6 +3885,11 @@ pub struct FacetConfig {
     // applies on all platforms. Only meaningful together with `hidden = true`.
     #[serde(default)]
     pub hidden_always_active_for_platform: Option<String>,
+
+    // Per-facet overrides for the model-planned task route. Every key is
+    // optional and falls back to the matching `[delegation.tasks]` value.
+    #[serde(default)]
+    pub delegation: Option<FacetDelegationOverrides>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]

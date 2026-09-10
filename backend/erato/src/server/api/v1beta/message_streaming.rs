@@ -752,12 +752,12 @@ pub struct MessageSubmitRequest {
     /// Optional action facet to apply during this generation.
     action_facet: Option<ActionFacetRequest>,
     /// Assistants the user @-mentioned in this message as delegation targets.
-    /// Validated server-side; requires `assistants.delegation.enabled`.
+    /// Validated server-side; requires `delegation.assistants.enabled`.
     #[serde(default)]
     #[schema(nullable = false)]
     mentioned_assistant_ids: Option<Vec<Uuid>>,
     /// How delegated runs spawned by this message are awaited. Defaults to
-    /// `wait`; `background` requires `assistants.delegation.allow_background`
+    /// `wait`; `background` requires `delegation.allow_background`
     /// and is downgraded to `wait` server-side when the gate is off.
     #[serde(default)]
     #[schema(nullable = false)]
@@ -1305,12 +1305,12 @@ pub struct RegenerateMessageRequest {
     /// Optional action facet to apply during this generation.
     action_facet: Option<ActionFacetRequest>,
     /// Assistants the user @-mentioned in this message as delegation targets.
-    /// Validated server-side; requires `assistants.delegation.enabled`.
+    /// Validated server-side; requires `delegation.assistants.enabled`.
     #[serde(default)]
     #[schema(nullable = false)]
     mentioned_assistant_ids: Option<Vec<Uuid>>,
     /// How delegated runs spawned by this message are awaited. Defaults to
-    /// `wait`; `background` requires `assistants.delegation.allow_background`
+    /// `wait`; `background` requires `delegation.allow_background`
     /// and is downgraded to `wait` server-side when the gate is off.
     #[serde(default)]
     #[schema(nullable = false)]
@@ -1452,12 +1452,12 @@ pub struct EditMessageRequest {
     /// Optional action facet to apply during this generation.
     action_facet: Option<ActionFacetRequest>,
     /// Assistants the user @-mentioned in this message as delegation targets.
-    /// Validated server-side; requires `assistants.delegation.enabled`.
+    /// Validated server-side; requires `delegation.assistants.enabled`.
     #[serde(default)]
     #[schema(nullable = false)]
     mentioned_assistant_ids: Option<Vec<Uuid>>,
     /// How delegated runs spawned by this message are awaited. Defaults to
-    /// `wait`; `background` requires `assistants.delegation.allow_background`
+    /// `wait`; `background` requires `delegation.allow_background`
     /// and is downgraded to `wait` server-side when the gate is off.
     #[serde(default)]
     #[schema(nullable = false)]
@@ -6684,6 +6684,7 @@ mod tests {
             display_name: "Baseline".to_string(),
             hidden: true,
             hidden_always_active_for_platform: platform.map(str::to_string),
+            delegation: None,
             ..Default::default()
         };
         let config = ExperimentalFacetsConfig {
@@ -6744,6 +6745,7 @@ mod tests {
                         display_name: "Baseline".to_string(),
                         hidden: true,
                         hidden_always_active_for_platform: Some("outlook".to_string()),
+                        delegation: None,
                         ..Default::default()
                     },
                 ),
@@ -8520,7 +8522,7 @@ pub(crate) async fn run_message_submit_task(
     let effective_delegation_run_mode = crate::services::delegation::resolve_delegation_run_mode(
         request.delegation_run_mode,
         None,
-        &app_state.config.assistants.delegation,
+        &app_state.config.delegation,
     );
     let user_input = PromptCompositionUserInput {
         just_submitted_user_message_id: saved_user_message.id,
@@ -8905,7 +8907,7 @@ pub async fn regenerate_message_sse(
             warn_and_capture_error("read regenerate fallback delegation run mode", &error);
             None
         }),
-        &app_state.config.assistants.delegation,
+        &app_state.config.delegation,
     );
 
     // Create a channel for sending events
@@ -9403,7 +9405,7 @@ pub async fn edit_message_sse(
     let effective_delegation_run_mode = crate::services::delegation::resolve_delegation_run_mode(
         resolved_delegation_run_mode,
         None,
-        &app_state.config.assistants.delegation,
+        &app_state.config.delegation,
     );
     let edit_input_parameters = if resolved_action_facet.is_some()
         || resolved_mentioned_assistant_ids.is_some()

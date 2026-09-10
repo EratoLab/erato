@@ -661,7 +661,7 @@ async fn submit_with_mentions_with_previous(
 
 fn delegation_enabled_config() -> erato::config::AppConfig {
     let mut app_config = crate::test_utils::hermetic_app_config(None, None);
-    app_config.assistants.delegation.enabled = true;
+    app_config.delegation.assistants.enabled = true;
     app_config
 }
 
@@ -677,7 +677,7 @@ async fn delegation_enabled_state_with_llm(
         );
     });
     let (mut app_config, server) = setup_mock_llm_server_with_mocks(mocks).await;
-    app_config.assistants.delegation.enabled = true;
+    app_config.delegation.assistants.enabled = true;
     let app_state = test_app_state(app_config, pool).await;
     erato::models::user::get_or_create_user(
         &app_state.db,
@@ -1477,7 +1477,7 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
     }
 
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
-    app_config.assistants.delegation.enabled = true;
+    app_config.delegation.assistants.enabled = true;
     // A globally allowlisted client tool: offered to the parent request,
     // suppressed in the delegated child run.
     app_config.client_tools.tools.insert(
@@ -1840,7 +1840,7 @@ async fn test_delegation_unoffered_target_refused_turn_recovers(pool: Pool<Postg
     });
 
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
-    app_config.assistants.delegation.enabled = true;
+    app_config.delegation.assistants.enabled = true;
     let app_state = test_app_state(app_config, pool).await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
@@ -2003,7 +2003,7 @@ async fn test_delegation_file_ids_copied_and_foreign_file_refused(pool: Pool<Pos
     });
 
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
-    app_config.assistants.delegation.enabled = true;
+    app_config.delegation.assistants.enabled = true;
     let app_state = test_app_state(app_config, pool).await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
@@ -2162,7 +2162,7 @@ async fn test_delegation_context_seeding_rebases_child(pool: Pool<Postgres>) {
     });
 
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
-    app_config.assistants.delegation.enabled = true;
+    app_config.delegation.assistants.enabled = true;
     let app_state = test_app_state(app_config, pool).await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
@@ -2305,7 +2305,7 @@ async fn test_delegation_refuses_approval_gated_mcp_in_child(pool: Pool<Postgres
     });
 
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
-    app_config.assistants.delegation.enabled = true;
+    app_config.delegation.assistants.enabled = true;
     app_config.mcp_servers.insert(
         "mock_mcp_approval".to_string(),
         erato::config::McpServerConfig {
@@ -2473,8 +2473,8 @@ async fn test_delegation_timeout_aborts_child_and_parent_completes(pool: Pool<Po
     });
 
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
-    app_config.assistants.delegation.enabled = true;
-    app_config.assistants.delegation.run_timeout_seconds = 1;
+    app_config.delegation.assistants.enabled = true;
+    app_config.delegation.run_timeout_seconds = 1;
     let app_state = test_app_state(app_config, pool).await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
@@ -2578,8 +2578,8 @@ async fn test_delegation_timeout_persists_partial_trace(pool: Pool<Postgres>) {
     });
 
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
-    app_config.assistants.delegation.enabled = true;
-    app_config.assistants.delegation.run_timeout_seconds = 1;
+    app_config.delegation.assistants.enabled = true;
+    app_config.delegation.run_timeout_seconds = 1;
     let app_state = test_app_state(app_config, pool).await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
@@ -2707,7 +2707,7 @@ async fn test_delegation_abort_forwarding_cancels_child(pool: Pool<Postgres>) {
     });
 
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
-    app_config.assistants.delegation.enabled = true;
+    app_config.delegation.assistants.enabled = true;
     let app_state = test_app_state(app_config, pool).await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
@@ -2948,8 +2948,8 @@ async fn test_background_dispatch_returns_at_launch(pool: Pool<Postgres>) {
     }
 
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
-    app_config.assistants.delegation.enabled = true;
-    app_config.assistants.delegation.allow_background = true;
+    app_config.delegation.assistants.enabled = true;
+    app_config.delegation.allow_background = true;
     let app_state = test_app_state(app_config, pool).await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
@@ -3122,8 +3122,8 @@ async fn test_parent_abort_leaves_background_child_running(pool: Pool<Postgres>)
     });
 
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
-    app_config.assistants.delegation.enabled = true;
-    app_config.assistants.delegation.allow_background = true;
+    app_config.delegation.assistants.enabled = true;
+    app_config.delegation.allow_background = true;
     let app_state = test_app_state(app_config, pool).await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
@@ -3271,7 +3271,7 @@ async fn test_background_request_downgrades_to_awaited_when_gate_off(pool: Pool<
     });
 
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
-    app_config.assistants.delegation.enabled = true;
+    app_config.delegation.assistants.enabled = true;
     let app_state = test_app_state(app_config, pool).await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
@@ -3364,8 +3364,8 @@ async fn test_regenerate_replays_background_dispatch(pool: Pool<Postgres>) {
     });
 
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
-    app_config.assistants.delegation.enabled = true;
-    app_config.assistants.delegation.allow_background = true;
+    app_config.delegation.assistants.enabled = true;
+    app_config.delegation.allow_background = true;
     let app_state = test_app_state(app_config, pool).await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
@@ -3491,8 +3491,8 @@ async fn test_regenerate_request_wait_overrides_persisted_background(pool: Pool<
     });
 
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
-    app_config.assistants.delegation.enabled = true;
-    app_config.assistants.delegation.allow_background = true;
+    app_config.delegation.assistants.enabled = true;
+    app_config.delegation.allow_background = true;
     let app_state = test_app_state(app_config, pool).await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
@@ -3646,9 +3646,9 @@ async fn test_background_run_timeout_self_aborts_detached_child(pool: Pool<Postg
     });
 
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
-    app_config.assistants.delegation.enabled = true;
-    app_config.assistants.delegation.allow_background = true;
-    app_config.assistants.delegation.run_timeout_seconds = 1;
+    app_config.delegation.assistants.enabled = true;
+    app_config.delegation.allow_background = true;
+    app_config.delegation.run_timeout_seconds = 1;
     let app_state = test_app_state(app_config, pool).await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
@@ -3980,12 +3980,9 @@ async fn test_background_concurrency_cap_refuses_and_frees(pool: Pool<Postgres>)
     }
 
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
-    app_config.assistants.delegation.enabled = true;
-    app_config.assistants.delegation.allow_background = true;
-    app_config
-        .assistants
-        .delegation
-        .max_concurrent_background_runs = 1;
+    app_config.delegation.assistants.enabled = true;
+    app_config.delegation.allow_background = true;
+    app_config.delegation.max_concurrent_background_runs = 1;
     let app_state = test_app_state(app_config, pool).await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
@@ -4143,12 +4140,9 @@ async fn test_per_message_background_cap_refuses_second_launch_in_one_turn(pool:
     });
 
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
-    app_config.assistants.delegation.enabled = true;
-    app_config.assistants.delegation.allow_background = true;
-    app_config
-        .assistants
-        .delegation
-        .max_concurrent_background_runs = 1;
+    app_config.delegation.assistants.enabled = true;
+    app_config.delegation.allow_background = true;
+    app_config.delegation.max_concurrent_background_runs = 1;
     let app_state = test_app_state(app_config, pool).await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
@@ -4794,8 +4788,8 @@ async fn test_delegated_run_outcome_survives_retention(pool: Pool<Postgres>) {
     });
 
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
-    app_config.assistants.delegation.enabled = true;
-    app_config.assistants.delegation.allow_background = true;
+    app_config.delegation.assistants.enabled = true;
+    app_config.delegation.allow_background = true;
     let app_state = test_app_state(app_config, pool).await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
@@ -5281,8 +5275,8 @@ async fn test_delegation_result_truncated_at_cap(pool: Pool<Postgres>) {
     });
 
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
-    app_config.assistants.delegation.enabled = true;
-    app_config.assistants.delegation.result_max_chars = 32;
+    app_config.delegation.assistants.enabled = true;
+    app_config.delegation.result_max_chars = 32;
     let app_state = test_app_state(app_config, pool).await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
@@ -5365,7 +5359,7 @@ async fn test_delegation_empty_child_answer_reports_failed(pool: Pool<Postgres>)
     });
 
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
-    app_config.assistants.delegation.enabled = true;
+    app_config.delegation.assistants.enabled = true;
     let app_state = test_app_state(app_config, pool).await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
@@ -5417,7 +5411,7 @@ async fn test_no_delegation_offer_inside_a_delegated_run(pool: Pool<Postgres>) {
     }
 
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
-    app_config.assistants.delegation.enabled = true;
+    app_config.delegation.assistants.enabled = true;
     let app_state = test_app_state(app_config, pool).await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
@@ -5520,7 +5514,7 @@ async fn test_regenerate_reoffers_tool_and_empty_task_refused(pool: Pool<Postgre
     }
 
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
-    app_config.assistants.delegation.enabled = true;
+    app_config.delegation.assistants.enabled = true;
     let app_state = test_app_state(app_config, pool).await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
@@ -5632,7 +5626,7 @@ async fn test_delegation_dispatch_refuses_target_archived_after_validation(pool:
     });
 
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
-    app_config.assistants.delegation.enabled = true;
+    app_config.delegation.assistants.enabled = true;
     let app_state = test_app_state(app_config, pool).await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
@@ -6010,7 +6004,7 @@ async fn test_pre_run_dispatch_failure_leaves_no_child_chat(pool: Pool<Postgres>
     });
 
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
-    app_config.assistants.delegation.enabled = true;
+    app_config.delegation.assistants.enabled = true;
     let app_state = test_app_state(app_config, pool).await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
@@ -6330,7 +6324,7 @@ async fn test_continued_turn_does_not_reoffer_the_delegation_tool(pool: Pool<Pos
     }
 
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
-    app_config.assistants.delegation.enabled = true;
+    app_config.delegation.assistants.enabled = true;
     app_config.mcp_servers.insert(
         "mock_mcp_approval".to_string(),
         erato::config::McpServerConfig {
