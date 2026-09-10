@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { useId, useState } from "react";
+import { useState } from "react";
 
 import { componentRegistry } from "@/config/componentRegistry";
 
@@ -10,7 +10,9 @@ import {
   getFileName,
   type FileResource,
 } from "./FilePreviewBase";
+import { ThreadMessageCard } from "./ThreadMessageCard";
 import { FILE_PREVIEW_STYLES } from "./fileUploadStyles";
+import { Card } from "../Container/Card";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { Button } from "../Controls/Button";
 import { SpinnerIcon } from "../Feedback/SpinnerIcon";
@@ -309,155 +311,6 @@ const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
   );
 };
 
-interface ThreadMessageGroupSectionProps {
-  label: string;
-  sublabel?: string;
-  selected?: boolean;
-  onToggle?: () => void;
-  attachments: ThreadMessageAttachmentItem[];
-  defaultCollapsed?: boolean;
-  disabled: boolean;
-  showFileType: boolean;
-  showSize: boolean;
-  filenameTruncateLength: number;
-  onFilePreview?: (file: FileResource) => void;
-}
-
-const ThreadMessageHeaderText: React.FC<{
-  label: string;
-  sublabel?: string;
-  metaLabel?: string;
-}> = ({ label, sublabel, metaLabel }) => {
-  // Meta stays in the text stack (like the group header's "N messages")
-  // instead of floating right-aligned on its own.
-  const secondLine = [sublabel, metaLabel].filter(Boolean).join(" · ");
-  return (
-    <div className="min-w-0 flex-1">
-      <p
-        className="truncate text-sm font-medium text-theme-fg-primary"
-        title={label}
-      >
-        {label}
-      </p>
-      {secondLine && (
-        <p className="truncate text-xs text-theme-fg-muted" title={secondLine}>
-          {secondLine}
-        </p>
-      )}
-    </div>
-  );
-};
-
-const ThreadMessageGroupSection: React.FC<ThreadMessageGroupSectionProps> = ({
-  label,
-  sublabel,
-  selected = true,
-  onToggle,
-  attachments,
-  defaultCollapsed = true,
-  disabled,
-  showFileType,
-  showSize,
-  filenameTruncateLength,
-  onFilePreview,
-}) => {
-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
-  const panelId = useId();
-  const hasAttachments = attachments.length > 0;
-  const attachmentCount = attachments.length;
-  return (
-    <div
-      className={clsx(
-        "thread-message-card-geometry border border-theme-border bg-theme-bg-secondary p-2",
-        !selected && "opacity-60",
-      )}
-      data-ui="thread-message-card"
-    >
-      <div className="flex items-center gap-2">
-        {/* Fixed columns across tree levels: disclosure, selection, text. */}
-        {hasAttachments ? (
-          // Only render the chevron when there's something to expand —
-          // an empty thread message has no attachments to show, so a
-          // disclosure toggle would dangle without any payload.
-          <button
-            type="button"
-            onClick={() => setCollapsed((value) => !value)}
-            className="inline-flex size-4 shrink-0 items-center justify-center text-theme-fg-muted"
-            aria-expanded={!collapsed}
-            aria-controls={panelId}
-            aria-label={`${t`Toggle attachments`} ${label}`}
-          >
-            {collapsed ? (
-              <ChevronRightIcon className="size-4" />
-            ) : (
-              <ChevronDownIcon className="size-4" />
-            )}
-          </button>
-        ) : (
-          <span className="size-4 shrink-0" aria-hidden="true" />
-        )}
-        {onToggle && (
-          <input
-            type="checkbox"
-            checked={selected}
-            onChange={onToggle}
-            disabled={disabled}
-            className="size-4 shrink-0 rounded border-theme-border text-theme-fg-accent focus:ring-theme-focus disabled:cursor-not-allowed"
-            aria-label={`${t`Include message`} ${label}`}
-            onClick={(event) => event.stopPropagation()}
-          />
-        )}
-        {hasAttachments ? (
-          <button
-            type="button"
-            onClick={() => setCollapsed((value) => !value)}
-            className="flex min-w-0 flex-1 items-start gap-2 text-left"
-            tabIndex={-1}
-          >
-            <ThreadMessageHeaderText
-              label={label}
-              sublabel={sublabel}
-              metaLabel={
-                attachmentCount === 1 ? t`1 file` : t`${attachmentCount} files`
-              }
-            />
-          </button>
-        ) : (
-          <div className="flex min-w-0 flex-1 items-start gap-2">
-            <ThreadMessageHeaderText label={label} sublabel={sublabel} />
-          </div>
-        )}
-      </div>
-      {!collapsed && hasAttachments && (
-        <div
-          id={panelId}
-          role="region"
-          className="mt-2 flex flex-col gap-1 pl-6"
-        >
-          {attachments.map((attachment) => (
-            <SelectableAttachmentRow
-              key={attachment.id}
-              file={attachment.file}
-              selected={attachment.selected}
-              onToggle={attachment.onToggle}
-              disabled={disabled}
-              showFileType={showFileType}
-              showSize={showSize}
-              filenameTruncateLength={filenameTruncateLength}
-              validation={attachment.validation}
-              onPreview={
-                onFilePreview && "id" in attachment.file
-                  ? () => onFilePreview(attachment.file)
-                  : undefined
-              }
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
 const StatusRow: React.FC<{
   label: string;
   description?: string;
@@ -583,6 +436,7 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
     <div className={clsx("mb-3 flex flex-col gap-3", className)}>
       {groups.map((group) => {
         const itemCount = group.items.length;
+        const collapsible = group.collapsible === true;
         const isCollapsed = getGroupCollapsed(group);
         const isExpanded = expandedGroupIds.includes(group.id);
         const shouldCollapse = itemCount > defaultVisibleItems;
@@ -592,9 +446,13 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
             ? baseItems.slice(0, defaultVisibleItems)
             : baseItems;
         const hiddenCount = isCollapsed ? 0 : itemCount - visibleItems.length;
+        // Two inset regimes. Without sticky headers the frame carries the
+        // inset and the bands sit inside it; with them the frame stays bare so
+        // the header can span its full width, and header and items carry the
+        // inset instead.
         const sectionClassName = stickyGroupHeaders
-          ? "attachment-group-geometry overflow-clip border border-[var(--theme-border)] bg-[var(--theme-bg-primary)]"
-          : FILE_PREVIEW_STYLES.group.container;
+          ? "attachment-group-geometry overflow-clip"
+          : "attachment-group-geometry attachment-group-frame-geometry";
         const headerClassName = clsx(
           stickyGroupHeaders
             ? "flex min-w-0 items-start gap-2"
@@ -614,13 +472,14 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
           tilesOnly
             ? "flex flex-wrap items-start gap-2"
             : "flex flex-col gap-2",
-          stickyGroupHeaders &&
-            "attachment-group-items-geometry bg-[var(--theme-bg-primary)]",
+          stickyGroupHeaders
+            ? "attachment-group-items-geometry bg-[var(--theme-bg-primary)]"
+            : "p-0",
         );
 
         const headerInner = (
           <>
-            {group.collapsible && (
+            {collapsible && (
               <span
                 className="mr-1 inline-flex shrink-0 items-center text-theme-fg-muted"
                 aria-hidden="true"
@@ -650,153 +509,172 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
         );
 
         return (
-          <section
+          <Card
             key={group.id}
+            // A group that cannot collapse has nothing to disclose, and the
+            // wrapper an expandable card animates its body in would clip the
+            // focus ring of a chip sitting against the body's edge.
+            variant={collapsible ? "expandable" : "surface"}
+            as="section"
+            size="sm"
+            expanded={collapsible && !isCollapsed}
+            unmountOnCollapse
             className={sectionClassName}
+            bodyClassName={itemsClassName}
             data-ui="attachment-group"
+            header={
+              collapsible ? (
+                <button
+                  type="button"
+                  onClick={() => toggleGroupCollapsed(group)}
+                  className={clsx(headerClassName, "w-full text-left")}
+                  aria-expanded={!isCollapsed}
+                >
+                  {headerInner}
+                </button>
+              ) : (
+                <div className={clsx(headerClassName, "justify-between")}>
+                  {headerInner}
+                  {shouldCollapse && isExpanded && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setGroupExpanded(group.id, false)}
+                      className={FILE_PREVIEW_STYLES.group.toggleButton}
+                    >
+                      {t`Show less`}
+                    </Button>
+                  )}
+                </div>
+              )
+            }
           >
-            {group.collapsible ? (
-              <button
-                type="button"
-                onClick={() => toggleGroupCollapsed(group)}
-                className={clsx(headerClassName, "w-full text-left")}
-                aria-expanded={!isCollapsed}
-              >
-                {headerInner}
-              </button>
-            ) : (
-              <div className={clsx(headerClassName, "justify-between")}>
-                {headerInner}
-                {shouldCollapse && isExpanded && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setGroupExpanded(group.id, false)}
-                    className={FILE_PREVIEW_STYLES.group.toggleButton}
+            {visibleItems.map((item) => {
+              if (item.kind === "loading") {
+                // Inside a group the placeholder is a bare centred
+                // spinner; the framed loading chip belongs to the
+                // composer, where a loading file stands in a row of files.
+                return (
+                  <div
+                    key={item.id}
+                    className="flex w-full justify-center py-2"
+                    data-ui="attachment-loading"
                   >
-                    {t`Show less`}
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {(!stickyGroupHeaders || !isCollapsed) && (
-              <div className={itemsClassName}>
-                {visibleItems.map((item) => {
-                  if (item.kind === "loading") {
-                    // Inside a group the placeholder is a bare centred
-                    // spinner; the framed loading chip belongs to the
-                    // composer, where a loading file stands in a row of files.
-                    return (
-                      <div
-                        key={item.id}
-                        className="flex w-full justify-center py-2"
-                        data-ui="attachment-loading"
-                      >
-                        <SpinnerIcon
-                          size="md"
-                          srText={item.label ?? t`Loading attachment...`}
-                        />
-                        {item.description ? (
-                          <span className="sr-only">{item.description}</span>
-                        ) : null}
-                      </div>
-                    );
-                  }
-
-                  if (item.kind === "status") {
-                    return (
-                      <StatusRow
-                        key={item.id}
-                        label={item.label}
-                        description={item.description}
-                        tone={item.tone}
-                      />
-                    );
-                  }
-
-                  if (item.kind === "threadMessageGroup") {
-                    return (
-                      <ThreadMessageGroupSection
-                        key={item.id}
-                        label={item.label}
-                        sublabel={item.sublabel}
-                        selected={item.selected}
-                        onToggle={item.onToggle}
-                        attachments={item.attachments}
-                        defaultCollapsed={item.defaultCollapsed}
-                        disabled={disabled}
-                        showFileType={showFileTypes}
-                        showSize={showFileSizes}
-                        filenameTruncateLength={filenameTruncateLength}
-                        onFilePreview={onFilePreview}
-                      />
-                    );
-                  }
-
-                  if (item.kind === "selectableAttachment") {
-                    return (
-                      <SelectableAttachmentRow
-                        key={getFileKey(item)}
-                        file={item.file}
-                        selected={item.selected}
-                        onToggle={item.onToggle}
-                        disabled={disabled}
-                        showFileType={showFileTypes}
-                        showSize={showFileSizes}
-                        filenameTruncateLength={filenameTruncateLength}
-                        validation={item.validation}
-                      />
-                    );
-                  }
-
-                  const onOpen =
-                    item.kind === "attachment" ? item.onOpen : undefined;
-                  const activate =
-                    onOpen ??
-                    (onFilePreview
-                      ? () => onFilePreview(item.file)
-                      : undefined);
-
-                  // `context` chips are read-only by contract — no remove
-                  // affordance (there is nothing staged to remove).
-                  return (
-                    <AttachmentTile
-                      key={getFileKey(item)}
-                      file={item.file}
-                      previewUrl={getItemPreviewUrl(item)}
-                      labelOverride={item.labelOverride}
-                      disabled={disabled}
-                      onRemove={
-                        item.kind === "context" || !onRemoveFile
-                          ? undefined
-                          : () => onRemoveFile(getFileId(item))
-                      }
-                      onActivate={activate}
-                      activateLabel={onOpen ? t`Open` : undefined}
+                    <SpinnerIcon
+                      size="md"
+                      srText={item.label ?? t`Loading attachment...`}
                     />
-                  );
-                })}
+                    {item.description ? (
+                      <span className="sr-only">{item.description}</span>
+                    ) : null}
+                  </div>
+                );
+              }
 
-                {hiddenCount > 0 && !isExpanded && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setGroupExpanded(group.id, true)}
-                    className={FILE_PREVIEW_STYLES.group.moreButton}
+              if (item.kind === "status") {
+                return (
+                  <StatusRow
+                    key={item.id}
+                    label={item.label}
+                    description={item.description}
+                    tone={item.tone}
+                  />
+                );
+              }
+
+              if (item.kind === "threadMessageGroup") {
+                return (
+                  <ThreadMessageCard
+                    key={item.id}
+                    label={item.label}
+                    sublabel={item.sublabel}
+                    selected={item.selected}
+                    onToggle={item.onToggle}
+                    disabled={disabled}
+                    defaultCollapsed={item.defaultCollapsed}
+                    attachmentCount={item.attachments.length}
                   >
-                    {hiddenCount === 1
-                      ? t`Show 1 more item`
-                      : t`Show ${hiddenCount} more items`}
-                  </Button>
-                )}
+                    {item.attachments.map((attachment) => (
+                      <SelectableAttachmentRow
+                        key={attachment.id}
+                        file={attachment.file}
+                        selected={attachment.selected}
+                        onToggle={attachment.onToggle}
+                        disabled={disabled}
+                        showFileType={showFileTypes}
+                        showSize={showFileSizes}
+                        filenameTruncateLength={filenameTruncateLength}
+                        validation={attachment.validation}
+                        onPreview={
+                          onFilePreview && "id" in attachment.file
+                            ? () => onFilePreview(attachment.file)
+                            : undefined
+                        }
+                      />
+                    ))}
+                  </ThreadMessageCard>
+                );
+              }
 
-                {!isCollapsed && groupActions?.[group.id]}
-              </div>
+              if (item.kind === "selectableAttachment") {
+                return (
+                  <SelectableAttachmentRow
+                    key={getFileKey(item)}
+                    file={item.file}
+                    selected={item.selected}
+                    onToggle={item.onToggle}
+                    disabled={disabled}
+                    showFileType={showFileTypes}
+                    showSize={showFileSizes}
+                    filenameTruncateLength={filenameTruncateLength}
+                    validation={item.validation}
+                  />
+                );
+              }
+
+              const onOpen =
+                item.kind === "attachment" ? item.onOpen : undefined;
+              const activate =
+                onOpen ??
+                (onFilePreview ? () => onFilePreview(item.file) : undefined);
+
+              // `context` chips are read-only by contract — no remove
+              // affordance (there is nothing staged to remove).
+              return (
+                <AttachmentTile
+                  key={getFileKey(item)}
+                  file={item.file}
+                  previewUrl={getItemPreviewUrl(item)}
+                  labelOverride={item.labelOverride}
+                  disabled={disabled}
+                  onRemove={
+                    item.kind === "context" || !onRemoveFile
+                      ? undefined
+                      : () => onRemoveFile(getFileId(item))
+                  }
+                  onActivate={activate}
+                  activateLabel={onOpen ? t`Open` : undefined}
+                />
+              );
+            })}
+
+            {hiddenCount > 0 && !isExpanded && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setGroupExpanded(group.id, true)}
+                className={FILE_PREVIEW_STYLES.group.moreButton}
+              >
+                {hiddenCount === 1
+                  ? t`Show 1 more item`
+                  : t`Show ${hiddenCount} more items`}
+              </Button>
             )}
-          </section>
+
+            {!isCollapsed && groupActions?.[group.id]}
+          </Card>
         );
       })}
     </div>

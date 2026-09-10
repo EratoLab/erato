@@ -31,6 +31,13 @@ export { DefaultStarterPromptsSection } from "@/components/ui/Chat/StarterPrompt
 export { StarterPromptsSection } from "@/components/ui/Chat/StarterPromptsSection";
 export type { StarterPromptsRendererProps } from "@/components/ui/Chat/StarterPromptsSection";
 export type { StarterPromptsSectionProps } from "@/components/ui/Chat/StarterPromptsSection";
+export { Card } from "@/components/ui/Container/Card";
+export type { CardControl } from "@/components/ui/Container/Card";
+export type { CardProps } from "@/components/ui/Container/Card";
+export type { CardSize } from "@/components/ui/Container/Card";
+export type { CardTag } from "@/components/ui/Container/Card";
+export type { CardTone } from "@/components/ui/Container/Card";
+export type { CardVariant } from "@/components/ui/Container/Card";
 export { InteractiveContainer } from "@/components/ui/Container/InteractiveContainer";
 export { AnchoredPopover } from "@/components/ui/Controls/AnchoredPopover";
 export type { AnchoredPopoverProps } from "@/components/ui/Controls/AnchoredPopover";
@@ -117,6 +124,8 @@ export type { FileAttachmentGroup } from "@/components/ui/FileUpload/GroupedFile
 export type { FileAttachmentGroupItem } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 export type { GroupedFileAttachmentsPreviewProps } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 export type { ThreadMessageAttachmentItem } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
+export { ThreadMessageCard } from "@/components/ui/FileUpload/ThreadMessageCard";
+export type { ThreadMessageCardProps } from "@/components/ui/FileUpload/ThreadMessageCard";
 export { Archive } from "@/components/ui/icons/index";
 export { ArchiveIcon } from "@/components/ui/icons/index";
 export { ArrowLeftIcon } from "@/components/ui/icons/index";

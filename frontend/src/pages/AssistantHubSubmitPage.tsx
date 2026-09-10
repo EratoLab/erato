@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import { Card } from "@/components/ui/Container/Card";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
@@ -505,7 +506,7 @@ export default function AssistantHubSubmitPage() {
 
           {!isLoading && assistant && config?.enabled && (
             <>
-              <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
+              <Card variant="surface" as="section" size="lg">
                 <h2 className="mb-2 text-lg font-semibold text-theme-fg-primary">
                   {assistant.name}
                 </h2>
@@ -516,9 +517,14 @@ export default function AssistantHubSubmitPage() {
                       "Submission clones the assistant into an immutable snapshot. Future edits to the draft assistant will not change this hub version.",
                   })}
                 </p>
-              </section>
+              </Card>
 
-              <section className="space-y-5 rounded-lg border border-theme-border bg-theme-bg-primary p-6">
+              <Card
+                variant="surface"
+                as="section"
+                size="lg"
+                bodyClassName="space-y-5"
+              >
                 <FormField
                   label={t({
                     id: "assistantHub.submit.description",
@@ -602,21 +608,31 @@ export default function AssistantHubSubmitPage() {
                       <span className="ml-1 text-theme-error-fg">*</span>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {config.categories.map((category) => (
-                        <button
-                          key={category.id}
-                          type="button"
-                          className={clsx(
-                            "focus-ring theme-transition rounded border px-3 py-2 text-sm",
-                            categoryIds.includes(category.id)
-                              ? "border-theme-border-focus bg-theme-bg-selected text-theme-fg-primary"
-                              : "border-theme-border bg-theme-bg-secondary text-theme-fg-secondary hover:bg-theme-bg-hover",
-                          )}
-                          onClick={() => toggleCategory(category.id)}
-                        >
-                          {category.display_name}
-                        </button>
-                      ))}
+                      {config.categories.map((category) => {
+                        const selected = categoryIds.includes(category.id);
+
+                        return (
+                          <Card
+                            key={category.id}
+                            variant="selectable"
+                            control="none"
+                            as="button"
+                            selected={selected}
+                            onClick={() => toggleCategory(category.id)}
+                            // A chip is padded by its text, not by an inset the
+                            // family has a step for.
+                            size="none"
+                            className={
+                              selected
+                                ? "text-theme-fg-primary"
+                                : "text-theme-fg-secondary"
+                            }
+                            bodyClassName="px-3 py-2 text-sm"
+                          >
+                            {category.display_name}
+                          </Card>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -678,9 +694,9 @@ export default function AssistantHubSubmitPage() {
                     }
                   />
                 </FormField>
-              </section>
+              </Card>
 
-              <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
+              <Card variant="surface" as="section" size="lg">
                 <h2 className="mb-2 text-lg font-semibold text-theme-fg-primary">
                   {t({
                     id: "assistantHub.submit.audience",
@@ -698,9 +714,9 @@ export default function AssistantHubSubmitPage() {
                   selectedIds={selectedAudience.map((subject) => subject.id)}
                   onToggleSubject={toggleAudienceSubject}
                 />
-              </section>
+              </Card>
 
-              <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
+              <Card variant="surface" as="section" size="lg">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                   <h2 className="text-lg font-semibold text-theme-fg-primary">
                     {t({
@@ -740,7 +756,7 @@ export default function AssistantHubSubmitPage() {
                     })}
                   </p>
                 )}
-              </section>
+              </Card>
 
               <div className="flex justify-end gap-3">
                 <Button

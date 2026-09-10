@@ -12,6 +12,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { Card } from "@/components/ui/Container/Card";
 import {
   detectDesktopSidecarClientPlatform,
   selectBestDesktopSidecarTarget,
@@ -23,6 +24,14 @@ import type React from "react";
 
 type DistributionTarget = Schemas.DesktopSidecarDistributionTargetResponse;
 type DistributionFile = Schemas.DesktopSidecarDistributionFileResponse;
+
+// The panels on this page stand a hairline off the page and wear the stronger
+// border token. The card surface paints from variables and is declared past the
+// reach of a utility on the frame, so both have to arrive through the channel.
+const PANEL_CARD_STYLE = {
+  "--card-border": "var(--theme-border-primary)",
+  "--card-shadow": "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+} as React.CSSProperties;
 
 function platformLabel(os: string): string {
   switch (os) {
@@ -198,7 +207,12 @@ export default function DesktopSidecarSetupPage() {
   if (error || !data || data.targets.length === 0 || !selectedTarget) {
     return (
       <SetupFrame>
-        <div className="rounded-xl border border-theme-border-primary bg-theme-bg-primary p-8 text-center shadow-sm">
+        <Card
+          variant="surface"
+          size="xl"
+          bodyClassName="text-center"
+          style={PANEL_CARD_STYLE}
+        >
           <h1 className="text-2xl font-semibold text-theme-fg-primary">
             <Trans id="desktopSidecar.setup.unavailable.title">
               Desktop Sidecar downloads are unavailable
@@ -210,7 +224,7 @@ export default function DesktopSidecarSetupPage() {
               could not be loaded. Contact your Erato administrator.
             </Trans>
           </p>
-        </div>
+        </Card>
       </SetupFrame>
     );
   }
@@ -238,9 +252,15 @@ export default function DesktopSidecarSetupPage() {
         </p>
       </header>
 
-      <section
+      <Card
+        variant="surface"
+        as="section"
         aria-labelledby="desktop-sidecar-platform-heading"
-        className="rounded-2xl border border-theme-border-primary bg-theme-bg-primary p-5 shadow-sm sm:p-6"
+        className="[--card-inset:1.25rem] sm:[--card-inset:1.5rem]"
+        // The lift belongs to the panel alone; the option cards inside would
+        // otherwise inherit it through the variable.
+        bodyClassName="[--card-shadow:none]"
+        style={PANEL_CARD_STYLE}
       >
         <h2
           id="desktop-sidecar-platform-heading"
@@ -254,20 +274,22 @@ export default function DesktopSidecarSetupPage() {
           {availableOperatingSystems.map((os) => {
             const selected = selectedTarget.platform.os === os;
             return (
-              <button
+              <Card
                 key={os}
-                type="button"
-                aria-pressed={selected}
+                variant="selectable"
+                control="none"
+                as="button"
+                selected={selected}
                 onClick={() => selectOperatingSystem(os)}
-                className={`flex min-h-20 items-center gap-3 rounded-xl border px-4 text-left transition-colors ${
-                  selected
-                    ? "border-theme-border-focus bg-theme-bg-selected text-theme-fg-primary"
-                    : "border-theme-border-primary bg-theme-bg-secondary text-theme-fg-secondary hover:bg-theme-bg-hover"
+                size="none"
+                className={`flex min-h-20 text-left ${
+                  selected ? "text-theme-fg-primary" : "text-theme-fg-secondary"
                 }`}
+                bodyClassName="flex flex-1 items-center gap-3 px-4"
               >
                 {platformIcon(os)}
                 <span className="font-semibold">{platformLabel(os)}</span>
-              </button>
+              </Card>
             );
           })}
         </div>
@@ -282,16 +304,18 @@ export default function DesktopSidecarSetupPage() {
             const selected = selectedTarget.id === target.id;
             const recommended = recommendedTarget?.id === target.id;
             return (
-              <button
+              <Card
                 key={target.id}
-                type="button"
-                aria-pressed={selected}
+                variant="selectable"
+                control="none"
+                as="button"
+                selected={selected}
                 onClick={() => setSelectedTargetId(target.id)}
-                className={`rounded-xl border px-4 py-3 text-left transition-colors ${
-                  selected
-                    ? "border-theme-border-focus bg-theme-bg-selected text-theme-fg-primary"
-                    : "border-theme-border-primary bg-theme-bg-secondary text-theme-fg-secondary hover:bg-theme-bg-hover"
+                size="none"
+                className={`text-left ${
+                  selected ? "text-theme-fg-primary" : "text-theme-fg-secondary"
                 }`}
+                bodyClassName="px-4 py-3"
               >
                 <span className="block font-semibold">
                   {architectureLabel(target.platform.architecture)}
@@ -305,11 +329,11 @@ export default function DesktopSidecarSetupPage() {
                     target.platform.abi
                   )}
                 </span>
-              </button>
+              </Card>
             );
           })}
         </div>
-      </section>
+      </Card>
 
       <section
         aria-labelledby="desktop-sidecar-download-heading"
@@ -351,7 +375,26 @@ function ArtifactCard({
   const isDefault = target.default_file === file.id;
 
   return (
-    <article className="flex flex-col rounded-2xl border border-theme-border-primary bg-theme-bg-primary p-5 shadow-sm">
+    <Card
+      variant="surface"
+      as="article"
+      className="flex flex-col [--card-inset:1.25rem]"
+      style={PANEL_CARD_STYLE}
+      footer={
+        <div className="flex items-center justify-between gap-4 border-t border-theme-border-primary px-5 pb-5 pt-4">
+          <span className="text-sm text-theme-fg-muted">
+            {formatFileSize(file.size)}
+          </span>
+          <a
+            href={downloadUrl(target.id, file.id)}
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-theme-action-primary-bg px-4 text-sm font-semibold text-theme-action-primary-fg transition-colors hover:bg-theme-action-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-theme-border-focus"
+          >
+            <Download width={18} height={18} aria-hidden />
+            <Trans id="desktopSidecar.setup.download.button">Download</Trans>
+          </a>
+        </div>
+      }
+    >
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
           <div className="rounded-xl bg-theme-bg-accent p-2.5 text-theme-fg-accent">
@@ -374,19 +417,7 @@ function ArtifactCard({
           </span>
         ) : null}
       </div>
-      <div className="mt-5 flex items-center justify-between gap-4 border-t border-theme-border-primary pt-4">
-        <span className="text-sm text-theme-fg-muted">
-          {formatFileSize(file.size)}
-        </span>
-        <a
-          href={downloadUrl(target.id, file.id)}
-          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-theme-action-primary-bg px-4 text-sm font-semibold text-theme-action-primary-fg transition-colors hover:bg-theme-action-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-theme-border-focus"
-        >
-          <Download width={18} height={18} aria-hidden />
-          <Trans id="desktopSidecar.setup.download.button">Download</Trans>
-        </a>
-      </div>
-    </article>
+    </Card>
   );
 }
 

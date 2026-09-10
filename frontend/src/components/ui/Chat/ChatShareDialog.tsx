@@ -2,6 +2,7 @@ import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useMemo, useState } from "react";
 
+import { Card } from "@/components/ui/Container/Card";
 import { InteractiveContainer } from "@/components/ui/Container/InteractiveContainer";
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
@@ -11,8 +12,16 @@ import { useChatShareLink } from "@/hooks/useChatShareLink";
 
 import { CheckIcon, CopyIcon } from "../icons";
 
+import type React from "react";
+
 // eslint-disable-next-line lingui/no-unlocalized-strings
 const CHAT_SHARE_PATH_PREFIX = "/chat-share/";
+
+// The row has never painted a fill of its own — it sits on the dialog's own
+// surface — and the card skin's default would give it one.
+const UNFILLED_CARD_STYLE = {
+  "--card-bg": "transparent",
+} as React.CSSProperties;
 
 interface ChatShareDialogProps {
   isOpen: boolean;
@@ -91,7 +100,16 @@ export function ChatShareDialog({
           </div>
         </Alert>
 
-        <label className="flex cursor-pointer items-center justify-between gap-4 rounded-[var(--theme-radius-shell)] border border-theme-border px-4 py-3">
+        <Card
+          variant="selectable"
+          control="checkbox"
+          as="label"
+          selected={!!shareLink?.enabled}
+          size="none"
+          className="cursor-pointer"
+          bodyClassName="flex items-center justify-between gap-4 px-4 py-3"
+          style={UNFILLED_CARD_STYLE}
+        >
           <div className="space-y-1">
             <p className="font-medium text-theme-fg-primary">
               {t({
@@ -119,7 +137,7 @@ export function ChatShareDialog({
               message: "Toggle chat sharing",
             })}
           />
-        </label>
+        </Card>
 
         {shareLink?.enabled ? (
           <InteractiveContainer

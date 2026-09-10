@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import { Card } from "@/components/ui/Container/Card";
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
@@ -314,7 +315,7 @@ export default function AssistantHubReviewPage() {
                 assistantDetails={assistantDetails}
               />
 
-              <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
+              <Card variant="surface" as="section" size="lg">
                 <h2 className="mb-2 text-lg font-semibold text-theme-fg-primary">
                   {t({
                     id: "assistantHub.review.audience",
@@ -332,9 +333,9 @@ export default function AssistantHubReviewPage() {
                   grants={selectedVersion.audience_grants}
                   canManage={false}
                 />
-              </section>
+              </Card>
 
-              <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
+              <Card variant="surface" as="section" size="lg">
                 <div className="mb-5">
                   {(() => {
                     const versionNumber = selectedVersion.version_number;
@@ -469,7 +470,7 @@ export default function AssistantHubReviewPage() {
                     </div>
                   )}
                 </div>
-              </section>
+              </Card>
             </div>
           )}
 

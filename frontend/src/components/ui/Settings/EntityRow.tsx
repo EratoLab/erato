@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { useId, useState } from "react";
 
-import { Collapse } from "../Controls/Collapse";
+import { Card } from "../Container/Card";
 import { DisclosureChevron } from "../Controls/DisclosureChevron";
 import { CheckCircleIcon, ErrorIcon, WarningCircleIcon } from "../icons";
 
@@ -28,7 +28,7 @@ const toneText: Record<EntityRowTone, string> = {
   error: "text-theme-error-fg",
 };
 
-interface EntityRowProps {
+export interface EntityRowProps {
   /** Kind glyph for the entity (MCP mark, computer, mail, ...). */
   icon: ReactNode;
   name: ReactNode;
@@ -72,52 +72,62 @@ export function EntityRow({
   const panelId = useId();
 
   return (
-    <article
-      className="rounded-[var(--theme-radius-card)] border border-theme-border bg-theme-bg-secondary"
+    <Card
+      variant="expandable"
+      as="article"
       data-ui="entity-row"
       data-testid={dataTestId}
-    >
-      <div className="flex items-center gap-2 p-3">
-        <button
-          type="button"
-          aria-expanded={isExpanded}
-          aria-controls={panelId}
-          onClick={() => setIsExpanded((value) => !value)}
-          className="theme-transition focus-ring-tight flex min-w-0 flex-1 items-center gap-3 text-left"
-        >
-          <DisclosureChevron open={isExpanded} size="md" />
-          <span className="min-w-0 flex-1 space-y-1">
-            <span className="flex items-center gap-2">
-              <span aria-hidden="true" className="shrink-0">
-                {icon}
+      // The rows are the secondary fill on a primary pane, which is what the
+      // muted tone is; pinning it through the tone channel rather than an
+      // inline variable keeps it reachable from a customer theme.
+      tone="muted"
+      expanded={isExpanded}
+      // Collapse hides the details by height alone, so a closed row would keep
+      // its buttons in the tab order and its permission rows in the
+      // accessibility tree.
+      unmountOnCollapse
+      bodyId={panelId}
+      bodyClassName="space-y-3 border-t border-theme-border"
+      header={
+        // The band carries no inset of its own, so the row brings one — and
+        // the action has to sit inside it, which is why it is not passed to
+        // the card's own action slot.
+        <div className="flex items-center gap-2 p-3">
+          <button
+            type="button"
+            aria-expanded={isExpanded}
+            aria-controls={panelId}
+            onClick={() => setIsExpanded((value) => !value)}
+            className="theme-transition focus-ring-tight flex min-w-0 flex-1 items-center gap-3 text-left"
+          >
+            <DisclosureChevron open={isExpanded} size="md" />
+            <span className="min-w-0 flex-1 space-y-1">
+              <span className="flex items-center gap-2">
+                <span aria-hidden="true" className="shrink-0">
+                  {icon}
+                </span>
+                <span className="truncate text-sm font-medium text-theme-fg-primary">
+                  {name}
+                </span>
               </span>
-              <span className="truncate text-sm font-medium text-theme-fg-primary">
-                {name}
+              <span
+                className={clsx(
+                  "flex items-center gap-1 text-xs",
+                  status ? toneText[status.tone] : "text-theme-fg-secondary",
+                )}
+              >
+                {status ? (
+                  <span aria-hidden="true">{toneIcon[status.tone]}</span>
+                ) : null}
+                <span className="truncate">{caption ?? status?.label}</span>
               </span>
             </span>
-            <span
-              className={clsx(
-                "flex items-center gap-1 text-xs",
-                status ? toneText[status.tone] : "text-theme-fg-secondary",
-              )}
-            >
-              {status ? (
-                <span aria-hidden="true">{toneIcon[status.tone]}</span>
-              ) : null}
-              <span className="truncate">{caption ?? status?.label}</span>
-            </span>
-          </span>
-        </button>
-        {action ? <span className="shrink-0">{action}</span> : null}
-      </div>
-      <Collapse isOpen={isExpanded}>
-        <div
-          id={panelId}
-          className="space-y-3 border-t border-theme-border p-4 pt-3"
-        >
-          {children}
+          </button>
+          {action ? <span className="shrink-0">{action}</span> : null}
         </div>
-      </Collapse>
-    </article>
+      }
+    >
+      {children}
+    </Card>
   );
 }

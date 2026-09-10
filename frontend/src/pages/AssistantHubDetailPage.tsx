@@ -5,6 +5,7 @@ import { Star } from "iconoir-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import { Card } from "@/components/ui/Container/Card";
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
@@ -97,7 +98,7 @@ function AssistantHubReviewsSection({
   };
 
   return (
-    <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
+    <Card variant="surface" as="section" size="lg">
       <div className="mb-5">
         <h2 className="text-lg font-semibold text-theme-fg-primary">
           {t({
@@ -105,7 +106,9 @@ function AssistantHubReviewsSection({
             message: "Reviews",
           })}
         </h2>
-        <div className="mt-3 rounded-lg border border-theme-border bg-theme-bg-secondary p-4">
+        {/* Deliberately not nested: the enclosing inset is wider than the
+            corner it would derive from, which would square this panel off. */}
+        <Card variant="surface" tone="muted" className="mt-3">
           <div className="text-sm font-medium text-theme-fg-primary">
             {t({
               id: "assistantHub.reviews.aggregateScore",
@@ -121,7 +124,7 @@ function AssistantHubReviewsSection({
               {getAssistantHubRatingLabel(version, ratingMode)}
             </span>
           </div>
-        </div>
+        </Card>
       </div>
 
       <div>
@@ -146,7 +149,11 @@ function AssistantHubReviewsSection({
             })}
           </p>
         ) : (
-          <div className="divide-y divide-theme-border rounded-lg border border-theme-border">
+          <Card
+            variant="surface"
+            size="none"
+            bodyClassName="divide-y divide-theme-border"
+          >
             {reviews.map((review) => (
               <ReviewComment
                 key={review.id}
@@ -154,7 +161,7 @@ function AssistantHubReviewsSection({
                 ratingMode={ratingMode}
               />
             ))}
-          </div>
+          </Card>
         )}
       </div>
 
@@ -223,7 +230,7 @@ function AssistantHubReviewsSection({
           </Button>
         </div>
       </form>
-    </section>
+    </Card>
   );
 }
 
@@ -435,7 +442,7 @@ export default function AssistantHubDetailPage() {
                 ratingMode={config?.rating_mode}
               />
 
-              <section className="rounded-lg border border-theme-border bg-theme-bg-primary p-6">
+              <Card variant="surface" as="section" size="lg">
                 <div className="mb-5">
                   {(() => {
                     const versionNumber = version.version_number;
@@ -477,7 +484,7 @@ export default function AssistantHubDetailPage() {
                     </div>
                   </details>
                 )}
-              </section>
+              </Card>
             </>
           )}
         </div>

@@ -3,6 +3,7 @@ import { skipToken } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 
+import { Card } from "@/components/ui/Container/Card";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { useGetAssistantUsage } from "@/lib/generated/v1betaApi/v1betaApiComponents";
@@ -30,7 +31,7 @@ function UsageChart({
   const points = (metric: "invocations" | "unique_users") =>
     buckets.map((point, index) => `${x(index)},${y(point[metric])}`).join(" ");
   return (
-    <div className="overflow-x-auto rounded-lg border border-theme-border bg-theme-bg-primary p-4">
+    <Card variant="surface" size="md" bodyClassName="overflow-x-auto">
       <div className="mb-3 flex flex-wrap gap-6 text-sm">
         <span className="flex items-center gap-2 text-theme-fg-primary">
           <span aria-hidden="true" className="w-6 border-t-2 border-current" />
@@ -139,7 +140,7 @@ function UsageChart({
           </tbody>
         </table>
       </details>
-    </div>
+    </Card>
   );
 }
 
@@ -232,6 +233,8 @@ export default function AssistantUsagePage() {
                     { label: invocationsLabel, value: data.total_invocations },
                     { label: usersLabel, value: data.total_unique_users },
                   ].map(({ label, value }) => (
+                    // Not a Card: the frame would wrap these in its body
+                    // element, and a dl group may only hold dt and dd.
                     <div
                       key={label}
                       className="rounded-lg border border-theme-border bg-theme-bg-primary p-5"

@@ -481,4 +481,152 @@ describe("GroupedFileAttachmentsPreview", () => {
     );
     expect(onRemoveFile).toHaveBeenCalledWith("file-1");
   });
+
+  it("frames a group as a card that keeps its own corner channel", async () => {
+    const { container } = await renderWithI18n(
+      <GroupedFileAttachmentsPreview
+        groups={[
+          {
+            id: "group-email",
+            label: "Current email",
+            items: [
+              {
+                kind: "attachment",
+                id: "file-1",
+                file: { id: "file-1", filename: "invoice.pdf", size: 2048 },
+              },
+            ],
+          },
+        ]}
+        onRemoveFile={() => {}}
+      />,
+    );
+
+    const group = container.querySelector('[data-ui="attachment-group"]')!;
+
+    expect(group.tagName).toBe("SECTION");
+    // The corner is the card family's, but the value is the group's: a theme
+    // moves this frame with radius.input, not radius.card.
+    expect(group).toHaveClass("card-geometry", "attachment-group-geometry");
+    // Without sticky headers the frame carries the inset itself, so the body
+    // must not pad a second time.
+    expect(group).toHaveClass("attachment-group-frame-geometry");
+    expect(group.querySelector('[data-ui="card-body"]')).toHaveClass("p-0");
+  });
+
+  it("moves the group inset onto the bands when headers are sticky", async () => {
+    const { container } = await renderWithI18n(
+      <GroupedFileAttachmentsPreview
+        stickyGroupHeaders={true}
+        groups={[
+          {
+            id: "group-email",
+            label: "Current email",
+            collapsible: true,
+            defaultCollapsed: false,
+            items: [
+              {
+                kind: "attachment",
+                id: "file-1",
+                file: { id: "file-1", filename: "invoice.pdf", size: 2048 },
+              },
+            ],
+          },
+        ]}
+        onRemoveFile={() => {}}
+      />,
+    );
+
+    const group = container.querySelector('[data-ui="attachment-group"]')!;
+
+    // A padded frame would leave a strip of it showing beside the header once
+    // the header sticks, so the inset moves to the header and the items.
+    expect(group).not.toHaveClass("attachment-group-frame-geometry");
+    expect(group).toHaveClass("overflow-clip");
+    expect(group.querySelector('[data-ui="card-body"]')).toHaveClass(
+      "attachment-group-items-geometry",
+    );
+  });
+
+  it("nests a thread message card inside the group's corner", async () => {
+    const { container } = await renderWithI18n(
+      <GroupedFileAttachmentsPreview
+        groups={[
+          {
+            id: "group-conversation",
+            label: "Project Alpha",
+            items: [
+              {
+                kind: "threadMessageGroup",
+                id: "message-1",
+                label: "Anna Schmidt",
+                selected: false,
+                onToggle: () => {},
+                defaultCollapsed: false,
+                attachments: [
+                  {
+                    id: "file-1",
+                    file: { id: "file-1", filename: "invoice.pdf", size: 2048 },
+                    selected: true,
+                  },
+                ],
+              },
+            ],
+          },
+        ]}
+        onRemoveFile={() => {}}
+      />,
+    );
+
+    const card = container.querySelector('[data-ui="thread-message-card"]')!;
+
+    // The corner and the inset both come from the group frame, and the chips
+    // inside derive from the card in turn.
+    expect(card).toHaveClass("card-nested", "thread-message-card-geometry");
+    // A message left out of the upload is dimmed rather than deselected: the
+    // card's own selected fill would read as the opposite.
+    expect(card).toHaveClass("opacity-60");
+    expect(card).not.toHaveAttribute("data-selected");
+  });
+
+  it("drops a collapsed thread message's rows from the DOM", async () => {
+    const { container } = await renderWithI18n(
+      <GroupedFileAttachmentsPreview
+        groups={[
+          {
+            id: "group-conversation",
+            label: "Project Alpha",
+            items: [
+              {
+                kind: "threadMessageGroup",
+                id: "message-1",
+                label: "Anna Schmidt",
+                defaultCollapsed: true,
+                attachments: [
+                  {
+                    id: "file-1",
+                    file: { id: "file-1", filename: "invoice.pdf", size: 2048 },
+                    selected: true,
+                  },
+                ],
+              },
+            ],
+          },
+        ]}
+        onRemoveFile={() => {}}
+      />,
+    );
+
+    // Height alone would leave the rows in the tab order and in the
+    // accessibility tree, and their previews would still be fetched.
+    expect(container.querySelector('[data-ui="attachment-tile"]')).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /toggle attachments anna schmidt/i }),
+    );
+
+    expect(
+      container.querySelector('[data-ui="attachment-tile"]'),
+    ).not.toBeNull();
+  });
 });

@@ -624,13 +624,93 @@ body {
     position: absolute;
   }
 
+  /* The card family. A card is a frame carrying .card-geometry and one inset,
+     wrapping a body that carries .card-body-geometry. The body — not the frame
+     — publishes what a card nested inside derives from: a frame that both read
+     --card-child-radius and declared it would be a custom-property cycle, and
+     the whole declaration would then resolve to nothing at any depth.
+
+     Order inside this block is load-bearing. Every head here is a single
+     class, so the token default loses to the corner a parent published, and an
+     inset named at the call site beats the one a parent published. */
+  .card-geometry {
+    --card-radius: var(--theme-radius-card);
+
+    border-radius: var(--card-radius);
+  }
+
+  .card-nested {
+    --card-radius: var(--card-child-radius, var(--theme-radius-card));
+    --card-inset: var(--card-child-inset, var(--theme-spacing-control-gap));
+  }
+
+  .card-inset-none {
+    /* 0px, never 0: a bare zero is not a <length> inside calc() or max(), so
+       the derived corner below would silently fall back to its initial value
+       with nothing in the console to say so. */
+    --card-inset: 0px;
+  }
+
+  .card-inset-xs {
+    --card-inset: 0.5rem;
+  }
+
+  .card-inset-sm {
+    --card-inset: 0.75rem;
+  }
+
+  .card-inset-md {
+    --card-inset: 1rem;
+  }
+
+  .card-inset-lg {
+    --card-inset: 1.5rem;
+  }
+
+  .card-inset-xl {
+    --card-inset: 2rem;
+  }
+
+  .card-body-geometry {
+    --card-child-radius: max(0px, var(--card-radius) - var(--card-inset));
+    --card-child-inset: max(0px, var(--card-inset) - 0.25rem);
+
+    padding: var(--card-inset);
+  }
+
+  /* A band flush against the frame's inner edge — a header, a footer, a details
+     strip. It is the reason the frame needs no overflow: hidden, which would
+     crop the offset focus ring of a control inside a band. :where() holds the
+     position selectors at one class of specificity so a caller's own rounding
+     utility still wins. */
+  .card-section {
+    border-radius: 0;
+  }
+
+  .card-section:where(:first-child) {
+    border-start-start-radius: var(--card-radius);
+    border-start-end-radius: var(--card-radius);
+  }
+
+  .card-section:where(:last-child) {
+    border-end-start-radius: var(--card-radius);
+    border-end-end-radius: var(--card-radius);
+  }
+
   /* Selectable option cards and their icon tiles read one token. The tile is
      not derived from the card corner: card padding exceeds the card radius
      for every shipped theme, so radius-minus-padding would square it. A theme
      re-declares --theme-radius-control on [data-ui="option-card"] to move
-     card and tile together. */
+     card and tile together.
+
+     It follows the family rather than preceding it because both heads are a
+     single class, so source order alone decides which --card-radius the option
+     card reads. The corner is painted here as well: the icon tile wears this
+     class on its own and is no card. */
   .option-card-geometry {
-    border-radius: var(--theme-radius-control);
+    --card-radius: var(--theme-radius-control);
+
+    border-radius: var(--card-radius);
   }
 
   .modal-section-geometry {
@@ -854,6 +934,74 @@ body {
   box-shadow: var(--theme-elevation-modal);
 }
 
+/* The card surface. This is the only rule in the family that sets a final
+   value; tone and state below move the variables it reads. That split is what
+   gives a theme two knobs instead of one: re-declaring --card-border retunes
+   the resting colour and leaves hover and selection on the host tokens, while
+   setting border-color outright catches every state at once. */
+.card-skin {
+  border-color: var(--card-border, var(--theme-border));
+  background-color: var(--card-bg, var(--theme-bg-primary));
+  box-shadow: var(--card-shadow, none);
+}
+
+.card-skin[data-tone="muted"] {
+  --card-bg: var(--theme-bg-secondary);
+}
+
+.card-skin[data-tone="accent"] {
+  /* There is no accent border token, so the fill carries this tone alone. */
+  --card-bg: var(--theme-bg-accent);
+}
+
+.card-skin[data-tone="info"] {
+  --card-bg: var(--theme-info-bg);
+  --card-border: var(--theme-info-border);
+}
+
+.card-skin[data-tone="success"] {
+  --card-bg: var(--theme-success-bg);
+  --card-border: var(--theme-success-border);
+}
+
+.card-skin[data-tone="warning"] {
+  --card-bg: var(--theme-warning-bg);
+  --card-border: var(--theme-warning-border);
+}
+
+.card-skin[data-tone="error"] {
+  --card-bg: var(--theme-error-bg);
+  --card-border: var(--theme-error-border);
+}
+
+/* Hover belongs to the two variants that answer a pointer, and stops at a card
+   that is already chosen or unavailable: the selected fill is the stronger of
+   the two, and a hover tint over it reads as a third state. The exclusions sit
+   inside :where() so they cost no specificity — a theme rule keyed on the hook
+   and :hover still meets this one on level ground and wins on order. */
+.card-skin[data-variant="interactive"]:hover:where(
+    :not([data-selected], [data-disabled], :disabled)
+  ),
+.card-skin[data-variant="selectable"]:hover:where(
+    :not([data-selected], [data-disabled], :disabled)
+  ) {
+  --card-bg: var(--theme-bg-hover);
+  --card-border: var(--theme-border-focus);
+}
+
+.card-skin[data-selected] {
+  --card-bg: var(--theme-bg-selected);
+  --card-border: var(--theme-border-focus);
+}
+
+/* Opening a card paints nothing at stock: every expandable frame in the app
+   keeps its resting colours while open, and a declaration here is past the
+   reach of any call-site utility, so anything this rule painted would become
+   law for every card that ever opens. It exists to name the channel. */
+.card-skin[data-expanded] {
+  --card-shadow: var(--card-expanded-shadow, none);
+}
+
 /* The sidebar's own width stays inline — it is computed from slim/expanded
    state. Only the surface moves here. */
 .sidebar-skin {
@@ -1022,26 +1170,27 @@ body {
   background-color: var(--theme-border-divider);
 }
 
-/* Attachment group frames and the thread cards inside them. The frame reads
-   the input radius like the app's other framed cards; a card inside derives
-   its corner from the frame radius minus the frame inset, so the two stay
-   concentric for any theme value. Unlayered so a theme.css rule can retune
-   any of it through the data-ui hooks. A sticky-header group clips to the
-   frame (overflow: clip creates no scroll container, so the header still
-   sticks to the outer scroll region) while header and items stay square
-   inside it, so nothing shows through a corner once the frame's top has
-   scrolled away. */
+/* Attachment group frames and the thread cards inside them. Both are cards, so
+   the corner and the surface come from the card family; what is left here is
+   the input radius the group reads instead of the card one, the padding the
+   two group layouts need, and the two tile radii a chip reads. Held outside
+   @layer components and after the utilities on purpose — that position is what
+   lets a customer theme.css retune any of it through the data-ui hooks, and it
+   is also what keeps the padding out of reach of a caller's utility, which the
+   sticky layout below depends on. A sticky-header group clips to the frame
+   (overflow: clip creates no scroll container, so the header still sticks to
+   the outer scroll region) while header and items stay square inside it, so
+   nothing shows through a corner once the frame's top has scrolled away. */
 .attachment-group-geometry {
-  --attachment-group-inset: 0.75rem;
-  border-radius: var(--theme-radius-input);
+  --card-radius: var(--theme-radius-input);
 }
 
 .attachment-group-frame-geometry {
-  padding: var(--attachment-group-inset);
+  padding: var(--card-inset);
 }
 
 .attachment-group-header-geometry {
-  padding: var(--attachment-group-inset) var(--attachment-group-inset) 0.5rem;
+  padding: var(--card-inset) var(--card-inset) 0.5rem;
 }
 
 /* Collapsed, the frame's own bottom border closes the card. */
@@ -1050,28 +1199,33 @@ body {
 }
 
 .attachment-group-items-geometry {
-  padding: 0.5rem var(--attachment-group-inset) var(--attachment-group-inset);
+  padding: 0.5rem var(--card-inset) var(--card-inset);
 }
 
-/* The thread card derives from the group frame, and the attachment tiles
-   inside it derive from the card in turn (the tile reads
-   --attachment-tile-radius with the base radius as its fallback elsewhere).
-   The floors keep a deep nest from squaring off entirely. */
+/* A sticky element travels inside its own containing block, and the band a
+   card wraps a header slot in is exactly as tall as the header, which would
+   pin it in place. The band steps out of the flow so the header sticks to the
+   frame, as it did before the group became a card. */
+[data-ui="attachment-group"] > [data-ui="card-header"] {
+  display: contents;
+}
+
+/* Attachment tiles derive from the thread card, which derives from the group
+   frame in turn (a tile reads --attachment-tile-radius with the base radius as
+   its fallback elsewhere). Both floors are what a stock theme actually
+   renders, not a guard against exotic ones: the group corner is 1rem and its
+   inset 0.75rem, so the card lands on 0.25rem and both derivations below go
+   negative. Replacing them with the family's plain max(0px, …) squares every
+   chip and every icon plate inside a thread. */
 .thread-message-card-geometry {
-  --thread-message-card-radius: max(
-    0px,
-    var(--theme-radius-input) - var(--attachment-group-inset, 0.75rem)
-  );
-  --thread-message-card-inset: 0.5rem;
   --attachment-tile-radius: max(
     0.25rem,
-    var(--thread-message-card-radius) - var(--thread-message-card-inset)
+    var(--card-radius) - var(--card-inset)
   );
   --attachment-tile-icon-radius: max(
     0.125rem,
     var(--attachment-tile-radius) - 0.5rem
   );
-  border-radius: var(--thread-message-card-radius);
 }
 
 /* Preferences → Appearance → Text size. Percent, not px, so the browser's own

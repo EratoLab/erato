@@ -7,9 +7,17 @@
 import { t } from "@lingui/core/macro";
 import { memo } from "react";
 
+import { Card } from "../Container/Card";
 import { FolderIcon, OpenNewWindowIcon } from "../icons";
 
 import type { CloudDrive } from "@/lib/api/cloudProviders/types";
+import type React from "react";
+
+// The skeleton has never painted a fill of its own, and the card skin's
+// default would give it one.
+const UNFILLED_CARD_STYLE = {
+  "--card-bg": "transparent",
+} as React.CSSProperties;
 
 interface CloudDriveListProps {
   drives: CloudDrive[];
@@ -126,7 +134,7 @@ function getDriveDetailLines(drive: CloudDrive): string[] {
 }
 
 const DriveCardSkeleton = memo(() => (
-  <div className="animate-pulse rounded-[var(--theme-radius-shell)] border border-theme-border p-4">
+  <Card variant="surface" className="animate-pulse" style={UNFILLED_CARD_STYLE}>
     <div className="flex items-start gap-3">
       <div className="size-10 rounded bg-theme-bg-accent" />
       <div className="flex-1 space-y-2">
@@ -134,7 +142,7 @@ const DriveCardSkeleton = memo(() => (
         <div className="h-4 w-1/2 rounded bg-theme-bg-accent" />
       </div>
     </div>
-  </div>
+  </Card>
 ));
 
 // eslint-disable-next-line lingui/no-unlocalized-strings
@@ -171,9 +179,38 @@ export const CloudDriveList = memo<CloudDriveListProps>(
     return (
       <div className={`grid gap-3 ${className}`}>
         {drives.map((drive) => (
-          <div
+          <Card
             key={drive.id}
-            className="rounded-[var(--theme-radius-shell)] border border-theme-border bg-theme-bg-primary"
+            variant="surface"
+            size="none"
+            // The hover fill sits on the band rather than on the button
+            // inside it, because the band is what the card rounds against
+            // the frame: to the top corners while a footer follows, to all
+            // four without one.
+            bodyClassName="theme-transition hover:bg-theme-bg-hover"
+            footer={
+              drive.web_url ? (
+                <div className="flex justify-end border-t border-theme-border px-4 py-2">
+                  <a
+                    href={drive.web_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                    }}
+                    className="theme-transition inline-flex items-center gap-1.5 rounded text-sm text-theme-fg-secondary hover:text-theme-fg-primary"
+                  >
+                    <span>
+                      {t({
+                        id: "cloudDriveList.viewInSharepoint",
+                        message: "View in Sharepoint",
+                      })}
+                    </span>
+                    <OpenNewWindowIcon className="size-4" />
+                  </a>
+                </div>
+              ) : undefined
+            }
           >
             <button
               type="button"
@@ -184,15 +221,7 @@ export const CloudDriveList = memo<CloudDriveListProps>(
                   onSelectDrive(drive);
                 }
               }}
-              // Only the top corners are rounded when a footer follows, so the
-              // hover fill meets the footer's border instead of curving away
-              // from it. The wrapper can't just clip: `focus-ring` is an
-              // offset (outset) ring, and overflow-hidden would cut it off.
-              className={`theme-transition focus-ring w-full p-4 text-left hover:bg-theme-bg-hover ${
-                drive.web_url
-                  ? "rounded-t-[var(--theme-radius-shell)]"
-                  : "rounded-[var(--theme-radius-shell)]"
-              }`}
+              className="focus-ring w-full p-4 text-left"
               aria-label={t({
                 id: "cloudDriveList.openDrive",
                 message: "Open drive",
@@ -226,28 +255,7 @@ export const CloudDriveList = memo<CloudDriveListProps>(
                 </div>
               </div>
             </button>
-            {drive.web_url && (
-              <div className="flex justify-end border-t border-theme-border px-4 py-2">
-                <a
-                  href={drive.web_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                  }}
-                  className="theme-transition inline-flex items-center gap-1.5 rounded text-sm text-theme-fg-secondary hover:text-theme-fg-primary"
-                >
-                  <span>
-                    {t({
-                      id: "cloudDriveList.viewInSharepoint",
-                      message: "View in Sharepoint",
-                    })}
-                  </span>
-                  <OpenNewWindowIcon className="size-4" />
-                </a>
-              </div>
-            )}
-          </div>
+          </Card>
         ))}
       </div>
     );

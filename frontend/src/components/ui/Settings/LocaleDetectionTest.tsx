@@ -8,6 +8,16 @@ import {
   dynamicActivate,
 } from "@/lib/i18n";
 
+import { Card } from "../Container/Card";
+
+import type React from "react";
+
+// The panel has never painted a fill of its own, and the card skin's default
+// would give it one.
+const UNFILLED_CARD_STYLE = {
+  "--card-bg": "transparent",
+} as React.CSSProperties;
+
 /**
  * Simple test component to verify locale detection works correctly
  * This is for development/testing purposes only
@@ -38,7 +48,11 @@ export function LocaleDetectionTest() {
   };
 
   return (
-    <div className="space-y-4 rounded-lg border border-[var(--theme-border)] p-4">
+    <Card
+      variant="surface"
+      bodyClassName="space-y-4"
+      style={UNFILLED_CARD_STYLE}
+    >
       <h3 className="text-lg font-semibold">
         <Trans>Locale Detection Test</Trans>
       </h3>
@@ -130,6 +144,6 @@ export function LocaleDetectionTest() {
           </li>
         </ul>
       </div>
-    </div>
+    </Card>
   );
 }

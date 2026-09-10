@@ -3340,8 +3340,8 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
-msgid "preferences.dialog.desktopSidecar.description"
-msgstr ""
+#~ msgid "preferences.dialog.desktopSidecar.description"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
@@ -4223,7 +4223,7 @@ msgstr ""
 #~ msgid "{0} messages could not be loaded."
 #~ msgstr "{0} messages n'ont pas pu être chargés."
 
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+#: src/components/ui/FileUpload/ThreadMessageCard.tsx
 msgid "{attachmentCount} files"
 msgstr ""
 
@@ -4299,7 +4299,7 @@ msgstr ""
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/components/ui/FilePreview/EmlPreview.tsx
 #: src/components/ui/FileUpload/AttachmentTileList.tsx
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+#: src/components/ui/FileUpload/ThreadMessageCard.tsx
 msgid "1 file"
 msgstr "1 fichier"
 
@@ -5049,7 +5049,7 @@ msgstr "En cours"
 msgid "Include"
 msgstr "Inclure"
 
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+#: src/components/ui/FileUpload/ThreadMessageCard.tsx
 msgid "Include message"
 msgstr "Inclure le message"
 
@@ -5727,7 +5727,7 @@ msgstr "Ce message utilise {percentUsed}% de la limite de tokens disponible ({to
 msgid "To"
 msgstr ""
 
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+#: src/components/ui/FileUpload/ThreadMessageCard.tsx
 msgid "Toggle attachments"
 msgstr "Afficher ou masquer les pièces jointes"
 

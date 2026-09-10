@@ -351,7 +351,9 @@ describe("Chat surface composition", () => {
     expect(
       bar!.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(bar!.parentElement).toBe(input.parentElement);
+    // The hook marks the framed bar; the width wrapper around it is what
+    // shares the composer's parent.
+    expect(bar!.parentElement!.parentElement).toBe(input.parentElement);
     // It queries the open chat's own runs.
     expect(useRecentChats).toHaveBeenCalledWith({
       queryParams: {
