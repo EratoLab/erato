@@ -102,7 +102,7 @@ const ItemRow = memo<ItemRowProps>(
             checked={isSelected}
             onChange={handleCheckboxChange}
             disabled={isDisabled}
-            className="size-4 rounded border-theme-border text-theme-fg-accent focus:ring-theme-focus disabled:cursor-not-allowed"
+            className="size-4 accent-[var(--theme-fg-accent)] focus:ring-theme-focus disabled:cursor-not-allowed"
             aria-label={t({
               id: "cloudItemBrowser.select",
               message: "Select",

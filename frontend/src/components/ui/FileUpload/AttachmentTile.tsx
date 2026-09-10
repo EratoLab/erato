@@ -274,7 +274,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
           checked={selection.selected}
           onChange={selection.onToggle}
           disabled={disabled}
-          className="size-4 shrink-0 rounded border-theme-border text-theme-fg-accent focus:ring-theme-focus disabled:cursor-not-allowed"
+          className="size-4 shrink-0 accent-[var(--theme-fg-accent)] focus:ring-theme-focus disabled:cursor-not-allowed"
           aria-label={`${selection.label ?? t({ id: "chat.attachments.include", message: "Include" })} ${filename}`}
         />
       )}

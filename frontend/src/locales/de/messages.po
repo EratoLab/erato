@@ -171,6 +171,7 @@ msgstr "Optional: Beschränken Sie, welche MCP-Server diesem Assistenten Fähigk
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
+#: src/components/ui/Assistant/McpServerSelector.tsx
 msgid "assistant.form.mcpServers.label"
 msgstr "MCP-Server"
 

@@ -171,6 +171,7 @@ msgstr "Optionnel : Limitez les serveurs MCP pouvant fournir des capacités à c
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
+#: src/components/ui/Assistant/McpServerSelector.tsx
 msgid "assistant.form.mcpServers.label"
 msgstr "Serveurs MCP"
 

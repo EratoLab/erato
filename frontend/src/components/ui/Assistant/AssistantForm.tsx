@@ -887,7 +887,7 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
                         event.target.checked,
                       )
                     }
-                    className="size-4 rounded border-theme-border-primary bg-theme-bg-primary text-theme-fg-accent focus:ring-theme-fg-accent focus:ring-offset-0"
+                    className="size-4 accent-[var(--theme-fg-accent)] focus:ring-theme-fg-accent focus:ring-offset-0"
                   />
                   <span className="inline-flex items-center gap-1.5 text-sm text-theme-fg-secondary">
                     <span>

@@ -61,11 +61,7 @@ export const ToolCallSettings: React.FC<ToolCallSettingsProps> = ({
               type="checkbox"
               checked={settings.showToolCalls}
               onChange={toggleShowToolCalls}
-              className={clsx(
-                "size-4 rounded border-theme-border-primary",
-                "text-theme-fg-accent focus:ring-theme-fg-accent focus:ring-offset-0",
-                "bg-theme-bg-primary",
-              )}
+              className="size-4 accent-[var(--theme-fg-accent)] focus:ring-theme-fg-accent focus:ring-offset-0"
             />
             <span className="text-sm text-theme-fg-secondary">
               {t`Show tool calls`}
@@ -86,12 +82,7 @@ export const ToolCallSettings: React.FC<ToolCallSettingsProps> = ({
               checked={settings.defaultExpanded}
               onChange={toggleDefaultExpanded}
               disabled={!settings.showToolCalls}
-              className={clsx(
-                "size-4 rounded border-theme-border-primary",
-                "text-theme-fg-accent focus:ring-theme-fg-accent focus:ring-offset-0",
-                "bg-theme-bg-primary",
-                "disabled:cursor-not-allowed disabled:opacity-50",
-              )}
+              className="size-4 accent-[var(--theme-fg-accent)] focus:ring-theme-fg-accent focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50"
             />
             <span className="text-sm text-theme-fg-secondary">
               {t`Expand by default`}

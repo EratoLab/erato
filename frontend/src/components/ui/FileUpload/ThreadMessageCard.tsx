@@ -119,7 +119,7 @@ export const ThreadMessageCard: React.FC<ThreadMessageCardProps> = ({
               checked={selected}
               onChange={onToggle}
               disabled={disabled}
-              className="size-4 shrink-0 rounded border-theme-border text-theme-fg-accent focus:ring-theme-focus disabled:cursor-not-allowed"
+              className="size-4 shrink-0 accent-[var(--theme-fg-accent)] focus:ring-theme-focus disabled:cursor-not-allowed"
               aria-label={`${t({ id: "chat.attachments.include_message", message: "Include message" })} ${label}`}
               onClick={(event) => event.stopPropagation()}
             />

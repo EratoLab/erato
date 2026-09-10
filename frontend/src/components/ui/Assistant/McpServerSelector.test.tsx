@@ -116,6 +116,22 @@ describe("McpServerSelector", () => {
     expect(onSelectionChange).toHaveBeenCalledWith(["oauth-server"]);
   });
 
+  it("toggles a server from the status half of the row", () => {
+    const { onSelectionChange } = renderSelector();
+
+    fireEvent.click(screen.getByText("Connected"));
+
+    expect(onSelectionChange).toHaveBeenCalledWith(["search-server"]);
+  });
+
+  it("does not toggle a server when the connect affordance is clicked", () => {
+    const { onSelectionChange } = renderSelector();
+
+    fireEvent.click(screen.getByTestId("mcp-server-connect-oauth-server"));
+
+    expect(onSelectionChange).not.toHaveBeenCalled();
+  });
+
   it("opens the settings dialog on the servers tab from the connect affordance", () => {
     renderSelector();
 
