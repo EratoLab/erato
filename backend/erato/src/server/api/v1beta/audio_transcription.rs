@@ -1553,16 +1553,10 @@ async fn transcribe_audio_chunk_genai(
     ]);
     let chat_request = ChatRequest::new(vec![GenAiChatMessage::user(user_content)])
         .with_system("You are a strict audio transcription engine.");
-    let reasoning_effort = if matches!(
-        provider.chat_provider_config.provider_kind.as_str(),
-        "gemini" | "vertex_ai"
-    ) {
-        // Gemini treats an omitted thinking config differently from an explicit zero budget.
-        // Audio transcription is an extraction task, so spend the response budget on text.
-        ReasoningEffort::Budget(0)
-    } else {
-        ReasoningEffort::None
-    };
+    let reasoning_effort = audio_transcription_reasoning_effort(
+        &provider.chat_provider_config.provider_kind,
+        &provider.chat_provider_config.model_name,
+    );
     let chat_options = ChatOptions::default()
         .with_capture_content(true)
         .with_temperature(0.0)
@@ -1785,9 +1779,62 @@ async fn retry_failed_chunks(
     Ok(session_state_frame(session))
 }
 
+fn audio_transcription_reasoning_effort(provider_kind: &str, model_name: &str) -> ReasoningEffort {
+    if !matches!(provider_kind, "gemini" | "vertex_ai") {
+        return ReasoningEffort::None;
+    }
+
+    // Gemini 3 cannot disable thinking. Low maps to thinkingLevel=LOW in the
+    // Gemini adapter, whereas Budget(0) sends an unsupported zero thinkingBudget.
+    // Accept resource-qualified model names used by Vertex AI as well.
+    if model_name
+        .rsplit('/')
+        .next()
+        .unwrap_or(model_name)
+        .starts_with("gemini-3")
+    {
+        ReasoningEffort::Low
+    } else {
+        // Preserve the existing extraction behavior for earlier Gemini models.
+        ReasoningEffort::Budget(0)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gemini_3_audio_uses_a_supported_thinking_level() {
+        for provider_kind in ["gemini", "vertex_ai"] {
+            for model_name in [
+                "gemini-3.8-flash",
+                "gemini-3-flash-preview",
+                "publishers/google/models/gemini-3.8-flash",
+            ] {
+                assert!(matches!(
+                    audio_transcription_reasoning_effort(provider_kind, model_name),
+                    ReasoningEffort::Low
+                ));
+            }
+        }
+    }
+
+    #[test]
+    fn audio_thinking_preserves_other_provider_behavior() {
+        assert!(matches!(
+            audio_transcription_reasoning_effort("gemini", "gemini-2.5-flash"),
+            ReasoningEffort::Budget(0)
+        ));
+        assert!(matches!(
+            audio_transcription_reasoning_effort("vertex_ai", "gemini-2.5-flash"),
+            ReasoningEffort::Budget(0)
+        ));
+        assert!(matches!(
+            audio_transcription_reasoning_effort("openai", "gpt-4o-audio-preview"),
+            ReasoningEffort::None
+        ));
+    }
 
     #[test]
     fn validates_canonical_wav() {
