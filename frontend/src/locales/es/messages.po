@@ -4427,11 +4427,11 @@ msgstr ""
 
 #: src/hooks/audio/audioTranscriptionErrors.ts
 msgid "A passage could not be transcribed because the AI provider's content filter blocked it. This also happens with harmless speech. Please say it differently or type it."
-msgstr ""
+msgstr "No se pudo transcribir un fragmento porque el filtro de contenido del proveedor de IA lo bloqueó. Esto también ocurre con frases inofensivas. Dilo de otra manera o escríbelo."
 
 #: src/hooks/audio/audioTranscriptionErrors.ts
 msgid "A passage could not be transcribed. Please try again."
-msgstr ""
+msgstr "No se pudo transcribir un fragmento. Inténtalo de nuevo."
 
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Accepted types:"
@@ -5022,7 +5022,7 @@ msgstr "Error"
 
 #: src/hooks/audio/audioTranscriptionErrors.ts
 msgid "Error code: {code}"
-msgstr ""
+msgstr "Código de error: {code}"
 
 #: src/components/ui/ThemeApplier.tsx
 #~ msgid "Error loading theme:"
@@ -5768,11 +5768,11 @@ msgstr "Probar cambios de idioma:"
 
 #: src/hooks/audio/audioTranscriptionErrors.ts
 msgid "The AI provider could not transcribe a passage. Please try again."
-msgstr ""
+msgstr "El proveedor de IA no pudo transcribir un fragmento. Inténtalo de nuevo."
 
 #: src/hooks/audio/audioTranscriptionErrors.ts
 msgid "The AI provider could not transcribe the passage starting at {passage}. Please try again."
-msgstr ""
+msgstr "El proveedor de IA no pudo transcribir el fragmento que empieza en {passage}. Inténtalo de nuevo."
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "The file \"{filename}\" cannot be processed by the AI and was not uploaded."
@@ -5809,11 +5809,11 @@ msgstr "El micrófono se desconectó. Comprueba el micrófono y vuelve a iniciar
 
 #: src/hooks/audio/audioTranscriptionErrors.ts
 msgid "The passage starting at {passage} could not be transcribed because the AI provider's content filter blocked it. This also happens with harmless speech. Please say it differently or type it."
-msgstr ""
+msgstr "No se pudo transcribir el fragmento que empieza en {passage} porque el filtro de contenido del proveedor de IA lo bloqueó. Esto también ocurre con frases inofensivas. Dilo de otra manera o escríbelo."
 
 #: src/hooks/audio/audioTranscriptionErrors.ts
 msgid "The passage starting at {passage} could not be transcribed. Please try again."
-msgstr ""
+msgstr "No se pudo transcribir el fragmento que empieza en {passage}. Inténtalo de nuevo."
 
 #: src/hooks/audio/useAudioInputLevelPreview.ts
 #: src/hooks/audio/useGuidedAudioCapture.ts

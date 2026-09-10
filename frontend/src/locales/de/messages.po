@@ -4427,11 +4427,11 @@ msgstr ""
 
 #: src/hooks/audio/audioTranscriptionErrors.ts
 msgid "A passage could not be transcribed because the AI provider's content filter blocked it. This also happens with harmless speech. Please say it differently or type it."
-msgstr ""
+msgstr "Ein Abschnitt konnte nicht transkribiert werden, weil der Inhaltsfilter des KI-Anbieters ihn blockiert hat. Das passiert auch bei harmlosen Aussagen. Bitte formulieren Sie ihn anders oder tippen Sie ihn ein."
 
 #: src/hooks/audio/audioTranscriptionErrors.ts
 msgid "A passage could not be transcribed. Please try again."
-msgstr ""
+msgstr "Ein Abschnitt konnte nicht transkribiert werden. Bitte versuchen Sie es erneut."
 
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Accepted types:"
@@ -5022,7 +5022,7 @@ msgstr "Fehler"
 
 #: src/hooks/audio/audioTranscriptionErrors.ts
 msgid "Error code: {code}"
-msgstr ""
+msgstr "Fehlercode: {code}"
 
 #: src/components/ui/ThemeApplier.tsx
 #~ msgid "Error loading theme:"
@@ -5768,11 +5768,11 @@ msgstr ""
 
 #: src/hooks/audio/audioTranscriptionErrors.ts
 msgid "The AI provider could not transcribe a passage. Please try again."
-msgstr ""
+msgstr "Der KI-Anbieter konnte einen Abschnitt nicht transkribieren. Bitte versuchen Sie es erneut."
 
 #: src/hooks/audio/audioTranscriptionErrors.ts
 msgid "The AI provider could not transcribe the passage starting at {passage}. Please try again."
-msgstr ""
+msgstr "Der KI-Anbieter konnte den Abschnitt ab {passage} nicht transkribieren. Bitte versuchen Sie es erneut."
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "The file \"{filename}\" cannot be processed by the AI and was not uploaded."
@@ -5809,11 +5809,11 @@ msgstr "Das Mikrofon wurde getrennt. Bitte überprüfen Sie Ihr Mikrofon und sta
 
 #: src/hooks/audio/audioTranscriptionErrors.ts
 msgid "The passage starting at {passage} could not be transcribed because the AI provider's content filter blocked it. This also happens with harmless speech. Please say it differently or type it."
-msgstr ""
+msgstr "Der Abschnitt ab {passage} konnte nicht transkribiert werden, weil der Inhaltsfilter des KI-Anbieters ihn blockiert hat. Das passiert auch bei harmlosen Aussagen. Bitte formulieren Sie ihn anders oder tippen Sie ihn ein."
 
 #: src/hooks/audio/audioTranscriptionErrors.ts
 msgid "The passage starting at {passage} could not be transcribed. Please try again."
-msgstr ""
+msgstr "Der Abschnitt ab {passage} konnte nicht transkribiert werden. Bitte versuchen Sie es erneut."
 
 #: src/hooks/audio/useAudioInputLevelPreview.ts
 #: src/hooks/audio/useGuidedAudioCapture.ts
