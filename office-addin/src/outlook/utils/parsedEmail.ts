@@ -43,14 +43,21 @@ export async function parseEmlBytes(
 ): Promise<ParsedEmail | null> {
   let parsed;
   try {
-    parsed = await PostalMime.parse(bytes);
+    // A forwarded email must stay one attachment. Left to its default,
+    // postal-mime inlines a disposition-less message/rfc822 part and hoists
+    // its attachments into this list, while the trim walker still sees the
+    // nested message as a single leaf — so the indices the chips dismiss no
+    // longer name the parts the trim removes.
+    parsed = await PostalMime.parse(bytes, { rfc822Attachments: true });
   } catch (error) {
     console.warn("[parsedEmail] postal-mime failed to parse bytes:", error);
     return null;
   }
 
-  const attachments: ParsedAttachment[] = (parsed.attachments ?? []).map(
-    (attachment, index) => buildAttachment(attachment, index),
+  const attachments: ParsedAttachment[] = await Promise.all(
+    (parsed.attachments ?? []).map(async (attachment, index) =>
+      buildAttachment(attachment, index, await nestedMessageName(attachment)),
+    ),
   );
 
   const rawEmlFile = new File(
@@ -76,11 +83,35 @@ export async function parseEmlBytes(
   };
 }
 
+/**
+ * A forwarded email arrives as a message/rfc822 part that usually carries no
+ * filename. Name it after its own subject so the row reads as the email it
+ * is, rather than as "attachment".
+ */
+async function nestedMessageName(
+  attachment: Attachment,
+): Promise<string | null> {
+  if (attachment.mimeType !== "message/rfc822" || attachment.filename?.trim()) {
+    return null;
+  }
+  const blobPart = toBlobPart(attachment.content);
+  if (!(blobPart instanceof ArrayBuffer)) {
+    return buildDefaultName(undefined);
+  }
+  try {
+    const nested = await PostalMime.parse(new Uint8Array(blobPart));
+    return buildDefaultName(nested.subject);
+  } catch {
+    return buildDefaultName(undefined);
+  }
+}
+
 function buildAttachment(
   attachment: Attachment,
   index: number,
+  nameFallback: string | null,
 ): ParsedAttachment {
-  const filename = attachment.filename?.trim() || "attachment";
+  const filename = attachment.filename?.trim() || nameFallback || "attachment";
   const mimeType = attachment.mimeType || "application/octet-stream";
   const blobPart = toBlobPart(attachment.content);
   const size = blobPart instanceof ArrayBuffer ? blobPart.byteLength : 0;
