@@ -2922,8 +2922,8 @@ mod test_cases {
         adopted: bool,
     ) -> chats::Model {
         let assistant_id = Uuid::new_v4();
-        let configuration = crate::models::chat::AssistantConfiguration {
-            assistant_id,
+        let configuration = crate::models::chat::ChatConfiguration {
+            assistant_id: Some(assistant_id),
             provenance: Some(crate::models::chat::ChatProvenance {
                 kind,
                 origin_chat_id: Some(Uuid::new_v4()),
@@ -2932,9 +2932,14 @@ mod test_cases {
                 rebase_cutoff: None,
                 depth: 1,
                 adopted_at: adopted.then(|| chrono::Utc::now().into()),
+                legacy_expected_output: None,
+                legacy_constraints: None,
+                run_mode: None,
+            }),
+            task: Some(crate::models::chat::TaskSpec {
                 expected_output: expected_output.map(str::to_string),
                 constraints: constraints.map(str::to_string),
-                run_mode: None,
+                ..crate::models::chat::TaskSpec::default()
             }),
         };
         let mut chat = create_test_chat();
@@ -2954,6 +2959,76 @@ mod test_cases {
                 _ => None,
             })
             .collect()
+    }
+
+    #[tokio::test]
+    async fn preamble_for_bare_child_renders_brief_from_task() {
+        // A task child on the bare model: no assistant bound, and the brief
+        // lives in `task`. Composing against a legacy-shaped row would still
+        // pass through the read-side lift, so this pins the canonical shape
+        // directly — a reader left pointing at the provenance envelope would
+        // silently render an empty directive here.
+        let mut message_repo = MockMessageRepository::new();
+        let file_resolver = MockFileResolver::new();
+        let prompt_provider = MockPromptProvider::new().with_system_prompt("You are helpful.");
+
+        let configuration = crate::models::chat::ChatConfiguration {
+            assistant_id: None,
+            provenance: Some(crate::models::chat::ChatProvenance {
+                kind: crate::models::chat::ChatProvenanceKind::Delegation,
+                origin_chat_id: Some(Uuid::new_v4()),
+                origin_message_id: None,
+                origin_assistant_id: None,
+                rebase_cutoff: None,
+                depth: 1,
+                adopted_at: None,
+                legacy_expected_output: None,
+                legacy_constraints: None,
+                run_mode: None,
+            }),
+            task: Some(crate::models::chat::TaskSpec {
+                expected_output: Some("A single number.".to_string()),
+                constraints: Some("Use only the attached figures.".to_string()),
+                route: crate::models::chat::DelegateRoute::Task,
+                ..crate::models::chat::TaskSpec::default()
+            }),
+        };
+        let mut chat = create_test_chat();
+        chat.assistant_id = None;
+        chat.assistant_configuration = Some(configuration.to_json().unwrap());
+
+        let config = create_test_chat_provider_config();
+        let msg_id = Uuid::new_v4();
+        message_repo.add_message(msg_id, None, MessageRole::User, "Count the figures");
+
+        let abstract_seq = build_abstract_sequence(
+            &message_repo,
+            &prompt_provider,
+            &chat,
+            &msg_id,
+            vec![],
+            &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
+            None,
+        )
+        .await
+        .expect("Failed to build abstract sequence");
+
+        let (resolved, _) = resolve_sequence(abstract_seq, &message_repo, &file_resolver)
+            .await
+            .expect("Failed to resolve sequence");
+
+        let markers = delegation_preamble_markers(&resolved);
+        assert_eq!(markers.len(), 1, "expected exactly one preamble marker");
+        assert_eq!(
+            markers[0].expected_output.as_deref(),
+            Some("A single number.")
+        );
+        assert_eq!(
+            markers[0].constraints.as_deref(),
+            Some("Use only the attached figures.")
+        );
     }
 
     #[tokio::test]
@@ -3148,7 +3223,7 @@ mod test_cases {
 
         let adopted_chat = {
             let mut adopted = chat.clone();
-            let mut configuration = crate::models::chat::parse_assistant_configuration(&adopted)
+            let mut configuration = crate::models::chat::parse_chat_configuration(&adopted)
                 .unwrap()
                 .unwrap();
             configuration.provenance.as_mut().unwrap().adopted_at = Some(chrono::Utc::now().into());

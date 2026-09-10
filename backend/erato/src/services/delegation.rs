@@ -996,7 +996,7 @@ pub(crate) async fn dispatch_delegate_tool_call(
         }
     }
 
-    let parent_depth = crate::models::chat::parse_assistant_configuration(context.origin_chat)
+    let parent_depth = crate::models::chat::parse_chat_configuration(context.origin_chat)
         .ok()
         .flatten()
         .and_then(|configuration| configuration.provenance)
@@ -1011,18 +1011,25 @@ pub(crate) async fn dispatch_delegate_tool_call(
         rebase_cutoff: Some(spawned_at),
         depth: parent_depth + 1,
         adopted_at: None,
-        expected_output: bounded_brief_field(args.expected_output.as_deref()),
-        constraints: bounded_brief_field(args.constraints.as_deref()),
+        legacy_expected_output: None,
+        legacy_constraints: None,
         run_mode: (context.run_mode == DelegationRunMode::Background)
             .then_some(DelegationRunMode::Background),
+    };
+    let task = crate::models::chat::TaskSpec {
+        expected_output: bounded_brief_field(args.expected_output.as_deref()),
+        constraints: bounded_brief_field(args.constraints.as_deref()),
+        route: crate::models::chat::DelegateRoute::Assistant,
+        ..crate::models::chat::TaskSpec::default()
     };
     let child_chat = crate::models::chat::create_delegated_chat(
         &app_state.db,
         policy,
         &owner_subject,
         &context.origin_chat.owner_user_id,
-        assistant_id,
+        Some(assistant_id),
         provenance,
+        Some(task),
         delegated_chat_title(&args.task),
     )
     .await

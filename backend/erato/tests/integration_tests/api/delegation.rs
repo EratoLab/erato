@@ -11,7 +11,7 @@ use axum::http;
 use axum_test::TestServer;
 use axum_test::multipart::{MultipartForm, Part};
 use erato::models::chat::{
-    AssistantConfiguration, ChatProvenance, ChatProvenanceKind, seed_chat_lineage,
+    ChatConfiguration, ChatProvenance, ChatProvenanceKind, seed_chat_lineage,
 };
 use mocktail::MockSet;
 use mocktail::body::BodyAction;
@@ -148,8 +148,8 @@ async fn write_delegation_provenance(
     origin_chat_id: Uuid,
     origin_assistant_id: Option<Uuid>,
 ) {
-    let configuration = AssistantConfiguration {
-        assistant_id: delegate_assistant_id,
+    let configuration = ChatConfiguration {
+        assistant_id: Some(delegate_assistant_id),
         provenance: Some(ChatProvenance {
             kind: ChatProvenanceKind::Delegation,
             origin_chat_id: Some(origin_chat_id),
@@ -158,10 +158,11 @@ async fn write_delegation_provenance(
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
             adopted_at: None,
-            expected_output: None,
-            constraints: None,
+            legacy_expected_output: None,
+            legacy_constraints: None,
             run_mode: None,
         }),
+        task: None,
     };
     let chat = erato::db::entity::chats::Entity::find_by_id(chat_id)
         .one(db)
@@ -579,8 +580,8 @@ async fn test_provenance_generated_column_and_legacy_rows(pool: Pool<Postgres>) 
     let assistant_id = Uuid::parse_str(&assistant).unwrap();
 
     let legacy_json = json!({ "assistant_id": assistant_id });
-    let parsed = AssistantConfiguration::from_json(&legacy_json).unwrap();
-    assert_eq!(parsed.assistant_id, assistant_id);
+    let parsed = ChatConfiguration::from_json(&legacy_json).unwrap();
+    assert_eq!(parsed.assistant_id, Some(assistant_id));
     assert!(parsed.provenance.is_none());
 
     let plain_chat = create_chat(&server, Some(&assistant)).await;
@@ -610,7 +611,7 @@ async fn test_provenance_generated_column_and_legacy_rows(pool: Pool<Postgres>) 
     assert_eq!(delegated_row.origin_chat_id, Some(plain_chat_id));
 
     let round_tripped =
-        AssistantConfiguration::from_json(delegated_row.assistant_configuration.as_ref().unwrap())
+        ChatConfiguration::from_json(delegated_row.assistant_configuration.as_ref().unwrap())
             .unwrap();
     let provenance = round_tripped.provenance.unwrap();
     assert_eq!(provenance.kind, ChatProvenanceKind::Delegation);
@@ -1621,13 +1622,13 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
         child_chat.title_by_user_provided.as_deref(),
         Some("CHILD-TASK-BRIEF: summarize the numbers")
     );
-    let configuration = erato::models::chat::AssistantConfiguration::from_json(
+    let configuration = erato::models::chat::ChatConfiguration::from_json(
         child_chat.assistant_configuration.as_ref().unwrap(),
     )
     .unwrap();
     assert_eq!(
         configuration.assistant_id,
-        Uuid::parse_str(DELEGATE_ASSISTANT_FIXED_ID).unwrap()
+        Some(Uuid::parse_str(DELEGATE_ASSISTANT_FIXED_ID).unwrap())
     );
     let provenance = configuration.provenance.unwrap();
     assert_eq!(provenance.kind, ChatProvenanceKind::Delegation);
@@ -1639,15 +1640,20 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
     assert_eq!(provenance.depth, 1);
     assert!(provenance.rebase_cutoff.is_some());
     // The structured brief lives in the envelope, not only in the parent's
-    // tool-call input — that copy sits in a chat the child cannot read.
+    // tool-call input — that copy sits in a chat the child cannot read. It is
+    // carried by the task spec, and the route it came from is recorded with it.
+    let task = configuration
+        .task
+        .expect("a delegated run carries a task spec");
     assert_eq!(
-        provenance.expected_output.as_deref(),
+        task.expected_output.as_deref(),
         Some("EXPECTED-OUTPUT-SENTINEL: one number per line")
     );
     assert_eq!(
-        provenance.constraints.as_deref(),
+        task.constraints.as_deref(),
         Some("CONSTRAINTS-SENTINEL: use only the attached figures")
     );
+    assert_eq!(task.route, erato::models::chat::DelegateRoute::Assistant);
     assert_eq!(child_chat.generation_state.as_deref(), Some("completed"));
     assert_eq!(
         shared_generation_event_types(&app_state.db, child_chat.id)
@@ -2863,7 +2869,7 @@ async fn wait_for_child_completion(
 }
 
 fn provenance_of(chat: &erato::db::entity::chats::Model) -> ChatProvenance {
-    erato::models::chat::AssistantConfiguration::from_json(
+    erato::models::chat::ChatConfiguration::from_json(
         chat.assistant_configuration.as_ref().unwrap(),
     )
     .unwrap()
@@ -4236,7 +4242,7 @@ async fn spawn_listed_delegated_run(
         &rebuilt_policy(app_state).await,
         &erato::policy::types::Subject::User(me_user_id.to_string()),
         me_user_id,
-        assistant_id,
+        Some(assistant_id),
         ChatProvenance {
             kind: ChatProvenanceKind::Delegation,
             origin_chat_id: Some(origin_chat_id),
@@ -4245,10 +4251,11 @@ async fn spawn_listed_delegated_run(
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
             adopted_at: None,
-            expected_output: None,
-            constraints: None,
+            legacy_expected_output: None,
+            legacy_constraints: None,
             run_mode: None,
         },
+        None,
         title.to_string(),
     )
     .await
@@ -4314,7 +4321,7 @@ async fn test_listing_hides_delegated_runs_and_exposes_provenance(pool: Pool<Pos
             &rebuilt_policy(&app_state).await,
             &erato::policy::types::Subject::User(me.id.to_string()),
             &me.id.to_string(),
-            assistant_id,
+            Some(assistant_id),
             ChatProvenance {
                 kind: ChatProvenanceKind::Delegation,
                 origin_chat_id: Some(origin_chat_id),
@@ -4323,13 +4330,14 @@ async fn test_listing_hides_delegated_runs_and_exposes_provenance(pool: Pool<Pos
                 rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
                 depth: 1,
                 adopted_at: None,
-                expected_output: None,
-                constraints: None,
+                legacy_expected_output: None,
+                legacy_constraints: None,
                 // One detached run among awaited ones, so the listing's
                 // run-mode passthrough is exercised in both directions.
                 run_mode: (index == 0)
                     .then_some(erato::models::message::DelegationRunMode::Background),
             },
+            None,
             format!("Delegated run {index}"),
         )
         .await
@@ -5037,7 +5045,7 @@ async fn test_delegated_run_outcome_reports_failures(pool: Pool<Postgres>) {
         &rebuilt_policy(&app_state).await,
         &erato::policy::types::Subject::User(me_user_id.to_string()),
         &me_user_id,
-        assistant_id,
+        Some(assistant_id),
         ChatProvenance {
             kind: ChatProvenanceKind::Delegation,
             origin_chat_id: Some(origin_id),
@@ -5046,10 +5054,11 @@ async fn test_delegated_run_outcome_reports_failures(pool: Pool<Postgres>) {
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
             adopted_at: None,
-            expected_output: None,
-            constraints: None,
+            legacy_expected_output: None,
+            legacy_constraints: None,
             run_mode: None,
         },
+        None,
         "Seeded only".to_string(),
     )
     .await
@@ -5137,7 +5146,7 @@ async fn test_parked_delegated_chat_stays_reachable(pool: Pool<Postgres>) {
         &rebuilt_policy(&app_state).await,
         &erato::policy::types::Subject::User(me.id.to_string()),
         &me.id.to_string(),
-        Uuid::parse_str(&assistant).unwrap(),
+        Some(Uuid::parse_str(&assistant).unwrap()),
         ChatProvenance {
             kind: ChatProvenanceKind::Delegation,
             origin_chat_id: Some(Uuid::parse_str(&origin_chat).unwrap()),
@@ -5146,10 +5155,11 @@ async fn test_parked_delegated_chat_stays_reachable(pool: Pool<Postgres>) {
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
             adopted_at: None,
-            expected_output: None,
-            constraints: None,
+            legacy_expected_output: None,
+            legacy_constraints: None,
             run_mode: None,
         },
+        None,
         "Parked delegated run".to_string(),
     )
     .await
@@ -5709,7 +5719,7 @@ async fn spawn_delegated_run(
         &rebuilt_policy(app_state).await,
         &erato::policy::types::Subject::User(owner_user_id.to_string()),
         owner_user_id,
-        assistant_id,
+        Some(assistant_id),
         ChatProvenance {
             kind: ChatProvenanceKind::Delegation,
             origin_chat_id: Some(origin_chat_id),
@@ -5718,10 +5728,11 @@ async fn spawn_delegated_run(
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
             adopted_at: None,
-            expected_output: None,
-            constraints: None,
+            legacy_expected_output: None,
+            legacy_constraints: None,
             run_mode: None,
         },
+        None,
         title.to_string(),
     )
     .await
@@ -5742,7 +5753,7 @@ async fn spawn_handoff_branch(
         &rebuilt_policy(app_state).await,
         &erato::policy::types::Subject::User(owner_user_id.to_string()),
         owner_user_id,
-        assistant_id,
+        Some(assistant_id),
         ChatProvenance {
             kind: ChatProvenanceKind::HandoffBranch,
             origin_chat_id: Some(origin_chat_id),
@@ -5751,10 +5762,11 @@ async fn spawn_handoff_branch(
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
             adopted_at: None,
-            expected_output: None,
-            constraints: None,
+            legacy_expected_output: None,
+            legacy_constraints: None,
             run_mode: None,
         },
+        None,
         "Handoff branch".to_string(),
     )
     .await
@@ -6132,7 +6144,7 @@ async fn test_submit_into_live_delegated_run_conflicts(pool: Pool<Postgres>) {
         &rebuilt_policy(&app_state).await,
         &erato::policy::types::Subject::User(me.id.to_string()),
         &me.id.to_string(),
-        Uuid::parse_str(&assistant).unwrap(),
+        Some(Uuid::parse_str(&assistant).unwrap()),
         ChatProvenance {
             kind: ChatProvenanceKind::Delegation,
             origin_chat_id: Some(Uuid::parse_str(&origin).unwrap()),
@@ -6141,10 +6153,11 @@ async fn test_submit_into_live_delegated_run_conflicts(pool: Pool<Postgres>) {
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
             adopted_at: None,
-            expected_output: None,
-            constraints: None,
+            legacy_expected_output: None,
+            legacy_constraints: None,
             run_mode: None,
         },
+        None,
         "Continuable run".to_string(),
     )
     .await
@@ -6480,7 +6493,7 @@ async fn test_chat_detail_carries_provenance_and_run_parameters(pool: Pool<Postg
         &rebuilt_policy(&app_state).await,
         &erato::policy::types::Subject::User(me.id.to_string()),
         &me.id.to_string(),
-        Uuid::parse_str(&assistant).unwrap(),
+        Some(Uuid::parse_str(&assistant).unwrap()),
         ChatProvenance {
             kind: ChatProvenanceKind::Delegation,
             origin_chat_id: Some(Uuid::parse_str(&origin).unwrap()),
@@ -6489,10 +6502,15 @@ async fn test_chat_detail_carries_provenance_and_run_parameters(pool: Pool<Postg
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
             adopted_at: None,
-            expected_output: Some("One number per line.".to_string()),
-            constraints: Some("Only the attached figures.".to_string()),
+            legacy_expected_output: None,
+            legacy_constraints: None,
             run_mode: None,
         },
+        Some(erato::models::chat::TaskSpec {
+            expected_output: Some("One number per line.".to_string()),
+            constraints: Some("Only the attached figures.".to_string()),
+            ..erato::models::chat::TaskSpec::default()
+        }),
         "Summarize the numbers".to_string(),
     )
     .await
@@ -6538,6 +6556,199 @@ async fn test_chat_detail_carries_provenance_and_run_parameters(pool: Pool<Postg
         .assert_status(axum::http::StatusCode::NOT_FOUND);
 }
 
+/// Adoption parses the envelope and writes it back, so a row seeded in the
+/// pre-`task` shape is rewritten canonically on the way through: the brief
+/// moves under `task` and the legacy keys disappear from the provenance
+/// envelope. Nothing migrates rows eagerly, so this is the path that proves an
+/// old row is readable and re-writable without a data migration.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn adoption_rewrites_a_legacy_row_in_canonical_form(pool: Pool<Postgres>) {
+    let (app_state, _llm) = delegation_enabled_state_with_llm(pool).await;
+    let server = app_server(app_state.clone());
+
+    let assistant = create_assistant(&server, "Legacy Delegate", "prompt").await;
+    let origin = create_chat(&server, Some(&assistant)).await;
+    let child = create_chat(&server, Some(&assistant)).await;
+    let child_id = Uuid::parse_str(&child).unwrap();
+
+    // Seed the row exactly as it would have been written before `task` existed.
+    let legacy = json!({
+        "assistant_id": assistant,
+        "provenance": {
+            "kind": "delegation",
+            "origin_chat_id": origin,
+            "depth": 1,
+            "expected_output": "One number per line.",
+            "constraints": "Only the attached figures.",
+        }
+    });
+    let mut active: erato::db::entity::chats::ActiveModel =
+        erato::db::entity::chats::Entity::find_by_id(child_id)
+            .one(&app_state.db)
+            .await
+            .unwrap()
+            .expect("seeded child")
+            .into();
+    active.assistant_configuration = sea_orm::ActiveValue::Set(Some(legacy));
+    sea_orm::ActiveModelTrait::update(active, &app_state.db)
+        .await
+        .unwrap();
+
+    let seeded = erato::db::entity::chats::Entity::find_by_id(child_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("seeded child");
+    erato::models::chat::mark_delegated_run_adopted(&app_state.db, &seeded)
+        .await
+        .unwrap();
+
+    let rewritten = erato::db::entity::chats::Entity::find_by_id(child_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("child")
+        .assistant_configuration
+        .expect("envelope");
+
+    assert_eq!(rewritten["task"]["expected_output"], "One number per line.");
+    assert_eq!(
+        rewritten["task"]["constraints"],
+        "Only the attached figures."
+    );
+    assert!(rewritten["provenance"].get("expected_output").is_none());
+    assert!(rewritten["provenance"].get("constraints").is_none());
+    assert!(rewritten["provenance"]["adopted_at"].is_string());
+    assert_eq!(rewritten["assistant_id"], assistant);
+}
+
+/// A task child dispatched on the bare model has no assistant. The row must
+/// insert without tripping the `assistant_id` foreign key, resolve to "no
+/// assistant" rather than erroring, and still carry its brief and origin
+/// everywhere the delegated-run surfaces read them.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn bare_child_row_has_null_assistant_and_resolves_no_assistant(pool: Pool<Postgres>) {
+    let (app_state, _llm) = delegation_enabled_state_with_llm(pool).await;
+    let server = app_server(app_state.clone());
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+
+    let assistant = create_assistant(&server, "Origin Assistant", "prompt").await;
+    let origin = create_chat(&server, Some(&assistant)).await;
+
+    let child = erato::models::chat::create_delegated_chat(
+        &app_state.db,
+        &rebuilt_policy(&app_state).await,
+        &erato::policy::types::Subject::User(me.id.to_string()),
+        &me.id.to_string(),
+        // No assistant: this is the bare-model task child.
+        None,
+        ChatProvenance {
+            kind: ChatProvenanceKind::Delegation,
+            origin_chat_id: Some(Uuid::parse_str(&origin).unwrap()),
+            origin_message_id: None,
+            origin_assistant_id: Some(Uuid::parse_str(&assistant).unwrap()),
+            rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
+            depth: 1,
+            adopted_at: None,
+            legacy_expected_output: None,
+            legacy_constraints: None,
+            run_mode: None,
+        },
+        Some(erato::models::chat::TaskSpec {
+            expected_output: Some("A single number.".to_string()),
+            constraints: Some("Use only the attached figures.".to_string()),
+            route: erato::models::chat::DelegateRoute::Task,
+            ..erato::models::chat::TaskSpec::default()
+        }),
+        "Count the figures".to_string(),
+    )
+    .await
+    .unwrap();
+    // The recent-chats listing INNER JOINs the latest message, so a chat with
+    // no messages never appears there at all. Give the run its brief the way a
+    // real dispatch does.
+    erato::models::message::submit_message(
+        &app_state.db,
+        &rebuilt_policy(&app_state).await,
+        &erato::policy::types::Subject::User(me.id.to_string()),
+        &child.id,
+        json!({
+            "role": "user",
+            "content": [{"content_type": "text", "text": "count the figures"}],
+            "name": me.id.to_string(),
+        }),
+        None,
+        None,
+        None,
+        &[],
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    app_state.global_policy_engine.invalidate_data().await;
+
+    // The generated column stays NULL, so the foreign key was never evaluated,
+    // while the generated origin column is still populated.
+    assert!(child.assistant_id.is_none());
+    assert_eq!(
+        child.origin_chat_id,
+        Some(Uuid::parse_str(&origin).unwrap())
+    );
+
+    // Resolving the assistant is a clean "none", not an error about a missing
+    // assistant row.
+    let resolved = erato::models::chat::get_chat_assistant_configuration(
+        &app_state.db,
+        &rebuilt_policy(&app_state).await,
+        &erato::policy::types::Subject::User(me.id.to_string()),
+        &child,
+    )
+    .await
+    .unwrap();
+    assert!(resolved.is_none());
+
+    // The detail route omits the assistant but still carries the brief.
+    let response = server
+        .get(&format!("/api/v1beta/me/chats/{}", child.id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status_ok();
+    let detail = response.json::<Value>();
+    assert!(detail.get("assistant_id").is_none());
+    assert!(detail.get("assistant_name").is_none());
+    assert_eq!(detail["provenance_kind"], "delegation");
+    assert_eq!(detail["origin_chat_id"], origin);
+    assert_eq!(detail["expected_output"], "A single number.");
+    assert_eq!(detail["constraints"], "Use only the attached figures.");
+
+    // And the listing shows it with no assistant name rather than skipping it.
+    let listing = recent_chats(&server, "?include_delegated=true").await;
+    let row = listing["chats"]
+        .as_array()
+        .expect("chats array")
+        .iter()
+        .find(|row| row["id"] == child.id.to_string())
+        .expect("the bare child is listed");
+    assert!(row.get("assistant_name").is_none() || row["assistant_name"].is_null());
+}
+
 /// The archive cascade can archive a run its owner never touched, and taking
 /// a run over is durable — both are states the header has to be able to read.
 ///
@@ -6564,7 +6775,7 @@ async fn test_chat_detail_reports_adopted_and_archived_runs(pool: Pool<Postgres>
         &rebuilt_policy(&app_state).await,
         &erato::policy::types::Subject::User(me.id.to_string()),
         &me.id.to_string(),
-        Uuid::parse_str(&assistant).unwrap(),
+        Some(Uuid::parse_str(&assistant).unwrap()),
         ChatProvenance {
             kind: ChatProvenanceKind::Delegation,
             origin_chat_id: Some(Uuid::parse_str(&origin).unwrap()),
@@ -6573,10 +6784,11 @@ async fn test_chat_detail_reports_adopted_and_archived_runs(pool: Pool<Postgres>
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
             adopted_at: None,
-            expected_output: None,
-            constraints: None,
+            legacy_expected_output: None,
+            legacy_constraints: None,
             run_mode: None,
         },
+        None,
         "Adoptable run".to_string(),
     )
     .await

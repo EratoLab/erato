@@ -5726,7 +5726,9 @@ pub async fn generate_chat_summary(
         "[SUMMARY] Starting generation for chat_id={}, user_id={}, has_assistant={}",
         chat.id,
         me_user.id,
-        chat.assistant_configuration.is_some()
+        // The envelope is no longer a proxy for "has an assistant": a bare task
+        // child carries provenance and a task spec with no assistant bound.
+        chat.assistant_id.is_some()
     );
 
     // Resolve TextFilePointer entries that have completed audio transcripts so that
