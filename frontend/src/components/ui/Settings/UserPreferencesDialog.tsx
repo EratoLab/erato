@@ -19,6 +19,7 @@ import {
   useStartMcpServerOauth,
   useAvailableModels,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { storeMcpOauthCallback } from "@/lib/mcpOauthCallback";
 import {
   useAssistantsFeature,
   useAudioDictationFeature,
@@ -593,6 +594,7 @@ export function UserPreferencesDialog({
       const response = await startMcpServerOauthMutation({
         pathParams: { serverId },
       });
+      storeMcpOauthCallback(response.authorization_url, serverId);
       window.location.href = response.authorization_url;
     } catch {
       setAuthorizingServerId(null);
