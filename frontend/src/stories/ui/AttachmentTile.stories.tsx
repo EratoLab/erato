@@ -2,6 +2,7 @@ import { action } from "@storybook/addon-actions";
 
 import { ChatInput } from "../../components/ui/Chat/ChatInput";
 import { ChatMessage } from "../../components/ui/Chat/ChatMessage";
+import { AttachmentNotice } from "../../components/ui/FileUpload/AttachmentNotice";
 import { AttachmentTile } from "../../components/ui/FileUpload/AttachmentTile";
 import { AttachmentTileList } from "../../components/ui/FileUpload/AttachmentTileList";
 import { FILE_TYPES } from "../../utils/fileTypes";
@@ -257,6 +258,161 @@ export const AllFileTypes: Story = {
       </div>
     );
   },
+};
+
+const longName =
+  "FY2026-enterprise-rollout-supporting-documentation-and-implementation-notes-final-review-v12.pdf";
+
+/**
+ * The row form: the chip stretched across a list, where a leading checkbox and
+ * a validation line have somewhere to sit. With nothing else to activate, the
+ * whole row is one `label`, so a click anywhere in it reaches the box.
+ *
+ * These carry no type line, so the extension pins itself beside a stem that
+ * truncates — as it does under a family line too. Only the composer stories
+ * above, whose line is the extension, leave the name whole to truncate plainly.
+ */
+export const SelectableRows: Story = {
+  args: { items: [] },
+  render: () => (
+    <div className="flex flex-col gap-1">
+      <AttachmentTile
+        file={uploaded("s1", "Erato_One-Pager_IT-Digital-Leitung.pdf")}
+        variant="row"
+        size="medium"
+        showType="none"
+        selection={{ selected: true, onToggle: action("toggle attachment") }}
+      />
+      <AttachmentTile
+        file={uploaded("s2", "Acme_Inc_Organizational_Data.docx")}
+        variant="row"
+        size="medium"
+        showType="none"
+        selection={{ selected: false, onToggle: action("toggle attachment") }}
+      />
+      <AttachmentTile
+        file={uploaded("s3", longName)}
+        variant="row"
+        size="medium"
+        showType="none"
+        selection={{ selected: true, onToggle: action("toggle attachment") }}
+        validation={{ ok: false, reason: "Larger than the 20 MB limit" }}
+      />
+    </div>
+  ),
+};
+
+/**
+ * The same rows with a preview to open. The checkbox and the body stop sharing
+ * one control: a `label` around both would forward a body click to the box, so
+ * opening the preview would deselect the file in the same gesture.
+ */
+export const SelectableRowsWithPreview: Story = {
+  args: { items: [] },
+  render: () => (
+    <div className="flex flex-col gap-1">
+      <AttachmentTile
+        file={uploaded("p1", "Erato_One-Pager_IT-Digital-Leitung.pdf")}
+        variant="row"
+        size="medium"
+        showType="none"
+        selection={{ selected: true, onToggle: action("toggle attachment") }}
+        onActivate={action("preview attachment")}
+      />
+      <AttachmentTile
+        file={uploaded("p2", "Acme_Inc_Revenue_2000_2025.csv")}
+        variant="row"
+        size="medium"
+        showType="none"
+        selection={{ selected: false, onToggle: action("toggle attachment") }}
+        onActivate={action("preview attachment")}
+      />
+    </div>
+  ),
+};
+
+/**
+ * The bare form: no frame, no fill and no corner of its own, for a surface that
+ * draws its own chrome around the chip's contents. The dashed box is this
+ * story's, standing in for that surface.
+ */
+export const BareChips: Story = {
+  args: { items: [] },
+  render: () => (
+    <div className="flex flex-col gap-3">
+      <div className="rounded-lg border border-dashed border-theme-border p-3">
+        <AttachmentTile
+          file={uploaded("b1", "Q3_report.pdf")}
+          variant="bare"
+          size="medium"
+          showType="none"
+          onActivate={action("preview attachment")}
+        />
+      </div>
+      <div className="rounded-lg border border-dashed border-theme-border p-3">
+        <AttachmentTile
+          file={uploaded("b2", "Product_sync.md")}
+          variant="bare"
+          size="medium"
+          hideIcon
+          metaLabel=""
+        />
+      </div>
+    </div>
+  ),
+};
+
+/**
+ * The three readings of the type line on one file. `extension` tells a `.csv`
+ * from an `.xlsx`, both of which are Spreadsheet; `family` calls both by the
+ * coarser name; `none` drops the line. Only the first ends in the extension, so
+ * it is also the only one whose filename stops pinning its own tail.
+ */
+export const TypeLines: Story = {
+  args: { items: [] },
+  render: () => (
+    <div className="flex flex-wrap items-start gap-2">
+      <AttachmentTile
+        file={uploaded("t-ext", "Acme_Inc_Revenue_2000_2025.csv")}
+        size="medium"
+      />
+      <AttachmentTile
+        file={uploaded("t-fam", "Acme_Inc_Revenue_2000_2025.csv")}
+        size="medium"
+        showType="family"
+      />
+      <AttachmentTile
+        file={uploaded("t-none", "Acme_Inc_Revenue_2000_2025.csv")}
+        size="medium"
+        showType="none"
+      />
+    </div>
+  ),
+};
+
+/**
+ * The notice standing where a chip would: something to say about the group
+ * around it, or a placeholder for an attachment still arriving. Tone moves the
+ * frame, the glyph and the label together, and the bare form keeps the
+ * deliberate centred-spinner shape a group uses inside its own frame.
+ */
+export const Notices: Story = {
+  args: { items: [] },
+  render: () => (
+    <div className="flex flex-col gap-1">
+      <AttachmentNotice
+        label="2 attachments hidden"
+        description="They are shared with everyone in the thread"
+      />
+      <AttachmentNotice
+        label="Some files were left out"
+        description="Larger than the 20 MB limit"
+        tone="error"
+      />
+      <AttachmentNotice label="Loading attachments" busy />
+      <AttachmentNotice label="Loading attachments" busy bare />
+    </div>
+  ),
 };
 
 /**

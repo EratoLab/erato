@@ -1046,6 +1046,31 @@ body {
   );
 }
 
+/* The notice standing where a chip would. Tone moves variables rather than
+   final values, so one rule reaches the frame, the glyph and the label at
+   once — the `data-[tone=error]:` variants this replaces had to restate the
+   same specificity fight at each of them, because a shared class constant set
+   the colour they were overriding. Unlayered, so it outranks any utility a
+   caller stacks on the same element without having to win on specificity. */
+.attachment-notice-skin {
+  border-color: var(--attachment-notice-border, var(--theme-border));
+  background-color: var(--attachment-notice-bg, var(--theme-bg-secondary));
+}
+
+.attachment-notice-skin[data-tone="error"] {
+  --attachment-notice-border: var(--theme-error-border);
+  --attachment-notice-icon: var(--theme-error-fg);
+  --attachment-notice-label: var(--theme-error-fg);
+}
+
+.attachment-notice-icon-skin {
+  color: var(--attachment-notice-icon, var(--theme-fg-muted));
+}
+
+.attachment-notice-label-skin {
+  color: var(--attachment-notice-label, var(--theme-fg-primary));
+}
+
 /* The sidebar's own width stays inline — it is computed from slim/expanded
    state. Only the surface moves here. */
 .sidebar-skin {

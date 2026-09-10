@@ -5150,6 +5150,7 @@ msgstr "Image"
 msgid "In Progress"
 msgstr "En cours"
 
+#: src/components/ui/FileUpload/AttachmentTile.tsx
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 #~ msgid "Include"
 #~ msgstr "Inclure"

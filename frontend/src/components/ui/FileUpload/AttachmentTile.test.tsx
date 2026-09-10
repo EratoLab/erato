@@ -1,5 +1,5 @@
 import { I18nProvider } from "@lingui/react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
@@ -109,5 +109,150 @@ describe("AttachmentTile theme hooks", () => {
     expect(remove).toHaveAttribute("data-ui", "attachment-remove");
     expect(remove).toHaveClass("attachment-badge-geometry");
     expect(remove.className).not.toContain("rounded");
+  });
+});
+
+const noop = () => {};
+
+describe("AttachmentTile shapes", () => {
+  // The hook names one chip. While the grouped preview still hand-rolls its own
+  // row around this component, a second emitter inside the first would double
+  // every `querySelectorAll` a test or a theme rule makes, and index-addressed
+  // queries would silently start reading the wrapper.
+  it.each([["tile"], ["row"], ["bare"]] as const)(
+    "emits the chip hook exactly once as a %s",
+    async (variant) => {
+      await renderWithProviders(
+        <AttachmentTile
+          file={file("notes.txt")}
+          variant={variant}
+          previewUrl="blob:notes"
+        />,
+      );
+
+      const tiles = document.querySelectorAll('[data-ui="attachment-tile"]');
+      expect(tiles).toHaveLength(1);
+      expect(tiles[0]).toHaveAttribute("data-variant", variant);
+    },
+  );
+
+  it("reports selection and validation as presence attributes", async () => {
+    await renderWithProviders(
+      <>
+        <AttachmentTile
+          file={file("invoice.pdf")}
+          variant="row"
+          selection={{ selected: true, onToggle: noop }}
+          validation={{ ok: false, reason: "Too large" }}
+        />
+        <AttachmentTile
+          file={file("notes.txt")}
+          variant="row"
+          selection={{ selected: false, onToggle: noop }}
+          validation={{ ok: true }}
+        />
+      </>,
+    );
+
+    const [invalid, valid] = Array.from(
+      document.querySelectorAll('[data-ui="attachment-tile"]'),
+    );
+    expect(invalid).toHaveAttribute("data-selected", "true");
+    expect(invalid).toHaveAttribute("data-invalid", "true");
+    expect(screen.getByText("Too large")).toBeInTheDocument();
+    expect(valid).not.toHaveAttribute("data-selected");
+    expect(valid).not.toHaveAttribute("data-invalid");
+  });
+
+  it("makes a selectable chip one label when nothing else can be activated", async () => {
+    const onToggle = vi.fn();
+    await renderWithProviders(
+      <AttachmentTile
+        file={file("invoice.pdf")}
+        variant="row"
+        selection={{ selected: true, onToggle }}
+      />,
+    );
+
+    const frame = document.querySelector('[data-ui="attachment-tile"]');
+    expect(frame?.tagName).toBe("LABEL");
+    expect(frame).toContainElement(screen.getByRole("checkbox"));
+    expect(
+      screen.queryByRole("button", { name: /Preview attachment/ }),
+    ).toBeNull();
+  });
+
+  // A label forwards every click inside it to its control, so the two
+  // affordances have to stop sharing one: activating the body would otherwise
+  // open the preview and deselect the file in the same gesture.
+  it("splits the checkbox from an activatable body", async () => {
+    const onToggle = vi.fn();
+    const onActivate = vi.fn();
+    await renderWithProviders(
+      <AttachmentTile
+        file={file("invoice.pdf")}
+        variant="row"
+        selection={{ selected: true, onToggle }}
+        onActivate={onActivate}
+      />,
+    );
+
+    const frame = document.querySelector('[data-ui="attachment-tile"]');
+    expect(frame?.tagName).toBe("DIV");
+
+    const body = screen.getByRole("button", {
+      name: "Preview attachment invoice.pdf, PDF",
+    });
+    expect(body).not.toContainElement(screen.getByRole("checkbox"));
+
+    fireEvent.click(body);
+    expect(onActivate).toHaveBeenCalledTimes(1);
+    expect(onToggle).not.toHaveBeenCalled();
+  });
+});
+
+describe("AttachmentTile filename and type line", () => {
+  it("keeps the whole filename in one node while the type line names the extension", async () => {
+    await renderWithProviders(<AttachmentTile file={file("revenue.csv")} />);
+
+    expect(screen.getByText("revenue.csv")).toBeInTheDocument();
+    expect(screen.getByText("CSV")).toBeInTheDocument();
+  });
+
+  // Pinned beside a stem that truncates, the extension survives a long name —
+  // at the price of splitting it across two nodes, which is why the one line
+  // that already ends in the extension does without.
+  it("pins the extension in its own node under a family type line", async () => {
+    await renderWithProviders(
+      <AttachmentTile file={file("report.csv")} showType="family" />,
+    );
+
+    expect(screen.getByText("report")).toBeInTheDocument();
+    expect(screen.getByText(".csv")).toBeInTheDocument();
+    expect(screen.getByText("SPREADSHEET")).toBeInTheDocument();
+  });
+
+  it("pins the extension in its own node once the type line is gone", async () => {
+    await renderWithProviders(
+      <AttachmentTile file={file("invoice.pdf")} showType="none" />,
+    );
+
+    expect(screen.getByText("invoice")).toBeInTheDocument();
+    expect(screen.getByText(".pdf")).toBeInTheDocument();
+    expect(screen.queryByText("PDF")).toBeNull();
+  });
+
+  it("drops the type line from the accessible name with it", async () => {
+    await renderWithProviders(
+      <AttachmentTile
+        file={file("invoice.pdf")}
+        showType="none"
+        onActivate={noop}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Preview attachment invoice.pdf" }),
+    ).toBeInTheDocument();
   });
 });
