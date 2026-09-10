@@ -275,6 +275,8 @@ jobs:
   lint-infrastructure:
     timeout-minutes: 10
     name: "lint (infrastructure)"
+    env:
+      KUBESCAPE_CONTROLS_VERSION: v2.0.35
     runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
@@ -349,45 +351,66 @@ jobs:
         if: success() || failure()
         run: ./check-docs.sh
 
-      # Temporarily disabled due to upstream Kubescape bugs:
-      # https://github.com/kubescape/kubescape/issues/3056
-      # https://github.com/kubescape/github-action/issues/78
-      # Re-enable after the action is fixed; the version override is not reliable.
+      # Pin both the scanner and controls: newer controls may require CEL policies
+      # absent from an older binary's embedded bundle. Upgrade these together.
+      # Use the CLI because the upstream action has no controls-version input.
+      - name: "Install Kubescape"
+        if: success() || failure()
+        env:
+          KUBESCAPE_VERSION: '4.0.13'
+          KUBESCAPE_SHA256: b83573f8bd38112867b9f8d7e76de02b8f6ed5376ea39ad6caab9cd2d1aaa676
+        run: |
+          curl --fail --silent --show-error --location \
+            "https://github.com/kubescape/kubescape/releases/download/v${KUBESCAPE_VERSION}/kubescape_${KUBESCAPE_VERSION}_linux_amd64" \
+            --output "${RUNNER_TEMP}/kubescape"
+          echo "${KUBESCAPE_SHA256}  ${RUNNER_TEMP}/kubescape" | sha256sum --check
+          sudo install -m 0755 "${RUNNER_TEMP}/kubescape" /usr/local/bin/kubescape
+          kubescape version
+
       - name: "Kubescape main chart (DevOpsBest)"
         if: success() || failure()
-        uses: EratoLab/kubescape-github-action@6cae5e17fae03c8450fb7841c7ccd77a8aed3bac
-        with:
-          version: v4.0.11
-          files: infrastructure/charts/erato
-          frameworks: DevOpsBest
-          failedThreshold: 20
+        env:
+          KUBESCAPE_FRAMEWORK: DevOpsBest
+          KUBESCAPE_FAIL_THRESHOLD: '20'
+        run: >-
+          kubescape scan framework "${KUBESCAPE_FRAMEWORK}" infrastructure/charts/erato
+          --controls-version "${{ env.KUBESCAPE_CONTROLS_VERSION }}"
+          --fail-threshold "${KUBESCAPE_FAIL_THRESHOLD}" --severity-threshold high
+          --format junit --output "${{ runner.temp }}/kubescape-devopsbest"
 
       - name: "Kubescape main chart (MITRE)"
         if: success() || failure()
-        uses: EratoLab/kubescape-github-action@6cae5e17fae03c8450fb7841c7ccd77a8aed3bac
-        with:
-          version: v4.0.11
-          files: infrastructure/charts/erato
-          frameworks: MITRE
-          failedThreshold: 0
+        env:
+          KUBESCAPE_FRAMEWORK: MITRE
+          KUBESCAPE_FAIL_THRESHOLD: '0'
+        run: >-
+          kubescape scan framework "${KUBESCAPE_FRAMEWORK}" infrastructure/charts/erato
+          --controls-version "${{ env.KUBESCAPE_CONTROLS_VERSION }}"
+          --fail-threshold "${KUBESCAPE_FAIL_THRESHOLD}" --severity-threshold high
+          --format junit --output "${{ runner.temp }}/kubescape-mitre"
 
       - name: "Kubescape main chart (NSA)"
         if: success() || failure()
-        uses: EratoLab/kubescape-github-action@6cae5e17fae03c8450fb7841c7ccd77a8aed3bac
-        with:
-          version: v4.0.11
-          files: infrastructure/charts/erato
-          frameworks: NSA
-          failedThreshold: 35
+        env:
+          KUBESCAPE_FRAMEWORK: NSA
+          KUBESCAPE_FAIL_THRESHOLD: '35'
+        run: >-
+          kubescape scan framework "${KUBESCAPE_FRAMEWORK}" infrastructure/charts/erato
+          --controls-version "${{ env.KUBESCAPE_CONTROLS_VERSION }}"
+          --fail-threshold "${KUBESCAPE_FAIL_THRESHOLD}" --severity-threshold high
+          --format junit --output "${{ runner.temp }}/kubescape-nsa"
 
       - name: "Kubescape main chart (SOC2)"
         if: success() || failure()
-        uses: EratoLab/kubescape-github-action@6cae5e17fae03c8450fb7841c7ccd77a8aed3bac
-        with:
-          version: v4.0.11
-          files: infrastructure/charts/erato
-          frameworks: SOC2
-          failedThreshold: 35
+        env:
+          KUBESCAPE_FRAMEWORK: SOC2
+          KUBESCAPE_FAIL_THRESHOLD: '35'
+        run: >-
+          kubescape scan framework "${KUBESCAPE_FRAMEWORK}" infrastructure/charts/erato
+          --set ingress.tls.enabled=true --set ingress.tls.secretName=erato-tls
+          --controls-version "${{ env.KUBESCAPE_CONTROLS_VERSION }}"
+          --fail-threshold "${KUBESCAPE_FAIL_THRESHOLD}" --severity-threshold high
+          --format junit --output "${{ runner.temp }}/kubescape-soc2"
 
       - name: "Validate Helm test schema for erato-local chart"
         working-directory: ./infrastructure/k3d/erato-local
