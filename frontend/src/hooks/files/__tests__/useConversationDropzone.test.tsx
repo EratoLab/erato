@@ -226,6 +226,64 @@ describe("useConversationDropzone", () => {
       expect(mockUploadFiles).not.toHaveBeenCalled();
     });
 
+    it("withholds accepted siblings when one file is oversized", () => {
+      renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          maxSize: LIMIT,
+          onError: mockOnError,
+        }),
+      );
+
+      act(() => {
+        capturedOnDrop(
+          [makeFileWithSize("small.pdf", 100)],
+          [
+            {
+              file: makeFileWithSize("big.pdf", LIMIT + 1),
+              errors: [{ code: "file-too-large", message: "too large" }],
+            },
+          ],
+        );
+      });
+
+      // Uploads are atomic: the small file is not sent behind the error.
+      expect(mockOnError).toHaveBeenCalledTimes(1);
+      expect(mockUploadFiles).not.toHaveBeenCalled();
+    });
+
+    it("still hands size-exempt siblings on when one file is oversized", () => {
+      renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          maxSize: LIMIT,
+          onError: mockOnError,
+          isSizeExempt: (file) => file.name.endsWith(".eml"),
+        }),
+      );
+
+      const thread = makeFileWithSize("thread.eml", LIMIT + 1);
+      act(() => {
+        capturedOnDrop(
+          [makeFileWithSize("small.pdf", 100), thread],
+          [
+            {
+              file: makeFileWithSize("big.pdf", LIMIT + 1),
+              errors: [{ code: "file-too-large", message: "too large" }],
+            },
+          ],
+        );
+      });
+
+      // The email is staged, not transmitted, so it is not part of the
+      // atomic batch — dropping it would lose something the user can still
+      // trim to fit. The PDF beside it is withheld like any other sibling.
+      expect(mockOnError).toHaveBeenCalledTimes(1);
+      expect(mockUploadFiles).toHaveBeenCalledWith([thread]);
+    });
+
     it("still uploads accepted files that are within the limit", async () => {
       renderHook(() =>
         useConversationDropzone({

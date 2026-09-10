@@ -106,24 +106,29 @@ export function useConversationDropzone({
       // updates its error state before the upload hook's own preflight fires.
       // `maxSize` keeps these files out of `acceptedFiles`, so the preflight
       // never sees them — reporting here is the only chance to tell the user.
+      let files = acceptedFiles;
       if (rejectedFiles.length > 0) {
         const oversized = oversizedRejectionNames(rejectedFiles);
         if (oversized.length > 0) {
           reportError(new UploadTooLargeError(maxSizeFormatted, oversized));
-          return;
+          // Uploads stay atomic, so accepted siblings are withheld — except
+          // the size-exempt ones, which the handler stages rather than
+          // transmits. Abandoning those would lose an email the user could
+          // still trim to fit because a PDF beside it was too big.
+          files = isSizeExempt ? acceptedFiles.filter(isSizeExempt) : [];
         }
       }
 
-      if (acceptedFiles.length === 0) {
+      if (files.length === 0) {
         return;
       }
-      void uploadFiles(acceptedFiles).then((uploaded) => {
+      void uploadFiles(files).then((uploaded) => {
         if (uploaded && uploaded.length > 0) {
           onUploaded(uploaded);
         }
       });
     },
-    [onUploaded, uploadFiles, reportError, maxSizeFormatted],
+    [onUploaded, uploadFiles, reportError, maxSizeFormatted, isSizeExempt],
   );
 
   const accept = useMemo(() => {
