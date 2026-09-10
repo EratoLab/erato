@@ -916,20 +916,16 @@ function AssistantListView({
             const count = statusCounts[status];
 
             return (
-              <button
+              // Button paints the selected fill from aria-pressed.
+              <Button
                 key={status}
-                type="button"
+                variant="ghost"
                 aria-pressed={isActive}
                 onClick={() => setStatusFilter(status)}
-                className={clsx(
-                  "focus-ring theme-transition rounded-lg px-3 py-1.5 text-sm font-medium",
-                  isActive
-                    ? "bg-theme-bg-selected text-theme-fg-primary"
-                    : "text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary",
-                )}
+                className="font-medium"
               >
                 {`${label} (${count})`}
-              </button>
+              </Button>
             );
           })}
         </div>
