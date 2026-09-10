@@ -1,4 +1,4 @@
-import { t } from "@lingui/core/macro";
+import { plural, t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useState } from "react";
 
@@ -172,6 +172,23 @@ type ItemWithFile = Extract<
   { kind: "attachment" | "selectableAttachment" | "context" }
 >;
 
+// The placeholder must stay `count`: component-kit catalogs merge last and
+// format these ids with {count, plural, …}.
+const getItemCountLabel = (count: number) =>
+  t({
+    id: "chat.attachments.items.count",
+    message: plural(count, { one: "# item", other: "# items" }),
+  });
+
+const getShowMoreItemsLabel = (count: number) =>
+  t({
+    id: "chat.attachments.show_more.count",
+    message: plural(count, {
+      one: "Show # more item",
+      other: "Show # more items",
+    }),
+  });
+
 function getFileKey(item: ItemWithFile): string {
   if ("id" in item.file) {
     return item.file.id;
@@ -265,7 +282,7 @@ const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
       onChange={onToggle}
       disabled={disabled}
       className="size-4 shrink-0 rounded border-theme-border text-theme-fg-accent focus:ring-theme-focus disabled:cursor-not-allowed"
-      aria-label={`${t`Include`} ${filename}`}
+      aria-label={`${t({ id: "chat.attachments.include", message: "Include" })} ${filename}`}
     />
   ) : null;
 
@@ -281,7 +298,7 @@ const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
           onClick={onPreview}
           useDiv={true}
           className="min-w-0 flex-1 cursor-pointer rounded-[var(--attachment-tile-radius,var(--theme-radius-base))] hover:bg-theme-bg-accent"
-          aria-label={`${t`Preview attachment`} ${filename}`}
+          aria-label={`${t({ id: "chat.file.preview_attachment", message: "Preview attachment" })} ${filename}`}
         >
           {chip}
         </InteractiveContainer>
@@ -500,8 +517,7 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
               </h3>
               {group.metaLabel !== "" && (
                 <p className={FILE_PREVIEW_STYLES.group.meta}>
-                  {group.metaLabel ??
-                    (itemCount === 1 ? t`1 item` : t`${itemCount} items`)}
+                  {group.metaLabel ?? getItemCountLabel(itemCount)}
                 </p>
               )}
             </div>
@@ -543,7 +559,10 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
                       onClick={() => setGroupExpanded(group.id, false)}
                       className={FILE_PREVIEW_STYLES.group.toggleButton}
                     >
-                      {t`Show less`}
+                      {t({
+                        id: "chat.attachments.show_less",
+                        message: "Show less",
+                      })}
                     </Button>
                   )}
                 </div>
@@ -563,7 +582,13 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
                   >
                     <SpinnerIcon
                       size="md"
-                      srText={item.label ?? t`Loading attachment...`}
+                      srText={
+                        item.label ??
+                        t({
+                          id: "chat.attachments.loading",
+                          message: "Loading attachment...",
+                        })
+                      }
                     />
                     {item.description ? (
                       <span className="sr-only">{item.description}</span>
@@ -667,9 +692,7 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
                 onClick={() => setGroupExpanded(group.id, true)}
                 className={FILE_PREVIEW_STYLES.group.moreButton}
               >
-                {hiddenCount === 1
-                  ? t`Show 1 more item`
-                  : t`Show ${hiddenCount} more items`}
+                {getShowMoreItemsLabel(hiddenCount)}
               </Button>
             )}
 

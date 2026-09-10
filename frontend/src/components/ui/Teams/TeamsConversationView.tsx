@@ -365,7 +365,7 @@ const AssetRow: React.FC<
       onClick={preview}
       fullWidth={false}
       className="min-w-0 rounded-[var(--theme-radius-base)] text-left hover:bg-theme-bg-accent"
-      aria-label={`${t`Preview attachment`} ${label}`}
+      aria-label={`${t({ id: "chat.file.preview_attachment", message: "Preview attachment" })} ${label}`}
     >
       {chip}
     </InteractiveContainer>

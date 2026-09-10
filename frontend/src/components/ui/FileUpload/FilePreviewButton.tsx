@@ -62,7 +62,7 @@ export const FilePreviewButton = memo<FilePreviewButtonProps>(
         variant="icon-only"
         size="sm"
         icon={<CloseIcon className="size-4" />}
-        aria-label={`${t`Remove`} ${(file as File).name || (file as FileUploadItem).filename}`}
+        aria-label={`${t({ id: "common.remove", message: "Remove" })} ${(file as File).name || (file as FileUploadItem).filename}`}
         onClick={(e) => {
           // Stop event propagation to prevent triggering parent container's click
           e.stopPropagation();

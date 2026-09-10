@@ -102,7 +102,7 @@ export const ThreadMessageCard: React.FC<ThreadMessageCardProps> = ({
               className="inline-flex size-4 shrink-0 items-center justify-center text-theme-fg-muted"
               aria-expanded={!collapsed}
               aria-controls={panelId}
-              aria-label={`${t`Toggle attachments`} ${label}`}
+              aria-label={`${t({ id: "chat.attachments.toggle", message: "Toggle attachments" })} ${label}`}
             >
               {collapsed ? (
                 <ChevronRightIcon className="size-4" />
@@ -120,7 +120,7 @@ export const ThreadMessageCard: React.FC<ThreadMessageCardProps> = ({
               onChange={onToggle}
               disabled={disabled}
               className="size-4 shrink-0 rounded border-theme-border text-theme-fg-accent focus:ring-theme-focus disabled:cursor-not-allowed"
-              aria-label={`${t`Include message`} ${label}`}
+              aria-label={`${t({ id: "chat.attachments.include_message", message: "Include message" })} ${label}`}
               onClick={(event) => event.stopPropagation()}
             />
           )}

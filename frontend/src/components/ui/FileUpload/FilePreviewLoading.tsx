@@ -15,7 +15,7 @@ interface FilePreviewLoadingProps {
 
 export const FilePreviewLoading = memo<FilePreviewLoadingProps>(
   ({
-    label = t`Loading file...`,
+    label = t({ id: "chat.file.loading", message: "Loading file..." }),
     description = t`Please wait`,
     className = "",
   }) => {

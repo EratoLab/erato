@@ -1,4 +1,4 @@
-import { t } from "@lingui/core/macro";
+import { plural, t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -57,6 +57,15 @@ export interface AssistantWelcomeScreenProps {
 type AssistantChatSegment = "chats" | "delegated";
 
 const PAST_CHAT_PREVIEW_COUNT = 5;
+
+const getMoreConversationsLabel = (count: number) =>
+  t({
+    id: "assistant.welcome.more_conversations.count",
+    message: plural(count, {
+      one: "And # more conversation...",
+      other: "And # more conversations...",
+    }),
+  });
 
 /**
  * The screen unmounts as soon as a conversation is opened, so the selected
@@ -190,7 +199,10 @@ export function AssistantWelcomeUpper({
       <ModalBase
         isOpen={isConfigurationOpen}
         onClose={closeConfiguration}
-        title={t`Configuration`}
+        title={t({
+          id: "assistant.welcome.configuration.title",
+          message: "Configuration",
+        })}
         contentClassName="max-w-2xl"
       >
         <div className="space-y-5 text-left" data-ui="assistant-detail-card">
@@ -227,7 +239,10 @@ export function AssistantWelcomeUpper({
 
           <div>
             <h3 className="mb-2 text-sm font-medium text-theme-fg-secondary">
-              {t`System Prompt`}
+              {t({
+                id: "assistant.welcome.system_prompt",
+                message: "System Prompt",
+              })}
             </h3>
             <div className="max-h-48 overflow-y-auto rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3">
               <p className="whitespace-pre-wrap font-mono text-xs text-theme-fg-primary">
@@ -241,7 +256,11 @@ export function AssistantWelcomeUpper({
           {assistant.files.length > 0 && (
             <div>
               <h3 className="mb-2 text-sm font-medium text-theme-fg-secondary">
-                {t`Default Files`} ({assistant.files.length})
+                {t({
+                  id: "assistant.welcome.files.title",
+                  message: "Default Files",
+                })}{" "}
+                ({assistant.files.length})
               </h3>
               <div className="flex flex-wrap gap-2">
                 {assistant.files.map((file) => (
@@ -263,7 +282,10 @@ export function AssistantWelcomeUpper({
               icon={<EditIcon />}
               onClick={handleEditAssistant}
             >
-              {t`Edit Assistant Settings`}
+              {t({
+                id: "assistant.welcome.edit",
+                message: "Edit Assistant Settings",
+              })}
             </Button>
           )}
         </div>
@@ -359,7 +381,10 @@ export function AssistantWelcomeLower({
                   contentTextAlignment,
                 )}
               >
-                {t`Your conversations with this assistant`}
+                {t({
+                  id: "assistant.welcome.history",
+                  message: "Your conversations with this assistant",
+                })}
               </h2>
               {showSegments && (
                 <SegmentedControl
@@ -486,8 +511,9 @@ export function AssistantWelcomeLower({
                   contentTextAlignment,
                 )}
               >
-                {t`And`} {visibleChats.length - PAST_CHAT_PREVIEW_COUNT}{" "}
-                {t`more conversations...`}
+                {getMoreConversationsLabel(
+                  visibleChats.length - PAST_CHAT_PREVIEW_COUNT,
+                )}
               </p>
             )}
           </div>

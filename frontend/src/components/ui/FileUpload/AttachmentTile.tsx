@@ -85,7 +85,7 @@ const RemoveButton: React.FC<{
       onRemove();
     }}
     disabled={disabled}
-    aria-label={`${t`Remove`} ${filename}`}
+    aria-label={`${t({ id: "common.remove", message: "Remove" })} ${filename}`}
     className={clsx(
       // Overhangs just far enough to clear the tile's own content without
       // reaching into the neighbouring tile across the gap.
@@ -236,7 +236,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
           type="button"
           onClick={onActivate}
           title={filename}
-          aria-label={`${activateLabel ?? t`Preview attachment`} ${filename}, ${metaLabel}`}
+          aria-label={`${activateLabel ?? t({ id: "chat.file.preview_attachment", message: "Preview attachment" })} ${filename}, ${metaLabel}`}
           className={clsx(
             "block w-full cursor-pointer rounded-[var(--attachment-tile-radius,var(--theme-radius-base))] text-left",
             "focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus focus-visible:ring-offset-2",
