@@ -132,8 +132,11 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
     // system messages once a new head exists). Self-retiring: the first
     // generation after the cutoff persists its own snapshot, which post-dates
     // the cutoff and replays normally.
-    let provenance = crate::models::chat::parse_assistant_configuration(chat)?
-        .and_then(|config| config.provenance);
+    let chat_configuration = crate::models::chat::parse_chat_configuration(chat)?;
+    let task = chat_configuration
+        .as_ref()
+        .and_then(|configuration| configuration.task.clone());
+    let provenance = chat_configuration.and_then(|configuration| configuration.provenance);
     let rebase_cutoff = provenance
         .as_ref()
         .and_then(|provenance| provenance.rebase_cutoff);
@@ -313,8 +316,8 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
         && provenance.adopted_at.is_none()
     {
         sequence.push(AbstractChatSequencePart::DelegationPreamble {
-            expected_output: provenance.expected_output.clone(),
-            constraints: provenance.constraints.clone(),
+            expected_output: task.as_ref().and_then(|task| task.expected_output.clone()),
+            constraints: task.as_ref().and_then(|task| task.constraints.clone()),
             run_mode: provenance.run_mode,
         });
     }

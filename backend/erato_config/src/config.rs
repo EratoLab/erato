@@ -3369,7 +3369,7 @@ pub struct FacetDelegationOverrides {
 
 /// Whether a task child speaks as the origin chat's assistant or as the bare
 /// model.
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
 #[facet(rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 #[repr(C)]
@@ -3382,7 +3382,7 @@ pub enum TaskPersona {
 /// How a completed async task result re-enters the origin chat. `interrupt` is
 /// a reserved spelling with no implementation; it is rejected at load rather
 /// than silently accepted.
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
 #[facet(rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 #[repr(C)]
