@@ -311,7 +311,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
     className: clsx(
       "attachment-tile-geometry flex w-full items-center gap-2 text-left",
       variant !== "bare" &&
-        "border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-2",
+        "border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-secondary)] p-2",
       variant !== "bare" &&
         onActivate &&
         !selection &&
