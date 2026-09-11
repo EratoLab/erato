@@ -16,6 +16,7 @@ const state = vi.hoisted(() => ({
   emailThreadLoadError: null as string | null,
   emailBodyFile: null as File | null,
   isThreadEmlStale: false,
+  isDropResolutionStale: false,
   isEmailBodyDismissed: false,
   dismissedAttachmentIds: [] as string[],
   getAttachmentFile: vi.fn(),
@@ -48,6 +49,7 @@ vi.mock("../../providers/OutlookEmailSourceProvider", () => ({
   useOutlookEmailSource: () => ({
     emailBodyFile: state.emailBodyFile,
     isThreadEmlStale: state.isThreadEmlStale,
+    isDropResolutionStale: state.isDropResolutionStale,
     isLoadingEmailBody: state.isLoadingEmailBody,
     emailThreadLoadError: state.emailThreadLoadError,
     isEmailBodyDismissed: state.isEmailBodyDismissed,
