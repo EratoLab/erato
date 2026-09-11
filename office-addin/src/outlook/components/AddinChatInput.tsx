@@ -1,4 +1,5 @@
 import {
+  DEFAULT_MAX_FILES_PER_MESSAGE,
   GroupedFileAttachmentsPreview,
   SpinnerIcon,
   UploadTooLargeError,
@@ -14,6 +15,7 @@ import {
   validateFileSizes,
   type ChatInputControlsHandle,
   type ChatModel,
+  type ComposerSizeLimit,
   type FileAttachmentGroup,
   type FileAttachmentGroupItem,
   type ActionFacetRequest,
@@ -59,6 +61,7 @@ import {
   toLocalOffsetIso,
 } from "../utils/outlookScheduleTool";
 import { restoreComposerDraft } from "../utils/restoreComposerDraft";
+import { findStagedSendLimit } from "../utils/stagedSendLimit";
 import { EmailTrimError } from "../utils/trimRawEmlBytes";
 import {
   isPolicyExcluded,
@@ -116,6 +119,8 @@ interface AddinChatInputProps {
   ) => void;
   uploadFiles?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
   uploadError?: Error | string | null;
+  /** Overrides the limit check this component derives from its staged parts. */
+  sizeLimitExceeded?: ComposerSizeLimit | null;
   /**
    * `true` while one or more dropped emails are being expanded or
    * deduplicated. Gates the send button and renders a non-blocking inline
@@ -201,6 +206,8 @@ export const AddinChatInput = forwardRef<
     dropPipeline,
     onEmailSourceDropsSent,
     lastSchedulingSignalAt = null,
+    handleFileAttachments: ownerHandleFileAttachments,
+    sizeLimitExceeded: ownerSizeLimitExceeded = null,
     ...chatInputProps
   },
   ref,
@@ -315,6 +322,7 @@ export const AddinChatInput = forwardRef<
     isThreadEmlStale,
     isDropResolutionStale,
     resolvedDrops,
+    resolvedParts,
     resolvedTotalBytes,
   } = useOutlookEmailSource();
   const { maxSizeBytes: globalMaxSizeBytes, maxSizeFormatted } =
@@ -419,6 +427,41 @@ export const AddinChatInput = forwardRef<
       setPolicyExcludedAttachmentIds(key, excluded);
     }
   }, [setPolicyExcludedAttachmentIds, stagedPartVerdicts]);
+
+  // The composer's own attachments, mirrored here so the limit check can
+  // count them next to the staged emails it will upload alongside.
+  const [composerFiles, setComposerFiles] = useState<FileUploadItem[]>([]);
+  const handleFileAttachments = useCallback(
+    (files: FileUploadItem[]) => {
+      ownerHandleFileAttachments?.(files);
+      // The composer reports from inside a state updater.
+      void Promise.resolve().then(() => setComposerFiles(files));
+    },
+    [ownerHandleFileAttachments],
+  );
+  const maxFiles = chatInputProps.maxFiles ?? DEFAULT_MAX_FILES_PER_MESSAGE;
+  const stagedLimitExceeded = useMemo<ComposerSizeLimit | null>(
+    () =>
+      findStagedSendLimit(
+        // The send only uploads the staged emails on this path.
+        shouldUseSuggestedEmailSource ? resolvedParts : [],
+        composerFiles,
+        {
+          maxBytes: globalMaxSizeBytes,
+          maxFormatted: maxSizeFormatted,
+          maxFiles,
+        },
+      ),
+    [
+      composerFiles,
+      globalMaxSizeBytes,
+      maxFiles,
+      maxSizeFormatted,
+      resolvedParts,
+      shouldUseSuggestedEmailSource,
+    ],
+  );
+  const sizeLimitExceeded = ownerSizeLimitExceeded ?? stagedLimitExceeded;
 
   const emailSourceGroups = useMemo<FileAttachmentGroup[]>(() => {
     const groups: FileAttachmentGroup[] = [];
@@ -1244,6 +1287,8 @@ export const AddinChatInput = forwardRef<
         ref={ref}
         chatId={chatId}
         {...chatInputProps}
+        handleFileAttachments={handleFileAttachments}
+        sizeLimitExceeded={sizeLimitExceeded}
         onSendMessage={(
           message,
           inputFileIds,

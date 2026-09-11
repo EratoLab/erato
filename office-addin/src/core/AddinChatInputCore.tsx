@@ -3,6 +3,7 @@ import {
   type AssistantMention,
   type ChatInputControlsHandle,
   type ChatModel,
+  type ComposerSizeLimit,
   type DelegationRunMode,
   type FileType,
   type FileUploadItem,
@@ -30,6 +31,7 @@ export interface AddinChatInputCoreProps {
   onFacetSelectionChange?: (selectedFacetIds: string[]) => void;
   uploadFiles?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
   uploadError?: Error | string | null;
+  sizeLimitExceeded?: ComposerSizeLimit | null;
   virtualFiles?: File[];
   maxFiles?: number;
   controlledAvailableModels?: ChatModel[];
