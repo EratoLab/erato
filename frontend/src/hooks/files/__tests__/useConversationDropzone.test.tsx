@@ -302,4 +302,65 @@ describe("useConversationDropzone", () => {
       expect(mockUploadFiles).toHaveBeenCalledWith([validFile]);
     });
   });
+
+  describe("accept map", () => {
+    const extras = { "message/rfc822": [".eml"] };
+    const lastAccept = () =>
+      vi.mocked(useDropzone).mock.calls.at(-1)?.[0]?.accept;
+
+    it("accepts everything while no file types are known, even with extras", () => {
+      renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          acceptedFileTypes: [],
+          extraAcceptMimeTypes: extras,
+        }),
+      );
+
+      // Capabilities are still loading: an extras-only map would reject every
+      // ordinary file and keep the drop overlay hidden.
+      expect(lastAccept()).toBeUndefined();
+    });
+
+    it("accepts everything when file types are undefined", () => {
+      renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          extraAcceptMimeTypes: extras,
+        }),
+      );
+
+      expect(lastAccept()).toBeUndefined();
+    });
+
+    it("uses the capability types alone when there are no extras", () => {
+      renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          acceptedFileTypes: ["pdf"],
+        }),
+      );
+
+      expect(lastAccept()).toEqual(FileTypeUtil.getAcceptObject(["pdf"]));
+    });
+
+    it("merges extras into the capability types once both are present", () => {
+      renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          acceptedFileTypes: ["pdf"],
+          extraAcceptMimeTypes: extras,
+        }),
+      );
+
+      expect(lastAccept()).toEqual({
+        ...FileTypeUtil.getAcceptObject(["pdf"]),
+        ...extras,
+      });
+    });
+  });
 });
