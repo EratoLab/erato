@@ -174,6 +174,9 @@ export function useConversationDropzone({
         ...props,
         onDrop: (event: DragEvent) => {
           if (typeof consumerOnDrop === "function") consumerOnDrop(event);
+          // A stopped event never reaches react-dropzone, so nothing would
+          // release the span.
+          if (event.isPropagationStopped()) return;
           handleReceive(event);
         },
       });

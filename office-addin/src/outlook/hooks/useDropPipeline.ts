@@ -31,7 +31,7 @@ export interface DropPipeline extends DropPipelineState {
   begin: (total: number) => () => void;
   progress: (update: DropPipelineProgress) => void;
   stage: (phase: Exclude<DropPipelinePhase, "idle">) => void;
-  /** Closes the most recent open span. */
+  /** Closes one open span. */
   end: () => void;
 }
 
