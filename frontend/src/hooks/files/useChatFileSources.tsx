@@ -21,7 +21,11 @@ import {
 } from "react";
 import { useDropzone } from "react-dropzone";
 
-import { CloudLinkError, UploadTooLargeError } from "@/hooks/files/errors";
+import {
+  CloudLinkError,
+  UnsupportedFileTypeError,
+  UploadTooLargeError,
+} from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useFileUploadWithTokenCheck } from "@/hooks/files/useFileUploadWithTokenCheck";
 import {
@@ -36,6 +40,7 @@ import { FileTypeUtil } from "@/utils/fileTypes";
 import { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
 import {
   oversizedRejectionNames,
+  rejectionNames,
   validateFileSizes,
 } from "@/utils/validateFileSizes";
 
@@ -183,8 +188,11 @@ export function useChatFileSources({
   } = useDropzone({
     onDrop: (acceptedFiles, rejectedFiles) => {
       if (rejectedFiles.length > 0) {
+        const unsupported = rejectionNames(rejectedFiles, "file-invalid-type");
+        if (unsupported.length > 0) {
+          setError(new UnsupportedFileTypeError(unsupported));
+        }
         const oversized = oversizedRejectionNames(rejectedFiles);
-
         if (oversized.length > 0) {
           setError(new UploadTooLargeError(maxSizeFormatted, oversized));
           return;

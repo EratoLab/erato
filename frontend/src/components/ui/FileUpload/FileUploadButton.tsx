@@ -3,11 +3,18 @@ import { memo, Suspense, useId } from "react";
 import { useDropzone } from "react-dropzone";
 import { ErrorBoundary } from "react-error-boundary";
 
-import { UploadTooLargeError, type UploadError } from "@/hooks/files/errors";
+import {
+  UnsupportedFileTypeError,
+  UploadTooLargeError,
+  type UploadError,
+} from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useUploadFeature } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
-import { oversizedRejectionNames } from "@/utils/validateFileSizes";
+import {
+  oversizedRejectionNames,
+  rejectionNames,
+} from "@/utils/validateFileSizes";
 
 import { Button } from "../Controls";
 import { PlusIcon } from "../icons";
@@ -80,6 +87,13 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
       onDrop: (acceptedFiles, rejectedFiles) => {
         // Rejected files never reach the upload preflight; report them here.
         if (rejectedFiles.length > 0) {
+          const unsupported = rejectionNames(
+            rejectedFiles,
+            "file-invalid-type",
+          );
+          if (unsupported.length > 0) {
+            reportError(new UnsupportedFileTypeError(unsupported));
+          }
           const oversized = oversizedRejectionNames(rejectedFiles);
           if (oversized.length > 0) {
             reportError(new UploadTooLargeError(maxSizeFormatted, oversized));

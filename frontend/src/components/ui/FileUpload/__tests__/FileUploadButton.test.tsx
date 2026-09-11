@@ -1,7 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-import { UploadTooLargeError } from "@/hooks/files/errors";
+import {
+  UnsupportedFileTypeError,
+  UploadTooLargeError,
+} from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { makeFileWithSize } from "@/test/fileFixtures";
 
@@ -151,6 +154,36 @@ describe("FileUploadButton", () => {
       capturedOnDrop([], [rejection]);
 
       expect(performFileUpload).not.toHaveBeenCalled();
+    });
+
+    it("reports a wrong-type rejection and still uploads the accepted files", () => {
+      const performFileUpload = vi.fn(async () => undefined);
+      const onError = vi.fn();
+      render(
+        <FileUploadButton
+          label="Attach"
+          iconOnly
+          performFileUpload={performFileUpload}
+          onError={onError}
+        />,
+      );
+
+      const accepted = makeFileWithSize("fine.pdf", 100);
+      capturedOnDrop(
+        [accepted],
+        [
+          {
+            file: makeFileWithSize("wrong.exe", 100),
+            errors: [{ code: "file-invalid-type", message: "type" }],
+          },
+        ],
+      );
+
+      expect(onError).toHaveBeenCalledTimes(1);
+      const err = onError.mock.calls[0][0];
+      expect(err).toBeInstanceOf(UnsupportedFileTypeError);
+      expect(err.message).toContain("wrong.exe");
+      expect(performFileUpload).toHaveBeenCalledWith([accepted]);
     });
 
     it("does not call onError when there are no rejections (valid drop)", () => {

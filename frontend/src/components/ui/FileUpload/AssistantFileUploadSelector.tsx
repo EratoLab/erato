@@ -10,7 +10,11 @@ import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 
 import { componentRegistry } from "@/config/componentRegistry";
-import { CloudLinkError, UploadTooLargeError } from "@/hooks/files/errors";
+import {
+  CloudLinkError,
+  UnsupportedFileTypeError,
+  UploadTooLargeError,
+} from "@/hooks/files/errors";
 import { useStandaloneFileUpload } from "@/hooks/files/useStandaloneFileUpload";
 import { fetchLinkFile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import {
@@ -19,7 +23,10 @@ import {
 } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
 import { DEFAULT_MAX_ASSISTANT_FILES } from "@/utils/fileUploadLimits";
-import { oversizedRejectionNames } from "@/utils/validateFileSizes";
+import {
+  oversizedRejectionNames,
+  rejectionNames,
+} from "@/utils/validateFileSizes";
 
 import { CloudFilePickerModal } from "./CloudFilePickerModal";
 import { FileSourceSelector } from "./FileSourceSelector";
@@ -118,6 +125,10 @@ export const AssistantFileUploadSelector: React.FC<
     onDrop: (acceptedFiles, rejectedFiles) => {
       // Rejected files never reach the upload preflight; report them here.
       if (rejectedFiles.length > 0) {
+        const unsupported = rejectionNames(rejectedFiles, "file-invalid-type");
+        if (unsupported.length > 0) {
+          setCloudLinkError(new UnsupportedFileTypeError(unsupported));
+        }
         const oversized = oversizedRejectionNames(rejectedFiles);
         if (oversized.length > 0) {
           setCloudLinkError(

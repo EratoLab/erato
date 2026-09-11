@@ -94,6 +94,26 @@ describe("AssistantFileUploadSelector", () => {
     expect(mockUploadFiles).not.toHaveBeenCalled();
   });
 
+  it("renders a wrong-type rejection in its own alert and still uploads the rest", () => {
+    render(<AssistantFileUploadSelector onFilesUploaded={vi.fn()} />);
+
+    const accepted = makeFileWithSize("fine.pdf", 100);
+    act(() => {
+      capturedOnDrop(
+        [accepted],
+        [
+          {
+            file: makeFileWithSize("wrong.exe", 100),
+            errors: [{ code: "file-invalid-type", message: "type" }],
+          },
+        ],
+      );
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("wrong.exe");
+    expect(mockUploadFiles).toHaveBeenCalledWith([accepted]);
+  });
+
   it("still uploads a batch that is within the limit", () => {
     render(<AssistantFileUploadSelector onFilesUploaded={vi.fn()} />);
 
