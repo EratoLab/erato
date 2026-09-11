@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { buildThreadSynthInputs } from "../buildThreadSynthInputs";
+import { parseEmlBytes } from "../parsedEmail";
+import { EmailTrimError } from "../trimRawEmlBytes";
 
 import type { ThreadAttachment, ThreadMessage } from "../parsedThread";
 
@@ -42,7 +44,133 @@ function makeMessage(overrides: Partial<ThreadMessage> = {}): ThreadMessage {
 
 const NO_DISMISSALS = new Set<string>();
 
+const CRLF = "\r\n";
+
+/** A forwarded email carrying `keep.pdf` and `deep.pdf`, padded past the dedup floor. */
+function buildForwardedEml(): string {
+  const filler = "x".repeat(600);
+  return (
+    `From: c@example.com${CRLF}` +
+    `Subject: Re: budget numbers${CRLF}` +
+    `Content-Type: multipart/mixed; boundary="----INNER"${CRLF}${CRLF}` +
+    `------INNER${CRLF}` +
+    `Content-Type: text/plain${CRLF}${CRLF}` +
+    `Forwarded body. ${filler}${CRLF}` +
+    `------INNER${CRLF}` +
+    `Content-Type: application/pdf; name="keep.pdf"${CRLF}` +
+    `Content-Disposition: attachment; filename="keep.pdf"${CRLF}` +
+    `Content-Transfer-Encoding: base64${CRLF}${CRLF}` +
+    `S0VFUA==${CRLF}` +
+    `------INNER${CRLF}` +
+    `Content-Type: application/pdf; name="deep.pdf"${CRLF}` +
+    `Content-Disposition: attachment; filename="deep.pdf"${CRLF}` +
+    `Content-Transfer-Encoding: base64${CRLF}${CRLF}` +
+    `REVFUA==${CRLF}` +
+    `------INNER--${CRLF}`
+  );
+}
+
+/** A thread attachment the way `fetchCurrentThread` delivers a forward: raw bytes plus the parsed `nested`. */
+async function makeForward(id: string): Promise<ThreadAttachment> {
+  const contentBytes = new TextEncoder().encode(buildForwardedEml()).buffer;
+  const nested = await parseEmlBytes(contentBytes, { idPrefix: `${id}/` });
+  return makeAttachment({
+    id,
+    filename: "Forwarded.eml",
+    mimeType: "message/rfc822",
+    size: contentBytes.byteLength,
+    contentBytes,
+    nested: nested!,
+  });
+}
+
+function emittedText(input: {
+  attachments: { contentBytes: ArrayBuffer | Uint8Array }[];
+}): string {
+  return new TextDecoder().decode(input.attachments[0].contentBytes);
+}
+
 describe("buildThreadSynthInputs", () => {
+  describe("a dismissed part inside a forwarded email", () => {
+    it("cuts it out of the forward's bytes and keeps the rest", async () => {
+      const forward = await makeForward("<m1@x>:fwd");
+      expect(forward.nested?.attachments.map((a) => a.id)).toEqual([
+        "<m1@x>:fwd/att-0",
+        "<m1@x>:fwd/att-1",
+      ]);
+
+      const [input] = buildThreadSynthInputs(
+        [makeMessage({ id: "<m1@x>", attachments: [forward] })],
+        new Set(["<m1@x>:fwd/att-1"]),
+      );
+
+      expect(input.attachments).toHaveLength(1);
+      const text = emittedText(input);
+      expect(text).toContain("keep.pdf");
+      expect(text).toContain("Forwarded body.");
+      expect(text).not.toContain("deep.pdf");
+    });
+
+    it("passes the forward through untouched when nothing inside it is dismissed", async () => {
+      const forward = await makeForward("<m1@x>:fwd");
+
+      const [input] = buildThreadSynthInputs(
+        [makeMessage({ id: "<m1@x>", attachments: [forward] })],
+        NO_DISMISSALS,
+      );
+
+      expect(emittedText(input)).toBe(buildForwardedEml());
+    });
+
+    it("trims before the byte-dedup, so a trimmed copy is not mistaken for its untrimmed twin", async () => {
+      const messages = [
+        makeMessage({
+          id: "<m1@x>",
+          attachments: [await makeForward("<m1@x>:fwd")],
+        }),
+        makeMessage({
+          id: "<m2@x>",
+          attachments: [await makeForward("<m2@x>:fwd")],
+        }),
+      ];
+
+      const inputs = buildThreadSynthInputs(
+        messages,
+        new Set(["<m2@x>:fwd/att-1"]),
+      );
+
+      expect(inputs[0].attachments).toHaveLength(1);
+      expect(emittedText(inputs[0])).toContain("deep.pdf");
+      // Same fetched bytes, but the user kept less of the second copy.
+      expect(inputs[1].attachments).toHaveLength(1);
+      expect(inputs[1].bodyText).not.toContain("identical to");
+      expect(emittedText(inputs[1])).not.toContain("deep.pdf");
+    });
+
+    it("refuses to build when the dismissal cannot be cut out", async () => {
+      const forward = await makeForward("<m1@x>:fwd");
+      // Bytes the trimmer cannot walk, with a nested list that still lets the
+      // user address a part inside.
+      const unwalkable = makeAttachment({
+        ...forward,
+        contentBytes: new TextEncoder().encode("this is not an email").buffer,
+      });
+
+      expect(() =>
+        buildThreadSynthInputs(
+          [makeMessage({ id: "<m1@x>", attachments: [unwalkable] })],
+          new Set(["<m1@x>:fwd/att-1"]),
+        ),
+      ).toThrow(EmailTrimError);
+      expect(() =>
+        buildThreadSynthInputs(
+          [makeMessage({ id: "<m1@x>", attachments: [unwalkable] })],
+          new Set(["<m1@x>:fwd"]),
+        ),
+      ).not.toThrow();
+    });
+  });
+
   it("keeps one canonical copy of byte-identical attachments and marks the duplicates", () => {
     const shared = () => bytes(600, 0xaa);
     const messages = [
