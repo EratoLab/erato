@@ -380,8 +380,9 @@ export function useFileDropzone({
       if (disabled || isUploading) return;
 
       // Rejected files never reach the upload preflight; report them here.
+      let unsupported: string[] = [];
       if (rejectedFiles.length > 0) {
-        const unsupported = rejectionNames(rejectedFiles, "file-invalid-type");
+        unsupported = rejectionNames(rejectedFiles, "file-invalid-type");
         if (unsupported.length > 0) {
           setError(new UnsupportedFileTypeError(unsupported));
         }
@@ -394,7 +395,13 @@ export function useFileDropzone({
 
       // If we have accepted files, upload them
       if (acceptedFiles.length > 0) {
-        void uploadFiles(acceptedFiles);
+        void uploadFiles(acceptedFiles).then((uploaded) => {
+          // uploadFiles clears the error slot on its way in; only a batch
+          // that went through has wiped the report, so restore it then.
+          if (uploaded !== undefined && unsupported.length > 0) {
+            setError(new UnsupportedFileTypeError(unsupported));
+          }
+        });
       }
     },
     [disabled, isUploading, uploadFiles, setError, maxSizeFormatted],

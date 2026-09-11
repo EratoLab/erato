@@ -124,8 +124,9 @@ export const AssistantFileUploadSelector: React.FC<
   } = useDropzone({
     onDrop: (acceptedFiles, rejectedFiles) => {
       // Rejected files never reach the upload preflight; report them here.
+      let unsupported: string[] = [];
       if (rejectedFiles.length > 0) {
-        const unsupported = rejectionNames(rejectedFiles, "file-invalid-type");
+        unsupported = rejectionNames(rejectedFiles, "file-invalid-type");
         if (unsupported.length > 0) {
           setCloudLinkError(new UnsupportedFileTypeError(unsupported));
         }
@@ -142,8 +143,12 @@ export const AssistantFileUploadSelector: React.FC<
         clearErrors();
         void (async () => {
           const uploadedFiles = await uploadFiles(acceptedFiles);
-          if (uploadedFiles && onFilesUploaded) {
-            onFilesUploaded(uploadedFiles);
+          if (uploadedFiles === undefined) return;
+          onFilesUploaded?.(uploadedFiles);
+          // Cleared above with the stale errors; a batch that went through
+          // still owes the user the names it left behind.
+          if (unsupported.length > 0) {
+            setCloudLinkError(new UnsupportedFileTypeError(unsupported));
           }
         })();
       }

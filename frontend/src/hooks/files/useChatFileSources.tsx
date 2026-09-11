@@ -147,7 +147,7 @@ export function useChatFileSources({
   const handleSelectedFiles = useCallback(
     async (files: File[]) => {
       if (files.length === 0) {
-        return;
+        return undefined;
       }
 
       // Guards the `onSelectFiles` path, where hosts hand in already-resolved Files.
@@ -159,7 +159,7 @@ export function useChatFileSources({
             sizeValidation.oversizedFiles.map((file) => file.name),
           ),
         );
-        return;
+        return undefined;
       }
 
       const uploadedFiles = await performDiskUpload(files);
@@ -170,6 +170,7 @@ export function useChatFileSources({
       ) {
         onFilesUploaded?.(uploadedFiles);
       }
+      return uploadedFiles;
     },
     [
       externalPerformFileUpload,
@@ -180,6 +181,12 @@ export function useChatFileSources({
       setError,
     ],
   );
+  const selectFiles = useCallback(
+    async (files: File[]) => {
+      await handleSelectedFiles(files);
+    },
+    [handleSelectedFiles],
+  );
 
   const {
     open: openDiskFilePicker,
@@ -187,8 +194,9 @@ export function useChatFileSources({
     getInputProps,
   } = useDropzone({
     onDrop: (acceptedFiles, rejectedFiles) => {
+      let unsupported: string[] = [];
       if (rejectedFiles.length > 0) {
-        const unsupported = rejectionNames(rejectedFiles, "file-invalid-type");
+        unsupported = rejectionNames(rejectedFiles, "file-invalid-type");
         if (unsupported.length > 0) {
           setError(new UnsupportedFileTypeError(unsupported));
         }
@@ -200,7 +208,13 @@ export function useChatFileSources({
       }
 
       if (acceptedFiles.length > 0) {
-        void handleSelectedFiles(acceptedFiles);
+        void handleSelectedFiles(acceptedFiles).then((uploaded) => {
+          // The upload clears the error slot on its way in; only a batch
+          // that went through has wiped the report, so restore it then.
+          if (uploaded !== undefined && unsupported.length > 0) {
+            setError(new UnsupportedFileTypeError(unsupported));
+          }
+        });
       }
     },
     accept:
@@ -379,7 +393,7 @@ export function useChatFileSources({
     performDiskUpload,
     onSelectDisk: handleSelectDisk,
     onSelectCloud: handleSelectCloud,
-    onSelectFiles: handleSelectedFiles,
+    onSelectFiles: selectFiles,
     fileSourceItems,
     dropzoneRootProps: getRootProps,
     dropzoneInputProps: getInputProps,

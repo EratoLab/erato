@@ -317,6 +317,38 @@ describe("useConversationDropzone", () => {
       expect(mockUploadFiles).toHaveBeenCalledWith([accepted]);
     });
 
+    it("keeps naming the wrong-type file after the sibling upload cleared the store", async () => {
+      const uploadThatResets = vi.fn(async (files: File[]) => {
+        // The upload hook clears the shared error slot before it starts.
+        useFileUploadStore.getState().setError(null);
+        return files.map((file) => makeUploadedItem(file.name));
+      });
+      renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: uploadThatResets,
+          onUploaded: mockOnUploaded,
+          maxSize: LIMIT,
+        }),
+      );
+
+      await act(async () => {
+        capturedOnDrop(
+          [makeFileWithSize("fine.pdf", 100)],
+          [
+            {
+              file: makeFileWithSize("wrong.exe", 100),
+              errors: [{ code: "file-invalid-type", message: "type" }],
+            },
+          ],
+        );
+      });
+
+      expect(mockOnUploaded).toHaveBeenCalledTimes(1);
+      const storeError = useFileUploadStore.getState().error;
+      expect(storeError).toBeInstanceOf(UnsupportedFileTypeError);
+      expect(storeError?.message).toContain("wrong.exe");
+    });
+
     it("names a file that fails both checks only in the unsupported-type error", () => {
       renderHook(() =>
         useConversationDropzone({

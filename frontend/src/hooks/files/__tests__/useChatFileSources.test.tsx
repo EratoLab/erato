@@ -2,6 +2,7 @@ import { renderHook, act, cleanup } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 import { makeFileWithSize } from "@/test/fileFixtures";
+import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { UnsupportedFileTypeError, UploadTooLargeError } from "../errors";
 import { useChatFileSources } from "../useChatFileSources";
@@ -173,5 +174,37 @@ describe("useChatFileSources — dropzone rejections", () => {
     expect(storeError).toBeInstanceOf(UnsupportedFileTypeError);
     expect(storeError?.message).toContain("wrong.exe");
     expect(mockUploadFiles).toHaveBeenCalledWith([accepted]);
+  });
+
+  it("keeps naming the wrong-type file after the sibling upload cleared the store", async () => {
+    mockUploadFiles.mockImplementation(async (files) => {
+      // The upload hook clears the shared error slot before it starts.
+      useFileUploadStore.getState().setError(null);
+      return files.map((file) => ({
+        id: file.name,
+        filename: file.name,
+        download_url: `http://example.com/${file.name}`,
+        file_contents_unavailable_missing_permissions: false,
+        is_sharepoint_file: false,
+        file_capability: FileTypeUtil.createMockFileCapability(file.name),
+      }));
+    });
+    renderUseChatFileSources();
+
+    await act(async () => {
+      capturedOnDrop(
+        [makeFileWithSize("fine.pdf", 100)],
+        [
+          {
+            file: makeFileWithSize("wrong.exe", 100),
+            errors: [{ code: "file-invalid-type", message: "type" }],
+          },
+        ],
+      );
+    });
+
+    const storeError = useFileUploadStore.getState().error;
+    expect(storeError).toBeInstanceOf(UnsupportedFileTypeError);
+    expect(storeError?.message).toContain("wrong.exe");
   });
 });
