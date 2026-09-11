@@ -23,22 +23,25 @@ import type { ReactNode } from "react";
 
 // Hoisted so the dropzone stub can record the options AddinChat passes —
 // the `.msg` advertising test below asserts on `extraAcceptMimeTypes`.
-const { useConversationDropzoneMock, dismissSessionToastsMock } = vi.hoisted(
-  () => ({
-    useConversationDropzoneMock: vi.fn(
-      (_options: {
-        extraAcceptMimeTypes?: Record<string, string[]>;
-        onReceive?: (count: number) => unknown;
-      }) => ({
-        getRootProps: () => ({}),
-        getInputProps: () => ({}),
-        isDragActive: false,
-        isDragAccept: false,
-      }),
-    ),
-    dismissSessionToastsMock: vi.fn(),
-  }),
-);
+const {
+  useConversationDropzoneMock,
+  dismissSessionToastsMock,
+  fileUploadState,
+} = vi.hoisted(() => ({
+  fileUploadState: { error: null, setError: vi.fn() },
+  useConversationDropzoneMock: vi.fn(
+    (_options: {
+      extraAcceptMimeTypes?: Record<string, string[]>;
+      onReceive?: (count: number) => unknown;
+    }) => ({
+      getRootProps: () => ({}),
+      getInputProps: () => ({}),
+      isDragActive: false,
+      isDragAccept: false,
+    }),
+  ),
+  dismissSessionToastsMock: vi.fn(),
+}));
 
 vi.mock("../components/sessionAskToast", () => ({
   dismissSessionToasts: dismissSessionToastsMock,
@@ -121,12 +124,11 @@ vi.mock("@erato/frontend/library", () => ({
     closePreviewModal: vi.fn(),
   }),
   useFacets: () => ({ data: { action_facets: [] } }),
-  useFileUploadStore: (
-    selector?: (state: { setError: (error: unknown) => void }) => unknown,
-  ) => {
-    const state = { setError: vi.fn() };
-    return selector ? selector(state) : state;
-  },
+  useFileUploadStore: Object.assign(
+    (selector?: (state: typeof fileUploadState) => unknown) =>
+      selector ? selector(fileUploadState) : fileUploadState,
+    { getState: () => fileUploadState },
+  ),
   UploadUnknownError: class extends Error {},
   useFileUploadWithTokenCheck: () => ({
     uploadFiles: vi.fn(async () => []),
