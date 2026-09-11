@@ -3,7 +3,10 @@ import { t } from "@lingui/core/macro";
 import { isPolicyExcluded } from "./validateStagedPart";
 
 import type { ParsedAttachment, ParsedEmail } from "./parsedEmail";
-import type { StagedPartValidation } from "./validateStagedPart";
+import type {
+  StagedPartMetadata,
+  StagedPartValidation,
+} from "./validateStagedPart";
 import type {
   FileAttachmentGroup,
   FileAttachmentGroupItem,
@@ -42,6 +45,35 @@ export function isEmailBodyPart(attachment: ParsedAttachment): boolean {
     return false;
   }
   return attachment.disposition === "inline" || attachment.related;
+}
+
+/**
+ * Judges every part the card renders: the attachments and, one level down,
+ * the parts of each expanded forward. `excluded` lists the ids policy leaves
+ * out for the user; a part inside a forward that cannot be cut out keeps its
+ * verdict for the badge but is never excluded, as that would demand a trim
+ * the bytes cannot honour.
+ */
+export function judgeDropEmailParts(
+  parsed: ParsedEmail,
+  validate: (part: StagedPartMetadata) => StagedPartValidation,
+): { verdicts: Map<string, StagedPartValidation>; excluded: string[] } {
+  const verdicts = new Map<string, StagedPartValidation>();
+  const excluded: string[] = [];
+  const judge = (part: ParsedAttachment, enforce: boolean) => {
+    const verdict = validate(part);
+    verdicts.set(part.id, verdict);
+    if (enforce && isPolicyExcluded(verdict)) excluded.push(part.id);
+  };
+  for (const attachment of parsed.attachments) {
+    if (isEmailBodyPart(attachment)) continue;
+    judge(attachment, true);
+    for (const part of attachment.nested?.attachments ?? []) {
+      if (isEmailBodyPart(part)) continue;
+      judge(part, attachment.nestedTrimmable === true);
+    }
+  }
+  return { verdicts, excluded };
 }
 
 /**

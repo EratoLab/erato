@@ -1,7 +1,11 @@
 import { i18n } from "@lingui/core";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
-import { buildDropEmailGroup, isEmailBodyPart } from "../buildDropEmailGroup";
+import {
+  buildDropEmailGroup,
+  isEmailBodyPart,
+  judgeDropEmailParts,
+} from "../buildDropEmailGroup";
 import { parseEmlBytes } from "../parsedEmail";
 
 import type {
@@ -268,5 +272,31 @@ describe("buildDropEmailGroup", () => {
     expect(body.kind === "selectableAttachment" && body.selected).toBe(false);
     if (body.kind === "selectableAttachment") body.onToggle?.();
     expect(options.restoreBody).toHaveBeenCalled();
+  });
+
+  describe("judgeDropEmailParts", () => {
+    const unsupportedPdf = (part: { mimeType: string }) =>
+      part.mimeType === "application/pdf" ? UNSUPPORTED : { ok: true as const };
+
+    it("judges the attachments and the parts of a forward, skipping body parts", async () => {
+      const { verdicts, excluded } = judgeDropEmailParts(
+        await parseFixture(),
+        unsupportedPdf,
+      );
+
+      expect([...verdicts.keys()]).toEqual(["att-0", "att-1", "att-1/att-0"]);
+      expect(excluded).toEqual(["att-0", "att-1/att-0"]);
+    });
+
+    it("never excludes a part inside a forward that cannot be cut out", async () => {
+      const { verdicts, excluded } = judgeDropEmailParts(
+        await parseFixture({ encodeForward: true }),
+        unsupportedPdf,
+      );
+
+      // Still judged, so the row can carry its badge.
+      expect(verdicts.get("att-1/att-0")).toBe(UNSUPPORTED);
+      expect(excluded).toEqual(["att-0"]);
+    });
   });
 });
