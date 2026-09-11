@@ -11,7 +11,8 @@ const ThreadMessageHeaderText: React.FC<{
   label: string;
   sublabel?: string;
   metaLabel?: string;
-}> = ({ label, sublabel, metaLabel }) => {
+  reason?: string;
+}> = ({ label, sublabel, metaLabel, reason }) => {
   // Meta stays in the text stack (like the group header's "N messages")
   // instead of floating right-aligned on its own.
   const secondLine = [sublabel, metaLabel].filter(Boolean).join(" · ");
@@ -27,6 +28,9 @@ const ThreadMessageHeaderText: React.FC<{
         <p className="truncate text-xs text-theme-fg-muted" title={secondLine}>
           {secondLine}
         </p>
+      )}
+      {reason && (
+        <p className="mt-0.5 text-xs text-[var(--theme-error-fg)]">{reason}</p>
       )}
     </div>
   );
@@ -46,6 +50,11 @@ export interface ThreadMessageCardProps {
   /** Whether the message is staged for upload. Unselected reads as dimmed. */
   selected?: boolean;
   onToggle?: () => void;
+  /**
+   * Verdict on the message as a whole. When `ok` is false the header carries
+   * `reason` under its text, the way an attachment row carries its own.
+   */
+  validation?: { ok: boolean; reason?: string };
   disabled?: boolean;
   defaultCollapsed?: boolean;
 }
@@ -63,12 +72,15 @@ export const ThreadMessageCard: React.FC<ThreadMessageCardProps> = ({
   attachmentCount,
   selected = true,
   onToggle,
+  validation,
   disabled = false,
   defaultCollapsed = true,
 }) => {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const panelId = useId();
   const hasAttachments = attachmentCount > 0;
+  const invalid = validation?.ok === false;
+  const reason = invalid ? validation.reason : undefined;
   return (
     <Card
       variant="expandable"
@@ -79,6 +91,7 @@ export const ThreadMessageCard: React.FC<ThreadMessageCardProps> = ({
       expanded={!collapsed}
       bodyId={panelId}
       data-ui="thread-message-card"
+      data-invalid={invalid || undefined}
       // The inset is painted on the frame, not on the body: the body's left
       // gutter is a column the header's controls stand in rather than an
       // inset, so the body cannot carry both.
@@ -139,11 +152,16 @@ export const ThreadMessageCard: React.FC<ThreadMessageCardProps> = ({
                     ? t`1 file`
                     : t`${attachmentCount} files`
                 }
+                reason={reason}
               />
             </button>
           ) : (
             <div className="flex min-w-0 flex-1 items-start gap-2">
-              <ThreadMessageHeaderText label={label} sublabel={sublabel} />
+              <ThreadMessageHeaderText
+                label={label}
+                sublabel={sublabel}
+                reason={reason}
+              />
             </div>
           )}
         </div>
