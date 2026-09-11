@@ -3,8 +3,17 @@ import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from "vitest";
 
+import { componentRegistry } from "@/config/componentRegistry";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useRecentChats } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { messages as enMessages } from "@/locales/en/messages.json";
@@ -32,12 +41,17 @@ vi.mock("./ChatHistorySidebar", () => ({
 const testState = vi.hoisted(
   (): {
     chatContext: Record<string, unknown>;
+    chatSharingEnabled: boolean;
     emptyStateLayout: "bottom" | "centered";
     showUsageAdvisory: boolean;
+    // Chat reads `isOpen` as its collapsed flag, so `true` means collapsed.
+    sidebar: { isOpen: boolean; collapsedMode: "slim" | "hidden" };
   } => ({
     chatContext: {},
+    chatSharingEnabled: true,
     emptyStateLayout: "bottom",
     showUsageAdvisory: true,
+    sidebar: { isOpen: false, collapsedMode: "hidden" },
   }),
 );
 
@@ -59,11 +73,13 @@ vi.mock("./ChatInput", () => ({
 }));
 vi.mock("../MessageList/MessageList", () => ({
   MessageList: ({
+    className,
     controlsContext,
   }: {
+    className?: string;
     controlsContext: MessageControlsContext;
   }) => (
-    <div data-testid="message-list-stub">
+    <div data-testid="message-list-stub" className={className}>
       {[true, false].map((isUser) => (
         <DefaultMessageControls
           key={String(isUser)}
@@ -77,7 +93,18 @@ vi.mock("../MessageList/MessageList", () => ({
   ),
 }));
 vi.mock("./ChatMessage", () => ({ ChatMessage: () => null }));
-vi.mock("./ChatShareDialog", () => ({ ChatShareDialog: () => null }));
+vi.mock("./ChatShareDialog", () => ({
+  ChatShareDialog: ({
+    isOpen,
+    chatId,
+  }: {
+    isOpen: boolean;
+    chatId: string | null;
+  }) =>
+    isOpen ? (
+      <div data-testid="share-dialog-stub" data-chat-id={chatId ?? undefined} />
+    ) : null,
+}));
 vi.mock("./EditChatTitleDialog", () => ({ EditChatTitleDialog: () => null }));
 vi.mock("../Feedback/FeedbackCommentDialog", () => ({
   FeedbackCommentDialog: () => null,
@@ -169,11 +196,7 @@ vi.mock("@/hooks/files/useFileUploadWithTokenCheck", () => ({
 }));
 
 vi.mock("@/hooks/ui", () => ({
-  useSidebar: () => ({
-    isOpen: false,
-    toggle: vi.fn(),
-    collapsedMode: "hidden",
-  }),
+  useSidebar: () => ({ ...testState.sidebar, toggle: vi.fn() }),
   useFilePreviewModal: () => ({
     isPreviewModalOpen: false,
     fileToPreview: null,
@@ -197,7 +220,7 @@ vi.mock("@/providers/FeatureConfigProvider", () => ({
     showUsageAdvisory: testState.showUsageAdvisory,
     maxFiles: 5,
   }),
-  useChatSharingFeature: () => ({ enabled: true }),
+  useChatSharingFeature: () => ({ enabled: testState.chatSharingEnabled }),
   usePinnedChatsFeature: () => ({ enabled: true, maxItems: 5 }),
   useSidebarFeature: () => ({ chatHistoryShowMetadata: false }),
   useAssistantsFeature: () => ({ enabled: true, delegationEnabled: true }),
@@ -296,8 +319,10 @@ describe("Chat surface composition", () => {
     chatLists.chats = [];
     chatLists.pinnedChats = [];
     testState.chatContext = {};
+    testState.chatSharingEnabled = true;
     testState.emptyStateLayout = "bottom";
     testState.showUsageAdvisory = true;
+    testState.sidebar = { isOpen: false, collapsedMode: "hidden" };
     useGenerationStatusStore.getState().reset();
     (useRecentChats as Mock).mockReturnValue({
       data: undefined,
@@ -461,8 +486,10 @@ describe("Chat empty-state shell", () => {
     chatLists.chats = [];
     chatLists.pinnedChats = [];
     testState.chatContext = {};
+    testState.chatSharingEnabled = true;
     testState.emptyStateLayout = "centered";
     testState.showUsageAdvisory = true;
+    testState.sidebar = { isOpen: false, collapsedMode: "hidden" };
     useGenerationStatusStore.getState().reset();
     mockRuns([]);
     i18n.load("en", enMessages as unknown as Messages);
@@ -602,5 +629,118 @@ describe("Chat empty-state shell", () => {
     expect(
       container.querySelector('[data-ui="chat-usage-advisory"]'),
     ).toBeNull();
+  });
+});
+
+describe("Chat top bar", () => {
+  const TopLeftAccessoryStub = () => <div data-testid="accessory-stub" />;
+  const toggleColumn = "pl-[var(--chat-top-bar-toggle-column)]";
+  const topBar = (container: HTMLElement) =>
+    container.querySelector('[data-ui="chat-top-bar"]');
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    chatLists.chats = [{ ...backgroundRun("origin-1"), can_edit: true }];
+    chatLists.pinnedChats = [];
+    testState.chatContext = {};
+    testState.chatSharingEnabled = true;
+    testState.emptyStateLayout = "bottom";
+    testState.showUsageAdvisory = true;
+    testState.sidebar = { isOpen: false, collapsedMode: "hidden" };
+    useGenerationStatusStore.getState().reset();
+    mockRuns([]);
+    i18n.load("en", enMessages as unknown as Messages);
+    i18n.activate("en");
+  });
+
+  afterEach(() => {
+    componentRegistry.ChatTopLeftAccessory = null;
+  });
+
+  it("holds the kit accessory and the share button in one in-flow bar", () => {
+    componentRegistry.ChatTopLeftAccessory = TopLeftAccessoryStub;
+
+    const { container } = renderChat({ messageOrder: ["user-1"] });
+
+    const bar = topBar(container)!;
+    expect(bar.contains(screen.getByTestId("accessory-stub"))).toBe(true);
+    expect(bar.contains(screen.getByRole("button", { name: "Share" }))).toBe(
+      true,
+    );
+    const listClasses = screen.getByTestId("message-list-stub").className;
+    expect(listClasses).not.toContain("pt-12");
+    expect(listClasses).not.toContain("pt-14");
+  });
+
+  it("reserves the toggle column only while collapsed in hidden mode", () => {
+    testState.sidebar = { isOpen: true, collapsedMode: "hidden" };
+    const { container, rerenderChat } = renderChat({
+      messageOrder: ["user-1"],
+    });
+    expect(topBar(container)!.classList.contains(toggleColumn)).toBe(true);
+
+    testState.sidebar = { isOpen: false, collapsedMode: "hidden" };
+    rerenderChat({ messageOrder: ["user-1"] });
+    expect(topBar(container)!.classList.contains(toggleColumn)).toBe(false);
+
+    testState.sidebar = { isOpen: true, collapsedMode: "slim" };
+    rerenderChat({ messageOrder: ["user-1"] });
+    expect(topBar(container)!.classList.contains(toggleColumn)).toBe(false);
+  });
+
+  it("opens the share dialog for the current chat from the bar", () => {
+    renderChat({ messageOrder: ["user-1"] });
+
+    expect(screen.queryByTestId("share-dialog-stub")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    expect(screen.getByTestId("share-dialog-stub")).toHaveAttribute(
+      "data-chat-id",
+      "origin-1",
+    );
+  });
+
+  it("drops the bar without an accessory once sharing is off", () => {
+    const { container, rerenderChat } = renderChat({
+      messageOrder: ["user-1"],
+    });
+    const bar = topBar(container)!;
+    expect(bar.contains(screen.getByRole("button", { name: "Share" }))).toBe(
+      true,
+    );
+
+    testState.chatSharingEnabled = false;
+    rerenderChat({ messageOrder: ["user-1"] });
+
+    expect(topBar(container)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
+  });
+
+  it("keeps the accessory bar above the centred empty state without a share button", () => {
+    testState.emptyStateLayout = "centered";
+    componentRegistry.ChatTopLeftAccessory = TopLeftAccessoryStub;
+
+    const { container } = renderChat({ emptyStateComponent: welcome });
+
+    const bar = topBar(container)!;
+    expect(bar.contains(screen.getByTestId("accessory-stub"))).toBe(true);
+    expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
+    const centredShell = container.querySelector(
+      '[data-ui="chat-empty-state-centered-shell"]',
+    )!;
+    expect(
+      bar.compareDocumentPosition(centredShell) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("leaves the top strip's corner unreserved while sharing is on", () => {
+    const { container } = renderChat({
+      messageOrder: ["user-1"],
+      topContent: <div data-testid="top-content-stub" />,
+    });
+
+    expect(topBar(container)).not.toBeNull();
+    const strip = screen.getByTestId("top-content-stub").parentElement!;
+    expect(strip.className).not.toContain("pr-28");
   });
 });

@@ -78,20 +78,20 @@ components.
 
 ## Available Override Points
 
-| Registry Key                    | Location            | Props Interface                      | Description                                                    |
-| ------------------------------- | ------------------- | ------------------------------------ | -------------------------------------------------------------- |
-| `AssistantFileSourceSelector`   | Assistant form      | `FileSourceSelectorProps`            | File source selector when adding default files to an assistant |
-| `ChatFileSourceSelector`        | Chat input          | `FileSourceSelectorProps`            | File source selector when uploading files to a conversation    |
-| `ChatInputAttachmentPreview`    | Chat input          | `ChatInputAttachmentPreviewProps`    | Staged attachments inside the chat composer, above the textarea |
-| `ChatGroupedAttachmentsPreview` | Attachment groups   | `GroupedFileAttachmentsPreviewProps` | Grouped attachment preview cards or chips                      |
-| `ChatHistoryList`               | Chat sidebar        | `ChatHistoryListProps`               | Chat history list rows and actions                             |
-| `ChatWelcomeScreen`             | Chat empty state    | `WelcomeScreenProps`                 | Empty state shown when a chat has no messages                  |
-| `StarterPrompts`                | Chat welcome screen | `StarterPromptsRendererProps`        | Starter prompt suggestion presentation                         |
-| `AssistantWelcomeScreen`        | Assistant chat      | `AssistantWelcomeScreenProps`        | Empty state shown when opening an assistant chat               |
-| `MessageControls`               | Every message       | `MessageControlsProps`               | Action buttons below each message                              |
-| `ChatMessageRenderer`           | Every message       | `ChatMessageProps`                   | Entire message layout                                          |
-| `ChatTopLeftAccessory`          | Chat shell          | `ChatTopLeftAccessoryProps`          | Chat-level accessory UI                                        |
-| `EratoEmailCodeBlock`           | Message code block  | `EratoEmailCodeBlockProps`           | Custom renderer for `erato-email` fenced code blocks           |
+| Registry Key                    | Location            | Props Interface                      | Description                                                                                                        |
+| ------------------------------- | ------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `AssistantFileSourceSelector`   | Assistant form      | `FileSourceSelectorProps`            | File source selector when adding default files to an assistant                                                     |
+| `ChatFileSourceSelector`        | Chat input          | `FileSourceSelectorProps`            | File source selector when uploading files to a conversation                                                        |
+| `ChatInputAttachmentPreview`    | Chat input          | `ChatInputAttachmentPreviewProps`    | Staged attachments inside the chat composer, above the textarea                                                    |
+| `ChatGroupedAttachmentsPreview` | Attachment groups   | `GroupedFileAttachmentsPreviewProps` | Grouped attachment preview cards or chips                                                                          |
+| `ChatHistoryList`               | Chat sidebar        | `ChatHistoryListProps`               | Chat history list rows and actions                                                                                 |
+| `ChatWelcomeScreen`             | Chat empty state    | `WelcomeScreenProps`                 | Empty state shown when a chat has no messages                                                                      |
+| `StarterPrompts`                | Chat welcome screen | `StarterPromptsRendererProps`        | Starter prompt suggestion presentation                                                                             |
+| `AssistantWelcomeScreen`        | Assistant chat      | `AssistantWelcomeScreenProps`        | Empty state shown when opening an assistant chat                                                                   |
+| `MessageControls`               | Every message       | `MessageControlsProps`               | Action buttons below each message                                                                                  |
+| `ChatMessageRenderer`           | Every message       | `ChatMessageProps`                   | Entire message layout                                                                                              |
+| `ChatTopLeftAccessory`          | Chat shell          | `ChatTopLeftAccessoryProps`          | Model picker slot in the chat top bar; the host positions it in flow, the kit owns the control and its inner inset |
+| `EratoEmailCodeBlock`           | Message code block  | `EratoEmailCodeBlockProps`           | Custom renderer for `erato-email` fenced code blocks                                                               |
 
 Each example is available in `frontend/src/customer/examples/` and can be copied to `frontend/src/customer/components/` as a starting point.
 

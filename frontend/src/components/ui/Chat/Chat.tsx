@@ -714,28 +714,8 @@ export const Chat = ({
   const aboveComposerContent = (
     <>
       {!centeredEmpty && topContent ? (
-        <div
-          className={clsx(
-            "relative z-10 shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3 sm:px-4",
-            // The share button floats over this strip's corner.
-            canShareCurrentChat && "pr-28 sm:pr-32",
-          )}
-        >
+        <div className="shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3 sm:px-4">
           {topContent}
-        </div>
-      ) : null}
-      {!centeredEmpty && canShareCurrentChat ? (
-        <div className="absolute right-3 top-3 z-10 sm:right-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={<ShareIcon className="size-4" />}
-            onClick={() => {
-              handleOpenShareDialog(currentChatId);
-            }}
-          >
-            {currentShareButtonLabel}
-          </Button>
         </div>
       ) : null}
       {showEmptyState ? (
@@ -765,7 +745,7 @@ export const Chat = ({
               canEdit: canEditForCurrentChat,
             }}
             onMessageAction={standardMessageActionHandler}
-            className={clsx(layout, canShareCurrentChat && "pt-12 sm:pt-14")}
+            className={layout}
             useVirtualization={messageOrder.length > 30}
             virtualizationThreshold={30}
             onScrollToBottomRef={handleMessageListRef}
@@ -898,21 +878,41 @@ export const Chat = ({
                 </div>
               </div>
             )}
-            {TopLeftAccessory ? (
-              // In hidden mode the sidebar's floating toggle sits at the
-              // page's top-left; reserve its column so an in-flow accessory
-              // does not slide under it.
+            {TopLeftAccessory || canShareCurrentChat ? (
               <div
                 className={clsx(
-                  sidebarCollapsed && collapsedMode === "hidden" && "pl-12",
+                  "flex min-w-0 shrink-0 items-center",
+                  // In hidden mode the sidebar's toggle floats over this corner.
+                  sidebarCollapsed &&
+                    collapsedMode === "hidden" &&
+                    "pl-[var(--chat-top-bar-toggle-column)]",
                 )}
+                data-ui="chat-top-bar"
               >
-                <TopLeftAccessory
-                  availableModels={availableModels}
-                  selectedModel={selectedModel}
-                  onModelChange={setSelectedModel}
-                  isModelSelectionReady={isSelectionReady}
-                />
+                <div className="min-w-0 flex-1">
+                  {TopLeftAccessory ? (
+                    <TopLeftAccessory
+                      availableModels={availableModels}
+                      selectedModel={selectedModel}
+                      onModelChange={setSelectedModel}
+                      isModelSelectionReady={isSelectionReady}
+                    />
+                  ) : null}
+                </div>
+                {canShareCurrentChat ? (
+                  <div className="shrink-0 py-2 pr-3 sm:pr-4">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon={<ShareIcon className="size-4" />}
+                      onClick={() => {
+                        handleOpenShareDialog(currentChatId);
+                      }}
+                    >
+                      {currentShareButtonLabel}
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             ) : null}
             <ChatEmptyStateLayout
