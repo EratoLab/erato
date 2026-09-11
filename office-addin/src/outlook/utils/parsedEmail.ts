@@ -124,7 +124,7 @@ async function buildAttachment(
   // A forwarded email usually has no filename; name it after its subject.
   const filename =
     attachment.filename?.trim() ||
-    (isMessage ? buildDefaultName(nested?.subject) : null) ||
+    (isMessage ? buildDefaultName(nested?.subject ?? undefined) : null) ||
     "attachment";
   return {
     id,
