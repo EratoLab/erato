@@ -56,6 +56,8 @@ export type FileAttachmentGroupItem =
        */
       onToggle?: () => void;
       labelOverride?: string;
+      /** Replaces the derived type and size line, e.g. while a size is still being worked out. */
+      metaLabel?: string;
       /**
        * Pre-upload validation result. When `ok` is false, the row renders
        * a red error badge with `reason` so the user sees the failure
@@ -497,6 +499,8 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
                         : undefined
                     }
                     validation={item.validation}
+                    labelOverride={item.labelOverride}
+                    metaLabel={item.metaLabel}
                     disabled={disabled}
                     showType={rowTypeLabel}
                     showSize={showFileSizes}
