@@ -246,6 +246,26 @@ msgstr "Votre brouillon est inclus comme contexte"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.dropPipeline.reading"
+msgstr "Lecture de l'e-mail {index} sur {total}…"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.dropPipeline.receiving"
+msgstr "{count, plural, one {Réception de # e-mail…} other {Réception de # e-mails…}}"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.dropPipeline.resolving"
+msgstr "Recherche de {index} sur {total} dans votre boîte aux lettres…"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.dropPipeline.staging"
+msgstr "Ajout à la conversation…"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.emailBody"
 msgstr "Corps de l'e-mail"
 

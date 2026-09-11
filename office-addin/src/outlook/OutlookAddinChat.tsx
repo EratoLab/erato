@@ -17,6 +17,7 @@ import {
   type AddinChatHostProps,
 } from "../core/AddinChatCore";
 import { useActionFacetClientActions } from "./hooks/useAvailableActionFacets";
+import { useDropPipeline } from "./hooks/useDropPipeline";
 import { useEmailDedupSet } from "./hooks/useEmailDedupSet";
 import { useOfficeDragAndDrop } from "../hooks/useOfficeDragAndDrop";
 import { useOutlookClientTools } from "./hooks/useOutlookClientTools";
@@ -40,6 +41,7 @@ import {
 } from "./utils/parseDroppedFiles";
 import { parseEmlBytes } from "./utils/parsedEmail";
 
+import type { DropPipelineState } from "./hooks/useDropPipeline";
 import type { FetchOutlookMessageBytesResult } from "./utils/fetchOutlookMessage";
 import type { OutlookMailListDragItem } from "./utils/outlookMailListDragParse";
 
@@ -165,18 +167,35 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
     [messageFetcher],
   );
 
-  const [pendingExpansionCount, setPendingExpansionCount] = useState(0);
-  const isExpandingDroppedEmails = pendingExpansionCount > 0;
+  const pipeline = useDropPipeline();
+  const {
+    begin: beginDrop,
+    progress: reportDropProgress,
+    phase: dropPhase,
+    done: dropDone,
+    total: dropTotal,
+    name: dropName,
+  } = pipeline;
+  const isExpandingDroppedEmails = dropPhase !== "idle";
+  const dropPipeline = useMemo<DropPipelineState>(
+    () => ({
+      phase: dropPhase,
+      done: dropDone,
+      total: dropTotal,
+      name: dropName,
+    }),
+    [dropPhase, dropDone, dropTotal, dropName],
+  );
   const trackExpansion = useCallback(
-    async <T,>(work: () => Promise<T>): Promise<T> => {
-      setPendingExpansionCount((value) => value + 1);
+    async <T,>(work: () => Promise<T>, total: number): Promise<T> => {
+      const release = beginDrop(total);
       try {
         return await work();
       } finally {
-        setPendingExpansionCount((value) => value - 1);
+        release();
       }
     },
-    [],
+    [beginDrop],
   );
   const uploadFilesWithEmailExpansion = useCallback(
     async (files: File[]) =>
@@ -202,7 +221,7 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
           claimedIds.forEach((id) => dedup.remove(id));
         }
         return uploaded;
-      }),
+      }, files.length),
     [
       addDroppedEmail,
       dedup,
@@ -235,7 +254,13 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
   const handleOutlookMailListDrop = useCallback(
     async (items: OutlookMailListDragItem[]) =>
       trackExpansion(async () => {
-        for (const item of items) {
+        for (const [index, item] of items.entries()) {
+          reportDropProgress({
+            stage: "resolving",
+            index: index + 1,
+            total: items.length,
+            name: item.subject || undefined,
+          });
           try {
             const { bytes, internetMessageId } =
               await fetchOutlookMessageBytesCoalesced(item.itemId);
@@ -266,11 +291,12 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
             );
           }
         }
-      }),
+      }, items.length),
     [
       addDroppedEmail,
       dedup,
       fetchOutlookMessageBytesCoalesced,
+      reportDropProgress,
       trackExpansion,
       tryClaimEmailAttachment,
     ],
@@ -306,7 +332,7 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
         } else if (uploaded.length > 0) {
           chatInputControls.addUploadedFiles(uploaded);
         }
-      });
+      }, files.length);
     },
     [
       addDroppedEmail,
@@ -453,6 +479,7 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
           showSuggestedEmailSource={shouldSuggestCurrentEmail}
           onEmailSourceDropsSent={handleEmailSourceDropsSent}
           isExpandingDroppedEmails={isExpandingDroppedEmails}
+          dropPipeline={dropPipeline}
           virtualFiles={previewVirtualFiles}
           lastSchedulingSignalAt={lastSchedulingSignalAt}
         />

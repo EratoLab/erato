@@ -246,6 +246,26 @@ msgstr "Your draft is included as context"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.dropPipeline.reading"
+msgstr "Reading email {index} of {total}…"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.dropPipeline.receiving"
+msgstr "{count, plural, one {Receiving # email…} other {Receiving # emails…}}"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.dropPipeline.resolving"
+msgstr "Finding {index} of {total} in your mailbox…"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.dropPipeline.staging"
+msgstr "Adding to the chat…"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.emailBody"
 msgstr "Email body"
 
