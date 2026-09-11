@@ -6,13 +6,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
+import { AttachmentTile } from "@/components/ui/FileUpload/AttachmentTile";
 import { formatFileSize } from "@/components/ui/FileUpload/FilePreviewBase";
 import {
   ArrowLeftIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   MailIcon,
-  PageIcon,
 } from "@/components/ui/icons";
 import { createLogger } from "@/utils/debugLogger";
 
@@ -376,12 +376,12 @@ const EmlPreviewBody: React.FC<{
               title={parsed.subject ?? t`Email preview`}
               sandbox=""
               srcDoc={sanitizedHtml}
-              className="h-[60vh] w-full rounded border border-[var(--theme-border-attachment)] bg-white"
+              className="card-geometry h-[60vh] w-full border border-[var(--theme-border-attachment)] bg-white"
             />
           ) : (
             <pre
               data-testid="eml-preview-text"
-              className="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-accent)] p-3 text-sm text-[var(--theme-fg-primary)]"
+              className="card-geometry max-h-[60vh] overflow-auto whitespace-pre-wrap border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-accent)] p-3 text-sm text-[var(--theme-fg-primary)]"
             >
               {parsed.text || t`(no body)`}
             </pre>
@@ -563,12 +563,12 @@ const ThreadMessageSection: React.FC<{
   return (
     <div
       data-testid="eml-thread-message"
-      className="rounded border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-primary)]"
+      className="card-geometry border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-primary)]"
     >
       <button
         type="button"
         onClick={() => setExpanded((value) => !value)}
-        className="flex w-full items-start gap-2 p-3 text-left"
+        className="card-section focus-ring-inset flex w-full items-start gap-2 p-3 text-left"
         aria-expanded={expanded}
         aria-controls={panelId}
       >
@@ -614,12 +614,12 @@ const ThreadMessageSection: React.FC<{
               title={message.subject ?? t`Email`}
               sandbox=""
               srcDoc={sanitizedHtml}
-              className="h-[40vh] w-full rounded border border-[var(--theme-border-attachment)] bg-white"
+              className="card-geometry h-[40vh] w-full border border-[var(--theme-border-attachment)] bg-white"
             />
           ) : message.text ? (
             <pre
               data-testid="eml-thread-message-text"
-              className="max-h-[40vh] overflow-auto whitespace-pre-wrap rounded border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-accent)] p-3 text-sm text-[var(--theme-fg-primary)]"
+              className="card-geometry max-h-[40vh] overflow-auto whitespace-pre-wrap border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-accent)] p-3 text-sm text-[var(--theme-fg-primary)]"
             >
               {message.text}
             </pre>
@@ -649,7 +649,7 @@ const EmlHeader: React.FC<{
   date: string | null;
 }> = ({ subject, from, to, cc, date }) => {
   return (
-    <div className="flex items-start gap-3 rounded border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-primary)] p-3">
+    <div className="card-geometry flex items-start gap-3 border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-primary)] p-3">
       <div className="mt-0.5 shrink-0 text-[var(--theme-fg-muted)]">
         <MailIcon className="size-5" aria-hidden="true" />
       </div>
@@ -703,25 +703,21 @@ const EmlAttachmentList: React.FC<{
     >
       {attachments.map((att, index) => (
         <li key={`${att.filename}-${index}`} className="min-w-0">
-          <button
-            type="button"
-            onClick={() => onSelect(att)}
-            title={att.filename}
-            className="flex min-w-0 items-center gap-2 rounded-[var(--theme-radius-message)] border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-primary)] px-3 py-2 text-left shadow-sm transition-colors hover:bg-[var(--theme-bg-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-fg-accent)]"
-          >
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--theme-bg-accent)] text-[var(--theme-fg-secondary)]">
-              <PageIcon className="size-4" aria-hidden="true" />
-            </div>
-            <div className="min-w-0">
-              <div className="truncate text-sm font-medium text-[var(--theme-fg-primary)]">
-                {att.filename}
-              </div>
-              <div className="truncate text-xs text-[var(--theme-fg-muted)]">
-                {att.mimeType}
-                {att.size > 0 ? ` • ${formatFileSize(att.size)}` : ""}
-              </div>
-            </div>
-          </button>
+          <AttachmentTile
+            file={{ id: `${att.filename}-${index}`, filename: att.filename }}
+            // The line under the name is the MIME type the message declared,
+            // not the extension, and the two disagree often enough here (the
+            // octet-stream PDFs below) that a per-type glyph would contradict
+            // it. One neutral page keeps them from arguing.
+            // eslint-disable-next-line lingui/no-unlocalized-strings -- Icon registry key
+            icon="Page"
+            metaLabel={
+              att.size > 0
+                ? `${att.mimeType} · ${formatFileSize(att.size)}`
+                : att.mimeType
+            }
+            onActivate={() => onSelect(att)}
+          />
         </li>
       ))}
     </ul>

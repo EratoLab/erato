@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { useCallback, useMemo } from "react";
+import { useCallback, useId, useMemo } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { useOpenMcpServersSettings } from "@/hooks/ui/useOpenMcpServersSettings";
@@ -37,6 +37,8 @@ export const McpServerSelector = ({
   onSelectionChange,
   disabled = false,
 }: McpServerSelectorProps) => {
+  const serverNameIdPrefix = useId();
+
   const selectedServerIdsSet = useMemo(
     () => new Set(selectedServerIds),
     [selectedServerIds],
@@ -75,7 +77,16 @@ export const McpServerSelector = ({
   );
 
   return (
-    <div className="space-y-2">
+    // Named here rather than by aria-labelledby: the visible heading is
+    // FormField's own label element, which carries no id to point at.
+    <div
+      className="space-y-2"
+      role="group"
+      aria-label={t({
+        id: "assistant.form.mcpServers.label",
+        message: "MCP Servers",
+      })}
+    >
       <p
         className="text-sm text-theme-fg-secondary"
         data-testid="mcp-server-selector-summary"
@@ -92,58 +103,63 @@ export const McpServerSelector = ({
             })}
       </p>
       <ul className="divide-y divide-theme-border rounded-md border border-theme-border">
-        {servers.map((server) => {
+        {servers.map((server, index) => {
           const isSelected = selectedServerIdsSet.has(server.id);
           const needsAuthentication =
             server.connection_status === "NEEDS_AUTHENTICATION";
           const isUnavailable = server.connection_status === "FAILURE";
           const isCheckboxDisabled = disabled || (isUnavailable && !isSelected);
+          const serverNameId = `${serverNameIdPrefix}-${index}`;
 
           return (
             <li
               key={server.id}
-              className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 p-3"
+              className="flex items-center"
               data-testid={`mcp-server-option-${server.id}`}
             >
               <label
                 className={clsx(
-                  "flex min-w-0 items-center gap-2",
+                  "flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-3 gap-y-1 p-3",
                   isCheckboxDisabled ? "cursor-not-allowed" : "cursor-pointer",
                 )}
               >
-                <input
-                  type="checkbox"
-                  checked={isSelected}
-                  disabled={isCheckboxDisabled}
-                  onChange={() => toggleServerSelection(server.id)}
-                  className="size-4 rounded border-theme-border-primary bg-theme-bg-primary text-theme-fg-accent focus:ring-theme-fg-accent focus:ring-offset-0 disabled:opacity-50"
-                />
-                <span
-                  className={clsx(
-                    "truncate text-sm",
-                    isUnavailable
-                      ? "text-theme-fg-muted"
-                      : "text-theme-fg-primary",
-                  )}
-                >
-                  {server.id}
-                </span>
-              </label>
-              <span className="flex shrink-0 items-center gap-2">
-                {server.connection_status === "SUCCESS" && (
-                  <span className="inline-flex items-center gap-1 text-xs text-theme-success-fg">
-                    <CheckCircleIcon
-                      className="size-3.5 shrink-0"
-                      aria-hidden="true"
-                    />
-                    {t({
-                      id: "assistant.form.mcpServers.status.connected",
-                      message: "Connected",
-                    })}
+                <span className="flex min-w-0 items-center gap-2">
+                  {/* The label spans the row, so name-from-content would
+                      swallow the status text; the name stays the server id. */}
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    disabled={isCheckboxDisabled}
+                    onChange={() => toggleServerSelection(server.id)}
+                    aria-labelledby={serverNameId}
+                    className="size-4 accent-[var(--theme-fg-accent)] focus:ring-theme-fg-accent focus:ring-offset-0 disabled:opacity-50"
+                  />
+                  <span
+                    id={serverNameId}
+                    className={clsx(
+                      "truncate text-sm",
+                      isUnavailable
+                        ? "text-theme-fg-muted"
+                        : "text-theme-fg-primary",
+                    )}
+                  >
+                    {server.id}
                   </span>
-                )}
-                {needsAuthentication && (
-                  <>
+                </span>
+                <span className="flex shrink-0 items-center gap-2">
+                  {server.connection_status === "SUCCESS" && (
+                    <span className="inline-flex items-center gap-1 text-xs text-theme-success-fg">
+                      <CheckCircleIcon
+                        className="size-3.5 shrink-0"
+                        aria-hidden="true"
+                      />
+                      {t({
+                        id: "assistant.form.mcpServers.status.connected",
+                        message: "Connected",
+                      })}
+                    </span>
+                  )}
+                  {needsAuthentication && (
                     <span className="inline-flex items-center gap-1 text-xs text-theme-warning-fg">
                       <WarningCircleIcon
                         className="size-3.5 shrink-0"
@@ -154,39 +170,40 @@ export const McpServerSelector = ({
                         message: "Requires connection",
                       })}
                     </span>
-                    {/* A null callback means no Router-mounted settings
-                        chrome exists on this host, so the shortcut would be
-                        a dead button — the status label alone stands. */}
-                    {openServerSettings && (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        disabled={disabled}
-                        onClick={openServerSettings}
-                        data-testid={`mcp-server-connect-${server.id}`}
-                      >
-                        {t({
-                          id: "assistant.form.mcpServers.connectAction",
-                          message: "Connect in Settings",
-                        })}
-                      </Button>
-                    )}
-                  </>
-                )}
-                {isUnavailable && (
-                  <span className="inline-flex items-center gap-1 text-xs text-theme-error-fg">
-                    <ErrorIcon
-                      className="size-3.5 shrink-0"
-                      aria-hidden="true"
-                    />
+                  )}
+                  {isUnavailable && (
+                    <span className="inline-flex items-center gap-1 text-xs text-theme-error-fg">
+                      <ErrorIcon
+                        className="size-3.5 shrink-0"
+                        aria-hidden="true"
+                      />
+                      {t({
+                        id: "assistant.form.mcpServers.status.unavailable",
+                        message: "Unavailable",
+                      })}
+                    </span>
+                  )}
+                </span>
+              </label>
+              {/* Outside the label: a label holds one labelable element, and
+                  this must not toggle the row. Null callback = no host chrome. */}
+              {needsAuthentication && openServerSettings && (
+                <span className="shrink-0 pr-3">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={disabled}
+                    onClick={openServerSettings}
+                    data-testid={`mcp-server-connect-${server.id}`}
+                  >
                     {t({
-                      id: "assistant.form.mcpServers.status.unavailable",
-                      message: "Unavailable",
+                      id: "assistant.form.mcpServers.connectAction",
+                      message: "Connect in Settings",
                     })}
-                  </span>
-                )}
-              </span>
+                  </Button>
+                </span>
+              )}
             </li>
           );
         })}

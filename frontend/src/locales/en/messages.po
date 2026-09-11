@@ -171,6 +171,7 @@ msgstr "Optional: Restrict which MCP servers may provide capabilities to this as
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
+#: src/components/ui/Assistant/McpServerSelector.tsx
 msgid "assistant.form.mcpServers.label"
 msgstr "MCP Servers"
 
@@ -1455,7 +1456,7 @@ msgid "chat.attachment.teamsImage"
 msgstr "Image"
 
 #. js-lingui-explicit-id
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+#: src/components/ui/FileUpload/AttachmentTile.tsx
 msgid "chat.attachments.include"
 msgstr "Include"
 
@@ -1546,8 +1547,6 @@ msgstr "Loading file..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/AttachmentTile.tsx
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
-#: src/components/ui/Teams/TeamsConversationView.tsx
 msgid "chat.file.preview_attachment"
 msgstr "Preview attachment"
 
@@ -2582,7 +2581,6 @@ msgstr "Preview"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/AttachmentTile.tsx
-#: src/components/ui/FileUpload/FilePreviewBase.tsx
 #: src/components/ui/FileUpload/FilePreviewButton.tsx
 msgid "common.remove"
 msgstr "Remove"
@@ -5129,7 +5127,6 @@ msgid "Failed to upload audio recording for transcription."
 msgstr "Failed to upload audio recording for transcription."
 
 #: src/components/ui/FileUpload/AttachmentTile.tsx
-#: src/components/ui/FileUpload/FilePreviewBase.tsx
 msgid "File"
 msgstr "File"
 
@@ -5189,6 +5186,7 @@ msgstr "Image"
 msgid "In Progress"
 msgstr "In Progress"
 
+#: src/components/ui/FileUpload/AttachmentTile.tsx
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 #~ msgid "Include"
 #~ msgstr "Include"

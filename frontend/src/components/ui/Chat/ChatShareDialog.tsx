@@ -12,16 +12,8 @@ import { useChatShareLink } from "@/hooks/useChatShareLink";
 
 import { CheckIcon, CopyIcon } from "../icons";
 
-import type React from "react";
-
 // eslint-disable-next-line lingui/no-unlocalized-strings
 const CHAT_SHARE_PATH_PREFIX = "/chat-share/";
-
-// The row has never painted a fill of its own — it sits on the dialog's own
-// surface — and the card skin's default would give it one.
-const UNFILLED_CARD_STYLE = {
-  "--card-bg": "transparent",
-} as React.CSSProperties;
 
 interface ChatShareDialogProps {
   isOpen: boolean;
@@ -106,9 +98,9 @@ export function ChatShareDialog({
           as="label"
           selected={!!shareLink?.enabled}
           size="none"
-          className="cursor-pointer"
+          // A class, not an inline style: hover and selection only move --card-bg.
+          className="cursor-pointer [--card-bg:transparent]"
           bodyClassName="flex items-center justify-between gap-4 px-4 py-3"
-          style={UNFILLED_CARD_STYLE}
         >
           <div className="space-y-1">
             <p className="font-medium text-theme-fg-primary">

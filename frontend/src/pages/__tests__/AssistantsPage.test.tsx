@@ -527,6 +527,13 @@ describe("AssistantsPage", () => {
     fireEvent.click(inReviewFilter);
     expect(allFilter).toHaveClass("font-medium");
     expect(inReviewFilter).toHaveClass("font-medium");
+    // Guards the selected filter against being repainted by the hover fill.
+    expect(inReviewFilter).toHaveClass(
+      "aria-pressed:hover:bg-theme-bg-selected",
+    );
+    expect(allFilter).not.toHaveClass(
+      "aria-pressed:hover:bg-theme-bg-selected",
+    );
     expect(screen.getByText("Pending assistant")).toBeInTheDocument();
     expect(screen.queryByText("Published assistant")).not.toBeInTheDocument();
 

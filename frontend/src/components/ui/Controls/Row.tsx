@@ -23,7 +23,8 @@ export const ROW_ITEM_SELECTOR = "[data-row-item]:not([disabled])";
 /**
  * `menu` rows live inside a popover panel and read the dropdown item channel;
  * `sidebar` rows are the app's navigation and history rows; `list` rows are a
- * plain vertical list of choices inside a modal or a card well.
+ * plain vertical list of choices inside a modal or a card well, and take their
+ * corner from the step that well publishes, so the two stay concentric.
  *
  * `list` is deliberately not the home for a row that only *frames* a control it
  * does not own — a checkbox row whose click belongs to the checkbox, not to the

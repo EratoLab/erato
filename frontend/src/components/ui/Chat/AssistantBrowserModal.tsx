@@ -13,10 +13,12 @@ import type React from "react";
 
 const SEARCH_KEYS = ["name", "description"];
 
-// The well has never painted a fill of its own — it sits on the modal shell —
-// and the card skin's default would give it one.
-const UNFILLED_CARD_STYLE = {
+// No fill of its own — the well sits on the modal shell. The inset is off the
+// size scale and is what publishes the concentric corner the rows read.
+const WELL_CARD_STYLE = {
   "--card-bg": "transparent",
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  "--card-inset": "0.25rem",
 } as React.CSSProperties;
 
 export interface AssistantBrowserModalProps {
@@ -102,9 +104,8 @@ export function AssistantBrowserModal({
 
       <Card
         variant="surface"
-        size="none"
         className="max-h-64 overflow-y-auto"
-        style={UNFILLED_CARD_STYLE}
+        style={WELL_CARD_STYLE}
       >
         {matches.length === 0 ? (
           <div className="py-8 text-center">
@@ -119,7 +120,7 @@ export function AssistantBrowserModal({
           // Inset by the row corner rather than divided by hairlines: once a
           // row paints a rounded hover fill, a full-bleed rule between two of
           // them cuts across the corner it just drew.
-          <div className="flex flex-col gap-0.5 p-1">
+          <div className="flex flex-col gap-0.5">
             {matches.map((assistant) => (
               <Row
                 key={assistant.id}

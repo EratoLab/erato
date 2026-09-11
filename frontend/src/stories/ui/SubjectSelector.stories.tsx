@@ -199,7 +199,7 @@ const SubjectRow = memo<SubjectRowProps>(
           checked={isSelected}
           onChange={() => onToggle(subject)}
           disabled={disabled}
-          className="size-4 rounded border-theme-border text-theme-fg-accent focus:ring-theme-focus disabled:cursor-not-allowed"
+          className="size-4 accent-[var(--theme-fg-accent)] focus:ring-theme-focus disabled:cursor-not-allowed"
           aria-label={`Select ${subject.display_name}`}
         />
         <div className="min-w-0 flex-1">

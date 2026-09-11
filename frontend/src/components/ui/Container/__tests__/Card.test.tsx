@@ -58,6 +58,26 @@ describe("Card", () => {
     expect(screen.getByTestId("section-card").tagName).toBe("SECTION");
   });
 
+  it("gives a tag that is inline by default a display of its own", () => {
+    render(
+      <>
+        <Card variant="selectable" as="label" data-testid="label-frame">
+          Fast
+        </Card>
+        <Card variant="interactive" as="a" href="/chat/1" data-testid="a-frame">
+          A search result
+        </Card>
+        <Card variant="surface" as="section" data-testid="block-frame">
+          A settings panel
+        </Card>
+      </>,
+    );
+
+    expect(screen.getByTestId("label-frame")).toHaveClass("block");
+    expect(screen.getByTestId("a-frame")).toHaveClass("block");
+    expect(screen.getByTestId("block-frame")).not.toHaveClass("block");
+  });
+
   it("spreads unknown props and forwards a ref onto the frame", () => {
     const ref = createRef<HTMLElement>();
     const onDrop = vi.fn();

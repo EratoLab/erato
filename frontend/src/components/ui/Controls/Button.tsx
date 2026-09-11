@@ -245,6 +245,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           shape === "pill" && "rounded-[var(--theme-radius-pill)]",
           {
             "bg-theme-bg-selected": ariaPressed === true,
+            // The `aria-pressed:` prefix buys specificity, not gating: ghost's
+            // own hover fill and label colour outrank the plain utilities.
+            "aria-pressed:text-theme-fg-primary aria-pressed:hover:bg-theme-bg-selected":
+              variant === "ghost" && ariaPressed === true,
             "justify-center": usesIconGeometry,
           },
           showOnHover && "theme-transition opacity-0 group-hover:opacity-100",

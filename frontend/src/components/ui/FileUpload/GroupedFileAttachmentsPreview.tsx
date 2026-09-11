@@ -4,24 +4,14 @@ import { useState } from "react";
 
 import { componentRegistry } from "@/config/componentRegistry";
 
+import { AttachmentNotice } from "./AttachmentNotice";
 import { AttachmentTile } from "./AttachmentTile";
-import {
-  FilePreviewBase,
-  getFileName,
-  type FileResource,
-} from "./FilePreviewBase";
+import { type FileResource } from "./FilePreviewBase";
 import { ThreadMessageCard } from "./ThreadMessageCard";
 import { FILE_PREVIEW_STYLES } from "./fileUploadStyles";
 import { Card } from "../Container/Card";
-import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { Button } from "../Controls/Button";
-import { SpinnerIcon } from "../Feedback/SpinnerIcon";
-import {
-  ChevronDownIcon,
-  ChevronRightIcon,
-  ErrorIcon,
-  InfoIcon,
-} from "../icons";
+import { ChevronDownIcon, ChevronRightIcon } from "../icons";
 
 import type React from "react";
 
@@ -155,6 +145,10 @@ export interface GroupedFileAttachmentsPreviewProps {
   showFileTypes?: boolean;
   showFileSizes?: boolean;
   className?: string;
+  /**
+   * Accepted and ignored: a chip truncates in CSS against the width it is
+   * actually given, so there is no character count to cut at.
+   */
   filenameTruncateLength?: number;
   defaultVisibleItems?: number;
   stickyGroupHeaders?: boolean;
@@ -218,172 +212,6 @@ function getFileId(item: ItemWithFile): string {
   return item.id;
 }
 
-interface SelectableAttachmentRowProps {
-  file: FileResource;
-  selected?: boolean;
-  onToggle?: () => void;
-  disabled: boolean;
-  showFileType: boolean;
-  showSize: boolean;
-  filenameTruncateLength: number;
-  validation?: { ok: boolean; reason?: string };
-  /**
-   * When present, the chip body becomes a click-to-preview target (the same
-   * mechanic as plain attachment items) while the checkbox stays a separate
-   * control. Without it, the whole row is one toggle label as before.
-   */
-  onPreview?: () => void;
-}
-
-const SELECTABLE_ROW_CLASS =
-  "flex w-full items-center gap-2 rounded-[var(--attachment-tile-radius,var(--theme-radius-base))] border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-2";
-
-const SelectableAttachmentRow: React.FC<SelectableAttachmentRowProps> = ({
-  file,
-  selected = true,
-  onToggle,
-  disabled,
-  showFileType,
-  showSize,
-  filenameTruncateLength,
-  validation,
-  onPreview,
-}) => {
-  const filename = getFileName(file);
-  const invalid = validation?.ok === false;
-  const rowClassName = clsx(SELECTABLE_ROW_CLASS, !selected && "opacity-50");
-  // A row without a toggle is read-only, so it has no selection to report and
-  // must not look selected to a theme rule.
-  const rowSelected = onToggle ? selected || undefined : undefined;
-  const chip = (
-    <div className="min-w-0 flex-1">
-      <FilePreviewBase
-        file={file}
-        onRemove={() => onToggle?.()}
-        disabled={disabled}
-        showRemoveButton={false}
-        showSize={showSize}
-        showFileType={showFileType}
-        filenameTruncateLength={filenameTruncateLength}
-        filenameClassName="max-w-full"
-        chromeless
-      />
-      {invalid && validation.reason && (
-        <p className="mt-0.5 text-xs text-[var(--theme-error-fg)]">
-          {validation.reason}
-        </p>
-      )}
-    </div>
-  );
-  const checkbox = onToggle ? (
-    <input
-      type="checkbox"
-      checked={selected}
-      onChange={onToggle}
-      disabled={disabled}
-      className="size-4 shrink-0 rounded border-theme-border text-theme-fg-accent focus:ring-theme-focus disabled:cursor-not-allowed"
-      aria-label={`${t({ id: "chat.attachments.include", message: "Include" })} ${filename}`}
-    />
-  ) : null;
-
-  if (onPreview) {
-    return (
-      <div
-        className={rowClassName}
-        data-selected={rowSelected}
-        data-ui="attachment-tile"
-      >
-        {checkbox}
-        <InteractiveContainer
-          onClick={onPreview}
-          useDiv={true}
-          className="min-w-0 flex-1 cursor-pointer rounded-[var(--attachment-tile-radius,var(--theme-radius-base))] hover:bg-theme-bg-accent"
-          aria-label={`${t({ id: "chat.file.preview_attachment", message: "Preview attachment" })} ${filename}`}
-        >
-          {chip}
-        </InteractiveContainer>
-      </div>
-    );
-  }
-
-  // Without a toggle there is nothing to label, so the row is a plain
-  // container rather than a `label` pointing at a control that isn't there.
-  if (!onToggle) {
-    return (
-      <div className={rowClassName} data-ui="attachment-tile">
-        {chip}
-      </div>
-    );
-  }
-
-  return (
-    <label
-      className={rowClassName}
-      data-selected={rowSelected}
-      data-ui="attachment-tile"
-    >
-      {checkbox}
-      {chip}
-    </label>
-  );
-};
-
-const StatusRow: React.FC<{
-  label: string;
-  description?: string;
-  tone?: "neutral" | "error";
-}> = ({ label, description, tone = "neutral" }) => {
-  const isError = tone === "error";
-  const Icon = isError ? ErrorIcon : InfoIcon;
-  return (
-    // `data-tone` carries the error state into CSS so the overrides below can
-    // be `data-[tone=error]:` variants. `FILE_PREVIEW_STYLES` is shared with
-    // FilePreviewBase/FilePreviewLoading and already sets a border colour and a
-    // filename colour; without tailwind-merge an `isError && "…"` branch raced
-    // those on generated-stylesheet position, and the filename override lost —
-    // an error filename rendered in the ordinary foreground colour. The variant
-    // compiles to `.data-\[tone\=error\]\:…[data-tone="error"]`, specificity
-    // (0,2,0) against the shared constant's (0,1,0), so it wins by rule.
-    <div
-      data-tone={tone}
-      className={clsx(
-        FILE_PREVIEW_STYLES.container,
-        "data-[tone=error]:border-[var(--theme-error-border)]",
-      )}
-      role={isError ? "alert" : "status"}
-      aria-live={isError ? undefined : "polite"}
-    >
-      <div
-        className={clsx(
-          "mr-2 shrink-0",
-          isError
-            ? "text-[var(--theme-error-fg)]"
-            : "text-[var(--theme-fg-muted)]",
-        )}
-      >
-        <Icon className={FILE_PREVIEW_STYLES.icon} aria-hidden="true" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div
-          data-tone={tone}
-          className={clsx(
-            FILE_PREVIEW_STYLES.name,
-            "data-[tone=error]:text-[var(--theme-error-fg)]",
-          )}
-          title={label}
-        >
-          {label}
-        </div>
-        {description && (
-          <div className="text-xs text-[var(--theme-fg-muted)]">
-            {description}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
 export const DefaultGroupedFileAttachmentsPreview: React.FC<
   GroupedFileAttachmentsPreviewProps
 > = ({
@@ -394,7 +222,6 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
   showFileTypes = false,
   showFileSizes = true,
   className = "",
-  filenameTruncateLength = 25,
   defaultVisibleItems = 3,
   stickyGroupHeaders = false,
   groupActions,
@@ -448,6 +275,12 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
   if (groups.length === 0) {
     return null;
   }
+
+  // These rows have always read the type as its family name — a .csv says
+  // SPREADSHEET — so that is what a caller asking for type labels gets, and no
+  // line at all is what one asking for none gets. Neither ends in the
+  // extension, so both leave the filename pinning its own tail.
+  const rowTypeLabel = showFileTypes ? "family" : "none";
 
   return (
     <div className={clsx("mb-3 flex flex-col gap-3", className)}>
@@ -575,31 +408,25 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
                 // spinner; the framed loading chip belongs to the
                 // composer, where a loading file stands in a row of files.
                 return (
-                  <div
+                  <AttachmentNotice
                     key={item.id}
-                    className="flex w-full justify-center py-2"
-                    data-ui="attachment-loading"
-                  >
-                    <SpinnerIcon
-                      size="md"
-                      srText={
-                        item.label ??
-                        t({
-                          id: "chat.attachments.loading",
-                          message: "Loading attachment...",
-                        })
-                      }
-                    />
-                    {item.description ? (
-                      <span className="sr-only">{item.description}</span>
-                    ) : null}
-                  </div>
+                    label={
+                      item.label ??
+                      t({
+                        id: "chat.attachments.loading",
+                        message: "Loading attachment...",
+                      })
+                    }
+                    description={item.description}
+                    busy
+                    bare
+                  />
                 );
               }
 
               if (item.kind === "status") {
                 return (
-                  <StatusRow
+                  <AttachmentNotice
                     key={item.id}
                     label={item.label}
                     description={item.description}
@@ -621,17 +448,23 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
                     attachmentCount={item.attachments.length}
                   >
                     {item.attachments.map((attachment) => (
-                      <SelectableAttachmentRow
+                      <AttachmentTile
                         key={attachment.id}
                         file={attachment.file}
-                        selected={attachment.selected}
-                        onToggle={attachment.onToggle}
-                        disabled={disabled}
-                        showFileType={showFileTypes}
-                        showSize={showFileSizes}
-                        filenameTruncateLength={filenameTruncateLength}
+                        variant="row"
+                        selection={
+                          attachment.onToggle
+                            ? {
+                                selected: attachment.selected ?? true,
+                                onToggle: attachment.onToggle,
+                              }
+                            : undefined
+                        }
                         validation={attachment.validation}
-                        onPreview={
+                        disabled={disabled}
+                        showType={rowTypeLabel}
+                        showSize={showFileSizes}
+                        onActivate={
                           onFilePreview && "id" in attachment.file
                             ? () => onFilePreview(attachment.file)
                             : undefined
@@ -644,16 +477,18 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
 
               if (item.kind === "selectableAttachment") {
                 return (
-                  <SelectableAttachmentRow
+                  <AttachmentTile
                     key={getFileKey(item)}
                     file={item.file}
-                    selected={item.selected}
-                    onToggle={item.onToggle}
-                    disabled={disabled}
-                    showFileType={showFileTypes}
-                    showSize={showFileSizes}
-                    filenameTruncateLength={filenameTruncateLength}
+                    variant="row"
+                    selection={{
+                      selected: item.selected,
+                      onToggle: item.onToggle,
+                    }}
                     validation={item.validation}
+                    disabled={disabled}
+                    showType={rowTypeLabel}
+                    showSize={showFileSizes}
                   />
                 );
               }

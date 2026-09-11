@@ -186,6 +186,10 @@ export const Card = forwardRef<HTMLElement, CardProps>(function Card(
   const domProps: React.HTMLAttributes<HTMLElement> = rest;
   const nativeButton = as === "button";
 
+  // An inline frame is split around its block body and the border paints on the
+  // fragments; `block` sorts first in Tailwind, so a caller's own display wins.
+  const inlineByDefault = as === "a" || as === "label";
+
   // The offset ring, not the inset one: a card's own corner is the outer edge
   // here, and the bands inside it already keep clear of the ring by never
   // clipping.
@@ -203,6 +207,7 @@ export const Card = forwardRef<HTMLElement, CardProps>(function Card(
 
   const frameClassName = clsx(
     "card-geometry card-skin",
+    inlineByDefault && "block",
     bordered && "border",
     nested && "card-nested",
     insetClass,

@@ -115,6 +115,8 @@ export {
   type SidebarNavigationItemProps,
 } from "@/components/ui/Chat/SidebarNavigationItem";
 export type { ChatTopLeftAccessoryProps } from "@/components/ui/Chat/ChatTopLeftAccessory";
+export { AttachmentNotice } from "@/components/ui/FileUpload/AttachmentNotice";
+export type { AttachmentNoticeProps } from "@/components/ui/FileUpload/AttachmentNotice";
 export { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
 export { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoading";
 export {
