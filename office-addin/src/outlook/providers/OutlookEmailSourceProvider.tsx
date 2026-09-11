@@ -13,6 +13,7 @@ import { useOutlookMailItem } from "./OutlookMailItemProvider";
 import { useCurrentThread } from "../hooks/useCurrentThread";
 import { useOutlookMessageFetcher } from "../hooks/useOutlookMessageFetcher";
 import { buildThreadEmlFile } from "../utils/buildThreadEmlFile";
+import { collectDismissedPaths } from "../utils/dismissedAttachmentPaths";
 import {
   OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
   runWithGraphTimeout,
@@ -39,37 +40,6 @@ const OUTLOOK_CLOUD_ATTACHMENT_TYPE = "cloud";
 
 function generateDroppedKey(): string {
   return `drop-${globalThis.crypto.randomUUID()}`;
-}
-
-interface DismissableAttachment {
-  id: string;
-  nested?: { attachments: DismissableAttachment[] };
-}
-
-/** Attachment paths for `trimEmlFileSync`, descending into forwarded emails. */
-function collectDismissedPaths(
-  attachments: DismissableAttachment[],
-  dismissedIds: ReadonlySet<string>,
-  prefix = "",
-): string[] {
-  const paths: string[] = [];
-  attachments.forEach((attachment, index) => {
-    const path = `${prefix}${index}`;
-    if (dismissedIds.has(attachment.id)) {
-      paths.push(path);
-      return;
-    }
-    if (attachment.nested) {
-      paths.push(
-        ...collectDismissedPaths(
-          attachment.nested.attachments,
-          dismissedIds,
-          `${path}/`,
-        ),
-      );
-    }
-  });
-  return paths;
 }
 
 export type StagedEmailSource = "current-thread" | "drop";
