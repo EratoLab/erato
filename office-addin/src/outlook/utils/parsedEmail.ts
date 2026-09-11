@@ -80,6 +80,9 @@ export async function parseEmlBytes(
   };
 }
 
+/** Above this a forwarded email keeps the generic name; parsing it only for a subject is not worth the stall. */
+const NESTED_NAME_PARSE_LIMIT_BYTES = 2 * 1024 * 1024;
+
 /** A forwarded email usually has no filename; name it after its subject. */
 async function nestedMessageName(
   attachment: Attachment,
@@ -88,7 +91,10 @@ async function nestedMessageName(
     return null;
   }
   const blobPart = toBlobPart(attachment.content);
-  if (!(blobPart instanceof ArrayBuffer)) {
+  if (
+    !(blobPart instanceof ArrayBuffer) ||
+    blobPart.byteLength > NESTED_NAME_PARSE_LIMIT_BYTES
+  ) {
     return buildDefaultName(undefined);
   }
   try {
