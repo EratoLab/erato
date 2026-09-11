@@ -54,7 +54,7 @@ import {
 } from "../sessionPolicy";
 import {
   buildDropEmailGroup,
-  isEmailBodyPart,
+  judgeDropEmailParts,
 } from "../utils/buildDropEmailGroup";
 import { resolveOutlookActionFacet } from "../utils/outlookActionFacet";
 import { OUTLOOK_REPLY_FROM_READ_FACET_ID } from "../utils/outlookClientActions";
@@ -402,9 +402,7 @@ export const AddinChatInput = forwardRef<
           parentReplyContext !== null ||
           isLoadingParentReplyContext)));
   // One verdict per rendered attachment row, shared by the rows and the
-  // exclusions handed to the provider so the two can never disagree. A part
-  // inside a forwarded email that cannot be cut out is judged for its badge
-  // but never excluded: that would demand a trim the bytes cannot honour.
+  // exclusions handed to the provider so the two can never disagree.
   const { stagedPartVerdicts, policyExclusions } = useMemo<{
     stagedPartVerdicts: StagedPartVerdicts;
     policyExclusions: ReadonlyMap<string, string[]>;
@@ -414,18 +412,10 @@ export const AddinChatInput = forwardRef<
       maxFormatted: maxSizeFormatted,
     };
     const typePolicy = { capabilities, isLoading: isLoadingCapabilities };
+    const validate = (part: StagedPartMetadata) =>
+      validateStagedPart(part, limits, typePolicy);
     const verdicts = new Map<string, Map<string, StagedPartValidation>>();
     const exclusions = new Map<string, string[]>();
-    const judge = (
-      perKey: Map<string, StagedPartValidation>,
-      excluded: string[],
-      part: StagedPartMetadata & { id: string },
-      enforce = true,
-    ) => {
-      const verdict = validateStagedPart(part, limits, typePolicy);
-      perKey.set(part.id, verdict);
-      if (enforce && isPolicyExcluded(verdict)) excluded.push(part.id);
-    };
     for (const staged of stagedEmails) {
       if (staged.source === "current-thread") {
         for (const message of staged.thread.messages) {
@@ -433,25 +423,18 @@ export const AddinChatInput = forwardRef<
           const excluded: string[] = [];
           for (const attachment of message.attachments) {
             if (attachment.isInline) continue;
-            judge(perMessage, excluded, attachment);
+            const verdict = validate(attachment);
+            perMessage.set(attachment.id, verdict);
+            if (isPolicyExcluded(verdict)) excluded.push(attachment.id);
           }
           verdicts.set(message.id, perMessage);
           exclusions.set(message.id, excluded);
         }
         continue;
       }
-      const perDrop = new Map<string, StagedPartValidation>();
-      const excluded: string[] = [];
-      for (const attachment of staged.parsed.attachments) {
-        if (isEmailBodyPart(attachment)) continue;
-        judge(perDrop, excluded, attachment);
-        for (const part of attachment.nested?.attachments ?? []) {
-          if (isEmailBodyPart(part)) continue;
-          judge(perDrop, excluded, part, attachment.nestedTrimmable === true);
-        }
-      }
-      verdicts.set(staged.key, perDrop);
-      exclusions.set(staged.key, excluded);
+      const perDrop = judgeDropEmailParts(staged.parsed, validate);
+      verdicts.set(staged.key, perDrop.verdicts);
+      exclusions.set(staged.key, perDrop.excluded);
     }
     return { stagedPartVerdicts: verdicts, policyExclusions: exclusions };
   }, [
