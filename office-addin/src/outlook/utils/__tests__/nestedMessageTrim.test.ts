@@ -15,13 +15,19 @@ function toArrayBuffer(text: string): ArrayBuffer {
  * An email carrying `top.pdf` plus a forwarded email (no Content-Disposition,
  * the way Outlook emits item attachments) that itself carries `deep.pdf`.
  */
-function buildEmailWithForward(forwardEncoding?: string): string {
+function buildEmailWithForward(
+  forwardEncoding?: string,
+  forwardDisposition?: string,
+): string {
   const outer = "----OUTER";
   const inner = "----INNER";
   const forwardHeaders =
     `Content-Type: message/rfc822${CRLF}` +
     (forwardEncoding
       ? `Content-Transfer-Encoding: ${forwardEncoding}${CRLF}`
+      : "") +
+    (forwardDisposition
+      ? `Content-Disposition: ${forwardDisposition}${CRLF}`
       : "");
   return (
     `From: a@example.com${CRLF}` +
@@ -85,6 +91,32 @@ describe("dismissing parts of a dropped email with a forwarded email inside", ()
     );
     // The default-name builder sanitises the subject; only the content matters.
     expect(parsed?.attachments[1].filename).toMatch(/budget[_ ]numbers/);
+  });
+
+  it("exposes the forwarded email's own attachments under path ids", async () => {
+    const parsed = await parseEmlBytes(toArrayBuffer(buildEmailWithForward()));
+
+    expect(parsed?.attachments.map((a) => a.id)).toEqual(["att-0", "att-1"]);
+    const nested = parsed?.attachments[1].nested;
+    expect(nested?.subject).toBe("Re: budget numbers");
+    expect(nested?.attachments.map((a) => [a.id, a.filename])).toEqual([
+      ["att-1/att-0", "deep.pdf"],
+    ]);
+  });
+
+  it("treats an inline-disposed forward the same as a disposition-less one", async () => {
+    const raw = new TextEncoder().encode(
+      buildEmailWithForward(undefined, "inline"),
+    );
+    const parsed = await parseEmlBytes(raw.slice().buffer);
+
+    expect(parsed?.attachments.map((a) => a.id)).toEqual(["att-0", "att-1"]);
+    expect(parsed?.attachments[1].nested?.attachments.map((a) => a.id)).toEqual(
+      ["att-1/att-0"],
+    );
+    const trimmed = trimEmlAttachments(raw, [1]);
+    expect(trimmed).not.toBeNull();
+    expect(new TextDecoder().decode(trimmed!)).not.toContain("deep.pdf");
   });
 
   it("unchecking the forwarded email removes exactly that, keeping top.pdf", async () => {

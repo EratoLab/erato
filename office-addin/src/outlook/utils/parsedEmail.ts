@@ -16,6 +16,13 @@ export interface ParsedAttachment {
   related: boolean;
   contentId: string | null;
   toFile: () => File;
+  /**
+   * The forwarded email inside a `message/rfc822` part, parsed in turn. Its
+   * attachment ids extend this part's id (`att-1/att-0`), so one flat set of
+   * ids addresses every level. Absent when the part is too deep, too large,
+   * or does not parse.
+   */
+  nested?: ParsedEmail;
 }
 
 export interface ParsedEmail {
@@ -43,19 +50,33 @@ export async function parseEmlBytes(
   bytes: ArrayBuffer,
   options: ParseEmlBytesOptions = {},
 ): Promise<ParsedEmail | null> {
+  return parseEmlBytesAt(bytes, options, 0, "");
+}
+
+/** Forwarded emails nest no deeper than this; beyond it a part stays opaque. */
+const MAX_NESTED_DEPTH = 3;
+/** Above this a forwarded email is not expanded; parsing it would stall the drop. */
+const NESTED_PARSE_LIMIT_BYTES = 25 * 1024 * 1024;
+
+async function parseEmlBytesAt(
+  bytes: ArrayBuffer,
+  options: ParseEmlBytesOptions,
+  depth: number,
+  idPrefix: string,
+): Promise<ParsedEmail | null> {
   let parsed;
   try {
-    // By default postal-mime hoists a forwarded email's attachments into this
-    // list while the trim walker sees one leaf, so dismissal indices diverge.
-    parsed = await PostalMime.parse(bytes, { rfc822Attachments: true });
+    // Forced so a forwarded email is one attachment (never inlined, whatever
+    // its disposition) and the trim walker's leaf indices line up with this list.
+    parsed = await PostalMime.parse(bytes, { forceRfc822Attachments: true });
   } catch (error) {
     console.warn("[parsedEmail] postal-mime failed to parse bytes:", error);
     return null;
   }
 
   const attachments: ParsedAttachment[] = await Promise.all(
-    (parsed.attachments ?? []).map(async (attachment, index) =>
-      buildAttachment(attachment, index, await nestedMessageName(attachment)),
+    (parsed.attachments ?? []).map((attachment, index) =>
+      buildAttachment(attachment, `${idPrefix}att-${index}`, depth),
     ),
   );
 
@@ -83,42 +104,30 @@ export async function parseEmlBytes(
   };
 }
 
-/** Above this a forwarded email keeps the generic name; parsing it only for a subject is not worth the stall. */
-const NESTED_NAME_PARSE_LIMIT_BYTES = 2 * 1024 * 1024;
-
-/** A forwarded email usually has no filename; name it after its subject. */
-async function nestedMessageName(
+async function buildAttachment(
   attachment: Attachment,
-): Promise<string | null> {
-  if (attachment.mimeType !== "message/rfc822" || attachment.filename?.trim()) {
-    return null;
-  }
-  const blobPart = toBlobPart(attachment.content);
-  if (
-    !(blobPart instanceof ArrayBuffer) ||
-    blobPart.byteLength > NESTED_NAME_PARSE_LIMIT_BYTES
-  ) {
-    return buildDefaultName(undefined);
-  }
-  try {
-    const nested = await PostalMime.parse(new Uint8Array(blobPart));
-    return buildDefaultName(nested.subject);
-  } catch {
-    return buildDefaultName(undefined);
-  }
-}
-
-function buildAttachment(
-  attachment: Attachment,
-  index: number,
-  nameFallback: string | null,
-): ParsedAttachment {
-  const filename = attachment.filename?.trim() || nameFallback || "attachment";
+  id: string,
+  depth: number,
+): Promise<ParsedAttachment> {
   const mimeType = attachment.mimeType || "application/octet-stream";
+  const isMessage = mimeType.trim().toLowerCase() === "message/rfc822";
   const blobPart = toBlobPart(attachment.content);
   const size = blobPart instanceof ArrayBuffer ? blobPart.byteLength : 0;
+  const nested =
+    isMessage &&
+    depth < MAX_NESTED_DEPTH &&
+    blobPart instanceof ArrayBuffer &&
+    blobPart.byteLength <= NESTED_PARSE_LIMIT_BYTES
+      ? ((await parseEmlBytesAt(blobPart, {}, depth + 1, `${id}/`)) ??
+        undefined)
+      : undefined;
+  // A forwarded email usually has no filename; name it after its subject.
+  const filename =
+    attachment.filename?.trim() ||
+    (isMessage ? buildDefaultName(nested?.subject) : null) ||
+    "attachment";
   return {
-    id: `att-${index}`,
+    id,
     filename,
     mimeType,
     size,
@@ -129,6 +138,7 @@ function buildAttachment(
       blobPart === null
         ? new File([], filename, { type: mimeType })
         : new File([blobPart], filename, { type: mimeType }),
+    ...(nested ? { nested } : {}),
   };
 }
 
