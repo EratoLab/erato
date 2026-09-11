@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/Container/Card";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { Button } from "@/components/ui/Controls/Button";
 import { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
-import { SegmentedControl } from "@/components/ui/Controls/SegmentedControl";
+import { TabRail } from "@/components/ui/Controls/TabRail";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { Input } from "@/components/ui/Input";
@@ -1183,7 +1183,14 @@ export default function AssistantsPage({ view }: AssistantsPageProps) {
               data-ui="assistants-page-toolbar"
             >
               {tabs.length > 1 && (
-                <SegmentedControl
+                <TabRail
+                  variant="rail"
+                  orientation="horizontal"
+                  // Rail tabs neither shrink nor wrap their labels; below the
+                  // toolbar's sm breakpoint three of them outgrow a phone-width
+                  // column, so whole tabs wrap instead of scrolling the page.
+                  className="flex-wrap"
+                  tabClassName="font-medium"
                   options={tabs}
                   value={view}
                   onChange={(nextView) => navigate(viewRoutes[nextView])}
