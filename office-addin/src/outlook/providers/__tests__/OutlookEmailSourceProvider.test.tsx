@@ -567,3 +567,131 @@ describe("OutlookEmailSourceProvider — dropped email resolution", () => {
     expect(captured!.resolvedDrops[0].file).toBe(parsed.rawEmlFile);
   });
 });
+
+describe("OutlookEmailSourceProvider — policy exclusions", () => {
+  const CRLF = "\r\n";
+
+  function prime(thread: ParsedThread | null) {
+    mockUseOutlookMailItem.mockReturnValue({
+      itemIdentity: "id-4",
+      mailItem: thread
+        ? {
+            itemId: "item-1",
+            conversationId: thread.conversationId,
+            internetMessageId: "<m2@x>",
+            subject: thread.subject,
+            isComposeMode: false,
+          }
+        : {
+            itemId: null,
+            conversationId: null,
+            internetMessageId: null,
+            subject: "New message",
+            isComposeMode: true,
+          },
+      attachments: [],
+      isLoadingAttachments: false,
+      getAttachmentFile: vi.fn(),
+    });
+    mockUseCurrentThread.mockReturnValue({
+      thread,
+      isLoading: false,
+      error: false,
+    });
+    mockUseOutlookMessageFetcher.mockReturnValue({
+      fetcher: null,
+      unavailableReason: "unsupported-mode",
+    });
+  }
+
+  async function parseDrop(): Promise<ParsedEmail> {
+    const b = "----B";
+    const eml =
+      `Subject: Dropped${CRLF}` +
+      `Message-ID: <drop-2@x>${CRLF}` +
+      `Content-Type: multipart/mixed; boundary="${b}"${CRLF}${CRLF}` +
+      `--${b}${CRLF}` +
+      `Content-Type: text/plain${CRLF}${CRLF}` +
+      `body${CRLF}` +
+      `--${b}${CRLF}` +
+      `Content-Type: application/zip; name="build.zip"${CRLF}` +
+      `Content-Disposition: attachment; filename="build.zip"${CRLF}${CRLF}` +
+      `ZIP-BYTES${CRLF}` +
+      `--${b}--${CRLF}`;
+    const bytes = new TextEncoder().encode(eml);
+    const parsed = await parseEmlBytes(bytes.buffer, { filename: "drop.eml" });
+    expect(parsed?.attachments).toHaveLength(1);
+    return parsed!;
+  }
+
+  it("unions the policy exclusions of a drop with the user's dismissals", async () => {
+    prime(null);
+    const parsed = await parseDrop();
+    renderProvider();
+
+    act(() => {
+      captured!.addDroppedEmail(parsed);
+    });
+    expect(captured!.resolvedDrops[0].file).toBe(parsed.rawEmlFile);
+
+    act(() => {
+      captured!.setPolicyExcludedAttachmentIds("<drop-2@x>", ["att-0"]);
+    });
+    const excludedOnly = captured!.resolvedDrops;
+    expect(excludedOnly[0].file).not.toBe(parsed.rawEmlFile);
+    expect(await excludedOnly[0].file!.text()).not.toContain("build.zip");
+
+    // Re-applying the same exclusion is a no-op for the resolution.
+    act(() => {
+      captured!.setPolicyExcludedAttachmentIds("<drop-2@x>", ["att-0"]);
+    });
+    expect(captured!.resolvedDrops).toBe(excludedOnly);
+
+    act(() => {
+      captured!.dismissStagedEmailAttachment("<drop-2@x>", "att-0");
+    });
+    expect(await captured!.resolvedDrops[0].file!.text()).not.toContain(
+      "build.zip",
+    );
+
+    // The user's dismissal outlives the policy.
+    act(() => {
+      captured!.setPolicyExcludedAttachmentIds("<drop-2@x>", []);
+    });
+    expect(await captured!.resolvedDrops[0].file!.text()).not.toContain(
+      "build.zip",
+    );
+
+    act(() => {
+      captured!.restoreStagedEmailAttachment("<drop-2@x>", "att-0");
+    });
+    expect(captured!.resolvedDrops[0].file).toBe(parsed.rawEmlFile);
+  });
+
+  it("leaves a policy-excluded thread attachment out of the synthesized .eml", async () => {
+    prime(makeThread());
+    renderProvider();
+
+    const withDeck = captured!.emailBodyFile;
+    expect(await withDeck!.text()).toContain("Deck.pdf");
+
+    act(() => {
+      captured!.setPolicyExcludedAttachmentIds("<m2@x>", ["<m2@x>:a1"]);
+    });
+    expect(captured!.isThreadEmlStale).toBe(false);
+    const withoutDeck = captured!.emailBodyFile;
+    expect(withoutDeck).not.toBe(withDeck);
+    expect(await withoutDeck!.text()).not.toContain("Deck.pdf");
+
+    let sent: File[] = [];
+    await act(async () => {
+      sent = await captured!.resolveSelectedFilesForSend();
+    });
+    expect(sent).toEqual([withoutDeck]);
+
+    act(() => {
+      captured!.setPolicyExcludedAttachmentIds("<m2@x>", []);
+    });
+    expect(await captured!.emailBodyFile!.text()).toContain("Deck.pdf");
+  });
+});

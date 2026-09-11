@@ -112,19 +112,47 @@ export interface ResolvedPart {
 interface ResolvedDropCacheEntry {
   parsed: ParsedEmail;
   dismissals: StagedEmailDismissals | undefined;
+  excludedAttachmentIds: ReadonlySet<string> | undefined;
   resolved: ResolvedDrop;
+}
+
+type PolicyExcludedIdsMap = ReadonlyMap<string, ReadonlySet<string>>;
+
+const EMPTY_IDS: ReadonlySet<string> = new Set();
+
+function unionIds(
+  ...sets: (ReadonlySet<string> | undefined)[]
+): ReadonlySet<string> {
+  const present = sets.filter((set): set is ReadonlySet<string> =>
+    Boolean(set?.size),
+  );
+  if (present.length <= 1) return present[0] ?? EMPTY_IDS;
+  const union = new Set<string>();
+  for (const set of present) {
+    for (const id of set) union.add(id);
+  }
+  return union;
+}
+
+function sameIds(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const id of a) {
+    if (!b.has(id)) return false;
+  }
+  return true;
 }
 
 function resolveDrop(
   entry: DroppedEmailEntry,
   dismissals: StagedEmailDismissals | undefined,
+  excludedAttachmentIds: ReadonlySet<string> | undefined,
 ): ResolvedDrop {
   if (dismissals?.bodyDismissed) {
     return { key: entry.key, file: null, size: 0 };
   }
   const indicesToRemove = collectDismissedIndices(
     entry.parsed.attachments,
-    dismissals?.attachmentIds ?? new Set<string>(),
+    unionIds(dismissals?.attachmentIds, excludedAttachmentIds),
   );
   const { rawEmlFile } = entry.parsed;
   if (indicesToRemove.length === 0) {
@@ -179,6 +207,12 @@ interface OutlookEmailSourceContextValue {
   restoreStagedEmailBody: (key: string) => void;
   dismissStagedEmailAttachment: (key: string, attachmentId: string) => void;
   restoreStagedEmailAttachment: (key: string, attachmentId: string) => void;
+  /**
+   * Attachments left out of the resolution by policy rather than by the
+   * user, keyed like the dismissals (thread message id or drop key). They
+   * are unioned with the user's dismissals; an empty list clears the key.
+   */
+  setPolicyExcludedAttachmentIds: (key: string, ids: readonly string[]) => void;
   addDroppedEmail: (parsed: ParsedEmail) => string | null;
   removeDroppedEmail: (key: string) => void;
   selectedAttachmentItems: LocalFilePreviewItem[];
@@ -213,6 +247,7 @@ const defaultValue: OutlookEmailSourceContextValue = {
   restoreStagedEmailBody: () => {},
   dismissStagedEmailAttachment: () => {},
   restoreStagedEmailAttachment: () => {},
+  setPolicyExcludedAttachmentIds: () => {},
   addDroppedEmail: () => null,
   removeDroppedEmail: () => {},
   selectedAttachmentItems: [],
@@ -261,6 +296,8 @@ export function OutlookEmailSourceProvider({
     useState(false);
   const [emailDismissals, setEmailDismissals] =
     useState<StagedEmailDismissalsMap>(() => new Map());
+  const [policyExcludedIds, setPolicyExcludedIds] =
+    useState<PolicyExcludedIdsMap>(() => new Map());
   const [droppedEmails, setDroppedEmails] = useState<DroppedEmailEntry[]>([]);
 
   // This provider is intentionally email-only. Appointment descriptions ride
@@ -394,9 +431,14 @@ export function OutlookEmailSourceProvider({
     return {
       thread: currentThread,
       includedMessages: includedThreadMessages,
-      dismissedAttachmentIds: threadStaged.dismissedAttachmentIds,
+      dismissedAttachmentIds: unionIds(
+        threadStaged.dismissedAttachmentIds,
+        ...currentThread.messages.map((message) =>
+          policyExcludedIds.get(message.id),
+        ),
+      ),
     };
-  }, [currentThread, includedThreadMessages, threadStaged]);
+  }, [currentThread, includedThreadMessages, policyExcludedIds, threadStaged]);
 
   // The full base64 synthesis is genuinely expensive on large threads (tens of
   // MB of attachments → a ~1-2s synchronous encode). Running it directly in a
@@ -429,8 +471,8 @@ export function OutlookEmailSourceProvider({
   // Same deferred pattern as the thread; cached per key so toggling one drop
   // never remints (and re-digests) its siblings.
   const dropSynthInput = useMemo(
-    () => ({ droppedEmails, emailDismissals }),
-    [droppedEmails, emailDismissals],
+    () => ({ droppedEmails, emailDismissals, policyExcludedIds }),
+    [droppedEmails, emailDismissals, policyExcludedIds],
   );
   const deferredDropInput = useDeferredValue(dropSynthInput);
   const resolvedDropCacheRef = useRef(
@@ -442,18 +484,23 @@ export function OutlookEmailSourceProvider({
     const resolved = deferredDropInput.droppedEmails.map((entry) => {
       liveKeys.add(entry.key);
       const dismissals = deferredDropInput.emailDismissals.get(entry.key);
+      const excludedAttachmentIds = deferredDropInput.policyExcludedIds.get(
+        entry.key,
+      );
       const cached = cache.get(entry.key);
       if (
         cached &&
         cached.parsed === entry.parsed &&
-        cached.dismissals === dismissals
+        cached.dismissals === dismissals &&
+        cached.excludedAttachmentIds === excludedAttachmentIds
       ) {
         return cached.resolved;
       }
-      const next = resolveDrop(entry, dismissals);
+      const next = resolveDrop(entry, dismissals, excludedAttachmentIds);
       cache.set(entry.key, {
         parsed: entry.parsed,
         dismissals,
+        excludedAttachmentIds,
         resolved: next,
       });
       return next;
@@ -557,6 +604,28 @@ export function OutlookEmailSourceProvider({
     [],
   );
 
+  // Callers re-apply on every render of the staged list, so an unchanged
+  // set must keep the previous map identity or the resolution reruns.
+  const setPolicyExcludedAttachmentIds = useCallback(
+    (key: string, ids: readonly string[]) => {
+      setPolicyExcludedIds((previous) => {
+        const existing = previous.get(key);
+        const next = new Set(ids);
+        if (existing ? sameIds(existing, next) : next.size === 0) {
+          return previous;
+        }
+        const map = new Map(previous);
+        if (next.size === 0) {
+          map.delete(key);
+        } else {
+          map.set(key, next);
+        }
+        return map;
+      });
+    },
+    [],
+  );
+
   // The dedup check has to be StrictMode-safe: returning a synchronous
   // "did we accept this?" answer from inside the setState updater would
   // misreport on the second invocation. Track known keys in a ref so the
@@ -583,6 +652,12 @@ export function OutlookEmailSourceProvider({
       previous.filter((entry) => entry.key !== key),
     );
     setEmailDismissals((previous) => {
+      if (!previous.has(key)) return previous;
+      const next = new Map(previous);
+      next.delete(key);
+      return next;
+    });
+    setPolicyExcludedIds((previous) => {
       if (!previous.has(key)) return previous;
       const next = new Map(previous);
       next.delete(key);
@@ -700,6 +775,7 @@ export function OutlookEmailSourceProvider({
       restoreStagedEmailBody,
       dismissStagedEmailAttachment,
       restoreStagedEmailAttachment,
+      setPolicyExcludedAttachmentIds,
       addDroppedEmail,
       removeDroppedEmail,
       selectedAttachmentItems,
@@ -748,6 +824,7 @@ export function OutlookEmailSourceProvider({
       restoreStagedEmailAttachment,
       restoreStagedEmailBody,
       selectedAttachmentItems,
+      setPolicyExcludedAttachmentIds,
       stagedEmails,
     ],
   );
