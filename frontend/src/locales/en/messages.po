@@ -4347,6 +4347,11 @@ msgstr "(no body)"
 msgid "{0, plural, one {# attachment ready to send} other {# attachments ready to send}}"
 msgstr "{0, plural, one {# attachment ready to send} other {# attachments ready to send}}"
 
+#. placeholder {0}: sizeLimitExceeded.names.length
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "{0, plural, one {Cannot send: {names} exceeds the {limit} limit. Remove it to send.} other {Cannot send: {names} exceed the {limit} limit. Remove them to send.}}"
+msgstr "{0, plural, one {Cannot send: {names} exceeds the {limit} limit. Remove it to send.} other {Cannot send: {names} exceed the {limit} limit. Remove them to send.}}"
+
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 #~ msgid "{0} items"
 #~ msgstr "{0} items"
@@ -4714,8 +4719,20 @@ msgid "Cancelled"
 msgstr "Cancelled"
 
 #: src/components/ui/Chat/ChatInput.tsx
+msgid "Cannot send: a message can carry at most {limit} files. Remove some to send."
+msgstr "Cannot send: a message can carry at most {limit} files. Remove some to send."
+
+#: src/components/ui/Chat/ChatInput.tsx
 #~ msgid "Cannot send: Audio transcription in progress"
 #~ msgstr "Cannot send: Audio transcription in progress"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Cannot send: File count limit exceeded"
+msgstr "Cannot send: File count limit exceeded"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Cannot send: File size limit exceeded"
+msgstr "Cannot send: File size limit exceeded"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Cannot send: Token limit exceeded"
