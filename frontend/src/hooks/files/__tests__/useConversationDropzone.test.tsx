@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { makeFileWithSize } from "@/test/fileFixtures";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
-import { UploadTooLargeError } from "../errors";
+import { UnsupportedFileTypeError, UploadTooLargeError } from "../errors";
 import { useConversationDropzone } from "../useConversationDropzone";
 import { useFileUploadStore } from "../useFileUploadStore";
 
@@ -283,6 +283,71 @@ describe("useConversationDropzone", () => {
       // trim to fit. The PDF beside it is withheld like any other sibling.
       expect(mockOnError).toHaveBeenCalledTimes(1);
       expect(mockUploadFiles).toHaveBeenCalledWith([thread]);
+    });
+
+    it("reports a wrong-type rejection and still uploads its accepted siblings", () => {
+      renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          maxSize: LIMIT,
+          onError: mockOnError,
+        }),
+      );
+
+      const accepted = makeFileWithSize("fine.pdf", 100);
+      act(() => {
+        capturedOnDrop(
+          [accepted],
+          [
+            {
+              file: makeFileWithSize("wrong.exe", 100),
+              errors: [{ code: "file-invalid-type", message: "type" }],
+            },
+          ],
+        );
+      });
+
+      expect(mockOnError).toHaveBeenCalledTimes(1);
+      const err = mockOnError.mock.calls[0][0];
+      expect(err).toBeInstanceOf(UnsupportedFileTypeError);
+      expect(err.message).toContain("wrong.exe");
+      expect(mockUploadFiles).toHaveBeenCalledWith([accepted]);
+    });
+
+    it("names a file that fails both checks only in the unsupported-type error", () => {
+      renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          maxSize: LIMIT,
+          maxSizeFormatted: "15 MiB",
+          onError: mockOnError,
+        }),
+      );
+
+      const accepted = makeFileWithSize("fine.pdf", 100);
+      act(() => {
+        capturedOnDrop(
+          [accepted],
+          [
+            {
+              file: makeFileWithSize("both.exe", LIMIT + 1),
+              errors: [
+                { code: "file-invalid-type", message: "type" },
+                { code: "file-too-large", message: "too large" },
+              ],
+            },
+          ],
+        );
+      });
+
+      expect(mockOnError).toHaveBeenCalledTimes(1);
+      expect(mockOnError.mock.calls[0][0]).toBeInstanceOf(
+        UnsupportedFileTypeError,
+      );
+      // Type outranks size, so the batch is not withheld as oversized.
+      expect(mockUploadFiles).toHaveBeenCalledWith([accepted]);
     });
 
     it("still uploads accepted files that are within the limit", async () => {
