@@ -9,12 +9,12 @@ import {
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import {
-  startTransition,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
+  useTransition,
 } from "react";
 
 import { AddinChatInput } from "./components/AddinChatInput";
@@ -194,7 +194,10 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
     total: dropTotal,
     name: dropName,
   } = pipeline;
-  const isExpandingDroppedEmails = dropPhase !== "idle";
+  // The pipeline closes before the staged emails commit; keep the composer
+  // held until they are in state, or a send in between would miss them.
+  const [isStagingDrop, startStaging] = useTransition();
+  const isExpandingDroppedEmails = dropPhase !== "idle" || isStagingDrop;
   const dropPipeline = useMemo<DropPipelineState>(
     () => ({
       phase: dropPhase,
@@ -234,7 +237,7 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
       if (emails.length === 0) return;
       setDropStage("staging");
       await yieldToRenderer();
-      startTransition(() => {
+      startStaging(() => {
         for (const parsed of emails) {
           if (addDroppedEmail(parsed) === null && parsed.messageId) {
             dedup.remove(parsed.messageId);
@@ -243,7 +246,7 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
         }
       });
     },
-    [addDroppedEmail, dedup, setDropStage],
+    [addDroppedEmail, dedup, setDropStage, startStaging],
   );
   const uploadFilesWithEmailExpansion = useCallback(
     async (files: File[]) =>
