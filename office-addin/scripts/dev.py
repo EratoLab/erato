@@ -334,6 +334,16 @@ def sync_entra_proxy_funnel_settings(funnel_url: str) -> None:
 
 
 def start_auth_proxy() -> None:
+    # The frontend also runs a host-networked Redis. Keep the add-in's session
+    # store on its own port, including configs created before project isolation.
+    config_text = ENTRA_CONFIG_PATH.read_text(encoding="utf-8")
+    updated_config_text = replace_or_append_config_assignment(
+        config_text,
+        "redis_connection_url",
+        'redis_connection_url = "redis://localhost:6381"',
+    )
+    if updated_config_text != config_text:
+        ENTRA_CONFIG_PATH.write_text(updated_config_text, encoding="utf-8")
     run_quiet_command(
         [
             "docker",

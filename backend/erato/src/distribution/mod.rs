@@ -53,9 +53,10 @@ fn load_desktop_sidecar(config: &AppConfig) -> Option<Arc<DesktopSidecarDistribu
         return None;
     }
 
-    match DesktopSidecarDistribution::load_with_allowed_origins(
+    match DesktopSidecarDistribution::load_with_bootstrap(
         &config.desktop_sidecar.distribution.directory,
         &config.desktop_sidecar.allowed_origins,
+        &config.desktop_sidecar.tls,
     ) {
         Ok(distribution) => {
             tracing::info!(

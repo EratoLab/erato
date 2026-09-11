@@ -201,7 +201,7 @@ async fn build_download_response(
             )
         }
         BootstrapTransport::WindowsExecutable { slot_offset } => {
-            let slot = encode_executable_bootstrap_slot(distribution.bootstrap()).map_err(|error| {
+            let slot = encode_executable_bootstrap_slot(&personalization_bootstrap(distribution)?).map_err(|error| {
                 tracing::error!(%error, "Failed to encode desktop sidecar executable bootstrap");
                 StatusCode::INTERNAL_SERVER_ERROR
             })?;
@@ -239,9 +239,28 @@ async fn build_download_response(
             })?;
             (Body::from(executable), size)
         }
+        BootstrapTransport::MacosApplication => {
+            let bootstrap = personalization_bootstrap(distribution)?;
+            let artifact = artifact.clone();
+            let personalized = tokio::task::spawn_blocking(move || {
+                artifact.personalized_macos_application(&bootstrap)
+            })
+            .await
+            .map_err(|error| {
+                tracing::error!(%error, "macOS sidecar personalization task failed");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
+            .map_err(|error| {
+                tracing::error!(%error, "Failed to personalize macOS sidecar application");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+            let size =
+                u64::try_from(personalized.len()).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            (Body::from(personalized), size)
+        }
         BootstrapTransport::WindowsMsi => {
             let personalized = artifact
-                .personalized_msi(distribution.bootstrap())
+                .personalized_msi(&personalization_bootstrap(distribution)?)
                 .map_err(|error| {
                     tracing::error!(%error, "Failed to personalize desktop sidecar MSI");
                     StatusCode::INTERNAL_SERVER_ERROR
@@ -283,6 +302,15 @@ async fn build_download_response(
         .headers_mut()
         .insert(CONTENT_DISPOSITION, content_disposition);
     Ok(response)
+}
+
+fn personalization_bootstrap(
+    distribution: &DesktopSidecarDistribution,
+) -> Result<Vec<u8>, StatusCode> {
+    distribution.bootstrap_for_download().map_err(|error| {
+        tracing::error!(%error, "Failed to create desktop sidecar bootstrap identity");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })
 }
 
 #[cfg(test)]
@@ -381,6 +409,67 @@ mod tests {
             expected
         );
 
+        // Download-time issuance must use a fresh identity for each response.
+        let key = rcgen::KeyPair::generate().unwrap();
+        let mut params = rcgen::CertificateParams::default();
+        params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+        params.key_usages = vec![rcgen::KeyUsagePurpose::KeyCertSign];
+        let tls = erato_config::config::DesktopSidecarTlsConfig {
+            intermediate_certificate_pem: Some(params.self_signed(&key).unwrap().pem()),
+            intermediate_private_key_pem: Some(key.serialize_pem().into()),
+            ..Default::default()
+        };
+        let tls_distribution = DesktopSidecarDistribution::load_with_bootstrap(
+            directory.path(),
+            &["https://app.example.test".into()],
+            &tls,
+        )
+        .unwrap();
+        let mut identities = Vec::new();
+        for _ in 0..2 {
+            let response = build_download_response(
+                Some(&tls_distribution),
+                DesktopSidecarDistributionDownloadQuery {
+                    target: "windows-x86_64".into(),
+                    file: None,
+                },
+            )
+            .await
+            .unwrap();
+            assert_eq!(response.headers()[CACHE_CONTROL], "private, no-store");
+            let bytes = to_bytes(response.into_body(), template.len())
+                .await
+                .unwrap();
+            let offset = 0x200 + 32;
+            let length =
+                u32::from_le_bytes(bytes[offset + 18..offset + 22].try_into().unwrap()) as usize;
+            let document: serde_json::Value =
+                serde_json::from_slice(&bytes[offset + 26..offset + 26 + length]).unwrap();
+            assert_eq!(
+                document["organization_configuration"]["allowed_origins"][0],
+                "https://app.example.test"
+            );
+            assert!(
+                document["tls"]["certificate_pem"]
+                    .as_str()
+                    .unwrap()
+                    .contains("BEGIN CERTIFICATE")
+            );
+            let private_key = document["tls"]["private_key_pem"]
+                .as_str()
+                .unwrap()
+                .to_owned();
+            assert_ne!(private_key, key.serialize_pem());
+            identities.push(private_key);
+            assert_eq!(&bytes[..offset], &template[..offset]);
+            assert_eq!(&bytes[offset + 4096..], &template[offset + 4096..]);
+        }
+        assert_ne!(identities[0], identities[1]);
+        assert_eq!(
+            fs::read(target_directory.join("erato-desktop-sidecar.exe")).unwrap(),
+            template
+        );
+
         let missing = build_download_response(
             Some(&distribution),
             DesktopSidecarDistributionDownloadQuery {
@@ -390,6 +479,148 @@ mod tests {
         )
         .await;
         assert!(matches!(missing, Err(StatusCode::NOT_FOUND)));
+    }
+
+    #[tokio::test]
+    async fn macos_downloads_embed_fixed_or_fresh_tls_for_both_architectures() {
+        use erato_config::config::DesktopSidecarTlsConfig;
+        use std::io::{Cursor, Write};
+        use zip::{ZipArchive, ZipWriter, write::SimpleFileOptions};
+
+        const EXECUTABLE: &str = "erato-desktop-sidecar.app/Contents/MacOS/erato-desktop-sidecar";
+        const PLIST: &str = "erato-desktop-sidecar.app/Contents/Info.plist";
+        const BOOTSTRAP: &str = "erato-desktop-sidecar.app/Contents/Resources/bootstrap.json";
+        let key = rcgen::KeyPair::generate().unwrap();
+        let mut params = rcgen::CertificateParams::default();
+        params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+        params.key_usages = vec![rcgen::KeyUsagePurpose::KeyCertSign];
+        let ca = params.self_signed(&key).unwrap();
+        let dynamic = DesktopSidecarTlsConfig {
+            intermediate_certificate_pem: Some(ca.pem()),
+            intermediate_private_key_pem: Some(key.serialize_pem().into()),
+            ..Default::default()
+        };
+        let leaf = rcgen::generate_simple_self_signed(vec!["127.0.0.1".into()]).unwrap();
+        let fixed = DesktopSidecarTlsConfig {
+            certificate_pem: Some(leaf.cert.pem()),
+            private_key_pem: Some(leaf.signing_key.serialize_pem().into()),
+            ..Default::default()
+        };
+        for (architecture, cpu) in [("x86_64", 0x0100_0007_u32), ("aarch64", 0x0100_000c_u32)] {
+            let directory = tempdir().unwrap();
+            let mut executable = vec![0xcf, 0xfa, 0xed, 0xfe];
+            executable.extend_from_slice(&cpu.to_le_bytes());
+            executable.extend_from_slice(b"unmodified executable bytes");
+            let mut zip = ZipWriter::new(Cursor::new(Vec::new()));
+            zip.start_file(PLIST, SimpleFileOptions::default().unix_permissions(0o644))
+                .unwrap();
+            zip.write_all(b"unmodified Info.plist").unwrap();
+            zip.start_file(
+                EXECUTABLE,
+                SimpleFileOptions::default().unix_permissions(0o755),
+            )
+            .unwrap();
+            zip.write_all(&executable).unwrap();
+            let template = zip.finish().unwrap().into_inner();
+            let source_path = directory.path().join("sidecar.app.zip");
+            fs::write(&source_path, &template).unwrap();
+            let target = format!("macos-{architecture}");
+            fs::write(directory.path().join("manifest.json"), serde_json::to_vec(&json!({
+                "targets": [{"id": target, "platform": {"os": "macos", "architecture": architecture, "abi": "darwin"},
+                    "default_file": "application", "files": [{"id": "application", "kind": "application_archive",
+                        "path": "sidecar.app.zip", "download_filename": "sidecar.app.zip", "media_type": "application/zip"}]}]
+            })).unwrap()).unwrap();
+            for config in [
+                DesktopSidecarTlsConfig::default(),
+                fixed.clone(),
+                dynamic.clone(),
+            ] {
+                let distribution = DesktopSidecarDistribution::load_with_bootstrap(
+                    directory.path(),
+                    &["https://app.example.test".into()],
+                    &config,
+                )
+                .unwrap();
+                assert_eq!(
+                    distribution
+                        .artifact(&target, None)
+                        .unwrap()
+                        .bootstrap_transport(),
+                    BootstrapTransport::MacosApplication
+                );
+                let download = || {
+                    build_download_response(
+                        Some(&distribution),
+                        DesktopSidecarDistributionDownloadQuery {
+                            target: target.clone(),
+                            file: None,
+                        },
+                    )
+                };
+                let (first, second) = tokio::join!(download(), download());
+                let mut bootstraps = Vec::new();
+                for response in [first.unwrap(), second.unwrap()] {
+                    assert_eq!(response.headers()[CONTENT_TYPE], "application/zip");
+                    assert_eq!(response.headers()[CACHE_CONTROL], "private, no-store");
+                    let length: usize = response.headers()[CONTENT_LENGTH]
+                        .to_str()
+                        .unwrap()
+                        .parse()
+                        .unwrap();
+                    let body = to_bytes(response.into_body(), 1_000_000).await.unwrap();
+                    assert_eq!(body.len(), length);
+                    let mut archive = ZipArchive::new(Cursor::new(body)).unwrap();
+                    assert_eq!(archive.len(), 3);
+                    let mut actual = Vec::new();
+                    let mut binary = archive.by_name(EXECUTABLE).unwrap();
+                    assert_eq!(binary.unix_mode().unwrap() & 0o777, 0o755);
+                    binary.read_to_end(&mut actual).unwrap();
+                    assert_eq!(actual, executable);
+                    drop(binary);
+                    let mut plist = String::new();
+                    archive
+                        .by_name(PLIST)
+                        .unwrap()
+                        .read_to_string(&mut plist)
+                        .unwrap();
+                    assert_eq!(plist, "unmodified Info.plist");
+                    let mut entry = archive.by_name(BOOTSTRAP).unwrap();
+                    assert_eq!(entry.unix_mode().unwrap() & 0o777, 0o600);
+                    let mut bytes = Vec::new();
+                    entry.read_to_end(&mut bytes).unwrap();
+                    let document: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                    assert_eq!(
+                        document["organization_configuration"]["allowed_origins"][0],
+                        "https://app.example.test"
+                    );
+                    assert_ne!(document["tls"]["private_key_pem"], key.serialize_pem());
+                    bootstraps.push(document);
+                }
+                if config.intermediate_certificate_pem.is_some() {
+                    assert_ne!(
+                        bootstraps[0]["tls"]["private_key_pem"],
+                        bootstraps[1]["tls"]["private_key_pem"]
+                    );
+                    assert!(
+                        bootstraps[0]["tls"]["certificate_pem"]
+                            .as_str()
+                            .unwrap()
+                            .contains(ca.pem().trim())
+                    );
+                } else {
+                    assert_eq!(bootstraps[0], bootstraps[1]);
+                    if let Some(key) = &config.private_key_pem {
+                        assert_eq!(bootstraps[0]["tls"]["private_key_pem"], key.expose_secret());
+                        assert_eq!(bootstraps[0]["tls"]["certificate_pem"], leaf.cert.pem());
+                    } else {
+                        assert!(bootstraps[0].get("tls").is_none());
+                    }
+                }
+                assert_eq!(fs::read(&source_path).unwrap(), template);
+            }
+            fs::write(source_path, b"invalid ZIP").unwrap();
+            assert!(DesktopSidecarDistribution::load(directory.path()).is_err());
+        }
     }
 
     fn windows_executable_template() -> Vec<u8> {

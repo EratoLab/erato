@@ -628,8 +628,8 @@ show_settings_tab_office_addin = false
 
 {/* erato_toml_config_key: desktop_sidecar.allowed_origins */}
 
-Browser origins that are embedded as immutable policy in Windows desktop-sidecar
-downloads. Entries must be normalized, non-loopback origins in lowercase
+Browser origins that are embedded as immutable policy in Windows and macOS
+desktop-sidecar downloads. Entries must be normalized, non-loopback origins in lowercase
 `scheme://host[:port]` form; do not include a path, trailing slash, query, or
 fragment. An empty list is valid and refuses all production browser origins.
 
@@ -643,6 +643,80 @@ fragment. An empty list is valid and refuses all production browser origins.
 [desktop_sidecar]
 allowed_origins = ["https://app.example.com"]
 ```
+
+#### `desktop_sidecar.tls`
+
+{/* erato_toml_config_key: desktop_sidecar.tls.certificate_pem */}
+{/* erato_toml_config_key: desktop_sidecar.tls.private_key_pem */}
+{/* erato_toml_config_key: desktop_sidecar.tls.intermediate_certificate_pem */}
+{/* erato_toml_config_key: desktop_sidecar.tls.intermediate_private_key_pem */}
+{/* erato_toml_config_key: desktop_sidecar.tls.validity_days */}
+
+TLS identity added to the immutable bootstrap data of personalized Windows
+EXE/MSI and macOS `.app.zip` downloads. With all PEM fields unset, bootstrap TLS
+is disabled. Configure one complete pair: fixed `certificate_pem` / `private_key_pem`, or
+`intermediate_certificate_pem` / `intermediate_private_key_pem`. Values are inline
+PEM strings, not file paths. Incomplete, mixed, invalid, or mismatched pairs make
+the distribution unavailable. Private-key configuration values are redacted.
+
+Fixed mode copies the supplied server certificate chain (leaf first) and matching
+unencrypted key into each download. The leaf must include the `127.0.0.1` IP SAN
+and permit TLS server authentication. For example (replace the abbreviated PEM):
+
+```toml
+[desktop_sidecar.tls]
+certificate_pem = """
+-----BEGIN CERTIFICATE-----
+...
+-----END CERTIFICATE-----
+"""
+private_key_pem = """
+-----BEGIN PRIVATE KEY-----
+...
+-----END PRIVATE KEY-----
+"""
+```
+
+Dynamic mode generates a fresh P-256 leaf key and signs its certificate during
+each download's bootstrap injection. The intermediate chain is included in the
+bootstrap; the intermediate private key stays on the backend. Generated leaves
+cover `127.0.0.1`, `::1`, and `localhost`, with server-authentication usage.
+`validity_days` defaults to 365, accepts 1–3650, and applies only to dynamic mode.
+The leaf expires no later than the intermediate chain. For example:
+
+```toml
+[desktop_sidecar.tls]
+intermediate_certificate_pem = """
+-----BEGIN CERTIFICATE-----
+...
+-----END CERTIFICATE-----
+"""
+intermediate_private_key_pem = """
+-----BEGIN PRIVATE KEY-----
+...
+-----END PRIVATE KEY-----
+"""
+validity_days = 365
+```
+
+Set the frontend endpoint to match the HTTPS listener (a build-time
+`VITE_DESKTOP_SIDECAR_URL` override takes precedence):
+
+```toml
+[frontend.additional_environment]
+DESKTOP_SIDECAR_URL = "https://127.0.0.1:23123/erato/sidecar/rpc"
+```
+
+Clients must trust the issuing CA and use the HTTPS loopback URL. Bootstrap TLS
+automatically enables HTTPS on the sidecar; certificate trust installation and
+automatic renewal are separate deployment responsibilities. Re-download and
+redeploy before expiry. Copies of one download share its key. Treat personalized
+artifacts and installed bootstrap files as secrets. EXE bootstrap JSON has a
+4070-byte limit including escaped PEM; oversized identities are rejected. MSI
+bootstrap files and macOS application ZIPs do not have that slot limit. macOS
+downloads automatically include `Contents/Resources/bootstrap.json` inside the app
+bundle, so normal extraction and installation also installs the TLS identity.
+Linux installers must still supply an adjacent `bootstrap.json`.
 
 #### `desktop_sidecar.distribution.enabled`
 

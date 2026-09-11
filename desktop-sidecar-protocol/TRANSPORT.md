@@ -56,6 +56,26 @@ non-JSON HTTP error body as a JSON-RPC response.
 `GET` is not accepted, so JSON-RPC payloads cannot appear in URLs, browser
 history, or intermediary caches. RPC responses set `Cache-Control: no-store`.
 
+## HTTPS loopback profile
+
+When a TLS identity is supplied through the immutable bootstrap document, the
+sidecar serves `https://127.0.0.1:23123/erato/sidecar/rpc` on the same port. The
+request adapter, payloads, limits, deadlines, Origin allowlist, and Host validation
+are unchanged. A browser sends `Host: 127.0.0.1:23123` over either scheme.
+The HTTPS listener does not also serve plain HTTP on that port.
+
+The client must select the HTTPS URL and trust the issuing CA through its OS or
+browser trust store. WKWebView's mixed-content restriction makes a trusted HTTPS
+endpoint necessary when the Office add-in is loaded from HTTPS; CORS changes do
+not remove that restriction. TLS does not replace origin authorization or
+platform qualification. Native Outlook qualification remains tracked separately.
+
+Certificate/key provisioning, startup validation, development-file precedence,
+and private-key handling are defined in
+[`DISTRIBUTION.md` section 6](DISTRIBUTION.md#6-organization-bootstrap-personalization).
+TLS is optional for distributions without bootstrap identity data. Clients MUST
+NOT silently downgrade a configured HTTPS endpoint to HTTP on certificate errors.
+
 ## Inline bytes
 
 The bytes that a result references — the message bodies and attachments of

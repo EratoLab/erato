@@ -43,6 +43,7 @@ serde = { version = "1.0.217", features = ["derive"] }
 serde_json = { version = "1.0.138", features = ["raw_value"] }
 cab = "0.6.0"
 msi = "0.10.0"
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 
 # Dependencies: Outgoing HTTP
 reqwest = { version = "0.13.1", default-features = false, features = ["rustls", "charset", "http2", "system-proxy", "multipart"] }
@@ -50,6 +51,10 @@ reqwest-middleware = "0.5.1"
 reqwest-tracing = { version = "0.7.1", features = ["opentelemetry_0_32"] }
 
 # Dependencies: Security
+rcgen = { version = "0.14.8", default-features = false, features = ["ring", "pem", "x509-parser"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+x509-parser = "0.18"
+time = "0.3"
 aes-gcm-siv = "0.11.1"
 hmac = "0.13.0"
 jsonwebtoken = "10.4.0"

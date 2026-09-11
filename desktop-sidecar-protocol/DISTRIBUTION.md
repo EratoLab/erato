@@ -6,7 +6,7 @@ REQUIRED, SHOULD, SHOULD NOT, and MAY are interpreted as described by BCP 14.
 
 This contract covers the artifact root, target and file discovery, backend
 validation, and deployment replacement. It also defines the bootstrap-policy convention
-used when the backend personalizes a Windows artifact. Signing artifacts and
+used when the backend personalizes a Windows or macOS artifact. Signing artifacts and
 establishing their integrity are responsibilities of the build and deployment
 pipeline, not fields in the distribution manifest.
 
@@ -235,8 +235,10 @@ manifest completely describes the six-target filesystem example in Section 1:
   `Content-Disposition`.
 - `media_type` is the HTTP response media type.
 
-The backend obtains the current file size from filesystem metadata when serving it and uses that value for response
-metadata such as `Content-Length`.
+The backend obtains source artifact sizes from filesystem metadata. For
+unmodified downloads that size is also the response `Content-Length`.
+Personalized downloads MUST use the actual personalized output length instead;
+distribution metadata continues to report the source template size.
 
 ## 4. Backend interpretation and validation
 
@@ -308,10 +310,12 @@ target IDs, download filenames, or API routing.
 
 ## 6. Organization bootstrap personalization
 
-A backend MAY personalize a Windows download with a single immutable
+A backend MAY personalize a Windows or macOS download with a single immutable
 organization bootstrap document. The document configures policy needed before
-the sidecar accepts browser requests; it is not user preferences, user
-identity, enrollment state, a client private key, or a reusable credential.
+the sidecar accepts browser requests. It can also contain the TLS server identity
+used by the loopback HTTPS listener. It is not user preferences or enrollment
+state. A TLS-personalized artifact contains a private key and MUST be handled
+as secret material; the issuing CA private key MUST never be injected.
 
 The bootstrap document is UTF-8 JSON with this versioned, extensible shape:
 
@@ -320,6 +324,10 @@ The bootstrap document is UTF-8 JSON with this versioned, extensible shape:
   "version": 1,
   "organization_configuration": {
     "allowed_origins": ["https://app.example.test"]
+  },
+  "tls": {
+    "certificate_pem": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n",
+    "private_key_pem": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
   }
 }
 ```
@@ -337,6 +345,41 @@ file. In particular, `sidecar.configure.v1` and files in a user's platform
 configuration directory MUST NOT add or replace production allowed origins.
 Development origins remain an explicit local development-mode option.
 
+The optional root `tls` object contains two required, nonempty strings:
+`certificate_pem` is a PEM certificate chain, leaf first; `private_key_pem` is
+its matching unencrypted PEM private key (PKCS#8, PKCS#1, or SEC1 as supported by
+the TLS implementation). The example above abbreviates the PEM bodies. The leaf
+MUST be valid for TLS server authentication and include the `127.0.0.1` IP subject
+alternative name. The issuing CA must already be trusted by the browser/OS;
+shipping certificates in bootstrap data does not install trust.
+
+When `tls` is absent, the sidecar MAY use explicit development certificate/key
+files or serve HTTP. When present, it MUST serve HTTPS automatically, including
+autorun and restart, and MUST reject malformed PEM, incomplete identities, and
+certificate/key mismatches before opening its listener. A present invalid
+identity MUST NOT fall back to HTTP or another bootstrap source. Development
+certificate/key flags conflict with a bootstrap identity and MUST be rejected.
+User configuration and `sidecar.configure.v1` MUST NOT override or expose the
+bootstrap TLS identity. Bootstrap contents and private keys MUST NOT appear in
+logs, debug output, RPC responses, or public distribution metadata.
+
+A backend can provide a fixed certificate/key pair or issue a fresh leaf/key
+pair during each download's bootstrap injection. In the latter mode it MUST
+validate the intermediate CA certificate and matching signing key, generate a
+fresh leaf key, restrict the leaf to server authentication, and cap its validity
+at the issuer's expiration. The injected certificate chain includes the
+intermediate(s), while the CA private key remains exclusively on the backend.
+The reference backend issues P-256 leaves for `127.0.0.1`, `::1`, and `localhost`,
+with a default 365-day lifetime and up to five minutes of clock-skew allowance,
+bounded by the chain's validity. This provisions keys per download, not per
+device: copies of the same artifact share the injected identity. Renewal requires
+new bootstrap data; no enrollment or automatic renewal is defined here.
+
+A `bootstrap.json` beside the executable takes precedence over the embedded
+Windows slot. The backend automatically injects it into Windows MSI and macOS
+application downloads; the macOS file lives inside the downloaded `.app` bundle.
+Linux installers can supply this file separately.
+
 ### 6.1 Windows executable personalization
 
 The Windows executable template contains exactly one file-backed, non-executable
@@ -353,10 +396,13 @@ The Windows executable template contains exactly one file-backed, non-executable
 A personalizer MUST parse the PE section table, find exactly one `.erato`
 section, then find the magic exactly once inside that section. It MUST validate
 the template header, replace the complete 4096-byte slot, and reject an
-oversized document. It MUST NOT replace a JSON substring or append an EOF
-trailer. The sidecar validates the header, version, length, JSON, and origin
-policy before opening its browser listener. A template slot with a zero length
-is an unpersonalized artifact and has an empty, fail-closed allowlist.
+oversized document, including the JSON-escaped PEM strings. The complete JSON
+must fit within 4070 UTF-8 bytes; large RSA keys or long chains may exceed this
+limit and require an MSI/external bootstrap file. It MUST NOT truncate PEM,
+replace a JSON substring, or append an EOF trailer. The sidecar validates the
+header, version, length, JSON, origin policy, and TLS identity before opening its
+browser listener. A template slot with a zero length is an unpersonalized
+artifact and has an empty, fail-closed allowlist.
 
 ### 6.2 Windows MSI personalization
 
@@ -372,11 +418,52 @@ its embedded slot, so the MSI and standalone forms implement the same policy
 with no post-install user action.
 
 A personalizer MAY build one artifact per organization policy revision and
-target. It MUST use the same bootstrap document for the MSI and standalone
-executable emitted for that revision. It MUST read each output back and verify
-the exact bootstrap bytes before signing or publishing it. Personalized output
+target. Artifacts emitted together for a single personalization MUST use the
+same bootstrap document. Separately requested downloads MAY receive different
+TLS leaf identities while retaining the same organization policy. It MUST read
+each output back and verify the exact bootstrap bytes before signing or
+publishing it. Personalized output
 MUST remain in memory or temporary deployment storage and MUST NOT be written
 into the immutable artifact root.
+
+### 6.3 macOS application personalization
+
+For both `macos-x86_64` and `macos-aarch64`, the backend personalizes the
+`application_archive` (`.app.zip`) during each download. It adds or replaces
+exactly one entry:
+
+```text
+erato-desktop-sidecar.app/Contents/Resources/bootstrap.json
+```
+
+This entry contains the same bootstrap document used by the Windows transports,
+including the immutable allowed origins and optional TLS certificate/key. Fixed
+TLS values are copied; intermediate-CA mode issues a fresh identity per download.
+There is no 4070-byte executable-slot limit for the ZIP bootstrap entry.
+
+The user extracts and installs the application normally. The bootstrap stays
+inside the `.app` at `Contents/Resources/bootstrap.json`, where the startup
+loader reads it automatically. Resources take precedence over the legacy adjacent
+bootstrap location; malformed resources fail startup without falling back. The
+JSON MUST live in Resources because macOS signing treats Contents/MacOS entries
+as executable code. No separate file placement or TLS flags are needed.
+Trusting the issuing CA remains a deployment prerequisite.
+
+The reference backend accepts the canonical unsealed bundle template containing
+`Contents/Info.plist` and `Contents/MacOS/erato-desktop-sidecar`, with an optional
+existing bootstrap entry. It rejects other layouts, symlinks, non-executable
+binaries, and malformed archives at distribution load time. Application resource
+signatures (`_CodeSignature`) are not accepted in these templates: bundle signing
+and notarization, when used, must operate on the personalized application.
+
+Personalization MUST preserve the executable and Info.plist contents and file
+permissions. The reference implementation copies their compressed ZIP data,
+replaces any old bootstrap entry, and gives the new bootstrap file mode `0600`.
+It verifies the injected bytes before serving the result and never modifies the
+source artifact. Concurrent downloads use immutable template bytes. Responses
+use `application/zip`, the personalized content length, and
+`Cache-Control: private, no-store`. Distribution metadata continues to describe
+the source template's size, as for MSI personalization.
 
 ## 7. Responsibility boundaries
 
