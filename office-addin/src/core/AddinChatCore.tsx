@@ -763,7 +763,7 @@ export function AddinChatCoreView({
                 // sits on the header's title; with a header row the trigger
                 // is in flow and needs no clearance.
                 <div
-                  className={`relative z-10 shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3${TopLeftAccessory ? "" : " pl-10"}${hasStartViewToggle ? " pr-10" : ""}`}
+                  className={`relative z-10 shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3${TopLeftAccessory ? "" : " pl-10"}${hasStartViewToggle && !TopLeftAccessory ? " pr-10" : ""}`}
                 >
                   {controller.delegatedRunHeader}
                 </div>
