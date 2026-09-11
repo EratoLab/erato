@@ -346,9 +346,14 @@ msgid "officeAddin.chatInput.unknownSender"
 msgstr "Unknown sender"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
+#: src/outlook/utils/validateStagedPart.ts
 msgid "officeAddin.chatInput.validation.tooLarge"
 msgstr "File exceeds the server limit of {globalMaxFormatted}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/validateStagedPart.ts
+msgid "officeAddin.chatInput.validation.unsupported"
+msgstr "Won't be read by the AI"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookClientActions.ts
