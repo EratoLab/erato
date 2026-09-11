@@ -275,17 +275,19 @@ msgid "officeAddin.chatInput.dropSkipped.unparseable"
 msgstr "No se pudo añadir {names}: no es un correo legible."
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
+#: src/outlook/utils/buildDropEmailGroup.ts
 msgid "officeAddin.chatInput.emailBody"
 msgstr "Cuerpo del correo electrónico"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
+#: src/outlook/utils/buildDropEmailGroup.ts
 msgid "officeAddin.chatInput.emailFallback"
 msgstr "Correo electrónico"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
+#: src/outlook/utils/buildDropEmailGroup.ts
 msgid "officeAddin.chatInput.emailLabel"
 msgstr "Correo electrónico"
 

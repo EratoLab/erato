@@ -12,6 +12,8 @@
  * to know about attachment subtypes or the `@odata.type` discriminator.
  */
 
+import { NESTED_PARSE_LIMIT_BYTES, parseEmlBytes } from "./parsedEmail";
+
 import type { FetchConversationMessages } from "./fetchOutlookMessage";
 import type {
   FetchConversationOptions,
@@ -19,8 +21,6 @@ import type {
   GraphConversationMessage,
   GraphRecipient,
 } from "./fetchOutlookMessageGraph";
-import { NESTED_PARSE_LIMIT_BYTES, parseEmlBytes } from "./parsedEmail";
-
 import type { ParsedEmail, ParsedEmailAddress } from "./parsedEmail";
 
 const FILE_ATTACHMENT_TYPE = "#microsoft.graph.fileAttachment";
