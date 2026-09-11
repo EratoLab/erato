@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef, type DragEvent } from "react";
 import { useDropzone } from "react-dropzone";
 
 import { UploadTooLargeError, type UploadError } from "@/hooks/files/errors";
@@ -34,10 +34,18 @@ interface UseConversationDropzoneOptions {
    * (an .eml the user can still trim). Their uploads are preflighted later.
    */
   isSizeExempt?: (file: File) => boolean;
+  /**
+   * Fires on the raw drop event with the number of dropped files, before
+   * react-dropzone has read or validated them. May return a release that is
+   * called once the drop reaches the handler (which then owns the signal).
+   */
+  onReceive?: (count: number) => void | (() => void);
 }
 
+type RootProps = Record<string, unknown>;
+
 interface ConversationDropzoneBindings {
-  getRootProps: () => Record<string, unknown>;
+  getRootProps: (props?: RootProps) => RootProps;
   getInputProps: () => Record<string, unknown>;
   isDragActive: boolean;
   isDragAccept: boolean;
@@ -62,9 +70,11 @@ export function useConversationDropzone({
   maxSizeFormatted,
   onError,
   isSizeExempt,
+  onReceive,
 }: UseConversationDropzoneOptions): ConversationDropzoneBindings {
   const setStoreError = useFileUploadStore((state) => state.setError);
   const reportError = onError ?? setStoreError;
+  const receiveReleaseRef = useRef<(() => void) | null>(null);
 
   // A validator instead of `maxSize` so `isSizeExempt` can spare files.
   // Only a known size rejects: dragenter runs this on `DataTransferItem`s
@@ -85,6 +95,8 @@ export function useConversationDropzone({
   );
   const handleDrop = useCallback(
     (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
+      receiveReleaseRef.current?.();
+      receiveReleaseRef.current = null;
       // Rejected files never reach the upload preflight; report them here.
       let files = acceptedFiles;
       if (rejectedFiles.length > 0) {
@@ -124,16 +136,64 @@ export function useConversationDropzone({
     return { ...base, ...extraAcceptMimeTypes };
   }, [acceptedFileTypes, extraAcceptMimeTypes]);
 
-  const { getRootProps, getInputProps, isDragActive, isDragAccept } =
-    useDropzone({
-      onDrop: handleDrop,
-      accept,
-      multiple: true,
-      disabled: isUploading,
-      validator: validateSize,
-      noClick: true,
-      noKeyboard: true,
-    });
+  const {
+    getRootProps: getDropzoneRootProps,
+    getInputProps,
+    isDragActive,
+    isDragAccept,
+  } = useDropzone({
+    onDrop: handleDrop,
+    accept,
+    multiple: true,
+    disabled: isUploading,
+    validator: validateSize,
+    noClick: true,
+    noKeyboard: true,
+  });
+
+  // react-dropzone runs a caller's onDrop before its own, so this sees the
+  // event first; a file drop always reaches handleDrop afterwards.
+  const handleReceive = useCallback(
+    (event: DragEvent) => {
+      if (!onReceive) return;
+      // Typed non-null by React, absent on some synthetic drops.
+      const transfer = event.dataTransfer as DataTransfer | null;
+      if (!transfer || !isFileDrag(transfer)) return;
+      receiveReleaseRef.current?.();
+      const release = onReceive(droppedFileCount(transfer));
+      receiveReleaseRef.current =
+        typeof release === "function" ? release : null;
+    },
+    [onReceive],
+  );
+  const getRootProps = useCallback(
+    (props: RootProps = {}) => {
+      if (!onReceive) return getDropzoneRootProps(props);
+      const consumerOnDrop = props.onDrop;
+      return getDropzoneRootProps({
+        ...props,
+        onDrop: (event: DragEvent) => {
+          if (typeof consumerOnDrop === "function") consumerOnDrop(event);
+          handleReceive(event);
+        },
+      });
+    },
+    [getDropzoneRootProps, handleReceive, onReceive],
+  );
 
   return { getRootProps, getInputProps, isDragActive, isDragAccept };
+}
+
+// Mirrors react-dropzone's own file-drag test so a string-only drag (an
+// Outlook mail-list row) never announces files that will not arrive.
+function isFileDrag(transfer: DataTransfer): boolean {
+  return Array.from(transfer.types).some(
+    (type) => type === "Files" || type === "application/x-moz-file",
+  );
+}
+
+function droppedFileCount(transfer: DataTransfer): number {
+  if (transfer.files.length > 0) return transfer.files.length;
+  return Array.from(transfer.items).filter((item) => item.kind === "file")
+    .length;
 }

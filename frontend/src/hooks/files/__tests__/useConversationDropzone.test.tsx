@@ -23,7 +23,8 @@ vi.mock("react-dropzone", () => ({
   useDropzone: vi.fn((opts) => {
     capturedOnDrop = opts.onDrop ?? (() => {});
     return {
-      getRootProps: vi.fn(() => ({})),
+      // Echoes its argument so tests can reach the handlers the hook composes.
+      getRootProps: vi.fn((props?: Record<string, unknown>) => props ?? {}),
       getInputProps: vi.fn(() => ({})),
       isDragActive: false,
       isDragAccept: false,
@@ -300,6 +301,160 @@ describe("useConversationDropzone", () => {
       });
 
       expect(mockUploadFiles).toHaveBeenCalledWith([validFile]);
+    });
+  });
+
+  describe("onReceive", () => {
+    function dropEvent(init: {
+      types: string[];
+      files?: number;
+      items?: { kind: string }[];
+    }) {
+      return {
+        dataTransfer: {
+          types: init.types,
+          files: { length: init.files ?? 0 },
+          items: init.items ?? [],
+        },
+      };
+    }
+
+    it("fires with the dropped file count from the raw drop event", () => {
+      const onReceive = vi.fn();
+      const { result } = renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          onReceive,
+        }),
+      );
+
+      const rootProps = result.current.getRootProps();
+      act(() => {
+        (rootProps.onDrop as (event: unknown) => void)(
+          dropEvent({ types: ["Files"], files: 3 }),
+        );
+      });
+
+      expect(onReceive).toHaveBeenCalledWith(3);
+      // react-dropzone's own drop handling has not run yet at this point.
+      expect(mockUploadFiles).not.toHaveBeenCalled();
+    });
+
+    it("counts file items when the file list is empty", () => {
+      const onReceive = vi.fn();
+      const { result } = renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          onReceive,
+        }),
+      );
+
+      const rootProps = result.current.getRootProps();
+      act(() => {
+        (rootProps.onDrop as (event: unknown) => void)(
+          dropEvent({
+            types: ["Files"],
+            items: [{ kind: "file" }, { kind: "string" }, { kind: "file" }],
+          }),
+        );
+      });
+
+      expect(onReceive).toHaveBeenCalledWith(2);
+    });
+
+    it("stays quiet for a drag that carries no files", () => {
+      const onReceive = vi.fn();
+      const { result } = renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          onReceive,
+        }),
+      );
+
+      const rootProps = result.current.getRootProps();
+      act(() => {
+        (rootProps.onDrop as (event: unknown) => void)(
+          dropEvent({ types: ["maillistrow"] }),
+        );
+      });
+
+      expect(onReceive).not.toHaveBeenCalled();
+    });
+
+    it("keeps the consumer's own onDrop and forwards the rest of its props", () => {
+      const onReceive = vi.fn();
+      const consumerOnDrop = vi.fn();
+      const { result } = renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          onReceive,
+        }),
+      );
+
+      const rootProps = result.current.getRootProps({
+        onDrop: consumerOnDrop,
+        className: "chat-body",
+      });
+      const event = dropEvent({ types: ["Files"], files: 1 });
+      act(() => {
+        (rootProps.onDrop as (event: unknown) => void)(event);
+      });
+
+      expect(rootProps.className).toBe("chat-body");
+      expect(consumerOnDrop).toHaveBeenCalledWith(event);
+      expect(onReceive).toHaveBeenCalledWith(1);
+    });
+
+    it("calls the release onReceive returned once the drop reaches the handler", () => {
+      const release = vi.fn();
+      const onReceive = vi.fn(() => release);
+      const { result } = renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          onReceive,
+        }),
+      );
+
+      const rootProps = result.current.getRootProps();
+      act(() => {
+        (rootProps.onDrop as (event: unknown) => void)(
+          dropEvent({ types: ["Files"], files: 1 }),
+        );
+      });
+      expect(release).not.toHaveBeenCalled();
+
+      // A fully rejected drop still reaches the handler, so the early
+      // signal is always closed.
+      act(() => {
+        capturedOnDrop(
+          [],
+          [
+            {
+              file: makeFileWithSize("odd.xyz", 1),
+              errors: [{ code: "file-invalid-type", message: "type" }],
+            },
+          ],
+        );
+      });
+      expect(release).toHaveBeenCalledTimes(1);
+    });
+
+    it("hands react-dropzone's root props through untouched when unused", () => {
+      const { result } = renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+        }),
+      );
+
+      const rootProps = result.current.getRootProps({ className: "x" });
+
+      expect(rootProps).toEqual({ className: "x" });
     });
   });
 
