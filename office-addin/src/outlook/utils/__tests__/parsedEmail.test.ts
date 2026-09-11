@@ -174,4 +174,43 @@ describe("parseEmlBytes", () => {
       ["att-1", "second.bin"],
     ]);
   });
+
+  describe("naming a forwarded email that has no filename", () => {
+    function buildWithForward(innerBody: string): string {
+      const boundary = "----FWD";
+      return (
+        `From: a@example.com${CRLF}` +
+        `Subject: Cover${CRLF}` +
+        `Content-Type: multipart/mixed; boundary="${boundary}"${CRLF}${CRLF}` +
+        `--${boundary}${CRLF}` +
+        `Content-Type: text/plain${CRLF}${CRLF}` +
+        `See attached.${CRLF}` +
+        `--${boundary}${CRLF}` +
+        `Content-Type: message/rfc822${CRLF}${CRLF}` +
+        `From: c@example.com${CRLF}` +
+        `Subject: Quarterly numbers${CRLF}` +
+        `Content-Type: text/plain${CRLF}${CRLF}` +
+        `${innerBody}${CRLF}` +
+        `--${boundary}--${CRLF}`
+      );
+    }
+
+    it("names a small forwarded email after its subject", async () => {
+      const parsed = await parseEmlBytes(
+        toArrayBuffer(buildWithForward("short body")),
+      );
+      expect(parsed?.attachments.map((a) => a.filename)).toEqual([
+        "Quarterly_numbers.eml",
+      ]);
+    });
+
+    it("keeps the generic name for a forwarded email above 2 MiB instead of parsing it", async () => {
+      const parsed = await parseEmlBytes(
+        toArrayBuffer(buildWithForward("x".repeat(2 * 1024 * 1024 + 1))),
+      );
+      expect(parsed?.attachments.map((a) => a.filename)).toEqual([
+        "message.eml",
+      ]);
+    });
+  });
 });
