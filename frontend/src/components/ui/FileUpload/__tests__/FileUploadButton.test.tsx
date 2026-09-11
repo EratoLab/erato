@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import {
@@ -7,8 +7,11 @@ import {
 } from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { makeFileWithSize } from "@/test/fileFixtures";
+import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { FileUploadButton } from "../FileUploadButton";
+
+import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 const MiB = 1024 * 1024;
 const DEFAULT_LIMIT = 20 * MiB;
@@ -184,6 +187,46 @@ describe("FileUploadButton", () => {
       expect(err).toBeInstanceOf(UnsupportedFileTypeError);
       expect(err.message).toContain("wrong.exe");
       expect(performFileUpload).toHaveBeenCalledWith([accepted]);
+    });
+
+    it("keeps naming the wrong-type file after the sibling upload cleared the store", async () => {
+      const performFileUpload = vi.fn<
+        (files: File[]) => Promise<FileUploadItem[] | undefined>
+      >(async (files) => {
+        // The upload hook clears the shared error slot before it starts.
+        useFileUploadStore.getState().setError(null);
+        return files.map((file) => ({
+          id: file.name,
+          filename: file.name,
+          download_url: `http://example.com/${file.name}`,
+          file_contents_unavailable_missing_permissions: false,
+          is_sharepoint_file: false,
+          file_capability: FileTypeUtil.createMockFileCapability(file.name),
+        }));
+      });
+      render(
+        <FileUploadButton
+          label="Attach"
+          iconOnly
+          performFileUpload={performFileUpload}
+        />,
+      );
+
+      await act(async () => {
+        capturedOnDrop(
+          [makeFileWithSize("fine.pdf", 100)],
+          [
+            {
+              file: makeFileWithSize("wrong.exe", 100),
+              errors: [{ code: "file-invalid-type", message: "type" }],
+            },
+          ],
+        );
+      });
+
+      const storeError = useFileUploadStore.getState().error;
+      expect(storeError).toBeInstanceOf(UnsupportedFileTypeError);
+      expect(storeError?.message).toContain("wrong.exe");
     });
 
     it("does not call onError when there are no rejections (valid drop)", () => {

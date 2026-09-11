@@ -660,6 +660,32 @@ describe("useFileDropzone", () => {
       expect(result.current.error?.message).toContain("wrong.exe");
     });
 
+    it("keeps naming the wrong-type file after the sibling upload went through", async () => {
+      const mockFetchUploadFile = vi.mocked(fetchUploadFile);
+      mockFetchUploadFile.mockResolvedValue({
+        files: [createMockUploadedFile("file1", "ok.pdf")],
+      });
+      const { result } = renderHook(() =>
+        useFileDropzone({ chatId: "existing-chat-id" }),
+      );
+
+      await act(async () => {
+        capturedOnDrop(
+          [makeFileWithSize("ok.pdf", 100, "application/pdf")],
+          [
+            {
+              file: makeFileWithSize("wrong.exe", 100),
+              errors: [{ code: "file-invalid-type", message: "type" }],
+            },
+          ],
+        );
+      });
+
+      expect(mockFetchUploadFile).toHaveBeenCalledTimes(1);
+      expect(result.current.error).toBeInstanceOf(UnsupportedFileTypeError);
+      expect(result.current.error?.message).toContain("wrong.exe");
+    });
+
     it("does not set isUploading to true when files are rejected by preflight", async () => {
       const { result } = renderHook(() =>
         useFileDropzone({ chatId: "existing-chat-id" }),

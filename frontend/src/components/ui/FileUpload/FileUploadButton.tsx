@@ -86,11 +86,9 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
     const { getRootProps, getInputProps, open } = useDropzone({
       onDrop: (acceptedFiles, rejectedFiles) => {
         // Rejected files never reach the upload preflight; report them here.
+        let unsupported: string[] = [];
         if (rejectedFiles.length > 0) {
-          const unsupported = rejectionNames(
-            rejectedFiles,
-            "file-invalid-type",
-          );
+          unsupported = rejectionNames(rejectedFiles, "file-invalid-type");
           if (unsupported.length > 0) {
             reportError(new UnsupportedFileTypeError(unsupported));
           }
@@ -104,8 +102,12 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
         if (acceptedFiles.length > 0 && performFileUpload) {
           // Call the provided upload function
           void performFileUpload(acceptedFiles).then((files) => {
-            if (files) {
-              onFilesUploaded?.(files);
+            if (files === undefined) return;
+            onFilesUploaded?.(files);
+            // The upload clears the error slot on its way in; only a batch
+            // that went through has wiped the report, so restore it then.
+            if (unsupported.length > 0) {
+              reportError(new UnsupportedFileTypeError(unsupported));
             }
           });
         }
