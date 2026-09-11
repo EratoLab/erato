@@ -108,12 +108,11 @@ interface AddinChatInputProps {
   onFacetSelectionChange?: (selectedFacetIds: string[]) => void;
   showSuggestedEmailSource?: boolean;
   /**
-   * Called after a send in which dropped emails were actually attached — i.e.
-   * their files uploaded successfully. The owner clears the drop from BOTH the
-   * provider drop-state and the AddinChat-owned dedup set (the two live in
-   * different layers, so neither can release the other alone). Intentionally
-   * NOT called when the email-file upload failed: in that path the message is
-   * sent without the emails, so the chips must stay for a retry.
+   * Called with the dropped emails a send attached, and with a single drop
+   * when the user removes it from its card. The owner clears the drop from
+   * BOTH the provider drop-state and the AddinChat-owned dedup set (the two
+   * live in different layers, so neither can release the other alone). A
+   * failed upload sends nothing, so the chips stay for a retry.
    */
   onEmailSourceDropsSent?: (
     drops: { key: string; messageId: string | null }[],
@@ -209,6 +208,7 @@ export const AddinChatInput = forwardRef<
     lastSchedulingSignalAt = null,
     handleFileAttachments: ownerHandleFileAttachments,
     sizeLimitExceeded: ownerSizeLimitExceeded = null,
+    uploadError: ownerUploadError = null,
     ...chatInputProps
   },
   ref,
@@ -331,8 +331,21 @@ export const AddinChatInput = forwardRef<
   const { maxFiles: maxFilesPerMessage } = useChatInputFeature();
   const { capabilities, isLoading: isLoadingCapabilities } =
     useFileCapabilitiesContext();
-  // The composer's alert renders and clears this store; a local copy would outlive it.
-  const setUploadStoreError = useFileUploadStore((state) => state.setError);
+  // A declined send's error and the drops staged at that moment. The composer
+  // hides the banner on dismiss but only a new Error instance re-shows it, so
+  // each failure mints its own; it clears on the next send attempt and when
+  // one of those drops is removed.
+  const [sendFailure, setSendFailure] = useState<{
+    error: Error;
+    dropKeys: string[];
+  } | null>(null);
+  useEffect(() => {
+    if (!sendFailure) return;
+    const stagedKeys = new Set(stagedEmails.map((staged) => staged.key));
+    if (sendFailure.dropKeys.some((key) => !stagedKeys.has(key))) {
+      setSendFailure(null);
+    }
+  }, [sendFailure, stagedEmails]);
   // The composer clears itself on handoff, before this handler can size-check;
   // a declined send has to put the draft back.
   const chatInputControls = useChatInputControls();
@@ -886,6 +899,7 @@ export const AddinChatInput = forwardRef<
       // actions like create-appointment can auto-prompt) while item-bound
       // executors treat it as a mismatch and fail closed.
       const sendItemIdentity = itemIdentity ?? NO_ITEM_SEND_IDENTITY;
+      setSendFailure(null);
 
       // Appointment fields are re-read from the LIVE item at send time:
       // editing an appointment form fires no ItemChanged, so the provider's
@@ -1034,13 +1048,15 @@ export const AddinChatInput = forwardRef<
       }
 
       setIsUploadingEmail(true);
-      // Only this path's own alert is cleared; anything else stays until dismissed.
-      if (useFileUploadStore.getState().error instanceof UploadTooLargeError) {
-        setUploadStoreError(null);
-      }
+      // Every refused send ends the same way: nothing is dispatched, the
+      // draft comes back, and the dedup marker forgets the draft it never sent.
+      const declineSend = (error: Error) => {
+        setSendFailure({ error, dropKeys: sentDrops.map((drop) => drop.key) });
+        lastSentDraftFingerprintRef.current = previousDraftFingerprint;
+        restoreDraft(message, inputFileIds);
+      };
       let resolvedFileIds: string[] = [];
-      let uploadFailed = false;
-      // Outside the try so the 413 branch can name the files.
+      // Outside the try so the catch can name the files.
       let attemptedFileNames: string[] = [];
 
       try {
@@ -1066,21 +1082,19 @@ export const AddinChatInput = forwardRef<
           return;
         }
 
-        // Sending anyway would answer from context the model never received.
-        // Chips stay so the user can drop the offender and retry.
+        // The composer gate normally refuses this earlier; it reads the
+        // resolution one deferred pass behind, so the files are checked again.
         const sizeValidation = validateFileSizes(
           filesToUpload,
           globalMaxSizeBytes,
         );
         if (!sizeValidation.valid) {
-          setUploadStoreError(
+          declineSend(
             new UploadTooLargeError(
               maxSizeFormatted,
               sizeValidation.oversizedFiles.map((file) => file.name),
             ),
           );
-          lastSentDraftFingerprintRef.current = previousDraftFingerprint;
-          restoreDraft(message, inputFileIds);
           return;
         }
 
@@ -1104,7 +1118,7 @@ export const AddinChatInput = forwardRef<
       } catch (error) {
         if (error instanceof EmailTrimError) {
           // The untrimmed original would ship what the user removed.
-          setUploadStoreError(
+          declineSend(
             new UploadUnknownError(
               t({
                 id: "officeAddin.chatInput.emailTrimFailed",
@@ -1112,21 +1126,29 @@ export const AddinChatInput = forwardRef<
               }),
             ),
           );
-          lastSentDraftFingerprintRef.current = previousDraftFingerprint;
-          restoreDraft(message, inputFileIds);
           return;
         }
-        uploadFailed = true;
         if (isUploadTooLarge(error)) {
-          setUploadStoreError(
+          declineSend(
             new UploadTooLargeError(maxSizeFormatted, attemptedFileNames),
           );
-        } else {
-          console.warn(
-            "Failed to upload Outlook email source files, sending without them:",
-            error,
-          );
+          return;
         }
+        console.warn("Failed to upload Outlook email source files:", error);
+        const names = (
+          attemptedFileNames.length > 0
+            ? attemptedFileNames
+            : resolvedParts.map((part) => part.name)
+        ).join(", ");
+        declineSend(
+          new UploadUnknownError(
+            t({
+              id: "officeAddin.chatInput.uploadFailed",
+              message: `Couldn't upload ${names}. The message was not sent.`,
+            }),
+          ),
+        );
+        return;
       } finally {
         setIsUploadingEmail(false);
       }
@@ -1143,12 +1165,7 @@ export const AddinChatInput = forwardRef<
         delegationRunMode,
       );
 
-      // Clear the drops only when their files actually uploaded. On a failed
-      // upload the message was sent WITHOUT them (see catch), so the chips must
-      // remain so the user can retry.
-      if (!uploadFailed) {
-        clearSentDrops();
-      }
+      clearSentDrops();
     },
     [
       calendarFetcher,
@@ -1170,10 +1187,10 @@ export const AddinChatInput = forwardRef<
       maxSizeFormatted,
       onEmailSourceDropsSent,
       replyFromReadAvailable,
+      resolvedParts,
       resolveSelectedFilesForSend,
       restoreDraft,
       scheduleFacetAvailable,
-      setUploadStoreError,
       shouldUseSuggestedEmailSource,
       stagedEmails,
     ],
@@ -1296,6 +1313,7 @@ export const AddinChatInput = forwardRef<
         {...chatInputProps}
         handleFileAttachments={handleFileAttachments}
         sizeLimitExceeded={sizeLimitExceeded}
+        uploadError={sendFailure?.error ?? ownerUploadError}
         onSendMessage={(
           message,
           inputFileIds,
