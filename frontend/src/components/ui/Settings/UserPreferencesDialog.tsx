@@ -1,6 +1,5 @@
 import { t } from "@lingui/core/macro";
 import { skipToken, useQueryClient } from "@tanstack/react-query";
-import clsx from "clsx";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -29,6 +28,7 @@ import {
 
 import { ModelSelector } from "../Chat/ModelSelector";
 import { Button } from "../Controls/Button";
+import { TabRail } from "../Controls/TabRail";
 import { Alert } from "../Feedback/Alert";
 import { FormField, Input, Textarea } from "../Input";
 import { ModalBase } from "../Modal/ModalBase";
@@ -55,7 +55,7 @@ import type {
   UpdateProfilePreferencesRequest,
   UserProfile,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
-import type { KeyboardEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 type PreferencesTab =
   | "personalization"
@@ -470,46 +470,6 @@ export function UserPreferencesDialog({
   } satisfies Record<PreferencesTab, string>;
   /* eslint-enable lingui/no-unlocalized-strings */
 
-  const focusTab = (tab: PreferencesTab) => {
-    const element = document.getElementById(tabIds[tab]);
-    element?.focus({ preventScroll: true });
-    element?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  };
-
-  const handleTabKeyDown = (
-    event: KeyboardEvent<HTMLButtonElement>,
-    currentTab: PreferencesTab,
-  ) => {
-    const currentIndex = visibleTabs.indexOf(currentTab);
-    let nextTab: PreferencesTab | undefined;
-
-    switch (event.key) {
-      case "ArrowDown":
-      case "ArrowRight":
-        nextTab = visibleTabs[(currentIndex + 1) % visibleTabs.length];
-        break;
-      case "ArrowUp":
-      case "ArrowLeft":
-        nextTab =
-          visibleTabs[
-            (currentIndex - 1 + visibleTabs.length) % visibleTabs.length
-          ];
-        break;
-      case "Home":
-        nextTab = visibleTabs[0];
-        break;
-      case "End":
-        nextTab = visibleTabs[visibleTabs.length - 1];
-        break;
-      default:
-        return;
-    }
-
-    event.preventDefault();
-    setActiveTab(nextTab);
-    focusTab(nextTab);
-  };
-
   const handleSave = async () => {
     setSaveError(null);
     setIsSaving(true);
@@ -644,46 +604,28 @@ export function UserPreferencesDialog({
     >
       <div className="flex h-full flex-col gap-4 md:flex-row md:gap-5">
         <aside className="shrink-0 border-b border-theme-border pb-3 md:w-48 md:border-b-0 md:border-r md:pb-0 md:pr-4">
-          <div
-            role="tablist"
-            data-ui="tab-rail"
+          <TabRail
+            variant="rail"
+            orientation="vertical"
+            // The rail announces itself as vertical but lays out as a
+            // horizontal strip below `md`, so both arrow pairs have to work.
+            arrowKeys="both"
             aria-label={t({
               id: "preferences.dialog.title",
               message: "Preferences",
             })}
-            aria-orientation="vertical"
-            className="flex gap-1 overflow-x-auto md:flex-col md:overflow-x-visible"
-          >
-            {visibleTabs.map((tab) => {
-              const isActive = activeTab === tab;
-
-              return (
-                <button
-                  key={tab}
-                  id={tabIds[tab]}
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  aria-controls={panelIds[tab]}
-                  tabIndex={isActive ? 0 : -1}
-                  className={clsx(
-                    "flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap rounded-[var(--theme-radius-control)] px-3 py-2 text-left text-sm md:w-full",
-                    "theme-transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus",
-                    isActive
-                      ? "bg-theme-bg-selected font-medium text-theme-fg-primary"
-                      : "text-theme-fg-secondary hover:bg-theme-bg-hover",
-                  )}
-                  onClick={() => setActiveTab(tab)}
-                  onKeyDown={(event) => handleTabKeyDown(event, tab)}
-                >
-                  <span aria-hidden="true" className="shrink-0">
-                    {tabIcons[tab]}
-                  </span>
-                  {tabLabels[tab]}
-                </button>
-              );
-            })}
-          </div>
+            className="overflow-x-auto md:flex-col md:overflow-x-visible"
+            tabClassName="text-left md:w-full"
+            options={visibleTabs.map((tab) => ({
+              value: tab,
+              label: tabLabels[tab],
+              icon: tabIcons[tab],
+              id: tabIds[tab],
+              panelId: panelIds[tab],
+            }))}
+            value={activeTab}
+            onChange={setActiveTab}
+          />
         </aside>
 
         <section
