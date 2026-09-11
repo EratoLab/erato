@@ -1399,66 +1399,74 @@ describe("fetchConversationMessagesViaEws", () => {
     expect(attachment?.contentType).toBe("message/rfc822");
   });
 
-  it("enriches a byte-less ItemAttachment whose nested message/rfc822 part has NO Content-Disposition (forced to an attachment, matched by type)", async () => {
-    // A forwarded email can arrive as a nested message/rfc822 part with no
-    // Content-Disposition. With postal-mime's default parsing that submessage is
-    // INLINED — its bytes are lost and its inner content leaks into the parent
-    // body — so the byte-less ItemAttachment never gets filled. We parse with
-    // `rfc822Attachments: true`, which surfaces it as a filename-less,
-    // Content-ID-less attachment, then pair it to the ItemAttachment by type.
-    const boundary = "----EWS-MIME-BOUNDARY";
-    const innerEml =
-      `From: orig@x${CRLF}To: me@x${CRLF}Subject: Forwarded thing${CRLF}` +
-      `MIME-Version: 1.0${CRLF}Content-Type: text/plain${CRLF}${CRLF}` +
-      `inner body${CRLF}`;
-    const mime =
-      `From: a@x${CRLF}To: b@x${CRLF}Subject: Parent${CRLF}MIME-Version: 1.0${CRLF}` +
-      `Content-Type: multipart/mixed; boundary="${boundary}"${CRLF}${CRLF}` +
-      `--${boundary}${CRLF}Content-Type: text/plain${CRLF}${CRLF}` +
-      `see forwarded${CRLF}` +
-      // The nested message carries NO Content-Disposition — the leaky case.
-      `--${boundary}${CRLF}Content-Type: message/rfc822${CRLF}${CRLF}${innerEml}` +
-      `--${boundary}--${CRLF}`;
-    const attachmentsXml =
-      "<t:Attachments><t:ItemAttachment>" +
-      '<t:AttachmentId Id="att-item-1"/>' +
-      "<t:Name>Forwarded thing</t:Name>" +
-      "<t:ContentType>message/rfc822</t:ContentType>" +
-      "</t:ItemAttachment></t:Attachments>";
-    installHostMock((body) => {
-      if (body.includes("<m:GetConversationItems>")) {
+  it.each([
+    ["NO Content-Disposition", ""],
+    ["an inline Content-Disposition", `Content-Disposition: inline${CRLF}`],
+  ])(
+    "enriches a byte-less ItemAttachment whose nested message/rfc822 part has %s (forced to an attachment, matched by type)",
+    async (_label, dispositionHeader) => {
+      // A forwarded email can arrive as a nested message/rfc822 part with no
+      // Content-Disposition, or an explicitly inline one. With postal-mime's
+      // default parsing that submessage is INLINED — its bytes are lost and its
+      // inner content leaks into the parent body — so the byte-less
+      // ItemAttachment never gets filled. We parse with
+      // `forceRfc822Attachments: true`, which surfaces it as a filename-less,
+      // Content-ID-less attachment, then pair it to the ItemAttachment by type.
+      const boundary = "----EWS-MIME-BOUNDARY";
+      const innerEml =
+        `From: orig@x${CRLF}To: me@x${CRLF}Subject: Forwarded thing${CRLF}` +
+        `MIME-Version: 1.0${CRLF}Content-Type: text/plain${CRLF}${CRLF}` +
+        `inner body${CRLF}`;
+      const mime =
+        `From: a@x${CRLF}To: b@x${CRLF}Subject: Parent${CRLF}MIME-Version: 1.0${CRLF}` +
+        `Content-Type: multipart/mixed; boundary="${boundary}"${CRLF}${CRLF}` +
+        `--${boundary}${CRLF}Content-Type: text/plain${CRLF}${CRLF}` +
+        `see forwarded${CRLF}` +
+        `--${boundary}${CRLF}Content-Type: message/rfc822${CRLF}${dispositionHeader}${CRLF}${innerEml}` +
+        `--${boundary}--${CRLF}`;
+      const attachmentsXml =
+        "<t:Attachments><t:ItemAttachment>" +
+        '<t:AttachmentId Id="att-item-1"/>' +
+        "<t:Name>Forwarded thing</t:Name>" +
+        "<t:ContentType>message/rfc822</t:ContentType>" +
+        "</t:ItemAttachment></t:Attachments>";
+      installHostMock((body) => {
+        if (body.includes("<m:GetConversationItems>")) {
+          return {
+            status: "succeeded",
+            value: conversationItemsResponse(["m1"]),
+          };
+        }
+        if (isMimeGetItem(body)) {
+          return {
+            status: "succeeded",
+            value: getItemMimeContentResponse(mime),
+          };
+        }
         return {
           status: "succeeded",
-          value: conversationItemsResponse(["m1"]),
+          value: messageItemResponse({
+            itemId: "m1",
+            subject: "Forwarded item",
+            attachmentsXml,
+          }),
         };
-      }
-      if (isMimeGetItem(body)) {
-        return {
-          status: "succeeded",
-          value: getItemMimeContentResponse(mime),
-        };
-      }
-      return {
-        status: "succeeded",
-        value: messageItemResponse({
-          itemId: "m1",
-          subject: "Forwarded item",
-          attachmentsXml,
-        }),
-      };
-    });
+      });
 
-    const { messages } = await fetchConversationMessagesViaEws("conv-1");
+      const { messages } = await fetchConversationMessagesViaEws("conv-1");
 
-    const attachment = messages[0].attachments?.[0];
-    expect(attachment?.["@odata.type"]).toBe("#microsoft.graph.itemAttachment");
-    // The nested email survived as an attachment (not inlined) and its bytes were
-    // spliced onto the byte-less ItemAttachment despite the missing filename/CID.
-    expect(attachment?.contentBytes).toBeTruthy();
-    const decoded = atob(attachment!.contentBytes!);
-    expect(decoded).toContain("Subject: Forwarded thing");
-    expect(decoded).toContain("inner body");
-  });
+      const attachment = messages[0].attachments?.[0];
+      expect(attachment?.["@odata.type"]).toBe(
+        "#microsoft.graph.itemAttachment",
+      );
+      // The nested email survived as an attachment (not inlined) and its bytes were
+      // spliced onto the byte-less ItemAttachment despite the missing filename/CID.
+      expect(attachment?.contentBytes).toBeTruthy();
+      const decoded = atob(attachment!.contentBytes!);
+      expect(decoded).toContain("Subject: Forwarded thing");
+      expect(decoded).toContain("inner body");
+    },
+  );
 
   it("leaves an attachment byte-less (disclosure marker downstream) when the owning message's MIME GetItem errors", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
