@@ -596,6 +596,49 @@ describe("useFileDropzone", () => {
       expect(result.current.error).toBeInstanceOf(UnsupportedFileTypeError);
     });
 
+    it("creates no silent chat when every file is unsupported", async () => {
+      const mockFetchUploadFile = vi.mocked(fetchUploadFile);
+
+      const { result } = renderHook(() =>
+        useFileDropzone({ chatId: null, multiple: true }),
+      );
+
+      await act(async () => {
+        await result.current.uploadFiles([makeFileWithSize("bad.zip", 100)]);
+      });
+
+      expect(result.current.error).toBeInstanceOf(UnsupportedFileTypeError);
+      expect(mockFetchUploadFile).not.toHaveBeenCalled();
+      expect(mockCreateChatMutateAsync).not.toHaveBeenCalled();
+    });
+
+    it("uploads the supported files and names only the unsupported one", async () => {
+      const mockFetchUploadFile = vi.mocked(fetchUploadFile);
+      mockFetchUploadFile.mockResolvedValue({
+        files: [createMockUploadedFile("file1", "ok.pdf")],
+      });
+
+      const { result } = renderHook(() =>
+        useFileDropzone({ chatId: "existing-chat-id", multiple: true }),
+      );
+
+      await act(async () => {
+        await result.current.uploadFiles([
+          makeFileWithSize("bad.zip", 100),
+          makeFileWithSize("ok.pdf", 100, "application/pdf"),
+        ]);
+      });
+
+      expect(result.current.error).toBeInstanceOf(UnsupportedFileTypeError);
+      expect(result.current.error?.message).toContain("bad.zip");
+      expect(result.current.error?.message).not.toContain("ok.pdf");
+      expect(mockFetchUploadFile).toHaveBeenCalledTimes(1);
+      const sent = (
+        mockFetchUploadFile.mock.calls[0][0].body as unknown as FormData
+      ).getAll("file") as File[];
+      expect(sent.map((file) => file.name)).toEqual(["ok.pdf"]);
+    });
+
     it("reports a wrong-type dropzone rejection as an unsupported file type", () => {
       const { result } = renderHook(() =>
         useFileDropzone({ chatId: "existing-chat-id" }),

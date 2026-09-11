@@ -244,12 +244,14 @@ export function useFileDropzone({
         if (!isLoadingCapabilities && capabilities.length > 0) {
           const { valid, invalid } = validateFiles(files, capabilities);
 
-          // If there are invalid files, throw error and don't upload ANY files
+          // Name the unsupported files and carry on with the rest of the batch.
           if (invalid.length > 0) {
-            throw new UnsupportedFileTypeError(invalid.map((f) => f.name));
+            setError(new UnsupportedFileTypeError(invalid.map((f) => f.name)));
+          }
+          if (valid.length === 0) {
+            return;
           }
 
-          // Only proceed with valid files
           files = valid;
         } else {
           // Capabilities not loaded - log warning and allow upload (backend will validate)
@@ -342,8 +344,7 @@ export function useFileDropzone({
         logger.error("Error uploading files (outer catch):", err);
         const isKnownError =
           err instanceof UploadTooLargeError ||
-          err instanceof UploadUnknownError ||
-          err instanceof UnsupportedFileTypeError;
+          err instanceof UploadUnknownError;
 
         setError(isKnownError ? err : new UploadUnknownError());
       } finally {
