@@ -26,7 +26,10 @@ import type { ReactNode } from "react";
 const { useConversationDropzoneMock, dismissSessionToastsMock } = vi.hoisted(
   () => ({
     useConversationDropzoneMock: vi.fn(
-      (_options: { extraAcceptMimeTypes?: Record<string, string[]> }) => ({
+      (_options: {
+        extraAcceptMimeTypes?: Record<string, string[]>;
+        onReceive?: (count: number) => unknown;
+      }) => ({
         getRootProps: () => ({}),
         getInputProps: () => ({}),
         isDragActive: false,
@@ -217,6 +220,13 @@ describe("AddinChat without any Graph provider mounted (Exchange SE / unsupporte
     expect(dropzoneOptions?.extraAcceptMimeTypes).toEqual({
       "message/rfc822": [".eml"],
     });
+  });
+
+  it("asks the dropzone to announce a drop before the files are read", () => {
+    renderWithoutGraphProvider(<AddinChat />);
+
+    const dropzoneOptions = useConversationDropzoneMock.mock.calls.at(-1)?.[0];
+    expect(dropzoneOptions?.onReceive).toBeTypeOf("function");
   });
 
   // A pending ask toast floats interactive above the aria-modal drawer but

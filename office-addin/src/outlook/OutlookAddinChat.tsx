@@ -274,6 +274,7 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
     maxSize: maxSizeBytes,
     maxSizeFormatted,
     isSizeExempt,
+    onReceive: beginDrop,
   });
 
   const handleOutlookMailListDrop = useCallback(
@@ -343,6 +344,7 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
   );
   const { isDragActive: isOutlookMailDragActive } = useOutlookMailListDrag({
     onDrop: handleOutlookMailListDrop,
+    onDropStart: beginDrop,
     disabled: !messageFetcher && !ownMailboxFetcher,
   });
 
@@ -387,6 +389,7 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
   );
   const { isDragActive: isOfficeDragActive } = useOfficeDragAndDrop({
     onDrop: handleOfficeDragAndDrop,
+    onDropStart: beginDrop,
   });
   const showDropOverlay =
     (dropzone.isDragActive && dropzone.isDragAccept) ||
