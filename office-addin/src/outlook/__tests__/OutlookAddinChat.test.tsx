@@ -121,7 +121,13 @@ vi.mock("@erato/frontend/library", () => ({
     closePreviewModal: vi.fn(),
   }),
   useFacets: () => ({ data: { action_facets: [] } }),
-  useFileUploadStore: () => ({ setError: vi.fn() }),
+  useFileUploadStore: (
+    selector?: (state: { setError: (error: unknown) => void }) => unknown,
+  ) => {
+    const state = { setError: vi.fn() };
+    return selector ? selector(state) : state;
+  },
+  UploadUnknownError: class extends Error {},
   useFileUploadWithTokenCheck: () => ({
     uploadFiles: vi.fn(async () => []),
     uploadError: null,
