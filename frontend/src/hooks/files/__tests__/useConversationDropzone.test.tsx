@@ -18,10 +18,12 @@ let capturedOnDrop: (
   accepted: File[],
   rejected: { file: File; errors: { code: string; message: string }[] }[],
 ) => void = () => {};
+let capturedOnError: (error: Error) => void = () => {};
 
 vi.mock("react-dropzone", () => ({
   useDropzone: vi.fn((opts) => {
     capturedOnDrop = opts.onDrop ?? (() => {});
+    capturedOnError = opts.onError ?? (() => {});
     return {
       // Echoes its argument so tests can reach the handlers the hook composes.
       getRootProps: vi.fn((props?: Record<string, unknown>) => props ?? {}),
@@ -529,6 +531,58 @@ describe("useConversationDropzone", () => {
         );
       });
       expect(release).toHaveBeenCalledTimes(1);
+    });
+
+    it("releases the early signal when react-dropzone fails to read the files", () => {
+      const release = vi.fn();
+      const onReceive = vi.fn(() => release);
+      const { result } = renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          onReceive,
+        }),
+      );
+
+      const rootProps = result.current.getRootProps();
+      act(() => {
+        (rootProps.onDrop as (event: unknown) => void)(
+          dropEvent({ types: ["Files"], files: 1 }),
+        );
+      });
+      expect(release).not.toHaveBeenCalled();
+
+      // A file item that yields no File makes react-dropzone reject before
+      // onDrop; only its onError sees the drop end.
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      act(() => {
+        capturedOnError(new Error("[object DataTransferItem] is not a File"));
+      });
+      consoleError.mockRestore();
+      expect(release).toHaveBeenCalledTimes(1);
+      expect(mockUploadFiles).not.toHaveBeenCalled();
+    });
+
+    it("stays quiet for a file drag that carries no file entries", () => {
+      const onReceive = vi.fn();
+      const { result } = renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          onReceive,
+        }),
+      );
+
+      const rootProps = result.current.getRootProps();
+      act(() => {
+        (rootProps.onDrop as (event: unknown) => void)(
+          dropEvent({ types: ["Files"], items: [{ kind: "string" }] }),
+        );
+      });
+
+      expect(onReceive).not.toHaveBeenCalled();
     });
 
     it("hands react-dropzone's root props through untouched when unused", () => {

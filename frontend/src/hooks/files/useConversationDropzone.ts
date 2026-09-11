@@ -100,10 +100,13 @@ export function useConversationDropzone({
     },
     [maxSize, isSizeExempt],
   );
+  const releaseReceive = useCallback(() => {
+    receiveReleaseRef.current?.();
+    receiveReleaseRef.current = null;
+  }, []);
   const handleDrop = useCallback(
     (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
-      receiveReleaseRef.current?.();
-      receiveReleaseRef.current = null;
+      releaseReceive();
       // Rejected files never reach the upload preflight; report them here.
       let files = acceptedFiles;
       if (rejectedFiles.length > 0) {
@@ -128,7 +131,23 @@ export function useConversationDropzone({
         }
       });
     },
-    [onUploaded, uploadFiles, reportError, maxSizeFormatted, isSizeExempt],
+    [
+      onUploaded,
+      uploadFiles,
+      reportError,
+      maxSizeFormatted,
+      isSizeExempt,
+      releaseReceive,
+    ],
+  );
+  // react-dropzone reads the dropped items before onDrop; when that read
+  // fails (an item of kind "file" that yields no File) onDrop never runs.
+  const handleReadError = useCallback(
+    (error: Error) => {
+      console.error(error);
+      releaseReceive();
+    },
+    [releaseReceive],
   );
 
   const accept = useMemo(() => {
@@ -154,6 +173,7 @@ export function useConversationDropzone({
     isDragAccept,
   } = useDropzone({
     onDrop: handleDrop,
+    onError: handleReadError,
     accept,
     multiple: true,
     disabled: isUploading,
@@ -163,15 +183,17 @@ export function useConversationDropzone({
   });
 
   // react-dropzone runs a caller's onDrop before its own, so this sees the
-  // event first; a file drop always reaches handleDrop afterwards.
+  // event first; a file drop then reaches handleDrop or handleReadError.
   const handleReceive = useCallback(
     (event: DragEvent) => {
       if (!onReceive) return;
       // Typed non-null by React, absent on some synthetic drops.
       const transfer = event.dataTransfer as DataTransfer | null;
       if (!transfer || !isFileDrag(transfer)) return;
+      const count = droppedFileCount(transfer);
+      if (count === 0) return;
       receiveReleaseRef.current?.();
-      const release = onReceive(droppedFileCount(transfer));
+      const release = onReceive(count);
       receiveReleaseRef.current =
         typeof release === "function" ? release : null;
     },
