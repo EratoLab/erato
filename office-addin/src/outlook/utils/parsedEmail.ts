@@ -19,6 +19,8 @@ export interface ParsedAttachment {
 }
 
 export interface ParsedEmail {
+  /** The parsed bytes; `rawEmlFile` holds a copy. */
+  rawBytes: ArrayBuffer;
   rawEmlFile: File;
   messageId: string | null;
   subject: string | null;
@@ -66,6 +68,7 @@ export async function parseEmlBytes(
   );
 
   return {
+    rawBytes: bytes,
     rawEmlFile,
     messageId: parsed.messageId ?? null,
     subject: nullIfEmpty(parsed.subject),

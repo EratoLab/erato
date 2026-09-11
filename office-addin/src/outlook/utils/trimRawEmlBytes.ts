@@ -9,6 +9,26 @@ export class EmailTrimError extends Error {
 }
 
 /**
+ * Mints the trimmed `.eml` as a File named and typed like `like`. The
+ * `lastModified` is inherited so remints of the same input digest the same.
+ * Null when the structure cannot be cut safely.
+ */
+export function trimEmlFileSync(
+  bytes: Uint8Array,
+  like: File,
+  indicesToRemove: number[],
+): File | null {
+  const trimmed = trimEmlAttachments(bytes, indicesToRemove);
+  if (!trimmed) {
+    return null;
+  }
+  return new File([trimmed.slice()], like.name, {
+    type: like.type,
+    lastModified: like.lastModified,
+  });
+}
+
+/**
  * Cuts dismissed attachments out of a staged email's bytes. Never falls back
  * to the untrimmed file: an email that cannot honour the dismissal is not sent.
  */
@@ -17,11 +37,13 @@ export async function trimRawEmlBytes(
   indicesToRemove: number[],
 ): Promise<File> {
   const buffer = await rawEmlFile.arrayBuffer();
-  const trimmed = trimEmlAttachments(new Uint8Array(buffer), indicesToRemove);
+  const trimmed = trimEmlFileSync(
+    new Uint8Array(buffer),
+    rawEmlFile,
+    indicesToRemove,
+  );
   if (!trimmed) {
     throw new EmailTrimError(rawEmlFile.name);
   }
-  return new File([trimmed.slice()], rawEmlFile.name, {
-    type: rawEmlFile.type,
-  });
+  return trimmed;
 }
