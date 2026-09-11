@@ -9,6 +9,7 @@ import {
   getIdToken,
   isUploadTooLarge,
   useChatInputControls,
+  useChatInputFeature,
   useFileCapabilitiesContext,
   useFileUploadStore,
   useUploadFeature,
@@ -327,6 +328,7 @@ export const AddinChatInput = forwardRef<
   } = useOutlookEmailSource();
   const { maxSizeBytes: globalMaxSizeBytes, maxSizeFormatted } =
     useUploadFeature();
+  const { maxFiles: maxFilesPerMessage } = useChatInputFeature();
   const { capabilities, isLoading: isLoadingCapabilities } =
     useFileCapabilitiesContext();
   // The composer's alert renders and clears this store; a local copy would outlive it.
@@ -439,7 +441,12 @@ export const AddinChatInput = forwardRef<
     },
     [ownerHandleFileAttachments],
   );
-  const maxFiles = chatInputProps.maxFiles ?? DEFAULT_MAX_FILES_PER_MESSAGE;
+  // The server caps a message at its own per-message count, whatever the
+  // composer was told.
+  const maxFiles = Math.min(
+    chatInputProps.maxFiles ?? DEFAULT_MAX_FILES_PER_MESSAGE,
+    maxFilesPerMessage,
+  );
   const stagedLimitExceeded = useMemo<ComposerSizeLimit | null>(
     () =>
       findStagedSendLimit(

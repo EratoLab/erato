@@ -433,6 +433,7 @@ export {
   useAudioConversationalFeature,
   useFeatureConfig,
   useAssistantsFeature,
+  useChatInputFeature,
   useChatSharingFeature,
   useMessageFeedbackFeature,
   useTraceFeature,
