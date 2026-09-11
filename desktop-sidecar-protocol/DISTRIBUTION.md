@@ -310,8 +310,10 @@ target IDs, download filenames, or API routing.
 
 A backend MAY personalize a Windows download with a single immutable
 organization bootstrap document. The document configures policy needed before
-the sidecar accepts browser requests; it is not user preferences, user
-identity, enrollment state, a client private key, or a reusable credential.
+the sidecar accepts browser requests. It can also contain the TLS server identity
+used by the loopback HTTPS listener. It is not user preferences or enrollment
+state. A TLS-personalized artifact contains a private key and MUST be handled
+as secret material; the issuing CA private key MUST never be injected.
 
 The bootstrap document is UTF-8 JSON with this versioned, extensible shape:
 
@@ -320,6 +322,10 @@ The bootstrap document is UTF-8 JSON with this versioned, extensible shape:
   "version": 1,
   "organization_configuration": {
     "allowed_origins": ["https://app.example.test"]
+  },
+  "tls": {
+    "certificate_pem": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n",
+    "private_key_pem": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
   }
 }
 ```
@@ -337,6 +343,40 @@ file. In particular, `sidecar.configure.v1` and files in a user's platform
 configuration directory MUST NOT add or replace production allowed origins.
 Development origins remain an explicit local development-mode option.
 
+The optional root `tls` object contains two required, nonempty strings:
+`certificate_pem` is a PEM certificate chain, leaf first; `private_key_pem` is
+its matching unencrypted PEM private key (PKCS#8, PKCS#1, or SEC1 as supported by
+the TLS implementation). The example above abbreviates the PEM bodies. The leaf
+MUST be valid for TLS server authentication and include the `127.0.0.1` IP subject
+alternative name. The issuing CA must already be trusted by the browser/OS;
+shipping certificates in bootstrap data does not install trust.
+
+When `tls` is absent, the sidecar MAY use explicit development certificate/key
+files or serve HTTP. When present, it MUST serve HTTPS automatically, including
+autorun and restart, and MUST reject malformed PEM, incomplete identities, and
+certificate/key mismatches before opening its listener. A present invalid
+identity MUST NOT fall back to HTTP or another bootstrap source. Development
+certificate/key flags conflict with a bootstrap identity and MUST be rejected.
+User configuration and `sidecar.configure.v1` MUST NOT override or expose the
+bootstrap TLS identity. Bootstrap contents and private keys MUST NOT appear in
+logs, debug output, RPC responses, or public distribution metadata.
+
+A backend can provide a fixed certificate/key pair or issue a fresh leaf/key
+pair during each download's bootstrap injection. In the latter mode it MUST
+validate the intermediate CA certificate and matching signing key, generate a
+fresh leaf key, restrict the leaf to server authentication, and cap its validity
+at the issuer's expiration. The injected certificate chain includes the
+intermediate(s), while the CA private key remains exclusively on the backend.
+The reference backend issues P-256 leaves for `127.0.0.1`, `::1`, and `localhost`,
+with a default 365-day lifetime and up to five minutes of clock-skew allowance,
+bounded by the chain's validity. This provisions keys per download, not per
+device: copies of the same artifact share the injected identity. Renewal requires
+new bootstrap data; no enrollment or automatic renewal is defined here.
+
+An external `bootstrap.json` beside the executable takes precedence over the
+embedded Windows slot. This also allows installer-managed TLS on macOS/Linux;
+the current backend's automatic download injection only supports Windows EXE/MSI.
+
 ### 6.1 Windows executable personalization
 
 The Windows executable template contains exactly one file-backed, non-executable
@@ -353,10 +393,13 @@ The Windows executable template contains exactly one file-backed, non-executable
 A personalizer MUST parse the PE section table, find exactly one `.erato`
 section, then find the magic exactly once inside that section. It MUST validate
 the template header, replace the complete 4096-byte slot, and reject an
-oversized document. It MUST NOT replace a JSON substring or append an EOF
-trailer. The sidecar validates the header, version, length, JSON, and origin
-policy before opening its browser listener. A template slot with a zero length
-is an unpersonalized artifact and has an empty, fail-closed allowlist.
+oversized document, including the JSON-escaped PEM strings. The complete JSON
+must fit within 4070 UTF-8 bytes; large RSA keys or long chains may exceed this
+limit and require an MSI/external bootstrap file. It MUST NOT truncate PEM,
+replace a JSON substring, or append an EOF trailer. The sidecar validates the
+header, version, length, JSON, origin policy, and TLS identity before opening its
+browser listener. A template slot with a zero length is an unpersonalized
+artifact and has an empty, fail-closed allowlist.
 
 ### 6.2 Windows MSI personalization
 
@@ -372,9 +415,11 @@ its embedded slot, so the MSI and standalone forms implement the same policy
 with no post-install user action.
 
 A personalizer MAY build one artifact per organization policy revision and
-target. It MUST use the same bootstrap document for the MSI and standalone
-executable emitted for that revision. It MUST read each output back and verify
-the exact bootstrap bytes before signing or publishing it. Personalized output
+target. Artifacts emitted together for a single personalization MUST use the
+same bootstrap document. Separately requested downloads MAY receive different
+TLS leaf identities while retaining the same organization policy. It MUST read
+each output back and verify the exact bootstrap bytes before signing or
+publishing it. Personalized output
 MUST remain in memory or temporary deployment storage and MUST NOT be written
 into the immutable artifact root.
 

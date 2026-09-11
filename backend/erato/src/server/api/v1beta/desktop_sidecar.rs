@@ -201,7 +201,7 @@ async fn build_download_response(
             )
         }
         BootstrapTransport::WindowsExecutable { slot_offset } => {
-            let slot = encode_executable_bootstrap_slot(distribution.bootstrap()).map_err(|error| {
+            let slot = encode_executable_bootstrap_slot(&personalization_bootstrap(distribution)?).map_err(|error| {
                 tracing::error!(%error, "Failed to encode desktop sidecar executable bootstrap");
                 StatusCode::INTERNAL_SERVER_ERROR
             })?;
@@ -241,7 +241,7 @@ async fn build_download_response(
         }
         BootstrapTransport::WindowsMsi => {
             let personalized = artifact
-                .personalized_msi(distribution.bootstrap())
+                .personalized_msi(&personalization_bootstrap(distribution)?)
                 .map_err(|error| {
                     tracing::error!(%error, "Failed to personalize desktop sidecar MSI");
                     StatusCode::INTERNAL_SERVER_ERROR
@@ -283,6 +283,15 @@ async fn build_download_response(
         .headers_mut()
         .insert(CONTENT_DISPOSITION, content_disposition);
     Ok(response)
+}
+
+fn personalization_bootstrap(
+    distribution: &DesktopSidecarDistribution,
+) -> Result<Vec<u8>, StatusCode> {
+    distribution.bootstrap_for_download().map_err(|error| {
+        tracing::error!(%error, "Failed to create desktop sidecar bootstrap identity");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })
 }
 
 #[cfg(test)]
@@ -379,6 +388,67 @@ mod tests {
                 .unwrap()
                 .as_ref(),
             expected
+        );
+
+        // Download-time issuance must use a fresh identity for each response.
+        let key = rcgen::KeyPair::generate().unwrap();
+        let mut params = rcgen::CertificateParams::default();
+        params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+        params.key_usages = vec![rcgen::KeyUsagePurpose::KeyCertSign];
+        let tls = erato_config::config::DesktopSidecarTlsConfig {
+            intermediate_certificate_pem: Some(params.self_signed(&key).unwrap().pem()),
+            intermediate_private_key_pem: Some(key.serialize_pem().into()),
+            ..Default::default()
+        };
+        let tls_distribution = DesktopSidecarDistribution::load_with_bootstrap(
+            directory.path(),
+            &["https://app.example.test".into()],
+            &tls,
+        )
+        .unwrap();
+        let mut identities = Vec::new();
+        for _ in 0..2 {
+            let response = build_download_response(
+                Some(&tls_distribution),
+                DesktopSidecarDistributionDownloadQuery {
+                    target: "windows-x86_64".into(),
+                    file: None,
+                },
+            )
+            .await
+            .unwrap();
+            assert_eq!(response.headers()[CACHE_CONTROL], "private, no-store");
+            let bytes = to_bytes(response.into_body(), template.len())
+                .await
+                .unwrap();
+            let offset = 0x200 + 32;
+            let length =
+                u32::from_le_bytes(bytes[offset + 18..offset + 22].try_into().unwrap()) as usize;
+            let document: serde_json::Value =
+                serde_json::from_slice(&bytes[offset + 26..offset + 26 + length]).unwrap();
+            assert_eq!(
+                document["organization_configuration"]["allowed_origins"][0],
+                "https://app.example.test"
+            );
+            assert!(
+                document["tls"]["certificate_pem"]
+                    .as_str()
+                    .unwrap()
+                    .contains("BEGIN CERTIFICATE")
+            );
+            let private_key = document["tls"]["private_key_pem"]
+                .as_str()
+                .unwrap()
+                .to_owned();
+            assert_ne!(private_key, key.serialize_pem());
+            identities.push(private_key);
+            assert_eq!(&bytes[..offset], &template[..offset]);
+            assert_eq!(&bytes[offset + 4096..], &template[offset + 4096..]);
+        }
+        assert_ne!(identities[0], identities[1]);
+        assert_eq!(
+            fs::read(target_directory.join("erato-desktop-sidecar.exe")).unwrap(),
+            template
         );
 
         let missing = build_download_response(

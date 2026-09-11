@@ -12,6 +12,12 @@ use serde::Deserialize;
 use serde_json::json;
 use url::{Host, Origin, Url};
 
+#[path = "desktop_sidecar_tls.rs"]
+mod tls;
+
+use erato_config::config::DesktopSidecarTlsConfig;
+use tls::BootstrapTls;
+
 const MANIFEST_FILE_NAME: &str = "manifest.json";
 const BOOTSTRAP_FORMAT_VERSION: u16 = 1;
 pub const EMBEDDED_BOOTSTRAP_SLOT_CAPACITY: usize = 4096;
@@ -24,6 +30,7 @@ const MSI_BOOTSTRAP_FILE_ID: &str = "OrganizationBootstrapFile";
 pub struct DesktopSidecarDistribution {
     targets: Vec<DistributionTarget>,
     bootstrap: Arc<[u8]>,
+    tls: Option<BootstrapTls>,
 }
 
 #[derive(Clone, Debug)]
@@ -90,6 +97,15 @@ impl DesktopSidecarDistribution {
         root: impl AsRef<Path>,
         allowed_origins: &[String],
     ) -> Result<Self> {
+        Self::load_with_bootstrap(root, allowed_origins, &DesktopSidecarTlsConfig::default())
+    }
+
+    pub fn load_with_bootstrap(
+        root: impl AsRef<Path>,
+        allowed_origins: &[String],
+        tls_config: &DesktopSidecarTlsConfig,
+    ) -> Result<Self> {
+        let tls = BootstrapTls::from_config(tls_config)?;
         let root = root.as_ref();
         validate_root(root)?;
         let bootstrap: Arc<[u8]> = build_bootstrap(allowed_origins)?.into();
@@ -176,7 +192,11 @@ impl DesktopSidecarDistribution {
             });
         }
 
-        Ok(Self { targets, bootstrap })
+        Ok(Self {
+            targets,
+            bootstrap,
+            tls,
+        })
     }
 
     #[must_use]
@@ -193,6 +213,20 @@ impl DesktopSidecarDistribution {
         let target = self.targets.iter().find(|target| target.id == target_id)?;
         let file_id = file_id.unwrap_or(&target.default_file);
         target.files.iter().find(|artifact| artifact.id == file_id)
+    }
+
+    /// Called once per personalization; dynamically issued private keys are never cached.
+    pub fn bootstrap_for_download(&self) -> Result<Vec<u8>> {
+        let Some(tls) = &self.tls else {
+            return Ok(self.bootstrap.to_vec());
+        };
+        let mut document: serde_json::Value = serde_json::from_slice(&self.bootstrap)?;
+        let (certificate, key) = tls.issue()?;
+        document["tls"] = json!({
+            "certificate_pem": certificate,
+            "private_key_pem": key.expose_secret(),
+        });
+        serde_json::to_vec(&document).wrap_err("Failed to serialize desktop sidecar TLS bootstrap")
     }
 
     #[must_use]
@@ -704,6 +738,64 @@ mod tests {
                 }]
             }]
         })
+    }
+
+    #[test]
+    fn tls_bootstrap_is_created_at_injection_and_fits_the_executable_slot() {
+        let directory = tempdir().unwrap();
+        write_distribution(directory.path(), valid_manifest());
+        let key = rcgen::KeyPair::generate().unwrap();
+        let mut params = rcgen::CertificateParams::default();
+        params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+        params.key_usages = vec![rcgen::KeyUsagePurpose::KeyCertSign];
+        let ca = params.self_signed(&key).unwrap();
+        let config = DesktopSidecarTlsConfig {
+            intermediate_certificate_pem: Some(ca.pem()),
+            intermediate_private_key_pem: Some(key.serialize_pem().into()),
+            ..Default::default()
+        };
+        let distribution = DesktopSidecarDistribution::load_with_bootstrap(
+            directory.path(),
+            &["https://app.example.test".into()],
+            &config,
+        )
+        .unwrap();
+        let first = distribution.bootstrap_for_download().unwrap();
+        let second = distribution.bootstrap_for_download().unwrap();
+        let document: serde_json::Value = serde_json::from_slice(&first).unwrap();
+        let next: serde_json::Value = serde_json::from_slice(&second).unwrap();
+        assert_eq!(
+            document["organization_configuration"],
+            next["organization_configuration"]
+        );
+        assert_ne!(
+            document["tls"]["private_key_pem"],
+            next["tls"]["private_key_pem"]
+        );
+        assert!(
+            !String::from_utf8(first.clone())
+                .unwrap()
+                .contains(&key.serialize_pem())
+        );
+        let slot = encode_executable_bootstrap_slot(&first).unwrap();
+        assert_eq!(&slot[26..26 + first.len()], first);
+        let cabinet = build_bootstrap_cabinet(&first).unwrap();
+        assert_eq!(read_bootstrap_cabinet(&cabinet).unwrap(), first);
+        let fixed = DesktopSidecarTlsConfig {
+            certificate_pem: Some(document["tls"]["certificate_pem"].as_str().unwrap().into()),
+            private_key_pem: Some(document["tls"]["private_key_pem"].as_str().unwrap().into()),
+            ..Default::default()
+        };
+        let fixed_distribution =
+            DesktopSidecarDistribution::load_with_bootstrap(directory.path(), &[], &fixed).unwrap();
+        assert_eq!(
+            fixed_distribution.bootstrap_for_download().unwrap(),
+            fixed_distribution.bootstrap_for_download().unwrap()
+        );
+        assert!(
+            encode_executable_bootstrap_slot(&vec![b' '; EMBEDDED_BOOTSTRAP_SLOT_CAPACITY])
+                .is_err()
+        );
     }
 
     #[test]

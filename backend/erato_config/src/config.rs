@@ -653,6 +653,10 @@ pub struct DesktopSidecarConfig {
     #[serde(default)]
     pub allowed_origins: Vec<String>,
 
+    /// TLS identity injected into personalized desktop-sidecar downloads.
+    #[serde(default)]
+    pub tls: DesktopSidecarTlsConfig,
+
     /// Distribution settings for desktop-sidecar installers and executables.
     #[serde(default)]
     pub distribution: DesktopSidecarDistributionConfig,
@@ -661,6 +665,26 @@ pub struct DesktopSidecarConfig {
     /// logged-in frontend session is initialized.
     #[serde(default)]
     pub organization_configuration: DesktopSidecarOrganizationConfiguration,
+}
+
+/// Configure either a fixed server identity or an intermediate CA used to issue
+/// a fresh identity for each personalized download. Omit all PEM fields for HTTP.
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[serde(deny_unknown_fields)]
+pub struct DesktopSidecarTlsConfig {
+    /// Fixed PEM server certificate chain, leaf first.
+    pub certificate_pem: Option<String>,
+    /// Unencrypted PEM private key matching the fixed leaf certificate.
+    #[facet(sensitive)]
+    pub private_key_pem: Option<SecretConfigString>,
+    /// PEM intermediate CA chain, signing intermediate first.
+    pub intermediate_certificate_pem: Option<String>,
+    /// Unencrypted PEM signing key; retained exclusively by the backend.
+    #[facet(sensitive)]
+    pub intermediate_private_key_pem: Option<SecretConfigString>,
+    /// Issued leaf lifetime in days (1–3650), capped by the issuer's expiry.
+    /// When unset, generated leaves are valid for 365 days.
+    pub validity_days: Option<u32>,
 }
 
 fn default_desktop_sidecar_distribution_directory() -> String {

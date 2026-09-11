@@ -292,6 +292,11 @@
   "desktop_sidecar.organization_configuration.show_tray_icon": {},
   "desktop_sidecar.show_settings_tab": {},
   "desktop_sidecar.show_settings_tab_office_addin": {},
+  "desktop_sidecar.tls.certificate_pem": {},
+  "desktop_sidecar.tls.intermediate_certificate_pem": {},
+  "desktop_sidecar.tls.intermediate_private_key_pem": {},
+  "desktop_sidecar.tls.private_key_pem": {},
+  "desktop_sidecar.tls.validity_days": {},
   "environment": {
     "hide_in_docs": true
   },

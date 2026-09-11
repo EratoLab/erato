@@ -50,6 +50,10 @@ reqwest-middleware = "0.5.1"
 reqwest-tracing = { version = "0.7.1", features = ["opentelemetry_0_32"] }
 
 # Dependencies: Security
+rcgen = { version = "0.14.8", default-features = false, features = ["ring", "pem", "x509-parser"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+x509-parser = "0.18"
+time = "0.3"
 aes-gcm-siv = "0.11.1"
 hmac = "0.13.0"
 jsonwebtoken = "10.4.0"
