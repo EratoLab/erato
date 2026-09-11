@@ -81,6 +81,7 @@ const threadMessage = (
   label: string,
   sublabel: string,
   attachments: { id: string; filename: string; size: number }[],
+  validation?: { ok: boolean; reason?: string },
 ) => ({
   kind: "threadMessageGroup" as const,
   id,
@@ -88,6 +89,7 @@ const threadMessage = (
   sublabel,
   selected: true,
   onToggle: () => {},
+  validation,
   defaultCollapsed: attachments.length === 0,
   attachments: attachments.map((file) => ({
     id: file.id,
@@ -149,6 +151,54 @@ export const StickyThread: Story = {
               { id: "a3", filename: "Zeitplan.png", size: 52000 },
             ],
           ),
+        ],
+      },
+    ],
+    onRemoveFile: () => {},
+    stickyGroupHeaders: true,
+    showFileTypes: true,
+    defaultVisibleItems: 10,
+  },
+};
+
+/* A message the composer will not send as it stands carries the verdict in
+   its header, beside the attachment rows that carry their own. */
+export const StickyThreadInvalid: Story = {
+  decorators: [boundedScroll],
+  args: {
+    groups: [
+      {
+        id: "thread",
+        label: "Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang",
+        metaLabel: "2 messages · 24.3 MB of 20 MB",
+        collapsible: true,
+        defaultCollapsed: false,
+        items: [
+          threadMessage(
+            "m1",
+            "Daniel Person",
+            "19/05/2026, 18:58:51 · Kickoff Kundenportal 2.0 – Lastenheft im Anhang",
+            [
+              {
+                id: "a1",
+                filename: "Lastenheft_Kundenportal_v1.pdf",
+                size: 240000,
+              },
+            ],
+          ),
+          {
+            ...threadMessage(
+              "m2",
+              "Max Token",
+              "19/05/2026, 19:02:28 · AW: Kickoff Kundenportal 2.0 – Lastenheft im Anhang",
+              [
+                { id: "a2", filename: "Rohdaten.zip", size: 24000000 },
+                { id: "a3", filename: "Zeitplan.png", size: 52000 },
+              ],
+              { ok: false, reason: "Too large to send as one message" },
+            ),
+            defaultCollapsed: false,
+          },
         ],
       },
     ],

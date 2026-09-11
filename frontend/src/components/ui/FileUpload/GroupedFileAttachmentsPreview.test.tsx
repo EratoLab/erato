@@ -625,6 +625,56 @@ describe("GroupedFileAttachmentsPreview", () => {
     expect(card).not.toHaveAttribute("data-selected");
   });
 
+  it("carries a thread message's verdict in its header", async () => {
+    const { container } = await renderWithI18n(
+      <GroupedFileAttachmentsPreview
+        groups={[
+          {
+            id: "group-conversation",
+            label: "Project Alpha",
+            items: [
+              {
+                kind: "threadMessageGroup",
+                id: "message-1",
+                label: "Anna Schmidt",
+                sublabel: "5 August 2026, 14:22",
+                selected: true,
+                onToggle: () => {},
+                validation: { ok: false, reason: "Too large to send" },
+                defaultCollapsed: true,
+                attachments: [
+                  {
+                    id: "file-1",
+                    file: { id: "file-1", filename: "raw.zip", size: 2048 },
+                    selected: true,
+                    onToggle: () => {},
+                  },
+                ],
+              },
+              {
+                kind: "threadMessageGroup",
+                id: "message-2",
+                label: "Ben Meier",
+                validation: { ok: true },
+                attachments: [],
+              },
+            ],
+          },
+        ]}
+        onRemoveFile={() => {}}
+      />,
+    );
+
+    const cards = container.querySelectorAll('[data-ui="thread-message-card"]');
+    // The reason sits in the header, so it reads while the rows are folded.
+    expect(cards[0]).toHaveAttribute("data-invalid", "true");
+    expect(screen.getByText("Too large to send")).toBeVisible();
+    expect(screen.getByText("Anna Schmidt")).toBeVisible();
+    expect(screen.queryByText("raw")).toBeNull();
+    // A passing verdict leaves the header as it was.
+    expect(cards[1]).not.toHaveAttribute("data-invalid");
+  });
+
   it("drops a collapsed thread message's rows from the DOM", async () => {
     const { container } = await renderWithI18n(
       <GroupedFileAttachmentsPreview
