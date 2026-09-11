@@ -50,7 +50,11 @@ export type FileAttachmentGroupItem =
       id: string;
       file: FileResource;
       selected: boolean;
-      onToggle: () => void;
+      /**
+       * Omit where inclusion is fixed: the row then renders read-only, with
+       * no checkbox that cannot change anything.
+       */
+      onToggle?: () => void;
       labelOverride?: string;
       /**
        * Pre-upload validation result. When `ok` is false, the row renders
@@ -481,10 +485,11 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
                     key={getFileKey(item)}
                     file={item.file}
                     variant="row"
-                    selection={{
-                      selected: item.selected,
-                      onToggle: item.onToggle,
-                    }}
+                    selection={
+                      item.onToggle
+                        ? { selected: item.selected, onToggle: item.onToggle }
+                        : undefined
+                    }
                     validation={item.validation}
                     disabled={disabled}
                     showType={rowTypeLabel}
