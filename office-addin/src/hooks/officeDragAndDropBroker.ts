@@ -22,6 +22,8 @@
 
 export interface OfficeDragAndDropSubscriber {
   onDragover: () => void;
+  /** Fires with the dropped item count before the items are read into Files. */
+  onDropStart?: (count: number) => void;
   onDrop: (files: File[]) => void;
 }
 
@@ -118,7 +120,18 @@ function handleOfficeEvent(event: Office.DragAndDropEventArgs): void {
     return;
   }
   if (data.type === "drop") {
-    const files = (data.dataTransfer?.files ?? []).map(toFile);
+    const items = data.dataTransfer?.files ?? [];
+    for (const subscriber of subscribers) {
+      try {
+        subscriber.onDropStart?.(items.length);
+      } catch (error) {
+        console.warn(
+          "[officeDragAndDropBroker] onDropStart listener threw:",
+          error,
+        );
+      }
+    }
+    const files = items.map(toFile);
     for (const subscriber of subscribers) {
       try {
         subscriber.onDrop(files);
