@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 import { makeFileWithSize } from "@/test/fileFixtures";
 
-import { UploadTooLargeError } from "../errors";
+import { UnsupportedFileTypeError, UploadTooLargeError } from "../errors";
 import { useChatFileSources } from "../useChatFileSources";
 import { useFileUploadStore } from "../useFileUploadStore";
 
@@ -37,12 +37,22 @@ vi.mock("@/hooks/files/useFileUploadWithTokenCheck", () => ({
   })),
 }));
 
+// Capture the onDrop callback react-dropzone receives so tests can invoke it
+// directly without triggering DOM drag events.
+let capturedOnDrop: (
+  accepted: File[],
+  rejected: { file: File; errors: { code: string; message: string }[] }[],
+) => void = () => {};
+
 vi.mock("react-dropzone", () => ({
-  useDropzone: vi.fn(() => ({
-    open: vi.fn(),
-    getRootProps: vi.fn(() => ({})),
-    getInputProps: vi.fn(() => ({})),
-  })),
+  useDropzone: vi.fn((opts) => {
+    capturedOnDrop = opts.onDrop ?? (() => {});
+    return {
+      open: vi.fn(),
+      getRootProps: vi.fn(() => ({})),
+      getInputProps: vi.fn(() => ({})),
+    };
+  }),
 }));
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
@@ -127,5 +137,41 @@ describe("useChatFileSources — onSelectFiles preflight", () => {
     expect(useFileUploadStore.getState().error).toBeInstanceOf(
       UploadTooLargeError,
     );
+  });
+});
+
+describe("useChatFileSources — dropzone rejections", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    act(() => {
+      useFileUploadStore.getState().reset();
+    });
+    mockUploadFiles.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("reports a wrong-type rejection and still uploads the accepted files", () => {
+    renderUseChatFileSources();
+    const accepted = makeFileWithSize("fine.pdf", 100);
+
+    act(() => {
+      capturedOnDrop(
+        [accepted],
+        [
+          {
+            file: makeFileWithSize("wrong.exe", 100),
+            errors: [{ code: "file-invalid-type", message: "type" }],
+          },
+        ],
+      );
+    });
+
+    const storeError = useFileUploadStore.getState().error;
+    expect(storeError).toBeInstanceOf(UnsupportedFileTypeError);
+    expect(storeError?.message).toContain("wrong.exe");
+    expect(mockUploadFiles).toHaveBeenCalledWith([accepted]);
   });
 });
