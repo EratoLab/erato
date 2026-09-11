@@ -179,6 +179,12 @@ interface OutlookEmailSourceContextValue {
   isDropResolutionStale: boolean;
   /** Every dropped email with its dismissals applied, in drop order. */
   resolvedDrops: ResolvedDrop[];
+  /**
+   * Set when a dismissal inside one of the thread's forwarded emails could
+   * not be cut out of its bytes. The thread then has no file, and a send is
+   * refused with this error rather than shipping the untrimmed original.
+   */
+  threadTrimError: EmailTrimError | null;
   /** The `.eml` files a send will upload: the thread first, then each drop that resolved. */
   resolvedFiles: File[];
   resolvedParts: ResolvedPart[];
@@ -225,6 +231,7 @@ const defaultValue: OutlookEmailSourceContextValue = {
   isThreadEmlStale: false,
   isDropResolutionStale: false,
   resolvedDrops: [],
+  threadTrimError: null,
   resolvedFiles: [],
   resolvedParts: [],
   resolvedTotalBytes: 0,
@@ -468,15 +475,27 @@ export function OutlookEmailSourceProvider({
   // upload — reused for BOTH the token estimate (as a virtual file) and the
   // actual send, so the estimate measures byte-for-byte what is sent. It only
   // lags the live selection by the deferred pass; see `isThreadEmlStale`.
-  // Null when every message is dismissed.
+  // Null when every message is dismissed, or when a dismissal inside a
+  // forwarded email cannot be honoured; the latter keeps its error alongside.
   const deferredSynthInput = useDeferredValue(threadSynthInput);
-  const threadEmlFile = useMemo<File | null>(() => {
-    if (!deferredSynthInput) return null;
-    return buildThreadEmlFile(
-      deferredSynthInput.thread,
-      deferredSynthInput.includedMessages,
-      deferredSynthInput.dismissedAttachmentIds,
-    );
+  const { file: threadEmlFile, error: threadTrimError } = useMemo<{
+    file: File | null;
+    error: EmailTrimError | null;
+  }>(() => {
+    if (!deferredSynthInput) return { file: null, error: null };
+    try {
+      return {
+        file: buildThreadEmlFile(
+          deferredSynthInput.thread,
+          deferredSynthInput.includedMessages,
+          deferredSynthInput.dismissedAttachmentIds,
+        ),
+        error: null,
+      };
+    } catch (error) {
+      if (error instanceof EmailTrimError) return { file: null, error };
+      throw error;
+    }
   }, [deferredSynthInput]);
 
   // True while the deferred synthesis is catching up to the latest toggle: the
@@ -716,8 +735,11 @@ export function OutlookEmailSourceProvider({
   }, []);
 
   const resolveSelectedFilesForSend = useCallback(async (): Promise<File[]> => {
-    // A drop whose dismissals could not be cut out is never replaced by its
+    // An email whose dismissals could not be cut out is never replaced by its
     // untrimmed original; the whole send is refused instead.
+    if (threadTrimError) {
+      throw threadTrimError;
+    }
     const failedDrop = resolvedDrops.find((drop) => drop.error);
     if (failedDrop?.error) {
       throw failedDrop.error;
@@ -771,6 +793,7 @@ export function OutlookEmailSourceProvider({
     resolvedFiles,
     selectableAttachments,
     stagedEmails,
+    threadTrimError,
   ]);
 
   const value = useMemo<OutlookEmailSourceContextValue>(
@@ -781,6 +804,7 @@ export function OutlookEmailSourceProvider({
       isThreadEmlStale,
       isDropResolutionStale,
       resolvedDrops,
+      threadTrimError,
       resolvedFiles,
       resolvedParts,
       resolvedTotalBytes,
@@ -821,6 +845,7 @@ export function OutlookEmailSourceProvider({
       isThreadEmlStale,
       isDropResolutionStale,
       resolvedDrops,
+      threadTrimError,
       resolvedFiles,
       resolvedParts,
       resolvedTotalBytes,
