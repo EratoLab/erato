@@ -5,7 +5,14 @@ import {
   type FileUploadItem,
   type PersistedStateOptions,
 } from "@erato/frontend/library";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { AddinChatInput } from "./components/AddinChatInput";
 import { AddinPinHintBanner } from "./components/AddinPinHintBanner";
@@ -40,10 +47,12 @@ import {
   parseDroppedFiles,
 } from "./utils/parseDroppedFiles";
 import { parseEmlBytes } from "./utils/parsedEmail";
+import { yieldToRenderer } from "../utils/yieldToRenderer";
 
 import type { DropPipelineState } from "./hooks/useDropPipeline";
 import type { FetchOutlookMessageBytesResult } from "./utils/fetchOutlookMessage";
 import type { OutlookMailListDragItem } from "./utils/outlookMailListDragParse";
+import type { ParsedEmail } from "./utils/parsedEmail";
 
 const EML_MIME_TYPES: Record<string, string[]> = {
   "message/rfc822": [".eml"],
@@ -171,6 +180,7 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
   const {
     begin: beginDrop,
     progress: reportDropProgress,
+    stage: setDropStage,
     phase: dropPhase,
     done: dropDone,
     total: dropTotal,
@@ -197,6 +207,22 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
     },
     [beginDrop],
   );
+  const stageDroppedEmails = useCallback(
+    async (emails: ParsedEmail[], claimedIds: string[]) => {
+      if (emails.length === 0) return;
+      setDropStage("staging");
+      await yieldToRenderer();
+      startTransition(() => {
+        for (const parsed of emails) {
+          if (addDroppedEmail(parsed) === null && parsed.messageId) {
+            dedup.remove(parsed.messageId);
+            claimedIds.splice(claimedIds.indexOf(parsed.messageId), 1);
+          }
+        }
+      });
+    },
+    [addDroppedEmail, dedup, setDropStage],
+  );
   const uploadFilesWithEmailExpansion = useCallback(
     async (files: File[]) =>
       trackExpansion(async () => {
@@ -208,13 +234,9 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
             claimedIds.push(messageId);
             return true;
           },
+          onProgress: reportDropProgress,
         });
-        for (const parsed of emails) {
-          if (addDroppedEmail(parsed) === null && parsed.messageId) {
-            dedup.remove(parsed.messageId);
-            claimedIds.splice(claimedIds.indexOf(parsed.messageId), 1);
-          }
-        }
+        await stageDroppedEmails(emails, claimedIds);
         if (nonEmail.length === 0) return undefined;
         const uploaded = await uploadFiles(nonEmail);
         if (uploaded === undefined) {
@@ -223,9 +245,10 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
         return uploaded;
       }, files.length),
     [
-      addDroppedEmail,
       dedup,
       messageFetcher,
+      reportDropProgress,
+      stageDroppedEmails,
       trackExpansion,
       tryClaimEmailAttachment,
       uploadFiles,
@@ -320,13 +343,9 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
             claimedIds.push(messageId);
             return true;
           },
+          onProgress: reportDropProgress,
         });
-        for (const parsed of emails) {
-          if (addDroppedEmail(parsed) === null && parsed.messageId) {
-            dedup.remove(parsed.messageId);
-            claimedIds.splice(claimedIds.indexOf(parsed.messageId), 1);
-          }
-        }
+        await stageDroppedEmails(emails, claimedIds);
         if (nonEmail.length === 0) return;
         const uploaded = await uploadFiles(nonEmail);
         if (uploaded === undefined) {
@@ -337,10 +356,11 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
       }, files.length);
     },
     [
-      addDroppedEmail,
       chatInputControls,
       dedup,
       messageFetcher,
+      reportDropProgress,
+      stageDroppedEmails,
       trackExpansion,
       tryClaimEmailAttachment,
       uploadFiles,
