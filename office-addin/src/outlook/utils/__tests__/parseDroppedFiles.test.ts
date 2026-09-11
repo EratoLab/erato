@@ -7,8 +7,16 @@ import {
 import { parseDroppedFiles } from "../parseDroppedFiles";
 
 import type { OutlookMessageFetcher } from "../fetchOutlookMessage";
+import type { ParseDroppedFilesProgress } from "../parseDroppedFiles";
 
 const CRLF = "\r\n";
+
+function toArrayBuffer(text: string): ArrayBuffer {
+  const encoded = new TextEncoder().encode(text);
+  const copy = new Uint8Array(encoded.byteLength);
+  copy.set(encoded);
+  return copy.buffer;
+}
 
 function makeEmlFile(content: string, name = "message.eml"): File {
   return new File([content], name, { type: "message/rfc822" });
@@ -35,7 +43,9 @@ function makeDroppedMsgFile(bytes: Uint8Array, name = "dropped.msg"): File {
   return new File([buffer], name, { type: "" });
 }
 
-function makeFetcherStub(): {
+function makeFetcherStub(
+  delayFor: (internetMessageId: string) => number = () => 0,
+): {
   fetcher: OutlookMessageFetcher;
   byteLookups: string[];
 } {
@@ -43,8 +53,11 @@ function makeFetcherStub(): {
   const fetcher = {
     fetchMessageBytesByInternetMessageId: async (internetMessageId: string) => {
       byteLookups.push(internetMessageId);
+      await new Promise((resolve) =>
+        setTimeout(resolve, delayFor(internetMessageId)),
+      );
       return {
-        bytes: new TextEncoder().encode(buildEml(internetMessageId, "Fetched")),
+        bytes: toArrayBuffer(buildEml(internetMessageId, "Fetched")),
         internetMessageId,
       };
     },
@@ -152,5 +165,86 @@ describe("parseDroppedFiles", () => {
     expect(result.nonEmail).toEqual([]);
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
+  });
+
+  it("reports reading for every email in input order, then resolving for each .msg", async () => {
+    const { fetcher } = makeFetcherStub();
+    const eml = makeEmlFile(buildEml("<a@x>"), "a.eml");
+    const msg = makeDroppedMsgFile(
+      buildMsgWithInternetMessageId("<b@x>"),
+      "b.msg",
+    );
+    const pdf = new File(["pdf"], "doc.pdf", { type: "application/pdf" });
+    const onProgress = vi.fn<(progress: ParseDroppedFilesProgress) => void>();
+
+    await parseDroppedFiles([eml, pdf, msg], { fetcher, onProgress });
+
+    expect(onProgress.mock.calls.map(([p]) => p)).toEqual([
+      { stage: "reading", index: 1, total: 2, name: "a.eml" },
+      { stage: "reading", index: 2, total: 2, name: "b.msg" },
+      { stage: "resolving", index: 1, total: 1, name: "b.msg" },
+    ]);
+  });
+
+  it("keeps input order and claims in input order when lookups finish out of order", async () => {
+    const { fetcher, byteLookups } = makeFetcherStub((id) =>
+      id === "<first@x>" ? 30 : 0,
+    );
+    const first = makeDroppedMsgFile(
+      buildMsgWithInternetMessageId("<first@x>"),
+      "first.msg",
+    );
+    const eml = makeEmlFile(buildEml("<middle@x>"), "middle.eml");
+    const last = makeDroppedMsgFile(
+      buildMsgWithInternetMessageId("<last@x>"),
+      "last.msg",
+    );
+    const claims: string[] = [];
+    const tryAttachEmail = vi.fn((messageId: string) => {
+      claims.push(messageId);
+      return true;
+    });
+
+    const result = await parseDroppedFiles([first, eml, last], {
+      fetcher,
+      tryAttachEmail,
+    });
+
+    expect(byteLookups).toEqual(["<first@x>", "<last@x>"]);
+    expect(result.emails.map((email) => email.messageId)).toEqual([
+      "<first@x>",
+      "<middle@x>",
+      "<last@x>",
+    ]);
+    expect(claims).toEqual(["<first@x>", "<middle@x>", "<last@x>"]);
+  });
+
+  it("drops the later duplicate when two .msg files resolve to the same email", async () => {
+    const { fetcher } = makeFetcherStub((id) => (id === "<dup@x>" ? 20 : 0));
+    const a = makeDroppedMsgFile(
+      buildMsgWithInternetMessageId("<dup@x>"),
+      "a.msg",
+    );
+    const b = makeDroppedMsgFile(
+      buildMsgWithInternetMessageId("<dup@x>"),
+      "b.msg",
+    );
+    const claimed = new Set<string>();
+    const tryAttachEmail = (messageId: string) => {
+      if (claimed.has(messageId)) return false;
+      claimed.add(messageId);
+      return true;
+    };
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const result = await parseDroppedFiles([a, b], { fetcher, tryAttachEmail });
+
+    expect(result.emails).toHaveLength(1);
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining("skipping"),
+      "b.msg",
+      "<dup@x>",
+    );
+    logSpy.mockRestore();
   });
 });

@@ -1,8 +1,22 @@
+import { mapWithConcurrency } from "../../utils/mapWithConcurrency";
+import { yieldToRenderer } from "../../utils/yieldToRenderer";
 import { isEmlFile, parseEmlToParsedEmail } from "./parseEmlFile";
-import { parseMsgFileToParsedEmail } from "./parseMsgFile";
+import { readMsgFile, resolveMsgRead } from "./parseMsgFile";
 
 import type { OutlookMessageFetcher } from "./fetchOutlookMessage";
 import type { ParsedEmail } from "./parsedEmail";
+import type { MsgRead } from "./parseMsgFile";
+
+const MSG_RESOLVE_CONCURRENCY = 4;
+
+export interface ParseDroppedFilesProgress {
+  stage: "reading" | "resolving";
+  /** 1-based position within the stage. */
+  index: number;
+  /** Email files in the stage: every email while reading, `.msg` files while resolving. */
+  total: number;
+  name: string;
+}
 
 interface ParseDroppedFilesOptions {
   /**
@@ -13,10 +27,12 @@ interface ParseDroppedFilesOptions {
   fetcher?: OutlookMessageFetcher;
   /**
    * Atomic check-and-claim consulted with the RFC 5322 `Message-ID` of each
-   * successfully parsed email. Returning `true` keeps the email; `false`
-   * drops it as a duplicate.
+   * successfully parsed email, in input order. Returning `true` keeps the
+   * email; `false` drops it as a duplicate.
    */
   tryAttachEmail?: (messageId: string) => boolean;
+  /** Called before each unit of work, so the UI can show what is running. */
+  onProgress?: (progress: ParseDroppedFilesProgress) => void;
 }
 
 export interface ParseDroppedFilesResult {
@@ -24,33 +40,40 @@ export interface ParseDroppedFilesResult {
   nonEmail: File[];
 }
 
+interface EmailUnit {
+  file: File;
+  kind: "eml" | "msg";
+  parsed: ParsedEmail | null;
+  messageId: string | null;
+  read: MsgRead | null;
+}
+
 /**
  * Splits a dropped batch into staged email payloads and regular files.
  * Used at the dropzone boundary so emails can be parked in the staged-email
  * UI (with per-attachment selection) while non-email files go through
  * regular immediate upload.
+ *
+ * Two passes: a sequential local read of every email, then the `.msg`
+ * mailbox lookups a few at a time. Results keep input order throughout.
  */
 export async function parseDroppedFiles(
   files: File[],
   options: ParseDroppedFilesOptions = {},
 ): Promise<ParseDroppedFilesResult> {
-  const emails: ParsedEmail[] = [];
   const nonEmail: File[] = [];
+  const units: EmailUnit[] = [];
 
   for (const file of files) {
     if (isEmlFile(file)) {
-      const parsed = await parseEmlToParsedEmail(file);
-      if (parsed && !claim(parsed.messageId, options.tryAttachEmail)) {
-        logSkip(file.name, parsed.messageId);
-        continue;
-      }
-      if (parsed) {
-        emails.push(parsed);
-      }
-      continue;
-    }
-
-    if (isMsgFile(file)) {
+      units.push({
+        file,
+        kind: "eml",
+        parsed: null,
+        messageId: null,
+        read: null,
+      });
+    } else if (isMsgFile(file)) {
       if (!options.fetcher) {
         console.warn(
           "[parseDroppedFiles] .msg drop received without a message fetcher — skipping",
@@ -58,18 +81,65 @@ export async function parseDroppedFiles(
         );
         continue;
       }
-      const result = await parseMsgFileToParsedEmail(file, options.fetcher);
-      if (result.parsed && !claim(result.messageId, options.tryAttachEmail)) {
-        logSkip(file.name, result.messageId);
-        continue;
-      }
-      if (result.parsed) {
-        emails.push(result.parsed);
-      }
+      units.push({
+        file,
+        kind: "msg",
+        parsed: null,
+        messageId: null,
+        read: null,
+      });
+    } else {
+      nonEmail.push(file);
+    }
+  }
+
+  for (const [index, unit] of units.entries()) {
+    options.onProgress?.({
+      stage: "reading",
+      index: index + 1,
+      total: units.length,
+      name: unit.file.name,
+    });
+    await yieldToRenderer();
+    if (unit.kind === "eml") {
+      unit.parsed = await parseEmlToParsedEmail(unit.file);
+      unit.messageId = unit.parsed?.messageId ?? null;
+    } else {
+      unit.read = await readMsgFile(unit.file);
+    }
+  }
+
+  const fetcher = options.fetcher;
+  const toResolve = units.flatMap((unit) =>
+    unit.read ? [{ unit, read: unit.read }] : [],
+  );
+  if (fetcher && toResolve.length > 0) {
+    await mapWithConcurrency(
+      toResolve,
+      MSG_RESOLVE_CONCURRENCY,
+      async ({ unit, read }, index) => {
+        options.onProgress?.({
+          stage: "resolving",
+          index: index + 1,
+          total: toResolve.length,
+          name: unit.file.name,
+        });
+        await yieldToRenderer();
+        const result = await resolveMsgRead(read, fetcher, unit.file.name);
+        unit.parsed = result.parsed;
+        unit.messageId = result.messageId;
+      },
+    );
+  }
+
+  const emails: ParsedEmail[] = [];
+  for (const unit of units) {
+    if (!unit.parsed) continue;
+    if (!claim(unit.messageId, options.tryAttachEmail)) {
+      logSkip(unit.file.name, unit.messageId);
       continue;
     }
-
-    nonEmail.push(file);
+    emails.push(unit.parsed);
   }
 
   return { emails, nonEmail };
