@@ -175,42 +175,164 @@ describe("parseEmlBytes", () => {
     ]);
   });
 
-  describe("naming a forwarded email that has no filename", () => {
-    function buildWithForward(innerBody: string): string {
+  describe("a forwarded email inside the drop", () => {
+    function buildWithForward(
+      innerBody: string,
+      forwardHeaders = `Content-Type: message/rfc822${CRLF}`,
+    ): string {
       const boundary = "----FWD";
+      const inner = "----INNER";
       return (
         `From: a@example.com${CRLF}` +
         `Subject: Cover${CRLF}` +
+        `Message-ID: <outer@example.com>${CRLF}` +
         `Content-Type: multipart/mixed; boundary="${boundary}"${CRLF}${CRLF}` +
         `--${boundary}${CRLF}` +
         `Content-Type: text/plain${CRLF}${CRLF}` +
         `See attached.${CRLF}` +
         `--${boundary}${CRLF}` +
-        `Content-Type: message/rfc822${CRLF}${CRLF}` +
+        `Content-Type: application/pdf; name="top.pdf"${CRLF}` +
+        `Content-Disposition: attachment; filename="top.pdf"${CRLF}${CRLF}` +
+        `top${CRLF}` +
+        `--${boundary}${CRLF}` +
+        `${forwardHeaders}${CRLF}` +
         `From: c@example.com${CRLF}` +
         `Subject: Quarterly numbers${CRLF}` +
+        `Message-ID: <inner@example.com>${CRLF}` +
+        `Content-Type: multipart/mixed; boundary="${inner}"${CRLF}${CRLF}` +
+        `--${inner}${CRLF}` +
         `Content-Type: text/plain${CRLF}${CRLF}` +
         `${innerBody}${CRLF}` +
+        `--${inner}${CRLF}` +
+        `Content-Type: application/pdf; name="deep.pdf"${CRLF}` +
+        `Content-Disposition: attachment; filename="deep.pdf"${CRLF}${CRLF}` +
+        `deep${CRLF}` +
+        `--${inner}--${CRLF}` +
         `--${boundary}--${CRLF}`
       );
     }
 
-    it("names a small forwarded email after its subject", async () => {
+    /** `levels` emails nested one inside the next; the innermost carries `leaf.pdf`. */
+    function buildChain(levels: number, level = 1): string {
+      const boundary = `----L${level}`;
+      const child =
+        level === levels
+          ? `Content-Type: application/pdf; name="leaf.pdf"${CRLF}` +
+            `Content-Disposition: attachment; filename="leaf.pdf"${CRLF}${CRLF}` +
+            `leaf${CRLF}`
+          : `Content-Type: message/rfc822${CRLF}${CRLF}` +
+            buildChain(levels, level + 1);
+      return (
+        `From: l${level}@example.com${CRLF}` +
+        `Subject: Level ${level}${CRLF}` +
+        `Content-Type: multipart/mixed; boundary="${boundary}"${CRLF}${CRLF}` +
+        `--${boundary}${CRLF}` +
+        `Content-Type: text/plain${CRLF}${CRLF}` +
+        `body ${level}${CRLF}` +
+        `--${boundary}${CRLF}` +
+        child +
+        `--${boundary}--${CRLF}`
+      );
+    }
+
+    it("expands it under the attachment with path ids and names it after its subject", async () => {
       const parsed = await parseEmlBytes(
         toArrayBuffer(buildWithForward("short body")),
       );
-      expect(parsed?.attachments.map((a) => a.filename)).toEqual([
-        "Quarterly_numbers.eml",
+      expect(parsed?.messageId).toBe("<outer@example.com>");
+      expect(parsed?.attachments.map((a) => [a.id, a.filename])).toEqual([
+        ["att-0", "top.pdf"],
+        ["att-1", "Quarterly_numbers.eml"],
       ]);
+      expect(parsed?.attachments[0].nested).toBeUndefined();
+
+      const nested = parsed?.attachments[1].nested;
+      expect(nested?.subject).toBe("Quarterly numbers");
+      expect(nested?.messageId).toBe("<inner@example.com>");
+      expect(nested?.text?.trim()).toBe("short body");
+      expect(nested?.attachments.map((a) => [a.id, a.filename])).toEqual([
+        ["att-1/att-0", "deep.pdf"],
+      ]);
+      expect(nested?.rawEmlFile.name).toBe("Quarterly_numbers.eml");
     });
 
-    it("keeps the generic name for a forwarded email above 2 MiB instead of parsing it", async () => {
+    it("keeps an inline-disposed forward as one attachment rather than hoisting its parts", async () => {
       const parsed = await parseEmlBytes(
-        toArrayBuffer(buildWithForward("x".repeat(2 * 1024 * 1024 + 1))),
+        toArrayBuffer(
+          buildWithForward(
+            "short body",
+            `Content-Type: message/rfc822${CRLF}Content-Disposition: inline${CRLF}`,
+          ),
+        ),
       );
-      expect(parsed?.attachments.map((a) => a.filename)).toEqual([
-        "message.eml",
+      expect(parsed?.attachments.map((a) => a.id)).toEqual(["att-0", "att-1"]);
+      expect(parsed?.attachments[1].disposition).toBe("inline");
+      expect(
+        parsed?.attachments[1].nested?.attachments.map((a) => a.id),
+      ).toEqual(["att-1/att-0"]);
+    });
+
+    it("stops expanding three levels down", async () => {
+      const parsed = await parseEmlBytes(toArrayBuffer(buildChain(5)));
+
+      const level2 = parsed?.attachments[0].nested;
+      const level3 = level2?.attachments[0].nested;
+      const level4 = level3?.attachments[0].nested;
+      expect(level2?.subject).toBe("Level 2");
+      expect(level3?.subject).toBe("Level 3");
+      expect(level4?.subject).toBe("Level 4");
+      expect(level4?.attachments.map((a) => [a.id, a.filename])).toEqual([
+        ["att-0/att-0/att-0/att-0", "message.eml"],
       ]);
+      expect(level4?.attachments[0].nested).toBeUndefined();
+    });
+
+    it("leaves the forward opaque when its own parse throws", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const PostalMimeModule = await import("postal-mime");
+      const original = PostalMimeModule.default.parse.bind(
+        PostalMimeModule.default,
+      );
+      const parseSpy = vi
+        .spyOn(PostalMimeModule.default, "parse")
+        .mockImplementationOnce(original)
+        .mockRejectedValueOnce(new Error("max nesting depth exceeded"));
+
+      const parsed = await parseEmlBytes(
+        toArrayBuffer(buildWithForward("short body")),
+      );
+      expect(parsed).not.toBeNull();
+      expect(parsed?.attachments.map((a) => [a.id, a.filename])).toEqual([
+        ["att-0", "top.pdf"],
+        ["att-1", "message.eml"],
+      ]);
+      expect(parsed?.attachments[1].nested).toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      parseSpy.mockRestore();
+      warnSpy.mockRestore();
+    });
+
+    it("does not expand a forward above 25 MiB", async () => {
+      const PostalMimeModule = await import("postal-mime");
+      const parseSpy = vi
+        .spyOn(PostalMimeModule.default, "parse")
+        .mockResolvedValueOnce({
+          headers: [],
+          attachments: [
+            {
+              mimeType: "message/rfc822",
+              content: new ArrayBuffer(25 * 1024 * 1024 + 1),
+            },
+          ],
+        } as never);
+
+      const parsed = await parseEmlBytes(new ArrayBuffer(8));
+      expect(parseSpy).toHaveBeenCalledTimes(1);
+      expect(parsed?.attachments.map((a) => [a.id, a.filename])).toEqual([
+        ["att-0", "message.eml"],
+      ]);
+      expect(parsed?.attachments[0].nested).toBeUndefined();
+      parseSpy.mockRestore();
     });
   });
 });
