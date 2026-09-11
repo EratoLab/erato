@@ -373,6 +373,106 @@ describe("fetchCurrentThread", () => {
     );
   });
 
+  describe("a forwarded email inside a thread message", () => {
+    const CRLF = "\r\n";
+    const forwardedEml =
+      `From: c@example.com${CRLF}` +
+      `Subject: Re: budget numbers${CRLF}` +
+      `Content-Type: multipart/mixed; boundary="----INNER"${CRLF}${CRLF}` +
+      `------INNER${CRLF}` +
+      `Content-Type: text/plain${CRLF}${CRLF}` +
+      `Forwarded body.${CRLF}` +
+      `------INNER${CRLF}` +
+      `Content-Type: application/pdf; name="deep.pdf"${CRLF}` +
+      `Content-Disposition: attachment; filename="deep.pdf"${CRLF}` +
+      `Content-Transfer-Encoding: base64${CRLF}${CRLF}` +
+      `REVFUA==${CRLF}` +
+      `------INNER--${CRLF}`;
+
+    function forwardingTransport(): GraphTransport {
+      return vi.fn(async (url: string) => {
+        if (url.includes("/attachments/") && url.endsWith("/$value")) {
+          return {
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            arrayBuffer: async () =>
+              new TextEncoder().encode(forwardedEml).buffer,
+          } as unknown as Response;
+        }
+        return {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => ({
+            value: [
+              {
+                id: "graph-m1",
+                internetMessageId: "<m1@x>",
+                subject: "with forwarded item",
+                body: { contentType: "text", content: "see forwarded" },
+                receivedDateTime: "2026-03-01T10:00:00Z",
+                isDraft: false,
+                attachments: [
+                  {
+                    "@odata.type": ITEM_ATTACHMENT,
+                    id: "item-1",
+                    name: "Forwarded.eml",
+                    size: 20,
+                    isInline: false,
+                  },
+                ],
+              },
+            ],
+          }),
+        } as unknown as Response;
+      });
+    }
+
+    it("lists the forward's own attachments under ids that extend the thread attachment id", async () => {
+      const thread = await fetchCurrentThread(
+        "conv-1",
+        fetchConversationMessages,
+        { transport: forwardingTransport() },
+      );
+
+      const [forward] = thread!.messages[0].attachments;
+      expect(forward.id).toBe("<m1@x>:item-1");
+      expect(forward.mimeType).toBe("message/rfc822");
+      // The bytes the send path serializes are still the forward as fetched.
+      expect(
+        new TextDecoder().decode(new Uint8Array(forward.contentBytes!)),
+      ).toBe(forwardedEml);
+      expect(forward.nested?.subject).toBe("Re: budget numbers");
+      expect(
+        forward.nested?.attachments.map((a) => [a.id, a.filename]),
+      ).toEqual([["<m1@x>:item-1/att-0", "deep.pdf"]]);
+    });
+
+    it("keeps the thread and the forward when the forward's parse fails", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const PostalMimeModule = await import("postal-mime");
+      const parseSpy = vi
+        .spyOn(PostalMimeModule.default, "parse")
+        .mockRejectedValue(new Error("nesting too deep"));
+      try {
+        const thread = await fetchCurrentThread(
+          "conv-1",
+          fetchConversationMessages,
+          { transport: forwardingTransport() },
+        );
+
+        const [forward] = thread!.messages[0].attachments;
+        expect(forward.contentBytes).not.toBeNull();
+        expect(forward.nested).toBeUndefined();
+        expect(warnSpy).toHaveBeenCalled();
+      } finally {
+        parseSpy.mockRestore();
+        warnSpy.mockRestore();
+      }
+    });
+  });
+
   it("preserves the isInline flag on attachments so the provider can filter them", async () => {
     const transport = makeTransport([
       {

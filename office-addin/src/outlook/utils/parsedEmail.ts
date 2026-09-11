@@ -72,7 +72,7 @@ export async function parseEmlBytes(
 /** Forwarded emails nest no deeper than this; beyond it a part stays opaque. */
 const MAX_NESTED_DEPTH = 3;
 /** Above this a forwarded email is not expanded; parsing it would stall the drop. */
-const NESTED_PARSE_LIMIT_BYTES = 25 * 1024 * 1024;
+export const NESTED_PARSE_LIMIT_BYTES = 25 * 1024 * 1024;
 
 async function parseEmlBytesAt(
   bytes: ArrayBuffer,
