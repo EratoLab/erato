@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { parseEmlBytes } from "../parsedEmail";
 import { trimEmlAttachments } from "../trimEmlAttachments";
 
+import type { AttachmentTarget } from "../trimEmlAttachments";
+
 const CRLF = "\r\n";
 
 function toArrayBuffer(text: string): ArrayBuffer {
@@ -13,9 +15,14 @@ function toArrayBuffer(text: string): ArrayBuffer {
  * An email carrying `top.pdf` plus a forwarded email (no Content-Disposition,
  * the way Outlook emits item attachments) that itself carries `deep.pdf`.
  */
-function buildEmailWithForward(): string {
+function buildEmailWithForward(forwardEncoding?: string): string {
   const outer = "----OUTER";
   const inner = "----INNER";
+  const forwardHeaders =
+    `Content-Type: message/rfc822${CRLF}` +
+    (forwardEncoding
+      ? `Content-Transfer-Encoding: ${forwardEncoding}${CRLF}`
+      : "");
   return (
     `From: a@example.com${CRLF}` +
     `To: b@example.com${CRLF}` +
@@ -30,7 +37,7 @@ function buildEmailWithForward(): string {
     `Content-Transfer-Encoding: base64${CRLF}${CRLF}` +
     `VE9Q${CRLF}` +
     `--${outer}${CRLF}` +
-    `Content-Type: message/rfc822${CRLF}${CRLF}` +
+    `${forwardHeaders}${CRLF}` +
     `From: c@example.com${CRLF}` +
     `Subject: Re: budget numbers${CRLF}` +
     `Content-Type: multipart/mixed; boundary="${inner}"${CRLF}${CRLF}` +
@@ -47,11 +54,11 @@ function buildEmailWithForward(): string {
   );
 }
 
-async function parseAndTrim(indices: number[]) {
+async function parseAndTrim(targets: AttachmentTarget[]) {
   const parsed = await parseEmlBytes(toArrayBuffer(buildEmailWithForward()));
   if (!parsed) throw new Error("fixture did not parse");
   const raw = new Uint8Array(await parsed.rawEmlFile.arrayBuffer());
-  const trimmed = trimEmlAttachments(raw, indices);
+  const trimmed = trimEmlAttachments(raw, targets);
   if (!trimmed) throw new Error("trim returned null");
   const reparsed = await parseEmlBytes(trimmed.slice().buffer);
   if (!reparsed) throw new Error("trimmed bytes did not parse");
@@ -97,5 +104,51 @@ describe("dismissing parts of a dropped email with a forwarded email inside", ()
     expect(trimmedText).not.toContain("top.pdf");
     expect(trimmedText).toContain("deep.pdf");
     expect(trimmedText).toContain("Forwarded body.");
+  });
+
+  it("unchecking deep.pdf by path removes only it, keeping the forwarded body", async () => {
+    const { trimmedText, reparsed } = await parseAndTrim(["1/0"]);
+
+    expect(reparsed.attachments.map((a) => a.mimeType)).toEqual([
+      "application/pdf",
+      "message/rfc822",
+    ]);
+    expect(trimmedText).toContain("top.pdf");
+    expect(trimmedText).toContain("Forwarded body.");
+    expect(trimmedText).not.toContain("deep.pdf");
+    expect(trimmedText).not.toContain("REVFUA==");
+  });
+
+  it("accepts the top-level index spelled as a path", async () => {
+    const byIndex = await parseAndTrim([1]);
+    const byPath = await parseAndTrim(["1"]);
+
+    expect(byPath.trimmedText).toBe(byIndex.trimmedText);
+  });
+
+  it("splices only the forwarded email when deep.pdf inside it is also targeted", async () => {
+    const whole = await parseAndTrim([1]);
+    const both = await parseAndTrim(["1/0", 1, "1/0"]);
+
+    expect(both.trimmedText).toBe(whole.trimmedText);
+    expect(both.reparsed.attachments.map((a) => a.filename)).toEqual([
+      "top.pdf",
+    ]);
+  });
+
+  it("refuses a path into a forwarded email whose bytes are transfer-encoded", () => {
+    const raw = new TextEncoder().encode(buildEmailWithForward("base64"));
+
+    expect(trimEmlAttachments(raw, ["1/0"])).toBeNull();
+    // The forwarded email itself is still addressable as a whole.
+    expect(trimEmlAttachments(raw, ["1"])).not.toBeNull();
+  });
+
+  it("refuses a path that does not resolve", () => {
+    const raw = new TextEncoder().encode(buildEmailWithForward());
+
+    expect(trimEmlAttachments(raw, ["1/1"])).toBeNull();
+    expect(trimEmlAttachments(raw, ["0/0"])).toBeNull();
+    expect(trimEmlAttachments(raw, ["x"])).toBeNull();
   });
 });
