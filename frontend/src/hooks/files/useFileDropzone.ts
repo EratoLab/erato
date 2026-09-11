@@ -18,6 +18,7 @@ import { FileTypeUtil } from "@/utils/fileTypes";
 import { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
 import {
   oversizedRejectionNames,
+  rejectionNames,
   validateFileSizes,
 } from "@/utils/validateFileSizes";
 
@@ -377,23 +378,17 @@ export function useFileDropzone({
     (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
       if (disabled || isUploading) return;
 
-      // Handle rejections first
+      // Rejected files never reach the upload preflight; report them here.
       if (rejectedFiles.length > 0) {
-        // Check if any rejection is due to file size
+        const unsupported = rejectionNames(rejectedFiles, "file-invalid-type");
+        if (unsupported.length > 0) {
+          setError(new UnsupportedFileTypeError(unsupported));
+        }
         const oversized = oversizedRejectionNames(rejectedFiles);
-
         if (oversized.length > 0) {
           setError(new UploadTooLargeError(maxSizeFormatted, oversized));
           return;
         }
-
-        // Other rejection reasons
-        const errorMessages = rejectedFiles.map((rejection) => {
-          const { file, errors } = rejection;
-          return `${file.name}: ${errors.map((e) => e.message).join(", ")}`;
-        });
-        setError(new UploadUnknownError(errorMessages.join("; ")));
-        return;
       }
 
       // If we have accepted files, upload them
