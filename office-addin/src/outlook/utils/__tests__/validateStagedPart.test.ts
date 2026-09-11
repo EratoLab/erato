@@ -11,13 +11,75 @@ type Capability = StagedPartTypePolicy["capabilities"][number];
 
 function capability(
   id: string,
+  extensions: string[],
+  mime_types: string[],
   operations: Capability["operations"] = ["extract_text"],
 ): Capability {
-  return { id, extensions: [], mime_types: [], operations };
+  return { id, extensions, mime_types, operations };
 }
 
-const pdfOnly: StagedPartTypePolicy = {
-  capabilities: [capability("pdf"), capability("other", [])],
+// Mirrors the backend's capability table, in its priority order.
+function backendCapabilities({
+  audio = true,
+}: { audio?: boolean } = {}): Capability[] {
+  return [
+    capability(
+      "word",
+      ["doc", "docx"],
+      [
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ],
+    ),
+    capability("pdf", ["pdf"], ["application/pdf"]),
+    capability(
+      "excel",
+      ["xls", "xlsx"],
+      [
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      ],
+    ),
+    capability(
+      "powerpoint",
+      ["ppt", "pptx"],
+      [
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      ],
+    ),
+    capability("email", ["eml"], ["message/rfc822"]),
+    capability(
+      "text",
+      ["txt", "md", "markdown", "json", "xml", "csv", "html", "htm"],
+      [
+        "text/plain",
+        "text/markdown",
+        "application/json",
+        "application/xml",
+        "text/xml",
+        "text/csv",
+        "text/html",
+      ],
+    ),
+    capability(
+      "image",
+      ["jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "tif"],
+      ["image/*"],
+      ["analyze_image"],
+    ),
+    capability(
+      "audio",
+      ["mp3", "m4a", "wav", "aac", "flac", "ogg", "oga", "opus", "webm", "mp4"],
+      ["audio/*"],
+      audio ? ["extract_text"] : [],
+    ),
+    capability("other", ["*"], ["*/*"], []),
+  ];
+}
+
+const backend: StagedPartTypePolicy = {
+  capabilities: backendCapabilities(),
   isLoading: false,
 };
 
@@ -37,7 +99,7 @@ describe("validateStagedPart", () => {
     ).toEqual({ ok: true });
     expect(
       validateStagedPart(zip, limits, {
-        capabilities: pdfOnly.capabilities,
+        capabilities: backend.capabilities,
         isLoading: true,
       }),
     ).toEqual({ ok: true });
@@ -47,11 +109,60 @@ describe("validateStagedPart", () => {
   });
 
   it("accepts a part whose type the backend can read", () => {
-    expect(validateStagedPart(pdf, limits, pdfOnly)).toEqual({ ok: true });
+    expect(validateStagedPart(pdf, limits, backend)).toEqual({ ok: true });
+  });
+
+  it("accepts every extension the backend's text capability lists", () => {
+    for (const [filename, mimeType] of [
+      ["Deck.html", "text/html"],
+      ["page.HTM", "text/html"],
+      ["data.json", "application/json"],
+      ["notes.xml", "application/xml"],
+      ["table.csv", "text/csv"],
+    ]) {
+      expect(
+        validateStagedPart({ filename, mimeType, size: 10 }, limits, backend),
+      ).toEqual({ ok: true });
+    }
+  });
+
+  it("follows the model's audio support", () => {
+    const voice = { filename: "voice.mp3", mimeType: "audio/mpeg", size: 10 };
+    expect(validateStagedPart(voice, limits, backend)).toEqual({ ok: true });
+    expect(
+      validateStagedPart(voice, limits, {
+        capabilities: backendCapabilities({ audio: false }),
+        isLoading: false,
+      }),
+    ).toMatchObject({ verdict: "unsupported" });
+  });
+
+  it("matches an extension-less part by its MIME type", () => {
+    expect(
+      validateStagedPart(
+        { filename: "inline-body", mimeType: "text/html", size: 10 },
+        limits,
+        backend,
+      ),
+    ).toEqual({ ok: true });
+    expect(
+      validateStagedPart(
+        { filename: "image001", mimeType: "image/png", size: 10 },
+        limits,
+        backend,
+      ),
+    ).toEqual({ ok: true });
+    expect(
+      validateStagedPart(
+        { filename: "blob", mimeType: "", size: 10 },
+        limits,
+        backend,
+      ),
+    ).toMatchObject({ verdict: "unsupported" });
   });
 
   it("rejects a part the backend cannot read and marks it excluded", () => {
-    const verdict = validateStagedPart(zip, limits, pdfOnly);
+    const verdict = validateStagedPart(zip, limits, backend);
     expect(verdict).toEqual({
       ok: false,
       verdict: "unsupported",
@@ -64,7 +175,7 @@ describe("validateStagedPart", () => {
     const verdict = validateStagedPart(
       { ...pdf, size: 1_001 },
       limits,
-      pdfOnly,
+      backend,
     );
     expect(verdict).toEqual({
       ok: false,
@@ -76,7 +187,7 @@ describe("validateStagedPart", () => {
 
   it("reports an oversized unreadable part as unsupported, not too large", () => {
     expect(
-      validateStagedPart({ ...zip, size: 1_001 }, limits, pdfOnly),
+      validateStagedPart({ ...zip, size: 1_001 }, limits, backend),
     ).toMatchObject({ verdict: "unsupported" });
   });
 
@@ -85,7 +196,7 @@ describe("validateStagedPart", () => {
       validateStagedPart(
         { ...pdf, size: 5_000 },
         { maxBytes: 0, maxFormatted: "" },
-        pdfOnly,
+        backend,
       ),
     ).toEqual({ ok: true });
   });

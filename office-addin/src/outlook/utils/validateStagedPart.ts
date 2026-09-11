@@ -1,7 +1,11 @@
-import { FileTypeUtil, getSupportedFileTypes } from "@erato/frontend/library";
+import {
+  findCapabilityByExtension,
+  hasSupportedOperations,
+} from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 
-type FileCapabilities = Parameters<typeof getSupportedFileTypes>[0];
+type FileCapabilities = Parameters<typeof findCapabilityByExtension>[1];
+type FileCapability = FileCapabilities[number];
 
 export interface StagedPartMetadata {
   filename: string;
@@ -32,6 +36,32 @@ export function isPolicyExcluded(validation: StagedPartValidation): boolean {
   return !validation.ok && validation.verdict === "unsupported";
 }
 
+function matchesMimePattern(mimeType: string, pattern: string): boolean {
+  if (pattern === "*/*") return true;
+  if (pattern.endsWith("/*")) {
+    return mimeType.startsWith(pattern.slice(0, -1));
+  }
+  return mimeType === pattern;
+}
+
+// Extension-less parts fall back to the capability claiming their MIME type.
+function findCapability(
+  part: StagedPartMetadata,
+  capabilities: FileCapabilities,
+): FileCapability | null {
+  const byExtension = findCapabilityByExtension(part.filename, capabilities);
+  if (byExtension) return byExtension;
+  const mimeType = part.mimeType.trim().toLowerCase();
+  if (!mimeType) return null;
+  return (
+    capabilities.find((capability) =>
+      capability.mime_types.some((pattern) =>
+        matchesMimePattern(mimeType, pattern.toLowerCase()),
+      ),
+    ) ?? null
+  );
+}
+
 export function validateStagedPart(
   part: StagedPartMetadata,
   limits: StagedPartLimits,
@@ -39,11 +69,8 @@ export function validateStagedPart(
 ): StagedPartValidation {
   // Until the capabilities have loaded every type passes, as the dropzone does.
   if (!typePolicy.isLoading && typePolicy.capabilities.length > 0) {
-    const fileType = FileTypeUtil.getFileTypeFromMetadata(
-      part.filename,
-      part.mimeType,
-    );
-    if (!getSupportedFileTypes(typePolicy.capabilities).includes(fileType)) {
+    const capability = findCapability(part, typePolicy.capabilities);
+    if (!capability || !hasSupportedOperations(capability)) {
       return {
         ok: false,
         verdict: "unsupported",
