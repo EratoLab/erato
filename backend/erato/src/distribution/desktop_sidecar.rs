@@ -12,6 +12,8 @@ use serde::Deserialize;
 use serde_json::json;
 use url::{Host, Origin, Url};
 
+#[path = "desktop_sidecar_macos.rs"]
+mod macos;
 #[path = "desktop_sidecar_tls.rs"]
 mod tls;
 
@@ -57,6 +59,7 @@ pub struct DistributionArtifact {
     pub size: u64,
     source: Arc<File>,
     bootstrap_transport: BootstrapTransport,
+    macos_template: Option<macos::Template>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -64,6 +67,7 @@ pub enum BootstrapTransport {
     None,
     WindowsExecutable { slot_offset: u64 },
     WindowsMsi,
+    MacosApplication,
 }
 
 #[derive(Debug, Deserialize)]
@@ -155,11 +159,22 @@ impl DesktopSidecarDistribution {
                     .metadata()
                     .wrap_err_with(|| format!("Failed to read metadata for {}", path.display()))?
                     .len();
-                let bootstrap_transport = bootstrap_transport(
-                    &target.platform.os,
-                    &artifact.kind,
-                    &source,
-                )
+                // Keep validated macOS ZIP bytes immutable. Concurrent downloads
+                // must not seek/read through cloned descriptors sharing one cursor.
+                let macos_template = if target.platform.os == "macos" {
+                    ensure!(
+                        artifact.kind == "application_archive",
+                        "macOS sidecar downloads must be application archives"
+                    );
+                    Some(macos::Template::load(&source)?)
+                } else {
+                    None
+                };
+                let bootstrap_transport = if macos_template.is_some() {
+                    Ok(BootstrapTransport::MacosApplication)
+                } else {
+                    bootstrap_transport(&target.platform.os, &artifact.kind, &source)
+                }
                 .wrap_err_with(|| {
                     format!(
                         "Failed to validate bootstrap transport for artifact '{}' in desktop sidecar target '{}'",
@@ -175,6 +190,7 @@ impl DesktopSidecarDistribution {
                     size,
                     source: Arc::new(source),
                     bootstrap_transport,
+                    macos_template,
                 });
             }
 
@@ -243,6 +259,15 @@ impl DistributionArtifact {
     #[must_use]
     pub fn bootstrap_transport(&self) -> BootstrapTransport {
         self.bootstrap_transport
+    }
+
+    pub fn personalized_macos_application(&self, bootstrap: &[u8]) -> Result<Vec<u8>> {
+        self.macos_template
+            .as_ref()
+            .ok_or_else(|| {
+                eyre::eyre!("artifact does not use the macOS application bootstrap transport")
+            })?
+            .inject(bootstrap)
     }
 
     pub fn personalized_msi(&self, bootstrap: &[u8]) -> Result<Vec<u8>> {

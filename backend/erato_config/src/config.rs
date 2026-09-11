@@ -648,7 +648,7 @@ pub struct DesktopSidecarConfig {
     /// Browser origins that downloaded desktop-sidecar artifacts may accept.
     ///
     /// Each origin must use the normalized `scheme://host[:port]` form. The
-    /// value is embedded in Windows downloads as immutable bootstrap policy,
+    /// value is embedded in Windows and macOS downloads as immutable bootstrap policy,
     /// so it cannot be changed by a user-local sidecar configuration file.
     #[serde(default)]
     pub allowed_origins: Vec<String>,

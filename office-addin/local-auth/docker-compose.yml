@@ -1,3 +1,5 @@
+name: erato-office-addin-auth
+
 services:
   oauth2-proxy:
     image: registry.eratolabs.com/erato/oauth2-proxy:v7.15.2-erato.4
@@ -10,5 +12,6 @@ services:
         condition: service_started
 
   redis:
+    command: ["redis-server", "--port", "6381"]
     image: redis:8.8.0-alpine3.23@sha256:09160599abd229764c0fb44cb6be640294e1d360a54b19985ab4843dcf2d90f1
     network_mode: host

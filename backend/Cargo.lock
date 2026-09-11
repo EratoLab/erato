@@ -2590,6 +2590,7 @@ dependencies = [
  "utoipa-scalar",
  "x509-parser 0.18.1",
  "xberg",
+ "zip",
 ]
 
 [[package]]

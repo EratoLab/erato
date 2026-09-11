@@ -6,7 +6,7 @@ REQUIRED, SHOULD, SHOULD NOT, and MAY are interpreted as described by BCP 14.
 
 This contract covers the artifact root, target and file discovery, backend
 validation, and deployment replacement. It also defines the bootstrap-policy convention
-used when the backend personalizes a Windows artifact. Signing artifacts and
+used when the backend personalizes a Windows or macOS artifact. Signing artifacts and
 establishing their integrity are responsibilities of the build and deployment
 pipeline, not fields in the distribution manifest.
 
@@ -235,8 +235,10 @@ manifest completely describes the six-target filesystem example in Section 1:
   `Content-Disposition`.
 - `media_type` is the HTTP response media type.
 
-The backend obtains the current file size from filesystem metadata when serving it and uses that value for response
-metadata such as `Content-Length`.
+The backend obtains source artifact sizes from filesystem metadata. For
+unmodified downloads that size is also the response `Content-Length`.
+Personalized downloads MUST use the actual personalized output length instead;
+distribution metadata continues to report the source template size.
 
 ## 4. Backend interpretation and validation
 
@@ -308,7 +310,7 @@ target IDs, download filenames, or API routing.
 
 ## 6. Organization bootstrap personalization
 
-A backend MAY personalize a Windows download with a single immutable
+A backend MAY personalize a Windows or macOS download with a single immutable
 organization bootstrap document. The document configures policy needed before
 the sidecar accepts browser requests. It can also contain the TLS server identity
 used by the loopback HTTPS listener. It is not user preferences or enrollment
@@ -373,9 +375,10 @@ bounded by the chain's validity. This provisions keys per download, not per
 device: copies of the same artifact share the injected identity. Renewal requires
 new bootstrap data; no enrollment or automatic renewal is defined here.
 
-An external `bootstrap.json` beside the executable takes precedence over the
-embedded Windows slot. This also allows installer-managed TLS on macOS/Linux;
-the current backend's automatic download injection only supports Windows EXE/MSI.
+A `bootstrap.json` beside the executable takes precedence over the embedded
+Windows slot. The backend automatically injects it into Windows MSI and macOS
+application downloads; the macOS file lives inside the downloaded `.app` bundle.
+Linux installers can supply this file separately.
 
 ### 6.1 Windows executable personalization
 
@@ -422,6 +425,45 @@ each output back and verify the exact bootstrap bytes before signing or
 publishing it. Personalized output
 MUST remain in memory or temporary deployment storage and MUST NOT be written
 into the immutable artifact root.
+
+### 6.3 macOS application personalization
+
+For both `macos-x86_64` and `macos-aarch64`, the backend personalizes the
+`application_archive` (`.app.zip`) during each download. It adds or replaces
+exactly one entry:
+
+```text
+erato-desktop-sidecar.app/Contents/Resources/bootstrap.json
+```
+
+This entry contains the same bootstrap document used by the Windows transports,
+including the immutable allowed origins and optional TLS certificate/key. Fixed
+TLS values are copied; intermediate-CA mode issues a fresh identity per download.
+There is no 4070-byte executable-slot limit for the ZIP bootstrap entry.
+
+The user extracts and installs the application normally. The bootstrap stays
+inside the `.app` at `Contents/Resources/bootstrap.json`, where the startup
+loader reads it automatically. Resources take precedence over the legacy adjacent
+bootstrap location; malformed resources fail startup without falling back. The
+JSON MUST live in Resources because macOS signing treats Contents/MacOS entries
+as executable code. No separate file placement or TLS flags are needed.
+Trusting the issuing CA remains a deployment prerequisite.
+
+The reference backend accepts the canonical unsealed bundle template containing
+`Contents/Info.plist` and `Contents/MacOS/erato-desktop-sidecar`, with an optional
+existing bootstrap entry. It rejects other layouts, symlinks, non-executable
+binaries, and malformed archives at distribution load time. Application resource
+signatures (`_CodeSignature`) are not accepted in these templates: bundle signing
+and notarization, when used, must operate on the personalized application.
+
+Personalization MUST preserve the executable and Info.plist contents and file
+permissions. The reference implementation copies their compressed ZIP data,
+replaces any old bootstrap entry, and gives the new bootstrap file mode `0600`.
+It verifies the injected bytes before serving the result and never modifies the
+source artifact. Concurrent downloads use immutable template bytes. Responses
+use `application/zip`, the personalized content length, and
+`Cache-Control: private, no-store`. Distribution metadata continues to describe
+the source template's size, as for MSI personalization.
 
 ## 7. Responsibility boundaries
 
