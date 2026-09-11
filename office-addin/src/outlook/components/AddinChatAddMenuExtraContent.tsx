@@ -50,6 +50,7 @@ export function AddinChatAddMenuExtraContent({
   const {
     emailBodyFile,
     isThreadEmlStale,
+    isDropResolutionStale,
     isLoadingEmailBody,
     emailThreadLoadError,
     isEmailBodyDismissed,
@@ -214,7 +215,7 @@ export function AddinChatAddMenuExtraContent({
               data-testid="addin-add-menu-email-thread"
               trailing={
                 <span className="shrink-0 text-xs text-theme-fg-muted">
-                  {isThreadEmlStale
+                  {isThreadEmlStale || isDropResolutionStale
                     ? t({
                         id: "officeAddin.fileSource.updatingThread",
                         message: "Updating…",
