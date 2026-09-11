@@ -16,9 +16,10 @@ interface UseConversationDropzoneOptions {
   onUploaded: (items: FileUploadItem[]) => void;
   acceptedFileTypes?: FileType[];
   /**
-   * Extra MIME-keyed entries merged into the dropzone accept map. Useful for
-   * surfaces that accept file types not declared by backend capabilities —
-   * e.g. the Outlook add-in accepting `.eml`/`.msg` drops of email messages.
+   * Extra MIME-keyed entries merged into the dropzone accept map once
+   * `acceptedFileTypes` is known. Useful for surfaces that accept file types
+   * not declared by backend capabilities — e.g. the Outlook add-in accepting
+   * `.eml`/`.msg` drops of email messages.
    */
   extraAcceptMimeTypes?: Record<string, string[]>;
   isUploading?: boolean;
@@ -108,17 +109,19 @@ export function useConversationDropzone({
   );
 
   const accept = useMemo(() => {
-    const base =
-      acceptedFileTypes && acceptedFileTypes.length > 0
-        ? FileTypeUtil.getAcceptObject(acceptedFileTypes)
-        : undefined;
+    // No capability types yet (still loading) means accept everything so the
+    // drop overlay shows; the upload preflight validates types regardless.
+    if (!acceptedFileTypes || acceptedFileTypes.length === 0) {
+      return undefined;
+    }
+    const base = FileTypeUtil.getAcceptObject(acceptedFileTypes);
     if (
       !extraAcceptMimeTypes ||
       Object.keys(extraAcceptMimeTypes).length === 0
     ) {
       return base;
     }
-    return { ...(base ?? {}), ...extraAcceptMimeTypes };
+    return { ...base, ...extraAcceptMimeTypes };
   }, [acceptedFileTypes, extraAcceptMimeTypes]);
 
   const { getRootProps, getInputProps, isDragActive, isDragAccept } =
