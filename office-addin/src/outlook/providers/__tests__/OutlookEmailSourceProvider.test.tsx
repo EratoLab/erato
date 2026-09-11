@@ -2,12 +2,14 @@ import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { parseEmlBytes } from "../../utils/parsedEmail";
+import { EmailTrimError } from "../../utils/trimRawEmlBytes";
 import {
   OutlookEmailSourceProvider,
   useOutlookEmailSource,
 } from "../OutlookEmailSourceProvider";
 
 import type { OutlookMessageFetcher } from "../../utils/fetchOutlookMessage";
+import type { ParsedEmail } from "../../utils/parsedEmail";
 import type { ParsedThread, ThreadMessage } from "../../utils/parsedThread";
 
 // The provider only needs these three hooks; mocking them keeps the test off
@@ -77,14 +79,18 @@ function makeThread(): ParsedThread {
 type ContextValue = ReturnType<typeof useOutlookEmailSource>;
 
 let captured: ContextValue | null = null;
+/** `isDropResolutionStale` per committed render, oldest first. */
+let dropStaleHistory: boolean[] = [];
 
 function Capture() {
   captured = useOutlookEmailSource();
+  dropStaleHistory.push(captured.isDropResolutionStale);
   return null;
 }
 
 function renderProvider() {
   captured = null;
+  dropStaleHistory = [];
   render(
     <OutlookEmailSourceProvider>
       <Capture />
@@ -326,5 +332,237 @@ describe("OutlookEmailSourceProvider — appointment isolation", () => {
     });
     expect(files).toEqual([]);
     expect(getAttachmentFile).not.toHaveBeenCalled();
+  });
+});
+
+describe("OutlookEmailSourceProvider — dropped email resolution", () => {
+  const CRLF = "\r\n";
+
+  function emlWithOneAttachment(): string {
+    const b = "----B";
+    return (
+      `Subject: Dropped${CRLF}` +
+      `Message-ID: <drop-1@x>${CRLF}` +
+      `Content-Type: multipart/mixed; boundary="${b}"${CRLF}${CRLF}` +
+      `--${b}${CRLF}` +
+      `Content-Type: text/plain${CRLF}${CRLF}` +
+      `body${CRLF}` +
+      `--${b}${CRLF}` +
+      `Content-Type: application/pdf; name="a.pdf"${CRLF}` +
+      `Content-Disposition: attachment; filename="a.pdf"${CRLF}${CRLF}` +
+      `PDF-BYTES-PDF-BYTES${CRLF}` +
+      `--${b}--${CRLF}`
+    );
+  }
+
+  async function parseDrop(): Promise<ParsedEmail> {
+    const bytes = new TextEncoder().encode(emlWithOneAttachment());
+    const parsed = await parseEmlBytes(bytes.buffer, {
+      filename: "drop.eml",
+    });
+    expect(parsed).not.toBeNull();
+    expect(parsed!.attachments).toHaveLength(1);
+    return parsed!;
+  }
+
+  function untrimmableDrop(): ParsedEmail {
+    const rawBytes = new TextEncoder().encode("this is not an email").buffer;
+    return {
+      rawBytes,
+      rawEmlFile: new File([rawBytes], "broken.eml", {
+        type: "message/rfc822",
+      }),
+      messageId: "<broken@x>",
+      subject: "Broken",
+      from: null,
+      to: [],
+      cc: [],
+      bcc: [],
+      date: null,
+      text: "this is not an email",
+      html: null,
+      attachments: [
+        {
+          id: "att-0",
+          filename: "ghost.pdf",
+          mimeType: "application/pdf",
+          size: 3,
+          disposition: "attachment",
+          related: false,
+          contentId: null,
+          toFile: () => new File([], "ghost.pdf"),
+        },
+      ],
+    };
+  }
+
+  // No thread: compose mode with no Graph fetcher, so the only staged
+  // emails are the drops added below.
+  function primeDropOnly() {
+    mockUseOutlookMailItem.mockReturnValue({
+      itemIdentity: "id-3",
+      mailItem: {
+        itemId: null,
+        conversationId: null,
+        internetMessageId: null,
+        subject: "New message",
+        isComposeMode: true,
+      },
+      attachments: [],
+      isLoadingAttachments: false,
+      getAttachmentFile: vi.fn(),
+    });
+    mockUseCurrentThread.mockReturnValue({
+      thread: null,
+      isLoading: false,
+      error: false,
+    });
+    mockUseOutlookMessageFetcher.mockReturnValue({
+      fetcher: null,
+      unavailableReason: "unsupported-mode",
+    });
+  }
+
+  it("resolves an untouched drop to its original File and re-trims it once an attachment is dismissed", async () => {
+    primeDropOnly();
+    const parsed = await parseDrop();
+    renderProvider();
+
+    let key: string | null = null;
+    act(() => {
+      key = captured!.addDroppedEmail(parsed);
+    });
+    expect(key).toBe("<drop-1@x>");
+
+    expect(captured!.isDropResolutionStale).toBe(false);
+    expect(captured!.resolvedDrops).toHaveLength(1);
+    expect(captured!.resolvedDrops[0].file).toBe(parsed.rawEmlFile);
+    expect(captured!.resolvedDrops[0].size).toBe(parsed.rawEmlFile.size);
+    expect(captured!.resolvedParts).toEqual([
+      { key: "<drop-1@x>", name: "drop.eml", size: parsed.rawEmlFile.size },
+    ]);
+    expect(captured!.resolvedTotalBytes).toBe(parsed.rawEmlFile.size);
+
+    act(() => {
+      captured!.dismissStagedEmailAttachment("<drop-1@x>", "att-0");
+    });
+
+    expect(captured!.isDropResolutionStale).toBe(false);
+    const trimmed = captured!.resolvedDrops[0];
+    expect(trimmed.file).not.toBe(parsed.rawEmlFile);
+    expect(trimmed.size).toBeLessThan(parsed.rawEmlFile.size);
+    expect(trimmed.size).toBe(trimmed.file!.size);
+    expect(trimmed.file!.name).toBe("drop.eml");
+    expect(trimmed.file!.lastModified).toBe(parsed.rawEmlFile.lastModified);
+    expect(await trimmed.file!.text()).not.toContain("a.pdf");
+    expect(captured!.resolvedTotalBytes).toBe(trimmed.size);
+    // The original stays untouched for a later restore.
+    expect(await parsed.rawEmlFile.text()).toContain("a.pdf");
+  });
+
+  it("sends the exact same trimmed File it estimated", async () => {
+    primeDropOnly();
+    const parsed = await parseDrop();
+    renderProvider();
+
+    act(() => {
+      captured!.addDroppedEmail(parsed);
+      captured!.dismissStagedEmailAttachment("<drop-1@x>", "att-0");
+    });
+
+    const estimateFile = captured!.resolvedDrops[0].file;
+    expect(estimateFile).not.toBeNull();
+    expect(captured!.resolvedFiles).toEqual([estimateFile]);
+    expect(captured!.emailBodyFile).toBe(estimateFile);
+
+    let sent: File[] = [];
+    await act(async () => {
+      sent = await captured!.resolveSelectedFilesForSend();
+    });
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toBe(estimateFile);
+    // A second send without any toggle reuses the same minted File.
+    expect(captured!.resolvedDrops[0].file).toBe(estimateFile);
+  });
+
+  it("flags the resolution as stale between the toggle commit and the deferred re-trim", async () => {
+    primeDropOnly();
+    const parsed = await parseDrop();
+    renderProvider();
+
+    act(() => {
+      captured!.addDroppedEmail(parsed);
+    });
+    dropStaleHistory = [];
+
+    act(() => {
+      captured!.dismissStagedEmailAttachment("<drop-1@x>", "att-0");
+    });
+
+    // The urgent render commits with the previous resolution (stale), then the
+    // deferred pass catches up and settles on the trimmed file.
+    expect(dropStaleHistory[0]).toBe(true);
+    expect(dropStaleHistory.at(-1)).toBe(false);
+    expect(captured!.isDropResolutionStale).toBe(false);
+  });
+
+  it("drops a dismissed body from the resolved files without an error", async () => {
+    primeDropOnly();
+    const parsed = await parseDrop();
+    renderProvider();
+
+    act(() => {
+      captured!.addDroppedEmail(parsed);
+      captured!.dismissStagedEmailBody("<drop-1@x>");
+    });
+
+    expect(captured!.resolvedDrops).toEqual([
+      { key: "<drop-1@x>", file: null, size: 0 },
+    ]);
+    expect(captured!.resolvedFiles).toEqual([]);
+    expect(captured!.resolvedParts).toEqual([]);
+    expect(captured!.resolvedTotalBytes).toBe(0);
+    // The "+" menu keeps its restore row on the original file.
+    expect(captured!.emailBodyFile).toBe(parsed.rawEmlFile);
+    expect(captured!.isEmailBodyDismissed).toBe(true);
+
+    let sent: File[] = [];
+    await act(async () => {
+      sent = await captured!.resolveSelectedFilesForSend();
+    });
+    expect(sent).toEqual([]);
+  });
+
+  it("exposes a failed trim on the resolved drop and only throws it at send", async () => {
+    primeDropOnly();
+    const parsed = untrimmableDrop();
+    renderProvider();
+
+    expect(() =>
+      act(() => {
+        captured!.addDroppedEmail(parsed);
+        captured!.dismissStagedEmailAttachment("<broken@x>", "att-0");
+      }),
+    ).not.toThrow();
+
+    const failed = captured!.resolvedDrops[0];
+    expect(failed.file).toBeNull();
+    expect(failed.size).toBe(0);
+    expect(failed.error).toBeInstanceOf(EmailTrimError);
+    expect(failed.error!.filename).toBe("broken.eml");
+    expect(captured!.resolvedParts).toEqual([]);
+    expect(captured!.resolvedTotalBytes).toBe(0);
+
+    await expect(captured!.resolveSelectedFilesForSend()).rejects.toBe(
+      failed.error,
+    );
+
+    // Restoring the attachment clears the error and ships the original.
+    act(() => {
+      captured!.restoreStagedEmailAttachment("<broken@x>", "att-0");
+    });
+    expect(captured!.resolvedDrops[0].error).toBeUndefined();
+    expect(captured!.resolvedDrops[0].file).toBe(parsed.rawEmlFile);
   });
 });
