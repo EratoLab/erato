@@ -4,6 +4,7 @@ import {
   UploadTooLargeError,
   UploadUnknownError,
   fetchUploadFile,
+  formatFileSize,
   getIdToken,
   isUploadTooLarge,
   useChatInputControls,
@@ -311,6 +312,10 @@ export const AddinChatInput = forwardRef<
     dismissStagedEmailBody,
     restoreStagedEmailBody,
     setPolicyExcludedAttachmentIds,
+    isThreadEmlStale,
+    isDropResolutionStale,
+    resolvedDrops,
+    resolvedTotalBytes,
   } = useOutlookEmailSource();
   const { maxSizeBytes: globalMaxSizeBytes, maxSizeFormatted } =
     useUploadFeature();
@@ -417,6 +422,20 @@ export const AddinChatInput = forwardRef<
 
   const emailSourceGroups = useMemo<FileAttachmentGroup[]>(() => {
     const groups: FileAttachmentGroup[] = [];
+    const updatingLabel = t({
+      id: "officeAddin.fileSource.updatingThread",
+      message: "Updating…",
+    });
+    // What the send would upload right now, against the upload limit.
+    const used = formatFileSize(resolvedTotalBytes);
+    const limit = maxSizeFormatted;
+    const usedOfLimitLabel =
+      isThreadEmlStale || isDropResolutionStale
+        ? updatingLabel
+        : t({
+            id: "officeAddin.chatInput.stagedSize",
+            message: `${used} of ${limit}`,
+          });
 
     if (
       showSuggestedEmailSource &&
@@ -599,8 +618,9 @@ export const AddinChatInput = forwardRef<
               id: "officeAddin.chatInput.emailFallback",
               message: "Email",
             }),
-          metaLabel:
-            messageCount === 1 ? t`1 message` : t`${messageCount} messages`,
+          metaLabel: `${
+            messageCount === 1 ? t`1 message` : t`${messageCount} messages`
+          } · ${usedOfLimitLabel}`,
           items,
           collapsible: true,
           defaultCollapsed: true,
@@ -610,6 +630,11 @@ export const AddinChatInput = forwardRef<
 
       // source === "drop" — one .eml dragged onto the chat, flat layout.
       const items: FileAttachmentGroupItem[] = [];
+      // The trimmed file is what gets sent, so its size is the one to show;
+      // a dismissed or failed drop has none and falls back to the original.
+      const resolvedDrop = resolvedDrops.find(
+        (drop) => drop.key === staged.key,
+      );
       items.push({
         kind: "selectableAttachment",
         id: `${staged.key}:body`,
@@ -620,8 +645,9 @@ export const AddinChatInput = forwardRef<
             id: "officeAddin.chatInput.emailBody",
             message: "Email body",
           }),
-          size: staged.parsed.rawEmlFile.size,
+          size: resolvedDrop?.file?.size ?? staged.parsed.rawEmlFile.size,
         },
+        metaLabel: isDropResolutionStale ? updatingLabel : undefined,
         selected: !staged.bodyDismissed,
         onToggle: () => {
           if (staged.bodyDismissed) {
@@ -638,6 +664,18 @@ export const AddinChatInput = forwardRef<
 
       for (const attachment of staged.parsed.attachments) {
         if (attachment.disposition === "inline" || attachment.related) {
+          // Part of the body rather than attached to it: always sent, so the
+          // row is read-only and counts toward the size like any other.
+          items.push({
+            kind: "selectableAttachment",
+            id: `${staged.key}:${attachment.id}`,
+            file: {
+              id: `${staged.key}:${attachment.id}`,
+              filename: attachment.filename,
+              size: attachment.size,
+            },
+            selected: true,
+          });
           continue;
         }
         const isDismissed = staged.dismissedAttachmentIds.has(attachment.id);
@@ -751,11 +789,16 @@ export const AddinChatInput = forwardRef<
     emailThreadLoadError,
     emailSubject,
     hasDroppedStagedEmails,
+    isDropResolutionStale,
     isEmailBodyIncluded,
     isLoadingAttachments,
     isLoadingEmailBody,
     isLoadingParentReplyContext,
+    isThreadEmlStale,
+    maxSizeFormatted,
     parentReplyContext,
+    resolvedDrops,
+    resolvedTotalBytes,
     restoreStagedEmailAttachment,
     restoreStagedEmailBody,
     selectedAttachmentItems,
