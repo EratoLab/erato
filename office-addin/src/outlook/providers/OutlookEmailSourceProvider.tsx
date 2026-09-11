@@ -426,10 +426,8 @@ export function OutlookEmailSourceProvider({
   // "recalculating", not a frozen click.
   const isThreadEmlStale = threadSynthInput !== deferredSynthInput;
 
-  // Drops follow the same deferred pattern: the trim is a synchronous byte
-  // splice over the parsed buffer, run once per (drop, dismissals) input and
-  // cached per key so toggling one drop never remints its siblings — a remint
-  // would change the virtual-file identity and re-digest every big drop.
+  // Same deferred pattern as the thread; cached per key so toggling one drop
+  // never remints (and re-digests) its siblings.
   const dropSynthInput = useMemo(
     () => ({ droppedEmails, emailDismissals }),
     [droppedEmails, emailDismissals],
@@ -505,9 +503,8 @@ export function OutlookEmailSourceProvider({
   const isEmailBodyDismissed = currentThread
     ? includedThreadMessages.length === 0
     : (currentStagedDrop?.bodyDismissed ?? false);
-  // The drop file falls back to the untrimmed original while it is dismissed,
-  // failed to trim, or has not resolved yet, so the "+" menu keeps its
-  // restore row; only the resolved file is ever uploaded.
+  // A dismissed, failed or unresolved drop falls back to its original so the
+  // "+" menu keeps its restore row; only the resolved file is uploaded.
   const currentResolvedDrop = currentStagedDrop
     ? resolvedDrops.find((drop) => drop.key === currentStagedDrop.key)
     : undefined;

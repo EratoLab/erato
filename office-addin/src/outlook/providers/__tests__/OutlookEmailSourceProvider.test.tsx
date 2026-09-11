@@ -472,7 +472,8 @@ describe("OutlookEmailSourceProvider — dropped email resolution", () => {
 
     const estimateFile = captured!.resolvedDrops[0].file;
     expect(estimateFile).not.toBeNull();
-    expect(captured!.resolvedFiles).toEqual([estimateFile]);
+    expect(captured!.resolvedFiles).toHaveLength(1);
+    expect(captured!.resolvedFiles[0]).toBe(estimateFile);
     expect(captured!.emailBodyFile).toBe(estimateFile);
 
     let sent: File[] = [];
