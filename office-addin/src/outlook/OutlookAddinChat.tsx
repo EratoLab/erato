@@ -289,9 +289,11 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
         const uploaded = await uploadFiles(nonEmail);
         if (uploaded === undefined) {
           claimedIds.forEach((id) => dedup.remove(id));
-        } else {
-          reportSkippedDrops(skipped);
+          // An upload that failed owns the error slot; one that merely
+          // declined to run has left nothing to show for the skipped files.
+          if (useFileUploadStore.getState().error) return undefined;
         }
+        reportSkippedDrops(skipped);
         return uploaded;
       }, files.length),
     [
@@ -424,9 +426,8 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
         const uploaded = await uploadFiles(nonEmail);
         if (uploaded === undefined) {
           claimedIds.forEach((id) => dedup.remove(id));
-          return;
-        }
-        if (uploaded.length > 0) {
+          if (useFileUploadStore.getState().error) return;
+        } else if (uploaded.length > 0) {
           chatInputControls.addUploadedFiles(uploaded);
         }
         reportSkippedDrops(skipped);
