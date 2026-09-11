@@ -327,6 +327,11 @@ msgstr "E-Mail-Kontext wird vorbereitet"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.removeDroppedEmail"
+msgstr "Entfernen"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.replyContext.groupLabel"
 msgstr "Antwortkontext"
 
@@ -349,6 +354,11 @@ msgstr "{used} von {limit}"
 #: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.unknownSender"
 msgstr "Unbekannter Absender"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.uploadFailed"
+msgstr "Hochladen von {names} fehlgeschlagen. Die Nachricht wurde nicht gesendet."
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/validateStagedPart.ts

@@ -327,6 +327,11 @@ msgstr "Préparation du contexte de l'e-mail"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.removeDroppedEmail"
+msgstr "Retirer"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.replyContext.groupLabel"
 msgstr "Contexte de réponse"
 
@@ -349,6 +354,11 @@ msgstr "{used} sur {limit}"
 #: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.unknownSender"
 msgstr "Expéditeur inconnu"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.uploadFailed"
+msgstr "Impossible de téléverser {names}. Le message n'a pas été envoyé."
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/validateStagedPart.ts
