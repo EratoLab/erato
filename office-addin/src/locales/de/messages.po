@@ -265,6 +265,16 @@ msgid "officeAddin.chatInput.dropPipeline.staging"
 msgstr "Wird zum Chat hinzugefügt…"
 
 #. js-lingui-explicit-id
+#: src/outlook/OutlookAddinChat.tsx
+msgid "officeAddin.chatInput.dropSkipped.noFetcher"
+msgstr "{names} konnte nicht hinzugefügt werden: Für .msg-Dateien ist ein verbundenes Postfach nötig."
+
+#. js-lingui-explicit-id
+#: src/outlook/OutlookAddinChat.tsx
+msgid "officeAddin.chatInput.dropSkipped.unparseable"
+msgstr "{names} konnte nicht hinzugefügt werden: keine lesbare E-Mail."
+
+#. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.emailBody"
 msgstr "E-Mail-Inhalt"
