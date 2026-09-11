@@ -309,8 +309,10 @@ describe("useConversationDropzone", () => {
       types: string[];
       files?: number;
       items?: { kind: string }[];
+      stopped?: boolean;
     }) {
       return {
+        isPropagationStopped: () => init.stopped ?? false,
         dataTransfer: {
           types: init.types,
           files: { length: init.files ?? 0 },
@@ -378,6 +380,26 @@ describe("useConversationDropzone", () => {
       act(() => {
         (rootProps.onDrop as (event: unknown) => void)(
           dropEvent({ types: ["maillistrow"] }),
+        );
+      });
+
+      expect(onReceive).not.toHaveBeenCalled();
+    });
+
+    it("stays quiet when the consumer's onDrop stopped the event", () => {
+      const onReceive = vi.fn();
+      const { result } = renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          onReceive,
+        }),
+      );
+
+      const rootProps = result.current.getRootProps({ onDrop: vi.fn() });
+      act(() => {
+        (rootProps.onDrop as (event: unknown) => void)(
+          dropEvent({ types: ["Files"], files: 1, stopped: true }),
         );
       });
 
