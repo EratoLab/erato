@@ -1,10 +1,17 @@
 import { useCallback, useMemo, useRef, type DragEvent } from "react";
 import { useDropzone } from "react-dropzone";
 
-import { UploadTooLargeError, type UploadError } from "@/hooks/files/errors";
+import {
+  UnsupportedFileTypeError,
+  UploadTooLargeError,
+  type UploadError,
+} from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { FileTypeUtil } from "@/utils/fileTypes";
-import { oversizedRejectionNames } from "@/utils/validateFileSizes";
+import {
+  oversizedRejectionNames,
+  rejectionNames,
+} from "@/utils/validateFileSizes";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
@@ -100,6 +107,10 @@ export function useConversationDropzone({
       // Rejected files never reach the upload preflight; report them here.
       let files = acceptedFiles;
       if (rejectedFiles.length > 0) {
+        const unsupported = rejectionNames(rejectedFiles, "file-invalid-type");
+        if (unsupported.length > 0) {
+          reportError(new UnsupportedFileTypeError(unsupported));
+        }
         const oversized = oversizedRejectionNames(rejectedFiles);
         if (oversized.length > 0) {
           reportError(new UploadTooLargeError(maxSizeFormatted, oversized));
