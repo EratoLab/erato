@@ -65,17 +65,26 @@ vi.mock("@/providers/FileCapabilitiesProvider", () => ({
   })),
 }));
 
-// Mock react-dropzone
+// Capture the onDrop callback react-dropzone receives so tests can invoke it
+// directly without triggering DOM drag events.
+let capturedOnDrop: (
+  accepted: File[],
+  rejected: { file: File; errors: { code: string; message: string }[] }[],
+) => void = () => {};
+
 vi.mock("react-dropzone", () => {
   return {
-    useDropzone: vi.fn(() => ({
-      getRootProps: vi.fn(),
-      getInputProps: vi.fn(),
-      isDragActive: false,
-      isDragAccept: false,
-      isDragReject: false,
-      open: vi.fn(),
-    })),
+    useDropzone: vi.fn((opts) => {
+      capturedOnDrop = opts.onDrop ?? (() => {});
+      return {
+        getRootProps: vi.fn(),
+        getInputProps: vi.fn(),
+        isDragActive: false,
+        isDragAccept: false,
+        isDragReject: false,
+        open: vi.fn(),
+      };
+    }),
   };
 });
 
@@ -585,6 +594,27 @@ describe("useFileDropzone", () => {
       });
 
       expect(result.current.error).toBeInstanceOf(UnsupportedFileTypeError);
+    });
+
+    it("reports a wrong-type dropzone rejection as an unsupported file type", () => {
+      const { result } = renderHook(() =>
+        useFileDropzone({ chatId: "existing-chat-id" }),
+      );
+
+      act(() => {
+        capturedOnDrop(
+          [],
+          [
+            {
+              file: makeFileWithSize("wrong.exe", 100),
+              errors: [{ code: "file-invalid-type", message: "type" }],
+            },
+          ],
+        );
+      });
+
+      expect(result.current.error).toBeInstanceOf(UnsupportedFileTypeError);
+      expect(result.current.error?.message).toContain("wrong.exe");
     });
 
     it("does not set isUploading to true when files are rejected by preflight", async () => {
