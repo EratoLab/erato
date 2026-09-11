@@ -3,17 +3,27 @@ import { i18n } from "@lingui/core";
 import type { UploadFileError as ApiUploadFileError } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 export class UploadTooLargeError extends Error {
-  constructor(maxSizeFormatted?: string) {
-    // Use the runtime API with string ID for i18n
-    // The message catalog is populated by lingui extract from other source files
-    // When maxSizeFormatted is not provided, use a fallback indicator
-    const message = i18n._("upload.error.tooLarge", {
-      maxSize: maxSizeFormatted ?? "—",
-    });
+  /** Names of the files that exceeded the limit, when the caller knew them. */
+  public readonly filenames: string[];
+
+  constructor(maxSizeFormatted?: string, filenames: string | string[] = []) {
+    const filenameArray = Array.isArray(filenames) ? filenames : [filenames];
+    // Explicit-ID `i18n._` calls are the extraction anchor; no macro needed.
+    const maxSize = maxSizeFormatted ?? "—";
+    // `count` drives an ICU plural so pl can inflect beyond one/other.
+    const message =
+      filenameArray.length > 0
+        ? i18n._("upload.error.tooLargeNamed", {
+            maxSize,
+            count: filenameArray.length,
+            filenames: filenameArray.join(", "),
+          })
+        : i18n._("upload.error.tooLarge", { maxSize });
 
     super(message);
     // eslint-disable-next-line lingui/no-unlocalized-strings
     this.name = "UploadTooLargeError";
+    this.filenames = filenameArray;
   }
 }
 

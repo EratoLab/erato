@@ -1,9 +1,13 @@
 import { t } from "@lingui/core/macro";
-import { memo, Suspense } from "react";
+import { memo, Suspense, useId } from "react";
 import { useDropzone } from "react-dropzone";
 import { ErrorBoundary } from "react-error-boundary";
 
+import { UploadTooLargeError, type UploadError } from "@/hooks/files/errors";
+import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
+import { useUploadFeature } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
+import { oversizedRejectionNames } from "@/utils/validateFileSizes";
 
 import { Button } from "../Controls";
 import { PlusIcon } from "../icons";
@@ -42,6 +46,11 @@ export interface FileUploadButtonProps {
   isUploading?: boolean;
   /** Any error that occurred during file upload */
   uploadError?: Error | null;
+  /**
+   * Where a selection-time rejection is reported; defaults to the shared upload
+   * store. `performFileUpload` never sees rejected files, so this is the only sink.
+   */
+  onError?: (error: UploadError) => void;
 }
 
 /**
@@ -59,10 +68,25 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
     performFileUpload,
     isUploading = false,
     uploadError = null,
+    onError,
   }) => {
+    const { maxSizeBytes, maxSizeFormatted } = useUploadFeature();
+    const maxSizeHintId = useId();
+    const setStoreError = useFileUploadStore((state) => state.setError);
+    const reportError = onError ?? setStoreError;
+
     // Setup react-dropzone
     const { getRootProps, getInputProps, open } = useDropzone({
-      onDrop: (acceptedFiles) => {
+      onDrop: (acceptedFiles, rejectedFiles) => {
+        // Rejected files never reach the upload preflight; report them here.
+        if (rejectedFiles.length > 0) {
+          const oversized = oversizedRejectionNames(rejectedFiles);
+          if (oversized.length > 0) {
+            reportError(new UploadTooLargeError(maxSizeFormatted, oversized));
+            return;
+          }
+        }
+
         if (acceptedFiles.length > 0 && performFileUpload) {
           // Call the provided upload function
           void performFileUpload(acceptedFiles).then((files) => {
@@ -78,6 +102,7 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
           : undefined,
       multiple,
       disabled: disabled || isUploading,
+      maxSize: maxSizeBytes,
       noClick: true, // We'll manually open the file dialog
       noKeyboard: true,
     });
@@ -91,6 +116,14 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
     if (uploadError) {
       return <FileUploadError error={uploadError} className={className} />;
     }
+
+    // A description, not part of the accessible name; icon-only also gets a tooltip.
+    const maxSizeHint = maxSizeFormatted
+      ? t({
+          id: "upload.maxSizeHint",
+          message: `Maximum file size: ${maxSizeFormatted}`,
+        })
+      : null;
 
     return (
       <div {...getRootProps({ className: "contents" })}>
@@ -111,10 +144,23 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
           onClick={open}
           disabled={disabled || isUploading}
           aria-label={iconOnly ? label : undefined}
+          aria-describedby={maxSizeHint ? maxSizeHintId : undefined}
+          title={iconOnly ? (maxSizeHint ?? undefined) : undefined}
           icon={<PlusIcon className="size-5" />}
         >
           {!iconOnly && <span>{label}</span>}
         </Button>
+        {maxSizeHint && (
+          <span
+            id={maxSizeHintId}
+            className={
+              iconOnly ? "sr-only" : "text-xs text-[var(--theme-fg-muted)]"
+            }
+            data-testid="file-upload-max-size"
+          >
+            {maxSizeHint}
+          </span>
+        )}
       </div>
     );
   },

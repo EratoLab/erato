@@ -10,12 +10,16 @@ import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 
 import { componentRegistry } from "@/config/componentRegistry";
-import { CloudLinkError } from "@/hooks/files/errors";
+import { CloudLinkError, UploadTooLargeError } from "@/hooks/files/errors";
 import { useStandaloneFileUpload } from "@/hooks/files/useStandaloneFileUpload";
 import { fetchLinkFile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
-import { useCloudProvidersFeature } from "@/providers/FeatureConfigProvider";
+import {
+  useCloudProvidersFeature,
+  useUploadFeature,
+} from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
 import { DEFAULT_MAX_ASSISTANT_FILES } from "@/utils/fileUploadLimits";
+import { oversizedRejectionNames } from "@/utils/validateFileSizes";
 
 import { CloudFilePickerModal } from "./CloudFilePickerModal";
 import { FileSourceSelector } from "./FileSourceSelector";
@@ -76,6 +80,7 @@ export const AssistantFileUploadSelector: React.FC<
 }) => {
   // Get cloud providers configuration
   const { availableProviders } = useCloudProvidersFeature();
+  const { maxSizeBytes, maxSizeFormatted } = useUploadFeature();
   const hasCloudProviders = availableProviders.length > 0;
   const hasCustomSelector =
     componentRegistry.AssistantFileSourceSelector != null;
@@ -110,7 +115,18 @@ export const AssistantFileUploadSelector: React.FC<
     getRootProps,
     getInputProps,
   } = useDropzone({
-    onDrop: (acceptedFiles) => {
+    onDrop: (acceptedFiles, rejectedFiles) => {
+      // Rejected files never reach the upload preflight; report them here.
+      if (rejectedFiles.length > 0) {
+        const oversized = oversizedRejectionNames(rejectedFiles);
+        if (oversized.length > 0) {
+          setCloudLinkError(
+            new UploadTooLargeError(maxSizeFormatted, oversized),
+          );
+          return;
+        }
+      }
+
       if (acceptedFiles.length > 0) {
         clearErrors();
         void (async () => {
@@ -127,6 +143,7 @@ export const AssistantFileUploadSelector: React.FC<
         : undefined,
     multiple,
     disabled: disabled || externalIsUploading || isLinkingFiles,
+    maxSize: maxSizeBytes,
     noClick: true, // We'll manually open via the selector
     noKeyboard: true,
   });
@@ -270,6 +287,17 @@ export const AssistantFileUploadSelector: React.FC<
               className={className}
             />
           )}
+          {maxSizeFormatted && (
+            <p
+              className="mt-1 text-xs text-[var(--theme-fg-muted)]"
+              data-testid="assistant-upload-max-size"
+            >
+              {t({
+                id: "upload.maxSizeHint",
+                message: `Maximum file size: ${maxSizeFormatted}`,
+              })}
+            </p>
+          )}
         </>
       ) : (
         <FileUploadButton
@@ -282,6 +310,8 @@ export const AssistantFileUploadSelector: React.FC<
           performFileUpload={uploadFiles}
           isUploading={isProcessing}
           uploadError={null}
+          // This selector renders `combinedError`, not the shared store.
+          onError={setCloudLinkError}
           onFilesUploaded={onFilesUploaded}
         />
       )}

@@ -1,6 +1,7 @@
 import {
   useConversationDropzone,
   usePersistedState,
+  useUploadFeature,
   type FileUploadItem,
   type PersistedStateOptions,
 } from "@erato/frontend/library";
@@ -33,7 +34,10 @@ import {
 } from "./utils/graphRequestTimeout";
 import { buildOutlookArtifact } from "./utils/outlookClientActions";
 import { newestSchedulingSignalAt } from "./utils/outlookScheduleTool";
-import { parseDroppedFiles } from "./utils/parseDroppedFiles";
+import {
+  isExpandableEmailFile,
+  parseDroppedFiles,
+} from "./utils/parseDroppedFiles";
 import { parseEmlBytes } from "./utils/parsedEmail";
 
 import type { FetchOutlookMessageBytesResult } from "./utils/fetchOutlookMessage";
@@ -209,6 +213,13 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
     ],
   );
   const emailDropMimeTypes = messageFetcher ? EMAIL_MIME_TYPES : EML_MIME_TYPES;
+  const { maxSizeBytes, maxSizeFormatted } = useUploadFeature();
+  // Dropped emails are staged and trimmable; their size is checked on the trimmed bytes at send.
+  const isSizeExempt = useCallback(
+    (file: File) =>
+      isExpandableEmailFile(file, { hasFetcher: messageFetcher != null }),
+    [messageFetcher],
+  );
   const dropzone = useConversationDropzone({
     uploadFiles: uploadFilesWithEmailExpansion,
     onUploaded: (uploaded: FileUploadItem[]) =>
@@ -216,6 +227,9 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
     acceptedFileTypes: controller.acceptedFileTypes,
     extraAcceptMimeTypes: emailDropMimeTypes,
     isUploading: controller.isUploading,
+    maxSize: maxSizeBytes,
+    maxSizeFormatted,
+    isSizeExempt,
   });
 
   const handleOutlookMailListDrop = useCallback(

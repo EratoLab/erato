@@ -4305,6 +4305,11 @@ msgstr "Le fichier est trop volumineux. Taille maximale : {maxSize}."
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts
+msgid "upload.error.tooLargeNamed"
+msgstr "{count, plural, one {Le fichier est trop volumineux : {filenames}. Taille maximale : {maxSize}.} other {Les fichiers sont trop volumineux : {filenames}. Taille maximale : {maxSize}.}}"
+
+#. js-lingui-explicit-id
+#: src/hooks/files/errors.ts
 msgid "upload.error.unknown"
 msgstr ""
 
@@ -4312,6 +4317,13 @@ msgstr ""
 #: src/hooks/files/errors.ts
 msgid "upload.error.unsupportedFileType"
 msgstr "Type(s) de fichier non pris en charge : {filenames}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/Chat.tsx
+#: src/components/ui/FileUpload/AssistantFileUploadSelector.tsx
+#: src/components/ui/FileUpload/FileUploadButton.tsx
+msgid "upload.maxSizeHint"
+msgstr "Taille de fichier maximale : {maxSizeFormatted}"
 
 # ==============================
 # Unstable IDs
@@ -4449,16 +4461,16 @@ msgid "A passage could not be transcribed. Please try again."
 msgstr "Un passage n'a pas pu être transcrit. Veuillez réessayer."
 
 #: src/components/ui/FileUpload/FileUpload.tsx
-msgid "Accepted types:"
-msgstr "Types acceptés :"
+#~ msgid "Accepted types:"
+#~ msgstr "Types acceptés :"
 
 #: src/components/ui/Chat/ChatInput.tsx
 #~ msgid "Action required — the assistant is waiting for your approval"
 #~ msgstr "Action requise — l'assistant attend votre approbation"
 
 #: src/components/ui/FileUpload/FileUpload.tsx
-msgid "All file types accepted"
-msgstr "Tous les types de fichiers acceptés"
+#~ msgid "All file types accepted"
+#~ msgstr "Tous les types de fichiers acceptés"
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #~ msgid "And"
@@ -4748,8 +4760,8 @@ msgid "Choose audio mode"
 msgstr ""
 
 #: src/components/ui/FileUpload/FileUpload.tsx
-msgid "Clear All"
-msgstr "Tout effacer"
+#~ msgid "Clear All"
+#~ msgstr "Tout effacer"
 
 #: src/pages/SearchPage.tsx
 msgid "Clear search"
@@ -4975,12 +4987,12 @@ msgid "Download File"
 msgstr "Télécharger le fichier"
 
 #: src/components/ui/FileUpload/FileUpload.tsx
-msgid "Drag files here or click to upload"
-msgstr "Glissez les fichiers ici ou cliquez pour télécharger"
+#~ msgid "Drag files here or click to upload"
+#~ msgstr "Glissez les fichiers ici ou cliquez pour télécharger"
 
 #: src/components/ui/FileUpload/FileUpload.tsx
-msgid "Drop files to upload..."
-msgstr "Déposez les fichiers pour les télécharger..."
+#~ msgid "Drop files to upload..."
+#~ msgstr "Déposez les fichiers pour les télécharger..."
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 #~ msgid "echo cancellation: {0}"
@@ -5667,8 +5679,8 @@ msgstr "Ignoré"
 #~ msgstr ""
 
 #: src/components/ui/FileUpload/FileUpload.tsx
-msgid "Some files won't be accepted..."
-msgstr "Certains fichiers ne seront pas acceptés..."
+#~ msgid "Some files won't be accepted..."
+#~ msgstr "Certains fichiers ne seront pas acceptés..."
 
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
 msgid "Something went wrong"
@@ -5956,12 +5968,12 @@ msgstr ""
 #~ msgstr ""
 
 #: src/components/ui/FileUpload/FileUpload.tsx
-msgid "Upload Files"
-msgstr "Télécharger des fichiers"
+#~ msgid "Upload Files"
+#~ msgstr "Télécharger des fichiers"
 
 #: src/components/ui/FileUpload/FileUpload.tsx
-msgid "Uploaded Files"
-msgstr "Fichiers téléchargés"
+#~ msgid "Uploaded Files"
+#~ msgstr "Fichiers téléchargés"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Uploading"

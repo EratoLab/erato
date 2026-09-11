@@ -4,7 +4,9 @@ import {
   fetchUploadFile,
   type UploadFileVariables,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { useUploadFeature } from "@/providers/FeatureConfigProvider";
 import { createLogger } from "@/utils/debugLogger";
+import { validateFileSizes } from "@/utils/validateFileSizes";
 
 import {
   UploadTooLargeError,
@@ -47,6 +49,7 @@ interface UseStandaloneFileUploadResult {
  * ```
  */
 export function useStandaloneFileUpload(): UseStandaloneFileUploadResult {
+  const { maxSizeBytes, maxSizeFormatted } = useUploadFeature();
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<UploadError | null>(null);
 
@@ -57,6 +60,17 @@ export function useStandaloneFileUpload(): UseStandaloneFileUploadResult {
   const uploadFiles = useCallback(
     async (files: File[]) => {
       if (isUploading || files.length === 0) return;
+
+      const sizeValidation = validateFileSizes(files, maxSizeBytes);
+      if (!sizeValidation.valid) {
+        setError(
+          new UploadTooLargeError(
+            maxSizeFormatted,
+            sizeValidation.oversizedFiles.map((file) => file.name),
+          ),
+        );
+        return undefined;
+      }
 
       let uploadedItems: FileUploadItem[] | undefined;
 
@@ -92,7 +106,10 @@ export function useStandaloneFileUpload(): UseStandaloneFileUploadResult {
 
           // Check for file too large error
           if (isUploadTooLarge(uploadError)) {
-            throw new UploadTooLargeError();
+            throw new UploadTooLargeError(
+              maxSizeFormatted,
+              files.map((file) => file.name),
+            );
           }
 
           // Fallback to unknown error
@@ -119,7 +136,7 @@ export function useStandaloneFileUpload(): UseStandaloneFileUploadResult {
 
       return uploadedItems;
     },
-    [isUploading],
+    [isUploading, maxSizeBytes, maxSizeFormatted],
   );
 
   return {

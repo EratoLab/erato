@@ -75,6 +75,17 @@ export async function parseDroppedFiles(
   return { emails, nonEmail };
 }
 
+/**
+ * Whether the drop handler stages this file as an email rather than uploading
+ * it (`.msg` needs a fetcher). Staged emails are trimmable, so they skip the size gate.
+ */
+export function isExpandableEmailFile(
+  file: File,
+  options: { hasFetcher: boolean },
+): boolean {
+  return isEmlFile(file) || (options.hasFetcher && isMsgFile(file));
+}
+
 function isMsgFile(file: File): boolean {
   if (file.type === "application/vnd.ms-outlook") {
     return true;

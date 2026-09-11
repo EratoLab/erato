@@ -16,6 +16,10 @@ import { createLogger } from "@/utils/debugLogger";
 import { validateFiles } from "@/utils/fileCapabilities";
 import { FileTypeUtil } from "@/utils/fileTypes";
 import { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
+import {
+  oversizedRejectionNames,
+  validateFileSizes,
+} from "@/utils/validateFileSizes";
 
 import {
   UploadTooLargeError,
@@ -122,6 +126,8 @@ interface UseFileDropzoneResult {
   open: () => void;
   /** Error message from dropzone validation or upload */
   error: UploadError | null;
+  /** Set an error without triggering an upload (e.g. from a sibling dropzone rejection). */
+  setError: (error: UploadError | null) => void;
   /** Uploaded files */
   uploadedFiles: FileUploadItem[];
   /** Whether an upload is in progress */
@@ -251,6 +257,16 @@ export function useFileDropzone({
 
         const filesToUpload = files.slice(0, multiple ? maxFiles : 1);
 
+        // After the type check and the maxFiles trim, before any network call.
+        // Nothing awaits before this throw, so `isUploading` never renders true.
+        const sizeValidation = validateFileSizes(filesToUpload, maxSizeBytes);
+        if (!sizeValidation.valid) {
+          throw new UploadTooLargeError(
+            maxSizeFormatted,
+            sizeValidation.oversizedFiles.map((file) => file.name),
+          );
+        }
+
         let uploadChatId = chatId;
         uploadChatId ??= await resolveInFlightNewChatId();
 
@@ -302,7 +318,10 @@ export function useFileDropzone({
 
           // Check for fetch-like error with status
           if (isUploadTooLarge(uploadError)) {
-            throw new UploadTooLargeError(maxSizeFormatted);
+            throw new UploadTooLargeError(
+              maxSizeFormatted,
+              filesToUpload.map((file) => file.name),
+            );
           }
 
           // Fallback to unknown error
@@ -339,6 +358,8 @@ export function useFileDropzone({
       disabled,
       multiple,
       maxFiles,
+      maxSizeBytes,
+      maxSizeFormatted,
       chatId,
       assistantId,
       chatProviderId,
@@ -359,12 +380,10 @@ export function useFileDropzone({
       // Handle rejections first
       if (rejectedFiles.length > 0) {
         // Check if any rejection is due to file size
-        const hasSizeError = rejectedFiles.some((rejection) =>
-          rejection.errors.some((e) => e.code === "file-too-large"),
-        );
+        const oversized = oversizedRejectionNames(rejectedFiles);
 
-        if (hasSizeError) {
-          setError(new UploadTooLargeError(maxSizeFormatted));
+        if (oversized.length > 0) {
+          setError(new UploadTooLargeError(maxSizeFormatted, oversized));
           return;
         }
 
@@ -415,6 +434,7 @@ export function useFileDropzone({
     isDragReject,
     open,
     error,
+    setError,
     uploadedFiles,
     isUploading,
     clearFiles,

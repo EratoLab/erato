@@ -210,6 +210,11 @@ msgid "officeAddin.chat.fileDrop.overlay.label"
 msgstr "Upuść, aby przesłać"
 
 #. js-lingui-explicit-id
+#: src/core/AddinChatCore.tsx
+msgid "officeAddin.chat.fileDrop.overlay.maxSize"
+msgstr "Maksymalny rozmiar pliku: {maxSizeFormatted}"
+
+#. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
 #~ msgid "officeAddin.chat.newChat"
 #~ msgstr "Nowy czat"
@@ -268,6 +273,12 @@ msgstr "Nie udało się wczytać wątku e-maili"
 #: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.emailThreadLoadErrorDescription"
 msgstr "Nadal możesz wysłać wiadomość bez tego kontekstu e-maila."
+
+#. js-lingui-explicit-id
+#. placeholder {0}: error.filename
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.emailTrimFailed"
+msgstr "Nie udało się pominąć odznaczonych załączników z {0}. Wiadomość nie została wysłana."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx

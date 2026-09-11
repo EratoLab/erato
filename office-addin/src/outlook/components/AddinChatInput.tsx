@@ -2,9 +2,15 @@ import {
   FileTypeUtil,
   GroupedFileAttachmentsPreview,
   SpinnerIcon,
+  UploadTooLargeError,
+  UploadUnknownError,
   fetchUploadFile,
   getIdToken,
+  isUploadTooLarge,
+  useChatInputControls,
+  useFileUploadStore,
   useUploadFeature,
+  validateFileSizes,
   type ChatInputControlsHandle,
   type ChatModel,
   type FileAttachmentGroup,
@@ -44,6 +50,8 @@ import {
   isSchedulingThreadFresh,
   toLocalOffsetIso,
 } from "../utils/outlookScheduleTool";
+import { restoreComposerDraft } from "../utils/restoreComposerDraft";
+import { EmailTrimError } from "../utils/trimRawEmlBytes";
 
 function validateAttachment(
   filename: string,
@@ -272,6 +280,21 @@ export const AddinChatInput = forwardRef<
   } = useOutlookEmailSource();
   const { maxSizeBytes: globalMaxSizeBytes, maxSizeFormatted } =
     useUploadFeature();
+  // The composer's alert renders and clears this store; a local copy would outlive it.
+  const setUploadStoreError = useFileUploadStore((state) => state.setError);
+  // The composer clears itself on handoff, before this handler can size-check;
+  // a declined send has to put the draft back.
+  const chatInputControls = useChatInputControls();
+  const restoreDraft = useCallback(
+    (message: string, inputFileIds?: string[]) =>
+      restoreComposerDraft(
+        chatInputControls,
+        useFileUploadStore.getState().uploadedFiles,
+        message,
+        inputFileIds,
+      ),
+    [chatInputControls],
+  );
   // Drop-staged emails are always user-driven, so they bypass the
   // `showSuggestedEmailSource` gate (which is for the auto-suggest of the
   // currently-open email when the chat is still fresh). Without this the
@@ -788,6 +811,8 @@ export const AddinChatInput = forwardRef<
           nowIso: toLocalOffsetIso(new Date().toISOString()),
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         });
+      // Rolled back on a declined send: the marker means "already sent".
+      const previousDraftFingerprint = lastSentDraftFingerprintRef.current;
       if (sentDraftFingerprint !== null) {
         // Remember what we sent so an unchanged follow-up de-dupes (#4).
         lastSentDraftFingerprintRef.current = sentDraftFingerprint;
@@ -824,8 +849,14 @@ export const AddinChatInput = forwardRef<
       }
 
       setIsUploadingEmail(true);
+      // Only this path's own alert is cleared; anything else stays until dismissed.
+      if (useFileUploadStore.getState().error instanceof UploadTooLargeError) {
+        setUploadStoreError(null);
+      }
       let resolvedFileIds: string[] = [];
       let uploadFailed = false;
+      // Outside the try so the 413 branch can name the files.
+      let attemptedFileNames: string[] = [];
 
       try {
         const filesToUpload = await resolveSelectedFilesForSend();
@@ -850,6 +881,26 @@ export const AddinChatInput = forwardRef<
           return;
         }
 
+        // Sending anyway would answer from context the model never received.
+        // Chips stay so the user can drop the offender and retry.
+        const sizeValidation = validateFileSizes(
+          filesToUpload,
+          globalMaxSizeBytes,
+        );
+        if (!sizeValidation.valid) {
+          setUploadStoreError(
+            new UploadTooLargeError(
+              maxSizeFormatted,
+              sizeValidation.oversizedFiles.map((file) => file.name),
+            ),
+          );
+          lastSentDraftFingerprintRef.current = previousDraftFingerprint;
+          restoreDraft(message, inputFileIds);
+          return;
+        }
+
+        attemptedFileNames = filesToUpload.map((file) => file.name);
+
         const formData = new FormData();
         filesToUpload.forEach((file) => {
           formData.append("file", file, file.name);
@@ -866,11 +917,31 @@ export const AddinChatInput = forwardRef<
 
         resolvedFileIds = result.files.map((file) => file.id);
       } catch (error) {
+        if (error instanceof EmailTrimError) {
+          // The untrimmed original would ship what the user removed.
+          setUploadStoreError(
+            new UploadUnknownError(
+              t({
+                id: "officeAddin.chatInput.emailTrimFailed",
+                message: `Couldn't leave out the unchecked attachments of ${error.filename}. The message was not sent.`,
+              }),
+            ),
+          );
+          lastSentDraftFingerprintRef.current = previousDraftFingerprint;
+          restoreDraft(message, inputFileIds);
+          return;
+        }
         uploadFailed = true;
-        console.warn(
-          "Failed to upload Outlook email source files, sending without them:",
-          error,
-        );
+        if (isUploadTooLarge(error)) {
+          setUploadStoreError(
+            new UploadTooLargeError(maxSizeFormatted, attemptedFileNames),
+          );
+        } else {
+          console.warn(
+            "Failed to upload Outlook email source files, sending without them:",
+            error,
+          );
+        }
       } finally {
         setIsUploadingEmail(false);
       }
@@ -904,16 +975,20 @@ export const AddinChatInput = forwardRef<
       composeSelection.data,
       composeSelection.sourceProperty,
       draftBodyText,
+      globalMaxSizeBytes,
       hasActiveSelection,
       isAppointmentCompose,
       isDraftContextIncluded,
       itemIdentity,
       lastSchedulingSignalAt,
       mailItem,
+      maxSizeFormatted,
       onEmailSourceDropsSent,
       replyFromReadAvailable,
       resolveSelectedFilesForSend,
+      restoreDraft,
       scheduleFacetAvailable,
+      setUploadStoreError,
       shouldUseSuggestedEmailSource,
       stagedEmails,
     ],

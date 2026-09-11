@@ -27,6 +27,7 @@ import {
   useChatSharingFeature,
   usePinnedChatsFeature,
   useSidebarFeature,
+  useUploadFeature,
 } from "@/providers/FeatureConfigProvider";
 import { isPromptInjectionFilterDetails } from "@/types/chat";
 import { mapRecentChatToSession } from "@/utils/chat/recentChatSession";
@@ -281,6 +282,8 @@ export const Chat = ({
       maxFiles,
     },
   );
+
+  const { maxSizeBytes, maxSizeFormatted } = useUploadFeature();
 
   const { profile } = useProfile();
   const { enabled: chatSharingEnabled } = useChatSharingFeature();
@@ -636,6 +639,8 @@ export const Chat = ({
     onUploaded: handleDropUploaded,
     acceptedFileTypes,
     isUploading,
+    maxSize: maxSizeBytes,
+    maxSizeFormatted,
   });
 
   if (process.env.NODE_ENV === "development") {
@@ -879,6 +884,17 @@ export const Chat = ({
                       message: "Drop to upload",
                     })}
                   </p>
+                  {maxSizeFormatted && (
+                    <p
+                      className="text-xs text-[var(--theme-fg-muted)]"
+                      data-testid="chat-drop-overlay-max-size"
+                    >
+                      {t({
+                        id: "upload.maxSizeHint",
+                        message: `Maximum file size: ${maxSizeFormatted}`,
+                      })}
+                    </p>
+                  )}
                 </div>
               </div>
             )}

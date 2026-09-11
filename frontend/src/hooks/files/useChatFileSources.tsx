@@ -34,6 +34,10 @@ import {
 } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
 import { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
+import {
+  oversizedRejectionNames,
+  validateFileSizes,
+} from "@/utils/validateFileSizes";
 
 import type { AddMenuActionItem } from "@/components/ui/Chat/ChatInputAddMenu";
 import type { CloudFilePickerModalProps } from "@/components/ui/FileUpload/CloudFilePickerModal";
@@ -141,6 +145,18 @@ export function useChatFileSources({
         return;
       }
 
+      // Guards the `onSelectFiles` path, where hosts hand in already-resolved Files.
+      const sizeValidation = validateFileSizes(files, maxSizeBytes);
+      if (!sizeValidation.valid) {
+        setError(
+          new UploadTooLargeError(
+            maxSizeFormatted,
+            sizeValidation.oversizedFiles.map((file) => file.name),
+          ),
+        );
+        return;
+      }
+
       const uploadedFiles = await performDiskUpload(files);
       if (
         !externalPerformFileUpload &&
@@ -150,7 +166,14 @@ export function useChatFileSources({
         onFilesUploaded?.(uploadedFiles);
       }
     },
-    [externalPerformFileUpload, onFilesUploaded, performDiskUpload],
+    [
+      externalPerformFileUpload,
+      maxSizeBytes,
+      maxSizeFormatted,
+      onFilesUploaded,
+      performDiskUpload,
+      setError,
+    ],
   );
 
   const {
@@ -160,12 +183,10 @@ export function useChatFileSources({
   } = useDropzone({
     onDrop: (acceptedFiles, rejectedFiles) => {
       if (rejectedFiles.length > 0) {
-        const hasSizeError = rejectedFiles.some((rejection) =>
-          rejection.errors.some((e) => e.code === "file-too-large"),
-        );
+        const oversized = oversizedRejectionNames(rejectedFiles);
 
-        if (hasSizeError) {
-          setError(new UploadTooLargeError(maxSizeFormatted));
+        if (oversized.length > 0) {
+          setError(new UploadTooLargeError(maxSizeFormatted, oversized));
           return;
         }
       }

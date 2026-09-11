@@ -16,7 +16,10 @@ export {
 export { ApiProvider } from "@/components/providers/ApiProvider";
 export { GenerationStatusPoller } from "@/components/providers/GenerationStatusPoller";
 export * from "@/components/ui/Chat";
-export { ChatInputControlsProvider } from "@/components/ui/Chat/ChatInputControlsContext";
+export {
+  ChatInputControlsProvider,
+  useChatInputControls,
+} from "@/components/ui/Chat/ChatInputControlsContext";
 export {
   DelegatedRunsSection,
   type DelegatedRunsSectionProps,
@@ -309,6 +312,13 @@ export {
   useFileUploadWithTokenCheck,
   useStandaloneFileUpload,
 } from "@/hooks/files";
+export {
+  UploadTooLargeError,
+  UploadUnknownError,
+  isUploadTooLarge,
+  type UploadError,
+} from "@/hooks/files/errors";
+export { validateFileSizes } from "@/utils/validateFileSizes";
 export {
   ChatBubbleIcon,
   CloseIcon,

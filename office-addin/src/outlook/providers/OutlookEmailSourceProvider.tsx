@@ -23,7 +23,7 @@ import {
   restoreAttachment as applyRestoreAttachment,
   restoreBody as applyRestoreBody,
 } from "../utils/stagedEmailDismissals";
-import { trimEmlAttachments } from "../utils/trimEmlAttachments";
+import { trimRawEmlBytes } from "../utils/trimRawEmlBytes";
 
 import type { ParentMessageMetadata } from "../utils/fetchOutlookMessage";
 import type { ParsedEmail } from "../utils/parsedEmail";
@@ -49,23 +49,6 @@ function collectDismissedIndices(
     }
   });
   return indices;
-}
-
-async function trimRawEmlBytes(
-  rawEmlFile: File,
-  indicesToRemove: number[],
-): Promise<File> {
-  const buffer = await rawEmlFile.arrayBuffer();
-  const trimmed = trimEmlAttachments(new Uint8Array(buffer), indicesToRemove);
-  if (!trimmed) {
-    console.warn(
-      "[OutlookEmailSourceProvider] surgical trim returned null; uploading the original .eml",
-    );
-    return rawEmlFile;
-  }
-  return new File([trimmed.slice()], rawEmlFile.name, {
-    type: rawEmlFile.type,
-  });
 }
 
 export type StagedEmailSource = "current-thread" | "drop";

@@ -32,6 +32,7 @@ import {
   useModelSwitches,
   useProfile,
   useStandardMessageActions,
+  useUploadFeature,
   type ActionFacetRequest,
   type AssistantMention,
   type ChatInputControlsHandle,
@@ -565,11 +566,14 @@ function useAddinChatController({
 type ConversationDropzone = ReturnType<typeof useConversationDropzone>;
 
 function NeutralAddinChatHost({ controller }: AddinChatHostProps) {
+  const { maxSizeBytes, maxSizeFormatted } = useUploadFeature();
   const dropzone = useConversationDropzone({
     uploadFiles: controller.uploadFiles,
     onUploaded: (files) => controller.chatInputControls.addUploadedFiles(files),
     acceptedFileTypes: controller.acceptedFileTypes,
     isUploading: controller.isUploading,
+    maxSize: maxSizeBytes,
+    maxSizeFormatted,
   });
 
   return (
@@ -634,6 +638,7 @@ export function AddinChatCoreView({
   drawerSectionsBeforeHistory?: ReactNode;
   drawerSectionsAfterHistory?: ReactNode;
 }) {
+  const { maxSizeFormatted } = useUploadFeature();
   const TopLeftAccessory = componentRegistry.ChatTopLeftAccessory;
   // When a kit registers a start view, its toggle floats at the top RIGHT
   // (mirroring the drawer trigger), so the trigger-clearance rows need the
@@ -738,6 +743,17 @@ export function AddinChatCoreView({
                         message: "Drop to upload",
                       })}
                     </p>
+                    {maxSizeFormatted && (
+                      <p
+                        className="text-xs text-[var(--theme-fg-muted)]"
+                        data-testid="addin-chat-drop-overlay-max-size"
+                      >
+                        {t({
+                          id: "officeAddin.chat.fileDrop.overlay.maxSize",
+                          message: `Maximum file size: ${maxSizeFormatted}`,
+                        })}
+                      </p>
+                    )}
                   </div>
                 </div>
               ) : null}
