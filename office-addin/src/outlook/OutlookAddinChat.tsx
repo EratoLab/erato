@@ -1,10 +1,13 @@
 import {
+  UploadUnknownError,
   useConversationDropzone,
+  useFileUploadStore,
   usePersistedState,
   useUploadFeature,
   type FileUploadItem,
   type PersistedStateOptions,
 } from "@erato/frontend/library";
+import { t } from "@lingui/core/macro";
 import {
   startTransition,
   useCallback,
@@ -52,6 +55,10 @@ import { yieldToRenderer } from "../utils/yieldToRenderer";
 import type { DropPipelineState } from "./hooks/useDropPipeline";
 import type { FetchOutlookMessageBytesResult } from "./utils/fetchOutlookMessage";
 import type { OutlookMailListDragItem } from "./utils/outlookMailListDragParse";
+import type {
+  DroppedFileSkipReason,
+  SkippedDroppedFile,
+} from "./utils/parseDroppedFiles";
 import type { ParsedEmail } from "./utils/parsedEmail";
 
 const EML_MIME_TYPES: Record<string, string[]> = {
@@ -61,6 +68,7 @@ const EMAIL_MIME_TYPES: Record<string, string[]> = {
   ...EML_MIME_TYPES,
   "application/vnd.ms-outlook": [".msg"],
 };
+const SKIP_REASONS: DroppedFileSkipReason[] = ["no-fetcher", "unparseable"];
 const PIN_HINT_DISMISSED_KEY = "erato.outlookAddin.pinHintDismissed";
 const pinHintDismissedPersistedOptions: PersistedStateOptions<boolean> = {
   parse: (value) => (typeof value === "boolean" ? value : null),
@@ -207,6 +215,20 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
     },
     [beginDrop],
   );
+  const setUploadError = useFileUploadStore((state) => state.setError);
+  const reportSkippedDrops = useCallback(
+    (skipped: SkippedDroppedFile[]) => {
+      for (const reason of SKIP_REASONS) {
+        const names = skipped
+          .filter((entry) => entry.reason === reason)
+          .map((entry) => entry.file.name);
+        if (names.length > 0) {
+          setUploadError(skippedDropError(reason, names.join(", ")));
+        }
+      }
+    },
+    [setUploadError],
+  );
   const stageDroppedEmails = useCallback(
     async (emails: ParsedEmail[], claimedIds: string[]) => {
       if (emails.length === 0) return;
@@ -227,7 +249,7 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
     async (files: File[]) =>
       trackExpansion(async () => {
         const claimedIds: string[] = [];
-        const { emails, nonEmail } = await parseDroppedFiles(files, {
+        const { emails, nonEmail, skipped } = await parseDroppedFiles(files, {
           fetcher: messageFetcher ?? undefined,
           tryAttachEmail: (messageId) => {
             if (!tryClaimEmailAttachment(messageId)) return false;
@@ -237,10 +259,15 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
           onProgress: reportDropProgress,
         });
         await stageDroppedEmails(emails, claimedIds);
-        if (nonEmail.length === 0) return undefined;
+        if (nonEmail.length === 0) {
+          reportSkippedDrops(skipped);
+          return undefined;
+        }
         const uploaded = await uploadFiles(nonEmail);
         if (uploaded === undefined) {
           claimedIds.forEach((id) => dedup.remove(id));
+        } else {
+          reportSkippedDrops(skipped);
         }
         return uploaded;
       }, files.length),
@@ -248,6 +275,7 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
       dedup,
       messageFetcher,
       reportDropProgress,
+      reportSkippedDrops,
       stageDroppedEmails,
       trackExpansion,
       tryClaimEmailAttachment,
@@ -336,7 +364,7 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
       if (files.length === 0) return;
       return trackExpansion(async () => {
         const claimedIds: string[] = [];
-        const { emails, nonEmail } = await parseDroppedFiles(files, {
+        const { emails, nonEmail, skipped } = await parseDroppedFiles(files, {
           fetcher: messageFetcher ?? undefined,
           tryAttachEmail: (messageId) => {
             if (!tryClaimEmailAttachment(messageId)) return false;
@@ -346,13 +374,19 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
           onProgress: reportDropProgress,
         });
         await stageDroppedEmails(emails, claimedIds);
-        if (nonEmail.length === 0) return;
+        if (nonEmail.length === 0) {
+          reportSkippedDrops(skipped);
+          return;
+        }
         const uploaded = await uploadFiles(nonEmail);
         if (uploaded === undefined) {
           claimedIds.forEach((id) => dedup.remove(id));
-        } else if (uploaded.length > 0) {
+          return;
+        }
+        if (uploaded.length > 0) {
           chatInputControls.addUploadedFiles(uploaded);
         }
+        reportSkippedDrops(skipped);
       }, files.length);
     },
     [
@@ -360,6 +394,7 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
       dedup,
       messageFetcher,
       reportDropProgress,
+      reportSkippedDrops,
       stageDroppedEmails,
       trackExpansion,
       tryClaimEmailAttachment,
@@ -510,4 +545,25 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
       renderSettings={(props) => <AddinSettingsDialog {...props} />}
     />
   );
+}
+
+/**
+ * The upload alert shows `message`; the class's own copy suggests a reload,
+ * which is the wrong advice for a file that was merely skipped.
+ */
+function skippedDropError(
+  reason: DroppedFileSkipReason,
+  names: string,
+): UploadUnknownError {
+  const message =
+    reason === "no-fetcher"
+      ? t({
+          id: "officeAddin.chatInput.dropSkipped.noFetcher",
+          message: `Couldn't add ${names}: a connected mailbox is needed for .msg files.`,
+        })
+      : t({
+          id: "officeAddin.chatInput.dropSkipped.unparseable",
+          message: `Couldn't add ${names}: not a readable email.`,
+        });
+  return Object.assign(new UploadUnknownError(), { message });
 }
