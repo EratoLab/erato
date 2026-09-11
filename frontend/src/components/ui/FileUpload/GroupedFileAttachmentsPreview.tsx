@@ -108,6 +108,11 @@ export type FileAttachmentGroupItem =
        * broken.
        */
       onToggle?: () => void;
+      /**
+       * Verdict on the message as a whole. When `ok` is false the header
+       * shows `reason` under its text; the attachment rows keep their own.
+       */
+      validation?: { ok: boolean; reason?: string };
       /** Initially collapsed when true. Default: true. */
       defaultCollapsed?: boolean;
       attachments: ThreadMessageAttachmentItem[];
@@ -447,6 +452,7 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
                     sublabel={item.sublabel}
                     selected={item.selected}
                     onToggle={item.onToggle}
+                    validation={item.validation}
                     disabled={disabled}
                     defaultCollapsed={item.defaultCollapsed}
                     attachmentCount={item.attachments.length}
