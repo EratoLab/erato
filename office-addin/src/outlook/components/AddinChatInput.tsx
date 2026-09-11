@@ -1,5 +1,4 @@
 import {
-  FileTypeUtil,
   GroupedFileAttachmentsPreview,
   SpinnerIcon,
   UploadTooLargeError,
@@ -8,6 +7,7 @@ import {
   getIdToken,
   isUploadTooLarge,
   useChatInputControls,
+  useFileCapabilitiesContext,
   useFileUploadStore,
   useUploadFeature,
   validateFileSizes,
@@ -22,7 +22,14 @@ import {
   type FileUploadItem,
 } from "@erato/frontend/library";
 import { plural, t } from "@lingui/core/macro";
-import { forwardRef, useCallback, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { AddinChatInputCore } from "../../core/AddinChatInputCore";
 import { useOffice } from "../../providers/OfficeProvider";
@@ -52,35 +59,19 @@ import {
 } from "../utils/outlookScheduleTool";
 import { restoreComposerDraft } from "../utils/restoreComposerDraft";
 import { EmailTrimError } from "../utils/trimRawEmlBytes";
+import {
+  isPolicyExcluded,
+  validateStagedPart,
+  type StagedPartValidation,
+} from "../utils/validateStagedPart";
 
 import type { DropPipelineState } from "../hooks/useDropPipeline";
 
-function validateAttachment(
-  filename: string,
-  mimeType: string,
-  size: number,
-  globalMaxBytes: number,
-  globalMaxFormatted: string,
-): { ok: true } | { ok: false; reason: string } {
-  // Apply the backend's global cap first — per-type static caps in
-  // FileTypeUtil are typically more permissive, so the global is what
-  // most uploads will hit. Surfacing the actual server-side cap means
-  // the user sees the same message they'd get on a post-upload 413.
-  if (globalMaxBytes > 0 && size > globalMaxBytes) {
-    return {
-      ok: false,
-      reason: t({
-        id: "officeAddin.chatInput.validation.tooLarge",
-        message: `File exceeds the server limit of ${globalMaxFormatted}`,
-      }),
-    };
-  }
-  const result = FileTypeUtil.validateMetadata({ filename, mimeType });
-  if (!result.valid) {
-    return { ok: false, reason: result.error ?? "Invalid file" };
-  }
-  return { ok: true };
-}
+/** Verdicts keyed like the dismissals: thread message id or drop key, then attachment id. */
+type StagedPartVerdicts = ReadonlyMap<
+  string,
+  ReadonlyMap<string, StagedPartValidation>
+>;
 
 interface AddinChatInputProps {
   onSendMessage: (
@@ -319,9 +310,12 @@ export const AddinChatInput = forwardRef<
     restoreStagedEmailAttachment,
     dismissStagedEmailBody,
     restoreStagedEmailBody,
+    setPolicyExcludedAttachmentIds,
   } = useOutlookEmailSource();
   const { maxSizeBytes: globalMaxSizeBytes, maxSizeFormatted } =
     useUploadFeature();
+  const { capabilities, isLoading: isLoadingCapabilities } =
+    useFileCapabilitiesContext();
   // The composer's alert renders and clears this store; a local copy would outlive it.
   const setUploadStoreError = useFileUploadStore((state) => state.setError);
   // The composer clears itself on handoff, before this handler can size-check;
@@ -368,6 +362,59 @@ export const AddinChatInput = forwardRef<
           isLoadingAttachments ||
           parentReplyContext !== null ||
           isLoadingParentReplyContext)));
+  // One verdict per rendered attachment row, shared by the rows and the
+  // exclusions handed to the provider so the two can never disagree.
+  const stagedPartVerdicts = useMemo<StagedPartVerdicts>(() => {
+    const limits = {
+      maxBytes: globalMaxSizeBytes,
+      maxFormatted: maxSizeFormatted,
+    };
+    const typePolicy = { capabilities, isLoading: isLoadingCapabilities };
+    const verdicts = new Map<string, Map<string, StagedPartValidation>>();
+    for (const staged of stagedEmails) {
+      if (staged.source === "current-thread") {
+        for (const message of staged.thread.messages) {
+          const perMessage = new Map<string, StagedPartValidation>();
+          for (const attachment of message.attachments) {
+            if (attachment.isInline) continue;
+            perMessage.set(
+              attachment.id,
+              validateStagedPart(attachment, limits, typePolicy),
+            );
+          }
+          verdicts.set(message.id, perMessage);
+        }
+        continue;
+      }
+      const perDrop = new Map<string, StagedPartValidation>();
+      for (const attachment of staged.parsed.attachments) {
+        if (attachment.disposition === "inline" || attachment.related) continue;
+        perDrop.set(
+          attachment.id,
+          validateStagedPart(attachment, limits, typePolicy),
+        );
+      }
+      verdicts.set(staged.key, perDrop);
+    }
+    return verdicts;
+  }, [
+    capabilities,
+    globalMaxSizeBytes,
+    isLoadingCapabilities,
+    maxSizeFormatted,
+    stagedEmails,
+  ]);
+
+  useEffect(() => {
+    for (const [key, perKey] of stagedPartVerdicts) {
+      const excluded: string[] = [];
+      for (const [attachmentId, verdict] of perKey) {
+        if (isPolicyExcluded(verdict)) excluded.push(attachmentId);
+      }
+      setPolicyExcludedAttachmentIds(key, excluded);
+    }
+  }, [setPolicyExcludedAttachmentIds, stagedPartVerdicts]);
+
   const emailSourceGroups = useMemo<FileAttachmentGroup[]>(() => {
     const groups: FileAttachmentGroup[] = [];
 
@@ -492,13 +539,10 @@ export const AddinChatInput = forwardRef<
                 const dismissed = staged.dismissedAttachmentIds.has(
                   attachment.id,
                 );
-                const validation = validateAttachment(
-                  attachment.filename,
-                  attachment.mimeType,
-                  attachment.size,
-                  globalMaxSizeBytes,
-                  maxSizeFormatted,
-                );
+                const validation = stagedPartVerdicts
+                  .get(message.id)
+                  ?.get(attachment.id);
+                const excluded = !!validation && isPolicyExcluded(validation);
                 return {
                   id: attachment.id,
                   file: {
@@ -507,13 +551,21 @@ export const AddinChatInput = forwardRef<
                     size: attachment.size,
                   },
                   selected: !dismissed,
-                  onToggle: () => {
-                    if (dismissed) {
-                      restoreStagedEmailAttachment(message.id, attachment.id);
-                    } else {
-                      dismissStagedEmailAttachment(message.id, attachment.id);
-                    }
-                  },
+                  onToggle: excluded
+                    ? undefined
+                    : () => {
+                        if (dismissed) {
+                          restoreStagedEmailAttachment(
+                            message.id,
+                            attachment.id,
+                          );
+                        } else {
+                          dismissStagedEmailAttachment(
+                            message.id,
+                            attachment.id,
+                          );
+                        }
+                      },
                   validation,
                 };
               });
@@ -589,13 +641,10 @@ export const AddinChatInput = forwardRef<
           continue;
         }
         const isDismissed = staged.dismissedAttachmentIds.has(attachment.id);
-        const validation = validateAttachment(
-          attachment.filename,
-          attachment.mimeType,
-          attachment.size,
-          globalMaxSizeBytes,
-          maxSizeFormatted,
-        );
+        const validation = stagedPartVerdicts
+          .get(staged.key)
+          ?.get(attachment.id);
+        const excluded = !!validation && isPolicyExcluded(validation);
         items.push({
           kind: "selectableAttachment",
           id: `${staged.key}:${attachment.id}`,
@@ -605,13 +654,15 @@ export const AddinChatInput = forwardRef<
             size: attachment.size,
           },
           selected: !isDismissed,
-          onToggle: () => {
-            if (isDismissed) {
-              restoreStagedEmailAttachment(staged.key, attachment.id);
-            } else {
-              dismissStagedEmailAttachment(staged.key, attachment.id);
-            }
-          },
+          onToggle: excluded
+            ? undefined
+            : () => {
+                if (isDismissed) {
+                  restoreStagedEmailAttachment(staged.key, attachment.id);
+                } else {
+                  dismissStagedEmailAttachment(staged.key, attachment.id);
+                }
+              },
           validation,
         });
       }
@@ -699,19 +750,18 @@ export const AddinChatInput = forwardRef<
     emailBodyFile,
     emailThreadLoadError,
     emailSubject,
-    globalMaxSizeBytes,
     hasDroppedStagedEmails,
     isEmailBodyIncluded,
     isLoadingAttachments,
     isLoadingEmailBody,
     isLoadingParentReplyContext,
-    maxSizeFormatted,
     parentReplyContext,
     restoreStagedEmailAttachment,
     restoreStagedEmailBody,
     selectedAttachmentItems,
     showSuggestedEmailSource,
     stagedEmails,
+    stagedPartVerdicts,
   ]);
 
   const handleRemoveEmailSourceFile = useCallback(
