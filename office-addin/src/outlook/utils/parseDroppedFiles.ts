@@ -35,9 +35,18 @@ interface ParseDroppedFilesOptions {
   onProgress?: (progress: ParseDroppedFilesProgress) => void;
 }
 
+export type DroppedFileSkipReason = "no-fetcher" | "unparseable";
+
+export interface SkippedDroppedFile {
+  file: File;
+  reason: DroppedFileSkipReason;
+}
+
 export interface ParseDroppedFilesResult {
   emails: ParsedEmail[];
   nonEmail: File[];
+  /** Email files that yielded nothing; duplicates are not listed. */
+  skipped: SkippedDroppedFile[];
 }
 
 interface EmailUnit {
@@ -62,6 +71,7 @@ export async function parseDroppedFiles(
   options: ParseDroppedFilesOptions = {},
 ): Promise<ParseDroppedFilesResult> {
   const nonEmail: File[] = [];
+  const skipped: SkippedDroppedFile[] = [];
   const units: EmailUnit[] = [];
 
   for (const file of files) {
@@ -75,10 +85,7 @@ export async function parseDroppedFiles(
       });
     } else if (isMsgFile(file)) {
       if (!options.fetcher) {
-        console.warn(
-          "[parseDroppedFiles] .msg drop received without a message fetcher — skipping",
-          file.name,
-        );
+        skipped.push({ file, reason: "no-fetcher" });
         continue;
       }
       units.push({
@@ -134,7 +141,10 @@ export async function parseDroppedFiles(
 
   const emails: ParsedEmail[] = [];
   for (const unit of units) {
-    if (!unit.parsed) continue;
+    if (!unit.parsed) {
+      skipped.push({ file: unit.file, reason: "unparseable" });
+      continue;
+    }
     if (!claim(unit.messageId, options.tryAttachEmail)) {
       logSkip(unit.file.name, unit.messageId);
       continue;
@@ -142,7 +152,7 @@ export async function parseDroppedFiles(
     emails.push(unit.parsed);
   }
 
-  return { emails, nonEmail };
+  return { emails, nonEmail, skipped };
 }
 
 /**

@@ -76,6 +76,7 @@ describe("parseDroppedFiles", () => {
     expect(result.emails[0].messageId).toBe("<a@x>");
     expect(result.nonEmail).toHaveLength(1);
     expect(result.nonEmail[0]).toBe(pdf);
+    expect(result.skipped).toEqual([]);
   });
 
   it("passes regular files through unchanged when there are no emails", async () => {
@@ -149,12 +150,12 @@ describe("parseDroppedFiles", () => {
     expect(byteLookups).toEqual([]);
     expect(result.emails).toEqual([]);
     expect(result.nonEmail).toEqual([]);
+    expect(result.skipped).toEqual([{ file: msg, reason: "unparseable" }]);
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
   });
 
-  it("skips .msg drops without a message fetcher", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("reports .msg drops without a message fetcher as skipped", async () => {
     const msg = new File(["msg"], "x.msg", {
       type: "application/vnd.ms-outlook",
     });
@@ -163,8 +164,49 @@ describe("parseDroppedFiles", () => {
 
     expect(result.emails).toEqual([]);
     expect(result.nonEmail).toEqual([]);
-    expect(warnSpy).toHaveBeenCalled();
+    expect(result.skipped).toEqual([{ file: msg, reason: "no-fetcher" }]);
+  });
+
+  it("reports an .eml whose bytes cannot be read as skipped", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const eml = makeEmlFile(buildEml("<a@x>"), "broken.eml");
+    eml.arrayBuffer = () => Promise.reject(new Error("read failed"));
+
+    const result = await parseDroppedFiles([eml]);
+
+    expect(result.emails).toEqual([]);
+    expect(result.skipped).toEqual([{ file: eml, reason: "unparseable" }]);
     warnSpy.mockRestore();
+  });
+
+  it("partitions a mixed drop and leaves duplicates out of skipped", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const { fetcher } = makeFetcherStub();
+    const ok = makeEmlFile(buildEml("<ok@x>"), "ok.eml");
+    const dup = makeEmlFile(buildEml("<ok@x>"), "dup.eml");
+    const pdf = new File(["pdf"], "doc.pdf", { type: "application/pdf" });
+    const broken = makeDroppedMsgFile(
+      new Uint8Array([1, 2, 3, 4]),
+      "broken.msg",
+    );
+    const claimed = new Set<string>();
+    const tryAttachEmail = (messageId: string) => {
+      if (claimed.has(messageId)) return false;
+      claimed.add(messageId);
+      return true;
+    };
+
+    const result = await parseDroppedFiles([ok, pdf, dup, broken], {
+      fetcher,
+      tryAttachEmail,
+    });
+
+    expect(result.emails.map((email) => email.messageId)).toEqual(["<ok@x>"]);
+    expect(result.nonEmail).toEqual([pdf]);
+    expect(result.skipped).toEqual([{ file: broken, reason: "unparseable" }]);
+    warnSpy.mockRestore();
+    logSpy.mockRestore();
   });
 
   it("reports reading for every email in input order, then resolving for each .msg", async () => {
