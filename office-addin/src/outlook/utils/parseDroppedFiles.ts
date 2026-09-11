@@ -1,11 +1,11 @@
-import { mapWithConcurrency } from "../../utils/mapWithConcurrency";
-import { yieldToRenderer } from "../../utils/yieldToRenderer";
 import { isEmlFile, parseEmlToParsedEmail } from "./parseEmlFile";
 import { readMsgFile, resolveMsgRead } from "./parseMsgFile";
+import { mapWithConcurrency } from "../../utils/mapWithConcurrency";
+import { yieldToRenderer } from "../../utils/yieldToRenderer";
 
 import type { OutlookMessageFetcher } from "./fetchOutlookMessage";
-import type { ParsedEmail } from "./parsedEmail";
 import type { MsgRead } from "./parseMsgFile";
+import type { ParsedEmail } from "./parsedEmail";
 
 const MSG_RESOLVE_CONCURRENCY = 4;
 
