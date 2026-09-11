@@ -1,5 +1,8 @@
 import PostalMime from "postal-mime";
 
+import { parseMimeStructure } from "./emlMimeStructure";
+import { canTrimInside, listAttachmentLeaves } from "./trimEmlAttachments";
+
 import type { Address, Attachment } from "postal-mime";
 
 export interface ParsedEmailAddress {
@@ -23,6 +26,13 @@ export interface ParsedAttachment {
    * or does not parse.
    */
   nested?: ParsedEmail;
+  /**
+   * Whether a dismissal inside `nested` can be cut out of this email's bytes.
+   * False when the forward is transfer-encoded: its parts are not addressable
+   * in place, so only the forward as a whole can be left out. Present with
+   * `nested` only.
+   */
+  nestedTrimmable?: boolean;
 }
 
 export interface ParsedEmail {
@@ -44,13 +54,19 @@ export interface ParsedEmail {
 export interface ParseEmlBytesOptions {
   /** File name to surface on the wrapped `.eml` File. Defaults to a sanitised subject. */
   filename?: string;
+  /**
+   * Prepended to every attachment id (`<prefix>att-0`, and on down into
+   * forwards). Lets a caller that holds several parsed emails keep one flat
+   * id set.
+   */
+  idPrefix?: string;
 }
 
 export async function parseEmlBytes(
   bytes: ArrayBuffer,
   options: ParseEmlBytesOptions = {},
 ): Promise<ParsedEmail | null> {
-  return parseEmlBytesAt(bytes, options, 0, "");
+  return parseEmlBytesAt(bytes, options, 0, options.idPrefix ?? "");
 }
 
 /** Forwarded emails nest no deeper than this; beyond it a part stays opaque. */
@@ -74,9 +90,18 @@ async function parseEmlBytesAt(
     return null;
   }
 
+  const rawAttachments = parsed.attachments ?? [];
+  const trimmableLeaves = rawAttachments.some(isMessagePart)
+    ? listTrimmableLeaves(bytes)
+    : [];
   const attachments: ParsedAttachment[] = await Promise.all(
-    (parsed.attachments ?? []).map((attachment, index) =>
-      buildAttachment(attachment, `${idPrefix}att-${index}`, depth),
+    rawAttachments.map((attachment, index) =>
+      buildAttachment(
+        attachment,
+        `${idPrefix}att-${index}`,
+        depth,
+        trimmableLeaves[index] === true,
+      ),
     ),
   );
 
@@ -104,13 +129,28 @@ async function parseEmlBytesAt(
   };
 }
 
+function isMessagePart(attachment: Attachment): boolean {
+  return (attachment.mimeType || "").trim().toLowerCase() === "message/rfc822";
+}
+
+/**
+ * Per attachment, in postal-mime's order, whether the trimmer can reach into
+ * it. Reads the same leaf list the trimmer walks, so the indices agree.
+ */
+function listTrimmableLeaves(bytes: ArrayBuffer): boolean[] {
+  const root = parseMimeStructure(new Uint8Array(bytes));
+  if (!root) return [];
+  return listAttachmentLeaves(root).map(canTrimInside);
+}
+
 async function buildAttachment(
   attachment: Attachment,
   id: string,
   depth: number,
+  trimmable: boolean,
 ): Promise<ParsedAttachment> {
   const mimeType = attachment.mimeType || "application/octet-stream";
-  const isMessage = mimeType.trim().toLowerCase() === "message/rfc822";
+  const isMessage = isMessagePart(attachment);
   const blobPart = toBlobPart(attachment.content);
   const size = blobPart instanceof ArrayBuffer ? blobPart.byteLength : 0;
   const nested =
@@ -138,7 +178,7 @@ async function buildAttachment(
       blobPart === null
         ? new File([], filename, { type: mimeType })
         : new File([blobPart], filename, { type: mimeType }),
-    ...(nested ? { nested } : {}),
+    ...(nested ? { nested, nestedTrimmable: trimmable } : {}),
   };
 }
 

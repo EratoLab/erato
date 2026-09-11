@@ -18,6 +18,17 @@ export type AttachmentTarget = number | string;
 const IDENTITY_TRANSFER_ENCODINGS = new Set(["", "7bit", "8bit", "binary"]);
 
 /**
+ * Whether a path can descend into this part: a forwarded email whose bytes
+ * sit in the stream as-is, so its own parts are addressable in place.
+ */
+export function canTrimInside(part: MimePart): boolean {
+  return (
+    part.contentType === "message/rfc822" &&
+    IDENTITY_TRANSFER_ENCODINGS.has(part.contentTransferEncoding)
+  );
+}
+
+/**
  * Surgically removes specific attachment parts from a `.eml` byte stream.
  *
  * Matching contract: `targets` are indices into the same flat ordering
@@ -107,10 +118,7 @@ function resolvePath(
   let leaf: MimePart | null = null;
   for (let depth = 0; depth < path.length; depth++) {
     if (leaf) {
-      if (
-        leaf.contentType !== "message/rfc822" ||
-        !IDENTITY_TRANSFER_ENCODINGS.has(leaf.contentTransferEncoding)
-      ) {
+      if (!canTrimInside(leaf)) {
         return null;
       }
       levelRoot = parseMimeStructureAt(bytes, leaf.bodyStart, leaf.end);
