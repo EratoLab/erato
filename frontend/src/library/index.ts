@@ -487,6 +487,10 @@ export {
 } from "@/utils/adapters/contentPartAdapter";
 export { getSupportedFileTypes } from "@/utils/capabilitiesToFileTypes";
 export {
+  findCapabilityByExtension,
+  hasSupportedOperations,
+} from "@/utils/fileCapabilities";
+export {
   mapMessageToUiMessage,
   type UiChatMessage,
 } from "@/utils/adapters/messageAdapter";
