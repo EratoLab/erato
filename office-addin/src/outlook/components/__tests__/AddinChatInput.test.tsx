@@ -18,7 +18,7 @@ import type {
   StagedEmail,
 } from "../../providers/OutlookEmailSourceProvider";
 import type { ParsedEmail } from "../../utils/parsedEmail";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 
 // The composer and the preview are stubbed to what this suite reads: the
 // props the wrapper hands down and the per-card actions it renders. Every
@@ -136,8 +136,8 @@ vi.mock("@erato/frontend/library", () => {
       return { valid: oversizedFiles.length === 0, oversizedFiles };
     },
     // Transitive needs of the wrapper's helper modules.
-    FileTypeUtil: { getFileTypeFromMetadata: () => "document" },
-    getSupportedFileTypes: () => [],
+    findCapabilityByExtension: () => null,
+    hasSupportedOperations: () => false,
     htmlToPlainText: (html: string) => html,
   };
 });
@@ -232,10 +232,11 @@ function renderInput() {
   const onSendMessage = vi.fn();
   const onEmailSourceDropsSent = vi.fn();
   // A fresh element per render, or React bails out on the unchanged props.
-  const ui = () => (
+  const ui = (props: Partial<ComponentProps<typeof AddinChatInput>> = {}) => (
     <AddinChatInput
       onSendMessage={onSendMessage}
       onEmailSourceDropsSent={onEmailSourceDropsSent}
+      {...props}
     />
   );
   return { ...render(ui()), ui, onSendMessage, onEmailSourceDropsSent };
@@ -398,5 +399,28 @@ describe("AddinChatInput", () => {
     rerender(ui());
 
     await waitFor(() => expect(uploadErrorText()).toBe(""));
+  });
+
+  it("keeps showing the failure while the owner has no newer error", async () => {
+    h.fetchUploadFile.mockRejectedValueOnce(new Error("network down"));
+    const { onSendMessage, rerender, ui } = renderInput();
+    send();
+    await expectDeclinedSend(onSendMessage);
+
+    rerender(ui({ uploadError: null }));
+
+    expect(uploadErrorText()).toContain("Couldn't upload quarterly.eml.");
+  });
+
+  it("yields to an owner error raised after the failure", async () => {
+    h.fetchUploadFile.mockRejectedValueOnce(new Error("network down"));
+    const { onSendMessage, rerender, ui } = renderInput();
+    send();
+    await expectDeclinedSend(onSendMessage);
+
+    const ownerError = new Error("x.zip cannot be processed");
+    rerender(ui({ uploadError: ownerError }));
+
+    await waitFor(() => expect(h.chatInput.props.uploadError).toBe(ownerError));
   });
 });
