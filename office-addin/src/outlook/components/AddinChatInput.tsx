@@ -52,6 +52,10 @@ import {
   isAppointmentCompose as isAppointmentComposeItem,
   resolveSupportedMailboxItem,
 } from "../sessionPolicy";
+import {
+  buildDropEmailGroup,
+  isEmailBodyPart,
+} from "../utils/buildDropEmailGroup";
 import { resolveOutlookActionFacet } from "../utils/outlookActionFacet";
 import { OUTLOOK_REPLY_FROM_READ_FACET_ID } from "../utils/outlookClientActions";
 import {
@@ -69,6 +73,7 @@ import { EmailTrimError } from "../utils/trimRawEmlBytes";
 import {
   isPolicyExcluded,
   validateStagedPart,
+  type StagedPartMetadata,
   type StagedPartValidation,
 } from "../utils/validateStagedPart";
 
@@ -397,40 +402,58 @@ export const AddinChatInput = forwardRef<
           parentReplyContext !== null ||
           isLoadingParentReplyContext)));
   // One verdict per rendered attachment row, shared by the rows and the
-  // exclusions handed to the provider so the two can never disagree.
-  const stagedPartVerdicts = useMemo<StagedPartVerdicts>(() => {
+  // exclusions handed to the provider so the two can never disagree. A part
+  // inside a forwarded email that cannot be cut out is judged for its badge
+  // but never excluded: that would demand a trim the bytes cannot honour.
+  const { stagedPartVerdicts, policyExclusions } = useMemo<{
+    stagedPartVerdicts: StagedPartVerdicts;
+    policyExclusions: ReadonlyMap<string, string[]>;
+  }>(() => {
     const limits = {
       maxBytes: globalMaxSizeBytes,
       maxFormatted: maxSizeFormatted,
     };
     const typePolicy = { capabilities, isLoading: isLoadingCapabilities };
     const verdicts = new Map<string, Map<string, StagedPartValidation>>();
+    const exclusions = new Map<string, string[]>();
+    const judge = (
+      perKey: Map<string, StagedPartValidation>,
+      excluded: string[],
+      part: StagedPartMetadata & { id: string },
+      enforce = true,
+    ) => {
+      const verdict = validateStagedPart(part, limits, typePolicy);
+      perKey.set(part.id, verdict);
+      if (enforce && isPolicyExcluded(verdict)) excluded.push(part.id);
+    };
     for (const staged of stagedEmails) {
       if (staged.source === "current-thread") {
         for (const message of staged.thread.messages) {
           const perMessage = new Map<string, StagedPartValidation>();
+          const excluded: string[] = [];
           for (const attachment of message.attachments) {
             if (attachment.isInline) continue;
-            perMessage.set(
-              attachment.id,
-              validateStagedPart(attachment, limits, typePolicy),
-            );
+            judge(perMessage, excluded, attachment);
           }
           verdicts.set(message.id, perMessage);
+          exclusions.set(message.id, excluded);
         }
         continue;
       }
       const perDrop = new Map<string, StagedPartValidation>();
+      const excluded: string[] = [];
       for (const attachment of staged.parsed.attachments) {
-        if (attachment.disposition === "inline" || attachment.related) continue;
-        perDrop.set(
-          attachment.id,
-          validateStagedPart(attachment, limits, typePolicy),
-        );
+        if (isEmailBodyPart(attachment)) continue;
+        judge(perDrop, excluded, attachment);
+        for (const part of attachment.nested?.attachments ?? []) {
+          if (isEmailBodyPart(part)) continue;
+          judge(perDrop, excluded, part, attachment.nestedTrimmable === true);
+        }
       }
       verdicts.set(staged.key, perDrop);
+      exclusions.set(staged.key, excluded);
     }
-    return verdicts;
+    return { stagedPartVerdicts: verdicts, policyExclusions: exclusions };
   }, [
     capabilities,
     globalMaxSizeBytes,
@@ -440,14 +463,10 @@ export const AddinChatInput = forwardRef<
   ]);
 
   useEffect(() => {
-    for (const [key, perKey] of stagedPartVerdicts) {
-      const excluded: string[] = [];
-      for (const [attachmentId, verdict] of perKey) {
-        if (isPolicyExcluded(verdict)) excluded.push(attachmentId);
-      }
+    for (const [key, excluded] of policyExclusions) {
       setPolicyExcludedAttachmentIds(key, excluded);
     }
-  }, [setPolicyExcludedAttachmentIds, stagedPartVerdicts]);
+  }, [policyExclusions, setPolicyExcludedAttachmentIds]);
 
   // The composer's own attachments, mirrored here so the limit check can
   // count them next to the staged emails it will upload alongside.
@@ -697,107 +716,26 @@ export const AddinChatInput = forwardRef<
         continue;
       }
 
-      // source === "drop" — one .eml dragged onto the chat, flat layout.
-      const items: FileAttachmentGroupItem[] = [];
+      // source === "drop" — one .eml dragged onto the chat.
       // The trimmed file is what gets sent, so its size is the one to show;
       // a dismissed or failed drop has none and falls back to the original.
       const resolvedDrop = resolvedDrops.find(
         (drop) => drop.key === staged.key,
       );
-      items.push({
-        kind: "selectableAttachment",
-        id: `${staged.key}:body`,
-        file: {
-          id: `${staged.key}:body`,
-          filename: staged.parsed.rawEmlFile.name,
-          displayName: t({
-            id: "officeAddin.chatInput.emailBody",
-            message: "Email body",
-          }),
-          size: resolvedDrop?.file?.size ?? staged.parsed.rawEmlFile.size,
-        },
-        metaLabel: isDropResolutionStale ? updatingLabel : undefined,
-        selected: !staged.bodyDismissed,
-        onToggle: () => {
-          if (staged.bodyDismissed) {
-            restoreStagedEmailBody(staged.key);
-          } else {
-            dismissStagedEmailBody(staged.key);
-          }
-        },
-        labelOverride: t({
-          id: "officeAddin.chatInput.emailLabel",
-          message: "Email",
+      groups.push(
+        buildDropEmailGroup(staged, {
+          resolvedSize: resolvedDrop?.file?.size,
+          bodyMetaLabel: isDropResolutionStale ? updatingLabel : undefined,
+          verdicts: stagedPartVerdicts.get(staged.key),
+          fallbackSubject: emailSubject,
+          dismissBody: () => dismissStagedEmailBody(staged.key),
+          restoreBody: () => restoreStagedEmailBody(staged.key),
+          dismissAttachment: (attachmentId) =>
+            dismissStagedEmailAttachment(staged.key, attachmentId),
+          restoreAttachment: (attachmentId) =>
+            restoreStagedEmailAttachment(staged.key, attachmentId),
         }),
-      });
-
-      for (const attachment of staged.parsed.attachments) {
-        if (attachment.disposition === "inline" || attachment.related) {
-          // Part of the body rather than attached to it: always sent, so the
-          // row is read-only and counts toward the size like any other.
-          items.push({
-            kind: "selectableAttachment",
-            id: `${staged.key}:${attachment.id}`,
-            file: {
-              id: `${staged.key}:${attachment.id}`,
-              filename: attachment.filename,
-              size: attachment.size,
-            },
-            selected: true,
-          });
-          continue;
-        }
-        const isDismissed = staged.dismissedAttachmentIds.has(attachment.id);
-        const validation = stagedPartVerdicts
-          .get(staged.key)
-          ?.get(attachment.id);
-        const excluded = !!validation && isPolicyExcluded(validation);
-        items.push({
-          kind: "selectableAttachment",
-          id: `${staged.key}:${attachment.id}`,
-          file: {
-            id: `${staged.key}:${attachment.id}`,
-            filename: attachment.filename,
-            size: attachment.size,
-          },
-          selected: !isDismissed,
-          onToggle: excluded
-            ? undefined
-            : () => {
-                if (isDismissed) {
-                  restoreStagedEmailAttachment(staged.key, attachment.id);
-                } else {
-                  dismissStagedEmailAttachment(staged.key, attachment.id);
-                }
-              },
-          validation,
-        });
-      }
-
-      const fromLabel = staged.parsed.from
-        ? staged.parsed.from.name || staged.parsed.from.address
-        : "";
-      const dateLabel = staged.parsed.date
-        ? new Date(staged.parsed.date).toLocaleDateString()
-        : "";
-      const metaParts = [fromLabel, dateLabel].filter(
-        (part) => part.length > 0,
       );
-
-      groups.push({
-        id: `staged-email:${staged.key}`,
-        label:
-          staged.parsed.subject ||
-          emailSubject ||
-          t({
-            id: "officeAddin.chatInput.emailFallback",
-            message: "Email",
-          }),
-        metaLabel: metaParts.join(" • "),
-        items,
-        collapsible: true,
-        defaultCollapsed: true,
-      });
     }
 
     // Office.js compose-mode attachments fallback. These are only relevant
