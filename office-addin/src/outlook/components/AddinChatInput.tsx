@@ -1,4 +1,5 @@
 import {
+  Button,
   DEFAULT_MAX_FILES_PER_MESSAGE,
   GroupedFileAttachmentsPreview,
   SpinnerIcon,
@@ -33,6 +34,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 
 import { AddinChatInputCore } from "../../core/AddinChatInputCore";
@@ -870,6 +872,36 @@ export const AddinChatInput = forwardRef<
     stagedPartVerdicts,
   ]);
 
+  // A dropped email leaves through the same door a sent one does, so the
+  // owner releases its dedup claim too. The card shows it only when expanded.
+  const emailSourceGroupActions = useMemo(() => {
+    const actions: Partial<Record<string, ReactNode>> = {};
+    for (const staged of stagedEmails) {
+      if (staged.source !== "drop") continue;
+      const drop = {
+        key: staged.key,
+        messageId: staged.parsed.messageId ?? null,
+      };
+      actions[`staged-email:${staged.key}`] = (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="self-start px-0 text-xs"
+          disabled={isUploadingEmail}
+          onClick={() => onEmailSourceDropsSent?.([drop])}
+          data-testid={`addin-staged-email-remove-${staged.key}`}
+        >
+          {t({
+            id: "officeAddin.chatInput.removeDroppedEmail",
+            message: "Remove",
+          })}
+        </Button>
+      );
+    }
+    return actions;
+  }, [isUploadingEmail, onEmailSourceDropsSent, stagedEmails]);
+
   const handleRemoveEmailSourceFile = useCallback(
     (fileId: string) => {
       if (fileId === "email-body") {
@@ -1220,6 +1252,7 @@ export const AddinChatInput = forwardRef<
           >
             <GroupedFileAttachmentsPreview
               groups={emailSourceGroups}
+              groupActions={emailSourceGroupActions}
               onRemoveFile={handleRemoveEmailSourceFile}
               disabled={isUploadingEmail}
               showFileTypes={true}
