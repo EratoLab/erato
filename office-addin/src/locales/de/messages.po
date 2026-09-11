@@ -246,6 +246,26 @@ msgstr "Dein Entwurf wird als Kontext einbezogen"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.dropPipeline.reading"
+msgstr "E-Mail {index} von {total} wird gelesen…"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.dropPipeline.receiving"
+msgstr "{count, plural, one {# E-Mail wird empfangen…} other {# E-Mails werden empfangen…}}"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.dropPipeline.resolving"
+msgstr "{index} von {total} wird im Postfach gesucht…"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.dropPipeline.staging"
+msgstr "Wird zum Chat hinzugefügt…"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.emailBody"
 msgstr "E-Mail-Inhalt"
 

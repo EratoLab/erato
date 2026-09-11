@@ -21,7 +21,7 @@ import {
   type FileType,
   type FileUploadItem,
 } from "@erato/frontend/library";
-import { t } from "@lingui/core/macro";
+import { plural, t } from "@lingui/core/macro";
 import { forwardRef, useCallback, useMemo, useRef, useState } from "react";
 
 import { AddinChatInputCore } from "../../core/AddinChatInputCore";
@@ -52,6 +52,8 @@ import {
 } from "../utils/outlookScheduleTool";
 import { restoreComposerDraft } from "../utils/restoreComposerDraft";
 import { EmailTrimError } from "../utils/trimRawEmlBytes";
+
+import type { DropPipelineState } from "../hooks/useDropPipeline";
 
 function validateAttachment(
   filename: string,
@@ -128,6 +130,8 @@ interface AddinChatInputProps {
    * indicator so the user knows attachments are still materializing.
    */
   isExpandingDroppedEmails?: boolean;
+  /** Which step the dropped items are in; refines the indicator's copy. */
+  dropPipeline?: DropPipelineState;
   /**
    * Forwarded to `ChatInput.virtualFiles`. The add-in passes its previewed
    * email body here so the token estimate covers it without polluting
@@ -156,6 +160,43 @@ interface AddinChatInputProps {
   lastSchedulingSignalAt?: string | null;
 }
 
+function dropPipelineLabel(pipeline: DropPipelineState | undefined): string {
+  const index = pipeline?.done ?? 0;
+  const total = pipeline?.total ?? 0;
+  switch (pipeline?.phase) {
+    case "receiving": {
+      const count = total;
+      return t({
+        id: "officeAddin.chatInput.dropPipeline.receiving",
+        message: plural(count, {
+          one: "Receiving # email…",
+          other: "Receiving # emails…",
+        }),
+      });
+    }
+    case "reading":
+      return t({
+        id: "officeAddin.chatInput.dropPipeline.reading",
+        message: `Reading email ${index} of ${total}…`,
+      });
+    case "resolving":
+      return t({
+        id: "officeAddin.chatInput.dropPipeline.resolving",
+        message: `Finding ${index} of ${total} in your mailbox…`,
+      });
+    case "staging":
+      return t({
+        id: "officeAddin.chatInput.dropPipeline.staging",
+        message: "Adding to the chat…",
+      });
+    default:
+      return t({
+        id: "officeAddin.chatInput.expandingDroppedEmails",
+        message: "Processing dropped emails…",
+      });
+  }
+}
+
 export const AddinChatInput = forwardRef<
   ChatInputControlsHandle,
   AddinChatInputProps
@@ -165,6 +206,7 @@ export const AddinChatInput = forwardRef<
     className,
     showSuggestedEmailSource = false,
     isExpandingDroppedEmails = false,
+    dropPipeline,
     onEmailSourceDropsSent,
     lastSchedulingSignalAt = null,
     ...chatInputProps
@@ -1039,10 +1081,7 @@ export const AddinChatInput = forwardRef<
           >
             <SpinnerIcon size="sm" aria-hidden />
             <span className="min-w-0 truncate">
-              {t({
-                id: "officeAddin.chatInput.expandingDroppedEmails",
-                message: "Processing dropped emails…",
-              })}
+              {dropPipelineLabel(dropPipeline)}
             </span>
           </div>
         </div>
