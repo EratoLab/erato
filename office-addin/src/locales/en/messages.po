@@ -342,6 +342,11 @@ msgstr "(no subject)"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.stagedSize"
+msgstr "{used} of {limit}"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.unknownSender"
 msgstr "Unknown sender"
 
@@ -587,6 +592,7 @@ msgstr "Loading email thread..."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatAddMenuExtraContent.tsx
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.fileSource.updatingThread"
 msgstr "Updating…"
 
