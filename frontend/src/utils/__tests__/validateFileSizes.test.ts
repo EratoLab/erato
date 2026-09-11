@@ -2,7 +2,11 @@ import { describe, it, expect } from "vitest";
 
 import { makeFileWithSize } from "@/test/fileFixtures";
 
-import { validateFileSizes } from "../validateFileSizes";
+import {
+  oversizedRejectionNames,
+  rejectionNames,
+  validateFileSizes,
+} from "../validateFileSizes";
 
 const MiB = 1024 * 1024;
 const LIMIT = 15 * MiB; // non-default limit used throughout these tests
@@ -83,5 +87,50 @@ describe("validateFileSizes", () => {
         expect(result.oversizedFiles[0]).toBe(file);
       }
     });
+  });
+});
+
+describe("rejectionNames", () => {
+  const rejections = [
+    { file: { name: "wrong.exe" }, errors: [{ code: "file-invalid-type" }] },
+    { file: { name: "big.pdf" }, errors: [{ code: "file-too-large" }] },
+    {
+      file: { name: "both.exe" },
+      errors: [{ code: "file-invalid-type" }, { code: "file-too-large" }],
+    },
+    { file: { name: "fine.pdf" }, errors: [] },
+  ];
+
+  it("names the files whose rejection carries the code", () => {
+    expect(rejectionNames(rejections, "file-invalid-type")).toEqual([
+      "wrong.exe",
+      "both.exe",
+    ]);
+    expect(rejectionNames(rejections, "file-too-large")).toEqual([
+      "big.pdf",
+      "both.exe",
+    ]);
+  });
+
+  it("returns nothing for a code no rejection carries", () => {
+    expect(rejectionNames(rejections, "too-many-files")).toEqual([]);
+  });
+});
+
+describe("oversizedRejectionNames", () => {
+  it("names size-only rejections and leaves out a file that also fails the type check", () => {
+    expect(
+      oversizedRejectionNames([
+        { file: { name: "big.pdf" }, errors: [{ code: "file-too-large" }] },
+        {
+          file: { name: "both.exe" },
+          errors: [{ code: "file-invalid-type" }, { code: "file-too-large" }],
+        },
+        {
+          file: { name: "wrong.exe" },
+          errors: [{ code: "file-invalid-type" }],
+        },
+      ]),
+    ).toEqual(["big.pdf"]);
   });
 });
