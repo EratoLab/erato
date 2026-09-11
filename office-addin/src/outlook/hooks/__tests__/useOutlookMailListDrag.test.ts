@@ -131,6 +131,55 @@ describe("useOutlookMailListDrag", () => {
     expect(result.current.isDragActive).toBe(false);
   });
 
+  it("announces the item count through onDropStart and releases once onDrop settles", async () => {
+    const release = vi.fn();
+    const onDropStart = vi.fn(() => release);
+    let finish: () => void = () => {};
+    const onDrop = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    renderHook(() => useOutlookMailListDrag({ onDrop, onDropStart }));
+
+    act(() => {
+      window.dispatchEvent(
+        buildDragEvent("drop", {
+          transferTypes: [MAILLISTROW_TRANSFER_TYPE],
+          payloadByType: { [MAILLISTROW_TRANSFER_TYPE]: validPayload },
+        }),
+      );
+    });
+
+    expect(onDropStart).toHaveBeenCalledWith(1);
+    expect(onDropStart.mock.invocationCallOrder[0]).toBeLessThan(
+      onDrop.mock.invocationCallOrder[0],
+    );
+    expect(release).not.toHaveBeenCalled();
+
+    await act(async () => {
+      finish();
+    });
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not announce a drop whose payload fails to parse", () => {
+    const onDropStart = vi.fn();
+    renderHook(() => useOutlookMailListDrag({ onDrop: vi.fn(), onDropStart }));
+
+    act(() => {
+      window.dispatchEvent(
+        buildDragEvent("drop", {
+          transferTypes: [MAILLISTROW_TRANSFER_TYPE],
+          payloadByType: { [MAILLISTROW_TRANSFER_TYPE]: "not-json" },
+        }),
+      );
+    });
+
+    expect(onDropStart).not.toHaveBeenCalled();
+  });
+
   it("does not call onDrop when the payload fails to parse", () => {
     const onDrop = vi.fn();
     renderHook(() => useOutlookMailListDrag({ onDrop }));
