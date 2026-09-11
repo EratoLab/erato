@@ -348,6 +348,10 @@ export const AddinChatInput = forwardRef<
       setSendFailure(null);
     }
   }, [sendFailure, stagedEmails]);
+  // A fresh owner error (a refused drop) outranks the held failure.
+  useEffect(() => {
+    if (ownerUploadError) setSendFailure(null);
+  }, [ownerUploadError]);
   // The composer clears itself on handoff, before this handler can size-check;
   // a declined send has to put the draft back.
   const chatInputControls = useChatInputControls();
