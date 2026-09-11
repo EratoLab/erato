@@ -41,17 +41,35 @@ function generateDroppedKey(): string {
   return `drop-${globalThis.crypto.randomUUID()}`;
 }
 
-function collectDismissedIndices(
-  attachments: { id: string }[],
+interface DismissableAttachment {
+  id: string;
+  nested?: { attachments: DismissableAttachment[] };
+}
+
+/** Attachment paths for `trimEmlFileSync`, descending into forwarded emails. */
+function collectDismissedPaths(
+  attachments: DismissableAttachment[],
   dismissedIds: ReadonlySet<string>,
-): number[] {
-  const indices: number[] = [];
+  prefix = "",
+): string[] {
+  const paths: string[] = [];
   attachments.forEach((attachment, index) => {
+    const path = `${prefix}${index}`;
     if (dismissedIds.has(attachment.id)) {
-      indices.push(index);
+      paths.push(path);
+      return;
+    }
+    if (attachment.nested) {
+      paths.push(
+        ...collectDismissedPaths(
+          attachment.nested.attachments,
+          dismissedIds,
+          `${path}/`,
+        ),
+      );
     }
   });
-  return indices;
+  return paths;
 }
 
 export type StagedEmailSource = "current-thread" | "drop";
@@ -150,18 +168,18 @@ function resolveDrop(
   if (dismissals?.bodyDismissed) {
     return { key: entry.key, file: null, size: 0 };
   }
-  const indicesToRemove = collectDismissedIndices(
+  const pathsToRemove = collectDismissedPaths(
     entry.parsed.attachments,
     unionIds(dismissals?.attachmentIds, excludedAttachmentIds),
   );
   const { rawEmlFile } = entry.parsed;
-  if (indicesToRemove.length === 0) {
+  if (pathsToRemove.length === 0) {
     return { key: entry.key, file: rawEmlFile, size: rawEmlFile.size };
   }
   const file = trimEmlFileSync(
     new Uint8Array(entry.parsed.rawBytes),
     rawEmlFile,
-    indicesToRemove,
+    pathsToRemove,
   );
   if (!file) {
     return {
