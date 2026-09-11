@@ -60,6 +60,23 @@ function buildEmailWithForward(
   );
 }
 
+/** The same email with the forwarded part genuinely base64-encoded. */
+function buildEmailWithEncodedForward(): string {
+  const plain = buildEmailWithForward();
+  const partStart = plain.indexOf("Content-Type: message/rfc822");
+  const innerStart = plain.indexOf(CRLF + CRLF, partStart) + 2 * CRLF.length;
+  const innerEnd = plain.lastIndexOf("--", plain.lastIndexOf("----OUTER--"));
+  const inner = plain.slice(innerStart, innerEnd);
+  return (
+    plain.slice(0, partStart) +
+    `Content-Type: message/rfc822${CRLF}` +
+    `Content-Transfer-Encoding: base64${CRLF}${CRLF}` +
+    btoa(inner) +
+    CRLF +
+    plain.slice(innerEnd)
+  );
+}
+
 async function parseAndTrim(targets: AttachmentTarget[]) {
   const parsed = await parseEmlBytes(toArrayBuffer(buildEmailWithForward()));
   if (!parsed) throw new Error("fixture did not parse");
@@ -166,6 +183,41 @@ describe("dismissing parts of a dropped email with a forwarded email inside", ()
     expect(both.reparsed.attachments.map((a) => a.filename)).toEqual([
       "top.pdf",
     ]);
+  });
+
+  it("tells the chips whether a forwarded email's own parts can be cut out", async () => {
+    const plain = await parseEmlBytes(toArrayBuffer(buildEmailWithForward()));
+    const encoded = await parseEmlBytes(
+      toArrayBuffer(buildEmailWithEncodedForward()),
+    );
+
+    expect(plain?.attachments[0].nestedTrimmable).toBeUndefined();
+    expect(plain?.attachments[1].nestedTrimmable).toBe(true);
+    // Still expanded (postal-mime decodes it), but only removable whole.
+    expect(
+      encoded?.attachments[1].nested?.attachments.map((a) => a.filename),
+    ).toEqual(["deep.pdf"]);
+    expect(encoded?.attachments[1].nestedTrimmable).toBe(false);
+    expect(
+      trimEmlAttachments(
+        new Uint8Array(toArrayBuffer(buildEmailWithEncodedForward())),
+        ["1/0"],
+      ),
+    ).toBeNull();
+  });
+
+  it("prefixes every level of ids when asked, so several parsed emails share one id set", async () => {
+    const parsed = await parseEmlBytes(toArrayBuffer(buildEmailWithForward()), {
+      idPrefix: "<m1@x>:item-1/",
+    });
+
+    expect(parsed?.attachments.map((a) => a.id)).toEqual([
+      "<m1@x>:item-1/att-0",
+      "<m1@x>:item-1/att-1",
+    ]);
+    expect(parsed?.attachments[1].nested?.attachments.map((a) => a.id)).toEqual(
+      ["<m1@x>:item-1/att-1/att-0"],
+    );
   });
 
   it("refuses a path into a forwarded email whose bytes are transfer-encoded", () => {
