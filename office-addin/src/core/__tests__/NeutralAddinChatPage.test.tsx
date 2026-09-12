@@ -25,6 +25,7 @@ const spies = vi.hoisted(() => ({
   generationIndicatorCount: { current: 0 },
   componentRegistry: {
     ChatTopLeftAccessory: undefined as (() => ReactNode) | undefined,
+    AddinStartView: null as (() => ReactNode) | null,
   },
   setGenerationCurrentChatId: vi.fn(),
   updateChatTitle: vi.fn(async () => undefined),
@@ -320,6 +321,7 @@ describe("NeutralAddinChatPage host boundary", () => {
 
   beforeEach(() => {
     spies.componentRegistry.ChatTopLeftAccessory = undefined;
+    spies.componentRegistry.AddinStartView = null;
     i18n.activate("en");
     Reflect.deleteProperty(globalThis, "Office");
     spies.drawerProps.length = 0;
@@ -636,6 +638,32 @@ describe("NeutralAddinChatPage host boundary", () => {
     expect(screen.getByTestId("neutral-run-banner").parentElement).toHaveClass(
       "pl-10",
     );
+  });
+
+  it("clears the start-view toggle only while the drawer trigger floats", () => {
+    spies.useDelegatedRunHeader.mockReturnValue({
+      header: <div data-testid="neutral-run-banner" />,
+      composerLocked: false,
+    });
+    function StartView() {
+      return null;
+    }
+    function KitAccessory() {
+      return <div data-testid="kit-accessory" />;
+    }
+    spies.componentRegistry.AddinStartView = StartView;
+
+    const { unmount } = renderPage();
+    expect(screen.getByTestId("neutral-run-banner").parentElement).toHaveClass(
+      "pr-10",
+    );
+    unmount();
+
+    spies.componentRegistry.ChatTopLeftAccessory = KitAccessory;
+    renderPage();
+    const strip = screen.getByTestId("neutral-run-banner").parentElement;
+    expect(strip).not.toHaveClass("pl-10");
+    expect(strip).not.toHaveClass("pr-10");
   });
 
   it("puts a kit accessory and the drawer trigger in one header row", () => {

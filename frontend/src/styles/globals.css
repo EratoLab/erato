@@ -1180,6 +1180,14 @@ body {
   min-height: var(--sidebar-icon-col-content);
 }
 
+/* The hidden-mode sidebar toggle floats at 0.5rem + a small icon button
+   (control-min-height - 0.25rem) + a 0.25rem gap. */
+:root {
+  --chat-top-bar-toggle-column: calc(
+    var(--theme-spacing-control-min-height) + 0.5rem
+  );
+}
+
 /* Sidebar chat rows. Same reasoning as .anchored-popover-skin: held inline,
    the radius made `[data-ui="chat-history-item"]` unoverridable. The row's <a>
    wrapper reads --theme-radius-shell too, so a theme that moves the token keeps
