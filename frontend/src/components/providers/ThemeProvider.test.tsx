@@ -14,6 +14,7 @@ vi.mock("@/app/env", () => ({
 import { env } from "@/app/env";
 
 import {
+  __resetThemeAssetProbeCache,
   TEXT_SIZE_LOCAL_STORAGE_KEY,
   THEME_MODE_LOCAL_STORAGE_KEY,
   ThemeProvider,
@@ -104,6 +105,7 @@ describe("ThemeProvider", () => {
     global.fetch = vi.fn();
     window.matchMedia = createMatchMedia(false);
     localStorage.clear();
+    __resetThemeAssetProbeCache();
   });
 
   afterEach(() => {
@@ -565,5 +567,206 @@ describe("ThemeProvider", () => {
       "x-large",
     );
     expect(localStorage.getItem(TEXT_SIZE_LOCAL_STORAGE_KEY)).toBeNull();
+  });
+  describe("optional theme assets", () => {
+    const THEME_URL = "/public/common/custom-theme/acme/theme.json";
+    const AVATAR_URL = "/public/common/custom-theme/acme/assistant-avatar.svg";
+
+    /**
+     * Routes by URL rather than call order, so an added or removed request
+     * cannot silently shift which response a call receives.
+     */
+    const mockFetchRoutes = (options: {
+      theme: CustomThemeConfig;
+      existingFiles?: string[];
+    }) => {
+      const existing = new Set(options.existingFiles ?? []);
+      global.fetch = vi.fn((url: string, init?: { method?: string }) => {
+        if (init?.method === "HEAD") {
+          return Promise.resolve({
+            ok: existing.has(url),
+            headers: new Headers({ "content-type": "image/svg+xml" }),
+          });
+        }
+        if (url === THEME_URL) {
+          return Promise.resolve({ ok: true, json: () => options.theme });
+        }
+        return Promise.resolve({ ok: false });
+      }) as unknown as typeof fetch;
+    };
+
+    const AssetProbe = () => {
+      const { assetPaths } = useTheme();
+      return (
+        <div data-testid="avatar-path">
+          {assetPaths.assistantAvatar ?? "none"}
+        </div>
+      );
+    };
+
+    const renderWithTheme = () =>
+      render(
+        <ThemeProvider>
+          <AssetProbe />
+        </ThemeProvider>,
+      );
+
+    const requestedUrls = () =>
+      (global.fetch as ReturnType<typeof vi.fn>).mock.calls.map(([url]) =>
+        String(url),
+      );
+
+    beforeEach(() => {
+      mockEnv.mockReturnValue(createMockEnv({ themeCustomerName: "acme" }));
+    });
+
+    it("never requests an asset the theme declares as absent", async () => {
+      mockFetchRoutes({
+        theme: { ...mockTheme, assets: { assistantAvatar: null } },
+      });
+
+      renderWithTheme();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("avatar-path")).toHaveTextContent("none");
+      });
+
+      // The whole point of the declaration: no probe, no <img>, no 404.
+      expect(
+        requestedUrls().some((url) => url.includes("assistant-avatar")),
+      ).toBe(false);
+    });
+
+    it("trusts a declared path without probing for it", async () => {
+      mockFetchRoutes({
+        theme: {
+          ...mockTheme,
+          assets: { assistantAvatar: { path: "./brand/avatar.svg" } },
+        },
+      });
+
+      renderWithTheme();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("avatar-path")).toHaveTextContent(
+          "/public/common/custom-theme/acme/brand/avatar.svg",
+        );
+      });
+
+      expect(requestedUrls().some((url) => url.includes("avatar.svg"))).toBe(
+        false,
+      );
+    });
+
+    it("uses the dark variant of a declared asset in dark mode", async () => {
+      localStorage.setItem(THEME_MODE_LOCAL_STORAGE_KEY, "dark");
+      mockFetchRoutes({
+        theme: {
+          ...mockTheme,
+          assets: {
+            assistantAvatar: {
+              path: "./avatar.svg",
+              darkPath: "./avatar-dark.svg",
+            },
+          },
+        },
+      });
+
+      renderWithTheme();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("avatar-path")).toHaveTextContent(
+          "/public/common/custom-theme/acme/avatar-dark.svg",
+        );
+      });
+    });
+
+    it("falls back to the filename convention when nothing is declared", async () => {
+      mockFetchRoutes({ theme: mockTheme, existingFiles: [AVATAR_URL] });
+
+      renderWithTheme();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("avatar-path")).toHaveTextContent(AVATAR_URL);
+      });
+    });
+
+    it("probes a convention asset once per page, not once per mount", async () => {
+      mockFetchRoutes({ theme: mockTheme });
+
+      const first = renderWithTheme();
+      await waitFor(() => {
+        expect(screen.getByTestId("avatar-path")).toHaveTextContent("none");
+      });
+      first.unmount();
+
+      renderWithTheme();
+      await waitFor(() => {
+        expect(screen.getByTestId("avatar-path")).toHaveTextContent("none");
+      });
+
+      expect(requestedUrls().filter((url) => url === AVATAR_URL)).toHaveLength(
+        1,
+      );
+    });
+
+    it("does not let a light sidebar logo override stand in for the dark one", async () => {
+      // A deployment may set only the light variable while shipping the dark
+      // file beside theme.json; dark mode must still find that file.
+      const DARK_LOGO_URL =
+        "/public/common/custom-theme/acme/sidebar-logo-dark.svg";
+      localStorage.setItem(THEME_MODE_LOCAL_STORAGE_KEY, "dark");
+      mockEnv.mockReturnValue(
+        createMockEnv({
+          themeCustomerName: "acme",
+          sidebarLogoPath: "/branding/sidebar-light.svg",
+        }),
+      );
+
+      const SidebarLogoProbe = () => {
+        const { assetPaths } = useTheme();
+        return (
+          <div data-testid="sidebar-logo-path">
+            {assetPaths.sidebarLogo ?? "none"}
+          </div>
+        );
+      };
+
+      mockFetchRoutes({ theme: mockTheme, existingFiles: [DARK_LOGO_URL] });
+
+      render(
+        <ThemeProvider>
+          <SidebarLogoProbe />
+        </ThemeProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("sidebar-logo-path")).toHaveTextContent(
+          DARK_LOGO_URL,
+        );
+      });
+    });
+
+    it("trusts an environment override without probing", async () => {
+      mockEnv.mockReturnValue(
+        createMockEnv({
+          themeCustomerName: "acme",
+          themeAssistantAvatarPath: "/branding/avatar.svg",
+        }),
+      );
+      mockFetchRoutes({ theme: mockTheme });
+
+      renderWithTheme();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("avatar-path")).toHaveTextContent(
+          "/branding/avatar.svg",
+        );
+      });
+
+      expect(requestedUrls().some((url) => url.includes("avatar.svg"))).toBe(
+        false,
+      );
+    });
   });
 });

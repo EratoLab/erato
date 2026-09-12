@@ -26,17 +26,27 @@ export interface ThemeLocationConfig {
   getLogoPath: (themeName: string | undefined, isDark: boolean) => string;
 
   /**
-   * Function to determine assistant avatar path
+   * Function to determine the by-convention assistant avatar path.
+   *
+   * This only builds a path; it cannot know whether the file exists. Deciding
+   * availability is `ThemeProvider`'s job -- read `assetPaths` from
+   * `useTheme()` instead of calling this directly in UI code.
+   *
    * @param themeName The name of the loaded theme
-   * @returns Path to the assistant avatar file, or null if not available
+   * @returns Convention path, or null when no theme location is configured
    */
   getAssistantAvatarPath: (themeName: string | undefined) => string | null;
 
   /**
-   * Function to determine sidebar logo paths based on theme name and mode
+   * Function to determine the by-convention sidebar logo path.
+   *
+   * As with the assistant avatar, this only builds a path. `ThemeProvider`
+   * resolves declarations and existence; UI code should read `assetPaths`
+   * from `useTheme()`.
+   *
    * @param themeName The name of the loaded theme
    * @param isDark Whether dark mode is active
-   * @returns Path to the sidebar logo file, or null if not available (falls back to regular logo)
+   * @returns Convention path, or null when no theme location is configured
    */
   getSidebarLogoPath: (
     themeName: string | undefined,
@@ -367,6 +377,46 @@ export const defaultThemeConfig: ThemeLocationConfig = {
       }) ?? `${commonPublicBasePath}/custom-theme/theme.css`
     );
   },
+};
+
+/**
+ * Resolves a path declared in `theme.json`'s `assets` block.
+ *
+ * Mirrors the `icons` resolution rules, minus the "bare string is an iconoir
+ * name" branch -- every value here is a file, so `avatar.svg` and
+ * `./avatar.svg` both resolve against the theme pack directory.
+ */
+export const resolveDeclaredAssetPath = (
+  declaredPath: string,
+  resolvedThemeConfigPath?: string | null,
+): string => {
+  // Absolute URLs are used verbatim.
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(declaredPath)) return declaredPath;
+  // Root-relative paths already address the deployment root.
+  if (declaredPath.startsWith("/")) return declaredPath;
+
+  const filename = declaredPath.startsWith("./")
+    ? declaredPath.slice(2)
+    : declaredPath;
+  const {
+    commonPublicBasePath,
+    frontendPublicBasePath,
+    themeConfigPath,
+    themePath,
+    themeCustomerName,
+  } = env();
+
+  return (
+    resolveThemePackAssetPath({
+      commonPublicBasePath,
+      filename,
+      platformPublicBasePath: frontendPublicBasePath,
+      resolvedThemeConfigPath,
+      themeConfigPath,
+      themePath,
+      themeCustomerName,
+    }) ?? `${commonPublicBasePath}/custom-theme/${filename}`
+  );
 };
 
 export interface LoadedThemeConfig {

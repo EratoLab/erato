@@ -18,6 +18,7 @@ vi.mock("@/components/providers/ThemeProvider", () => ({
   useTheme: () => ({
     effectiveTheme: "light",
     customThemeName: null,
+    assetPaths: { assistantAvatar: null, sidebarLogo: null },
   }),
 }));
 

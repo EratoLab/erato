@@ -12,7 +12,6 @@ import {
   componentRegistry,
   resolveComponentOverride,
 } from "@/config/componentRegistry";
-import { defaultThemeConfig } from "@/config/themeConfig";
 import {
   hasActiveFilters,
   useChatHistoryFilterFoldback,
@@ -31,7 +30,6 @@ import {
 } from "@/providers/FeatureConfigProvider";
 import { UNTITLED_BACKEND_SENTINEL } from "@/utils/chat/recentChatSession";
 import { createLogger } from "@/utils/debugLogger";
-import { checkFileExists } from "@/utils/themeUtils";
 
 import { ChatHistoryFilterMenu } from "./ChatHistoryFilterMenu";
 import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
@@ -418,7 +416,6 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     onLoadMoreSessions,
   }) => {
     const ref = useRef<HTMLElement>(null);
-    const [sidebarLogoPath, setSidebarLogoPath] = useState<string | null>(null);
     const navigate = useNavigate();
     const location = useLocation();
     const isOnSearchPage = location.pathname === "/search";
@@ -431,11 +428,9 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       location.pathname.startsWith(assistantHubRoute);
 
     // Get sidebar configuration
-    const {
-      collapsedMode,
-      logoPath: envLogoPath,
-      logoDarkPath: envLogoDarkPath,
-    } = useSidebarFeature();
+    // Logo env overrides are resolved by ThemeProvider, which also decides
+    // whether the file exists; only the collapse mode is read here.
+    const { collapsedMode } = useSidebarFeature();
 
     // Get responsive collapsed mode (forces hidden on mobile even if config is slim)
     const effectiveCollapsedMode = useResponsiveCollapsedMode(collapsedMode);
@@ -451,7 +446,8 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     );
 
     // Get theme information
-    const { effectiveTheme, customThemeName } = useTheme();
+    const { assetPaths } = useTheme();
+    const sidebarLogoPath = assetPaths.sidebarLogo;
 
     // Apply any user-dragged sidebar width as the width-token override.
     useApplySidebarWidth();
@@ -631,32 +627,6 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
 
     // Only use ResizeObserver in the browser
     const isBrowser = typeof window !== "undefined";
-
-    // Memoize logo path resolution to avoid recalculating on every render
-    const resolvedLogoPath = useMemo(() => {
-      const isDark = effectiveTheme === "dark";
-      // Check env vars first (from FeatureConfigProvider)
-      if (isDark && envLogoDarkPath) return envLogoDarkPath;
-      if (!isDark && envLogoPath) return envLogoPath;
-      // Fall back to theme-based paths
-      return defaultThemeConfig.getSidebarLogoPath(customThemeName, isDark);
-    }, [effectiveTheme, customThemeName, envLogoPath, envLogoDarkPath]);
-
-    // Load sidebar logo if configured
-    useEffect(() => {
-      if (!resolvedLogoPath) {
-        setSidebarLogoPath(null);
-        return;
-      }
-
-      const loadSidebarLogo = async () => {
-        // Check if the logo file exists
-        const exists = await checkFileExists(resolvedLogoPath);
-        setSidebarLogoPath(exists ? resolvedLogoPath : null);
-      };
-
-      void loadSidebarLogo();
-    }, [resolvedLogoPath]);
 
     // Memoize event handlers to prevent unnecessary re-renders of child components
     const handleSignOut = useCallback(() => {
