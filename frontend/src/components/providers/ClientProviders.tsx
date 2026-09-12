@@ -2,6 +2,7 @@
 
 import { ApiProvider } from "./ApiProvider";
 import { GenerationStatusPoller } from "./GenerationStatusPoller";
+import { TabChatIndicator } from "./TabChatIndicator";
 import { ThemeProvider } from "./ThemeProvider";
 import {
   DesktopSidecarConfigurationSync,
@@ -21,6 +22,7 @@ export function ClientProviders({ children }: PropsWithChildren) {
   return (
     <ApiProvider>
       <GenerationStatusPoller />
+      <TabChatIndicator />
       <DesktopSidecarProvider>
         <DesktopSidecarConfigurationSync />
         <ThemeProvider>
