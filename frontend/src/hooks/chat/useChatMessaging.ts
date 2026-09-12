@@ -1147,7 +1147,7 @@ export function useChatMessaging(
               streamError.error_description || "Streaming error";
             logger.error(
               "[DEBUG_STREAMING] processStreamEvent: stream error received.",
-              streamError,
+              JSON.stringify(streamError),
             );
 
             setError(new Error(description));

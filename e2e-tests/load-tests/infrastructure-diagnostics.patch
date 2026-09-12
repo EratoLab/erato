@@ -1,0 +1,65 @@
+diff --git a/helm/erato-stress-test/load-tests/chat.js b/helm/erato-stress-test/load-tests/chat.js
+index e43a285..115b078 100644
+--- a/helm/erato-stress-test/load-tests/chat.js
++++ b/helm/erato-stress-test/load-tests/chat.js
+@@ -55,6 +55,10 @@ export default async function () {
+     page = await context.newPage();
+     page.setDefaultTimeout(actionTimeout);
+     page.setDefaultNavigationTimeout(actionTimeout);
++    // Preserve structured stream errors in run.log instead of losing console objects.
++    page.on("console", message => {
++      if (message.type() === "error") console.error(`${email}: browser: ${message.text()}`);
++    });
+     stage = "login";
+     if (__ENV.DEBUG) console.log(`${email}: ${stage}`);
+     const startedLogin = Date.now();
+diff --git a/helm/erato-stress-test/load-tests/lib/chat.js b/helm/erato-stress-test/load-tests/lib/chat.js
+index 5e4e695..d9b34e8 100644
+--- a/helm/erato-stress-test/load-tests/lib/chat.js
++++ b/helm/erato-stress-test/load-tests/lib/chat.js
+@@ -68,18 +68,29 @@ export async function sendFirstMessage(page, message, timeout) {
+     .getByTestId("message-user")
+     .last()
+     .waitFor({ state: "visible", timeout });
+-  await page.waitForURL(/\/chat\/[0-9a-fA-F-]+/, { timeout });
++  await page.waitForFunction(() => {
++    const error = document.querySelector('[data-testid="chat-send-error"], [data-testid="chat-message-error"]');
++    if (error?.getClientRects().length) throw new Error(error.textContent);
++    return /\/chat\/[0-9a-fA-F-]+/.test(location.pathname);
++  }, { timeout });
+   return page.url().match(/\/chat\/([0-9a-fA-F-]+)/)[1];
+ }
+
+ export async function waitForAssistantCompletion(page, timeout) {
+   const assistant = page.getByTestId("message-assistant").last();
+-  await assistant.waitFor({ state: "visible", timeout });
++  await page.waitForFunction(() => {
++    const error = document.querySelector('[data-testid="chat-send-error"], [data-testid="chat-message-error"]');
++    if (error?.getClientRects().length) throw new Error(error.textContent);
++    return [...document.querySelectorAll('[data-testid="message-assistant"]')]
++      .some(el => el.getClientRects().length > 0);
++  }, { timeout });
+   // Loading disappears on the first token; the textarea remains enabled during
+   // streaming. Neither means completion. The Stop button covers the entire
+   // pending turn, including multi-step tools (see chatIsReadyToChat in e2e).
+   await page.waitForFunction(
+     () => {
++      const error = document.querySelector('[data-testid="chat-send-error"], [data-testid="chat-message-error"]');
++      if (error?.getClientRects().length) throw new Error(error.textContent);
+       const loading = [
+         ...document.querySelectorAll('[data-testid="message-assistant"] *'),
+       ].some(
+@@ -93,7 +104,12 @@ export async function waitForAssistantCompletion(page, timeout) {
+     },
+     { timeout },
+   );
+-  await assistant.waitFor({ state: "visible", timeout });
++  await page.waitForFunction(() => {
++    const error = document.querySelector('[data-testid="chat-send-error"], [data-testid="chat-message-error"]');
++    if (error?.getClientRects().length) throw new Error(error.textContent);
++    return [...document.querySelectorAll('[data-testid="message-assistant"]')]
++      .some(el => el.getClientRects().length > 0);
++  }, { timeout });
+   if (
+     (await page.getByTestId("chat-send-error").count()) ||
+     (await page.getByTestId("chat-message-error").count())

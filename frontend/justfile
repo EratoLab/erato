@@ -14,7 +14,10 @@ codegen:
 install:
     pnpm install
 
-dev:
+generate_dex_config:
+    python3 local-auth/generate_dex_config.py
+
+dev: generate_dex_config
     cd local-auth && docker compose up --force-recreate --detach
     echo "Proxied local server with auth will be available at http://localhost:4180"
     pnpm run dev

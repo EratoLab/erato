@@ -134,7 +134,9 @@ impl BackgroundTaskManager {
 
         // Insert into the map, replacing any existing task
         {
-            let mut tasks = self.tasks.write().await;
+            let mut tasks =
+                crate::latency::stage("generation.registry_lock_wait", self.tasks.write()).await;
+            let _hold_timer = crate::latency::StageTimer::new("generation.registry_lock_hold");
             tasks.insert(chat_id, Arc::clone(&task));
         }
 
@@ -215,7 +217,9 @@ impl BackgroundTaskManager {
     /// cannot remove (or mark terminal) a replacement generation.
     pub async fn remove_task(&self, chat_id: &Uuid, generation_id: Uuid, outcome: TaskOutcome) {
         {
-            let mut tasks = self.tasks.write().await;
+            let mut tasks =
+                crate::latency::stage("generation.registry_lock_wait", self.tasks.write()).await;
+            let _hold_timer = crate::latency::StageTimer::new("generation.registry_lock_hold");
             if tasks
                 .get(chat_id)
                 .is_some_and(|task| task.generation_id == generation_id)
@@ -845,7 +849,9 @@ impl StreamingTask {
             self.saw_error.store(true, Ordering::SeqCst);
         }
         // First, add to history
-        let mut history = self.event_history.write().await;
+        let mut history =
+            crate::latency::stage("generation.history_lock_wait", self.event_history.write()).await;
+        let hold_timer = crate::latency::StageTimer::new("generation.history_lock_hold");
 
         // Check if we've exceeded the maximum event history
         if history.len() >= MAX_EVENT_HISTORY {
@@ -859,12 +865,17 @@ impl StreamingTask {
             history.push(event.clone());
         }
         drop(history); // Release lock before broadcasting
+        drop(hold_timer);
 
         // Then broadcast to live subscribers
         // If there are no subscribers, this will just drop the event
         let _ = self.event_tx.send(event.clone());
 
-        self.persist_shared_event(&event).await;
+        crate::latency::stage(
+            "generation.shared_event_persistence",
+            self.persist_shared_event(&event),
+        )
+        .await;
 
         Ok(())
     }

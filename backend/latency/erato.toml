@@ -1,0 +1,40 @@
+# Isolated local benchmark config: no real inference services or file extraction.
+database_url = "postgres://eratouser:eratopw@localhost:5432/erato"
+http_host = "127.0.0.1"
+http_port = 3130
+
+[file_storage_providers]
+
+[chat_providers]
+priority_order = ["mock", "mock-responses"]
+
+[chat_providers.providers.mock]
+provider_kind = "openai"
+model_name = "mock-llm"
+model_display_name = "Mock LLM"
+base_url = "http://127.0.0.1:44320/base-openai/v1/"
+api_key = "mock"
+
+# Match the cluster's two model choices; the UI hides its selector with only one.
+[chat_providers.providers.mock-responses]
+provider_kind = "openai_responses"
+model_name = "gpt-5.2"
+model_display_name = "Mock LLM Responses"
+base_url = "http://127.0.0.1:44320/base-openai/v1/"
+api_key = "mock"
+
+[mcp_servers.mock]
+transport_type = "streamable_http"
+url = "http://127.0.0.1:44321/mcp/file"
+
+[integrations.prometheus]
+enabled = true
+host = "127.0.0.1"
+port = 3132
+
+# Enable with INTEGRATIONS__OTEL__ENABLED=true after `../run_jaeger.sh`.
+[integrations.otel]
+enabled = false
+endpoint = "http://127.0.0.1:4317"
+protocol = "grpc"
+service_name = "erato-local-latency"

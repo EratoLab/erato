@@ -13,6 +13,7 @@ pub mod db;
 pub mod deployment_identity;
 pub mod distribution;
 pub mod frontend_environment;
+pub mod latency;
 pub mod metrics;
 pub mod metrics_constants;
 pub mod models;
@@ -30,6 +31,9 @@ pub mod translation_po;
 
 #[cfg(all(feature = "profiling", not(target_os = "linux")))]
 compile_error!("The `profiling` feature is only supported on Linux.");
+
+#[cfg(all(feature = "profiling", feature = "profiling-dial9"))]
+compile_error!("The `profiling` and `profiling-dial9` features are mutually exclusive.");
 
 #[derive(OpenApi)]
 #[openapi(

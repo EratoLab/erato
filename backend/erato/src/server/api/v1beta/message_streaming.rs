@@ -646,9 +646,11 @@ async fn send_generation_event(
     // path. The request-scoped SSE receiver can disappear when a client
     // navigates away or reconnects; that must not cancel the generation or
     // turn a successfully persisted tool call into a generation failure.
-    if let Err(error) = tx
-        .send(Ok(Event::default().event(message.tag()).data(json)))
-        .await
+    if let Err(error) = crate::latency::stage(
+        "generation.sse_channel_wait",
+        tx.send(Ok(Event::default().event(message.tag()).data(json))),
+    )
+    .await
     {
         tracing::debug!(
             tag = message.tag(),
@@ -1799,7 +1801,7 @@ where
     let mut cleanup_guard =
         TaskCleanupGuard::new(background_tasks.clone(), chat_id, task.generation_id);
 
-    let result = run.await;
+    let result = crate::latency::stage("generation.run", run).await;
 
     match &result {
         Ok(()) => tracing::info!(%chat_id, "Generation task completed"),
@@ -2317,6 +2319,7 @@ fn prepare_chat_request<'a>(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[instrument(skip_all)]
 pub(crate) async fn prepare_chat_request_with_adapters(
     app_state: &AppState,
     policy: &PolicyEngine,
@@ -4676,13 +4679,15 @@ async fn stream_generate_chat_completion<
                 Some(chat_provider_headers_context),
             )
             .wrap_err("Unable to choose chat provider")?;
-        let chat_stream = match genai_client
-            .exec_chat_stream(
+        let chat_stream = match crate::latency::stage(
+            "provider.connect",
+            genai_client.exec_chat_stream(
                 "PLACEHOLDER_MODEL",
                 current_turn_chat_request.clone(),
                 Some(&chat_options),
-            )
-            .await
+            ),
+        )
+        .await
         {
             Ok(stream) => stream,
             Err(err) => {
@@ -5625,6 +5630,7 @@ async fn bg_stream_update_assistant_message_completion(
     me_user: &MeProfile,
     assistant_message_id: Uuid,
 ) -> Result<(), Report> {
+    let _persistence_timer = crate::latency::StageTimer::new("generation.final_persistence");
     let updated_assistant_message = crate::models::message::update_message_content(
         &app_state.db,
         policy,
@@ -5673,6 +5679,7 @@ async fn stream_update_assistant_message_completion<
     me_user: &MeProfile,
     assistant_message_id: Uuid,
 ) -> Result<(), Report> {
+    let _persistence_timer = crate::latency::StageTimer::new("generation.final_persistence");
     // Update the assistant message in the database
     let updated_assistant_message = crate::models::message::update_message_content(
         &app_state.db,
@@ -7537,9 +7544,12 @@ pub async fn message_submit_sse(
     let task_clone = Arc::clone(&task);
     let request_clone = request.clone();
 
+    // Time from dispatch until the generation task is first polled.
+    let dispatch_wait = crate::latency::StageTimer::new("generation.dispatch_wait");
     // Spawn the background generation task
     tokio::spawn(
         async move {
+            drop(dispatch_wait);
             tracing::info!("Starting background task for chat_id: {}", chat_id);
             let _ = with_generation_task_lifecycle(
                 &app_state_bg.background_tasks,
@@ -8412,6 +8422,7 @@ mod generation_failure_diagnostic_tests {
 
 /// Run the message submission task in the background
 #[allow(clippy::too_many_arguments)]
+#[instrument(skip_all, fields(%chat_id))]
 pub(crate) async fn run_message_submit_task(
     task: &Arc<StreamingTask>,
     app_state: &AppState,

@@ -28,6 +28,10 @@ static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 #[unsafe(export_name = "malloc_conf")]
 pub static MALLOC_CONF: &[u8] = b"prof:true,prof_active:true,lg_prof_sample:19\0";
 
+#[cfg(all(feature = "profiling-dial9", not(feature = "profiling")))]
+#[global_allocator]
+static GLOBAL: dial9::memory::Dial9Allocator = dial9::memory::Dial9Allocator::system();
+
 const ENV_WORKER_THREADS: &str = "TOKIO_WORKER_THREADS";
 const MIN_TOKIO_WORKER_THREADS: usize = 4;
 
@@ -91,19 +95,43 @@ async fn shutdown_signal() {
 
 fn main() -> Result<(), Report> {
     let worker_threads = configured_tokio_worker_threads();
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(worker_threads)
-        .thread_stack_size(TOKIO_WORKER_STACK_BYTES)
-        .enable_all()
-        .build()
-        .wrap_err("Failed to build Tokio runtime")?;
 
-    runtime.block_on(async_main(worker_threads))
+    #[cfg(feature = "profiling-dial9")]
+    {
+        let (recorder, runtime) = dial9::recorder_from_env_with(|builder| {
+            builder
+                .worker_threads(worker_threads)
+                .thread_stack_size(TOKIO_WORKER_STACK_BYTES);
+        })
+        .wrap_err("Failed to build Dial9 Tokio runtime")?;
+
+        let result = dial9::block_on(&runtime, async_main(worker_threads));
+        // Flush worker events before sealing and processing the final trace segment.
+        drop(runtime);
+        recorder.graceful_shutdown(Duration::from_secs(5));
+        result
+    }
+
+    #[cfg(not(feature = "profiling-dial9"))]
+    {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(worker_threads)
+            .thread_stack_size(TOKIO_WORKER_STACK_BYTES)
+            .enable_all()
+            .build()
+            .wrap_err("Failed to build Tokio runtime")?;
+
+        runtime.block_on(async_main(worker_threads))
+    }
 }
 
 async fn async_main(worker_threads: usize) -> Result<(), Report> {
     color_eyre::install()?;
-    let loaded_dotenv_files = dotenv_flow::dotenv_flow().ok();
+    let loaded_dotenv_files = if std::env::var("ERATO_SKIP_DOTENV").as_deref() == Ok("1") {
+        None
+    } else {
+        dotenv_flow::dotenv_flow().ok()
+    };
     if let Some(loaded_dotenv_files) = loaded_dotenv_files {
         for file in loaded_dotenv_files {
             startup_log::info_preinit(format!("Loaded dotenv file: {:?}", file));
@@ -117,6 +145,7 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
     let _telemetry_guard = erato::telemetry::init_telemetry(&config)?;
     startup_log::reemit_buffered_logs_if_json(&config.logging);
     erato::metrics::init_prometheus_metrics(&config)?;
+    erato::latency::start_runtime_probe();
 
     let mut _sentry_guard = None;
     setup_sentry(
@@ -192,6 +221,20 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
         app
     }
     .with_state(state);
+
+    #[cfg(feature = "profiling-dial9")]
+    let app = app.layer(
+        tower_http::trace::TraceLayer::new_for_http().make_span_with(
+            |request: &axum::http::Request<axum::body::Body>| {
+                tracing::info_span!(
+                    "http.request",
+                    dial9 = true,
+                    method = %request.method(),
+                    path = request.uri().path(),
+                )
+            },
+        ),
+    );
 
     tracing::info!(api_docs_url = %format!("http://{}/scalar", local_addr), "API docs available");
     tracing::info!(frontend_url = %format!("http://{}", local_addr), "Frontend available");
