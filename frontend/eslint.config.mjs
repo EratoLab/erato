@@ -558,6 +558,14 @@ const eslintConfig = [
     },
   },
 
+  // Favicon composition - SVG markup, selectors and media queries, no UI text
+  {
+    files: ["src/lib/favicon/**/*"],
+    rules: {
+      "lingui/no-unlocalized-strings": "off",
+    },
+  },
+
   // Test files configuration - more lenient rules for testing needs
   {
     files: [
