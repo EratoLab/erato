@@ -5,6 +5,10 @@ import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
 
 export type TabChatActivity = "idle" | "working" | "ready" | "attention";
 
+// Framed (the Teams tab), the favicon belongs to the host page and nothing this
+// hook drives is ever visible.
+const isFramed = (): boolean => window.self !== window.top;
+
 const useDocumentHidden = (): boolean => {
   const [hidden, setHidden] = useState(() => document.hidden);
 
@@ -58,7 +62,7 @@ export const useTabChatActivity = (): TabChatActivity => {
     }
   }, [hidden]);
 
-  if (!hidden) {
+  if (!hidden || isFramed()) {
     return "idle";
   }
   if (awaitingApproval) {

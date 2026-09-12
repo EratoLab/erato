@@ -16,6 +16,7 @@ type BaseIcon =
   | { kind: "raster"; dataUri: string };
 
 let baseIconPromise: Promise<BaseIcon | null> | null = null;
+const framesByTone = new Map<TabIndicatorTone | null, string>();
 
 const bytesToBase64 = (bytes: Uint8Array): string => {
   let binary = "";
@@ -31,6 +32,11 @@ const fetchBaseIcon = async (): Promise<BaseIcon | null> => {
     return null;
   }
   const contentType = response.headers.get("content-type") ?? "";
+  // An auth redirect lands here as a 200 HTML page; embedding it would paint
+  // garbage as the icon.
+  if (!contentType.startsWith("image/")) {
+    return null;
+  }
   // The backend resolves themed favicons by precedence and answers this .svg
   // path with a theme's .ico bytes when that is all it ships, so the response
   // header decides the branch and the URL extension cannot.
@@ -40,7 +46,7 @@ const fetchBaseIcon = async (): Promise<BaseIcon | null> => {
   const bytes = new Uint8Array(await response.arrayBuffer());
   return {
     kind: "raster",
-    dataUri: `data:${contentType || "image/x-icon"};base64,${bytesToBase64(bytes)}`,
+    dataUri: `data:${contentType};base64,${bytesToBase64(bytes)}`,
   };
 };
 
@@ -77,9 +83,15 @@ const badgeMarkup = (tone: TabIndicatorTone): string => {
 export const composeBadgedIcon = async (
   tone: TabIndicatorTone | null,
 ): Promise<string | null> => {
+  const cached = framesByTone.get(tone);
+  if (cached !== undefined) {
+    return cached;
+  }
   baseIconPromise ??= fetchBaseIcon().catch(() => null);
   const base = await baseIconPromise;
   if (!base) {
+    // Leave a failed fetch uncached so a later transition retries it.
+    baseIconPromise = null;
     return null;
   }
   const inner =
@@ -93,9 +105,12 @@ export const composeBadgedIcon = async (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${ICON_CANVAS_SIZE} ${ICON_CANVAS_SIZE}"` +
     ` width="${ICON_CANVAS_SIZE}" height="${ICON_CANVAS_SIZE}">` +
     `${inner}${tone === null ? "" : badgeMarkup(tone)}</svg>`;
-  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  const frame = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  framesByTone.set(tone, frame);
+  return frame;
 };
 
 export const resetBaseIconCache = (): void => {
   baseIconPromise = null;
+  framesByTone.clear();
 };

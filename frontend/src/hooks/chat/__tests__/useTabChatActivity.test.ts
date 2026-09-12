@@ -137,6 +137,20 @@ describe("useTabChatActivity", () => {
     expect(result.current).toBe("attention");
   });
 
+  it("stays idle inside an iframe, where the favicon is the host page's", () => {
+    const top = window.top;
+    Object.defineProperty(window, "top", { configurable: true, value: {} });
+    setStreaming(true);
+
+    const { result } = renderHook(() => useTabChatActivity());
+    act(() => {
+      setHidden(true);
+    });
+
+    expect(result.current).toBe("idle");
+    Object.defineProperty(window, "top", { configurable: true, value: top });
+  });
+
   it("ignores a pending approval belonging to another chat", () => {
     useGenerationStatusStore.setState({
       statusByChatId: {

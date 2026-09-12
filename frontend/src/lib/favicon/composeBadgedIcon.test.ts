@@ -80,4 +80,44 @@ describe("composeBadgedIcon", () => {
 
     await expect(composeBadgedIcon("working")).resolves.toBeNull();
   });
+
+  it("retries the fetch after a failure instead of pinning it", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce(
+        new Response(THEMED_SVG, {
+          status: 200,
+          headers: { "content-type": "image/svg+xml" },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(composeBadgedIcon("working")).resolves.toBeNull();
+    await expect(composeBadgedIcon("working")).resolves.toContain(
+      "data:image/svg+xml,",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses a non-image response such as an auth redirect page", async () => {
+    vi.stubGlobal(
+      "fetch",
+      respondWith("<html>sign in</html>", "text/html; charset=utf-8"),
+    );
+
+    await expect(composeBadgedIcon("working")).resolves.toBeNull();
+  });
+
+  it("serves a repeated tone from the frame cache without re-parsing", async () => {
+    vi.stubGlobal("fetch", respondWith(THEMED_SVG, "image/svg+xml"));
+    const parse = vi.spyOn(DOMParser.prototype, "parseFromString");
+
+    const first = await composeBadgedIcon("ready");
+    const second = await composeBadgedIcon("ready");
+
+    expect(second).toBe(first);
+    expect(parse).toHaveBeenCalledTimes(1);
+    parse.mockRestore();
+  });
 });
