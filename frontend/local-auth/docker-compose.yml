@@ -4,7 +4,7 @@ services:
     image: dexidp/dex:v2.45.1
     network_mode: host
     volumes:
-      - ./dex-config.yml:/etc/dex/config.yml
+      - ./dex-config.generated.yml:/etc/dex/config.yml:ro
     command: ["dex", "serve", "/etc/dex/config.yml"]
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:5556/healthz"]

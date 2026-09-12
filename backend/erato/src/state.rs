@@ -223,7 +223,14 @@ impl AppState {
             mcp_servers.clone(),
         )));
 
-        let db_connect_options = ConnectOptions::new(config.database_url.expose_secret());
+        let mut db_connect_options = ConnectOptions::new(config.database_url.expose_secret());
+        if crate::latency::enabled() {
+            db_connect_options.map_sqlx_postgres_pool_opts(|options| {
+                options
+                    .acquire_time_level(tracing::log::LevelFilter::Debug)
+                    .acquire_slow_threshold(Duration::from_millis(100))
+            });
+        }
         // TODO: Change level to Debug, but that also seems to deactivate some other logging (e.g. Errors during request?)
         // db_connect_options.sqlx_logging_level(LevelFilter::Debug);
         let mut db = Database::connect(db_connect_options).await?;

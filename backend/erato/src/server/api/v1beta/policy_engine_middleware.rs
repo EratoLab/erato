@@ -22,16 +22,24 @@ pub(crate) async fn policy_engine_middleware(
     mut req: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    let effective_config = app_state.effective_config().await;
+    let effective_config =
+        crate::latency::stage("request.configuration", app_state.effective_config()).await;
     // Get a cloned PolicyEngine from the global instance, with rebuild check
-    let policy_engine = app_state
-        .global_policy_engine
-        .get_engine_with_rebuild_check(&app_state.db, &effective_config, POLICY_REBUILD_THRESHOLD)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to get policy engine: {:?}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let policy_engine = crate::latency::stage(
+        "request.policy",
+        app_state
+            .global_policy_engine
+            .get_engine_with_rebuild_check(
+                &app_state.db,
+                &effective_config,
+                POLICY_REBUILD_THRESHOLD,
+            ),
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to get policy engine: {:?}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     // Insert the policy engine into request extensions
     req.extensions_mut().insert(policy_engine);

@@ -114,7 +114,8 @@ impl TranslationDistribution {
             return None;
         }
         let po_path = translation_po_path_for_messages_json(bundle_root, request_path)?;
-        let compiled = self.cache.compile_messages_json(&po_path);
+        let compiled = crate::latency::sync_span("translation.compile_messages_json")
+            .in_scope(|| self.cache.compile_messages_json(&po_path));
         Some((po_path, compiled))
     }
 
@@ -145,7 +146,9 @@ fn translation_po_path_for_messages_json(
 
     let mut file_path = safe_request_file_path(bundle_root, request_path)?;
     file_path.set_extension("po");
-    file_path.exists().then_some(file_path)
+    crate::latency::sync_span("translation.source_exists")
+        .in_scope(|| file_path.exists())
+        .then_some(file_path)
 }
 
 fn discover_sources(roots: Vec<(&'static str, PathBuf)>) -> Vec<ConfigSourceFile> {

@@ -302,10 +302,13 @@ pub(crate) async fn user_profile_middleware(
         .and_then(|value| value.to_str().ok())
         .map(str::to_owned);
 
-    if let Ok((current_user, id_token_claims)) = user_profile_from_token(
-        &app_state,
-        auth_header.token(),
-        accept_language_header.as_deref(),
+    if let Ok((current_user, id_token_claims)) = crate::latency::stage(
+        "request.authentication",
+        user_profile_from_token(
+            &app_state,
+            auth_header.token(),
+            accept_language_header.as_deref(),
+        ),
     )
     .await
     {

@@ -94,4 +94,32 @@ For background on `_info` metrics, see [Prometheus Info Metrics](https://oneupti
   - Known raw SQL statements use centrally defined query IDs
   - All other queries fall back to generated IDs in the form `hash-<hash-based-on-query-with-placeholders>`
 
+### Opt-in latency diagnostics
+
+Set `ERATO_LATENCY_DIAGNOSTICS=1` in addition to enabling Prometheus:
+
+- `erato_latency_stage_duration_seconds` (histogram), label `stage`
+  - Wall time for authentication, configuration, policy, generation dispatch/run,
+    provider connection, SSE channel sends, final/shared-event persistence, and
+    policy/generation lock waits and holds. Includes failed/cancelled operations.
+  - `policy.evaluation_queue_wait`: waiting for the process-wide policy
+    concurrency limit (four jobs), before freshness checks or snapshot cloning.
+  - `policy.blocking_dispatch_wait`: snapshot ready to blocking job start.
+  - `policy.engine_read_hold` covers only snapshot cloning; `policy.evaluate`
+    measures input preparation and queries on the blocking pool.
+- `erato_latency_stage_in_flight` (gauge), label `stage`
+  - Operations currently in each stage. `generation.dispatch_wait` counts
+    dispatched tasks not yet polled; this is not a global executor queue length.
+    `policy.evaluation_queue_wait` counts callers waiting for policy capacity,
+    and `policy.blocking_dispatch_wait` counts submitted jobs not yet started.
+- `erato_runtime_timer_lateness_seconds` (histogram)
+  - Lateness of a 250 ms Tokio timer, with missed ticks skipped.
+
+Stage durations include scheduling and I/O waits, not just CPU execution.
+Diagnostic stages also produce `latency.stage` trace spans and debug timing
+events. SQLx pool acquisition logs (`sqlx::pool::acquire=debug`) distinguish
+connection acquisition from the query execution histogram, which excludes pool
+acquisition. Recording these diagnostics has overhead; compare with an
+uninstrumented release build at the same concurrency.
+
 Erato also exposes Tokio runtime metrics via [`tokio-metrics`](https://github.com/tokio-rs/tokio-metrics), but those are produced by the upstream integration rather than defined directly by Erato, so they are not enumerated here.

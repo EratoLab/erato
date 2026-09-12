@@ -896,14 +896,19 @@ pub mod axum {
         let import_map_json = frontend.import_map_json.clone();
         let content_security_policy = frontend.content_security_policy.clone();
         let should_inject_environment = frontend.inject_environment;
-        let bundle_dir_path = PathBuf::from(frontend.bundle_path.clone())
-            .canonicalize()
-            .expect("Unable to normalize frontend bundle path");
+        let bundle_dir_path =
+            crate::latency::sync_span("frontend.canonicalize_bundle").in_scope(|| {
+                PathBuf::from(frontend.bundle_path.clone())
+                    .canonicalize()
+                    .expect("Unable to normalize frontend bundle path")
+            });
         let fallback_path = frontend.fallback_to_404.then(|| {
-            PathBuf::from(frontend.bundle_path.clone())
-                .join("404.html")
-                .canonicalize()
-                .expect("Unable to normalize frontend bundle path for 404.html")
+            crate::latency::sync_span("frontend.canonicalize_fallback").in_scope(|| {
+                PathBuf::from(frontend.bundle_path.clone())
+                    .join("404.html")
+                    .canonicalize()
+                    .expect("Unable to normalize frontend bundle path for 404.html")
+            })
         });
 
         // Check if the client sent an If-None-Match header for ETag validation
@@ -970,10 +975,13 @@ pub mod axum {
 
         // Create the static files service with the rewritten path if applicable
         let res = if let Some(rewritten_path) = rewritten_path {
-            let rewritten_file_path = PathBuf::from(frontend.bundle_path.clone())
-                .join(rewritten_path.trim_start_matches('/'))
-                .canonicalize()
-                .unwrap();
+            let rewritten_file_path = crate::latency::sync_span("frontend.canonicalize_rewrite")
+                .in_scope(|| {
+                    PathBuf::from(frontend.bundle_path.clone())
+                        .join(rewritten_path.trim_start_matches('/'))
+                        .canonicalize()
+                        .unwrap()
+                });
             ServeFile::new(rewritten_file_path.clone())
                 .try_call(req)
                 .await

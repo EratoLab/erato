@@ -1,0 +1,4 @@
+# Explicitly loaded by `just run_dial9`; outside Cargo's normal config discovery.
+[build]
+rustflags = ["--cfg", "tokio_unstable", "-C", "force-frame-pointers=yes"]
+target-dir = "../target/dial9"

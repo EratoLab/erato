@@ -446,7 +446,9 @@ pub(crate) fn ensure_office_addin_manifests_support_launch_events(
         OFFICE_ADDIN_EXCHANGE_SERVER_MANIFEST_FILE_NAME,
     ] {
         let manifest_path = office_addin_bundle.manifest_path(manifest_name);
-        let manifest_template = match std::fs::read_to_string(&manifest_path) {
+        let manifest_template = match crate::latency::sync_span("frontend.read_manifest")
+            .in_scope(|| std::fs::read_to_string(&manifest_path))
+        {
             Ok(manifest_template) => manifest_template,
             // A variant that cannot host launch events is not required to be
             // present: the route already answers 404 for a bundle that omits
@@ -540,7 +542,9 @@ async fn office_addin_manifest_response(
         .frontend_bundles
         .office_addin
         .manifest_path(manifest_name);
-    let manifest_template = match std::fs::read_to_string(&manifest_path) {
+    let manifest_template = match crate::latency::sync_span("frontend.read_manifest")
+        .in_scope(|| std::fs::read_to_string(&manifest_path))
+    {
         Ok(contents) => contents,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
             return (
@@ -641,7 +645,9 @@ async fn favicon(State(app_state): State<AppState>, path: &'static str) -> Respo
         .main
         .favicon_candidates(app_state.config.frontend.theme.as_deref(), path)
     {
-        match std::fs::read(&candidate) {
+        match crate::latency::sync_span("frontend.read_favicon")
+            .in_scope(|| std::fs::read(&candidate))
+        {
             Ok(contents) => {
                 let content_type = match candidate.extension().and_then(OsStr::to_str) {
                     Some("svg") => "image/svg+xml",

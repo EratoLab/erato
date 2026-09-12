@@ -188,11 +188,23 @@ pub fn init_telemetry(config: &AppConfig) -> Result<TelemetryGuard> {
     // 4. Setup Langfuse OTEL Layer (Experimental)
     // Disabled for now
 
+    // Capture explicitly marked spans independently of the application log filter.
+    // This avoids recording arbitrary dependency spans or request contents.
+    let registry = Registry::default();
+    #[cfg(feature = "profiling-dial9")]
+    let registry = registry.with(
+        dial9_utils::tracing_layer::Dial9TracingLayer::new().with_filter(
+            tracing_subscriber::filter::filter_fn(|metadata| {
+                metadata.is_span() && metadata.fields().field("dial9").is_some()
+            }),
+        ),
+    );
+
     // 5. Init Registry with optional Tokio Console Layer
     #[cfg(feature = "tokio-console")]
     {
         let console_layer = console_subscriber::spawn();
-        Registry::default()
+        registry
             .with(fmt_layer)
             .with(otel_layer)
             .with(console_layer)
@@ -201,7 +213,7 @@ pub fn init_telemetry(config: &AppConfig) -> Result<TelemetryGuard> {
 
     #[cfg(not(feature = "tokio-console"))]
     {
-        Registry::default().with(fmt_layer).with(otel_layer).init();
+        registry.with(fmt_layer).with(otel_layer).init();
     }
 
     Ok(TelemetryGuard)

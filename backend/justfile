@@ -70,6 +70,31 @@ run_mock_mcp:
 run_tokio_console:
     RUSTFLAGS="--cfg tokio_unstable" cargo run --features tokio-console --bin erato
 
+# Release baseline and a matched async diagnostic build (no allocator profiling).
+run_release:
+    cargo run --release --bin erato
+
+run_latency_console:
+    ERATO_LATENCY_DIAGNOSTICS=1 RUSTFLAGS="--cfg tokio_unstable" cargo run --release --features tokio-console --bin erato
+
+# Isolated mock-only configuration; does not read backend/erato.toml or its dotenv.
+run_latency:
+    cd latency && ERATO_SKIP_DOTENV=1 cargo run --manifest-path ../Cargo.toml --release --bin erato
+
+run_latency_diagnostics:
+    cd latency && ERATO_SKIP_DOTENV=1 ERATO_LATENCY_DIAGNOSTICS=1 RUST_LOG="info,erato::latency=debug,sqlx::pool::acquire=debug" cargo run --manifest-path ../Cargo.toml --release --bin erato
+
+run_latency_mock_console:
+    cd latency && ERATO_SKIP_DOTENV=1 ERATO_LATENCY_DIAGNOSTICS=1 RUSTFLAGS="--cfg tokio_unstable" cargo run --manifest-path ../Cargo.toml --release --features tokio-console --bin erato
+
+# The isolated mock configuration with Dial9 and an explicit trace directory.
+run_latency_dial9 trace_dir:
+    cd latency && ERATO_SKIP_DOTENV=1 ERATO_LATENCY_DIAGNOSTICS=1 DIAL9_ENABLED=true DIAL9_MEMORY_PROFILE_ENABLED=true DIAL9_TRACE_DIR={{quote(trace_dir)}} cargo --config ../profiling-dial9/.cargo/config.toml run --manifest-path ../Cargo.toml --release --features profiling-dial9 --bin erato
+
+# Run with Dial9 runtime, CPU (Linux), and allocation profiling.
+run_dial9:
+    DIAL9_ENABLED=true DIAL9_MEMORY_PROFILE_ENABLED=true cargo --config profiling-dial9/.cargo/config.toml run --release --features profiling-dial9 --bin erato
+
 # Run the local services required for running app (Postgres and Ollama-smol)
 run_local_services:
     ./run_postgres.sh

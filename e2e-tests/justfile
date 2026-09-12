@@ -4,6 +4,17 @@ default:
 install:
     pnpm install
 
+# Reuse the infrastructure k6 workload with local defaults and saved telemetry.
+load_test infrastructure:
+    python3 load-tests/run.py {{quote(infrastructure)}}
+
+# Real Dex login and identity verification, followed by direct HTTP/SSE timing.
+load_test_direct infrastructure:
+    node load-tests/direct.mjs {{quote(infrastructure)}}
+
+load_test_auth infrastructure:
+    AUTH_ONLY=1 node load-tests/direct.mjs {{quote(infrastructure)}}
+
 # Check all prerequisites before running tests
 [no-exit-message]
 check:

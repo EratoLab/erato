@@ -129,6 +129,8 @@ url = "2.5.8"
 # Dependencies: Optional feature: tokio-console / profiling
 # Tokio console for async debugging
 console-subscriber = { version = "0.5.0", optional = true }
+dial9-utils = { version = "0.5.0", optional = true, default-features = false, features = ["tracing-layer"] }
+dial9 = { version = "0.5.0", optional = true, default-features = false, features = ["tokio", "cpu-profiling", "memory-profiling", "process-resource"] }
 jemalloc_pprof = { version = "0.8.2", optional = true, features = ["flamegraph", "symbolize"] }
 tikv-jemallocator = { version = "0.6.1", optional = true, features = ["profiling", "unprefixed_malloc_on_supported_platforms"] }
 
@@ -154,3 +156,4 @@ default = ["sentry"]
 sentry = ["dep:sentry", "dep:sentry-tower"]
 tokio-console = ["dep:console-subscriber"]
 profiling = ["dep:jemalloc_pprof", "dep:tikv-jemallocator"]
+profiling-dial9 = ["dep:dial9", "dep:dial9-utils"]

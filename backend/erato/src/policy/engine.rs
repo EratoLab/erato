@@ -15,12 +15,16 @@ use sea_orm::prelude::Uuid;
 use sea_orm::{DatabaseConnection, EntityTrait, FromQueryResult, QuerySelect};
 use serde_json::{Value as JsonValue, json};
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::{Mutex, OwnedSemaphorePermit, RwLock, Semaphore};
 use tracing::instrument;
 
 const BACKEND_POLICY: &str = include_str!("../../../policy/backend/backend.rego");
+// Bound CPU-heavy evaluations across all policy engines, including reloads.
+const MAX_CONCURRENT_POLICY_EVALUATIONS: usize = 4;
+static EVALUATION_SLOTS: OnceLock<Arc<Semaphore>> = OnceLock::new();
+
 const UNKNOWN_RESOURCE_REBUILD_INTERVAL: Duration = Duration::from_secs(10);
 
 /// Database/configuration access used by request-scoped engines when an
@@ -375,6 +379,7 @@ pub struct PolicyEngine {
     /// acquiring, so they coalesce into a single rebuild.
     rebuild_lock: Arc<Mutex<()>>,
     rebuild_context: Option<Arc<PolicyRebuildContext>>,
+    evaluation_slots: Arc<Semaphore>,
 }
 
 impl Default for PolicyEngine {
@@ -397,6 +402,9 @@ impl PolicyEngine {
             data_needs_rebuild: Arc::new(RwLock::new(true)),
             rebuild_lock: Arc::new(Mutex::new(())),
             rebuild_context: None,
+            evaluation_slots: EVALUATION_SLOTS
+                .get_or_init(|| Arc::new(Semaphore::new(MAX_CONCURRENT_POLICY_EVALUATIONS)))
+                .clone(),
         }
     }
 
@@ -410,6 +418,7 @@ impl PolicyEngine {
             data_needs_rebuild: self.data_needs_rebuild.clone(),
             rebuild_lock: self.rebuild_lock.clone(),
             rebuild_context: None,
+            evaluation_slots: self.evaluation_slots.clone(),
         }
     }
 
@@ -421,6 +430,7 @@ impl PolicyEngine {
             data_needs_rebuild: self.data_needs_rebuild.clone(),
             rebuild_lock: self.rebuild_lock.clone(),
             rebuild_context: Some(Arc::new(context)),
+            evaluation_slots: self.evaluation_slots.clone(),
         }
     }
 
@@ -445,10 +455,13 @@ impl PolicyEngine {
         db: &DatabaseConnection,
         config: &AppConfig,
     ) -> Result<(), Report> {
-        let _rebuild_guard = self.rebuild_lock.lock().await;
+        let _rebuild_guard =
+            crate::latency::stage("policy.rebuild_lock_wait", self.rebuild_lock.lock()).await;
+        let _hold_timer = crate::latency::StageTimer::new("policy.rebuild_lock_hold");
         self.rebuild_data_locked(db, config).await
     }
 
+    #[instrument(skip_all)]
     async fn rebuild_data_locked(
         &self,
         db: &DatabaseConnection,
@@ -513,7 +526,9 @@ impl PolicyEngine {
         if !*self.data_needs_rebuild.read().await {
             return Ok(());
         }
-        let _rebuild_guard = self.rebuild_lock.lock().await;
+        let _rebuild_guard =
+            crate::latency::stage("policy.rebuild_lock_wait", self.rebuild_lock.lock()).await;
+        let _hold_timer = crate::latency::StageTimer::new("policy.rebuild_lock_hold");
         // Re-check after acquiring: a rebuild that finished while we waited on
         // the lock already covers this invalidation.
         if !*self.data_needs_rebuild.read().await {
@@ -639,6 +654,15 @@ impl PolicyEngine {
         organization_group_ids: &[String],
         groups: &[String],
     ) -> Result<(bool, bool), Report> {
+        // Wait before checking freshness or cloning; queued callers must not
+        // retain a policy read lock or an unnecessarily old snapshot.
+        let permit = crate::latency::stage(
+            "policy.evaluation_queue_wait",
+            self.evaluation_slots.clone().acquire_owned(),
+        )
+        .await
+        .wrap_err("Policy evaluation queue closed")?;
+
         if *self.data_needs_rebuild.read().await {
             if let Some(context) = &self.rebuild_context {
                 self.rebuild_data_if_needed(&context.db, &context.config)
@@ -651,32 +675,42 @@ impl PolicyEngine {
             }
         }
 
-        let engine = self.engine.read().await;
-        let mut engine = engine.clone();
+        let subject_id = subject_id.clone();
+        let resource_id = resource_id.clone();
+        let organization_group_ids = organization_group_ids.to_vec();
+        let groups = groups.to_vec();
+        evaluate_policy_snapshot(&self.engine, permit, move |mut engine| {
+            let _evaluation_timer = crate::latency::StageTimer::new("policy.evaluate");
+            let evaluation_span = crate::latency::sync_span("policy.evaluate");
+            let _evaluation_span = evaluation_span.enter();
 
-        let input = json!({
-            "subject_kind": subject_kind,
-            "subject_id": subject_id,
-            "resource_kind": resource_kind,
-            "resource_id": resource_id,
-            "action": action,
-            "organization_group_ids": organization_group_ids,
-            "groups": groups,
-        });
+            let input = json!({
+                "subject_kind": subject_kind,
+                "subject_id": subject_id,
+                "resource_kind": resource_kind,
+                "resource_id": resource_id,
+                "action": action,
+                "organization_group_ids": organization_group_ids,
+                "groups": groups,
+            });
 
-        engine
-            .set_input_json(&serde_json::to_string(&input)?)
-            .map_err(|e| eyre!(e))?;
-
-        let allowed = engine
-            .eval_bool_query("data.backend.allow".to_string(), false)
-            .map_err(|e| eyre!(e))?;
-        let resource_exists = resource_kind.is_snapshot_backed()
-            && engine
-                .eval_bool_query("data.backend.resource_exists".to_string(), false)
+            engine
+                .set_input_json(&serde_json::to_string(&input)?)
                 .map_err(|e| eyre!(e))?;
 
-        Ok((allowed, resource_exists))
+            let allowed = crate::latency::sync_span("policy.query.allow")
+                .in_scope(|| engine.eval_bool_query("data.backend.allow".to_string(), false))
+                .map_err(|e| eyre!(e))?;
+            let resource_exists = resource_kind.is_snapshot_backed()
+                && crate::latency::sync_span("policy.query.resource_exists")
+                    .in_scope(|| {
+                        engine.eval_bool_query("data.backend.resource_exists".to_string(), false)
+                    })
+                    .map_err(|e| eyre!(e))?;
+
+            Ok((allowed, resource_exists))
+        })
+        .await
     }
 
     async fn filter_authorized_config_resources(
@@ -777,6 +811,32 @@ impl PolicyEngine {
         self.filter_authorized_config_resources(subject, groups, resource_ids, Resource::Facet)
             .await
     }
+}
+
+/// Clone under a short read lock, then evaluate on the blocking pool. The
+/// permit lives inside the job: cancellation of its async caller cannot release
+/// capacity while synchronous work is still running.
+async fn evaluate_policy_snapshot<T: Send + 'static>(
+    shared_engine: &RwLock<Engine>,
+    permit: OwnedSemaphorePermit,
+    evaluate: impl FnOnce(Engine) -> Result<T, Report> + Send + 'static,
+) -> Result<T, Report> {
+    let snapshot = {
+        let engine = crate::latency::stage("policy.engine_read_wait", shared_engine.read()).await;
+        let _read_hold_timer = crate::latency::StageTimer::new("policy.engine_read_hold");
+        let _clone_timer = crate::latency::StageTimer::new("policy.engine_clone");
+        crate::latency::sync_span("policy.engine_clone").in_scope(|| engine.clone())
+    };
+
+    let dispatch_wait = crate::latency::StageTimer::new("policy.blocking_dispatch_wait");
+    let parent_span = tracing::Span::current();
+    tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        drop(dispatch_wait);
+        parent_span.in_scope(|| evaluate(snapshot))
+    })
+    .await
+    .wrap_err("Policy evaluation blocking task failed")?
 }
 
 impl ResourceKind {
@@ -881,6 +941,63 @@ pub const fn authorize_general(resource_kind: ResourceKind, action: Action) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn blocking_evaluation_releases_read_lock_and_keeps_permit_after_cancellation() {
+        let engine = Arc::new(RwLock::new(Engine::new()));
+        let slots = Arc::new(Semaphore::new(1));
+        let permit = slots.clone().acquire_owned().await.unwrap();
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let caller_thread = std::thread::current().id();
+        let shared = engine.clone();
+        let task = tokio::spawn(async move {
+            evaluate_policy_snapshot(&shared, permit, move |_| {
+                assert_ne!(std::thread::current().id(), caller_thread);
+                started_tx.send(()).unwrap();
+                release_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+                Ok(())
+            })
+            .await
+        });
+        tokio::time::timeout(Duration::from_secs(5), started_rx)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            engine.try_write().is_ok(),
+            "evaluation must not retain the read lock"
+        );
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+        assert_eq!(
+            slots.available_permits(),
+            0,
+            "running job still owns capacity"
+        );
+        release_tx.send(()).unwrap();
+        let _permit = tokio::time::timeout(Duration::from_secs(5), slots.acquire())
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn blocking_evaluation_panic_returns_error_and_releases_capacity() {
+        let engine = RwLock::new(Engine::new());
+        let slots = Arc::new(Semaphore::new(1));
+        let permit = slots.clone().acquire_owned().await.unwrap();
+        let result =
+            evaluate_policy_snapshot::<()>(&engine, permit, |_| panic!("test panic")).await;
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("blocking task failed")
+        );
+        assert_eq!(slots.available_permits(), 1);
+        assert!(engine.try_write().is_ok());
+    }
 
     #[test]
     fn test_authorize_macro_success() {

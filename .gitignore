@@ -17,7 +17,8 @@ frontend/component-kits
 office-addin/tmp/
 component-kit-example/dist/
 component-kit-example/node_modules/
-.pnpm-store/
+.pnpm-store
+.uv_cache
 
 # LLM helper
 .aider*
