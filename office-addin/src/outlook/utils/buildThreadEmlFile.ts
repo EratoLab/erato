@@ -8,7 +8,8 @@
  * measures exactly what is sent — no size-proxy placeholder, no divergence.
  *
  * Returns `null` when no message is included (every message dismissed), which
- * the caller treats as "no email body to send".
+ * the caller treats as "no email body to send". Throws `EmailTrimError` when a
+ * dismissal inside a forwarded email cannot be cut out of its bytes.
  *
  * Pure and synchronous (composes `buildThreadSynthInputs` + `synthesizeThreadEml`,
  * both synchronous), so it is safe to call inside a `useMemo`.

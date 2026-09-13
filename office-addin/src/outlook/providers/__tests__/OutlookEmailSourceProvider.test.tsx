@@ -76,6 +76,57 @@ function makeThread(): ParsedThread {
   };
 }
 
+const CRLF = "\r\n";
+
+/** A forwarded email carrying `deep.pdf`, padded so the thread file visibly shrinks without it. */
+const FORWARDED_EML =
+  `From: c@example.com${CRLF}` +
+  `Subject: Re: budget numbers${CRLF}` +
+  `Content-Type: multipart/mixed; boundary="----INNER"${CRLF}${CRLF}` +
+  `------INNER${CRLF}` +
+  `Content-Type: text/plain${CRLF}${CRLF}` +
+  `Forwarded body.${CRLF}` +
+  `------INNER${CRLF}` +
+  `Content-Type: application/pdf; name="deep.pdf"${CRLF}` +
+  `Content-Disposition: attachment; filename="deep.pdf"${CRLF}` +
+  `Content-Transfer-Encoding: base64${CRLF}${CRLF}` +
+  `${"REVFUA==".repeat(200)}${CRLF}` +
+  `------INNER--${CRLF}`;
+
+/** One message holding a forward the way `fetchCurrentThread` delivers it. */
+async function makeThreadWithForward(
+  contentBytes: ArrayBuffer,
+): Promise<ParsedThread> {
+  const id = "<m1@x>:fwd";
+  const nested = await parseEmlBytes(
+    new TextEncoder().encode(FORWARDED_EML).buffer,
+    { idPrefix: `${id}/` },
+  );
+  return {
+    conversationId: "conv-1",
+    subject: "Project kickoff",
+    messages: [
+      makeMessage({
+        id: "<m1@x>",
+        attachments: [
+          {
+            id,
+            filename: "Forwarded.eml",
+            mimeType: "message/rfc822",
+            size: contentBytes.byteLength,
+            contentBytes,
+            isInline: false,
+            contentId: null,
+            unavailableReason: null,
+            nested: nested!,
+          },
+        ],
+      }),
+    ],
+    incomplete: false,
+  };
+}
+
 type ContextValue = ReturnType<typeof useOutlookEmailSource>;
 
 let captured: ContextValue | null = null;
@@ -104,7 +155,7 @@ afterEach(() => {
 });
 
 describe("OutlookEmailSourceProvider — current-thread emailBodyFile", () => {
-  function primeReadModeThread() {
+  function primeReadModeThread(thread: ParsedThread = makeThread()) {
     mockUseOutlookMailItem.mockReturnValue({
       itemIdentity: "id-1",
       // itemId set => read mode => the compose reply-context effect early-returns.
@@ -120,7 +171,7 @@ describe("OutlookEmailSourceProvider — current-thread emailBodyFile", () => {
       getAttachmentFile: vi.fn(),
     });
     mockUseCurrentThread.mockReturnValue({
-      thread: makeThread(),
+      thread,
       isLoading: false,
       error: false,
     });
@@ -129,6 +180,64 @@ describe("OutlookEmailSourceProvider — current-thread emailBodyFile", () => {
       unavailableReason: "unsupported-mode",
     });
   }
+
+  it("cuts a dismissed part out of a forwarded email and still sends the file it estimated", async () => {
+    primeReadModeThread(
+      await makeThreadWithForward(
+        new TextEncoder().encode(FORWARDED_EML).buffer,
+      ),
+    );
+    renderProvider();
+    const whole = captured!.emailBodyFile;
+    expect(whole).not.toBeNull();
+
+    act(() => {
+      captured!.dismissStagedEmailAttachment("<m1@x>", "<m1@x>:fwd/att-0");
+    });
+
+    expect(captured!.threadTrimError).toBeNull();
+    const trimmed = captured!.emailBodyFile;
+    expect(trimmed).not.toBeNull();
+    expect(trimmed!.size).toBeLessThan(whole!.size);
+
+    let sent: File[] = [];
+    await act(async () => {
+      sent = await captured!.resolveSelectedFilesForSend();
+    });
+    expect(sent).toEqual([trimmed]);
+  });
+
+  it("holds a failed forward trim as threadTrimError and refuses the send until it is undone", async () => {
+    // The trimmer cannot walk these bytes, yet the nested list still offers a part to dismiss.
+    primeReadModeThread(
+      await makeThreadWithForward(
+        new TextEncoder().encode("this is not an email").buffer,
+      ),
+    );
+    renderProvider();
+    expect(captured!.threadTrimError).toBeNull();
+
+    act(() => {
+      captured!.dismissStagedEmailAttachment("<m1@x>", "<m1@x>:fwd/att-0");
+    });
+
+    expect(captured!.threadTrimError).toBeInstanceOf(EmailTrimError);
+    expect(captured!.threadTrimError!.filename).toBe("Forwarded.eml");
+    expect(captured!.emailBodyFile).toBeNull();
+    // The thread card stays so the refusal has something to point at.
+    expect(captured!.stagedEmails).toHaveLength(1);
+    expect(captured!.hasSelectedEmailSource).toBe(true);
+    await expect(captured!.resolveSelectedFilesForSend()).rejects.toBe(
+      captured!.threadTrimError,
+    );
+
+    act(() => {
+      captured!.restoreStagedEmailAttachment("<m1@x>", "<m1@x>:fwd/att-0");
+    });
+
+    expect(captured!.threadTrimError).toBeNull();
+    expect(captured!.emailBodyFile).not.toBeNull();
+  });
 
   it("exposes the real synthesized .eml as emailBodyFile (real bytes, not a zero-filled placeholder)", async () => {
     primeReadModeThread();

@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { parseEmlBytes } from "../parsedEmail";
 import { trimEmlAttachments } from "../trimEmlAttachments";
 
+import type { AttachmentTarget } from "../trimEmlAttachments";
+
 const CRLF = "\r\n";
 
 function toArrayBuffer(text: string): ArrayBuffer {
@@ -13,9 +15,20 @@ function toArrayBuffer(text: string): ArrayBuffer {
  * An email carrying `top.pdf` plus a forwarded email (no Content-Disposition,
  * the way Outlook emits item attachments) that itself carries `deep.pdf`.
  */
-function buildEmailWithForward(): string {
+function buildEmailWithForward(
+  forwardEncoding?: string,
+  forwardDisposition?: string,
+): string {
   const outer = "----OUTER";
   const inner = "----INNER";
+  const forwardHeaders =
+    `Content-Type: message/rfc822${CRLF}` +
+    (forwardEncoding
+      ? `Content-Transfer-Encoding: ${forwardEncoding}${CRLF}`
+      : "") +
+    (forwardDisposition
+      ? `Content-Disposition: ${forwardDisposition}${CRLF}`
+      : "");
   return (
     `From: a@example.com${CRLF}` +
     `To: b@example.com${CRLF}` +
@@ -30,7 +43,7 @@ function buildEmailWithForward(): string {
     `Content-Transfer-Encoding: base64${CRLF}${CRLF}` +
     `VE9Q${CRLF}` +
     `--${outer}${CRLF}` +
-    `Content-Type: message/rfc822${CRLF}${CRLF}` +
+    `${forwardHeaders}${CRLF}` +
     `From: c@example.com${CRLF}` +
     `Subject: Re: budget numbers${CRLF}` +
     `Content-Type: multipart/mixed; boundary="${inner}"${CRLF}${CRLF}` +
@@ -47,11 +60,28 @@ function buildEmailWithForward(): string {
   );
 }
 
-async function parseAndTrim(indices: number[]) {
+/** The same email with the forwarded part genuinely base64-encoded. */
+function buildEmailWithEncodedForward(): string {
+  const plain = buildEmailWithForward();
+  const partStart = plain.indexOf("Content-Type: message/rfc822");
+  const innerStart = plain.indexOf(CRLF + CRLF, partStart) + 2 * CRLF.length;
+  const innerEnd = plain.lastIndexOf("--", plain.lastIndexOf("----OUTER--"));
+  const inner = plain.slice(innerStart, innerEnd);
+  return (
+    plain.slice(0, partStart) +
+    `Content-Type: message/rfc822${CRLF}` +
+    `Content-Transfer-Encoding: base64${CRLF}${CRLF}` +
+    btoa(inner) +
+    CRLF +
+    plain.slice(innerEnd)
+  );
+}
+
+async function parseAndTrim(targets: AttachmentTarget[]) {
   const parsed = await parseEmlBytes(toArrayBuffer(buildEmailWithForward()));
   if (!parsed) throw new Error("fixture did not parse");
   const raw = new Uint8Array(await parsed.rawEmlFile.arrayBuffer());
-  const trimmed = trimEmlAttachments(raw, indices);
+  const trimmed = trimEmlAttachments(raw, targets);
   if (!trimmed) throw new Error("trim returned null");
   const reparsed = await parseEmlBytes(trimmed.slice().buffer);
   if (!reparsed) throw new Error("trimmed bytes did not parse");
@@ -80,6 +110,32 @@ describe("dismissing parts of a dropped email with a forwarded email inside", ()
     expect(parsed?.attachments[1].filename).toMatch(/budget[_ ]numbers/);
   });
 
+  it("exposes the forwarded email's own attachments under path ids", async () => {
+    const parsed = await parseEmlBytes(toArrayBuffer(buildEmailWithForward()));
+
+    expect(parsed?.attachments.map((a) => a.id)).toEqual(["att-0", "att-1"]);
+    const nested = parsed?.attachments[1].nested;
+    expect(nested?.subject).toBe("Re: budget numbers");
+    expect(nested?.attachments.map((a) => [a.id, a.filename])).toEqual([
+      ["att-1/att-0", "deep.pdf"],
+    ]);
+  });
+
+  it("treats an inline-disposed forward the same as a disposition-less one", async () => {
+    const raw = new TextEncoder().encode(
+      buildEmailWithForward(undefined, "inline"),
+    );
+    const parsed = await parseEmlBytes(raw.slice().buffer);
+
+    expect(parsed?.attachments.map((a) => a.id)).toEqual(["att-0", "att-1"]);
+    expect(parsed?.attachments[1].nested?.attachments.map((a) => a.id)).toEqual(
+      ["att-1/att-0"],
+    );
+    const trimmed = trimEmlAttachments(raw, [1]);
+    expect(trimmed).not.toBeNull();
+    expect(new TextDecoder().decode(trimmed!)).not.toContain("deep.pdf");
+  });
+
   it("unchecking the forwarded email removes exactly that, keeping top.pdf", async () => {
     const { trimmedText, reparsed } = await parseAndTrim([1]);
 
@@ -97,5 +153,86 @@ describe("dismissing parts of a dropped email with a forwarded email inside", ()
     expect(trimmedText).not.toContain("top.pdf");
     expect(trimmedText).toContain("deep.pdf");
     expect(trimmedText).toContain("Forwarded body.");
+  });
+
+  it("unchecking deep.pdf by path removes only it, keeping the forwarded body", async () => {
+    const { trimmedText, reparsed } = await parseAndTrim(["1/0"]);
+
+    expect(reparsed.attachments.map((a) => a.mimeType)).toEqual([
+      "application/pdf",
+      "message/rfc822",
+    ]);
+    expect(trimmedText).toContain("top.pdf");
+    expect(trimmedText).toContain("Forwarded body.");
+    expect(trimmedText).not.toContain("deep.pdf");
+    expect(trimmedText).not.toContain("REVFUA==");
+  });
+
+  it("accepts the top-level index spelled as a path", async () => {
+    const byIndex = await parseAndTrim([1]);
+    const byPath = await parseAndTrim(["1"]);
+
+    expect(byPath.trimmedText).toBe(byIndex.trimmedText);
+  });
+
+  it("splices only the forwarded email when deep.pdf inside it is also targeted", async () => {
+    const whole = await parseAndTrim([1]);
+    const both = await parseAndTrim(["1/0", 1, "1/0"]);
+
+    expect(both.trimmedText).toBe(whole.trimmedText);
+    expect(both.reparsed.attachments.map((a) => a.filename)).toEqual([
+      "top.pdf",
+    ]);
+  });
+
+  it("tells the chips whether a forwarded email's own parts can be cut out", async () => {
+    const plain = await parseEmlBytes(toArrayBuffer(buildEmailWithForward()));
+    const encoded = await parseEmlBytes(
+      toArrayBuffer(buildEmailWithEncodedForward()),
+    );
+
+    expect(plain?.attachments[0].nestedTrimmable).toBeUndefined();
+    expect(plain?.attachments[1].nestedTrimmable).toBe(true);
+    // Still expanded (postal-mime decodes it), but only removable whole.
+    expect(
+      encoded?.attachments[1].nested?.attachments.map((a) => a.filename),
+    ).toEqual(["deep.pdf"]);
+    expect(encoded?.attachments[1].nestedTrimmable).toBe(false);
+    expect(
+      trimEmlAttachments(
+        new Uint8Array(toArrayBuffer(buildEmailWithEncodedForward())),
+        ["1/0"],
+      ),
+    ).toBeNull();
+  });
+
+  it("prefixes every level of ids when asked, so several parsed emails share one id set", async () => {
+    const parsed = await parseEmlBytes(toArrayBuffer(buildEmailWithForward()), {
+      idPrefix: "<m1@x>:item-1/",
+    });
+
+    expect(parsed?.attachments.map((a) => a.id)).toEqual([
+      "<m1@x>:item-1/att-0",
+      "<m1@x>:item-1/att-1",
+    ]);
+    expect(parsed?.attachments[1].nested?.attachments.map((a) => a.id)).toEqual(
+      ["<m1@x>:item-1/att-1/att-0"],
+    );
+  });
+
+  it("refuses a path into a forwarded email whose bytes are transfer-encoded", () => {
+    const raw = new TextEncoder().encode(buildEmailWithForward("base64"));
+
+    expect(trimEmlAttachments(raw, ["1/0"])).toBeNull();
+    // The forwarded email itself is still addressable as a whole.
+    expect(trimEmlAttachments(raw, ["1"])).not.toBeNull();
+  });
+
+  it("refuses a path that does not resolve", () => {
+    const raw = new TextEncoder().encode(buildEmailWithForward());
+
+    expect(trimEmlAttachments(raw, ["1/1"])).toBeNull();
+    expect(trimEmlAttachments(raw, ["0/0"])).toBeNull();
+    expect(trimEmlAttachments(raw, ["x"])).toBeNull();
   });
 });

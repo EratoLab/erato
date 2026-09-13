@@ -1,5 +1,7 @@
 import { trimEmlAttachments } from "./trimEmlAttachments";
 
+import type { AttachmentTarget } from "./trimEmlAttachments";
+
 /** The dismissed attachments could not be cut out of an email's bytes. */
 export class EmailTrimError extends Error {
   constructor(public readonly filename: string) {
@@ -16,9 +18,9 @@ export class EmailTrimError extends Error {
 export function trimEmlFileSync(
   bytes: Uint8Array,
   like: File,
-  indicesToRemove: number[],
+  targets: AttachmentTarget[],
 ): File | null {
-  const trimmed = trimEmlAttachments(bytes, indicesToRemove);
+  const trimmed = trimEmlAttachments(bytes, targets);
   if (!trimmed) {
     return null;
   }
@@ -34,14 +36,10 @@ export function trimEmlFileSync(
  */
 export async function trimRawEmlBytes(
   rawEmlFile: File,
-  indicesToRemove: number[],
+  targets: AttachmentTarget[],
 ): Promise<File> {
   const buffer = await rawEmlFile.arrayBuffer();
-  const trimmed = trimEmlFileSync(
-    new Uint8Array(buffer),
-    rawEmlFile,
-    indicesToRemove,
-  );
+  const trimmed = trimEmlFileSync(new Uint8Array(buffer), rawEmlFile, targets);
   if (!trimmed) {
     throw new EmailTrimError(rawEmlFile.name);
   }

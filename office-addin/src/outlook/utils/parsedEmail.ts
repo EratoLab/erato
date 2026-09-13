@@ -1,5 +1,8 @@
 import PostalMime from "postal-mime";
 
+import { parseMimeStructure } from "./emlMimeStructure";
+import { canTrimInside, listAttachmentLeaves } from "./trimEmlAttachments";
+
 import type { Address, Attachment } from "postal-mime";
 
 export interface ParsedEmailAddress {
@@ -16,6 +19,20 @@ export interface ParsedAttachment {
   related: boolean;
   contentId: string | null;
   toFile: () => File;
+  /**
+   * The forwarded email inside a `message/rfc822` part, parsed in turn. Its
+   * attachment ids extend this part's id (`att-1/att-0`), so one flat set of
+   * ids addresses every level. Absent when the part is too deep, too large,
+   * or does not parse.
+   */
+  nested?: ParsedEmail;
+  /**
+   * Whether a dismissal inside `nested` can be cut out of this email's bytes.
+   * False when the forward is transfer-encoded: its parts are not addressable
+   * in place, so only the forward as a whole can be left out. Present with
+   * `nested` only.
+   */
+  nestedTrimmable?: boolean;
 }
 
 export interface ParsedEmail {
@@ -37,25 +54,54 @@ export interface ParsedEmail {
 export interface ParseEmlBytesOptions {
   /** File name to surface on the wrapped `.eml` File. Defaults to a sanitised subject. */
   filename?: string;
+  /**
+   * Prepended to every attachment id (`<prefix>att-0`, and on down into
+   * forwards). Lets a caller that holds several parsed emails keep one flat
+   * id set.
+   */
+  idPrefix?: string;
 }
 
 export async function parseEmlBytes(
   bytes: ArrayBuffer,
   options: ParseEmlBytesOptions = {},
 ): Promise<ParsedEmail | null> {
+  return parseEmlBytesAt(bytes, options, 0, options.idPrefix ?? "");
+}
+
+/** Forwarded emails nest no deeper than this; beyond it a part stays opaque. */
+const MAX_NESTED_DEPTH = 3;
+/** Above this a forwarded email is not expanded; parsing it would stall the drop. */
+export const NESTED_PARSE_LIMIT_BYTES = 25 * 1024 * 1024;
+
+async function parseEmlBytesAt(
+  bytes: ArrayBuffer,
+  options: ParseEmlBytesOptions,
+  depth: number,
+  idPrefix: string,
+): Promise<ParsedEmail | null> {
   let parsed;
   try {
-    // By default postal-mime hoists a forwarded email's attachments into this
-    // list while the trim walker sees one leaf, so dismissal indices diverge.
-    parsed = await PostalMime.parse(bytes, { rfc822Attachments: true });
+    // Forced so a forwarded email is one attachment (never inlined, whatever
+    // its disposition) and the trim walker's leaf indices line up with this list.
+    parsed = await PostalMime.parse(bytes, { forceRfc822Attachments: true });
   } catch (error) {
     console.warn("[parsedEmail] postal-mime failed to parse bytes:", error);
     return null;
   }
 
+  const rawAttachments = parsed.attachments ?? [];
+  const trimmableLeaves = rawAttachments.some(isMessagePart)
+    ? listTrimmableLeaves(bytes)
+    : [];
   const attachments: ParsedAttachment[] = await Promise.all(
-    (parsed.attachments ?? []).map(async (attachment, index) =>
-      buildAttachment(attachment, index, await nestedMessageName(attachment)),
+    rawAttachments.map((attachment, index) =>
+      buildAttachment(
+        attachment,
+        `${idPrefix}att-${index}`,
+        depth,
+        trimmableLeaves[index] === true,
+      ),
     ),
   );
 
@@ -83,42 +129,45 @@ export async function parseEmlBytes(
   };
 }
 
-/** Above this a forwarded email keeps the generic name; parsing it only for a subject is not worth the stall. */
-const NESTED_NAME_PARSE_LIMIT_BYTES = 2 * 1024 * 1024;
-
-/** A forwarded email usually has no filename; name it after its subject. */
-async function nestedMessageName(
-  attachment: Attachment,
-): Promise<string | null> {
-  if (attachment.mimeType !== "message/rfc822" || attachment.filename?.trim()) {
-    return null;
-  }
-  const blobPart = toBlobPart(attachment.content);
-  if (
-    !(blobPart instanceof ArrayBuffer) ||
-    blobPart.byteLength > NESTED_NAME_PARSE_LIMIT_BYTES
-  ) {
-    return buildDefaultName(undefined);
-  }
-  try {
-    const nested = await PostalMime.parse(new Uint8Array(blobPart));
-    return buildDefaultName(nested.subject);
-  } catch {
-    return buildDefaultName(undefined);
-  }
+function isMessagePart(attachment: Attachment): boolean {
+  return (attachment.mimeType || "").trim().toLowerCase() === "message/rfc822";
 }
 
-function buildAttachment(
+/**
+ * Per attachment, in postal-mime's order, whether the trimmer can reach into
+ * it. Reads the same leaf list the trimmer walks, so the indices agree.
+ */
+function listTrimmableLeaves(bytes: ArrayBuffer): boolean[] {
+  const root = parseMimeStructure(new Uint8Array(bytes));
+  if (!root) return [];
+  return listAttachmentLeaves(root).map(canTrimInside);
+}
+
+async function buildAttachment(
   attachment: Attachment,
-  index: number,
-  nameFallback: string | null,
-): ParsedAttachment {
-  const filename = attachment.filename?.trim() || nameFallback || "attachment";
+  id: string,
+  depth: number,
+  trimmable: boolean,
+): Promise<ParsedAttachment> {
   const mimeType = attachment.mimeType || "application/octet-stream";
+  const isMessage = isMessagePart(attachment);
   const blobPart = toBlobPart(attachment.content);
   const size = blobPart instanceof ArrayBuffer ? blobPart.byteLength : 0;
+  const nested =
+    isMessage &&
+    depth < MAX_NESTED_DEPTH &&
+    blobPart instanceof ArrayBuffer &&
+    blobPart.byteLength <= NESTED_PARSE_LIMIT_BYTES
+      ? ((await parseEmlBytesAt(blobPart, {}, depth + 1, `${id}/`)) ??
+        undefined)
+      : undefined;
+  // A forwarded email usually has no filename; name it after its subject.
+  const filename =
+    attachment.filename?.trim() ||
+    (isMessage ? buildDefaultName(nested?.subject ?? undefined) : null) ||
+    "attachment";
   return {
-    id: `att-${index}`,
+    id,
     filename,
     mimeType,
     size,
@@ -129,6 +178,7 @@ function buildAttachment(
       blobPart === null
         ? new File([], filename, { type: mimeType })
         : new File([blobPart], filename, { type: mimeType }),
+    ...(nested ? { nested, nestedTrimmable: trimmable } : {}),
   };
 }
 
