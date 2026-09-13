@@ -10,6 +10,7 @@ pub mod entra_id;
 pub mod facets;
 pub mod files;
 pub mod generating;
+pub mod mcp_servers;
 pub mod message_feedback;
 pub mod messages;
 pub mod sharepoint;
