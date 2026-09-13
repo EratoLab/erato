@@ -142,7 +142,7 @@ pub struct ServedFrontend {
     pub import_map_json: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct FrontendRegistry {
     frontends: Vec<ServedFrontend>,
     translations: TranslationDistribution,
@@ -749,6 +749,7 @@ pub mod axum {
     use http_body_util::combinators::UnsyncBoxBody;
     use std::convert::Infallible;
     use std::path::PathBuf;
+    use std::sync::Arc;
     use tower_http::services::{ServeDir, ServeFile};
 
     fn insert_content_security_policy(
@@ -882,7 +883,7 @@ pub mod axum {
     /// Static file handler that injects a script tag with environment variables into HTML files.
     /// Also handles cache headers for static files based on deployment version.
     pub async fn serve_files_with_script(
-        Extension(frontend_registry): Extension<FrontendRegistry>,
+        Extension(frontend_registry): Extension<Arc<FrontendRegistry>>,
         Extension(deployment_version): Extension<DeploymentVersion>,
         req: Request<Body>,
     ) -> Result<Response<UnsyncBoxBody<Bytes, BoxError>>, Infallible> {

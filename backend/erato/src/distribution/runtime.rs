@@ -9,8 +9,11 @@ use crate::models::runtime_configuration::{
 };
 use crate::services::mcp_manager::McpServers;
 use crate::state::AppState;
-use eyre::{Report, eyre};
+use crate::translation_po::TranslationPoCache;
+use axum::body::Bytes;
+use eyre::{Report, WrapErr, eyre};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
+use std::collections::HashMap;
 
 pub const ADMIN_PANEL_SOURCE_SERVICE: &str = "erato_admin_panel";
 const TRANSLATION_PO_SOURCE_TYPE: &str = "translation_po";
@@ -25,7 +28,8 @@ pub struct DistributionFile {
 /// Files loaded from the runtime configuration table.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DistributionBundle {
-    pub files: Vec<DistributionFile>,
+    files: Vec<DistributionFile>,
+    compiled_translations: HashMap<String, Result<Bytes, String>>,
 }
 
 /// Evaluated MCP configuration and the session manager that serves it.
@@ -36,6 +40,37 @@ pub struct McpAppState {
 }
 
 impl DistributionBundle {
+    // Compile once per replacement bundle, before publishing it. Cache failures
+    // too, preserving per-catalog HTTP errors without retrying on every request.
+    fn from_files(files: Vec<DistributionFile>) -> Self {
+        let compiler = TranslationPoCache::default();
+        let mut compiled_translations = HashMap::new();
+        for file in &files {
+            if translation_locale(&file.filename).is_none() {
+                continue;
+            }
+            // Match file()'s first-row behavior if the database has duplicates.
+            compiled_translations
+                .entry(file.filename.clone())
+                .or_insert_with(|| {
+                    compiler
+                        .compile_messages_json_from_contents(&file.contents)
+                        .map(Bytes::from)
+                        .map_err(|error| error.to_string())
+                });
+        }
+        Self {
+            files,
+            compiled_translations,
+        }
+    }
+
+    /// Cheaply clone immutable response bytes while holding the state read lock.
+    #[must_use]
+    pub fn compiled_translation(&self, filename: &str) -> Option<Result<Bytes, String>> {
+        self.compiled_translations.get(filename).cloned()
+    }
+
     #[must_use]
     pub fn file(&self, filename: &str) -> Option<&DistributionFile> {
         self.files.iter().find(|file| file.filename == filename)
@@ -110,6 +145,11 @@ impl ReloadableAppState {
             });
         }
 
+        let distribution_bundle =
+            tokio::task::spawn_blocking(move || DistributionBundle::from_files(files))
+                .await
+                .wrap_err("Runtime translation compilation task failed")?;
+
         // A malformed policy must not take the translation bundle down: carry
         // the previous policy forward so the swap stays one complete write. On
         // a cold start that previous policy is `None`.
@@ -138,7 +178,7 @@ impl ReloadableAppState {
         }
 
         Ok(Self {
-            distribution_bundle: DistributionBundle { files },
+            distribution_bundle,
             experience_policy,
             mcp: McpAppState {
                 config: mcp_config,
@@ -250,6 +290,71 @@ pub fn translation_filename(locale: &str) -> Result<String, Report> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn translation(contents: &str) -> DistributionFile {
+        DistributionFile {
+            filename: "overrides/de.po".into(),
+            contents: contents.into(),
+        }
+    }
+
+    #[test]
+    fn compiled_translations_share_bytes_and_replacement_drops_stale_catalogs() {
+        let old = DistributionBundle::from_files(vec![translation(
+            "msgid \"Hello\"\nmsgstr \"Hallo\"\n",
+        )]);
+        let first = old
+            .compiled_translation("overrides/de.po")
+            .unwrap()
+            .unwrap();
+        let again = old
+            .compiled_translation("overrides/de.po")
+            .unwrap()
+            .unwrap();
+        assert_eq!(first.as_ptr(), again.as_ptr());
+        let replacement = DistributionBundle::from_files(vec![translation(
+            "msgid \"Hello\"\nmsgstr \"Guten Tag\"\n",
+        )]);
+        assert_ne!(
+            first,
+            replacement
+                .compiled_translation("overrides/de.po")
+                .unwrap()
+                .unwrap()
+        );
+        assert!(
+            DistributionBundle::default()
+                .compiled_translation("overrides/de.po")
+                .is_none()
+        );
+        // Responses already in flight keep their immutable bytes after a reload.
+        drop(old);
+        assert_eq!(first, again);
+    }
+
+    #[test]
+    fn invalid_catalog_is_cached_without_hiding_other_locales() {
+        let bundle = DistributionBundle::from_files(vec![
+            translation("msgid unquoted"),
+            DistributionFile {
+                filename: "overrides/en.po".into(),
+                contents: "msgid \"Hello\"\nmsgstr \"Hello\"\n".into(),
+            },
+        ]);
+        assert!(
+            bundle
+                .compiled_translation("overrides/de.po")
+                .unwrap()
+                .is_err()
+        );
+        assert!(
+            bundle
+                .compiled_translation("overrides/en.po")
+                .unwrap()
+                .is_ok()
+        );
+        assert_eq!(bundle.translation_locales(), vec!["de", "en"]);
+    }
 
     #[test]
     fn accepts_only_runtime_translation_filenames() {

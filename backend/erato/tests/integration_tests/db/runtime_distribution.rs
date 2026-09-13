@@ -333,3 +333,45 @@ async fn foreign_filenames_never_silently_unpin(pool: Pool<Postgres>) {
     let loaded = ReloadableAppState::load(&app_state).await.unwrap();
     assert_eq!(loaded.experience_policy, Some(expected_policy_document()));
 }
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn translation_reload_replaces_cached_json_and_removes_deleted_locales(pool: Pool<Postgres>) {
+    let app_state = app_state_with_encryption(pool).await;
+    replace_translation_row(&app_state, "msgid \"Hello\"\nmsgstr \"Hallo\"\n").await;
+    let first = ReloadableAppState::load(&app_state).await.unwrap();
+    let old_body = first
+        .distribution_bundle
+        .compiled_translation("overrides/de.po")
+        .unwrap()
+        .unwrap();
+    *app_state.reloadable.write().await = first;
+
+    replace_translation_row(&app_state, "msgid \"Hello\"\nmsgstr \"Guten Tag\"\n").await;
+    let next = ReloadableAppState::load(&app_state).await.unwrap();
+    let new_body = next
+        .distribution_bundle
+        .compiled_translation("overrides/de.po")
+        .unwrap()
+        .unwrap();
+    assert_ne!(old_body, new_body);
+    assert!(
+        std::str::from_utf8(&new_body)
+            .unwrap()
+            .contains("Guten Tag")
+    );
+    *app_state.reloadable.write().await = next;
+
+    RuntimeConfiguration::delete_many()
+        .filter(runtime_configuration::Column::SourceType.eq(TRANSLATION_PO_SOURCE_TYPE))
+        .exec(&app_state.db)
+        .await
+        .unwrap();
+    let deleted = ReloadableAppState::load(&app_state).await.unwrap();
+    assert!(
+        deleted
+            .distribution_bundle
+            .compiled_translation("overrides/de.po")
+            .is_none()
+    );
+    assert!(deleted.distribution_bundle.translation_locales().is_empty());
+}
