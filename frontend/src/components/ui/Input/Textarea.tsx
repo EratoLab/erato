@@ -72,6 +72,19 @@ export interface TextareaProps
    */
   maxRows?: number;
   /**
+   * Whether the textarea draws its own frame: corner, border and focus
+   * indicator. Pass `false` when a container already frames it and the
+   * textarea sits flush against the container's inner edges — the container
+   * must then own the focus indicator, because the textarea no longer has one.
+   *
+   * This is a variant rather than a set of suppressing classes on `className`:
+   * there is no tailwind-merge in this repo, so `rounded-none` and
+   * `focus:ring-0` merely race the base utilities on generated-stylesheet
+   * position, and both lose.
+   * @default true
+   */
+  frame?: boolean;
+  /**
    * Additional CSS classes
    */
   className?: string;
@@ -121,6 +134,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
       monospace = false,
       autoResize = false,
       maxRows = 20,
+      frame = true,
       className,
       "aria-label": ariaLabel,
       "aria-describedby": ariaDescribedBy,
@@ -157,7 +171,16 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
       );
       const newHeight = Math.min(Math.max(contentHeight, minHeight), maxHeight);
       textarea.style.height = `${newHeight}px`;
-    }, [value, autoResize, rows, maxRows, monospace, className, textareaRef]);
+    }, [
+      value,
+      autoResize,
+      rows,
+      maxRows,
+      monospace,
+      className,
+      frame,
+      textareaRef,
+    ]);
 
     return (
       <div className="w-full">
@@ -174,17 +197,24 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           className={clsx(
             // Base styles
             "w-full",
-            "[border-radius:var(--theme-radius-input)]",
             "[padding:var(--theme-spacing-input-padding-y)_var(--theme-spacing-input-padding-x)]",
             "text-base text-theme-fg-primary placeholder:text-theme-fg-muted",
             "theme-transition",
-            // Background and border
-            "border bg-theme-bg-secondary",
-            error
-              ? "border-theme-error-border focus:border-theme-error-border focus:ring-theme-focus-error"
-              : "border-[var(--theme-border-field)] focus:border-[var(--theme-border-field-focus)] focus:ring-theme-focus",
+            // Background
+            "bg-theme-bg-secondary",
+            // The field's own frame: corner, border and focus indicator. All
+            // of it is omitted rather than overridden when `frame` is false,
+            // so a flush textarea emits no class the container has to outrank.
+            frame && [
+              "[border-radius:var(--theme-radius-input)]",
+              "border",
+              error
+                ? "border-theme-error-border focus:border-theme-error-border focus:ring-theme-focus-error"
+                : "border-[var(--theme-border-field)] focus:border-[var(--theme-border-field-focus)] focus:ring-theme-focus",
+              "focus:ring-2",
+            ],
             // Focus styles
-            "focus:outline-none focus:ring-2",
+            "focus:outline-none",
             // Disabled styles. These are `disabled:` variants, not a
             // `disabled && "..."` branch: there is no tailwind-merge in this
             // repo, so a conditional `bg-theme-bg-primary` would race the base
