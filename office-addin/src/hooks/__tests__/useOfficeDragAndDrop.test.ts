@@ -144,6 +144,73 @@ describe("useOfficeDragAndDrop", () => {
     expect(onDrop).not.toHaveBeenCalled();
   });
 
+  it("announces the count through onDropStart and releases once onDrop settles", async () => {
+    const release = vi.fn();
+    const onDropStart = vi.fn(() => release);
+    let finish: () => void = () => {};
+    const onDrop = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    renderHook(() => useOfficeDragAndDrop({ onDrop, onDropStart }));
+
+    act(() =>
+      fireDrop([
+        {
+          name: "m.eml",
+          type: "message/rfc822",
+          fileContent: new Blob(["body"]),
+        },
+      ]),
+    );
+
+    expect(onDropStart).toHaveBeenCalledWith(1);
+    expect(onDropStart.mock.invocationCallOrder[0]).toBeLessThan(
+      onDrop.mock.invocationCallOrder[0],
+    );
+    expect(release).not.toHaveBeenCalled();
+
+    await act(async () => {
+      finish();
+    });
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases the onDropStart span even when onDrop rejects", async () => {
+    const release = vi.fn();
+    const onDropStart = vi.fn(() => release);
+    const onDrop = vi.fn(() => Promise.reject(new Error("nope")));
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    renderHook(() => useOfficeDragAndDrop({ onDrop, onDropStart }));
+
+    await act(async () => {
+      fireDrop([
+        {
+          name: "m.eml",
+          type: "message/rfc822",
+          fileContent: new Blob(["body"]),
+        },
+      ]);
+    });
+
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases the onDropStart span at once for an empty drop", () => {
+    const release = vi.fn();
+    const onDropStart = vi.fn(() => release);
+    const onDrop = vi.fn();
+    renderHook(() => useOfficeDragAndDrop({ onDrop, onDropStart }));
+
+    act(() => fireDrop([]));
+
+    expect(onDropStart).toHaveBeenCalledWith(0);
+    expect(onDrop).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
   it("does not subscribe when disabled", () => {
     const mailbox = Office.context.mailbox as unknown as MailboxMock;
     const onDrop = vi.fn();

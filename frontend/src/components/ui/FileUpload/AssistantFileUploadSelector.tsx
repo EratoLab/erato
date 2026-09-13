@@ -10,7 +10,11 @@ import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 
 import { componentRegistry } from "@/config/componentRegistry";
-import { CloudLinkError, UploadTooLargeError } from "@/hooks/files/errors";
+import {
+  CloudLinkError,
+  UnsupportedFileTypeError,
+  UploadTooLargeError,
+} from "@/hooks/files/errors";
 import { useStandaloneFileUpload } from "@/hooks/files/useStandaloneFileUpload";
 import { fetchLinkFile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import {
@@ -19,7 +23,10 @@ import {
 } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
 import { DEFAULT_MAX_ASSISTANT_FILES } from "@/utils/fileUploadLimits";
-import { oversizedRejectionNames } from "@/utils/validateFileSizes";
+import {
+  oversizedRejectionNames,
+  rejectionNames,
+} from "@/utils/validateFileSizes";
 
 import { CloudFilePickerModal } from "./CloudFilePickerModal";
 import { FileSourceSelector } from "./FileSourceSelector";
@@ -117,7 +124,12 @@ export const AssistantFileUploadSelector: React.FC<
   } = useDropzone({
     onDrop: (acceptedFiles, rejectedFiles) => {
       // Rejected files never reach the upload preflight; report them here.
+      let unsupported: string[] = [];
       if (rejectedFiles.length > 0) {
+        unsupported = rejectionNames(rejectedFiles, "file-invalid-type");
+        if (unsupported.length > 0) {
+          setCloudLinkError(new UnsupportedFileTypeError(unsupported));
+        }
         const oversized = oversizedRejectionNames(rejectedFiles);
         if (oversized.length > 0) {
           setCloudLinkError(
@@ -131,8 +143,12 @@ export const AssistantFileUploadSelector: React.FC<
         clearErrors();
         void (async () => {
           const uploadedFiles = await uploadFiles(acceptedFiles);
-          if (uploadedFiles && onFilesUploaded) {
-            onFilesUploaded(uploadedFiles);
+          if (uploadedFiles === undefined) return;
+          onFilesUploaded?.(uploadedFiles);
+          // Cleared above with the stale errors; a batch that went through
+          // still owes the user the names it left behind.
+          if (unsupported.length > 0) {
+            setCloudLinkError(new UnsupportedFileTypeError(unsupported));
           }
         })();
       }

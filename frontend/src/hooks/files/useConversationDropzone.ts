@@ -1,10 +1,17 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef, type DragEvent } from "react";
 import { useDropzone } from "react-dropzone";
 
-import { UploadTooLargeError, type UploadError } from "@/hooks/files/errors";
+import {
+  UnsupportedFileTypeError,
+  UploadTooLargeError,
+  type UploadError,
+} from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { FileTypeUtil } from "@/utils/fileTypes";
-import { oversizedRejectionNames } from "@/utils/validateFileSizes";
+import {
+  oversizedRejectionNames,
+  rejectionNames,
+} from "@/utils/validateFileSizes";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
@@ -16,9 +23,10 @@ interface UseConversationDropzoneOptions {
   onUploaded: (items: FileUploadItem[]) => void;
   acceptedFileTypes?: FileType[];
   /**
-   * Extra MIME-keyed entries merged into the dropzone accept map. Useful for
-   * surfaces that accept file types not declared by backend capabilities —
-   * e.g. the Outlook add-in accepting `.eml`/`.msg` drops of email messages.
+   * Extra MIME-keyed entries merged into the dropzone accept map once
+   * `acceptedFileTypes` is known. Useful for surfaces that accept file types
+   * not declared by backend capabilities — e.g. the Outlook add-in accepting
+   * `.eml`/`.msg` drops of email messages.
    */
   extraAcceptMimeTypes?: Record<string, string[]>;
   isUploading?: boolean;
@@ -33,10 +41,18 @@ interface UseConversationDropzoneOptions {
    * (an .eml the user can still trim). Their uploads are preflighted later.
    */
   isSizeExempt?: (file: File) => boolean;
+  /**
+   * Fires on the raw drop event with the number of dropped files, before
+   * react-dropzone has read or validated them. May return a release that is
+   * called once the drop reaches the handler (which then owns the signal).
+   */
+  onReceive?: (count: number) => void | (() => void);
 }
 
+type RootProps = Record<string, unknown>;
+
 interface ConversationDropzoneBindings {
-  getRootProps: () => Record<string, unknown>;
+  getRootProps: (props?: RootProps) => RootProps;
   getInputProps: () => Record<string, unknown>;
   isDragActive: boolean;
   isDragAccept: boolean;
@@ -61,9 +77,11 @@ export function useConversationDropzone({
   maxSizeFormatted,
   onError,
   isSizeExempt,
+  onReceive,
 }: UseConversationDropzoneOptions): ConversationDropzoneBindings {
   const setStoreError = useFileUploadStore((state) => state.setError);
   const reportError = onError ?? setStoreError;
+  const receiveReleaseRef = useRef<(() => void) | null>(null);
 
   // A validator instead of `maxSize` so `isSizeExempt` can spare files.
   // Only a known size rejects: dragenter runs this on `DataTransferItem`s
@@ -82,11 +100,21 @@ export function useConversationDropzone({
     },
     [maxSize, isSizeExempt],
   );
+  const releaseReceive = useCallback(() => {
+    receiveReleaseRef.current?.();
+    receiveReleaseRef.current = null;
+  }, []);
   const handleDrop = useCallback(
     (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
+      releaseReceive();
       // Rejected files never reach the upload preflight; report them here.
       let files = acceptedFiles;
+      let unsupported: string[] = [];
       if (rejectedFiles.length > 0) {
+        unsupported = rejectionNames(rejectedFiles, "file-invalid-type");
+        if (unsupported.length > 0) {
+          reportError(new UnsupportedFileTypeError(unsupported));
+        }
         const oversized = oversizedRejectionNames(rejectedFiles);
         if (oversized.length > 0) {
           reportError(new UploadTooLargeError(maxSizeFormatted, oversized));
@@ -99,38 +127,116 @@ export function useConversationDropzone({
         return;
       }
       void uploadFiles(files).then((uploaded) => {
-        if (uploaded && uploaded.length > 0) {
+        if (uploaded === undefined) return;
+        if (uploaded.length > 0) {
           onUploaded(uploaded);
+        }
+        // The upload clears the error slot on its way in; only a batch that
+        // went through has wiped the report, so restore it then.
+        if (unsupported.length > 0) {
+          reportError(new UnsupportedFileTypeError(unsupported));
         }
       });
     },
-    [onUploaded, uploadFiles, reportError, maxSizeFormatted, isSizeExempt],
+    [
+      onUploaded,
+      uploadFiles,
+      reportError,
+      maxSizeFormatted,
+      isSizeExempt,
+      releaseReceive,
+    ],
+  );
+  // react-dropzone reads the dropped items before onDrop; when that read
+  // fails (an item of kind "file" that yields no File) onDrop never runs.
+  const handleReadError = useCallback(
+    (error: Error) => {
+      console.error(error);
+      releaseReceive();
+    },
+    [releaseReceive],
   );
 
   const accept = useMemo(() => {
-    const base =
-      acceptedFileTypes && acceptedFileTypes.length > 0
-        ? FileTypeUtil.getAcceptObject(acceptedFileTypes)
-        : undefined;
+    // No capability types yet (still loading) means accept everything so the
+    // drop overlay shows; the upload preflight validates types regardless.
+    if (!acceptedFileTypes || acceptedFileTypes.length === 0) {
+      return undefined;
+    }
+    const base = FileTypeUtil.getAcceptObject(acceptedFileTypes);
     if (
       !extraAcceptMimeTypes ||
       Object.keys(extraAcceptMimeTypes).length === 0
     ) {
       return base;
     }
-    return { ...(base ?? {}), ...extraAcceptMimeTypes };
+    return { ...base, ...extraAcceptMimeTypes };
   }, [acceptedFileTypes, extraAcceptMimeTypes]);
 
-  const { getRootProps, getInputProps, isDragActive, isDragAccept } =
-    useDropzone({
-      onDrop: handleDrop,
-      accept,
-      multiple: true,
-      disabled: isUploading,
-      validator: validateSize,
-      noClick: true,
-      noKeyboard: true,
-    });
+  const {
+    getRootProps: getDropzoneRootProps,
+    getInputProps,
+    isDragActive,
+    isDragAccept,
+  } = useDropzone({
+    onDrop: handleDrop,
+    onError: handleReadError,
+    accept,
+    multiple: true,
+    disabled: isUploading,
+    validator: validateSize,
+    noClick: true,
+    noKeyboard: true,
+  });
+
+  // react-dropzone runs a caller's onDrop before its own, so this sees the
+  // event first; a file drop then reaches handleDrop or handleReadError.
+  const handleReceive = useCallback(
+    (event: DragEvent) => {
+      if (!onReceive) return;
+      // Typed non-null by React, absent on some synthetic drops.
+      const transfer = event.dataTransfer as DataTransfer | null;
+      if (!transfer || !isFileDrag(transfer)) return;
+      const count = droppedFileCount(transfer);
+      if (count === 0) return;
+      receiveReleaseRef.current?.();
+      const release = onReceive(count);
+      receiveReleaseRef.current =
+        typeof release === "function" ? release : null;
+    },
+    [onReceive],
+  );
+  const getRootProps = useCallback(
+    (props: RootProps = {}) => {
+      if (!onReceive) return getDropzoneRootProps(props);
+      const consumerOnDrop = props.onDrop;
+      return getDropzoneRootProps({
+        ...props,
+        onDrop: (event: DragEvent) => {
+          if (typeof consumerOnDrop === "function") consumerOnDrop(event);
+          // A stopped event never reaches react-dropzone, so nothing would
+          // release the span.
+          if (event.isPropagationStopped()) return;
+          handleReceive(event);
+        },
+      });
+    },
+    [getDropzoneRootProps, handleReceive, onReceive],
+  );
 
   return { getRootProps, getInputProps, isDragActive, isDragAccept };
+}
+
+// Mirrors react-dropzone's own file-drag test so a string-only drag (an
+// Outlook mail-list row) never announces files that will not arrive.
+function isFileDrag(transfer: DataTransfer): boolean {
+  return Array.from(transfer.types).some(
+    (type) => type === "Files" || type === "application/x-moz-file",
+  );
+}
+
+function droppedFileCount(transfer: DataTransfer): number {
+  if (transfer.files.length > 0) return transfer.files.length;
+  return Array.from(transfer.items).filter((item) => item.kind === "file")
+    .length;
 }

@@ -246,6 +246,36 @@ msgstr "Twoja wersja robocza jest dołączona jako kontekst"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.dropPipeline.reading"
+msgstr "Odczytywanie wiadomości {index} z {total}…"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.dropPipeline.receiving"
+msgstr "{count, plural, one {Odbieranie # wiadomości e-mail…} few {Odbieranie # wiadomości e-mail…} many {Odbieranie # wiadomości e-mail…} other {Odbieranie # wiadomości e-mail…}}"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.dropPipeline.resolving"
+msgstr "Wyszukiwanie {index} z {total} w Twojej skrzynce…"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.dropPipeline.staging"
+msgstr "Dodawanie do czatu…"
+
+#. js-lingui-explicit-id
+#: src/outlook/OutlookAddinChat.tsx
+msgid "officeAddin.chatInput.dropSkipped.noFetcher"
+msgstr "Nie udało się dodać {names}: pliki .msg wymagają połączonej skrzynki pocztowej."
+
+#. js-lingui-explicit-id
+#: src/outlook/OutlookAddinChat.tsx
+msgid "officeAddin.chatInput.dropSkipped.unparseable"
+msgstr "Nie udało się dodać {names}: to nie jest czytelna wiadomość e-mail."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.emailBody"
 msgstr "Treść e-maila"
 

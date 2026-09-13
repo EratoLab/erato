@@ -73,22 +73,50 @@ export interface MsgParsedResult {
   messageId: string | null;
 }
 
+/** The local half of a `.msg` drop: the bytes plus the `Message-ID` they carry. */
+export interface MsgRead {
+  bytes: Uint8Array;
+  internetMessageId: string | null;
+}
+
 export async function parseMsgFileToParsedEmail(
   file: File,
   fetcher: OutlookMessageFetcher,
 ): Promise<MsgParsedResult> {
-  const bytes = await readBytesSafely(file);
-  if (!bytes) {
+  const read = await readMsgFile(file);
+  if (!read) {
     return { parsed: null, messageId: null };
   }
+  return resolveMsgRead(read, fetcher, file.name);
+}
 
-  const internetMessageId = extractMessageIdSafely(bytes, file.name);
+/**
+ * Reads the file and extracts only its `Message-ID`; no network. Returns null
+ * when the bytes cannot be read at all.
+ */
+export async function readMsgFile(file: File): Promise<MsgRead | null> {
+  const bytes = await readBytesSafely(file);
+  if (!bytes) {
+    return null;
+  }
+  return { bytes, internetMessageId: extractMessageIdSafely(bytes, file.name) };
+}
 
-  // The backend copy is preferred whenever it can be had: it owns the
-  // fidelity-sensitive work (RTF-encapsulated HTML, embedded content types)
-  // that the local reader deliberately skips.
+/**
+ * Turns a local read into a ParsedEmail. The backend copy is preferred
+ * whenever it can be had: it owns the fidelity-sensitive work
+ * (RTF-encapsulated HTML, embedded content types) that the local reader
+ * deliberately skips. With no Message-ID, no match, or a failed fetch, the
+ * file itself still describes the message well enough to attach. Never
+ * rejects.
+ */
+export async function resolveMsgRead(
+  { bytes, internetMessageId }: MsgRead,
+  fetcher: OutlookMessageFetcher,
+  sourceName: string,
+): Promise<MsgParsedResult> {
   if (internetMessageId) {
-    const fetched = await fetchParsedEmail(file, fetcher, internetMessageId);
+    const fetched = await fetchParsedEmail(fetcher, internetMessageId);
     if (fetched) {
       return {
         parsed: fetched,
@@ -97,21 +125,17 @@ export async function parseMsgFileToParsedEmail(
     }
   }
 
-  // Every remaining path — no Message-ID, no match, network or auth failure —
-  // used to drop the email with nothing to show for it. The file itself still
-  // describes the message well enough to attach.
-  const parsed = await parseMsgBytesLocally(bytes, file.name);
+  const parsed = await parseMsgBytesLocally(bytes, sourceName);
   if (!parsed) {
     console.warn(
       "[parseMsgFile] could not resolve or read dropped .msg:",
-      file.name,
+      sourceName,
     );
   }
   return { parsed, messageId: parsed?.messageId ?? internetMessageId };
 }
 
 async function fetchParsedEmail(
-  file: File,
   fetcher: OutlookMessageFetcher,
   internetMessageId: string,
 ): Promise<ParsedEmail | null> {

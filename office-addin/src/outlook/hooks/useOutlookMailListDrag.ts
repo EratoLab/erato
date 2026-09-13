@@ -9,6 +9,11 @@ import {
 interface UseOutlookMailListDragOptions {
   /** Called on drop with the parsed mail-list items (one per dragged row). */
   onDrop: (items: OutlookMailListDragItem[]) => void | Promise<void>;
+  /**
+   * Called with the parsed item count right before `onDrop`. May return a
+   * release; it runs once `onDrop` has settled.
+   */
+  onDropStart?: (count: number) => void | (() => void);
   /** When true, no listeners are registered and `isDragActive` stays false. */
   disabled?: boolean;
 }
@@ -37,11 +42,14 @@ interface UseOutlookMailListDragResult {
  */
 export function useOutlookMailListDrag({
   onDrop,
+  onDropStart,
   disabled = false,
 }: UseOutlookMailListDragOptions): UseOutlookMailListDragResult {
   const [isDragActive, setIsDragActive] = useState(false);
   const onDropRef = useRef(onDrop);
   onDropRef.current = onDrop;
+  const onDropStartRef = useRef(onDropStart);
+  onDropStartRef.current = onDropStart;
 
   const isMailListDrag = useCallback((event: DragEvent): boolean => {
     if (!event.dataTransfer) {
@@ -88,7 +96,9 @@ export function useOutlookMailListDrag({
       const raw = event.dataTransfer?.getData(MAILLISTROW_TRANSFER_TYPE) ?? "";
       const items = parseOutlookMailListPayload(raw);
       if (items && items.length > 0) {
-        void onDropRef.current(items);
+        const release = onDropStartRef.current?.(items.length);
+        const settle = typeof release === "function" ? release : undefined;
+        void Promise.resolve(onDropRef.current(items)).finally(settle);
       }
     };
 

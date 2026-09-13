@@ -2,8 +2,9 @@ import { renderHook, act, cleanup } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 import { makeFileWithSize } from "@/test/fileFixtures";
+import { FileTypeUtil } from "@/utils/fileTypes";
 
-import { UploadTooLargeError } from "../errors";
+import { UnsupportedFileTypeError, UploadTooLargeError } from "../errors";
 import { useChatFileSources } from "../useChatFileSources";
 import { useFileUploadStore } from "../useFileUploadStore";
 
@@ -37,12 +38,22 @@ vi.mock("@/hooks/files/useFileUploadWithTokenCheck", () => ({
   })),
 }));
 
+// Capture the onDrop callback react-dropzone receives so tests can invoke it
+// directly without triggering DOM drag events.
+let capturedOnDrop: (
+  accepted: File[],
+  rejected: { file: File; errors: { code: string; message: string }[] }[],
+) => void = () => {};
+
 vi.mock("react-dropzone", () => ({
-  useDropzone: vi.fn(() => ({
-    open: vi.fn(),
-    getRootProps: vi.fn(() => ({})),
-    getInputProps: vi.fn(() => ({})),
-  })),
+  useDropzone: vi.fn((opts) => {
+    capturedOnDrop = opts.onDrop ?? (() => {});
+    return {
+      open: vi.fn(),
+      getRootProps: vi.fn(() => ({})),
+      getInputProps: vi.fn(() => ({})),
+    };
+  }),
 }));
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
@@ -127,5 +138,73 @@ describe("useChatFileSources — onSelectFiles preflight", () => {
     expect(useFileUploadStore.getState().error).toBeInstanceOf(
       UploadTooLargeError,
     );
+  });
+});
+
+describe("useChatFileSources — dropzone rejections", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    act(() => {
+      useFileUploadStore.getState().reset();
+    });
+    mockUploadFiles.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("reports a wrong-type rejection and still uploads the accepted files", () => {
+    renderUseChatFileSources();
+    const accepted = makeFileWithSize("fine.pdf", 100);
+
+    act(() => {
+      capturedOnDrop(
+        [accepted],
+        [
+          {
+            file: makeFileWithSize("wrong.exe", 100),
+            errors: [{ code: "file-invalid-type", message: "type" }],
+          },
+        ],
+      );
+    });
+
+    const storeError = useFileUploadStore.getState().error;
+    expect(storeError).toBeInstanceOf(UnsupportedFileTypeError);
+    expect(storeError?.message).toContain("wrong.exe");
+    expect(mockUploadFiles).toHaveBeenCalledWith([accepted]);
+  });
+
+  it("keeps naming the wrong-type file after the sibling upload cleared the store", async () => {
+    mockUploadFiles.mockImplementation(async (files) => {
+      // The upload hook clears the shared error slot before it starts.
+      useFileUploadStore.getState().setError(null);
+      return files.map((file) => ({
+        id: file.name,
+        filename: file.name,
+        download_url: `http://example.com/${file.name}`,
+        file_contents_unavailable_missing_permissions: false,
+        is_sharepoint_file: false,
+        file_capability: FileTypeUtil.createMockFileCapability(file.name),
+      }));
+    });
+    renderUseChatFileSources();
+
+    await act(async () => {
+      capturedOnDrop(
+        [makeFileWithSize("fine.pdf", 100)],
+        [
+          {
+            file: makeFileWithSize("wrong.exe", 100),
+            errors: [{ code: "file-invalid-type", message: "type" }],
+          },
+        ],
+      );
+    });
+
+    const storeError = useFileUploadStore.getState().error;
+    expect(storeError).toBeInstanceOf(UnsupportedFileTypeError);
+    expect(storeError?.message).toContain("wrong.exe");
   });
 });

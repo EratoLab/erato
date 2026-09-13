@@ -21,7 +21,11 @@ import {
 } from "react";
 import { useDropzone } from "react-dropzone";
 
-import { CloudLinkError, UploadTooLargeError } from "@/hooks/files/errors";
+import {
+  CloudLinkError,
+  UnsupportedFileTypeError,
+  UploadTooLargeError,
+} from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useFileUploadWithTokenCheck } from "@/hooks/files/useFileUploadWithTokenCheck";
 import {
@@ -36,6 +40,7 @@ import { FileTypeUtil } from "@/utils/fileTypes";
 import { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
 import {
   oversizedRejectionNames,
+  rejectionNames,
   validateFileSizes,
 } from "@/utils/validateFileSizes";
 
@@ -142,7 +147,7 @@ export function useChatFileSources({
   const handleSelectedFiles = useCallback(
     async (files: File[]) => {
       if (files.length === 0) {
-        return;
+        return undefined;
       }
 
       // Guards the `onSelectFiles` path, where hosts hand in already-resolved Files.
@@ -154,7 +159,7 @@ export function useChatFileSources({
             sizeValidation.oversizedFiles.map((file) => file.name),
           ),
         );
-        return;
+        return undefined;
       }
 
       const uploadedFiles = await performDiskUpload(files);
@@ -165,6 +170,7 @@ export function useChatFileSources({
       ) {
         onFilesUploaded?.(uploadedFiles);
       }
+      return uploadedFiles;
     },
     [
       externalPerformFileUpload,
@@ -175,6 +181,12 @@ export function useChatFileSources({
       setError,
     ],
   );
+  const selectFiles = useCallback(
+    async (files: File[]) => {
+      await handleSelectedFiles(files);
+    },
+    [handleSelectedFiles],
+  );
 
   const {
     open: openDiskFilePicker,
@@ -182,9 +194,13 @@ export function useChatFileSources({
     getInputProps,
   } = useDropzone({
     onDrop: (acceptedFiles, rejectedFiles) => {
+      let unsupported: string[] = [];
       if (rejectedFiles.length > 0) {
+        unsupported = rejectionNames(rejectedFiles, "file-invalid-type");
+        if (unsupported.length > 0) {
+          setError(new UnsupportedFileTypeError(unsupported));
+        }
         const oversized = oversizedRejectionNames(rejectedFiles);
-
         if (oversized.length > 0) {
           setError(new UploadTooLargeError(maxSizeFormatted, oversized));
           return;
@@ -192,7 +208,13 @@ export function useChatFileSources({
       }
 
       if (acceptedFiles.length > 0) {
-        void handleSelectedFiles(acceptedFiles);
+        void handleSelectedFiles(acceptedFiles).then((uploaded) => {
+          // The upload clears the error slot on its way in; only a batch
+          // that went through has wiped the report, so restore it then.
+          if (uploaded !== undefined && unsupported.length > 0) {
+            setError(new UnsupportedFileTypeError(unsupported));
+          }
+        });
       }
     },
     accept:
@@ -371,7 +393,7 @@ export function useChatFileSources({
     performDiskUpload,
     onSelectDisk: handleSelectDisk,
     onSelectCloud: handleSelectCloud,
-    onSelectFiles: handleSelectedFiles,
+    onSelectFiles: selectFiles,
     fileSourceItems,
     dropzoneRootProps: getRootProps,
     dropzoneInputProps: getInputProps,

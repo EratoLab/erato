@@ -65,17 +65,26 @@ vi.mock("@/providers/FileCapabilitiesProvider", () => ({
   })),
 }));
 
-// Mock react-dropzone
+// Capture the onDrop callback react-dropzone receives so tests can invoke it
+// directly without triggering DOM drag events.
+let capturedOnDrop: (
+  accepted: File[],
+  rejected: { file: File; errors: { code: string; message: string }[] }[],
+) => void = () => {};
+
 vi.mock("react-dropzone", () => {
   return {
-    useDropzone: vi.fn(() => ({
-      getRootProps: vi.fn(),
-      getInputProps: vi.fn(),
-      isDragActive: false,
-      isDragAccept: false,
-      isDragReject: false,
-      open: vi.fn(),
-    })),
+    useDropzone: vi.fn((opts) => {
+      capturedOnDrop = opts.onDrop ?? (() => {});
+      return {
+        getRootProps: vi.fn(),
+        getInputProps: vi.fn(),
+        isDragActive: false,
+        isDragAccept: false,
+        isDragReject: false,
+        open: vi.fn(),
+      };
+    }),
   };
 });
 
@@ -585,6 +594,96 @@ describe("useFileDropzone", () => {
       });
 
       expect(result.current.error).toBeInstanceOf(UnsupportedFileTypeError);
+    });
+
+    it("creates no silent chat when every file is unsupported", async () => {
+      const mockFetchUploadFile = vi.mocked(fetchUploadFile);
+
+      const { result } = renderHook(() =>
+        useFileDropzone({ chatId: null, multiple: true }),
+      );
+
+      await act(async () => {
+        await result.current.uploadFiles([makeFileWithSize("bad.zip", 100)]);
+      });
+
+      expect(result.current.error).toBeInstanceOf(UnsupportedFileTypeError);
+      expect(mockFetchUploadFile).not.toHaveBeenCalled();
+      expect(mockCreateChatMutateAsync).not.toHaveBeenCalled();
+    });
+
+    it("uploads the supported files and names only the unsupported one", async () => {
+      const mockFetchUploadFile = vi.mocked(fetchUploadFile);
+      mockFetchUploadFile.mockResolvedValue({
+        files: [createMockUploadedFile("file1", "ok.pdf")],
+      });
+
+      const { result } = renderHook(() =>
+        useFileDropzone({ chatId: "existing-chat-id", multiple: true }),
+      );
+
+      await act(async () => {
+        await result.current.uploadFiles([
+          makeFileWithSize("bad.zip", 100),
+          makeFileWithSize("ok.pdf", 100, "application/pdf"),
+        ]);
+      });
+
+      expect(result.current.error).toBeInstanceOf(UnsupportedFileTypeError);
+      expect(result.current.error?.message).toContain("bad.zip");
+      expect(result.current.error?.message).not.toContain("ok.pdf");
+      expect(mockFetchUploadFile).toHaveBeenCalledTimes(1);
+      const sent = (
+        mockFetchUploadFile.mock.calls[0][0].body as unknown as FormData
+      ).getAll("file") as File[];
+      expect(sent.map((file) => file.name)).toEqual(["ok.pdf"]);
+    });
+
+    it("reports a wrong-type dropzone rejection as an unsupported file type", () => {
+      const { result } = renderHook(() =>
+        useFileDropzone({ chatId: "existing-chat-id" }),
+      );
+
+      act(() => {
+        capturedOnDrop(
+          [],
+          [
+            {
+              file: makeFileWithSize("wrong.exe", 100),
+              errors: [{ code: "file-invalid-type", message: "type" }],
+            },
+          ],
+        );
+      });
+
+      expect(result.current.error).toBeInstanceOf(UnsupportedFileTypeError);
+      expect(result.current.error?.message).toContain("wrong.exe");
+    });
+
+    it("keeps naming the wrong-type file after the sibling upload went through", async () => {
+      const mockFetchUploadFile = vi.mocked(fetchUploadFile);
+      mockFetchUploadFile.mockResolvedValue({
+        files: [createMockUploadedFile("file1", "ok.pdf")],
+      });
+      const { result } = renderHook(() =>
+        useFileDropzone({ chatId: "existing-chat-id" }),
+      );
+
+      await act(async () => {
+        capturedOnDrop(
+          [makeFileWithSize("ok.pdf", 100, "application/pdf")],
+          [
+            {
+              file: makeFileWithSize("wrong.exe", 100),
+              errors: [{ code: "file-invalid-type", message: "type" }],
+            },
+          ],
+        );
+      });
+
+      expect(mockFetchUploadFile).toHaveBeenCalledTimes(1);
+      expect(result.current.error).toBeInstanceOf(UnsupportedFileTypeError);
+      expect(result.current.error?.message).toContain("wrong.exe");
     });
 
     it("does not set isUploading to true when files are rejected by preflight", async () => {
