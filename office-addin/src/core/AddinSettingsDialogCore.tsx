@@ -3,11 +3,12 @@ import {
   AudioInputTabContent,
   ModalBase,
   ServersToolsPane,
+  TabRail,
   TextSizeSetting,
   useFeatureConfig,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
-import { useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useId, useMemo, useState, type ReactNode } from "react";
 
 import { UserSettingsTabContent } from "./UserSettingsTabContent";
 
@@ -84,59 +85,22 @@ export function AddinSettingsDialogCore({
     host: hostContribution?.tabLabel ?? "",
   };
 
+  const tabGroupId = useId();
+
   const tabIds: Record<SettingsTab, string> = {
-    appearance: "addin-settings-tab-appearance",
-    user: "addin-settings-tab-user",
-    audio: "addin-settings-tab-audio",
-    serversTools: "addin-settings-tab-servers-tools",
-    host: "addin-settings-tab-host",
+    appearance: `${tabGroupId}-tab-appearance`,
+    user: `${tabGroupId}-tab-user`,
+    audio: `${tabGroupId}-tab-audio`,
+    serversTools: `${tabGroupId}-tab-servers-tools`,
+    host: `${tabGroupId}-tab-host`,
   };
 
   const panelIds: Record<SettingsTab, string> = {
-    appearance: "addin-settings-panel-appearance",
-    user: "addin-settings-panel-user",
-    audio: "addin-settings-panel-audio",
-    serversTools: "addin-settings-panel-servers-tools",
-    host: "addin-settings-panel-host",
-  };
-
-  const focusTab = (tab: SettingsTab) => {
-    const element = document.getElementById(tabIds[tab]);
-    element?.focus({ preventScroll: true });
-    element?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  };
-
-  const handleTabKeyDown = (
-    event: KeyboardEvent<HTMLButtonElement>,
-    currentTab: SettingsTab,
-  ) => {
-    const currentIndex = tabOrder.indexOf(currentTab);
-    let nextTab: SettingsTab | undefined;
-
-    switch (event.key) {
-      case "ArrowDown":
-      case "ArrowRight":
-        nextTab = tabOrder[(currentIndex + 1) % tabOrder.length];
-        break;
-      case "ArrowUp":
-      case "ArrowLeft":
-        nextTab =
-          tabOrder[(currentIndex - 1 + tabOrder.length) % tabOrder.length];
-        break;
-      case "Home":
-        nextTab = tabOrder[0];
-        break;
-      case "End":
-        nextTab = tabOrder[tabOrder.length - 1];
-        break;
-      default:
-        return;
-    }
-
-    if (!nextTab) return;
-    event.preventDefault();
-    setActiveTab(nextTab);
-    focusTab(nextTab);
+    appearance: `${tabGroupId}-panel-appearance`,
+    user: `${tabGroupId}-panel-user`,
+    audio: `${tabGroupId}-panel-audio`,
+    serversTools: `${tabGroupId}-panel-servers-tools`,
+    host: `${tabGroupId}-panel-host`,
   };
 
   const dialogTitle = t({
@@ -153,37 +117,24 @@ export function AddinSettingsDialogCore({
     >
       <div className="flex h-full flex-col gap-4">
         <div className="shrink-0 border-b border-theme-border pb-2">
-          <div
-            role="tablist"
-            data-ui="tab-rail"
+          <TabRail
+            variant="rail"
+            orientation="horizontal"
+            // The rail is horizontal, but it always took Up/Down as well as
+            // Left/Right; keyboard users of the task pane rely on both pairs.
+            arrowKeys="both"
             aria-label={dialogTitle}
-            aria-orientation="horizontal"
-            className="flex gap-1 overflow-x-auto"
-          >
-            {tabOrder.map((tab) => {
-              const isActive = activeTab === tab;
-              return (
-                <button
-                  key={tab}
-                  id={tabIds[tab]}
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  aria-controls={panelIds[tab]}
-                  tabIndex={isActive ? 0 : -1}
-                  className={`flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap rounded-[var(--theme-radius-control)] px-3 py-2 text-sm theme-transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus ${
-                    isActive
-                      ? "bg-theme-bg-hover font-medium text-theme-fg-primary"
-                      : "text-theme-fg-secondary hover:bg-theme-bg-hover"
-                  }`}
-                  onClick={() => setActiveTab(tab)}
-                  onKeyDown={(event) => handleTabKeyDown(event, tab)}
-                >
-                  {tabLabels[tab]}
-                </button>
-              );
-            })}
-          </div>
+            data-ui="tab-rail"
+            className="overflow-x-auto"
+            options={tabOrder.map((tab) => ({
+              value: tab,
+              label: tabLabels[tab],
+              id: tabIds[tab],
+              panelId: panelIds[tab],
+            }))}
+            value={activeTab}
+            onChange={setActiveTab}
+          />
         </div>
 
         <div className="min-h-0 flex-1 px-1">

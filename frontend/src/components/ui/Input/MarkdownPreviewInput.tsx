@@ -4,14 +4,11 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { Textarea } from "./Textarea";
+import { TabRail } from "../Controls/TabRail";
 
 import type { TextareaProps } from "./Textarea";
-import type { KeyboardEvent } from "react";
 
 type MarkdownPreviewTab = "markdown" | "preview";
-
-/** Left-to-right order of the tab strip, for arrow-key navigation. */
-const TAB_ORDER: MarkdownPreviewTab[] = ["markdown", "preview"];
 
 export interface MarkdownPreviewInputProps
   extends Omit<TextareaProps, "className"> {
@@ -57,46 +54,6 @@ export function MarkdownPreviewInput({
 
   const isMarkdownTab = activeTab === "markdown";
 
-  const tabIds: Record<MarkdownPreviewTab, string> = {
-    markdown: markdownTabId,
-    preview: previewTabId,
-  };
-
-  /**
-   * Automatic activation: selection and focus move together. Without this the
-   * selected tab is the only tab stop in the strip and a keyboard user cannot
-   * reach the other one.
-   */
-  const handleTabKeyDown = (
-    event: KeyboardEvent<HTMLButtonElement>,
-    currentTab: MarkdownPreviewTab,
-  ) => {
-    const currentIndex = TAB_ORDER.indexOf(currentTab);
-    let nextTab: MarkdownPreviewTab;
-
-    switch (event.key) {
-      case "ArrowRight":
-        nextTab = TAB_ORDER[(currentIndex + 1) % TAB_ORDER.length];
-        break;
-      case "ArrowLeft":
-        nextTab =
-          TAB_ORDER[(currentIndex - 1 + TAB_ORDER.length) % TAB_ORDER.length];
-        break;
-      case "Home":
-        nextTab = TAB_ORDER[0];
-        break;
-      case "End":
-        nextTab = TAB_ORDER[TAB_ORDER.length - 1];
-        break;
-      default:
-        return;
-    }
-
-    event.preventDefault();
-    setActiveTab(nextTab);
-    document.getElementById(tabIds[nextTab])?.focus({ preventScroll: true });
-  };
-
   return (
     <div
       className={clsx(
@@ -106,48 +63,32 @@ export function MarkdownPreviewInput({
       )}
     >
       <div className="flex items-center border-b border-theme-border bg-theme-bg-primary px-2 py-1">
-        <div aria-label={tablistLabel} className="flex gap-1" role="tablist">
-          <button
-            id={markdownTabId}
-            type="button"
-            role="tab"
-            aria-controls={panelId}
-            aria-selected={isMarkdownTab}
-            tabIndex={isMarkdownTab ? 0 : -1}
-            disabled={disabled}
-            className={clsx(
-              "theme-transition rounded px-3 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus",
-              isMarkdownTab
-                ? "bg-theme-bg-selected text-theme-fg-primary"
-                : "text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary",
-              disabled && "cursor-not-allowed opacity-50",
-            )}
-            onClick={() => setActiveTab("markdown")}
-            onKeyDown={(event) => handleTabKeyDown(event, "markdown")}
-          >
-            {markdownTabLabel}
-          </button>
-          <button
-            id={previewTabId}
-            type="button"
-            role="tab"
-            aria-controls={panelId}
-            aria-selected={!isMarkdownTab}
-            tabIndex={isMarkdownTab ? -1 : 0}
-            disabled={disabled}
-            className={clsx(
-              "theme-transition rounded px-3 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus",
-              !isMarkdownTab
-                ? "bg-theme-bg-selected text-theme-fg-primary"
-                : "text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary",
-              disabled && "cursor-not-allowed opacity-50",
-            )}
-            onClick={() => setActiveTab("preview")}
-            onKeyDown={(event) => handleTabKeyDown(event, "preview")}
-          >
-            {previewTabLabel}
-          </button>
-        </div>
+        <TabRail
+          variant="rail"
+          orientation="horizontal"
+          aria-label={tablistLabel}
+          disabled={disabled}
+          // Both tabs are bold and both brighten on hover, unlike the
+          // settings rails; the corner and the block padding are the only
+          // things the primitive changes here.
+          tabClassName="font-medium hover:text-theme-fg-primary"
+          options={[
+            {
+              value: "markdown",
+              label: markdownTabLabel,
+              id: markdownTabId,
+              panelId,
+            },
+            {
+              value: "preview",
+              label: previewTabLabel,
+              id: previewTabId,
+              panelId,
+            },
+          ]}
+          value={activeTab}
+          onChange={setActiveTab}
+        />
       </div>
 
       <div

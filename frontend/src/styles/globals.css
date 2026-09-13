@@ -836,6 +836,38 @@ body {
     border-radius: var(--attachment-tile-radius, var(--theme-radius-base));
   }
 
+  /* Tab rail family. --tab-rail-radius is READ, never declared (a declaration
+     on the hook element would shadow a theme's value set on any ancestor); the
+     track vars are anatomy and are declared per variant on the rail, inheriting
+     to the tabs. Always write 0px, never 0: max() with a unitless zero is
+     invalid at computed-value time and silently squares every tab. */
+  .tab-rail-geometry {
+    --tab-rail-gap: 0.25rem;
+    --tab-rail-track-padding: 0px;
+    --tab-rail-track-border-width: 0px;
+    gap: var(--tab-rail-gap);
+  }
+
+  /* Must follow .tab-rail-geometry: same specificity, order decides. */
+  .tab-rail-track-geometry {
+    --tab-rail-gap: 0px;
+    --tab-rail-track-padding: 0.125rem;
+    --tab-rail-track-border-width: 1px;
+    padding: var(--tab-rail-track-padding);
+    border-width: var(--tab-rail-track-border-width);
+    border-radius: var(--tab-rail-radius, var(--theme-radius-control));
+  }
+
+  .tab-item-geometry {
+    padding-inline: var(--theme-spacing-control-padding-x);
+    padding-block: var(--theme-spacing-control-padding-y);
+    border-radius: max(
+      0px,
+      var(--tab-rail-radius, var(--theme-radius-control)) -
+        var(--tab-rail-track-padding)
+    );
+  }
+
   /* The spinner ring. --spinner-* are private to this family rather than
      --theme-* names, which ThemeProvider emits as literals on :root and would
      therefore overwrite. They are read with fallbacks and never declared here:

@@ -164,6 +164,11 @@ export {
   type DropdownMenuProps,
 } from "@/components/ui/Controls/DropdownMenu";
 export { Row, type RowProps } from "@/components/ui/Controls/Row";
+export {
+  TabRail,
+  type TabRailOption,
+  type TabRailProps,
+} from "@/components/ui/Controls/TabRail";
 export { Alert } from "@/components/ui/Feedback/Alert";
 export { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 export {

@@ -5,6 +5,7 @@ export * from "./DropdownMenu";
 export * from "./PopoverPanel";
 export * from "./Row";
 export * from "./SegmentedControl";
+export * from "./TabRail";
 export * from "./Tooltip";
 export * from "./UserProfileDropdown";
 export * from "./UserProfileThemeDropdown";

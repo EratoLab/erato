@@ -50,6 +50,11 @@ export type {
 } from "@/components/ui/Controls/PopoverPanel";
 export { Row } from "@/components/ui/Controls/Row";
 export type { RowProps } from "@/components/ui/Controls/Row";
+export { TabRail } from "@/components/ui/Controls/TabRail";
+export type {
+  TabRailOption,
+  TabRailProps,
+} from "@/components/ui/Controls/TabRail";
 export { Alert } from "@/components/ui/Feedback/Alert";
 export { Avatar } from "@/components/ui/Feedback/Avatar";
 export { CopyErrorButton } from "@/components/ui/Feedback/CopyErrorButton";
@@ -103,4 +108,4 @@ export const ERATO_SHARED_SURFACE_VERSION = 1;
 
 // Bump on purely additive growth of the surface, so a kit can require a name
 // that exists without demanding a new major.
-export const ERATO_SHARED_SURFACE_MINOR = 4;
+export const ERATO_SHARED_SURFACE_MINOR = 5;
