@@ -1,5 +1,6 @@
 use crate::config::{McpServerAuthenticationConfig, McpServerConfig};
 use crate::distribution::runtime::McpAppState;
+use crate::models::user_tool_approval_setting::{UserToolDecision, decision_of};
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::services::mcp_manager::McpRequestAuthContext;
@@ -79,6 +80,7 @@ pub enum McpServerToolApproval {
 pub enum McpServerToolUserDecision {
     Ask,
     Always,
+    Denied,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
@@ -178,19 +180,28 @@ pub async fn list_mcp_server_tools(
     let enumeration = mcp.servers.enumerate_tools(&server_id, &auth_context).await;
 
     let global = &mcp.config.mcp_servers_global;
-    // The gate only honors persistent approvals while `allow_always` is on,
-    // so a stored setting must not read as "always" when it would still ask.
-    let always_allowed_tools: HashSet<String> = if global.approval.allow_always {
-        crate::models::user_tool_approval_setting::list_active(&app_state.db, user_id)
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-            .into_iter()
-            .filter(|setting| setting.mcp_server_id == server_id)
-            .map(|setting| setting.tool_name)
-            .collect()
-    } else {
-        HashSet::new()
-    };
+    // The gate only honors persistent grants while `allow_always` is on, so a
+    // stored grant must not read as "always" when it would still ask. A denial
+    // is enforced regardless of the approval policy.
+    let mut always_allowed_tools: HashSet<String> = HashSet::new();
+    let mut denied_tools: HashSet<String> = HashSet::new();
+    for setting in crate::models::user_tool_approval_setting::list_active(&app_state.db, user_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    {
+        if setting.mcp_server_id != server_id {
+            continue;
+        }
+        match decision_of(&setting) {
+            UserToolDecision::Denied => {
+                denied_tools.insert(setting.tool_name);
+            }
+            UserToolDecision::AlwaysAllow if global.approval.allow_always => {
+                always_allowed_tools.insert(setting.tool_name);
+            }
+            UserToolDecision::AlwaysAllow => {}
+        }
+    }
 
     let mut tools: Vec<McpServerTool> = enumeration
         .tools
@@ -221,7 +232,9 @@ pub async fn list_mcp_server_tools(
                 } else {
                     McpServerToolApproval::Auto
                 },
-                user_decision: if always_allowed_tools.contains(&name) {
+                user_decision: if denied_tools.contains(&name) {
+                    McpServerToolUserDecision::Denied
+                } else if always_allowed_tools.contains(&name) {
                     McpServerToolUserDecision::Always
                 } else {
                     McpServerToolUserDecision::Ask

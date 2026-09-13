@@ -2363,74 +2363,34 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         )
         .await?;
 
-    let facet_allowlist = build_mcp_tool_allowlist(
-        &app_state.config.experimental_facets,
-        &effective_selected_facet_ids,
-    );
-    // The active action facet's `tool_call_allowlist` selects MCP tools too
-    // (same pattern space as regular facets), so an action facet activates both
-    // its client tools and MCP tools through one field.
-    let facet_allowlist = if let Some(action_facet) = user_input.action_facet.as_ref()
-        && let Some(facet_config) = app_state.config.action_facets.facets.get(&action_facet.id)
-    {
-        merge_action_facet_into_mcp_allowlist(facet_allowlist, &facet_config.tool_call_allowlist)
-    } else {
-        facet_allowlist
-    };
-    let server_filter_from_allowlist = derive_requested_server_ids_from_allowlist(
-        facet_allowlist.as_deref(),
-        !app_state.config.experimental_facets.facets.is_empty(),
-    );
-    let assistant_server_ids = assistant_config
-        .as_ref()
-        .and_then(|assistant| assistant.mcp_server_ids.as_deref());
-    let effective_server_filter =
-        apply_assistant_server_filter(server_filter_from_allowlist, assistant_server_ids);
-    let authorized_server_ids: HashSet<String> = policy
-        .filter_authorized_mcp_server_ids(
-            &me_profile_input.subject,
-            me_profile_input.user_groups,
-            &mcp.config.mcp_servers.keys().cloned().collect::<Vec<_>>(),
-        )
-        .await?
-        .into_iter()
-        .collect();
-    tracing::trace!(
-        subject = ?me_profile_input.subject,
-        user_groups = ?me_profile_input.user_groups,
-        requested_server_filter = ?effective_server_filter,
-        authorized_server_ids = ?authorized_server_ids,
-        "Computed authorized MCP server IDs for chat request"
-    );
-    let effective_server_filter = Some(match effective_server_filter {
-        Some(server_ids) => server_ids
-            .intersection(&authorized_server_ids)
-            .cloned()
-            .collect(),
-        None => authorized_server_ids,
-    });
-    tracing::trace!(
-        subject = ?me_profile_input.subject,
-        final_effective_server_filter = ?effective_server_filter,
-        "Final MCP server filter for chat request"
-    );
     let mcp_auth_context = McpRequestAuthContext {
         app_state: Some(app_state),
         user_id: me_profile_input.user_id,
         oidc_token: Some(me_profile_input.oidc_token),
         access_token: me_profile_input.access_token,
     };
-
-    // Only discover tools for servers potentially needed in this request.
-    let tool_discovery = mcp
-        .servers
-        .discover_tools_for_server_ids(chat.id, effective_server_filter.as_ref(), &mcp_auth_context)
-        .await;
-    let all_mcp_server_tools = tool_discovery.tools;
-    let filtered_mcp_tools =
-        filter_mcp_tools_by_assistant(all_mcp_server_tools, assistant_config.as_ref());
-    let generation_mcp_tools =
-        filter_mcp_tools_by_allowlist(filtered_mcp_tools, facet_allowlist.as_deref());
+    let GenerationMcpToolSet {
+        tools: generation_mcp_tools,
+        mcp_claimed_names,
+        denied: _,
+        unavailable_server_ids: mcp_servers_unavailable,
+        needing_auth_server_ids: mcp_servers_needing_auth,
+    } = resolve_generation_mcp_tools(
+        app_state,
+        policy,
+        &mcp,
+        chat.id,
+        GenerationMcpToolInputs {
+            effective_selected_facet_ids: &effective_selected_facet_ids,
+            action_facet_id: user_input.action_facet.as_ref().map(|af| af.id.as_str()),
+            assistant_config: assistant_config.as_ref(),
+            subject: &me_profile_input.subject,
+            user_groups: me_profile_input.user_groups,
+            user_id: me_profile_input.user_id,
+        },
+        &mcp_auth_context,
+    )
+    .await?;
     let facet_tool_expansions = build_facet_tool_template_expansions(
         &app_state.config.experimental_facets,
         &effective_selected_facet_ids,
@@ -2519,9 +2479,8 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         && let Some(facet_config) = app_state.config.action_facets.facets.get(&action_facet.id)
         && !facet_config.client_actions.is_empty()
     {
-        let name_taken_by_mcp_tool = generation_mcp_tools
-            .iter()
-            .any(|tool| tool.tool.name == crate::services::client_actions::CLIENT_ACTION_TOOL_NAME);
+        let name_taken_by_mcp_tool =
+            mcp_claimed_names.contains(crate::services::client_actions::CLIENT_ACTION_TOOL_NAME);
         if name_taken_by_mcp_tool {
             tracing::warn!(
                 "Not offering the client-action tool for action facet '{}': an MCP tool already uses the name '{}'",
@@ -2575,7 +2534,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         let selection = crate::services::client_tools::select_client_tools(
             allowlist_matched,
             &client_tool_allowlist,
-            |name| generation_mcp_tools.iter().any(|mcp| mcp.tool.name == name),
+            |name| mcp_claimed_names.contains(name),
         );
         for (skipped_tool, skip) in &selection.skipped {
             use crate::services::client_tools::ClientToolSkip;
@@ -2639,9 +2598,8 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     // synthetic tools).
     let mut delegation_offered_file_ids: Vec<Uuid> = Vec::new();
     if !user_input.delegation_targets.is_empty() && !is_delegated_run {
-        let name_taken_by_mcp_tool = generation_mcp_tools.iter().any(|tool| {
-            tool.tool.name == crate::services::delegation::DELEGATE_TO_ASSISTANT_TOOL_NAME
-        });
+        let name_taken_by_mcp_tool = mcp_claimed_names
+            .contains(crate::services::delegation::DELEGATE_TO_ASSISTANT_TOOL_NAME);
         if name_taken_by_mcp_tool {
             tracing::warn!(
                 "Not offering the delegation tool: an MCP tool already uses the name '{}'",
@@ -2748,8 +2706,8 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         generation_input_messages,
         generation_parameters,
         generation_request_context,
-        mcp_servers_unavailable: tool_discovery.unavailable_server_ids,
-        mcp_servers_needing_auth: tool_discovery.needing_auth_server_ids,
+        mcp_servers_unavailable,
+        mcp_servers_needing_auth,
         available_mcp_tools: generation_mcp_tools.clone(),
         offered_client_tool_timeouts,
         chat_request,
@@ -3977,14 +3935,16 @@ async fn stream_generate_chat_completion<
                 let has_active_always_allow = if mcp.config.mcp_servers_global.approval.allow_always
                 {
                     match Uuid::parse_str(&user_id) {
-                        Ok(user_id) => crate::models::user_tool_approval_setting::find_active(
-                            &app_state.db,
-                            user_id,
-                            &approval_request.mcp_server_id,
-                            &approval_request.tool_name,
-                        )
-                        .await?
-                        .is_some(),
+                        Ok(user_id) => {
+                            crate::models::user_tool_approval_setting::find_active_always_allow(
+                                &app_state.db,
+                                user_id,
+                                &approval_request.mcp_server_id,
+                                &approval_request.tool_name,
+                            )
+                            .await?
+                            .is_some()
+                        }
                         Err(_) => false,
                     }
                 } else {
@@ -6221,6 +6181,146 @@ async fn get_assistant_files_for_generation(
 /// If the assistant has specific mcp_server_ids configured, only tools from those servers are returned.
 /// If the assistant has no mcp_server_ids configured (None), all tools are returned.
 /// If no assistant is configured, all tools are returned.
+/// Everything that decides which MCP tools a generation may call.
+pub(crate) struct GenerationMcpToolInputs<'a> {
+    pub effective_selected_facet_ids: &'a [String],
+    pub action_facet_id: Option<&'a str>,
+    pub assistant_config: Option<&'a crate::models::assistant::AssistantWithFiles>,
+    pub subject: &'a Subject,
+    pub user_groups: &'a [String],
+    pub user_id: Option<Uuid>,
+}
+
+pub(crate) struct GenerationMcpToolSet {
+    /// The tools offered to the model, with the assistant, facet, policy and
+    /// per-user denial filters applied.
+    pub tools: Vec<crate::services::mcp_session_manager::ManagedTool>,
+    /// Tool names MCP claimed before the per-user denial. Synthetic and
+    /// client tools yield to MCP on a name clash, so a user denying an MCP
+    /// tool must not promote the same-named client tool it was shadowing —
+    /// the collision checks read this snapshot, not `tools`.
+    pub mcp_claimed_names: HashSet<String>,
+    /// `(server_id, tool_name)` pairs the user has denied for themselves.
+    pub denied: HashSet<(String, String)>,
+    pub unavailable_server_ids: Vec<String>,
+    pub needing_auth_server_ids: Vec<String>,
+}
+
+/// Resolve the MCP tool set of one generation: facet and action-facet
+/// allowlists, the assistant's server restriction, the policy engine's
+/// server authorization, and the user's own denials.
+///
+/// This is the only place that chain lives. A continued turn (after a tool
+/// approval) rebuilds the set through here from the persisted generation
+/// parameters, so an approval can never widen the tools beyond what the
+/// original turn was offered, and a denial stored while the approval was
+/// pending still holds.
+async fn resolve_generation_mcp_tools(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    mcp: &crate::distribution::runtime::McpAppState,
+    chat_id: Uuid,
+    inputs: GenerationMcpToolInputs<'_>,
+    mcp_auth_context: &McpRequestAuthContext<'_>,
+) -> Result<GenerationMcpToolSet, Report> {
+    let facet_allowlist = build_mcp_tool_allowlist(
+        &app_state.config.experimental_facets,
+        inputs.effective_selected_facet_ids,
+    );
+    // The active action facet's `tool_call_allowlist` selects MCP tools too
+    // (same pattern space as regular facets), so an action facet activates both
+    // its client tools and MCP tools through one field.
+    let facet_allowlist = if let Some(action_facet_id) = inputs.action_facet_id
+        && let Some(facet_config) = app_state.config.action_facets.facets.get(action_facet_id)
+    {
+        merge_action_facet_into_mcp_allowlist(facet_allowlist, &facet_config.tool_call_allowlist)
+    } else {
+        facet_allowlist
+    };
+    let server_filter_from_allowlist = derive_requested_server_ids_from_allowlist(
+        facet_allowlist.as_deref(),
+        !app_state.config.experimental_facets.facets.is_empty(),
+    );
+    let assistant_server_ids = inputs
+        .assistant_config
+        .and_then(|assistant| assistant.mcp_server_ids.as_deref());
+    let effective_server_filter =
+        apply_assistant_server_filter(server_filter_from_allowlist, assistant_server_ids);
+    let authorized_server_ids: HashSet<String> = policy
+        .filter_authorized_mcp_server_ids(
+            inputs.subject,
+            inputs.user_groups,
+            &mcp.config.mcp_servers.keys().cloned().collect::<Vec<_>>(),
+        )
+        .await?
+        .into_iter()
+        .collect();
+    tracing::trace!(
+        subject = ?inputs.subject,
+        user_groups = ?inputs.user_groups,
+        requested_server_filter = ?effective_server_filter,
+        authorized_server_ids = ?authorized_server_ids,
+        "Computed authorized MCP server IDs for chat request"
+    );
+    let effective_server_filter = Some(match effective_server_filter {
+        Some(server_ids) => server_ids
+            .intersection(&authorized_server_ids)
+            .cloned()
+            .collect(),
+        None => authorized_server_ids,
+    });
+    tracing::trace!(
+        subject = ?inputs.subject,
+        final_effective_server_filter = ?effective_server_filter,
+        "Final MCP server filter for chat request"
+    );
+
+    // Only discover tools for servers potentially needed in this request.
+    let tool_discovery = mcp
+        .servers
+        .discover_tools_for_server_ids(chat_id, effective_server_filter.as_ref(), mcp_auth_context)
+        .await;
+    let filtered_mcp_tools =
+        filter_mcp_tools_by_assistant(tool_discovery.tools, inputs.assistant_config);
+    let generation_mcp_tools =
+        filter_mcp_tools_by_allowlist(filtered_mcp_tools, facet_allowlist.as_deref());
+    let mcp_claimed_names: HashSet<String> = generation_mcp_tools
+        .iter()
+        .map(|tool| tool.tool.name.to_string())
+        .collect();
+
+    let denied: HashSet<(String, String)> = match inputs.user_id {
+        Some(user_id) if !generation_mcp_tools.is_empty() => {
+            crate::models::user_tool_approval_setting::list_denied(&app_state.db, user_id)
+                .await?
+                .into_iter()
+                .map(|setting| (setting.mcp_server_id, setting.tool_name))
+                .collect()
+        }
+        _ => HashSet::new(),
+    };
+    let tools = if denied.is_empty() {
+        generation_mcp_tools
+    } else {
+        generation_mcp_tools
+            .into_iter()
+            .filter(|tool| {
+                !denied.iter().any(|(server_id, name)| {
+                    *server_id == tool.server_id && name == &*tool.tool.name
+                })
+            })
+            .collect()
+    };
+
+    Ok(GenerationMcpToolSet {
+        tools,
+        mcp_claimed_names,
+        denied,
+        unavailable_server_ids: tool_discovery.unavailable_server_ids,
+        needing_auth_server_ids: tool_discovery.needing_auth_server_ids,
+    })
+}
+
 fn filter_mcp_tools_by_assistant(
     all_tools: Vec<crate::services::mcp_session_manager::ManagedTool>,
     assistant_config: Option<&crate::models::assistant::AssistantWithFiles>,
@@ -10047,13 +10147,81 @@ async fn run_continue_message_task(
     let user_id = Uuid::parse_str(&me_user.id)
         .map_err(|_| eyre!("MCP approvals require a UUID-backed user"))?;
     let is_approved = !matches!(request.decision, ToolApprovalDecision::Reject);
-    let always_allow_setting = if matches!(request.decision, ToolApprovalDecision::ApproveAlways) {
+
+    let generation_parameters: GenerationParameters = serde_json::from_value(
+        message
+            .generation_parameters
+            .clone()
+            .ok_or_else(|| eyre!("Interrupted message has no generation parameters"))?,
+    )?;
+    let mcp_auth_context = McpRequestAuthContext {
+        app_state: Some(app_state),
+        user_id: Some(user_id),
+        oidc_token: Some(&me_user.oidc_token),
+        access_token: me_user.access_token.as_deref(),
+    };
+    // Rebuild the tool set the parked turn was offered instead of trusting a
+    // fresh, unfiltered discovery: the persisted parameters carry the facet
+    // selection, the chat row carries the assistant, and the user's denials
+    // are read now — so a denial stored while the approval was pending wins.
+    // Discovery stays tolerant of unrelated servers being down; the strict
+    // `list_tools` helper would turn those into a generation failure.
+    let me_profile_input = MeProfileChatRequestInput::from_me_profile(me_user);
+    let assistant_config = crate::models::chat::get_chat_assistant_configuration(
+        &app_state.db,
+        policy,
+        &me_profile_input.subject,
+        &chat,
+    )
+    .await?;
+    let mut effective_selected_facet_ids: Vec<String> = generation_parameters
+        .selected_facets
+        .iter()
+        .filter(|(_, selected)| **selected)
+        .map(|(facet_id, _)| facet_id.clone())
+        .collect();
+    effective_selected_facet_ids.sort();
+    let GenerationMcpToolSet {
+        tools: available_mcp_tools,
+        mcp_claimed_names: _,
+        denied: denied_mcp_tools,
+        unavailable_server_ids: mcp_servers_unavailable,
+        needing_auth_server_ids: mcp_servers_needing_auth,
+    } = resolve_generation_mcp_tools(
+        app_state,
+        policy,
+        &mcp,
+        chat.id,
+        GenerationMcpToolInputs {
+            effective_selected_facet_ids: &effective_selected_facet_ids,
+            action_facet_id: generation_parameters.action_facet_id.as_deref(),
+            assistant_config: assistant_config.as_ref(),
+            subject: &me_profile_input.subject,
+            user_groups: me_profile_input.user_groups,
+            user_id: Some(user_id),
+        },
+        &mcp_auth_context,
+    )
+    .await?;
+    let approved_tool = available_mcp_tools
+        .iter()
+        .find(|tool| {
+            tool.server_id == approval_request.mcp_server_id
+                && tool.tool.name == approval_request.tool_name
+        })
+        .cloned();
+    // A grant is only written for a call that actually runs: "always allow"
+    // on a stale card must not overwrite a denial stored in the meantime.
+    let always_allow_setting = if matches!(request.decision, ToolApprovalDecision::ApproveAlways)
+        && approved_tool.is_some()
+    {
         Some(
             crate::models::user_tool_approval_setting::upsert_active(
                 &app_state.db,
                 user_id,
                 &approval_request.mcp_server_id,
                 &approval_request.tool_name,
+                crate::models::user_tool_approval_setting::UserToolDecision::AlwaysAllow,
             )
             .await?,
         )
@@ -10081,32 +10249,20 @@ async fn run_continue_message_task(
             }));
     }
 
-    let mcp_auth_context = McpRequestAuthContext {
-        app_state: Some(app_state),
-        user_id: Some(user_id),
-        oidc_token: Some(&me_user.oidc_token),
-        access_token: me_user.access_token.as_deref(),
-    };
-    // Keep discovery consistent with the initial generation. A chat can have
-    // an unrelated MCP server that is temporarily unavailable; that must not
-    // prevent a previously approved tool from continuing. The strict
-    // `list_tools` helper turns any such server into a generation failure.
-    let mcp_tool_discovery = mcp
-        .servers
-        .discover_tools_for_server_ids(chat.id, None, &mcp_auth_context)
-        .await;
-    let available_mcp_tools = mcp_tool_discovery.tools;
-    let mcp_servers_unavailable = mcp_tool_discovery.unavailable_server_ids;
-    let mcp_servers_needing_auth = mcp_tool_discovery.needing_auth_server_ids;
-    let tool_use = if is_approved {
-        let managed_tool = available_mcp_tools
-            .iter()
-            .find(|tool| {
-                tool.server_id == approval_request.mcp_server_id
-                    && tool.tool.name == approval_request.tool_name
-            })
-            .ok_or_else(|| eyre!("Approved MCP tool is no longer available"))?
-            .clone();
+    let tool_use = if !is_approved {
+        ToolUse {
+            tool_call_id: approval_request.tool_call_id.clone(),
+            status: MessageToolCallStatus::Error,
+            tool_name: approval_request.tool_name.clone(),
+            input: Some(approval_request.input.clone()),
+            progress_message: None,
+            progress: None,
+            total: None,
+            output: Some(json!({"status": "rejected", "error": "The user denied this tool call."})),
+            started_at: Some(now_timestamp()),
+            ended_at: Some(now_timestamp()),
+        }
+    } else if let Some(managed_tool) = approved_tool {
         let call = genai::chat::ToolCall {
             call_id: approval_request.tool_call_id.clone(),
             fn_name: approval_request.tool_name.clone(),
@@ -10156,6 +10312,28 @@ async fn run_continue_message_task(
             ended_at: Some(now_timestamp()),
         }
     } else {
+        // An outage keeps the park retryable; every other miss — the user
+        // denied the tool meanwhile, or the rebuilt set excludes it — is
+        // answered with a refusal the model can work around.
+        let server_id = &approval_request.mcp_server_id;
+        if mcp_servers_unavailable.contains(server_id)
+            || mcp_servers_needing_auth.contains(server_id)
+        {
+            return Err(eyre!("Approved MCP tool is no longer available"));
+        }
+        let error_message = if denied_mcp_tools
+            .contains(&(server_id.clone(), approval_request.tool_name.clone()))
+        {
+            format!(
+                "The user has disabled the tool '{}' in their settings; the call was not executed.",
+                approval_request.tool_name
+            )
+        } else {
+            format!(
+                "The tool '{}' is not available in this chat; the call was not executed.",
+                approval_request.tool_name
+            )
+        };
         ToolUse {
             tool_call_id: approval_request.tool_call_id.clone(),
             status: MessageToolCallStatus::Error,
@@ -10164,7 +10342,7 @@ async fn run_continue_message_task(
             progress_message: None,
             progress: None,
             total: None,
-            output: Some(json!({"status": "rejected", "error": "The user denied this tool call."})),
+            output: Some(json!({ "status": "rejected", "error": error_message })),
             started_at: Some(now_timestamp()),
             ended_at: Some(now_timestamp()),
         }
@@ -10188,12 +10366,6 @@ async fn run_continue_message_task(
             .generation_input_messages
             .clone()
             .ok_or_else(|| eyre!("Interrupted message has no generation input"))?,
-    )?;
-    let generation_parameters: GenerationParameters = serde_json::from_value(
-        message
-            .generation_parameters
-            .clone()
-            .ok_or_else(|| eyre!("Interrupted message has no generation parameters"))?,
     )?;
     let chat_provider_id = generation_parameters
         .generation_chat_provider_id
@@ -10258,7 +10430,7 @@ async fn run_continue_message_task(
         .map(|tools| tools.iter().map(|tool| tool.name.to_string()).collect())
         .unwrap_or_default();
     let headers_context = ChatProviderHeadersContext::new(&me_user.id, &me_user.id_token_claims);
-    // The tool set above is MCP discovery only, so a continued turn carries no
+    // The tool set above is MCP only, so a continued turn carries no
     // delegation offer and no dispatch context to honour one with: the
     // arguments a delegate call needs are request-scoped and are not persisted
     // with the parked message.

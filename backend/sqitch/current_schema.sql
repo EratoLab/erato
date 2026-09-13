@@ -538,7 +538,9 @@ CREATE TABLE public.user_tool_approval_settings (
     active boolean DEFAULT true NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    deactivated_at timestamp with time zone
+    deactivated_at timestamp with time zone,
+    decision text DEFAULT 'always_allow'::text NOT NULL,
+    CONSTRAINT user_tool_approval_settings_decision_check CHECK ((decision = ANY (ARRAY['always_allow'::text, 'denied'::text])))
 );
 
 

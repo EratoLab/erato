@@ -16,6 +16,8 @@ pub struct Model {
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
     pub deactivated_at: Option<DateTimeWithTimeZone>,
+    #[sea_orm(column_type = "Text")]
+    pub decision: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

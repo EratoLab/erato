@@ -1,4 +1,4 @@
-use crate::models::user_tool_approval_setting;
+use crate::models::user_tool_approval_setting::{self, UserToolDecision, decision_of};
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::state::AppState;
 use axum::extract::{Path, State};
@@ -11,6 +11,18 @@ pub struct UserToolApprovalSetting {
     pub id: Uuid,
     pub mcp_server_id: String,
     pub tool_name: String,
+    pub decision: UserToolDecision,
+}
+
+impl From<crate::db::entity::user_tool_approval_settings::Model> for UserToolApprovalSetting {
+    fn from(setting: crate::db::entity::user_tool_approval_settings::Model) -> Self {
+        Self {
+            decision: decision_of(&setting),
+            id: setting.id,
+            mcp_server_id: setting.mcp_server_id,
+            tool_name: setting.tool_name,
+        }
+    }
 }
 
 #[derive(serde::Serialize, ToSchema)]
@@ -43,14 +55,7 @@ pub async fn list_user_tool_approval_settings(
             )
         })?;
     Ok(Json(UserToolApprovalSettingsResponse {
-        settings: settings
-            .into_iter()
-            .map(|setting| UserToolApprovalSetting {
-                id: setting.id,
-                mcp_server_id: setting.mcp_server_id,
-                tool_name: setting.tool_name,
-            })
-            .collect(),
+        settings: settings.into_iter().map(Into::into).collect(),
     }))
 }
 
@@ -58,12 +63,19 @@ pub async fn list_user_tool_approval_settings(
 pub struct CreateUserToolApprovalSettingRequest {
     pub mcp_server_id: String,
     pub tool_name: String,
+    /// Defaults to `always_allow`, which is what pre-existing clients meant.
+    #[serde(default)]
+    pub decision: UserToolDecision,
 }
 
-/// Grant "always allow" for a tool from the settings surface. The in-stream
-/// ApproveAlways decision remains the other writer of the same rows; this
-/// endpoint exists so a grant flipped back to ask-per-use in settings can be
-/// re-granted without waiting for the next in-chat approval stop.
+/// Store a persistent decision for a tool from the settings surface. The
+/// in-stream ApproveAlways decision remains the other writer of the same rows;
+/// this endpoint exists so a grant flipped back to ask-per-use in settings can
+/// be re-granted without waiting for the next in-chat approval stop, and so a
+/// tool can be denied outright. The `allow_always` policy only guards grants:
+/// it exists to keep the product from becoming more permissive, and a denial
+/// is strictly more restrictive, so it works in deployments that never enable
+/// approvals at all.
 #[utoipa::path(
     post,
     path = "/me/mcp-tool-approval-settings",
@@ -80,7 +92,9 @@ pub async fn create_user_tool_approval_setting(
     Json(request): Json<CreateUserToolApprovalSettingRequest>,
 ) -> Result<Json<UserToolApprovalSetting>, (axum::http::StatusCode, String)> {
     let mcp = app_state.mcp_state().await;
-    if !mcp.config.mcp_servers_global.approval.allow_always {
+    if request.decision == UserToolDecision::AlwaysAllow
+        && !mcp.config.mcp_servers_global.approval.allow_always
+    {
         return Err((
             axum::http::StatusCode::BAD_REQUEST,
             "Always allow is disabled by MCP approval policy".to_string(),
@@ -109,6 +123,7 @@ pub async fn create_user_tool_approval_setting(
         user_id,
         &request.mcp_server_id,
         &request.tool_name,
+        request.decision,
     )
     .await
     .map_err(|error| {
@@ -117,11 +132,7 @@ pub async fn create_user_tool_approval_setting(
             error.to_string(),
         )
     })?;
-    Ok(Json(UserToolApprovalSetting {
-        id: setting.id,
-        mcp_server_id: setting.mcp_server_id,
-        tool_name: setting.tool_name,
-    }))
+    Ok(Json(setting.into()))
 }
 
 #[utoipa::path(
