@@ -6938,9 +6938,14 @@
         "required": [
           "server_id",
           "status",
+          "allow_always",
           "tools"
         ],
         "properties": {
+          "allow_always": {
+            "type": "boolean",
+            "description": "Whether the approval policy honors persistent \"always allow\" grants;\na settings surface offers that decision only when this is set, the\nsame way the in-chat approval card does."
+          },
           "server_id": {
             "type": "string"
           },
