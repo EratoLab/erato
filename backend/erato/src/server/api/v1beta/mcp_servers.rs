@@ -99,6 +99,10 @@ pub struct McpServerTool {
 pub struct ListMcpServerToolsResponse {
     pub server_id: String,
     pub status: McpServerStatusValue,
+    /// Whether the approval policy honors persistent "always allow" grants;
+    /// a settings surface offers that decision only when this is set, the
+    /// same way the in-chat approval card does.
+    pub allow_always: bool,
     /// Empty unless `status` is `SUCCESS`; sorted by title.
     pub tools: Vec<McpServerTool>,
 }
@@ -249,6 +253,7 @@ pub async fn list_mcp_server_tools(
     Ok(Json(ListMcpServerToolsResponse {
         server_id,
         status: map_status(enumeration.status),
+        allow_always: global.approval.allow_always,
         tools,
     }))
 }

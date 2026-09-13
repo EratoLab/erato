@@ -96,6 +96,7 @@ async fn test_list_mcp_server_tools_projects_effective_values(pool: Pool<Postgre
 
     assert_eq!(body["server_id"], "research");
     assert_eq!(body["status"], "SUCCESS");
+    assert_eq!(body["allow_always"], true);
     let tools = body["tools"].as_array().expect("tools array");
     let names: Vec<&str> = tools
         .iter()
@@ -251,6 +252,8 @@ async fn test_list_mcp_server_tools_reports_unconnected_oauth_server(pool: Pool<
     response.assert_status_ok();
     let body: Value = response.json();
     assert_eq!(body["status"], "NEEDS_AUTHENTICATION");
+    // The default policy honors no persistent grants.
+    assert_eq!(body["allow_always"], false);
     assert_eq!(body["tools"], json!([]));
 }
 
