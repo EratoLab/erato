@@ -18,7 +18,8 @@ use std::time::Duration;
 use crate::test_app_state;
 use crate::test_utils::{
     MockLlmConfig, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt,
-    create_test_server, setup_mock_llm_server, setup_mock_llm_server_with_mocks,
+    archive_chat_via_api, create_test_server, setup_mock_llm_server,
+    setup_mock_llm_server_with_mocks, unarchive_chat_via_api,
 };
 
 /// Mark a chat as having a running generation with the given heartbeat age.
@@ -42,6 +43,25 @@ async fn mark_running(db: &DatabaseConnection, chat_id: Uuid, heartbeat_age_secs
     ))
     .await
     .expect("Failed to mark chat as running");
+}
+
+/// Park a chat on a tool approval.
+async fn mark_awaiting_approval(db: &DatabaseConnection, chat_id: Uuid) {
+    db.execute_raw(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        r#"
+        UPDATE chats
+        SET active_generation_id = $1,
+            generation_state = 'awaiting_approval',
+            generation_started_at = now(),
+            generation_heartbeat_at = NULL,
+            generation_ended_at = NULL
+        WHERE id = $2
+        "#,
+        [Uuid::new_v4().into(), chat_id.into()],
+    ))
+    .await
+    .expect("Failed to park chat on a tool approval");
 }
 
 async fn insert_chat(db: &DatabaseConnection, owner_user_id: &str) -> chats::Model {
@@ -760,4 +780,57 @@ async fn test_generating_chats_excludes_other_users_and_archived(pool: Pool<Post
     assert_eq!(entries[0]["chat_id"], my_chat.id.to_string());
     assert_eq!(entries[0]["state"], "running");
     assert_eq!(entries[0]["title"], "My running chat");
+}
+
+async fn generating_chat_ids(server: &axum_test::TestServer) -> Vec<String> {
+    let response = server
+        .get("/api/v1beta/me/generating")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status_ok();
+    let body: Value = response.json();
+    body["chats"]
+        .as_array()
+        .expect("chats array")
+        .iter()
+        .map(|entry| entry["chat_id"].as_str().expect("chat_id").to_string())
+        .collect()
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_generating_chats_follow_archive_and_unarchive(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let me = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let chat = insert_chat(&app_state.db, &me.id.to_string()).await;
+    mark_awaiting_approval(&app_state.db, chat.id).await;
+    app_state.global_policy_engine.invalidate_data().await;
+
+    let server = create_test_server(app_state.clone());
+    assert_eq!(
+        generating_chat_ids(&server).await,
+        vec![chat.id.to_string()]
+    );
+
+    archive_chat_via_api(&server, &chat.id.to_string()).await;
+    assert!(generating_chat_ids(&server).await.is_empty());
+
+    unarchive_chat_via_api(&server, &chat.id.to_string()).await;
+    assert_eq!(
+        generating_chat_ids(&server).await,
+        vec![chat.id.to_string()]
+    );
+    assert_eq!(
+        Chats::find_by_id(chat.id)
+            .one(&app_state.db)
+            .await
+            .expect("Failed to fetch chat")
+            .expect("Missing chat")
+            .generation_state
+            .as_deref(),
+        Some("awaiting_approval")
+    );
 }

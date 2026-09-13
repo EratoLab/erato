@@ -26,7 +26,8 @@ use crate::models::assistant::create_standalone_file_upload;
 use crate::models::chat::{
     RecentChatTypeFilter, RecentChatsFilter, archive_all_unarchived_chats_for_owner, archive_chat,
     get_frequent_assistants, get_generating_chats, get_or_create_chat, get_recent_chats,
-    resolve_chat_display_name, update_chat_is_pinned, update_chat_title_by_user_provided,
+    resolve_chat_display_name, unarchive_chat, update_chat_is_pinned,
+    update_chat_title_by_user_provided,
 };
 use crate::models::file_capability::{
     FileCapability, FileOperation, find_file_capability_by_filename, get_file_capabilities,
@@ -223,6 +224,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
     let authenticated_routes = Router::new()
         .route("/chats/{chat_id}/messages", get(chat_messages))
         .route("/chats/{chat_id}/archive", post(archive_chat_endpoint))
+        .route("/chats/{chat_id}/unarchive", post(unarchive_chat_endpoint))
         .route(
             "/messages/{message_id}/feedback",
             put(submit_message_feedback).delete(delete_message_feedback),
@@ -409,6 +411,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         update_chat,
         archive_all_chats_endpoint,
         archive_chat_endpoint,
+        unarchive_chat_endpoint,
         token_usage::token_usage_estimate,
         prompt_optimizer,
         available_models,
@@ -499,6 +502,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         UpdateChatResponse,
         ArchiveChatRequest,
         ArchiveChatResponse,
+        UnarchiveChatResponse,
         ArchiveAllChatsResponse,
         ChatModel,
         McpServerStatusValue,
@@ -3858,6 +3862,13 @@ pub struct ArchiveChatResponse {
     archived_at: DateTime<FixedOffset>,
 }
 
+/// Response from the unarchive chat endpoint
+#[derive(Serialize, ToSchema)]
+pub struct UnarchiveChatResponse {
+    /// The ID of the unarchived chat
+    chat_id: String,
+}
+
 /// Response from the archive all chats endpoint
 #[derive(Serialize, ToSchema)]
 pub struct ArchiveAllChatsResponse {
@@ -3934,6 +3945,61 @@ pub async fn archive_chat_endpoint(
     Ok(Json(ArchiveChatResponse {
         chat_id: updated_chat.id.to_string(),
         archived_at,
+    }))
+}
+
+/// Unarchive a chat
+///
+/// Clears the chat's archived_at timestamp so it reappears in the default
+/// listing. Delegated runs archived along with it stay archived, and
+/// unarchiving a chat that is not archived changes nothing.
+#[utoipa::path(
+    post,
+    path = "/chats/{chat_id}/unarchive",
+    params(
+        ("chat_id" = String, Path, description = "The ID of the chat to unarchive")
+    ),
+    responses(
+        (status = OK, body = UnarchiveChatResponse, description = "Successfully unarchived the chat"),
+        (status = BAD_REQUEST, description = "Invalid chat ID format"),
+        (status = NOT_FOUND, description = "Chat not found"),
+        (status = UNAUTHORIZED, description = "User not authorized to unarchive this chat"),
+        (status = INTERNAL_SERVER_ERROR, description = "Server error")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn unarchive_chat_endpoint(
+    State(app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
+    Path(chat_id): Path<String>,
+) -> Result<Json<UnarchiveChatResponse>, StatusCode> {
+    let chat_id = Uuid::parse_str(&chat_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    policy
+        .rebuild_data_if_needed(&app_state.db, &app_state.config)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to rebuild policy data: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let updated_chat = unarchive_chat(&app_state.db, &policy, &me_user.to_subject(), &chat_id)
+        .await
+        .map_err(|e| {
+            if e.to_string().contains("not found") {
+                StatusCode::NOT_FOUND
+            } else {
+                log_internal_server_error(e)
+            }
+        })?;
+
+    app_state.global_policy_engine.invalidate_data().await;
+
+    Ok(Json(UnarchiveChatResponse {
+        chat_id: updated_chat.id.to_string(),
     }))
 }
 

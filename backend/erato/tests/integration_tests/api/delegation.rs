@@ -4,7 +4,8 @@
 use crate::test_app_state;
 use crate::test_utils::{
     Event, JwtTokenBuilder, RequestBodyRecorder, TEST_JWT_TOKEN, TEST_USER_ISSUER,
-    TEST_USER_SUBJECT, TestRequestAuthExt, parse_sse_events, setup_mock_llm_server_with_mocks,
+    TEST_USER_SUBJECT, TestRequestAuthExt, archive_chat_via_api, parse_sse_events,
+    setup_mock_llm_server_with_mocks, unarchive_chat_via_api,
 };
 use axum::Router;
 use axum::http;
@@ -5834,8 +5835,9 @@ async fn archived_at_of(db: &sea_orm::DatabaseConnection, chat_id: Uuid) -> Opti
 
 /// Archiving a chat archives the delegated runs it spawned and theirs in turn,
 /// but leaves alone a run whose generation has not finished or has not started
-/// yet, never leaves the owner, and never reaches another provenance kind. A
-/// run that survives its origin still reads with a dangling origin.
+/// yet, never leaves the owner, and never reaches another provenance kind.
+/// Unarchiving the origin restores only the origin. A run that survives its
+/// origin still reads with a dangling origin.
 ///
 /// # Test Categories
 /// - `uses-db`
@@ -5903,12 +5905,7 @@ async fn test_archive_cascades_to_idle_delegated_runs(pool: Pool<Postgres>) {
     )
     .await;
 
-    server
-        .post(&format!("/api/v1beta/chats/{parent}/archive"))
-        .with_bearer_token(TEST_JWT_TOKEN)
-        .json(&json!({}))
-        .await
-        .assert_status_ok();
+    archive_chat_via_api(&server, &parent).await;
 
     for (label, id) in [
         ("the archived chat", parent_id),
@@ -5936,6 +5933,13 @@ async fn test_archive_cascades_to_idle_delegated_runs(pool: Pool<Postgres>) {
             "{label} must not be archived"
         );
     }
+
+    unarchive_chat_via_api(&server, &parent).await;
+    assert!(archived_at_of(&app_state.db, parent_id).await.is_none());
+    assert!(
+        archived_at_of(&app_state.db, idle).await.is_some(),
+        "a delegated run stays archived when its origin is unarchived"
+    );
 
     // The origin goes away — by the cleanup worker later, or as here — while
     // the run that was still going survives it.

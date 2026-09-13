@@ -30,7 +30,7 @@ use mocktail::server::{MockServer, MockServerConfig};
 use crate::test_app_state;
 use crate::test_utils::{
     BodyContainsMatcher, JwtTokenBuilder, RequestBodyRecorder, RequestHeadersRecorder,
-    TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt,
+    TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt, archive_chat_via_api,
     build_openai_text_streaming_response, build_openai_tool_calls_streaming_response,
     extract_chat_id, extract_full_text, has_event_type, hermetic_app_config, parse_sse_events,
     read_integration_test_file_bytes, setup_mock_llm_server, setup_mock_llm_server_with_mocks,
@@ -4220,16 +4220,6 @@ async fn submit_opening_turn(server: &TestServer) -> (String, String) {
         .expect("Expected assistant_message_completed event with message_id");
 
     (chat_id, assistant_message_id)
-}
-
-/// Archive a chat through the public endpoint and assert success.
-async fn archive_chat_via_api(server: &TestServer, chat_id: &str) {
-    let archive_response = server
-        .post(&format!("/api/v1beta/chats/{chat_id}/archive"))
-        .with_bearer_token(TEST_JWT_TOKEN)
-        .json(&json!({}))
-        .await;
-    archive_response.assert_status_ok();
 }
 
 fn app_server(app_state: erato::state::AppState) -> TestServer {

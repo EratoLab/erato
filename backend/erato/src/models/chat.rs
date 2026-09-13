@@ -1706,6 +1706,36 @@ pub async fn archive_chat(
     Ok(updated_chat)
 }
 
+/// Clear a chat's archived_at timestamp. Descendants archived alongside it
+/// stay archived, and no other column is touched.
+pub async fn unarchive_chat(
+    conn: &DatabaseConnection,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    chat_id: &Uuid,
+) -> Result<chats::Model, Report> {
+    let chat = Chats::find_by_id(*chat_id)
+        .one(conn)
+        .await?
+        .ok_or_else(|| eyre!("Chat with ID {} not found", chat_id))?;
+
+    authorize!(
+        policy,
+        subject,
+        &Resource::Chat(chat.id.to_string()),
+        Action::Update
+    )?;
+
+    if chat.archived_at.is_none() {
+        return Ok(chat);
+    }
+
+    let mut chat_active: chats::ActiveModel = chat.into();
+    chat_active.archived_at = ActiveValue::Set(None);
+
+    Ok(chat_active.update(conn).await?)
+}
+
 /// Archive all non-archived chats for a specific owner user.
 ///
 /// Returns the number of chats that were newly archived.

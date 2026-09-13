@@ -10,7 +10,8 @@ use erato::config::{
 use erato::db::entity::{chats, messages};
 use erato::server::router::router;
 use sea_orm::{
-    ActiveModelTrait, ActiveValue, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, prelude::Uuid,
+    ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter,
+    QueryOrder, prelude::Uuid,
 };
 use serde_json::{Value, json};
 use sqlx::Pool;
@@ -19,7 +20,9 @@ use std::collections::HashMap;
 
 use crate::test_app_state;
 use crate::test_utils::{
-    TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt, setup_mock_llm_server,
+    TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt, archive_chat_via_api,
+    create_test_server, extract_chat_id, parse_sse_events, setup_mock_llm_server,
+    unarchive_chat_via_api,
 };
 
 /// Test retrieving recent chats for the authenticated user.
@@ -460,6 +463,133 @@ async fn test_archive_all_chats_endpoint_archives_only_unarchived(pool: Pool<Pos
         already_archived_chat_after.archived_at, already_archived_chat.archived_at,
         "Archive timestamp on previously archived chat should remain unchanged",
     );
+}
+
+/// A chat only reaches the recent-chats listing once it has a message, so
+/// create it through a submit turn rather than a bare row.
+async fn create_chat_via_submit(server: &TestServer) -> String {
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "Hello" }))
+        .await;
+    response.assert_status_ok();
+    extract_chat_id(&parse_sse_events(&response)).expect("Expected chat_created event")
+}
+
+async fn recent_chat_ids(server: &TestServer) -> Vec<String> {
+    let response = server
+        .get("/api/v1beta/me/recent_chats")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status_ok();
+    let body: Value = response.json();
+    body["chats"]
+        .as_array()
+        .expect("Response missing 'chats' array")
+        .iter()
+        .map(|chat| chat["id"].as_str().expect("Chat missing 'id'").to_string())
+        .collect()
+}
+
+async fn stored_chat(db: &DatabaseConnection, chat_id: &str) -> chats::Model {
+    chats::Entity::find_by_id(Uuid::parse_str(chat_id).expect("Invalid chat UUID"))
+        .one(db)
+        .await
+        .expect("Failed to fetch chat")
+        .expect("Missing chat")
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_unarchive_returns_the_chat_to_the_default_listing(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .expect("Failed to create user");
+
+    let server = create_test_server(app_state.clone());
+    let chat_id = create_chat_via_submit(&server).await;
+
+    archive_chat_via_api(&server, &chat_id).await;
+    assert!(!recent_chat_ids(&server).await.contains(&chat_id));
+
+    let unarchive_response = server
+        .post(&format!("/api/v1beta/chats/{chat_id}/unarchive"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    unarchive_response.assert_status_ok();
+    let body: Value = unarchive_response.json();
+    assert_eq!(body["chat_id"], chat_id);
+
+    assert!(recent_chat_ids(&server).await.contains(&chat_id));
+    assert!(
+        stored_chat(&app_state.db, &chat_id)
+            .await
+            .archived_at
+            .is_none()
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_unarchive_twice_is_a_no_op(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .expect("Failed to create user");
+
+    let server = create_test_server(app_state.clone());
+    let chat_id = create_chat_via_submit(&server).await;
+
+    archive_chat_via_api(&server, &chat_id).await;
+
+    for _ in 0..2 {
+        unarchive_chat_via_api(&server, &chat_id).await;
+    }
+
+    assert!(
+        stored_chat(&app_state.db, &chat_id)
+            .await
+            .archived_at
+            .is_none()
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_unarchive_unknown_chat_returns_404(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .expect("Failed to create user");
+
+    let server = create_test_server(app_state);
+
+    let response = server
+        .post(&format!("/api/v1beta/chats/{}/unarchive", Uuid::new_v4()))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+
+    assert_eq!(response.status_code(), http::StatusCode::NOT_FOUND);
 }
 
 /// Test that recent chats resolve title with `title_by_user_provided` precedence.
