@@ -147,9 +147,10 @@ describe("useOutlookMessageFetcher", () => {
 
     expect(result.current.fetcher).toBeNull();
     expect(result.current.unavailableReason).toBe("shared-mailbox-unsupported");
-    // The EWS backend would answer out of the delegate's own mailbox, so the
-    // refusal has to win before the on-prem fetcher is built.
-    expect(createEwsOutlookMessageFetcher).not.toHaveBeenCalled();
+    // The EWS backend would answer out of the delegate's own mailbox for the
+    // SELECTED item, so it is never handed out as `fetcher` here — only for
+    // operands that belong to the user's own store.
+    expect(result.current.ownMailboxFetcher).toEqual({ kind: "ews" });
     expect(createGraphOutlookMessageFetcher).not.toHaveBeenCalled();
   });
 
@@ -245,6 +246,8 @@ describe("useOutlookMessageFetcher", () => {
 
     const { result, rerender } = renderHook(() => useOutlookMessageFetcher());
     const first = result.current.fetcher;
+    const buildsAfterFirstRender = vi.mocked(createGraphOutlookMessageFetcher)
+      .mock.calls.length;
 
     // Hosts fire two selection events for a single selection, and the provider
     // mints a fresh context object for each. Keying on the address rather than
@@ -261,7 +264,9 @@ describe("useOutlookMessageFetcher", () => {
     rerender();
 
     expect(result.current.fetcher).toBe(first);
-    expect(createGraphOutlookMessageFetcher).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(createGraphOutlookMessageFetcher).mock.calls).toHaveLength(
+      buildsAfterFirstRender,
+    );
   });
 
   it("memoizes the fetcher across rerenders while mode and Graph context are stable", () => {
@@ -308,5 +313,70 @@ describe("useOutlookMessageFetcher", () => {
     // key their caches on it because an item's ids don't change with the
     // store that answers.
     expect(roots).toEqual(["shared@contoso.com", null, null, null]);
+  });
+
+  describe("own-store backend", () => {
+    it("keeps a fetcher for the user's own store beside a shared-rooted one", () => {
+      const factory = vi.mocked(createGraphOutlookMessageFetcher);
+      factory.mockImplementation(
+        (_acquire, options) =>
+          ({ kind: "graph", owner: options?.owner ?? null }) as never,
+      );
+      try {
+        prime("entra-msal", {
+          graph: { acquireToken: vi.fn() },
+          shared: { owner: "shared@contoso.com", targetMailbox: null },
+        });
+
+        const { result } = renderHook(() => useOutlookMessageFetcher());
+
+        expect(result.current.fetcher).toEqual({
+          kind: "graph",
+          owner: "shared@contoso.com",
+        });
+        expect(result.current.ownMailboxFetcher).toEqual({
+          kind: "graph",
+          owner: null,
+        });
+      } finally {
+        factory.mockImplementation(() => ({ kind: "graph" }) as never);
+      }
+    });
+
+    it("hands out one object for both when the item sits in the user's own store", () => {
+      prime("entra-msal", { graph: { acquireToken: vi.fn() } });
+
+      const { result } = renderHook(() => useOutlookMessageFetcher());
+
+      expect(result.current.ownMailboxFetcher).toBe(result.current.fetcher);
+      expect(createGraphOutlookMessageFetcher).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps the EWS backend for own-store operands while refusing a shared item on-prem", () => {
+      prime("entra-msal", {
+        onPrem: true,
+        shared: { owner: "shared@contoso.com", targetMailbox: null },
+      });
+
+      const { result } = renderHook(() => useOutlookMessageFetcher());
+
+      expect(result.current.fetcher).toBeNull();
+      expect(result.current.unavailableReason).toBe(
+        "shared-mailbox-unsupported",
+      );
+      expect(result.current.ownMailboxFetcher).toEqual({ kind: "ews" });
+    });
+
+    it("withholds both while the probe is in flight", () => {
+      prime("entra-msal", {
+        graph: { acquireToken: vi.fn() },
+        loadingShared: true,
+      });
+
+      const { result } = renderHook(() => useOutlookMessageFetcher());
+
+      expect(result.current.fetcher).toBeNull();
+      expect(result.current.ownMailboxFetcher).toBeNull();
+    });
   });
 });

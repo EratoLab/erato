@@ -32,6 +32,17 @@ export interface UseOutlookMessageFetcherResult {
    */
   mailboxRoot: string | null;
   fetcher: OutlookMessageFetcher | null;
+  /**
+   * Backend for the signed-in user's OWN store, whatever the selected item's
+   * provenance: the same object as `fetcher` when that is already own-rooted,
+   * a `/me`-rooted Graph fetcher beside a shared-rooted one, and the
+   * EWS/sidecar fetcher on-prem even while `fetcher` is withheld for a shared
+   * item. For operands that belong to the user's own mailbox — a row dragged
+   * from their inbox, a dropped `.msg` — never for the selected item. Null
+   * whenever no backend applies at all (auth mode, missing Graph, probe
+   * pending).
+   */
+  ownMailboxFetcher: OutlookMessageFetcher | null;
   unavailableReason: OutlookMessageFetcherUnavailableReason | null;
 }
 
@@ -102,6 +113,7 @@ export function useOutlookMessageFetcher(): UseOutlookMessageFetcherResult {
     if (mode !== "entra-msal") {
       return {
         fetcher: null,
+        ownMailboxFetcher: null,
         mailboxRoot: null,
         unavailableReason: "unsupported-mode",
       };
@@ -109,20 +121,14 @@ export function useOutlookMessageFetcher(): UseOutlookMessageFetcherResult {
     if (isLoadingSharedContext) {
       return {
         fetcher: null,
+        ownMailboxFetcher: null,
         mailboxRoot: null,
         unavailableReason: "mailbox-location-pending",
       };
     }
     if (isOnPrem) {
-      if (sharedMailboxRoot) {
-        return {
-          fetcher: null,
-          mailboxRoot: null,
-          unavailableReason: "shared-mailbox-unsupported",
-        };
-      }
       const ews = createEwsOutlookMessageFetcher();
-      const fetcher = sidecarClient
+      const ownMailboxFetcher = sidecarClient
         ? createSidecarOutlookMessageFetcher({
             inner: ews,
             client: sidecarClient,
@@ -131,19 +137,42 @@ export function useOutlookMessageFetcher(): UseOutlookMessageFetcherResult {
               Office.context?.mailbox?.userProfile?.emailAddress ?? null,
           })
         : ews;
-      return { fetcher, mailboxRoot: null, unavailableReason: null };
+      if (sharedMailboxRoot) {
+        // The selected item is out of reach, but the user's own store is not:
+        // rows dragged from their inbox and dropped `.msg` files still read.
+        return {
+          fetcher: null,
+          ownMailboxFetcher,
+          mailboxRoot: null,
+          unavailableReason: "shared-mailbox-unsupported",
+        };
+      }
+      return {
+        fetcher: ownMailboxFetcher,
+        ownMailboxFetcher,
+        mailboxRoot: null,
+        unavailableReason: null,
+      };
     }
     if (!graph) {
       return {
         fetcher: null,
+        ownMailboxFetcher: null,
         mailboxRoot: null,
         unavailableReason: "graph-unavailable",
       };
     }
+    const ownMailboxFetcher = createGraphOutlookMessageFetcher(
+      graph.acquireToken,
+      { owner: null },
+    );
     return {
-      fetcher: createGraphOutlookMessageFetcher(graph.acquireToken, {
-        owner: sharedMailboxRoot,
-      }),
+      fetcher: sharedMailboxRoot
+        ? createGraphOutlookMessageFetcher(graph.acquireToken, {
+            owner: sharedMailboxRoot,
+          })
+        : ownMailboxFetcher,
+      ownMailboxFetcher,
       mailboxRoot: sharedMailboxRoot,
       unavailableReason: null,
     };
