@@ -207,6 +207,15 @@ async function readAttachmentMetadata(
   return attachments.map(parseAttachmentDetails);
 }
 
+// Bounds the probe so a wedged host (the ERMAIN-431 class — classic Win32 was
+// seen dropping callbacks entirely) settles to "not shared" instead of pinning
+// every mail backend behind `mailbox-location-pending` for the item's
+// lifetime. A shared item on such a host degrades to reading the user's own
+// store, which is the pre-shared-mailbox behaviour; a later successful
+// re-probe still corrects it, because the thread cache is keyed on the
+// resolved mailbox root.
+const SHARED_CONTEXT_PROBE_TIMEOUT_MS = 5_000;
+
 /**
  * Resolve the shared-mailbox / delegated-folder provenance of an item, or
  * `null` when it sits in the user's own mailbox.
@@ -219,8 +228,9 @@ async function readAttachmentMetadata(
  *
  * A `Failed` callback is how Outlook says "this folder or mailbox is not
  * shared" — an ordinary answer rather than a fault, so it resolves to `null`
- * and logs nothing. That is also why this does not go through
- * `callOfficeAsync`, which would manufacture an `Error` for it.
+ * and logs nothing. Only the timeout logs, because that one is a host fault.
+ * That is also why this does not go through `callOfficeAsync`: it folds the
+ * failed callback and the timeout into the same rejection.
  */
 function readSharedContext(item: {
   getSharedPropertiesAsync?: (
@@ -232,6 +242,21 @@ function readSharedContext(item: {
   }
 
   return new Promise((resolve) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const settle = (value: OutlookSharedContext | null) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve(value);
+    };
+    timer = setTimeout(() => {
+      console.warn(
+        `Shared-mailbox probe did not answer within ${SHARED_CONTEXT_PROBE_TIMEOUT_MS}ms; treating the item as not shared`,
+      );
+      settle(null);
+    }, SHARED_CONTEXT_PROBE_TIMEOUT_MS);
+
     try {
       item.getSharedPropertiesAsync!((result) => {
         const owner =
@@ -244,16 +269,21 @@ function readSharedContext(item: {
         // raising a consent prompt, and then read the user's own mailbox
         // anyway.
         if (result.status !== Office.AsyncResultStatus.Succeeded || !owner) {
-          resolve(null);
+          settle(null);
           return;
         }
 
-        resolve({
+        // Normalised exactly like `owner`: consumers fall back from
+        // `targetMailbox` to `owner` with `??`, which an empty string defeats —
+        // the item would then read as "not shared" and be served out of the
+        // user's own store.
+        const targetMailbox =
+          typeof result.value.targetMailbox === "string"
+            ? result.value.targetMailbox.trim()
+            : "";
+        settle({
           owner,
-          targetMailbox:
-            typeof result.value.targetMailbox === "string"
-              ? result.value.targetMailbox
-              : null,
+          targetMailbox: targetMailbox || null,
           delegatePermissions:
             typeof result.value.delegatePermissions === "number"
               ? result.value.delegatePermissions
@@ -263,9 +293,21 @@ function readSharedContext(item: {
     } catch {
       // A host that refuses the call throws instead of failing the callback.
       // Same answer, so it degrades to "not shared" too.
-      resolve(null);
+      settle(null);
     }
   });
+}
+
+function isSameSharedContext(
+  a: OutlookSharedContext | null,
+  b: OutlookSharedContext,
+): boolean {
+  return (
+    a !== null &&
+    a.owner === b.owner &&
+    a.targetMailbox === b.targetMailbox &&
+    a.delegatePermissions === b.delegatePermissions
+  );
 }
 
 function base64ToArrayBuffer(content: string): ArrayBuffer {
@@ -642,6 +684,12 @@ export function OutlookMailItemProvider({
   // pin-hint tracking signal) from the host's initial same-item selection
   // event.
   const lastItemIdentityRef = useRef<string | null>(null);
+  // Identity of the item whose shared-mailbox answer is currently committed.
+  // Lets a re-run for the same stable item keep that answer instead of going
+  // back to "pending" (see the read effect). Deliberately separate from
+  // `lastItemIdentityRef`, which survives null-item events: after A → null → A
+  // the null run has already cleared the answer, so A must probe as new.
+  const committedSharedIdentityRef = useRef<string | null>(null);
 
   const refresh = useCallback(() => {
     setRefreshKey((previous) => previous + 1);
@@ -705,6 +753,7 @@ export function OutlookMailItemProvider({
       setMailItem(null);
       setAttachments([]);
       setSharedContext(null);
+      committedSharedIdentityRef.current = null;
       setIsLoading(false);
       setIsLoadingAttachments(false);
       setIsLoadingSharedContext(false);
@@ -715,12 +764,42 @@ export function OutlookMailItemProvider({
     // item-kind-agnostic and `getSharedPropertiesAsync` is served on
     // appointment compose too, so one code path covers every supported item.
     // Nothing on the calendar side consumes the result yet.
-    setSharedContext(null);
-    setIsLoadingSharedContext(true);
+    //
+    // A re-run for the SAME stable item (hosts fire two selection events per
+    // selection; `refresh()`) keeps the committed answer rather than resetting
+    // to pending: the reset flips the fetcher to null and back to a new
+    // object, and every consumer keyed on it — the thread query, the compose
+    // reply-context fetch, the mail-list drop target — tears down and
+    // restarts for a byte-identical item. The item is still re-probed, but a
+    // same item cannot change store, so only a real, different answer is
+    // committed: a null after a committed owner is a transient failure or a
+    // timeout, not a move.
+    const sharedContextSettled =
+      isStableItemIdentity(nextItemIdentity) &&
+      nextItemIdentity === committedSharedIdentityRef.current;
+    if (!sharedContextSettled) {
+      setSharedContext(null);
+      setIsLoadingSharedContext(true);
+    }
     void readSharedContext(item).then((nextSharedContext) => {
       if (!canCommit()) {
         return;
       }
+      if (sharedContextSettled) {
+        if (nextSharedContext !== null) {
+          setSharedContext((previous) =>
+            isSameSharedContext(previous, nextSharedContext)
+              ? previous
+              : nextSharedContext,
+          );
+        }
+        return;
+      }
+      committedSharedIdentityRef.current = isStableItemIdentity(
+        nextItemIdentity,
+      )
+        ? nextItemIdentity
+        : null;
       setSharedContext(nextSharedContext);
       setIsLoadingSharedContext(false);
     });

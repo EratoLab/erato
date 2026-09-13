@@ -36,6 +36,13 @@ export type OutlookMessageFetcherUnavailableReason =
   | "unsupported-mode";
 
 export interface UseOutlookMessageFetcherResult {
+  /**
+   * Mailbox the returned fetcher is bound to: the shared or delegated store's
+   * address for an item that lives there, `null` for the signed-in user's own
+   * store — and `null` whenever there is no fetcher. Consumers that cache by
+   * item must key on it: an item's ids do not change when its store does.
+   */
+  mailboxRoot: string | null;
   fetcher: OutlookMessageFetcher | null;
   unavailableReason: OutlookMessageFetcherUnavailableReason | null;
 }
@@ -55,7 +62,9 @@ export interface UseOutlookMessageFetcherResult {
  *     that window is not a glitch that later self-corrects: `useCurrentThread`
  *     keys its query on the item ids alone with `staleTime: Infinity`, so the
  *     empty answer for a conversation living in someone else's store gets
- *     cached and is never refetched once the owner arrives.
+ *     cached and is never refetched once the owner arrives. Consumers must
+ *     render this reason as LOADING, never as "no backend": the composer's
+ *     send gate keys on the thread being in flight.
  *   - on-prem mailbox, item out of a shared or delegated store →
  *     `fetcher: null` + `shared-mailbox-unsupported`. Microsoft does not
  *     support EWS in shared folder and shared mailbox scenarios, and Graph is
@@ -103,15 +112,24 @@ export function useOutlookMessageFetcher(): UseOutlookMessageFetcherResult {
 
   return useMemo<UseOutlookMessageFetcherResult>(() => {
     if (mode !== "entra-msal") {
-      return { fetcher: null, unavailableReason: "unsupported-mode" };
+      return {
+        fetcher: null,
+        mailboxRoot: null,
+        unavailableReason: "unsupported-mode",
+      };
     }
     if (isLoadingSharedContext) {
-      return { fetcher: null, unavailableReason: "mailbox-location-pending" };
+      return {
+        fetcher: null,
+        mailboxRoot: null,
+        unavailableReason: "mailbox-location-pending",
+      };
     }
     if (isOnPrem) {
       if (sharedMailboxRoot) {
         return {
           fetcher: null,
+          mailboxRoot: null,
           unavailableReason: "shared-mailbox-unsupported",
         };
       }
@@ -125,10 +143,14 @@ export function useOutlookMessageFetcher(): UseOutlookMessageFetcherResult {
               Office.context?.mailbox?.userProfile?.emailAddress ?? null,
           })
         : ews;
-      return { fetcher, unavailableReason: null };
+      return { fetcher, mailboxRoot: null, unavailableReason: null };
     }
     if (!graph) {
-      return { fetcher: null, unavailableReason: "graph-unavailable" };
+      return {
+        fetcher: null,
+        mailboxRoot: null,
+        unavailableReason: "graph-unavailable",
+      };
     }
     const acquireGraphToken: AcquireGraphToken = (options) =>
       graph.acquireToken(
@@ -139,6 +161,7 @@ export function useOutlookMessageFetcher(): UseOutlookMessageFetcherResult {
       fetcher: createGraphOutlookMessageFetcher(acquireGraphToken, {
         owner: sharedMailboxRoot,
       }),
+      mailboxRoot: sharedMailboxRoot,
       unavailableReason: null,
     };
   }, [

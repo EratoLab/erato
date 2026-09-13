@@ -294,4 +294,39 @@ describe("useOutlookMessageFetcher", () => {
     expect(result.current.fetcher).toBe(first);
     expect(createEwsOutlookMessageFetcher).toHaveBeenCalledTimes(1);
   });
+
+  it("exposes the mailbox root the fetcher is bound to, and null otherwise", () => {
+    const shared = {
+      owner: "shared@contoso.com",
+      targetMailbox: null,
+      delegatePermissions: null,
+    };
+    const roots: Array<string | null> = [];
+
+    prime("entra-msal", { graph: { acquireToken: vi.fn() }, shared });
+    roots.push(
+      renderHook(() => useOutlookMessageFetcher()).result.current.mailboxRoot,
+    );
+    prime("entra-msal", { graph: { acquireToken: vi.fn() } });
+    roots.push(
+      renderHook(() => useOutlookMessageFetcher()).result.current.mailboxRoot,
+    );
+    prime("entra-msal", {
+      graph: { acquireToken: vi.fn() },
+      shared,
+      loadingShared: true,
+    });
+    roots.push(
+      renderHook(() => useOutlookMessageFetcher()).result.current.mailboxRoot,
+    );
+    prime("entra-msal", { onPrem: true });
+    roots.push(
+      renderHook(() => useOutlookMessageFetcher()).result.current.mailboxRoot,
+    );
+
+    // Bound → its address; own store, pending and on-prem → null. Consumers
+    // key their caches on it because an item's ids don't change with the
+    // store that answers.
+    expect(roots).toEqual(["shared@contoso.com", null, null, null]);
+  });
 });

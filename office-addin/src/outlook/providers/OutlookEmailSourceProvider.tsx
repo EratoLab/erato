@@ -199,7 +199,11 @@ export function OutlookEmailSourceProvider({
   // Environment-dispatched message fetch; null when no mail backend is
   // available, in which case the thread preview and reply-context chip
   // quietly stay off (the same UX as a failed fetch).
-  const { fetcher: messageFetcher } = useOutlookMessageFetcher();
+  const {
+    fetcher: messageFetcher,
+    mailboxRoot,
+    unavailableReason: messageFetcherUnavailableReason,
+  } = useOutlookMessageFetcher();
   const [dismissedAttachmentIds, setDismissedAttachmentIds] = useState<
     string[]
   >([]);
@@ -231,6 +235,13 @@ export function OutlookEmailSourceProvider({
     itemId,
     conversationId,
     messageFetcher?.fetchConversationMessages ?? null,
+    {
+      mailboxRoot,
+      // Only the probe window counts as loading. "No Graph" and "unsupported
+      // mode" are steady states the thread quietly stays off in.
+      backendPending:
+        messageFetcherUnavailableReason === "mailbox-location-pending",
+    },
   );
 
   // Reply-context chip for compose mode (drafts have no itemId but do have a
