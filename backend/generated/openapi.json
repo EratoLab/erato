@@ -2329,6 +2329,51 @@
         ]
       }
     },
+    "/api/v1beta/me/mcp_servers/{server_id}/tools": {
+      "get": {
+        "tags": [
+          "mcp_servers"
+        ],
+        "operationId": "list_mcp_server_tools",
+        "parameters": [
+          {
+            "name": "server_id",
+            "in": "path",
+            "description": "Configured MCP server ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListMcpServerToolsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "403": {
+            "description": "The user is not authorized to access the MCP server"
+          },
+          "404": {
+            "description": "The server is not configured"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/messages/abortstream": {
       "post": {
         "tags": [],
@@ -6824,6 +6869,29 @@
           }
         }
       },
+      "ListMcpServerToolsResponse": {
+        "type": "object",
+        "required": [
+          "server_id",
+          "status",
+          "tools"
+        ],
+        "properties": {
+          "server_id": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/McpServerStatusValue"
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/McpServerTool"
+            },
+            "description": "Empty unless `status` is `SUCCESS`; sorted by title."
+          }
+        }
+      },
       "ListMcpServersResponse": {
         "type": "object",
         "required": [
@@ -6879,6 +6947,88 @@
           "SUCCESS",
           "FAILURE",
           "NEEDS_AUTHENTICATION"
+        ]
+      },
+      "McpServerTool": {
+        "type": "object",
+        "required": [
+          "name",
+          "title",
+          "annotations",
+          "approval",
+          "user_decision",
+          "is_wait_tool"
+        ],
+        "properties": {
+          "annotations": {
+            "$ref": "#/components/schemas/McpServerToolAnnotations"
+          },
+          "approval": {
+            "$ref": "#/components/schemas/McpServerToolApproval"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "is_wait_tool": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "user_decision": {
+            "$ref": "#/components/schemas/McpServerToolUserDecision"
+          }
+        }
+      },
+      "McpServerToolAnnotations": {
+        "type": "object",
+        "description": "MCP tool hints with absent values normalized to the protocol defaults.",
+        "required": [
+          "read_only_hint",
+          "destructive_hint",
+          "idempotent_hint",
+          "open_world_hint",
+          "annotated"
+        ],
+        "properties": {
+          "annotated": {
+            "type": "boolean",
+            "description": "Whether the server declared any hints at all. Defaults are the\npessimistic reading, so an unannotated tool is not read-only."
+          },
+          "destructive_hint": {
+            "type": "boolean"
+          },
+          "idempotent_hint": {
+            "type": "boolean"
+          },
+          "open_world_hint": {
+            "type": "boolean"
+          },
+          "read_only_hint": {
+            "type": "boolean"
+          }
+        }
+      },
+      "McpServerToolApproval": {
+        "type": "string",
+        "description": "What the configured approval policy does before running the tool.",
+        "enum": [
+          "auto",
+          "ask"
+        ]
+      },
+      "McpServerToolUserDecision": {
+        "type": "string",
+        "description": "The requesting user's persistent decision for the tool.",
+        "enum": [
+          "ask",
+          "always"
         ]
       },
       "MentionedAssistant": {
