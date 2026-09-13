@@ -152,6 +152,43 @@ describe("officeDragAndDropBroker", () => {
     expect(await aFiles[0].text()).toBe("body");
   });
 
+  it("announces the dropped item count before any file is delivered", () => {
+    setupOffice();
+    const onDropStart = vi.fn();
+    const onDrop = vi.fn();
+
+    subscribeToOfficeDragAndDrop({ onDragover: vi.fn(), onDropStart, onDrop });
+
+    fireDrop([
+      { name: "a.eml", type: "message/rfc822", fileContent: new Blob(["a"]) },
+      { name: "b.pdf", type: "application/pdf", fileContent: new Blob(["b"]) },
+    ]);
+
+    expect(onDropStart).toHaveBeenCalledWith(2);
+    expect(onDrop).toHaveBeenCalledTimes(1);
+    expect(onDropStart.mock.invocationCallOrder[0]).toBeLessThan(
+      onDrop.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("still delivers the drop when onDropStart throws", () => {
+    setupOffice();
+    const onDropStart = vi.fn(() => {
+      throw new Error("boom");
+    });
+    const onDrop = vi.fn();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    subscribeToOfficeDragAndDrop({ onDragover: vi.fn(), onDropStart, onDrop });
+
+    fireDrop([
+      { name: "x.eml", type: "message/rfc822", fileContent: new Blob(["x"]) },
+    ]);
+
+    expect(onDrop).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalled();
+  });
+
   it("skips notifying an unsubscribed listener", () => {
     setupOffice();
     const dropA = vi.fn();

@@ -25,18 +25,37 @@ export function validateFileSizes(
 }
 
 /** Structural react-dropzone rejection, kept local to avoid the dependency. */
-interface SizeRejection {
+export interface DropzoneRejection {
   file: { name: string };
   errors: readonly { code: string }[];
 }
 
-/** A rejection can carry several reasons; only the size ones belong in the too-large error. */
-export function oversizedRejectionNames(
-  rejections: readonly SizeRejection[],
+function hasRejectionCode(rejection: DropzoneRejection, code: string): boolean {
+  return rejection.errors.some((error) => error.code === code);
+}
+
+/** Names of the files whose rejection carries the given react-dropzone code. */
+export function rejectionNames(
+  rejections: readonly DropzoneRejection[],
+  code: string,
 ): string[] {
   return rejections
-    .filter((rejection) =>
-      rejection.errors.some((error) => error.code === "file-too-large"),
-    )
+    .filter((rejection) => hasRejectionCode(rejection, code))
     .map((rejection) => rejection.file.name);
+}
+
+/**
+ * A rejection can carry several reasons; only the size ones belong in the
+ * too-large error. A file that also fails the type check is named in the
+ * unsupported-type error instead, so it is left out here.
+ */
+export function oversizedRejectionNames(
+  rejections: readonly DropzoneRejection[],
+): string[] {
+  return rejectionNames(
+    rejections.filter(
+      (rejection) => !hasRejectionCode(rejection, "file-invalid-type"),
+    ),
+    "file-too-large",
+  );
 }

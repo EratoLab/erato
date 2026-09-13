@@ -18,6 +18,7 @@ import { FileTypeUtil } from "@/utils/fileTypes";
 import { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
 import {
   oversizedRejectionNames,
+  rejectionNames,
   validateFileSizes,
 } from "@/utils/validateFileSizes";
 
@@ -243,12 +244,14 @@ export function useFileDropzone({
         if (!isLoadingCapabilities && capabilities.length > 0) {
           const { valid, invalid } = validateFiles(files, capabilities);
 
-          // If there are invalid files, throw error and don't upload ANY files
+          // Name the unsupported files and carry on with the rest of the batch.
           if (invalid.length > 0) {
-            throw new UnsupportedFileTypeError(invalid.map((f) => f.name));
+            setError(new UnsupportedFileTypeError(invalid.map((f) => f.name)));
+          }
+          if (valid.length === 0) {
+            return;
           }
 
-          // Only proceed with valid files
           files = valid;
         } else {
           // Capabilities not loaded - log warning and allow upload (backend will validate)
@@ -341,8 +344,7 @@ export function useFileDropzone({
         logger.error("Error uploading files (outer catch):", err);
         const isKnownError =
           err instanceof UploadTooLargeError ||
-          err instanceof UploadUnknownError ||
-          err instanceof UnsupportedFileTypeError;
+          err instanceof UploadUnknownError;
 
         setError(isKnownError ? err : new UploadUnknownError());
       } finally {
@@ -377,28 +379,29 @@ export function useFileDropzone({
     (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
       if (disabled || isUploading) return;
 
-      // Handle rejections first
+      // Rejected files never reach the upload preflight; report them here.
+      let unsupported: string[] = [];
       if (rejectedFiles.length > 0) {
-        // Check if any rejection is due to file size
+        unsupported = rejectionNames(rejectedFiles, "file-invalid-type");
+        if (unsupported.length > 0) {
+          setError(new UnsupportedFileTypeError(unsupported));
+        }
         const oversized = oversizedRejectionNames(rejectedFiles);
-
         if (oversized.length > 0) {
           setError(new UploadTooLargeError(maxSizeFormatted, oversized));
           return;
         }
-
-        // Other rejection reasons
-        const errorMessages = rejectedFiles.map((rejection) => {
-          const { file, errors } = rejection;
-          return `${file.name}: ${errors.map((e) => e.message).join(", ")}`;
-        });
-        setError(new UploadUnknownError(errorMessages.join("; ")));
-        return;
       }
 
       // If we have accepted files, upload them
       if (acceptedFiles.length > 0) {
-        void uploadFiles(acceptedFiles);
+        void uploadFiles(acceptedFiles).then((uploaded) => {
+          // uploadFiles clears the error slot on its way in; only a batch
+          // that went through has wiped the report, so restore it then.
+          if (uploaded !== undefined && unsupported.length > 0) {
+            setError(new UnsupportedFileTypeError(unsupported));
+          }
+        });
       }
     },
     [disabled, isUploading, uploadFiles, setError, maxSizeFormatted],

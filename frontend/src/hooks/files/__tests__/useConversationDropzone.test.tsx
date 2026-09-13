@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { makeFileWithSize } from "@/test/fileFixtures";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
-import { UploadTooLargeError } from "../errors";
+import { UnsupportedFileTypeError, UploadTooLargeError } from "../errors";
 import { useConversationDropzone } from "../useConversationDropzone";
 import { useFileUploadStore } from "../useFileUploadStore";
 
@@ -18,12 +18,15 @@ let capturedOnDrop: (
   accepted: File[],
   rejected: { file: File; errors: { code: string; message: string }[] }[],
 ) => void = () => {};
+let capturedOnError: (error: Error) => void = () => {};
 
 vi.mock("react-dropzone", () => ({
   useDropzone: vi.fn((opts) => {
     capturedOnDrop = opts.onDrop ?? (() => {});
+    capturedOnError = opts.onError ?? (() => {});
     return {
-      getRootProps: vi.fn(() => ({})),
+      // Echoes its argument so tests can reach the handlers the hook composes.
+      getRootProps: vi.fn((props?: Record<string, unknown>) => props ?? {}),
       getInputProps: vi.fn(() => ({})),
       isDragActive: false,
       isDragAccept: false,
@@ -284,6 +287,103 @@ describe("useConversationDropzone", () => {
       expect(mockUploadFiles).toHaveBeenCalledWith([thread]);
     });
 
+    it("reports a wrong-type rejection and still uploads its accepted siblings", () => {
+      renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          maxSize: LIMIT,
+          onError: mockOnError,
+        }),
+      );
+
+      const accepted = makeFileWithSize("fine.pdf", 100);
+      act(() => {
+        capturedOnDrop(
+          [accepted],
+          [
+            {
+              file: makeFileWithSize("wrong.exe", 100),
+              errors: [{ code: "file-invalid-type", message: "type" }],
+            },
+          ],
+        );
+      });
+
+      expect(mockOnError).toHaveBeenCalledTimes(1);
+      const err = mockOnError.mock.calls[0][0];
+      expect(err).toBeInstanceOf(UnsupportedFileTypeError);
+      expect(err.message).toContain("wrong.exe");
+      expect(mockUploadFiles).toHaveBeenCalledWith([accepted]);
+    });
+
+    it("keeps naming the wrong-type file after the sibling upload cleared the store", async () => {
+      const uploadThatResets = vi.fn(async (files: File[]) => {
+        // The upload hook clears the shared error slot before it starts.
+        useFileUploadStore.getState().setError(null);
+        return files.map((file) => makeUploadedItem(file.name));
+      });
+      renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: uploadThatResets,
+          onUploaded: mockOnUploaded,
+          maxSize: LIMIT,
+        }),
+      );
+
+      await act(async () => {
+        capturedOnDrop(
+          [makeFileWithSize("fine.pdf", 100)],
+          [
+            {
+              file: makeFileWithSize("wrong.exe", 100),
+              errors: [{ code: "file-invalid-type", message: "type" }],
+            },
+          ],
+        );
+      });
+
+      expect(mockOnUploaded).toHaveBeenCalledTimes(1);
+      const storeError = useFileUploadStore.getState().error;
+      expect(storeError).toBeInstanceOf(UnsupportedFileTypeError);
+      expect(storeError?.message).toContain("wrong.exe");
+    });
+
+    it("names a file that fails both checks only in the unsupported-type error", () => {
+      renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          maxSize: LIMIT,
+          maxSizeFormatted: "15 MiB",
+          onError: mockOnError,
+        }),
+      );
+
+      const accepted = makeFileWithSize("fine.pdf", 100);
+      act(() => {
+        capturedOnDrop(
+          [accepted],
+          [
+            {
+              file: makeFileWithSize("both.exe", LIMIT + 1),
+              errors: [
+                { code: "file-invalid-type", message: "type" },
+                { code: "file-too-large", message: "too large" },
+              ],
+            },
+          ],
+        );
+      });
+
+      expect(mockOnError).toHaveBeenCalledTimes(1);
+      expect(mockOnError.mock.calls[0][0]).toBeInstanceOf(
+        UnsupportedFileTypeError,
+      );
+      // Type outranks size, so the batch is not withheld as oversized.
+      expect(mockUploadFiles).toHaveBeenCalledWith([accepted]);
+    });
+
     it("still uploads accepted files that are within the limit", async () => {
       renderHook(() =>
         useConversationDropzone({
@@ -300,6 +400,295 @@ describe("useConversationDropzone", () => {
       });
 
       expect(mockUploadFiles).toHaveBeenCalledWith([validFile]);
+    });
+  });
+
+  describe("onReceive", () => {
+    function dropEvent(init: {
+      types: string[];
+      files?: number;
+      items?: { kind: string }[];
+      stopped?: boolean;
+    }) {
+      return {
+        isPropagationStopped: () => init.stopped ?? false,
+        dataTransfer: {
+          types: init.types,
+          files: { length: init.files ?? 0 },
+          items: init.items ?? [],
+        },
+      };
+    }
+
+    it("fires with the dropped file count from the raw drop event", () => {
+      const onReceive = vi.fn();
+      const { result } = renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          onReceive,
+        }),
+      );
+
+      const rootProps = result.current.getRootProps();
+      act(() => {
+        (rootProps.onDrop as (event: unknown) => void)(
+          dropEvent({ types: ["Files"], files: 3 }),
+        );
+      });
+
+      expect(onReceive).toHaveBeenCalledWith(3);
+      // react-dropzone's own drop handling has not run yet at this point.
+      expect(mockUploadFiles).not.toHaveBeenCalled();
+    });
+
+    it("counts file items when the file list is empty", () => {
+      const onReceive = vi.fn();
+      const { result } = renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          onReceive,
+        }),
+      );
+
+      const rootProps = result.current.getRootProps();
+      act(() => {
+        (rootProps.onDrop as (event: unknown) => void)(
+          dropEvent({
+            types: ["Files"],
+            items: [{ kind: "file" }, { kind: "string" }, { kind: "file" }],
+          }),
+        );
+      });
+
+      expect(onReceive).toHaveBeenCalledWith(2);
+    });
+
+    it("stays quiet for a drag that carries no files", () => {
+      const onReceive = vi.fn();
+      const { result } = renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          onReceive,
+        }),
+      );
+
+      const rootProps = result.current.getRootProps();
+      act(() => {
+        (rootProps.onDrop as (event: unknown) => void)(
+          dropEvent({ types: ["maillistrow"] }),
+        );
+      });
+
+      expect(onReceive).not.toHaveBeenCalled();
+    });
+
+    it("stays quiet when the consumer's onDrop stopped the event", () => {
+      const onReceive = vi.fn();
+      const { result } = renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          onReceive,
+        }),
+      );
+
+      const rootProps = result.current.getRootProps({ onDrop: vi.fn() });
+      act(() => {
+        (rootProps.onDrop as (event: unknown) => void)(
+          dropEvent({ types: ["Files"], files: 1, stopped: true }),
+        );
+      });
+
+      expect(onReceive).not.toHaveBeenCalled();
+    });
+
+    it("keeps the consumer's own onDrop and forwards the rest of its props", () => {
+      const onReceive = vi.fn();
+      const consumerOnDrop = vi.fn();
+      const { result } = renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          onReceive,
+        }),
+      );
+
+      const rootProps = result.current.getRootProps({
+        onDrop: consumerOnDrop,
+        className: "chat-body",
+      });
+      const event = dropEvent({ types: ["Files"], files: 1 });
+      act(() => {
+        (rootProps.onDrop as (event: unknown) => void)(event);
+      });
+
+      expect(rootProps.className).toBe("chat-body");
+      expect(consumerOnDrop).toHaveBeenCalledWith(event);
+      expect(onReceive).toHaveBeenCalledWith(1);
+    });
+
+    it("calls the release onReceive returned once the drop reaches the handler", () => {
+      const release = vi.fn();
+      const onReceive = vi.fn(() => release);
+      const { result } = renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          onReceive,
+        }),
+      );
+
+      const rootProps = result.current.getRootProps();
+      act(() => {
+        (rootProps.onDrop as (event: unknown) => void)(
+          dropEvent({ types: ["Files"], files: 1 }),
+        );
+      });
+      expect(release).not.toHaveBeenCalled();
+
+      // A fully rejected drop still reaches the handler, so the early
+      // signal is always closed.
+      act(() => {
+        capturedOnDrop(
+          [],
+          [
+            {
+              file: makeFileWithSize("odd.xyz", 1),
+              errors: [{ code: "file-invalid-type", message: "type" }],
+            },
+          ],
+        );
+      });
+      expect(release).toHaveBeenCalledTimes(1);
+    });
+
+    it("releases the early signal when react-dropzone fails to read the files", () => {
+      const release = vi.fn();
+      const onReceive = vi.fn(() => release);
+      const { result } = renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          onReceive,
+        }),
+      );
+
+      const rootProps = result.current.getRootProps();
+      act(() => {
+        (rootProps.onDrop as (event: unknown) => void)(
+          dropEvent({ types: ["Files"], files: 1 }),
+        );
+      });
+      expect(release).not.toHaveBeenCalled();
+
+      // A file item that yields no File makes react-dropzone reject before
+      // onDrop; only its onError sees the drop end.
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      act(() => {
+        capturedOnError(new Error("[object DataTransferItem] is not a File"));
+      });
+      consoleError.mockRestore();
+      expect(release).toHaveBeenCalledTimes(1);
+      expect(mockUploadFiles).not.toHaveBeenCalled();
+    });
+
+    it("stays quiet for a file drag that carries no file entries", () => {
+      const onReceive = vi.fn();
+      const { result } = renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          onReceive,
+        }),
+      );
+
+      const rootProps = result.current.getRootProps();
+      act(() => {
+        (rootProps.onDrop as (event: unknown) => void)(
+          dropEvent({ types: ["Files"], items: [{ kind: "string" }] }),
+        );
+      });
+
+      expect(onReceive).not.toHaveBeenCalled();
+    });
+
+    it("hands react-dropzone's root props through untouched when unused", () => {
+      const { result } = renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+        }),
+      );
+
+      const rootProps = result.current.getRootProps({ className: "x" });
+
+      expect(rootProps).toEqual({ className: "x" });
+    });
+  });
+
+  describe("accept map", () => {
+    const extras = { "message/rfc822": [".eml"] };
+    const lastAccept = () =>
+      vi.mocked(useDropzone).mock.calls.at(-1)?.[0]?.accept;
+
+    it("accepts everything while no file types are known, even with extras", () => {
+      renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          acceptedFileTypes: [],
+          extraAcceptMimeTypes: extras,
+        }),
+      );
+
+      // Capabilities are still loading: an extras-only map would reject every
+      // ordinary file and keep the drop overlay hidden.
+      expect(lastAccept()).toBeUndefined();
+    });
+
+    it("accepts everything when file types are undefined", () => {
+      renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          extraAcceptMimeTypes: extras,
+        }),
+      );
+
+      expect(lastAccept()).toBeUndefined();
+    });
+
+    it("uses the capability types alone when there are no extras", () => {
+      renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          acceptedFileTypes: ["pdf"],
+        }),
+      );
+
+      expect(lastAccept()).toEqual(FileTypeUtil.getAcceptObject(["pdf"]));
+    });
+
+    it("merges extras into the capability types once both are present", () => {
+      renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          acceptedFileTypes: ["pdf"],
+          extraAcceptMimeTypes: extras,
+        }),
+      );
+
+      expect(lastAccept()).toEqual({
+        ...FileTypeUtil.getAcceptObject(["pdf"]),
+        ...extras,
+      });
     });
   });
 });

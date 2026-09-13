@@ -23,19 +23,25 @@ import type { ReactNode } from "react";
 
 // Hoisted so the dropzone stub can record the options AddinChat passes —
 // the `.msg` advertising test below asserts on `extraAcceptMimeTypes`.
-const { useConversationDropzoneMock, dismissSessionToastsMock } = vi.hoisted(
-  () => ({
-    useConversationDropzoneMock: vi.fn(
-      (_options: { extraAcceptMimeTypes?: Record<string, string[]> }) => ({
-        getRootProps: () => ({}),
-        getInputProps: () => ({}),
-        isDragActive: false,
-        isDragAccept: false,
-      }),
-    ),
-    dismissSessionToastsMock: vi.fn(),
-  }),
-);
+const {
+  useConversationDropzoneMock,
+  dismissSessionToastsMock,
+  fileUploadState,
+} = vi.hoisted(() => ({
+  fileUploadState: { error: null, setError: vi.fn() },
+  useConversationDropzoneMock: vi.fn(
+    (_options: {
+      extraAcceptMimeTypes?: Record<string, string[]>;
+      onReceive?: (count: number) => unknown;
+    }) => ({
+      getRootProps: () => ({}),
+      getInputProps: () => ({}),
+      isDragActive: false,
+      isDragAccept: false,
+    }),
+  ),
+  dismissSessionToastsMock: vi.fn(),
+}));
 
 vi.mock("../components/sessionAskToast", () => ({
   dismissSessionToasts: dismissSessionToastsMock,
@@ -118,7 +124,12 @@ vi.mock("@erato/frontend/library", () => ({
     closePreviewModal: vi.fn(),
   }),
   useFacets: () => ({ data: { action_facets: [] } }),
-  useFileUploadStore: () => ({ setError: vi.fn() }),
+  useFileUploadStore: Object.assign(
+    (selector?: (state: typeof fileUploadState) => unknown) =>
+      selector ? selector(fileUploadState) : fileUploadState,
+    { getState: () => fileUploadState },
+  ),
+  UploadUnknownError: class extends Error {},
   useFileUploadWithTokenCheck: () => ({
     uploadFiles: vi.fn(async () => []),
     uploadError: null,
@@ -217,6 +228,13 @@ describe("AddinChat without any Graph provider mounted (Exchange SE / unsupporte
     expect(dropzoneOptions?.extraAcceptMimeTypes).toEqual({
       "message/rfc822": [".eml"],
     });
+  });
+
+  it("asks the dropzone to announce a drop before the files are read", () => {
+    renderWithoutGraphProvider(<AddinChat />);
+
+    const dropzoneOptions = useConversationDropzoneMock.mock.calls.at(-1)?.[0];
+    expect(dropzoneOptions?.onReceive).toBeTypeOf("function");
   });
 
   // A pending ask toast floats interactive above the aria-modal drawer but

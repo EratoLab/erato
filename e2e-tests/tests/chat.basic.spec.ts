@@ -1,6 +1,12 @@
 import { test, expect } from "@playwright/test";
+import { readFileSync } from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import { TAG_CI } from "./tags";
 import { chatIsReadyToChat } from "./shared";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /** Filenames carry dots, which would otherwise read as regex wildcards. */
 const escapeForRegExp = (value: string) =>
@@ -241,13 +247,15 @@ test(
 );
 
 test(
-  "Uploading multiple files with some unsupported blocks all files",
+  "Uploading multiple files with one unsupported uploads the rest and names only that one",
   { tag: TAG_CI },
   async ({ page }) => {
-    // Track network requests to verify no upload request is made
+    // Track upload requests to verify the supported file is sent exactly once
     const uploadRequests: string[] = [];
     await page.route("**/api/v1beta/me/files*", async (route) => {
-      uploadRequests.push(route.request().url());
+      if (route.request().method() === "POST") {
+        uploadRequests.push(route.request().url());
+      }
       await route.continue();
     });
 
@@ -262,9 +270,11 @@ test(
     // Upload multiple files: one valid PDF and one invalid ZIP
     await fileChooser.setFiles([
       {
-        name: "valid-document.pdf",
+        name: "sample-report-compressed.pdf",
         mimeType: "application/pdf",
-        buffer: Buffer.from("fake pdf content"),
+        buffer: readFileSync(
+          path.join(__dirname, "../test-files/sample-report-compressed.pdf"),
+        ),
       },
       {
         name: "invalid-archive.zip",
@@ -278,17 +288,23 @@ test(
       timeout: 10000,
     });
 
-    // Verify the error message mentions the invalid file
+    // Verify the error names the invalid file and only that one
     await expect(page.getByTestId("file-upload-error")).toContainText(
       "invalid-archive.zip",
       { timeout: 10000 },
     );
+    await expect(page.getByTestId("file-upload-error")).not.toContainText(
+      "sample-report-compressed.pdf",
+    );
 
-    // Verify that no upload request was made (all files blocked)
-    expect(uploadRequests.length).toBe(0);
+    // Verify the valid file was uploaded and appears in the attachments
+    await expect(
+      page.getByText(/sample-report-compressed\.pdf/i),
+    ).toBeVisible();
+    await expect(page.locator("[data-filetype]")).toHaveCount(1);
 
-    // Verify no files appear in the attachments
-    await expect(page.locator("[data-filetype]")).toHaveCount(0);
+    // Verify exactly one upload request was made, for the valid file
+    expect(uploadRequests.length).toBe(1);
   },
 );
 
