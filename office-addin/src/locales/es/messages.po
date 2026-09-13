@@ -337,6 +337,21 @@ msgstr "Responder a todos los destinatarios"
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
+msgid "officeAddin.email.allowAccessToLoad.action"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/outlook/providers/EntraGraphTokenProvider.tsx
+msgid "officeAddin.email.allowAccessToLoad.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/outlook/providers/EntraGraphTokenProvider.tsx
+msgid "officeAddin.email.allowAccessToLoad.title"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signedIn.title"
 msgstr "Sesión iniciada. Vuelve a añadir el correo para adjuntarlo."
 

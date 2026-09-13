@@ -1,5 +1,11 @@
 import { toast } from "@erato/frontend/library";
-import { createContext, useCallback, useContext, useMemo } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+} from "react";
 
 import { useSessionRedeem } from "../SessionAuthProvider";
 import { InteractionRequiredError } from "./AuthSource";
@@ -19,6 +25,16 @@ export interface GraphSignInPrompt {
   description: string;
   action: string;
   signedInTitle: string;
+  /**
+   * Copy for the case where the user is signed in and only a scope grant is
+   * missing (`InteractionRequiredError.reason === "consent"`). Falls back to
+   * the sign-in copy when absent.
+   */
+  consent?: {
+    title: string;
+    description: string;
+    action: string;
+  };
 }
 
 export interface GraphTokenContextValue {
@@ -44,6 +60,12 @@ export interface GraphTokenContextValue {
       skipSessionWarm?: boolean;
     },
   ) => Promise<string>;
+  /**
+   * Number of interactive Graph sign-ins completed in this session. Bumps
+   * after the prompt's action succeeds, so a consumer holding a FAILED
+   * Graph-backed query can retry it — nothing else ever invalidates one.
+   */
+  signInCount: number;
 }
 
 const GraphTokenContext = createContext<GraphTokenContextValue | null>(null);
@@ -76,12 +98,14 @@ export function GraphTokenProvider({
   children: React.ReactNode;
 }) {
   const { redeemSessionForToken, lastRedeemedAtRef } = useSessionRedeem();
+  const [signInCount, setSignInCount] = useState(0);
 
   // Explicit, user-initiated interactive sign-in for Graph. Fired ONLY from the
   // toast's "Sign in" action (a real click), never automatically.
   const signInForGraph = useCallback(
     async (scopes: string[]): Promise<void> => {
       await source.acquireGraphToken(scopes, { allowInteraction: true });
+      setSignInCount((count) => count + 1);
       toast.success({
         dedupeKey: prompt.dedupeKey,
         title: prompt.signedInTitle,
@@ -126,14 +150,18 @@ export function GraphTokenProvider({
           !options?.allowInteraction &&
           !options?.suppressSignInPrompt
         ) {
+          // A signed-in user who only lacks a scope grant must not be told
+          // to sign in.
+          const consent =
+            error.reason === "consent" ? prompt.consent : undefined;
           toast.warning({
             dedupeKey: prompt.dedupeKey,
-            title: prompt.title,
-            description: prompt.description,
+            title: consent?.title ?? prompt.title,
+            description: consent?.description ?? prompt.description,
             actions: [
               {
                 id: "graph-signin",
-                label: prompt.action,
+                label: consent?.action ?? prompt.action,
                 variant: "primary",
                 onClick: () => {
                   void signInForGraph(scopes).catch(() => {
@@ -150,6 +178,7 @@ export function GraphTokenProvider({
     [
       lastRedeemedAtRef,
       prompt.action,
+      prompt.consent,
       prompt.dedupeKey,
       prompt.description,
       prompt.title,
@@ -160,8 +189,8 @@ export function GraphTokenProvider({
   );
 
   const value = useMemo<GraphTokenContextValue>(
-    () => ({ acquireToken }),
-    [acquireToken],
+    () => ({ acquireToken, signInCount }),
+    [acquireToken, signInCount],
   );
 
   return (

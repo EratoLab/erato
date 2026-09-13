@@ -44,14 +44,16 @@ vi.mock("../../utils/fetchOutlookMessage", () => ({
 function prime(
   mode: AuthMode,
   options: {
-    graph?: GraphTokenContextValue | null;
+    graph?: Pick<GraphTokenContextValue, "acquireToken"> | null;
     onPrem?: boolean;
     shared?: OutlookSharedContext | null;
     loadingShared?: boolean;
   } = {},
 ) {
   mockUseSessionAuth.mockReturnValue({ mode });
-  mockUseGraphTokenOptional.mockReturnValue(options.graph ?? null);
+  mockUseGraphTokenOptional.mockReturnValue(
+    options.graph ? { signInCount: 0, ...options.graph } : null,
+  );
   vi.mocked(detectExchangeOnPrem).mockReturnValue(options.onPrem ?? false);
   mockUseOutlookMailItem.mockReturnValue({
     mailItem: null,

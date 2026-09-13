@@ -374,6 +374,7 @@ describe("OutlookEmailSourceProvider — backend resolution", () => {
       {
         mailboxRoot: null,
         backendPending: true,
+        retryKey: 0,
       },
     );
   });
@@ -395,6 +396,7 @@ describe("OutlookEmailSourceProvider — backend resolution", () => {
       {
         mailboxRoot: null,
         backendPending: false,
+        retryKey: 0,
       },
     );
   });
@@ -414,7 +416,7 @@ describe("OutlookEmailSourceProvider — backend resolution", () => {
       "item-1",
       "conv-1",
       fetchConversationMessages,
-      { mailboxRoot: "shared@x", backendPending: false },
+      { mailboxRoot: "shared@x", backendPending: false, retryKey: 0 },
     );
   });
 });
