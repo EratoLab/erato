@@ -52,6 +52,12 @@ function installFetchMock(
   return fetchMock;
 }
 
+function requestedUrls(
+  fetchMock: ReturnType<typeof installFetchMock>,
+): string[] {
+  return fetchMock.mock.calls.map((call) => call[0]);
+}
+
 function bytesFrom(text: string): ArrayBuffer {
   const encoded = new TextEncoder().encode(text);
   const buffer = new ArrayBuffer(encoded.byteLength);
@@ -623,5 +629,160 @@ describe("fetchConversationMessagesViaGraph", () => {
     abortController.abort(abortReason);
 
     await expect(promise).rejects.toBe(abortReason);
+  });
+});
+
+describe("mailbox targeting", () => {
+  // A '+' is legal in an SMTP local part and would decode back as a space if
+  // the path segment were left unencoded, so the fixture owner carries one.
+  const OWNER = "shared+box@contoso.com";
+  const OWNER_ROOT = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(OWNER)}`;
+  const OWN_ROOT = "https://graph.microsoft.com/v1.0/me";
+
+  /** One conversation page whose single message carries a byte-less
+   * itemAttachment, so the enrichment `/$value` fetch is exercised too. */
+  function conversationTransport() {
+    return vi.fn(async (url: string) => {
+      if (url.includes("/attachments/")) {
+        return {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          arrayBuffer: () => Promise.resolve(bytesFrom("nested-mime")),
+        } as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: () =>
+          Promise.resolve({
+            value: [
+              {
+                id: "m1",
+                subject: "Forwarded item",
+                isDraft: false,
+                attachments: [
+                  {
+                    "@odata.type": "#microsoft.graph.itemAttachment",
+                    id: "att-1",
+                    name: "attached.eml",
+                  },
+                ],
+              },
+            ],
+          }),
+      } as Response;
+    });
+  }
+
+  beforeEach(() => {
+    installOutlookMailboxMock();
+  });
+
+  afterEach(() => {
+    uninstallMockMailbox();
+    vi.unstubAllGlobals();
+  });
+
+  it("addresses the owner's store for the metadata and raw-MIME requests", async () => {
+    const fetchMock = installFetchMock((url) =>
+      url.endsWith("/$value")
+        ? { ok: true, bytes: bytesFrom("raw") }
+        : { ok: true, jsonValue: { subject: "Shared" } },
+    );
+
+    await fetchOutlookMessageFilesViaGraph(
+      EWS_ID,
+      vi.fn().mockResolvedValue("tok"),
+      { owner: OWNER },
+    );
+
+    expect(requestedUrls(fetchMock)).toEqual([
+      `${OWNER_ROOT}/messages/${encodeURIComponent(GRAPH_ID)}?$select=subject,internetMessageId`,
+      `${OWNER_ROOT}/messages/${encodeURIComponent(GRAPH_ID)}/$value`,
+    ]);
+  });
+
+  it("addresses the owner's store for the internetMessageId lookup and the matched message's MIME", async () => {
+    const fetchMock = installFetchMock((url) =>
+      url.includes("$filter=")
+        ? {
+            ok: true,
+            jsonValue: { value: [{ id: "matched-id", subject: "Matched" }] },
+          }
+        : { ok: true, bytes: bytesFrom("raw") },
+    );
+
+    await fetchOutlookMessageFilesByInternetMessageIdViaGraph(
+      "<abc@host>",
+      vi.fn().mockResolvedValue("tok"),
+      { owner: OWNER },
+    );
+
+    const [lookupUrl, valueUrl] = requestedUrls(fetchMock);
+    expect(lookupUrl).toContain(`${OWNER_ROOT}/messages?$filter=`);
+    expect(valueUrl).toBe(
+      `${OWNER_ROOT}/messages/${encodeURIComponent("matched-id")}/$value`,
+    );
+  });
+
+  it("addresses the owner's store for the parent-message lookup", async () => {
+    const fetchMock = installFetchMock(() => ({
+      ok: true,
+      jsonValue: { value: [] },
+    }));
+
+    await fetchParentMessageInConversationViaGraph(
+      "conv-1",
+      vi.fn().mockResolvedValue("tok"),
+      { owner: OWNER },
+    );
+
+    expect(requestedUrls(fetchMock)[0]).toContain(
+      `${OWNER_ROOT}/messages?$filter=`,
+    );
+  });
+
+  it("addresses the owner's store for the conversation page and the item-attachment bytes", async () => {
+    const transport = conversationTransport();
+
+    const result = await fetchConversationMessagesViaGraph(
+      "conv-1",
+      vi.fn().mockResolvedValue("tok"),
+      { transport, owner: OWNER },
+    );
+
+    const urls = transport.mock.calls.map((call) => call[0]);
+    expect(urls[0]).toContain(`${OWNER_ROOT}/messages?$filter=`);
+    expect(urls[1]).toBe(`${OWNER_ROOT}/messages/m1/attachments/att-1/$value`);
+    expect(result.messages[0].attachments?.[0].contentBytes).toBe(
+      btoa("nested-mime"),
+    );
+  });
+
+  it("stays on the signed-in user's own store when no owner is given", async () => {
+    const fetchMock = installFetchMock((url) =>
+      url.endsWith("/$value")
+        ? { ok: true, bytes: bytesFrom("raw") }
+        : { ok: true, jsonValue: { subject: "Own" } },
+    );
+    const transport = conversationTransport();
+    const acquireToken = vi.fn().mockResolvedValue("tok");
+
+    await fetchOutlookMessageFilesViaGraph(EWS_ID, acquireToken);
+    await fetchParentMessageInConversationViaGraph("conv-1", acquireToken);
+    await fetchConversationMessagesViaGraph("conv-1", acquireToken, {
+      transport,
+    });
+
+    const urls = [
+      ...requestedUrls(fetchMock),
+      ...transport.mock.calls.map((call) => call[0]),
+    ];
+    expect(urls).toHaveLength(5);
+    for (const url of urls) {
+      expect(url.startsWith(`${OWN_ROOT}/messages`)).toBe(true);
+    }
   });
 });

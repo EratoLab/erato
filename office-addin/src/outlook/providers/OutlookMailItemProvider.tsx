@@ -32,6 +32,23 @@ export interface OutlookAttachmentData {
   contentType: string;
 }
 
+/**
+ * Provenance of an item that does not live in the signed-in user's own
+ * mailbox: a shared mailbox, or a folder someone has delegated to them.
+ *
+ * `owner` is the mailbox owner's address. `targetMailbox` is the one to
+ * address a request at when present — Office documents it as the mailbox
+ * LOCATION for the delegate's access and warns it can differ from `owner`
+ * between clients, so rooting on `owner` alone 404s wherever they disagree.
+ * Both it and `delegatePermissions` are absent on hosts that report ownership
+ * without a REST target or a permission mask.
+ */
+export interface OutlookSharedContext {
+  owner: string;
+  targetMailbox: string | null;
+  delegatePermissions: number | null;
+}
+
 export interface OutlookMailItemData {
   itemKind: "message" | "appointment";
   subject: string;
@@ -65,8 +82,13 @@ interface OutlookMailItemContextValue {
   itemIdentity: string | null;
   mailItem: OutlookMailItemData | null;
   attachments: OutlookAttachmentData[];
+  // Null both when the item sits in the user's own mailbox and while the
+  // answer is still outstanding — deliberately NOT folded into
+  // `OutlookMailItemData`, which the read paths build synchronously.
+  sharedContext: OutlookSharedContext | null;
   isLoading: boolean;
   isLoadingAttachments: boolean;
+  isLoadingSharedContext: boolean;
   // True once the resolved item has actually CHANGED to a different one — a
   // real navigation, which only a pinned/tracking pane observes. The host's
   // initial same-item selection event does NOT count (it would otherwise clear
@@ -82,8 +104,10 @@ const OutlookMailItemContext = createContext<OutlookMailItemContextValue>({
   itemIdentity: null,
   mailItem: null,
   attachments: [],
+  sharedContext: null,
   isLoading: true,
   isLoadingAttachments: false,
+  isLoadingSharedContext: false,
   hasItemChangedFired: false,
   refresh: () => {},
   getAttachmentFile: async () => {
@@ -181,6 +205,67 @@ async function readAttachmentMetadata(
     (callback) => item.getAttachmentsAsync(callback),
   );
   return attachments.map(parseAttachmentDetails);
+}
+
+/**
+ * Resolve the shared-mailbox / delegated-folder provenance of an item, or
+ * `null` when it sits in the user's own mailbox.
+ *
+ * Availability is a feature test on the method itself, never
+ * `Office.context.requirements.isSetSupported`: hosts under-report the mailbox
+ * requirement set while serving a working method, and a false negative there
+ * switches shared-mailbox handling off for everyone on that host without a
+ * trace.
+ *
+ * A `Failed` callback is how Outlook says "this folder or mailbox is not
+ * shared" — an ordinary answer rather than a fault, so it resolves to `null`
+ * and logs nothing. That is also why this does not go through
+ * `callOfficeAsync`, which would manufacture an `Error` for it.
+ */
+function readSharedContext(item: {
+  getSharedPropertiesAsync?: (
+    callback: (result: Office.AsyncResult<Office.SharedProperties>) => void,
+  ) => void;
+}): Promise<OutlookSharedContext | null> {
+  if (typeof item.getSharedPropertiesAsync !== "function") {
+    return Promise.resolve(null);
+  }
+
+  return new Promise((resolve) => {
+    try {
+      item.getSharedPropertiesAsync!((result) => {
+        const owner =
+          typeof result.value?.owner === "string"
+            ? result.value.owner.trim()
+            : "";
+        // A blank owner has to count as "not shared". Reporting it as shared
+        // while carrying no address to root a request at makes the two halves
+        // disagree: callers would widen to the shared Graph scope, possibly
+        // raising a consent prompt, and then read the user's own mailbox
+        // anyway.
+        if (result.status !== Office.AsyncResultStatus.Succeeded || !owner) {
+          resolve(null);
+          return;
+        }
+
+        resolve({
+          owner,
+          targetMailbox:
+            typeof result.value.targetMailbox === "string"
+              ? result.value.targetMailbox
+              : null,
+          delegatePermissions:
+            typeof result.value.delegatePermissions === "number"
+              ? result.value.delegatePermissions
+              : null,
+        });
+      });
+    } catch {
+      // A host that refuses the call throws instead of failing the callback.
+      // Same answer, so it degrades to "not shared" too.
+      resolve(null);
+    }
+  });
 }
 
 function base64ToArrayBuffer(content: string): ArrayBuffer {
@@ -544,8 +629,11 @@ export function OutlookMailItemProvider({
   const [itemIdentity, setItemIdentity] = useState<string | null>(null);
   const [mailItem, setMailItem] = useState<OutlookMailItemData | null>(null);
   const [attachments, setAttachments] = useState<OutlookAttachmentData[]>([]);
+  const [sharedContext, setSharedContext] =
+    useState<OutlookSharedContext | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingAttachments, setIsLoadingAttachments] = useState(true);
+  const [isLoadingSharedContext, setIsLoadingSharedContext] = useState(true);
   const [hasItemChangedFired, setHasItemChangedFired] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const currentItemRef = useRef<SupportedOutlookItem | null>(null);
@@ -616,10 +704,26 @@ export function OutlookMailItemProvider({
     if (!item) {
       setMailItem(null);
       setAttachments([]);
+      setSharedContext(null);
       setIsLoading(false);
       setIsLoadingAttachments(false);
+      setIsLoadingSharedContext(false);
       return;
     }
+
+    // Read above the appointment early-return on purpose: the probe is
+    // item-kind-agnostic and `getSharedPropertiesAsync` is served on
+    // appointment compose too, so one code path covers every supported item.
+    // Nothing on the calendar side consumes the result yet.
+    setSharedContext(null);
+    setIsLoadingSharedContext(true);
+    void readSharedContext(item).then((nextSharedContext) => {
+      if (!canCommit()) {
+        return;
+      }
+      setSharedContext(nextSharedContext);
+      setIsLoadingSharedContext(false);
+    });
 
     setAttachments([]);
     if (isAppointmentCompose(item)) {
@@ -764,8 +868,10 @@ export function OutlookMailItemProvider({
         itemIdentity,
         mailItem,
         attachments,
+        sharedContext,
         isLoading,
         isLoadingAttachments,
+        isLoadingSharedContext,
         hasItemChangedFired,
         refresh,
         getAttachmentFile,
