@@ -9,8 +9,9 @@ import { SettledInfoPill } from "../Trace/steps/ToolStatusPill";
 import type { McpServerTool } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ReactNode } from "react";
 
-// The server's tool roster only moves on a redeploy, and the backend serves
-// a repeat expand from its own session cache within this window anyway.
+// A listed roster only moves on a redeploy, and the backend serves a repeat
+// expand from its own session cache within this window anyway. Anything
+// short of a listing is retried on the next expand instead of being cached.
 const TOOLS_STALE_TIME_MS = 5 * 60 * 1000;
 
 const NEUTRAL_PILL = "bg-theme-bg-tertiary text-theme-fg-secondary";
@@ -124,7 +125,8 @@ export function McpServerToolList({
     {
       retry: false,
       refetchOnWindowFocus: false,
-      staleTime: TOOLS_STALE_TIME_MS,
+      staleTime: (query) =>
+        query.state.data?.status === "SUCCESS" ? TOOLS_STALE_TIME_MS : 0,
     },
   );
 
