@@ -11,6 +11,7 @@ use crate::models::message::{DelegationRunMode, GenerationParameters};
 use crate::models::pagination;
 use crate::policy::prelude::*;
 use crate::query_metrics::named_statement_from_sql_and_values;
+use erato_config::config::{TaskPersona, TaskScheduling};
 use eyre::{Report, eyre};
 use sea_orm::prelude::*;
 use sea_orm::{
@@ -22,16 +23,123 @@ use sqlx::types::chrono::Utc;
 use tracing::instrument;
 use utoipa::ToSchema;
 
-/// Configuration for a chat that is based on an assistant
+/// Everything the `chats.assistant_configuration` column carries, split into
+/// three independent concerns: the assistant binding (a generated column and a
+/// foreign key read it), the provenance envelope (SQL reads it via
+/// `#>> '{provenance,...}'`) and the task spec (Rust-only, never read by SQL).
+///
+/// Row-state invariant: a chat with no assistant stores the column as SQL NULL
+/// or an envelope whose `assistant_id` key is absent - never the empty object
+/// `{}` and never an explicit `null` - so the generated `assistant_id` column
+/// stays NULL and its foreign key is not evaluated.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct AssistantConfiguration {
-    /// The ID of the assistant this chat is based on
-    pub assistant_id: Uuid,
+#[serde(from = "StoredChatConfiguration")]
+pub struct ChatConfiguration {
+    /// The assistant this chat is bound to, when it is bound to one. A task
+    /// child dispatched on the bare model has none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assistant_id: Option<Uuid>,
     /// How this chat came to exist relative to another chat, when it was
     /// spawned from one (delegation, handoff). Absent for chats the user
     /// started directly.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provenance: Option<ChatProvenance>,
+    /// What a delegated run was asked to do. Rust-only: no SQL statement reads
+    /// inside it, so it is free to grow without touching a generated column.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task: Option<TaskSpec>,
+}
+
+/// The on-disk shape as it is read back. Deserializing `ChatConfiguration`
+/// goes through this so rows written before the task spec existed - which
+/// carried the brief inside the provenance envelope - are lifted at the single
+/// parse point rather than at each of the readers.
+#[derive(Debug, Deserialize)]
+pub struct StoredChatConfiguration {
+    #[serde(default)]
+    assistant_id: Option<Uuid>,
+    #[serde(default)]
+    provenance: Option<ChatProvenance>,
+    #[serde(default)]
+    task: Option<TaskSpec>,
+}
+
+impl From<StoredChatConfiguration> for ChatConfiguration {
+    fn from(stored: StoredChatConfiguration) -> Self {
+        let StoredChatConfiguration {
+            assistant_id,
+            mut provenance,
+            task,
+        } = stored;
+
+        // Lift the legacy brief out of the provenance envelope. A row that
+        // already carries a `task` wins; the legacy keys are dropped either
+        // way, because `ChatProvenance` never serializes them again.
+        let legacy = provenance.as_mut().map(|provenance| {
+            (
+                provenance.legacy_expected_output.take(),
+                provenance.legacy_constraints.take(),
+            )
+        });
+        let task = task.or_else(|| match legacy {
+            Some((expected_output, constraints))
+                if expected_output.is_some() || constraints.is_some() =>
+            {
+                Some(TaskSpec {
+                    expected_output,
+                    constraints,
+                    ..TaskSpec::default()
+                })
+            }
+            _ => None,
+        });
+
+        Self {
+            assistant_id,
+            provenance,
+            task,
+        }
+    }
+}
+
+/// What a delegated run was asked to do. Written once at dispatch and read
+/// every turn to render the run's preamble.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TaskSpec {
+    /// The result shape the origin model asked for. Also durable in that
+    /// model's tool-call input, but that copy lives in a chat this one cannot
+    /// read and which may be deleted independently, so a run keeps its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_output: Option<String>,
+    /// The limits the delegate must work within. Same reasoning as
+    /// `expected_output`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub constraints: Option<String>,
+    /// Facets composed into the run. These live here rather than in the
+    /// provenance envelope because nothing in SQL reads them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub facet_ids: Vec<String>,
+    /// Whether the run speaks as the origin chat's assistant or the bare model.
+    #[serde(default)]
+    pub persona: TaskPersona,
+    /// How a completed async result re-enters the origin chat.
+    #[serde(default)]
+    pub scheduling: TaskScheduling,
+    /// Which offer route produced this run. The discriminator every consumer
+    /// branches on, rather than inferring the route from a null assistant.
+    #[serde(default)]
+    pub route: DelegateRoute,
+}
+
+/// The offer route a delegated run came from.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DelegateRoute {
+    /// A user @-mentioned an assistant and the model delegated to it.
+    #[default]
+    Assistant,
+    /// The model planned the sub-task itself.
+    Task,
 }
 
 /// The relationship kind between a spawned chat and its origin chat.
@@ -72,16 +180,14 @@ pub struct ChatProvenance {
     /// automatic retention pass leaves it alone from then on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub adopted_at: Option<DateTimeWithTimeZone>,
-    /// Delegation only: the result shape the origin model asked for. Also
-    /// durable in that model's tool-call input, but that copy lives in a chat
-    /// this one cannot read and which may be deleted independently, so a run
-    /// keeps its own — it is what the preamble is rendered from every turn.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub expected_output: Option<String>,
-    /// Delegation only: the limits the delegate must work within. Same
-    /// reasoning as `expected_output`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub constraints: Option<String>,
+    /// Legacy: runs written before the task spec existed stored the brief
+    /// here. Read once by the lift in `StoredChatConfiguration` and never
+    /// written again, so re-serializing such a row moves it into `task`.
+    #[serde(rename = "expected_output", default, skip_serializing)]
+    pub legacy_expected_output: Option<String>,
+    /// Legacy counterpart of `legacy_expected_output`.
+    #[serde(rename = "constraints", default, skip_serializing)]
+    pub legacy_constraints: Option<String>,
     /// Delegation only: `Some(Background)` for a run the origin turn did not
     /// await — its result never flowed back. Feeds the run's preamble wording
     /// and, later, the accounting of concurrently running background runs.
@@ -104,16 +210,19 @@ impl ChatProvenanceKind {
     }
 }
 
-impl AssistantConfiguration {
-    /// Create a new assistant configuration
+impl ChatConfiguration {
+    /// A chat bound to an assistant and nothing else. Serializes to exactly
+    /// `{"assistant_id": "..."}`, byte-identical to what was written before
+    /// this envelope grew its other fields.
     pub fn new(assistant_id: Uuid) -> Self {
         Self {
-            assistant_id,
+            assistant_id: Some(assistant_id),
             provenance: None,
+            task: None,
         }
     }
 
-    /// Parse assistant configuration from a JSONB value
+    /// Parse chat configuration from a JSONB value
     pub fn from_json(json: &serde_json::Value) -> Result<Self, Report> {
         serde_json::from_value(json.clone())
             .map_err(|e| eyre!("Failed to parse assistant configuration: {}", e))
@@ -169,9 +278,12 @@ pub async fn get_or_create_chat(
         // Authorize that user is allowed to create a chat
         authorize!(policy, subject, &Resource::ChatSingleton, Action::Create)?;
 
-        // Build assistant_configuration JSON if assistant_id is provided
+        // Build assistant_configuration JSON if assistant_id is provided.
+        // Row-state invariant: a chat with no assistant stores SQL NULL here,
+        // never an empty envelope `{}` — the generated `assistant_id` column
+        // reads the same either way, but only one of the two shapes is written.
         let assistant_configuration = if let Some(aid) = assistant_id {
-            Some(AssistantConfiguration::new(*aid).to_json()?)
+            Some(ChatConfiguration::new(*aid).to_json()?)
         } else {
             None
         };
@@ -252,7 +364,7 @@ pub async fn get_or_create_chat_by_previous_message_id(
 /// Unparseable configurations count as not delegated; they fail loudly on the
 /// paths that need the assistant itself.
 pub fn chat_is_delegated_run(chat: &chats::Model) -> bool {
-    parse_assistant_configuration(chat)
+    parse_chat_configuration(chat)
         .ok()
         .flatten()
         .and_then(|configuration| configuration.provenance)
@@ -262,20 +374,29 @@ pub fn chat_is_delegated_run(chat: &chats::Model) -> bool {
 /// Create a chat owned by `owner_user_id`, bound to `assistant_id`, carrying a
 /// provenance envelope. The caller must have access-checked the assistant (the
 /// `POST /me/chats` pattern) — this function only authorizes chat creation.
+/// Insert a delegated child chat.
+///
+/// `assistant_id` is `None` for a task child that runs on the bare model. The
+/// envelope then simply omits the key, which keeps the generated
+/// `chats.assistant_id` column NULL so its foreign key is never evaluated -
+/// writing `{}` or an explicit `null` would be the same to Postgres here, but
+/// the absent key is the shape the row-state invariant pins.
 pub async fn create_delegated_chat(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,
     subject: &Subject,
     owner_user_id: &str,
-    assistant_id: Uuid,
+    assistant_id: Option<Uuid>,
     provenance: ChatProvenance,
+    task: Option<TaskSpec>,
     title: String,
 ) -> Result<chats::Model, Report> {
     authorize!(policy, subject, &Resource::ChatSingleton, Action::Create)?;
 
-    let configuration = AssistantConfiguration {
+    let configuration = ChatConfiguration {
         assistant_id,
         provenance: Some(provenance),
+        task,
     };
     let new_chat = chats::ActiveModel {
         owner_user_id: ActiveValue::Set(owner_user_id.to_owned()),
@@ -1020,7 +1141,11 @@ pub async fn get_chat_detail(
         None => None,
     };
 
-    let provenance = parse_assistant_configuration(&chat)?.and_then(|config| config.provenance);
+    let chat_configuration = parse_chat_configuration(&chat)?;
+    let task = chat_configuration
+        .as_ref()
+        .and_then(|configuration| configuration.task.clone());
+    let provenance = chat_configuration.and_then(|configuration| configuration.provenance);
     let origin_chat_id = provenance
         .as_ref()
         .and_then(|provenance| provenance.origin_chat_id);
@@ -1062,10 +1187,8 @@ pub async fn get_chat_detail(
         adopted_at: provenance
             .as_ref()
             .and_then(|provenance| provenance.adopted_at),
-        expected_output: provenance
-            .as_ref()
-            .and_then(|provenance| provenance.expected_output.clone()),
-        constraints: provenance.and_then(|provenance| provenance.constraints),
+        expected_output: task.as_ref().and_then(|task| task.expected_output.clone()),
+        constraints: task.and_then(|task| task.constraints),
     })
 }
 
@@ -1593,7 +1716,7 @@ pub async fn mark_delegated_run_adopted(
     conn: &DatabaseConnection,
     chat: &chats::Model,
 ) -> Result<(), Report> {
-    let Some(mut configuration) = parse_assistant_configuration(chat)? else {
+    let Some(mut configuration) = parse_chat_configuration(chat)? else {
         return Ok(());
     };
     let Some(provenance) = configuration.provenance.as_mut() else {
@@ -1742,12 +1865,10 @@ pub async fn get_last_chat_provider_id(
 
 /// Parse the assistant configuration from a chat model
 ///
-/// Returns the parsed AssistantConfiguration if one is set, or None if not.
-pub fn parse_assistant_configuration(
-    chat: &chats::Model,
-) -> Result<Option<AssistantConfiguration>, Report> {
+/// Returns the parsed ChatConfiguration if one is set, or None if not.
+pub fn parse_chat_configuration(chat: &chats::Model) -> Result<Option<ChatConfiguration>, Report> {
     if let Some(ref config_json) = chat.assistant_configuration {
-        Ok(Some(AssistantConfiguration::from_json(config_json)?))
+        Ok(Some(ChatConfiguration::from_json(config_json)?))
     } else {
         Ok(None)
     }
@@ -1763,8 +1884,15 @@ pub async fn get_chat_assistant_configuration(
     subject: &Subject,
     chat: &chats::Model,
 ) -> Result<Option<crate::models::assistant::AssistantWithFiles>, Report> {
-    // Parse assistant configuration from chat
-    if let Some(config) = parse_assistant_configuration(chat)? {
+    // Parse chat configuration from chat. An envelope may exist without an
+    // assistant binding - a bare task child carries provenance and a task spec
+    // but no assistant - so the absent binding resolves to "no assistant"
+    // rather than being treated as a missing envelope.
+    if let Some(config) = parse_chat_configuration(chat)? {
+        let Some(assistant_id) = config.assistant_id else {
+            return Ok(None);
+        };
+
         // Get the full assistant details including files
         // Pass allow_archived=true because we need to support existing chats
         // that were created with an assistant that's now archived
@@ -1772,7 +1900,7 @@ pub async fn get_chat_assistant_configuration(
             conn,
             policy,
             subject,
-            config.assistant_id,
+            assistant_id,
             true, // Allow archived for existing chats
         )
         .await?;
@@ -1786,6 +1914,107 @@ pub async fn get_chat_assistant_configuration(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn new_id_to_json_is_byte_identical() {
+        // The plain assistant-bound envelope is by far the most common row.
+        // Growing `ChatConfiguration` must not rewrite what it serializes to,
+        // or every existing row would differ from a freshly written one.
+        let assistant_id = Uuid::new_v4();
+        let json = ChatConfiguration::new(assistant_id).to_json().unwrap();
+
+        assert_eq!(json, serde_json::json!({ "assistant_id": assistant_id }));
+    }
+
+    #[test]
+    fn bare_configuration_omits_the_assistant_key_entirely() {
+        // Not `{"assistant_id": null}`: the row-state invariant is an absent
+        // key, so the generated column stays NULL and the FK is not evaluated.
+        let configuration = ChatConfiguration {
+            assistant_id: None,
+            provenance: None,
+            task: Some(TaskSpec {
+                expected_output: Some("A number.".to_string()),
+                ..TaskSpec::default()
+            }),
+        };
+
+        let json = configuration.to_json().unwrap();
+        assert!(json.get("assistant_id").is_none());
+        assert_eq!(json["task"]["expected_output"], "A number.");
+    }
+
+    #[test]
+    fn legacy_brief_in_provenance_lifts_into_task_and_reserializes_canonically() {
+        // A row written before the task spec existed.
+        let origin_chat_id = Uuid::new_v4();
+        let assistant_id = Uuid::new_v4();
+        let stored = serde_json::json!({
+            "assistant_id": assistant_id,
+            "provenance": {
+                "kind": "delegation",
+                "origin_chat_id": origin_chat_id,
+                "depth": 1,
+                "expected_output": "One number per line.",
+                "constraints": "Only the attached figures.",
+            }
+        });
+
+        let configuration = ChatConfiguration::from_json(&stored).unwrap();
+
+        let task = configuration.task.as_ref().expect("brief lifted into task");
+        assert_eq!(
+            task.expected_output.as_deref(),
+            Some("One number per line.")
+        );
+        assert_eq!(
+            task.constraints.as_deref(),
+            Some("Only the attached figures.")
+        );
+
+        // Re-serializing writes the canonical shape: the brief under `task`,
+        // and the legacy keys gone from the provenance envelope.
+        let rewritten = configuration.to_json().unwrap();
+        assert!(rewritten["provenance"].get("expected_output").is_none());
+        assert!(rewritten["provenance"].get("constraints").is_none());
+        assert_eq!(rewritten["task"]["expected_output"], "One number per line.");
+        assert_eq!(rewritten["provenance"]["kind"], "delegation");
+        assert_eq!(
+            rewritten["provenance"]["origin_chat_id"],
+            stored["provenance"]["origin_chat_id"]
+        );
+    }
+
+    #[test]
+    fn an_explicit_task_wins_over_the_legacy_brief() {
+        let stored = serde_json::json!({
+            "provenance": {
+                "kind": "delegation",
+                "depth": 1,
+                "expected_output": "stale",
+            },
+            "task": { "expected_output": "current" }
+        });
+
+        let configuration = ChatConfiguration::from_json(&stored).unwrap();
+
+        assert_eq!(
+            configuration.task.unwrap().expected_output.as_deref(),
+            Some("current")
+        );
+    }
+
+    #[test]
+    fn a_legacy_row_without_a_brief_lifts_no_task() {
+        let stored = serde_json::json!({
+            "assistant_id": Uuid::new_v4(),
+            "provenance": { "kind": "handoff_branch", "depth": 1 }
+        });
+
+        let configuration = ChatConfiguration::from_json(&stored).unwrap();
+
+        assert!(configuration.task.is_none());
+    }
 
     /// The listing reads `provenance_kind` straight out of the stored JSON
     /// while the detail route maps it in Rust. Both spellings have to be the
