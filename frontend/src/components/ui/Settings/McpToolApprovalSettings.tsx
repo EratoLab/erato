@@ -23,10 +23,10 @@ const rowKey = (row: ApprovalRow) => `${row.mcpServerId}/${row.toolName}`;
  * idiom (BehaviorTabContent): one radiogroup per tool with the two decisions
  * the backend can honor — ask per use (no stored grant) or always allow (a
  * persisted grant). Rows exist only for tools the user has granted at some
- * point: no endpoint enumerates MCP tools, so the roster grows with use. A
- * row flipped back to "ask" stays visible for the rest of the settings
- * session so the flip feels stable and reversible; it drops off on the next
- * visit.
+ * point: they are keyed off stored grants, not the server's tool roster, so
+ * the list grows with use. A row flipped back to "ask" stays visible for the
+ * rest of the settings session so the flip feels stable and reversible; it
+ * drops off on the next visit.
  *
  * With `serverId` the component becomes one server's permissions block for
  * an entity row: rows filter to that server and the redundant headings (the
