@@ -44,14 +44,16 @@ vi.mock("../../utils/fetchOutlookMessage", () => ({
 function prime(
   mode: AuthMode,
   options: {
-    graph?: GraphTokenContextValue | null;
+    graph?: Pick<GraphTokenContextValue, "acquireToken"> | null;
     onPrem?: boolean;
     shared?: OutlookSharedContext | null;
     loadingShared?: boolean;
   } = {},
 ) {
   mockUseSessionAuth.mockReturnValue({ mode });
-  mockUseGraphTokenOptional.mockReturnValue(options.graph ?? null);
+  mockUseGraphTokenOptional.mockReturnValue(
+    options.graph ? { signInCount: 0, ...options.graph } : null,
+  );
   vi.mocked(detectExchangeOnPrem).mockReturnValue(options.onPrem ?? false);
   mockUseOutlookMailItem.mockReturnValue({
     mailItem: null,
@@ -76,31 +78,21 @@ describe("useOutlookMessageFetcher", () => {
     expect(createEwsOutlookMessageFetcher).not.toHaveBeenCalled();
   });
 
-  it("binds the Graph acquirer to Mail.Read and passes forceRefresh through", async () => {
+  it("hands the Graph fetcher the raw acquirer with no owner for the user's own mailbox", () => {
     const acquireToken = vi.fn().mockResolvedValue("graph-token");
     prime("entra-msal", { graph: { acquireToken }, onPrem: false });
 
     renderHook(() => useOutlookMessageFetcher());
 
-    // No owner binding: an item in the user's own mailbox must stay on `/me`
-    // and must not widen the request to the shared scope.
+    // No owner binding: an item in the user's own mailbox stays on `/me`, and
+    // the factory — not the hook — keeps the request on the narrow scope.
     expect(createGraphOutlookMessageFetcher).toHaveBeenCalledWith(
-      expect.any(Function),
+      acquireToken,
       { owner: null },
     );
-
-    const boundAcquire = vi.mocked(createGraphOutlookMessageFetcher).mock
-      .calls[0][0];
-    await expect(boundAcquire()).resolves.toBe("graph-token");
-    expect(acquireToken).toHaveBeenCalledWith(["Mail.Read"], undefined);
-
-    await boundAcquire({ forceRefresh: true });
-    expect(acquireToken).toHaveBeenCalledWith(["Mail.Read"], {
-      forceRefresh: true,
-    });
   });
 
-  it("retargets Graph at the owner and asks for Mail.Read.Shared for a shared item", async () => {
+  it("binds the Graph fetcher to the owner and hands it the scoped acquirer", () => {
     const acquireToken = vi.fn().mockResolvedValue("graph-token");
     prime("entra-msal", {
       graph: { acquireToken },
@@ -108,22 +100,18 @@ describe("useOutlookMessageFetcher", () => {
       shared: {
         owner: "shared@erato.test",
         targetMailbox: "shared@erato.test",
-        delegatePermissions: 1,
       },
     });
 
     const { result } = renderHook(() => useOutlookMessageFetcher());
 
     expect(result.current.unavailableReason).toBeNull();
+    // The factory derives Mail.Read vs Mail.Read.Shared from the owner, so
+    // the hook passes the raw scoped acquirer through untouched.
     expect(createGraphOutlookMessageFetcher).toHaveBeenCalledWith(
-      expect.any(Function),
+      acquireToken,
       { owner: "shared@erato.test" },
     );
-
-    const boundAcquire = vi.mocked(createGraphOutlookMessageFetcher).mock
-      .calls[0][0];
-    await boundAcquire();
-    expect(acquireToken).toHaveBeenCalledWith(["Mail.Read.Shared"], undefined);
   });
 
   it("returns null + graph-unavailable for a cloud mailbox without the Graph context", () => {
@@ -154,7 +142,6 @@ describe("useOutlookMessageFetcher", () => {
       shared: {
         owner: "shared@erato.test",
         targetMailbox: null,
-        delegatePermissions: null,
       },
     });
 
@@ -162,9 +149,10 @@ describe("useOutlookMessageFetcher", () => {
 
     expect(result.current.fetcher).toBeNull();
     expect(result.current.unavailableReason).toBe("shared-mailbox-unsupported");
-    // The EWS backend would answer out of the delegate's own mailbox, so the
-    // refusal has to win before the on-prem fetcher is built.
-    expect(createEwsOutlookMessageFetcher).not.toHaveBeenCalled();
+    // The EWS backend would answer out of the delegate's own mailbox for the
+    // SELECTED item, so it is never handed out as `fetcher` here — only for
+    // operands that belong to the user's own store.
+    expect(result.current.ownMailboxFetcher).toEqual({ kind: "ews" });
     expect(createGraphOutlookMessageFetcher).not.toHaveBeenCalled();
   });
 
@@ -215,7 +203,6 @@ describe("useOutlookMessageFetcher", () => {
       shared: {
         owner: "alias@contoso.com",
         targetMailbox: "shared.team@contoso.onmicrosoft.com",
-        delegatePermissions: 1,
       },
     });
 
@@ -237,7 +224,6 @@ describe("useOutlookMessageFetcher", () => {
       shared: {
         owner: "shared@contoso.com",
         targetMailbox: null,
-        delegatePermissions: null,
       },
     });
 
@@ -257,12 +243,13 @@ describe("useOutlookMessageFetcher", () => {
       shared: {
         owner: "shared@contoso.com",
         targetMailbox: null,
-        delegatePermissions: null,
       },
     });
 
     const { result, rerender } = renderHook(() => useOutlookMessageFetcher());
     const first = result.current.fetcher;
+    const buildsAfterFirstRender = vi.mocked(createGraphOutlookMessageFetcher)
+      .mock.calls.length;
 
     // Hosts fire two selection events for a single selection, and the provider
     // mints a fresh context object for each. Keying on the address rather than
@@ -273,14 +260,15 @@ describe("useOutlookMessageFetcher", () => {
       sharedContext: {
         owner: "shared@contoso.com",
         targetMailbox: null,
-        delegatePermissions: null,
       },
       isLoadingSharedContext: false,
     });
     rerender();
 
     expect(result.current.fetcher).toBe(first);
-    expect(createGraphOutlookMessageFetcher).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(createGraphOutlookMessageFetcher).mock.calls).toHaveLength(
+      buildsAfterFirstRender,
+    );
   });
 
   it("memoizes the fetcher across rerenders while mode and Graph context are stable", () => {
@@ -299,7 +287,6 @@ describe("useOutlookMessageFetcher", () => {
     const shared = {
       owner: "shared@contoso.com",
       targetMailbox: null,
-      delegatePermissions: null,
     };
     const roots: Array<string | null> = [];
 
@@ -328,5 +315,70 @@ describe("useOutlookMessageFetcher", () => {
     // key their caches on it because an item's ids don't change with the
     // store that answers.
     expect(roots).toEqual(["shared@contoso.com", null, null, null]);
+  });
+
+  describe("own-store backend", () => {
+    it("keeps a fetcher for the user's own store beside a shared-rooted one", () => {
+      const factory = vi.mocked(createGraphOutlookMessageFetcher);
+      factory.mockImplementation(
+        (_acquire, options) =>
+          ({ kind: "graph", owner: options?.owner ?? null }) as never,
+      );
+      try {
+        prime("entra-msal", {
+          graph: { acquireToken: vi.fn() },
+          shared: { owner: "shared@contoso.com", targetMailbox: null },
+        });
+
+        const { result } = renderHook(() => useOutlookMessageFetcher());
+
+        expect(result.current.fetcher).toEqual({
+          kind: "graph",
+          owner: "shared@contoso.com",
+        });
+        expect(result.current.ownMailboxFetcher).toEqual({
+          kind: "graph",
+          owner: null,
+        });
+      } finally {
+        factory.mockImplementation(() => ({ kind: "graph" }) as never);
+      }
+    });
+
+    it("hands out one object for both when the item sits in the user's own store", () => {
+      prime("entra-msal", { graph: { acquireToken: vi.fn() } });
+
+      const { result } = renderHook(() => useOutlookMessageFetcher());
+
+      expect(result.current.ownMailboxFetcher).toBe(result.current.fetcher);
+      expect(createGraphOutlookMessageFetcher).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps the EWS backend for own-store operands while refusing a shared item on-prem", () => {
+      prime("entra-msal", {
+        onPrem: true,
+        shared: { owner: "shared@contoso.com", targetMailbox: null },
+      });
+
+      const { result } = renderHook(() => useOutlookMessageFetcher());
+
+      expect(result.current.fetcher).toBeNull();
+      expect(result.current.unavailableReason).toBe(
+        "shared-mailbox-unsupported",
+      );
+      expect(result.current.ownMailboxFetcher).toEqual({ kind: "ews" });
+    });
+
+    it("withholds both while the probe is in flight", () => {
+      prime("entra-msal", {
+        graph: { acquireToken: vi.fn() },
+        loadingShared: true,
+      });
+
+      const { result } = renderHook(() => useOutlookMessageFetcher());
+
+      expect(result.current.fetcher).toBeNull();
+      expect(result.current.ownMailboxFetcher).toBeNull();
+    });
   });
 });

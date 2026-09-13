@@ -1,6 +1,6 @@
 import { toast } from "@erato/frontend/library";
 import { i18n } from "@lingui/core";
-import { cleanup, render } from "@testing-library/react";
+import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { InteractionRequiredError } from "../../../core/auth/AuthSource";
@@ -54,6 +54,22 @@ function mountAcquireToken(): GraphTokenContextValue {
   return ctx;
 }
 
+function mountLatest(source: AuthSource & GraphCapableSource): {
+  current: GraphTokenContextValue | null;
+} {
+  const latest: { current: GraphTokenContextValue | null } = { current: null };
+  function Probe() {
+    latest.current = useGraphTokenOptional();
+    return null;
+  }
+  render(
+    <EntraGraphTokenProvider source={source}>
+      <Probe />
+    </EntraGraphTokenProvider>,
+  );
+  return latest;
+}
+
 describe("EntraGraphTokenProvider", () => {
   beforeEach(() => {
     i18n.activate("en");
@@ -78,5 +94,59 @@ describe("EntraGraphTokenProvider", () => {
       acquireToken(["People.Read"], { suppressSignInPrompt: true }),
     ).rejects.toBeInstanceOf(InteractionRequiredError);
     expect(toast.warning).not.toHaveBeenCalled();
+  });
+
+  it("prompts for access, not a sign-in, when only a scope grant is missing", async () => {
+    const source = {
+      acquireGraphToken: vi.fn().mockRejectedValue(
+        new InteractionRequiredError("consent_required", {
+          reason: "consent",
+        }),
+      ),
+    } as unknown as AuthSource & GraphCapableSource;
+    const latest = mountLatest(source);
+
+    await expect(
+      latest.current!.acquireToken(["Mail.Read.Shared"]),
+    ).rejects.toBeInstanceOf(InteractionRequiredError);
+
+    // The user is signed in; "Sign in" would send them to a step that
+    // cannot fix a missing grant.
+    expect(toast.warning).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Allow access to load email",
+        actions: [expect.objectContaining({ label: "Allow access" })],
+      }),
+    );
+  });
+
+  it("bumps signInCount once the prompt's action completes a sign-in", async () => {
+    const source = {
+      acquireGraphToken: vi.fn(
+        async (_scopes: string[], options?: { allowInteraction?: boolean }) => {
+          if (options?.allowInteraction) {
+            return { accessToken: "graph-token", bootstrap: "bootstrap" };
+          }
+          throw new InteractionRequiredError("interaction_required");
+        },
+      ),
+    } as unknown as AuthSource & GraphCapableSource;
+    const latest = mountLatest(source);
+    expect(latest.current?.signInCount).toBe(0);
+
+    await expect(
+      latest.current!.acquireToken(["Mail.Read"]),
+    ).rejects.toBeInstanceOf(InteractionRequiredError);
+    const [prompt] = vi.mocked(toast.warning).mock.calls[0] as unknown as [
+      { actions: Array<{ onClick: () => void }> },
+    ];
+
+    await act(async () => {
+      prompt.actions[0].onClick();
+    });
+
+    // Consumers holding a failed Graph-backed query key their retry on this.
+    expect(latest.current?.signInCount).toBe(1);
+    expect(toast.success).toHaveBeenCalledTimes(1);
   });
 });

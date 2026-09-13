@@ -309,7 +309,6 @@ describe("OutlookMailItemProvider", () => {
     expect(captured?.sharedContext).toEqual({
       owner: "team@x",
       targetMailbox: "team@x",
-      delegatePermissions: 3,
     });
     expect(captured?.isLoadingSharedContext).toBe(false);
   });
@@ -332,7 +331,6 @@ describe("OutlookMailItemProvider", () => {
     expect(captured?.sharedContext).toEqual({
       owner: "boss@x",
       targetMailbox: null,
-      delegatePermissions: 3,
     });
     expect(getAttachmentsAsync).not.toHaveBeenCalled();
     expect(captured?.attachments).toEqual([]);
@@ -399,7 +397,6 @@ describe("OutlookMailItemProvider", () => {
       expect(captured?.sharedContext).toEqual({
         owner: "team@x",
         targetMailbox: null,
-        delegatePermissions: 3,
       });
     },
   );

@@ -246,6 +246,14 @@ jobs:
         if: success() || failure()
         run: pnpm run test
 
+      # Validates the manifest as the backend serves it (placeholders rendered,
+      # launch-event blocks absent and present) against Microsoft's schema
+      # service. The raw template cannot be validated: its tokens fail first.
+      - name: "Office add-in served manifest validates"
+        working-directory: ./office-addin
+        if: success() || failure()
+        run: pnpm run office:validate:rendered
+
   lint-backend:
     timeout-minutes: 10
     name: "lint (backend)"

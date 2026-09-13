@@ -324,4 +324,24 @@ describe("createEntraAuthSource", () => {
       "MSAL not initialized",
     );
   });
+
+  it("marks a missing scope grant as a consent request, not a sign-in", async () => {
+    const { InteractionRequiredAuthError } = await import(
+      "@azure/msal-browser"
+    );
+    const pca = createPcaMock({
+      acquireTokenSilent: vi.fn(async () => {
+        throw new InteractionRequiredAuthError(
+          "consent_required",
+          "consent required",
+        );
+      }),
+    });
+    const { source } = await initializedSource(pca);
+
+    await expect(source.acquireBootstrapToken()).rejects.toMatchObject({
+      name: "InteractionRequiredError",
+      reason: "consent",
+    });
+  });
 });

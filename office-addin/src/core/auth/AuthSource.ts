@@ -104,9 +104,25 @@ export interface GraphCapableSource {
  * MSAL's `InteractionRequiredAuthError` into this so the SessionAuth core can
  * recognise "sign-in required" without importing `@azure/msal-browser`.
  */
+/**
+ * Why the silent acquisition needs the user: `sign-in` for a missing or
+ * expired session, `consent` when only a scope grant is missing — the user
+ * IS signed in, so the prompt must not tell them to sign in.
+ */
+export type InteractionRequiredReason = "sign-in" | "consent";
+
 export class InteractionRequiredError extends Error {
-  constructor(message = "Interaction required", options?: { cause?: unknown }) {
-    super(message, options?.cause === undefined ? undefined : options);
+  readonly reason: InteractionRequiredReason;
+
+  constructor(
+    message = "Interaction required",
+    options?: { cause?: unknown; reason?: InteractionRequiredReason },
+  ) {
+    super(
+      message,
+      options?.cause === undefined ? undefined : { cause: options.cause },
+    );
     this.name = "InteractionRequiredError";
+    this.reason = options?.reason ?? "sign-in";
   }
 }

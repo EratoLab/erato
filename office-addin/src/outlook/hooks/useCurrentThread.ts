@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import {
   OUTLOOK_GRAPH_THREAD_TIMEOUT_MS,
@@ -27,6 +27,12 @@ export interface UseCurrentThreadOptions extends FetchConversationOptions {
    * so the composer's send gate stays closed until the thread can be fetched.
    */
   backendPending?: boolean;
+  /**
+   * Bump to retry a FAILED fetch — after an interactive Graph sign-in, say.
+   * `retry: false` and `staleTime: Infinity` mean nothing else ever does, so
+   * without it the error tile outlives the consent that would fix it.
+   */
+  retryKey?: number;
 }
 
 export interface UseCurrentThreadResult {
@@ -73,7 +79,12 @@ export function useCurrentThread(
 ): UseCurrentThreadResult {
   // Stable transport reference avoids re-running the effect on every render
   // when the consumer passes an inline transport closure.
-  const { transport, mailboxRoot = null, backendPending = false } = options;
+  const {
+    transport,
+    mailboxRoot = null,
+    backendPending = false,
+    retryKey = 0,
+  } = options;
   const enabled =
     itemId !== null &&
     conversationId !== null &&
@@ -115,6 +126,14 @@ export function useCurrentThread(
       );
     }
   }, [query.error, query.isError]);
+
+  const { refetch, isError } = query;
+  const lastRetryKeyRef = useRef(retryKey);
+  useEffect(() => {
+    if (lastRetryKeyRef.current === retryKey) return;
+    lastRetryKeyRef.current = retryKey;
+    if (isError) void refetch();
+  }, [isError, refetch, retryKey]);
 
   if (!enabled) {
     return {

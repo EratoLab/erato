@@ -22,9 +22,14 @@ vi.mock("../../utils/teamsChatFetcher", () => ({
   createGraphTeamsChatFetcher: vi.fn(() => ({ kind: "graph" })),
 }));
 
-function prime(mode: AuthMode, graph: GraphTokenContextValue | null) {
+function prime(
+  mode: AuthMode,
+  graph: Pick<GraphTokenContextValue, "acquireToken"> | null,
+) {
   mockUseSessionAuth.mockReturnValue({ mode });
-  mockUseGraphTokenOptional.mockReturnValue(graph);
+  mockUseGraphTokenOptional.mockReturnValue(
+    graph ? { signInCount: 0, ...graph } : null,
+  );
 }
 
 afterEach(() => {

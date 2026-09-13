@@ -333,4 +333,44 @@ describe("useCurrentThread", () => {
     expect(sharedStore).toHaveBeenCalledTimes(1);
     expect(ownStore).toHaveBeenCalledTimes(1);
   });
+
+  it("retries a failed fetch when retryKey changes, and only then", async () => {
+    type Fetch = NonNullable<Parameters<typeof useCurrentThread>[2]>;
+    const fetch = vi
+      .fn<Fetch>()
+      .mockRejectedValueOnce(new Error("403 until consent"))
+      .mockResolvedValueOnce({
+        messages: [
+          {
+            id: "m1",
+            internetMessageId: "<m1@x>",
+            subject: "After consent",
+            body: { contentType: "text", content: "body" },
+            receivedDateTime: "2026-03-01T10:00:00Z",
+            isDraft: false,
+          },
+        ],
+        state: "ok",
+      });
+
+    const { result, rerender } = renderHook(
+      ({ retryKey }: { retryKey: number }) =>
+        useCurrentThread("item-1", "conv-1", fetch, { retryKey }),
+      { wrapper: createWrapper(), initialProps: { retryKey: 0 } },
+    );
+    await waitFor(() => {
+      expect(result.current.error).toBe(true);
+    });
+
+    // `retry: false` + `staleTime: Infinity`: a rerender alone never retries.
+    rerender({ retryKey: 0 });
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    rerender({ retryKey: 1 });
+    await waitFor(() => {
+      expect(result.current.thread?.subject).toBe("After consent");
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.current.error).toBe(false);
+  });
 });

@@ -149,4 +149,42 @@ describe("createGraphOutlookMessageFetcher", () => {
     const [, init] = fetchMock.mock.calls[0];
     expect(init?.signal).toBe(controller.signal);
   });
+
+  it("asks for the shared scope only when an owner is bound", async () => {
+    installFetchMock();
+    const acquire = vi.fn().mockResolvedValue("tok");
+
+    await createGraphOutlookMessageFetcher(acquire, {
+      owner: OWNER,
+    }).fetchMessageBytes(EWS_ID);
+    expect(acquire.mock.calls[0][0]).toEqual(["Mail.Read.Shared"]);
+
+    acquire.mockClear();
+    await createGraphOutlookMessageFetcher(acquire).fetchMessageBytes(EWS_ID);
+    // Entra consent has no hierarchy: an owner paired with a Mail.Read-only
+    // token 403s on every request, so the factory owns the pairing.
+    expect(acquire.mock.calls[0][0]).toEqual(["Mail.Read"]);
+  });
+
+  it("force-refreshes under the same scope when Graph answers 401", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          ({ ok: false, status: 401, statusText: "Unauthorized" }) as Response,
+      ),
+    );
+    const acquire = vi.fn().mockResolvedValue("tok");
+
+    await expect(
+      createGraphOutlookMessageFetcher(acquire, {
+        owner: OWNER,
+      }).fetchMessageBytes(EWS_ID),
+    ).rejects.toThrow();
+
+    expect(acquire.mock.calls).toEqual([
+      [["Mail.Read.Shared"], undefined],
+      [["Mail.Read.Shared"], { forceRefresh: true }],
+    ]);
+  });
 });

@@ -40,13 +40,11 @@ export interface OutlookAttachmentData {
  * address a request at when present — Office documents it as the mailbox
  * LOCATION for the delegate's access and warns it can differ from `owner`
  * between clients, so rooting on `owner` alone 404s wherever they disagree.
- * Both it and `delegatePermissions` are absent on hosts that report ownership
- * without a REST target or a permission mask.
+ * It is absent on hosts that report ownership without a REST target.
  */
 export interface OutlookSharedContext {
   owner: string;
   targetMailbox: string | null;
-  delegatePermissions: number | null;
 }
 
 export interface OutlookMailItemData {
@@ -281,14 +279,7 @@ function readSharedContext(item: {
           typeof result.value.targetMailbox === "string"
             ? result.value.targetMailbox.trim()
             : "";
-        settle({
-          owner,
-          targetMailbox: targetMailbox || null,
-          delegatePermissions:
-            typeof result.value.delegatePermissions === "number"
-              ? result.value.delegatePermissions
-              : null,
-        });
+        settle({ owner, targetMailbox: targetMailbox || null });
       });
     } catch {
       // A host that refuses the call throws instead of failing the callback.
@@ -303,10 +294,7 @@ function isSameSharedContext(
   b: OutlookSharedContext,
 ): boolean {
   return (
-    a !== null &&
-    a.owner === b.owner &&
-    a.targetMailbox === b.targetMailbox &&
-    a.delegatePermissions === b.delegatePermissions
+    a !== null && a.owner === b.owner && a.targetMailbox === b.targetMailbox
   );
 }
 

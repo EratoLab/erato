@@ -18,6 +18,7 @@ import {
 } from "../core/AddinChatCore";
 import { useActionFacetClientActions } from "./hooks/useAvailableActionFacets";
 import { useEmailDedupSet } from "./hooks/useEmailDedupSet";
+import { holdSessionPolicy, releaseSessionPolicy } from "./sessionPolicy";
 import { useOfficeDragAndDrop } from "../hooks/useOfficeDragAndDrop";
 import { useOutlookClientTools } from "./hooks/useOutlookClientTools";
 import { useOutlookMailListDrag } from "./hooks/useOutlookMailListDrag";
@@ -25,7 +26,6 @@ import { useOutlookMessageFetcher } from "./hooks/useOutlookMessageFetcher";
 import { useOffice } from "../providers/OfficeProvider";
 import { useOutlookEmailSource } from "./providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "./providers/OutlookMailItemProvider";
-import { holdSessionPolicy, releaseSessionPolicy } from "./sessionPolicy";
 import { resolveEditExchangeItemIdentity } from "./utils/exchangeItemIdentity";
 import { FreshCompletionTracker } from "./utils/freshCompletionTracker";
 import {
@@ -39,8 +39,12 @@ import {
   parseDroppedFiles,
 } from "./utils/parseDroppedFiles";
 import { parseEmlBytes } from "./utils/parsedEmail";
+import { resolveMailListRowFetcher } from "./utils/resolveMailListRowFetcher";
 
-import type { FetchOutlookMessageBytesResult } from "./utils/fetchOutlookMessage";
+import type {
+  FetchOutlookMessageBytesResult,
+  OutlookMessageFetcher,
+} from "./utils/fetchOutlookMessage";
 import type { OutlookMailListDragItem } from "./utils/outlookMailListDragParse";
 
 const EML_MIME_TYPES: Record<string, string[]> = {
@@ -95,8 +99,21 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
     [controller.messageOrder, controller.messages],
   );
 
-  const { fetcher: messageFetcher } = useOutlookMessageFetcher();
-  const { mailItem, hasItemChangedFired } = useOutlookMailItem();
+  const { fetcher: messageFetcher, ownMailboxFetcher } =
+    useOutlookMessageFetcher();
+  const { mailItem, hasItemChangedFired, sharedContext } = useOutlookMailItem();
+  // Addresses the selected item's store is known under; empty for the user's
+  // own mailbox. Dragged rows are matched against these, never the profile
+  // address, which flips to the shared mailbox in some OWA modes.
+  const boundMailboxAddresses = useMemo(
+    () =>
+      sharedContext
+        ? [sharedContext.owner, sharedContext.targetMailbox].filter(
+            (address): address is string => address !== null,
+          )
+        : [],
+    [sharedContext],
+  );
   const { itemTrackingRequiresPin } = useOffice();
   const [pinHintDismissed, setPinHintDismissed] = usePersistedState<boolean>(
     PIN_HINT_DISMISSED_KEY,
@@ -139,8 +156,11 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
     Map<string, Promise<FetchOutlookMessageBytesResult>>
   >(new Map());
   const fetchOutlookMessageBytesCoalesced = useCallback(
-    (itemId: string): Promise<FetchOutlookMessageBytesResult> => {
-      if (!messageFetcher) {
+    (
+      itemId: string,
+      fetcher: OutlookMessageFetcher | null,
+    ): Promise<FetchOutlookMessageBytesResult> => {
+      if (!fetcher) {
         return Promise.reject(
           new Error("Outlook message fetch is not available on this host"),
         );
@@ -153,7 +173,7 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
             OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
             `Outlook fetch timed out after ${OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS}ms`,
             undefined,
-            (signal) => messageFetcher.fetchMessageBytes(itemId, { signal }),
+            (signal) => fetcher.fetchMessageBytes(itemId, { signal }),
           );
         } finally {
           pendingOutlookFetchesRef.current.delete(itemId);
@@ -162,7 +182,7 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
       pendingOutlookFetchesRef.current.set(itemId, fetchPromise);
       return fetchPromise;
     },
-    [messageFetcher],
+    [],
   );
 
   const [pendingExpansionCount, setPendingExpansionCount] = useState(0);
@@ -183,7 +203,7 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
       trackExpansion(async () => {
         const claimedIds: string[] = [];
         const { emails, nonEmail } = await parseDroppedFiles(files, {
-          fetcher: messageFetcher ?? undefined,
+          fetcher: messageFetcher ?? ownMailboxFetcher ?? undefined,
           tryAttachEmail: (messageId) => {
             if (!tryClaimEmailAttachment(messageId)) return false;
             claimedIds.push(messageId);
@@ -207,18 +227,23 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
       addDroppedEmail,
       dedup,
       messageFetcher,
+      ownMailboxFetcher,
       trackExpansion,
       tryClaimEmailAttachment,
       uploadFiles,
     ],
   );
-  const emailDropMimeTypes = messageFetcher ? EMAIL_MIME_TYPES : EML_MIME_TYPES;
+  const emailDropMimeTypes =
+    messageFetcher || ownMailboxFetcher ? EMAIL_MIME_TYPES : EML_MIME_TYPES;
   const { maxSizeBytes, maxSizeFormatted } = useUploadFeature();
   // Dropped emails are staged and trimmable; their size is checked on the trimmed bytes at send.
+  // A `.msg` expands through whichever backend can read it, so the own-store
+  // one counts too — mirrors the accepted MIME types above.
+  const hasEmailFetcher = messageFetcher != null || ownMailboxFetcher != null;
   const isSizeExempt = useCallback(
     (file: File) =>
-      isExpandableEmailFile(file, { hasFetcher: messageFetcher != null }),
-    [messageFetcher],
+      isExpandableEmailFile(file, { hasFetcher: hasEmailFetcher }),
+    [hasEmailFetcher],
   );
   const dropzone = useConversationDropzone({
     uploadFiles: uploadFilesWithEmailExpansion,
@@ -236,9 +261,21 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
     async (items: OutlookMailListDragItem[]) =>
       trackExpansion(async () => {
         for (const item of items) {
+          const fetcher = resolveMailListRowFetcher(item, {
+            bound: messageFetcher,
+            own: ownMailboxFetcher,
+            boundMailboxAddresses,
+          });
+          if (!fetcher) {
+            console.warn(
+              "No mail backend can read the dropped Outlook email, skipping:",
+              item.subject || item.itemId,
+            );
+            continue;
+          }
           try {
             const { bytes, internetMessageId } =
-              await fetchOutlookMessageBytesCoalesced(item.itemId);
+              await fetchOutlookMessageBytesCoalesced(item.itemId, fetcher);
             if (
               internetMessageId &&
               !tryClaimEmailAttachment(internetMessageId)
@@ -269,15 +306,18 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
       }),
     [
       addDroppedEmail,
+      boundMailboxAddresses,
       dedup,
       fetchOutlookMessageBytesCoalesced,
+      messageFetcher,
+      ownMailboxFetcher,
       trackExpansion,
       tryClaimEmailAttachment,
     ],
   );
   const { isDragActive: isOutlookMailDragActive } = useOutlookMailListDrag({
     onDrop: handleOutlookMailListDrop,
-    disabled: !messageFetcher,
+    disabled: !messageFetcher && !ownMailboxFetcher,
   });
 
   const handleOfficeDragAndDrop = useCallback(
@@ -286,7 +326,7 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
       return trackExpansion(async () => {
         const claimedIds: string[] = [];
         const { emails, nonEmail } = await parseDroppedFiles(files, {
-          fetcher: messageFetcher ?? undefined,
+          fetcher: messageFetcher ?? ownMailboxFetcher ?? undefined,
           tryAttachEmail: (messageId) => {
             if (!tryClaimEmailAttachment(messageId)) return false;
             claimedIds.push(messageId);
@@ -313,6 +353,7 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
       chatInputControls,
       dedup,
       messageFetcher,
+      ownMailboxFetcher,
       trackExpansion,
       tryClaimEmailAttachment,
       uploadFiles,

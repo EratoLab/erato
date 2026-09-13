@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 
+import { useGraphTokenOptional } from "./EntraGraphTokenProvider";
 import { useOutlookMailItem } from "./OutlookMailItemProvider";
 import { useCurrentThread } from "../hooks/useCurrentThread";
 import { useOutlookMessageFetcher } from "../hooks/useOutlookMessageFetcher";
@@ -187,6 +188,9 @@ export function OutlookEmailSourceProvider({
     mailboxRoot,
     unavailableReason: messageFetcherUnavailableReason,
   } = useOutlookMessageFetcher();
+  // A completed interactive Graph sign-in is the only event that can turn a
+  // failed thread fetch into a working one; nothing else retries it.
+  const graphSignInCount = useGraphTokenOptional()?.signInCount ?? 0;
   const [dismissedAttachmentIds, setDismissedAttachmentIds] = useState<
     string[]
   >([]);
@@ -224,6 +228,7 @@ export function OutlookEmailSourceProvider({
       // mode" are steady states the thread quietly stays off in.
       backendPending:
         messageFetcherUnavailableReason === "mailbox-location-pending",
+      retryKey: graphSignInCount,
     },
   );
 

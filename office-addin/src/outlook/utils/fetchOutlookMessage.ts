@@ -106,6 +106,26 @@ export interface OutlookMessageFetcher {
 export type FetchConversationMessages =
   OutlookMessageFetcher["fetchConversationMessages"];
 
+/** Delegated Graph scope for the signed-in user's own mailbox. */
+export const GRAPH_MAIL_SCOPES = ["Mail.Read"];
+/**
+ * Reading a mailbox that isn't the signed-in user's own needs its OWN scope:
+ * Entra consent has no hierarchy, so a granted `Mail.Read` does not authorise
+ * `/users/{owner}` and Graph answers 403 there. Asked for only when an owner
+ * is bound, so the common path keeps requesting the narrow scope.
+ */
+export const GRAPH_SHARED_MAIL_SCOPES = ["Mail.Read.Shared"];
+
+/**
+ * Token acquirer that takes the scopes to ask for — the shape of
+ * `GraphTokenContextValue.acquireToken`. The Graph factory chooses the scope
+ * itself, so no call site can pair an owner with the wrong one.
+ */
+export type AcquireScopedGraphToken = (
+  scopes: string[],
+  options?: { forceRefresh?: boolean },
+) => Promise<string>;
+
 /**
  * Microsoft Graph backing (Exchange Online). Thin delegation to the Graph
  * functions — every request carries the options the call site passed.
@@ -118,47 +138,55 @@ export type FetchConversationMessages =
  * consume this seam precisely so they don't have to know where the mailbox
  * lives.
  *
- * The scope `acquireToken` must carry follows that binding: `Mail.Read`
+ * The scope follows that binding HERE, not at the call site: `Mail.Read`
  * without an owner, `Mail.Read.Shared` with one. Entra consent has no
- * hierarchy, so binding an owner against a `Mail.Read`-only token 403s on
- * every request.
+ * hierarchy, so an owner paired with a `Mail.Read`-only token 403s on every
+ * request; deriving the scope from the owner makes that pairing
+ * unexpressible. Callers hand in the raw scoped acquirer.
  *
  * The `…ByInternetMessageId` lookups follow the same root deliberately, even
  * though a dropped `.msg` can come from the user's own mailbox: a miss there
  * is not fatal, it falls back to the local reader.
  */
 export function createGraphOutlookMessageFetcher(
-  acquireToken: AcquireGraphToken,
+  acquireToken: AcquireScopedGraphToken,
   { owner }: { owner?: string | null } = {},
 ): OutlookMessageFetcher {
+  const scopes = owner ? GRAPH_SHARED_MAIL_SCOPES : GRAPH_MAIL_SCOPES;
+  const acquireMailToken: AcquireGraphToken = (options) =>
+    acquireToken(scopes, options);
   return {
     fetchMessageBytes: (ewsItemId, options) =>
-      fetchOutlookMessageBytesViaGraph(ewsItemId, acquireToken, {
+      fetchOutlookMessageBytesViaGraph(ewsItemId, acquireMailToken, {
         ...options,
         owner,
       }),
     fetchMessageFilesByInternetMessageId: (internetMessageId, options) =>
       fetchOutlookMessageFilesByInternetMessageIdViaGraph(
         internetMessageId,
-        acquireToken,
+        acquireMailToken,
         { ...options, owner },
       ),
     fetchMessageBytesByInternetMessageId: (internetMessageId, options) =>
       fetchOutlookMessageBytesByInternetMessageIdViaGraph(
         internetMessageId,
-        acquireToken,
+        acquireMailToken,
         { ...options, owner },
       ),
     fetchConversationMessages: (conversationId, options) =>
-      fetchConversationMessagesViaGraph(conversationId, acquireToken, {
+      fetchConversationMessagesViaGraph(conversationId, acquireMailToken, {
         ...options,
         owner,
       }),
     fetchParentMessageInConversation: (conversationId, options) =>
-      fetchParentMessageInConversationViaGraph(conversationId, acquireToken, {
-        ...options,
-        owner,
-      }),
+      fetchParentMessageInConversationViaGraph(
+        conversationId,
+        acquireMailToken,
+        {
+          ...options,
+          owner,
+        },
+      ),
   };
 }
 

@@ -337,6 +337,21 @@ msgstr "Reply to all recipients"
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
+msgid "officeAddin.email.allowAccessToLoad.action"
+msgstr "Allow access"
+
+#. js-lingui-explicit-id
+#: src/outlook/providers/EntraGraphTokenProvider.tsx
+msgid "officeAddin.email.allowAccessToLoad.description"
+msgstr "This email wasn't attached because reading its mailbox needs a permission you haven't granted yet."
+
+#. js-lingui-explicit-id
+#: src/outlook/providers/EntraGraphTokenProvider.tsx
+msgid "officeAddin.email.allowAccessToLoad.title"
+msgstr "Allow access to load email"
+
+#. js-lingui-explicit-id
+#: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signedIn.title"
 msgstr "Signed in. Add the email again to attach it."
 

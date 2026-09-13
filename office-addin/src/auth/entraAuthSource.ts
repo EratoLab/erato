@@ -29,6 +29,17 @@ const OAUTH2_PROXY_SESSION_SCOPES = ["User.Read"];
  * because the Office host seeds an account for SSO, but it is handled defensively
  * so a future standard-PCA host inherits the correct first-login behaviour.
  */
+/**
+ * MSAL reports a scope the user (or tenant) has not granted as
+ * `consent_required`. Everything else that needs interaction is a sign-in.
+ */
+function isConsentRequired(error: unknown): boolean {
+  return (
+    error instanceof InteractionRequiredAuthError &&
+    error.errorCode === "consent_required"
+  );
+}
+
 function requiresInteractiveSignIn(error: unknown): boolean {
   if (error instanceof InteractionRequiredAuthError) {
     return true;
@@ -134,6 +145,7 @@ export function createEntraAuthSource(
         // Translate to a host-agnostic signal so the core stays MSAL-free.
         throw new InteractionRequiredError("MSAL interaction required", {
           cause: silentError,
+          reason: isConsentRequired(silentError) ? "consent" : "sign-in",
         });
       }
       throw silentError;
