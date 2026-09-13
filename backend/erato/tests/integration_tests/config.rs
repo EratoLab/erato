@@ -4765,6 +4765,128 @@ model_name = "gpt-4o"
     );
 }
 
+/// The three reserved-namespace traps are warnings, not errors: each describes
+/// a configuration that loads and runs, just not the way the operator meant.
+/// The warning text goes to stderr via the pre-init startup log, so what is
+/// asserted here is that the configuration still boots and keeps the operator's
+/// values - a trap that turned into a hard failure would take deployments down.
+#[test]
+fn tasks_enabled_without_selecting_allowlist_still_boots() {
+    let config = build_and_migrate_delegation_config(
+        r#"
+[delegation.tasks]
+enabled = true
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+
+    assert!(config.delegation.tasks.enabled);
+    assert!(config.experimental_facets.tool_call_allowlist.is_empty());
+}
+
+#[test]
+fn planning_facet_without_selection_still_boots() {
+    let config = build_and_migrate_delegation_config(
+        r#"
+[delegation.tasks]
+enabled = true
+
+[experimental_facets.facets.plan]
+display_name = "Plan"
+tool_call_allowlist = ["web-search-mcp/*"]
+
+[experimental_facets.facets.plan.delegation]
+max_tasks_per_turn = 2
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+
+    let plan = &config.experimental_facets.facets["plan"];
+    assert_eq!(
+        plan.delegation
+            .as_ref()
+            .and_then(|overrides| overrides.max_tasks_per_turn),
+        Some(2)
+    );
+    assert!(!erato_config::config::allowlist_selects_reserved_tool(
+        &plan.tool_call_allowlist,
+        erato_config::config::DELEGATE_TASK_TOOL_NAME
+    ));
+}
+
+#[test]
+fn reserved_only_facet_allowlist_still_boots() {
+    let config = build_and_migrate_delegation_config(
+        r#"
+[delegation.tasks]
+enabled = true
+
+[experimental_facets.facets.plan]
+display_name = "Plan"
+tool_call_allowlist = ["erato/delegate_task"]
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+
+    let plan = &config.experimental_facets.facets["plan"];
+    assert_eq!(plan.tool_call_allowlist, vec!["erato/delegate_task"]);
+    // This is the trap the warning describes: the facet selects the built-in
+    // and nothing else, so the derived MCP server filter is empty.
+    assert!(
+        plan.tool_call_allowlist
+            .iter()
+            .all(|pattern| erato_config::config::pattern_names_reserved_namespace(pattern))
+    );
+}
+
+#[test]
+fn a_paired_planning_facet_selects_the_reserved_tool_and_keeps_mcp_patterns() {
+    let config = build_and_migrate_delegation_config(
+        r#"
+[delegation.tasks]
+enabled = true
+
+[experimental_facets.facets.plan]
+display_name = "Plan"
+tool_call_allowlist = ["erato/delegate_task", "web-search-mcp/*"]
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+
+    let plan = &config.experimental_facets.facets["plan"];
+    assert!(erato_config::config::allowlist_selects_reserved_tool(
+        &plan.tool_call_allowlist,
+        erato_config::config::DELEGATE_TASK_TOOL_NAME
+    ));
+    // The real MCP pattern survives beside the built-in, which is what keeps
+    // the parent turn's MCP tools alive.
+    assert!(
+        plan.tool_call_allowlist
+            .iter()
+            .any(|pattern| !erato_config::config::pattern_names_reserved_namespace(pattern))
+    );
+}
+
 #[test]
 #[should_panic(expected = "MCP server id `erato` is reserved")]
 fn test_mcp_server_id_erato_is_rejected_at_startup() {

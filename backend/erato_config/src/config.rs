@@ -43,6 +43,29 @@ pub const RESERVED_TOOL_NAMES: &[&str] = &[
     COLLECT_TASKS_TOOL_NAME,
 ];
 
+/// Whether a `tool_call_allowlist` selects a reserved `erato/<name>` tool.
+///
+/// Mirrors the request-time matcher: `*` (everything), a bare `erato`
+/// (the whole reserved namespace), `erato/*` (the same by prefix), or the
+/// exact `erato/<name>`.
+pub fn allowlist_selects_reserved_tool(allowlist: &[String], tool_name: &str) -> bool {
+    let qualified = format!("{RESERVED_TOOL_NAMESPACE}/{tool_name}");
+    allowlist.iter().any(|pattern| {
+        pattern == "*"
+            || pattern == RESERVED_TOOL_NAMESPACE
+            || pattern == &format!("{RESERVED_TOOL_NAMESPACE}/*")
+            || pattern == &qualified
+    })
+}
+
+/// Whether a pattern names the reserved namespace specifically. A bare `*` is
+/// deliberately excluded: it is a wildcard over everything, not a statement
+/// about built-in tools.
+pub fn pattern_names_reserved_namespace(pattern: &str) -> bool {
+    pattern == RESERVED_TOOL_NAMESPACE
+        || pattern.starts_with(&format!("{RESERVED_TOOL_NAMESPACE}/"))
+}
+
 /// Rejects an MCP server id that claims the reserved tool namespace. Called
 /// from both config load paths: `AppConfig::migrate` panics like its sibling
 /// load-time checks, while `McpRuntimeConfig::from_toml_sources` returns the
@@ -1116,6 +1139,60 @@ impl AppConfig {
 
         if let Err(e) = config.delegation.validate() {
             panic!("Invalid delegation configuration: {}", e);
+        }
+
+        // Operator traps around selecting the reserved tools. All three are
+        // warnings, not errors: each describes a configuration that loads and
+        // runs, just not the way the operator probably meant.
+        if config.delegation.tasks.enabled {
+            let selected_globally = allowlist_selects_reserved_tool(
+                &config.experimental_facets.tool_call_allowlist,
+                DELEGATE_TASK_TOOL_NAME,
+            );
+            let selected_by_a_facet = config.experimental_facets.facets.values().any(|facet| {
+                allowlist_selects_reserved_tool(&facet.tool_call_allowlist, DELEGATE_TASK_TOOL_NAME)
+            });
+            if !selected_globally && !selected_by_a_facet {
+                startup_log::warn_preinit(format!(
+                    "`delegation.tasks.enabled` is true but no tool_call_allowlist selects \
+                     `{RESERVED_TOOL_NAMESPACE}/{DELEGATE_TASK_TOOL_NAME}`, so the tool is never \
+                     offered. Add it to a facet's tool_call_allowlist."
+                ));
+            }
+        }
+
+        for (facet_id, facet) in &config.experimental_facets.facets {
+            if facet.delegation.is_some()
+                && !allowlist_selects_reserved_tool(
+                    &facet.tool_call_allowlist,
+                    DELEGATE_TASK_TOOL_NAME,
+                )
+            {
+                startup_log::warn_preinit(format!(
+                    "Facet '{facet_id}' configures `delegation` overrides but its \
+                     tool_call_allowlist does not select \
+                     `{RESERVED_TOOL_NAMESPACE}/{DELEGATE_TASK_TOOL_NAME}`, so the overrides \
+                     never apply."
+                ));
+            }
+
+            // A facet naming only reserved patterns flips the derived MCP
+            // allowlist from "no restriction" to a set that intersects the
+            // configured servers to nothing, so the parent turn loses every
+            // MCP tool while the facet is selected.
+            if !facet.tool_call_allowlist.is_empty()
+                && facet
+                    .tool_call_allowlist
+                    .iter()
+                    .all(|pattern| pattern_names_reserved_namespace(pattern))
+                && config.experimental_facets.tool_call_allowlist.is_empty()
+            {
+                startup_log::warn_preinit(format!(
+                    "Facet '{facet_id}' allowlists only reserved `{RESERVED_TOOL_NAMESPACE}/` \
+                     patterns while the global tool_call_allowlist is empty: selecting it \
+                     removes every MCP tool from the turn. Pair it with a real MCP pattern."
+                ));
+            }
         }
 
         // Every `child_facet_ids` entry, global or per facet, must name a
@@ -5637,5 +5714,46 @@ impl FacetPermissionRule {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod reserved_namespace_tests {
+    use super::{
+        DELEGATE_TASK_TOOL_NAME, allowlist_selects_reserved_tool, pattern_names_reserved_namespace,
+    };
+
+    #[test]
+    fn allowlist_selection_matches_the_request_time_matcher() {
+        for pattern in ["*", "erato", "erato/*", "erato/delegate_task"] {
+            assert!(
+                allowlist_selects_reserved_tool(&[pattern.to_string()], DELEGATE_TASK_TOOL_NAME),
+                "pattern {pattern} should select the reserved tool"
+            );
+        }
+
+        assert!(!allowlist_selects_reserved_tool(
+            &[],
+            DELEGATE_TASK_TOOL_NAME
+        ));
+        assert!(!allowlist_selects_reserved_tool(
+            &["outlook/*".to_string()],
+            DELEGATE_TASK_TOOL_NAME
+        ));
+        assert!(!allowlist_selects_reserved_tool(
+            &["erato/collect_tasks".to_string()],
+            DELEGATE_TASK_TOOL_NAME
+        ));
+    }
+
+    #[test]
+    fn only_explicit_reserved_patterns_name_the_namespace() {
+        assert!(pattern_names_reserved_namespace("erato"));
+        assert!(pattern_names_reserved_namespace("erato/*"));
+        assert!(pattern_names_reserved_namespace("erato/delegate_task"));
+        // A bare wildcard is a wildcard over everything, not a statement about
+        // built-ins, so it must not be stripped from a prompt template.
+        assert!(!pattern_names_reserved_namespace("*"));
+        assert!(!pattern_names_reserved_namespace("web-search-mcp/*"));
     }
 }
