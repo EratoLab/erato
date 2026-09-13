@@ -338,17 +338,17 @@ msgstr "Répondre à tous les destinataires"
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.allowAccessToLoad.action"
-msgstr ""
+msgstr "Autoriser l'accès"
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.allowAccessToLoad.description"
-msgstr ""
+msgstr "Cet e-mail n'a pas été joint, car la lecture de sa boîte aux lettres nécessite une autorisation que vous n'avez pas encore accordée."
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.allowAccessToLoad.title"
-msgstr ""
+msgstr "Autorisez l'accès pour charger l'e-mail"
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx

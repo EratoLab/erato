@@ -338,17 +338,17 @@ msgstr "Responder a todos los destinatarios"
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.allowAccessToLoad.action"
-msgstr ""
+msgstr "Permitir acceso"
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.allowAccessToLoad.description"
-msgstr ""
+msgstr "Este correo no se adjuntó porque leer su buzón requiere un permiso que aún no has concedido."
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.allowAccessToLoad.title"
-msgstr ""
+msgstr "Permite el acceso para cargar el correo"
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx

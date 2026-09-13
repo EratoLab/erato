@@ -338,17 +338,17 @@ msgstr "Odpowiedz wszystkim odbiorcom"
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.allowAccessToLoad.action"
-msgstr ""
+msgstr "Zezwól na dostęp"
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.allowAccessToLoad.description"
-msgstr ""
+msgstr "Ten e-mail nie został załączony, ponieważ odczytanie jego skrzynki wymaga uprawnienia, które nie zostało jeszcze przyznane."
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.allowAccessToLoad.title"
-msgstr ""
+msgstr "Zezwól na dostęp, aby załadować e-mail"
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
