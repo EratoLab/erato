@@ -3760,6 +3760,61 @@ msgid "preferences.dialog.mcpServers.status.success.label"
 msgstr "Połączono"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.badge.asksBeforeRunning"
+msgstr "Pyta przed uruchomieniem"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.badge.canModify"
+msgstr "Może modyfikować"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.badge.notDeclared"
+msgstr "Niezadeklarowane przez serwer"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.badge.reachesOtherSystems"
+msgstr "Sięga do innych systemów"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.badge.readsOnly"
+msgstr "Tylko odczyt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.empty"
+msgstr "Ten serwer nie udostępnia Ci żadnych narzędzi."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.failure"
+msgstr "Nie udało się wyświetlić narzędzi, ponieważ serwer jest nieosiągalny."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.heading"
+msgstr "Narzędzia"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.loadError"
+msgstr "Nie udało się załadować narzędzi tego serwera. Spróbuj ponownie."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.loading"
+msgstr "Ładowanie narzędzi..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.needsAuthentication"
+msgstr "Połącz się, aby zobaczyć narzędzia."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.save.error"
 msgstr "Nie udało się zapisać preferencji. Spróbuj ponownie."

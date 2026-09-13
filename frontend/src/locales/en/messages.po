@@ -3760,6 +3760,61 @@ msgid "preferences.dialog.mcpServers.status.success.label"
 msgstr "Connected"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.badge.asksBeforeRunning"
+msgstr "Asks before running"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.badge.canModify"
+msgstr "Can modify"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.badge.notDeclared"
+msgstr "Not declared by the server"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.badge.reachesOtherSystems"
+msgstr "Reaches other systems"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.badge.readsOnly"
+msgstr "Reads only"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.empty"
+msgstr "This server exposes no tools to you."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.failure"
+msgstr "The tools could not be listed because the server is unreachable."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.heading"
+msgstr "Tools"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.loadError"
+msgstr "Could not load the tools of this server. Please try again."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.loading"
+msgstr "Loading tools..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.needsAuthentication"
+msgstr "Connect to see tools."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.save.error"
 msgstr "Could not save preferences. Please try again."
