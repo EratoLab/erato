@@ -5,9 +5,9 @@ use axum::http;
 use axum_test::TestServer;
 use chrono::Utc;
 use erato::config::{
-    ActionFacetConfig, ExperimentalFacetsConfig, FacetConfig, McpServerAuthenticationConfig,
-    McpServerConfig, McpServerOauth2AuthenticationConfig, ModelSettings, PromptSourceSpecification,
-    SecretConfigString,
+    ActionFacetConfig, ClientToolConfig, ExperimentalFacetsConfig, FacetConfig,
+    McpServerAuthenticationConfig, McpServerConfig, McpServerOauth2AuthenticationConfig,
+    ModelSettings, PromptSourceSpecification, SecretConfigString,
 };
 use erato::db::entity::{chat_file_uploads, chats, file_uploads};
 use erato::models::message::{GenerationInputMessages, GenerationParameters};
@@ -4692,6 +4692,589 @@ async fn test_continuestream_denies_a_parked_tool_approval(pool: Pool<Postgres>)
             .generation_state
             .as_deref(),
         Some("completed")
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Per-user MCP tool denial: enforced when the tool set is built and again
+// when a parked approval is continued.
+// ---------------------------------------------------------------------------
+
+/// The model-facing tool names of every recorded chat-completion request
+/// that offered tools, in request order. The chat-title request carries no
+/// tools and is skipped.
+fn recorded_tool_offers(bodies: &[String]) -> Vec<Vec<String>> {
+    bodies
+        .iter()
+        .filter_map(|body| {
+            let body: Value = serde_json::from_str(body).expect("recorded body is JSON");
+            let tools = body["tools"].as_array()?;
+            Some(
+                tools
+                    .iter()
+                    .map(|tool| tool["function"]["name"].as_str().unwrap().to_string())
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
+/// A tool the user denied for themselves is not offered to the model, and the
+/// denial needs no approval policy at all: it is accepted while approvals are
+/// off entirely, where a grant is still refused.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_denied_mcp_tool_is_not_offered_to_the_model(pool: Pool<Postgres>) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post().path("/v1/chat/completions").matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                build_openai_text_streaming_response(&["FILES-ANSWER"]),
+            );
+        });
+    }
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.mcp_servers.insert(
+        "files".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url(),
+            "/mcp/file",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_server_permissions.rules.insert(
+        "allow-files".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["files".to_string()],
+        },
+    );
+    app_config.mcp_servers_global.approval = erato::config::McpToolApprovalConfig {
+        enabled: false,
+        allow_always: false,
+        ..Default::default()
+    };
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let server = app_server(app_state);
+
+    let grant = server
+        .post("/api/v1beta/me/mcp-tool-approval-settings")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "mcp_server_id": "files",
+            "tool_name": "read_file",
+            "decision": "always_allow",
+        }))
+        .await;
+    grant.assert_status(http::StatusCode::BAD_REQUEST);
+    let denied = server
+        .post("/api/v1beta/me/mcp-tool-approval-settings")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "mcp_server_id": "files",
+            "tool_name": "read_file",
+            "decision": "denied",
+        }))
+        .await;
+    denied.assert_status_ok();
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "what files are there?" }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    assert_eq!(extract_full_text(&events), "FILES-ANSWER");
+
+    let offers = recorded_tool_offers(&recorder.bodies());
+    assert_eq!(offers.len(), 1);
+    let offered = &offers[0];
+    assert!(
+        offered.iter().any(|name| name == "list_files"),
+        "undenied tools stay offered: {offered:?}"
+    );
+    assert!(
+        !offered.iter().any(|name| name == "read_file"),
+        "the denied tool must not reach the model: {offered:?}"
+    );
+
+    let tools = server
+        .get("/api/v1beta/me/mcp_servers/files/tools")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    tools.assert_status_ok();
+    let tools: Value = tools.json();
+    let decisions: Vec<(&str, &str)> = tools["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|tool| {
+            (
+                tool["name"].as_str().unwrap(),
+                tool["user_decision"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        decisions,
+        vec![("list_files", "ask"), ("read_file", "denied")]
+    );
+}
+
+/// A denial stored while an approval was pending wins over the approval: the
+/// continued turn does not execute the tool, records a refusal in its place,
+/// no longer offers the tool, and completes cleanly. "Always allow" on the
+/// stale card must not overwrite the denial either.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_continuestream_refuses_a_tool_denied_after_the_park(pool: Pool<Postgres>) {
+    const TOOL_RESULT: &str = "approval probe published";
+    const REFUSAL: &str = "has disabled the tool";
+    let continuation_recorder = RequestBodyRecorder::new();
+
+    let mut mocks = MockSet::new();
+    {
+        let recorder = continuation_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[REFUSAL], &[]))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                build_openai_text_streaming_response(&["DENIED-AFTER-PARK-ANSWER"]),
+            );
+        });
+    }
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &[REFUSAL]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[(
+                "call_probe",
+                "publish_approval_probe",
+                json!({}),
+            )]),
+        );
+    });
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.mcp_servers.insert(
+        "mock_mcp_approval".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url(),
+            "/mcp/approval-policy",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_server_permissions.rules.insert(
+        "allow-mock-mcp".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["mock_mcp_approval".to_string()],
+        },
+    );
+    app_config.mcp_servers_global.approval = erato::config::McpToolApprovalConfig {
+        enabled: true,
+        preset: erato::config::McpToolApprovalPreset::Restrictive,
+        allow_always: true,
+    };
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let db = app_state.db.clone();
+    let server = app_server(app_state);
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "publish the approval probe" }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let chat_id = Uuid::parse_str(&extract_chat_id(&events).expect("Expected chat_id")).unwrap();
+    let assistant_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    assert_eq!(
+        chats::Entity::find_by_id(chat_id)
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap()
+            .generation_state
+            .as_deref(),
+        Some("awaiting_approval")
+    );
+
+    // The denial lands while the card is still waiting.
+    let denied = server
+        .post("/api/v1beta/me/mcp-tool-approval-settings")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "mcp_server_id": "mock_mcp_approval",
+            "tool_name": "publish_approval_probe",
+            "decision": "denied",
+        }))
+        .await;
+    denied.assert_status_ok();
+
+    let continued = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": assistant_message_id,
+            "decision": "approve_always",
+        }))
+        .await;
+    continued.assert_status_ok();
+    let continued_events = parse_sse_events(&continued);
+    assert_eq!(
+        extract_full_text(&continued_events),
+        "DENIED-AFTER-PARK-ANSWER"
+    );
+
+    let continuation_bodies = continuation_recorder.bodies();
+    assert_eq!(continuation_bodies.len(), 1);
+    assert!(
+        !continuation_bodies[0].contains(TOOL_RESULT),
+        "a denied tool must not be executed"
+    );
+    let offers = recorded_tool_offers(&continuation_bodies);
+    assert_eq!(offers.len(), 1);
+    let offered = &offers[0];
+    assert!(
+        offered.iter().any(|name| name == "read_approval_fixture"),
+        "{offered:?}"
+    );
+    assert!(
+        !offered.iter().any(|name| name == "publish_approval_probe"),
+        "the denied tool must not be offered to the continued turn: {offered:?}"
+    );
+
+    let resumed = erato::db::entity::messages::Entity::find_by_id(assistant_message_id)
+        .one(&db)
+        .await
+        .unwrap()
+        .expect("Expected the resumed assistant message");
+    let resumed_content = resumed.raw_message["content"].as_array().unwrap().clone();
+    let content_types: Vec<&str> = resumed_content
+        .iter()
+        .map(|part| part["content_type"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        content_types,
+        vec!["tool_approval_request", "tool_approval", "tool_use", "text"]
+    );
+    assert_eq!(resumed_content[1]["always_allow"], false);
+    assert_eq!(resumed_content[2]["status"], "error");
+    assert_eq!(resumed_content[2]["output"]["status"], "rejected");
+    assert!(
+        resumed_content[2]["output"]["error"]
+            .as_str()
+            .unwrap()
+            .contains(REFUSAL)
+    );
+    assert_eq!(
+        chats::Entity::find_by_id(chat_id)
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap()
+            .generation_state
+            .as_deref(),
+        Some("completed")
+    );
+
+    let settings = server
+        .get("/api/v1beta/me/mcp-tool-approval-settings")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    let settings: Value = settings.json();
+    let settings = settings["settings"].as_array().unwrap().clone();
+    assert_eq!(settings.len(), 1);
+    assert_eq!(settings[0]["tool_name"], "publish_approval_probe");
+    assert_eq!(
+        settings[0]["decision"], "denied",
+        "approve_always on a stale card must not overwrite the denial"
+    );
+}
+
+/// The continued turn is offered the tool set the parked turn was built with:
+/// an assistant restricted to one server keeps the other authorized server's
+/// tools out of the continuation too.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_continuestream_keeps_the_original_filtered_tool_set(pool: Pool<Postgres>) {
+    const TOOL_RESULT: &str = "approval probe published";
+    let parked_recorder = RequestBodyRecorder::new();
+    let continuation_recorder = RequestBodyRecorder::new();
+
+    let mut mocks = MockSet::new();
+    {
+        let recorder = continuation_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[TOOL_RESULT], &[]))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                build_openai_text_streaming_response(&["FILTERED-CONTINUATION-ANSWER"]),
+            );
+        });
+    }
+    {
+        let recorder = parked_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[], &[TOOL_RESULT]))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                build_openai_tool_calls_streaming_response(&[(
+                    "call_probe",
+                    "publish_approval_probe",
+                    json!({}),
+                )]),
+            );
+        });
+    }
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.mcp_servers.insert(
+        "mock_mcp_approval".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url(),
+            "/mcp/approval-policy",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_servers.insert(
+        "files".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url(),
+            "/mcp/file",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_server_permissions.rules.insert(
+        "allow-both".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["mock_mcp_approval".to_string(), "files".to_string()],
+        },
+    );
+    app_config.mcp_servers_global.approval = erato::config::McpToolApprovalConfig {
+        enabled: true,
+        preset: erato::config::McpToolApprovalPreset::Restrictive,
+        allow_always: false,
+    };
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let server = app_server(app_state);
+
+    let assistant = server
+        .post("/api/v1beta/assistants")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&json!({
+            "name": "Approval only",
+            "description": "Sees one server",
+            "prompt": "You are a helpful test assistant.",
+            "mcp_server_ids": ["mock_mcp_approval"],
+            "default_chat_provider": null,
+            "file_ids": []
+        }))
+        .await;
+    assistant.assert_status(http::StatusCode::CREATED);
+    let assistant: Value = assistant.json();
+    let chat = server
+        .post("/api/v1beta/me/chats")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&json!({ "assistant_id": assistant["id"] }))
+        .await;
+    chat.assert_status_ok();
+    let chat: Value = chat.json();
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "existing_chat_id": chat["chat_id"],
+            "user_message": "publish the approval probe",
+        }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let assistant_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+
+    let mut parked_offers = recorded_tool_offers(&parked_recorder.bodies());
+    assert_eq!(parked_offers.len(), 1);
+    let mut parked_offered = parked_offers.remove(0);
+    parked_offered.sort();
+    assert_eq!(
+        parked_offered,
+        vec!["publish_approval_probe", "read_approval_fixture"]
+    );
+
+    let continued = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": assistant_message_id,
+            "decision": "approve",
+        }))
+        .await;
+    continued.assert_status_ok();
+    let continued_events = parse_sse_events(&continued);
+    assert_eq!(
+        extract_full_text(&continued_events),
+        "FILTERED-CONTINUATION-ANSWER"
+    );
+
+    let mut continued_offers = recorded_tool_offers(&continuation_recorder.bodies());
+    assert_eq!(continued_offers.len(), 1);
+    let mut continued_offered = continued_offers.remove(0);
+    continued_offered.sort();
+    assert_eq!(
+        continued_offered, parked_offered,
+        "the continued turn must be offered exactly the parked turn's tools"
+    );
+}
+
+/// MCP wins a name clash with a client tool. Denying the MCP tool removes it
+/// from the offer without promoting the same-named client tool it shadowed.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_denied_mcp_tool_does_not_promote_a_same_named_client_tool(pool: Pool<Postgres>) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post().path("/v1/chat/completions").matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                build_openai_text_streaming_response(&["COLLISION-ANSWER"]),
+            );
+        });
+    }
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.mcp_servers.insert(
+        "files".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url(),
+            "/mcp/file",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_server_permissions.rules.insert(
+        "allow-files".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["files".to_string()],
+        },
+    );
+    // A client tool with the MCP tool's model-facing name, globally
+    // allowlisted; no facets, so the MCP side stays unfiltered.
+    app_config.client_tools.tools.insert(
+        "outlook_read_file".to_string(),
+        ClientToolConfig {
+            name: "read_file".to_string(),
+            namespace: Some("outlook".to_string()),
+            description: "Reads a file from the mailbox".to_string(),
+            parameters: r#"{"type":"object","properties":{}}"#.to_string(),
+            timeout_ms: None,
+        },
+    );
+    app_config.experimental_facets.tool_call_allowlist = vec!["outlook/read_file".to_string()];
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let server = app_server(app_state);
+
+    let before = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "read the file" }))
+        .await;
+    before.assert_status_ok();
+    let before_offers = recorded_tool_offers(&recorder.bodies());
+    assert_eq!(before_offers.len(), 1);
+    let before_offered = &before_offers[0];
+    assert_eq!(
+        before_offered
+            .iter()
+            .filter(|name| *name == "read_file")
+            .count(),
+        1,
+        "the MCP tool shadows the client tool: {before_offered:?}"
+    );
+
+    let denied = server
+        .post("/api/v1beta/me/mcp-tool-approval-settings")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "mcp_server_id": "files",
+            "tool_name": "read_file",
+            "decision": "denied",
+        }))
+        .await;
+    denied.assert_status_ok();
+
+    let after = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "read the file again" }))
+        .await;
+    after.assert_status_ok();
+    let offers = recorded_tool_offers(&recorder.bodies());
+    assert_eq!(offers.len(), 2);
+    let after_offered = &offers[1];
+    assert!(
+        after_offered.iter().any(|name| name == "list_files"),
+        "{after_offered:?}"
+    );
+    assert!(
+        !after_offered.iter().any(|name| name == "read_file"),
+        "denying the MCP tool must not promote the client tool it shadowed: {after_offered:?}"
     );
 }
 

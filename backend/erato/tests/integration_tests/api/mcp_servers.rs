@@ -6,7 +6,7 @@ use erato::config::{
     McpServerPermissionRule, McpToolApprovalConfig, McpToolApprovalPreset,
 };
 use erato::models::user::get_or_create_user;
-use erato::models::user_tool_approval_setting::upsert_active;
+use erato::models::user_tool_approval_setting::{UserToolDecision, upsert_active};
 use erato::services::mcp_manager::McpRequestAuthContext;
 use mocktail::server::{MockServer, MockServerConfig};
 use serde_json::{Value, json};
@@ -67,9 +67,24 @@ async fn test_list_mcp_server_tools_projects_effective_values(pool: Pool<Postgre
     let user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
         .await
         .expect("Failed to create user");
-    upsert_active(&app_state.db, user.id, "research", "deep_research_poll")
-        .await
-        .expect("Failed to store always-allow setting");
+    upsert_active(
+        &app_state.db,
+        user.id,
+        "research",
+        "deep_research_poll",
+        UserToolDecision::AlwaysAllow,
+    )
+    .await
+    .expect("Failed to store always-allow setting");
+    upsert_active(
+        &app_state.db,
+        user.id,
+        "research",
+        "deep_research_dispatch",
+        UserToolDecision::Denied,
+    )
+    .await
+    .expect("Failed to store denied setting");
     let server = create_test_server(app_state);
 
     let response = server
@@ -107,7 +122,7 @@ async fn test_list_mcp_server_tools_projects_effective_values(pool: Pool<Postgre
         })
     );
     assert_eq!(dispatch["approval"], "ask");
-    assert_eq!(dispatch["user_decision"], "ask");
+    assert_eq!(dispatch["user_decision"], "denied");
     assert_eq!(dispatch["is_wait_tool"], false);
 
     let poll = &tools[1];
