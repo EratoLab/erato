@@ -1,7 +1,9 @@
 use crate::config::{AppConfig, McpRuntimeConfig};
 use crate::db::entity::prelude::FileUploads;
 use crate::services::file_storage::SharepointContext;
-use crate::services::mcp_session_manager::{ManagedTool, McpSessionManager};
+use crate::services::mcp_session_manager::{
+    ManagedTool, McpServerToolEnumeration, McpSessionManager,
+};
 use crate::state::AppState;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use eyre::{OptionExt, Report, WrapErr, eyre};
@@ -93,6 +95,22 @@ impl McpServers {
         self.session_manager
             .invalidate_oauth_sessions_for_token(server_id, access_token)
             .await;
+    }
+
+    /// List one server's tools for the requesting user without tearing the
+    /// session down afterwards.
+    pub async fn enumerate_tools(
+        &self,
+        server_id: &str,
+        auth_context: &McpRequestAuthContext<'_>,
+    ) -> McpServerToolEnumeration {
+        self.session_manager
+            .enumerate_tools(server_id, auth_context)
+            .await
+    }
+
+    pub async fn active_session_count(&self, server_id: &str) -> usize {
+        self.session_manager.active_session_count(server_id).await
     }
 
     /// List all available tools for a specific chat
