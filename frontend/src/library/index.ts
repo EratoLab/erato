@@ -89,6 +89,7 @@ export {
   EntityRow,
   type EntityRowStatus,
 } from "@/components/ui/Settings/EntityRow";
+export { McpServerToolList } from "@/components/ui/Settings/McpServerToolList";
 export {
   ServersToolsPane,
   type ServersToolsMcpConfig,
