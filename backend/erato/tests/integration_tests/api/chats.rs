@@ -402,6 +402,7 @@ async fn test_archive_all_chats_endpoint_archives_only_unarchived(pool: Pool<Pos
     let active_chat_1 = chats::ActiveModel {
         owner_user_id: ActiveValue::Set(owner_user_id.clone()),
         archived_at: ActiveValue::Set(None),
+        is_pinned: ActiveValue::Set(true),
         ..Default::default()
     }
     .insert(&app_state.db)
@@ -458,6 +459,7 @@ async fn test_archive_all_chats_endpoint_archives_only_unarchived(pool: Pool<Pos
         .expect("Missing archived chat after");
 
     assert!(active_chat_1_after.archived_at.is_some());
+    assert!(!active_chat_1_after.is_pinned);
     assert!(active_chat_2_after.archived_at.is_some());
     assert_eq!(
         already_archived_chat_after.archived_at, already_archived_chat.archived_at,
@@ -616,6 +618,55 @@ async fn test_archive_twice_keeps_the_original_timestamp(pool: Pool<Postgres>) {
         stored_chat(&app_state.db, &chat_id).await.archived_at,
         archived_at
     );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_archive_clears_the_pin(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .expect("Failed to create user");
+
+    let server = create_test_server(app_state.clone());
+    let chat_id = create_chat_via_submit(&server).await;
+
+    server
+        .put(&format!("/api/v1beta/me/chats/{chat_id}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "is_pinned": true }))
+        .await
+        .assert_status_ok();
+    assert!(stored_chat(&app_state.db, &chat_id).await.is_pinned);
+
+    archive_chat_via_api(&server, &chat_id).await;
+    let archived = stored_chat(&app_state.db, &chat_id).await;
+    assert!(!archived.is_pinned);
+
+    // Legacy rows archived while pinned are unpinned by archiving them again.
+    chats::ActiveModel {
+        id: ActiveValue::Unchanged(Uuid::parse_str(&chat_id).expect("Invalid chat UUID")),
+        is_pinned: ActiveValue::Set(true),
+        ..Default::default()
+    }
+    .update(&app_state.db)
+    .await
+    .expect("Failed to pin the archived chat");
+    archive_chat_via_api(&server, &chat_id).await;
+    let re_archived = stored_chat(&app_state.db, &chat_id).await;
+    assert!(!re_archived.is_pinned);
+    assert_eq!(re_archived.archived_at, archived.archived_at);
+
+    unarchive_chat_via_api(&server, &chat_id).await;
+
+    assert!(!stored_chat(&app_state.db, &chat_id).await.is_pinned);
+    assert!(recent_chat_ids(&server).await.contains(&chat_id));
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]

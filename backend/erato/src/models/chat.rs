@@ -1469,6 +1469,9 @@ fn generation_unfinished_condition(alias: &str, param_index: u8) -> String {
 /// that spawned it, so hiding the conversation hides its artifacts — and the
 /// age-based deletion of archived chats then reaches them too.
 ///
+/// Unlike the retention pass below, a pin does not protect a run here; the
+/// cascade clears it, because an archived chat is never pinned.
+///
 /// A run whose generation has not finished is left alone: completing into an
 /// archived chat is a worse state than a late archive, because every write
 /// path into an archived chat — including the tool-approval continuation —
@@ -1510,7 +1513,7 @@ pub async fn archive_delegated_descendants(
                 )
         )
         UPDATE "chats"
-        SET "archived_at" = now()
+        SET "archived_at" = now(), "is_pinned" = false
         WHERE "chats"."id" IN (SELECT id FROM descendants WHERE id <> $1::uuid)
         "#,
         unfinished = generation_unfinished_condition("\"child\"", 3)
@@ -1667,8 +1670,8 @@ pub async fn delete_unstarted_delegated_chat(
     Ok(())
 }
 
-/// Archive a chat by setting its archived_at timestamp. An already-archived
-/// chat keeps its original timestamp.
+/// Archive a chat by setting its archived_at timestamp and clearing its pin.
+/// An already-archived chat keeps its original timestamp.
 pub async fn archive_chat(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,
@@ -1690,11 +1693,15 @@ pub async fn archive_chat(
         Action::Update
     )?;
 
-    let updated_chat = if chat.archived_at.is_some() {
+    let already_archived = chat.archived_at.is_some();
+    let updated_chat = if already_archived && !chat.is_pinned {
         chat
     } else {
         let mut chat_active: chats::ActiveModel = chat.into();
-        chat_active.archived_at = ActiveValue::Set(Some(Utc::now().into()));
+        if !already_archived {
+            chat_active.archived_at = ActiveValue::Set(Some(Utc::now().into()));
+        }
+        chat_active.is_pinned = ActiveValue::Set(false);
         chat_active.update(conn).await?
     };
 
@@ -1750,6 +1757,7 @@ pub async fn archive_all_unarchived_chats_for_owner(
     let result = Chats::update_many()
         .set(chats::ActiveModel {
             archived_at: ActiveValue::Set(Some(now)),
+            is_pinned: ActiveValue::Set(false),
             ..Default::default()
         })
         .filter(chats::Column::OwnerUserId.eq(owner_user_id))

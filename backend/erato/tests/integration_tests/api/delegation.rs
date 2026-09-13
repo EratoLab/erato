@@ -5823,6 +5823,26 @@ async fn set_generation_lease(
     .expect("set generation lease");
 }
 
+async fn pin_chat(db: &sea_orm::DatabaseConnection, chat_id: Uuid) {
+    erato::db::entity::chats::ActiveModel {
+        id: ActiveValue::Unchanged(chat_id),
+        is_pinned: ActiveValue::Set(true),
+        ..Default::default()
+    }
+    .update(db)
+    .await
+    .expect("pin chat");
+}
+
+async fn is_pinned_of(db: &sea_orm::DatabaseConnection, chat_id: Uuid) -> bool {
+    erato::db::entity::chats::Entity::find_by_id(chat_id)
+        .one(db)
+        .await
+        .unwrap()
+        .expect("chat should still exist")
+        .is_pinned
+}
+
 async fn archived_at_of(db: &sea_orm::DatabaseConnection, chat_id: Uuid) -> Option<String> {
     erato::db::entity::chats::Entity::find_by_id(chat_id)
         .one(db)
@@ -5833,9 +5853,10 @@ async fn archived_at_of(db: &sea_orm::DatabaseConnection, chat_id: Uuid) -> Opti
         .map(|value| value.to_string())
 }
 
-/// Archiving a chat archives the delegated runs it spawned and theirs in turn,
-/// but leaves alone a run whose generation has not finished or has not started
-/// yet, never leaves the owner, and never reaches another provenance kind.
+/// Archiving a chat archives the delegated runs it spawned and theirs in turn
+/// and clears their pins, but leaves alone a run whose generation has not
+/// finished or has not started yet, never leaves the owner, and never reaches
+/// another provenance kind.
 /// Unarchiving the origin restores only the origin. A run that survives its
 /// origin still reads with a dangling origin.
 ///
@@ -5905,7 +5926,11 @@ async fn test_archive_cascades_to_idle_delegated_runs(pool: Pool<Postgres>) {
     )
     .await;
 
+    pin_chat(&app_state.db, idle).await;
+
     archive_chat_via_api(&server, &parent).await;
+
+    assert!(!is_pinned_of(&app_state.db, idle).await);
 
     for (label, id) in [
         ("the archived chat", parent_id),
