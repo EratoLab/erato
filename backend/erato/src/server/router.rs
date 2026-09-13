@@ -850,6 +850,42 @@ mod tests {
             .collect()
     }
 
+    /// `SupportsSharedFolders` is position-sensitive: the Mail 1.1 content
+    /// model is `SupportsSharedFolders?, FunctionFile?, ExtensionPoint+`, so
+    /// it has to be the literal first child of the V1_1 `DesktopFormFactor`.
+    /// Anywhere else, Outlook rejects the manifest at upload time — and the
+    /// served manifest is never run through the schema validator in CI.
+    #[test]
+    fn supports_shared_folders_leads_the_v1_1_desktop_form_factor_in_every_cloud_manifest() {
+        for manifest_name in [OFFICE_ADDIN_MANIFEST_FILE_NAME, "manifest-local.xml"] {
+            let template = stock_manifest_template(manifest_name);
+            let v1_1 = template
+                .find("xsi:type=\"VersionOverridesV1_1\"")
+                .unwrap_or_else(|| panic!("{manifest_name} must carry a V1_1 block"));
+            let form_factor = template[v1_1..]
+                .find("<DesktopFormFactor>")
+                .map(|offset| v1_1 + offset + "<DesktopFormFactor>".len())
+                .unwrap_or_else(|| panic!("{manifest_name}: V1_1 block has no DesktopFormFactor"));
+            let first_child = template[form_factor..]
+                .lines()
+                .map(str::trim)
+                .find(|line| !line.is_empty())
+                .unwrap_or_default();
+
+            assert_eq!(
+                first_child, "<SupportsSharedFolders>true</SupportsSharedFolders>",
+                "{manifest_name}: SupportsSharedFolders must be the first child of the V1_1 DesktopFormFactor"
+            );
+        }
+
+        // The on-prem variant is V1_0 only, where the element is a schema error.
+        assert!(
+            !stock_manifest_template(OFFICE_ADDIN_EXCHANGE_SERVER_MANIFEST_FILE_NAME)
+                .contains("SupportsSharedFolders"),
+            "the Exchange Server manifest cannot carry SupportsSharedFolders"
+        );
+    }
+
     #[test]
     fn render_office_addin_manifest_without_launch_events_matches_the_previous_template() {
         for manifest_name in [
