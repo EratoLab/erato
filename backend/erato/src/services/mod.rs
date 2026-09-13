@@ -16,6 +16,7 @@ pub mod langfuse;
 pub mod mcp_manager;
 pub mod mcp_oauth;
 pub mod mcp_session_manager;
+pub mod mcp_tool_approval;
 pub mod mcp_transports;
 pub mod mcp_wait;
 pub mod ms_graph;
