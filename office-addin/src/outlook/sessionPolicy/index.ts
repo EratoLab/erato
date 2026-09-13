@@ -7,10 +7,15 @@ export {
   isAppointmentCompose,
   isMessageRead,
   outlookAnchorFromItem,
+  outlookAnchorFromSelectedConversation,
   resolveSupportedMailboxItem,
   strictAnchorsEqual,
+  summarizeSelectedConversation,
 } from "./outlookAnchor";
-export type { SupportedOutlookItem } from "./outlookAnchor";
+export type {
+  OutlookSelectedConversation,
+  SupportedOutlookItem,
+} from "./outlookAnchor";
 export {
   DEFAULT_OUTLOOK_SESSION,
   DEFAULT_OUTLOOK_SESSION_PREFERENCES,
