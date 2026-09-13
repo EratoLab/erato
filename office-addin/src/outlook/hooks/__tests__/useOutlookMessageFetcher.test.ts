@@ -76,31 +76,21 @@ describe("useOutlookMessageFetcher", () => {
     expect(createEwsOutlookMessageFetcher).not.toHaveBeenCalled();
   });
 
-  it("binds the Graph acquirer to Mail.Read and passes forceRefresh through", async () => {
+  it("hands the Graph fetcher the raw acquirer with no owner for the user's own mailbox", () => {
     const acquireToken = vi.fn().mockResolvedValue("graph-token");
     prime("entra-msal", { graph: { acquireToken }, onPrem: false });
 
     renderHook(() => useOutlookMessageFetcher());
 
-    // No owner binding: an item in the user's own mailbox must stay on `/me`
-    // and must not widen the request to the shared scope.
+    // No owner binding: an item in the user's own mailbox stays on `/me`, and
+    // the factory — not the hook — keeps the request on the narrow scope.
     expect(createGraphOutlookMessageFetcher).toHaveBeenCalledWith(
-      expect.any(Function),
+      acquireToken,
       { owner: null },
     );
-
-    const boundAcquire = vi.mocked(createGraphOutlookMessageFetcher).mock
-      .calls[0][0];
-    await expect(boundAcquire()).resolves.toBe("graph-token");
-    expect(acquireToken).toHaveBeenCalledWith(["Mail.Read"], undefined);
-
-    await boundAcquire({ forceRefresh: true });
-    expect(acquireToken).toHaveBeenCalledWith(["Mail.Read"], {
-      forceRefresh: true,
-    });
   });
 
-  it("retargets Graph at the owner and asks for Mail.Read.Shared for a shared item", async () => {
+  it("binds the Graph fetcher to the owner and hands it the scoped acquirer", () => {
     const acquireToken = vi.fn().mockResolvedValue("graph-token");
     prime("entra-msal", {
       graph: { acquireToken },
@@ -114,15 +104,12 @@ describe("useOutlookMessageFetcher", () => {
     const { result } = renderHook(() => useOutlookMessageFetcher());
 
     expect(result.current.unavailableReason).toBeNull();
+    // The factory derives Mail.Read vs Mail.Read.Shared from the owner, so
+    // the hook passes the raw scoped acquirer through untouched.
     expect(createGraphOutlookMessageFetcher).toHaveBeenCalledWith(
-      expect.any(Function),
+      acquireToken,
       { owner: "shared@erato.test" },
     );
-
-    const boundAcquire = vi.mocked(createGraphOutlookMessageFetcher).mock
-      .calls[0][0];
-    await boundAcquire();
-    expect(acquireToken).toHaveBeenCalledWith(["Mail.Read.Shared"], undefined);
   });
 
   it("returns null + graph-unavailable for a cloud mailbox without the Graph context", () => {

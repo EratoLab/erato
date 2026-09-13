@@ -12,18 +12,6 @@ import {
 import { createSidecarOutlookMessageFetcher } from "../utils/fetchOutlookMessageSidecar";
 
 import type { OutlookMessageFetcher } from "../utils/fetchOutlookMessage";
-import type { AcquireGraphToken } from "../utils/fetchOutlookMessageGraph";
-
-const GRAPH_MAIL_SCOPES = ["Mail.Read"];
-/**
- * Reading a mailbox that isn't the signed-in user's own needs its OWN scope:
- * Entra consent has no hierarchy, so a granted `Mail.Read` does not authorise
- * `/users/{owner}` and Graph answers 403 there. Kept separate from
- * {@link GRAPH_MAIL_SCOPES} rather than merged into it — this is requested
- * only for an item that actually came out of a shared or delegated mailbox,
- * so the common path keeps asking for the narrow scope.
- */
-const GRAPH_SHARED_MAIL_SCOPES = ["Mail.Read.Shared"];
 
 export type OutlookMessageFetcherUnavailableReason =
   /** Mailbox is cloud-served but the Graph token context isn't mounted. */
@@ -76,11 +64,11 @@ export interface UseOutlookMessageFetcherResult {
  *     callback token (acquired per operation from the Office host, no React
  *     context needed).
  *   - cloud mailbox (EXO) with the Graph token context mounted → Graph
- *     fetcher, bound to a silent acquirer (`forceRefresh` passes through for
- *     the fetch layer's 401-retry) and rooted at the store the item lives in:
- *     `Mail.Read` against `/me` for the user's own mailbox, the wider
- *     `Mail.Read.Shared` against `/users/{owner}` for a shared or delegated
- *     one.
+ *     fetcher rooted at the store the item lives in, handed the raw scoped
+ *     acquirer (`forceRefresh` passes through for the fetch layer's
+ *     401-retry). The factory derives the scope from that root — `Mail.Read`
+ *     for `/me`, `Mail.Read.Shared` for `/users/{owner}` — so no caller can
+ *     pair an owner with the narrow scope.
  *   - cloud mailbox without the Graph context → `fetcher: null` +
  *     `graph-unavailable`.
  *
@@ -152,13 +140,8 @@ export function useOutlookMessageFetcher(): UseOutlookMessageFetcherResult {
         unavailableReason: "graph-unavailable",
       };
     }
-    const acquireGraphToken: AcquireGraphToken = (options) =>
-      graph.acquireToken(
-        sharedMailboxRoot ? GRAPH_SHARED_MAIL_SCOPES : GRAPH_MAIL_SCOPES,
-        options,
-      );
     return {
-      fetcher: createGraphOutlookMessageFetcher(acquireGraphToken, {
+      fetcher: createGraphOutlookMessageFetcher(graph.acquireToken, {
         owner: sharedMailboxRoot,
       }),
       mailboxRoot: sharedMailboxRoot,
