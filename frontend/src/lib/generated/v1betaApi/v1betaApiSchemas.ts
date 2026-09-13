@@ -1135,6 +1135,7 @@ export type CreateShareGrantRequest = {
 export type CreateShareGrantResponse = ShareGrant;
 
 export type CreateUserToolApprovalSettingRequest = {
+  decision?: UserToolDecision;
   mcp_server_id: string;
   tool_name: string;
 };
@@ -1618,6 +1619,12 @@ export type LinkFileRequest = {
 };
 
 export type ListMcpServerToolsResponse = {
+  /**
+   * Whether the approval policy honors persistent "always allow" grants;
+   * a settings surface offers that decision only when this is set, the
+   * same way the in-chat approval card does.
+   */
+  allow_always: boolean;
   server_id: string;
   status: McpServerStatusValue;
   /**
@@ -1684,7 +1691,7 @@ export type McpServerToolApproval = "auto" | "ask";
 /**
  * The requesting user's persistent decision for the tool.
  */
-export type McpServerToolUserDecision = "ask" | "always";
+export type McpServerToolUserDecision = "ask" | "always" | "denied";
 
 /**
  * An assistant the user @-mentioned in a message, resolved for display.
@@ -2959,6 +2966,7 @@ export type UserProfile = {
 };
 
 export type UserToolApprovalSetting = {
+  decision: UserToolDecision;
   /**
    * @format uuid
    */
@@ -2970,5 +2978,11 @@ export type UserToolApprovalSetting = {
 export type UserToolApprovalSettingsResponse = {
   settings: UserToolApprovalSetting[];
 };
+
+/**
+ * A user's persistent decision for one MCP tool. Rows exist only while a
+ * decision is active; "ask each time" is the absence of a row.
+ */
+export type UserToolDecision = "always_allow" | "denied";
 
 export type Value = void;
