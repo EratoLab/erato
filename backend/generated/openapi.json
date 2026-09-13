@@ -2125,7 +2125,7 @@
       },
       "post": {
         "tags": [],
-        "summary": "Grant \"always allow\" for a tool from the settings surface. The in-stream\nApproveAlways decision remains the other writer of the same rows; this\nendpoint exists so a grant flipped back to ask-per-use in settings can be\nre-granted without waiting for the next in-chat approval stop.",
+        "summary": "Store a persistent decision for a tool from the settings surface. The\nin-stream ApproveAlways decision remains the other writer of the same rows;\nthis endpoint exists so a grant flipped back to ask-per-use in settings can\nbe re-granted without waiting for the next in-chat approval stop, and so a\ntool can be denied outright. The `allow_always` policy only guards grants:\nit exists to keep the product from becoming more permissive, and a denial\nis strictly more restrictive, so it works in deployments that never enable\napprovals at all.",
         "operationId": "create_user_tool_approval_setting",
         "requestBody": {
           "content": {
@@ -5912,6 +5912,10 @@
           "tool_name"
         ],
         "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/UserToolDecision",
+            "description": "Defaults to `always_allow`, which is what pre-existing clients meant."
+          },
           "mcp_server_id": {
             "type": "string"
           },
@@ -7088,7 +7092,8 @@
         "description": "The requesting user's persistent decision for the tool.",
         "enum": [
           "ask",
-          "always"
+          "always",
+          "denied"
         ]
       },
       "MentionedAssistant": {
@@ -9362,9 +9367,13 @@
         "required": [
           "id",
           "mcp_server_id",
-          "tool_name"
+          "tool_name",
+          "decision"
         ],
         "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/UserToolDecision"
+          },
           "id": {
             "type": "string",
             "format": "uuid"
@@ -9390,6 +9399,14 @@
             }
           }
         }
+      },
+      "UserToolDecision": {
+        "type": "string",
+        "description": "A user's persistent decision for one MCP tool. Rows exist only while a\ndecision is active; \"ask each time\" is the absence of a row.",
+        "enum": [
+          "always_allow",
+          "denied"
+        ]
       },
       "Value": {}
     }
