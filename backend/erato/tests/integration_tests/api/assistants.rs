@@ -279,6 +279,7 @@ async fn test_update_assistant_endpoint(pool: Pool<Postgres>) {
                     disable_facet_prompt_template: false,
                     hidden: false,
                     hidden_always_active_for_platform: None,
+                    delegation: None,
                 },
             ),
             (
@@ -294,6 +295,7 @@ async fn test_update_assistant_endpoint(pool: Pool<Postgres>) {
                     disable_facet_prompt_template: false,
                     hidden: false,
                     hidden_always_active_for_platform: None,
+                    delegation: None,
                 },
             ),
         ]),
@@ -751,6 +753,7 @@ async fn test_create_assistant_endpoint(pool: Pool<Postgres>) {
                 disable_facet_prompt_template: false,
                 hidden: false,
                 hidden_always_active_for_platform: None,
+                delegation: None,
             },
         )]),
         priority_order: vec!["web_search".to_string()],

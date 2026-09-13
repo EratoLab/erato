@@ -26,14 +26,70 @@
   "assistant_hub.reviewers.rules.<rule-name>.rule_type": {},
   "assistants.context_file_contributor_threshold": {},
   "assistants.context_warning_threshold": {},
-  "assistants.delegation.allow_background": {},
-  "assistants.delegation.auto_archive_after_days": {},
-  "assistants.delegation.enabled": {},
-  "assistants.delegation.max_concurrent_background_runs": {},
-  "assistants.delegation.max_mentions_per_message": {},
-  "assistants.delegation.preamble": {},
-  "assistants.delegation.result_max_chars": {},
-  "assistants.delegation.run_timeout_seconds": {},
+  "assistants.delegation.allow_background": {
+    "deprecated": {
+      "note": "Please use `delegation.allow_background` instead.",
+      "replacement_key": "delegation.allow_background",
+      "planned_removal_version": "0.8.0"
+    },
+    "hide_in_docs": true
+  },
+  "assistants.delegation.auto_archive_after_days": {
+    "deprecated": {
+      "note": "Please use `delegation.auto_archive_after_days` instead.",
+      "replacement_key": "delegation.auto_archive_after_days",
+      "planned_removal_version": "0.8.0"
+    },
+    "hide_in_docs": true
+  },
+  "assistants.delegation.enabled": {
+    "deprecated": {
+      "note": "Please use `delegation.assistants.enabled` instead.",
+      "replacement_key": "delegation.assistants.enabled",
+      "planned_removal_version": "0.8.0"
+    },
+    "hide_in_docs": true
+  },
+  "assistants.delegation.max_concurrent_background_runs": {
+    "deprecated": {
+      "note": "Please use `delegation.max_concurrent_background_runs` instead.",
+      "replacement_key": "delegation.max_concurrent_background_runs",
+      "planned_removal_version": "0.8.0"
+    },
+    "hide_in_docs": true
+  },
+  "assistants.delegation.max_mentions_per_message": {
+    "deprecated": {
+      "note": "Please use `delegation.assistants.max_mentions_per_message` instead.",
+      "replacement_key": "delegation.assistants.max_mentions_per_message",
+      "planned_removal_version": "0.8.0"
+    },
+    "hide_in_docs": true
+  },
+  "assistants.delegation.preamble": {
+    "deprecated": {
+      "note": "Please use `delegation.preamble` instead.",
+      "replacement_key": "delegation.preamble",
+      "planned_removal_version": "0.8.0"
+    },
+    "hide_in_docs": true
+  },
+  "assistants.delegation.result_max_chars": {
+    "deprecated": {
+      "note": "Please use `delegation.result_max_chars` instead.",
+      "replacement_key": "delegation.result_max_chars",
+      "planned_removal_version": "0.8.0"
+    },
+    "hide_in_docs": true
+  },
+  "assistants.delegation.run_timeout_seconds": {
+    "deprecated": {
+      "note": "Please use `delegation.run_timeout_seconds` instead.",
+      "replacement_key": "delegation.run_timeout_seconds",
+      "planned_removal_version": "0.8.0"
+    },
+    "hide_in_docs": true
+  },
   "assistants.enable_edit_sharing": {},
   "assistants.enabled": {},
   "assistants.max_files": {},
@@ -286,6 +342,19 @@
   "client_tools.tools.<key>.timeout_ms": {},
   "database_url": {},
   "default_file_storage_provider": {},
+  "delegation.allow_background": {},
+  "delegation.assistants.enabled": {},
+  "delegation.assistants.max_mentions_per_message": {},
+  "delegation.auto_archive_after_days": {},
+  "delegation.max_concurrent_background_runs": {},
+  "delegation.preamble": {},
+  "delegation.result_max_chars": {},
+  "delegation.run_timeout_seconds": {},
+  "delegation.tasks.child_facet_ids.[]": {},
+  "delegation.tasks.enabled": {},
+  "delegation.tasks.max_tasks_per_turn": {},
+  "delegation.tasks.max_tool_calls_per_task": {},
+  "delegation.tasks.persona": {},
   "desktop_sidecar.allowed_origins.[]": {},
   "desktop_sidecar.distribution.directory": {},
   "desktop_sidecar.distribution.enabled": {},
@@ -313,6 +382,10 @@
   "experimental_facets.facets.<facet-id>.additional_system_prompt.prompt": {},
   "experimental_facets.facets.<facet-id>.additional_system_prompt.prompt_name": {},
   "experimental_facets.facets.<facet-id>.additional_system_prompt.source": {},
+  "experimental_facets.facets.<facet-id>.delegation.child_facet_ids.[]": {},
+  "experimental_facets.facets.<facet-id>.delegation.max_tasks_per_turn": {},
+  "experimental_facets.facets.<facet-id>.delegation.max_tool_calls_per_task": {},
+  "experimental_facets.facets.<facet-id>.delegation.persona": {},
   "experimental_facets.facets.<facet-id>.disable_facet_prompt_template": {},
   "experimental_facets.facets.<facet-id>.display_name": {},
   "experimental_facets.facets.<facet-id>.hidden": {},

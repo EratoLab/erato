@@ -361,10 +361,16 @@ chat_provider_ids = ["test-token-limit"]
 # # When not set, no server-side limit is enforced and the frontend defaults to 5000 for UI validation.
 # max_system_prompt_length = 5000
 
-# In-chat delegation to @-mentioned assistants
-# [assistants.delegation]
-# # Whether in-chat delegation is enabled. Requires assistants.enabled (default: false)
-# enabled = false
+# Delegated runs: shared runtime keys plus the two offer routes.
+# Replaces the deprecated [assistants.delegation] table, which is still read
+# (with a warning) until 0.8.0 but may not be combined with [delegation].
+# [delegation]
+# # Maximum wall-clock seconds a delegated child run may take before it is
+# # aborted; awaited runs report a timeout to the origin chat (default: 600)
+# run_timeout_seconds = 600
+# # Maximum number of characters of a delegate's final message returned to the
+# # origin chat; longer results are truncated (default: 16000)
+# result_max_chars = 16000
 # # Whether users may launch delegated runs in background mode, where the
 # # delegation tool returns at launch and the child run's result never flows
 # # back into the origin turn. When off, a background request is downgraded
@@ -374,14 +380,6 @@ chat_provider_ids = ["test-token-limit"]
 # # flight at once; further background launches are refused until a run
 # # finishes. 0 disables the cap (default: 5)
 # max_concurrent_background_runs = 5
-# # Maximum wall-clock seconds a delegated child run may take before it is
-# # aborted; awaited runs report a timeout to the origin chat (default: 600)
-# run_timeout_seconds = 600
-# # Maximum number of assistants that can be mentioned in a single message (default: 3)
-# max_mentions_per_message = 3
-# # Maximum number of characters of a delegate's final message returned to the
-# # origin chat; longer results are truncated (default: 16000)
-# result_max_chars = 16000
 # # Days without activity after which a finished delegated run is archived,
 # # independently of the chat that spawned it. Archived runs are then deleted
 # # after cleanup_archived_max_age_days, so this requires cleanup_enabled.
@@ -401,6 +399,33 @@ chat_provider_ids = ["test-token-limit"]
 #
 # Complete the task within this conversation: do not ask clarifying questions, do not defer work to a later turn, and do not address the end user. Finish with a final message that stands alone as the task result.
 # {{expected_output_section}}{{constraints_section}}"""
+#
+# # In-chat delegation to @-mentioned assistants.
+# [delegation.assistants]
+# # Whether in-chat delegation is enabled. Requires assistants.enabled (default: false)
+# enabled = false
+# # Maximum number of assistants that can be mentioned in a single message (default: 3)
+# max_mentions_per_message = 3
+#
+# # Model-planned delegated tasks, offered to the model as the reserved
+# # erato/delegate_task tool. Enabling this is not enough on its own: a selected
+# # facet's tool_call_allowlist must also select the tool. See the planning
+# # facet example in the experimental_facets section below.
+# [delegation.tasks]
+# # Whether the model may plan and dispatch its own delegated tasks (default: false)
+# enabled = false
+# # Maximum number of tasks one origin turn may dispatch in total. A call beyond
+# # the budget is refused with a tool result; it does not end the turn (default: 5)
+# max_tasks_per_turn = 5
+# # Tool-call budget for a single task run. When unset, inherits
+# # generation.max_tool_calls_per_message.
+# # max_tool_calls_per_task = 15
+# # Whether a task child runs with the origin chat's assistant persona
+# # ("inherit") or on the bare model ("bare") (default: "inherit")
+# persona = "inherit"
+# # Facets composed into every task child. Each id must name a facet configured
+# # under experimental_facets.facets (default: [])
+# child_facet_ids = []
 
 # Starter prompts feature configuration
 # [starter_prompts]
@@ -624,3 +649,22 @@ chat_provider_ids = ["test-token-limit"]
 # # additional_system_prompt = "Please execute one or multiple web searches to answer the user's question."
 # # additional_system_prompt = { source = "langfuse", prompt_name = "facet-web-search", label = "production", fallback = "Please execute one or multiple web searches to answer the user's question." }
 # # additional_system_prompt = { source = "static", prompt = "Please execute one or multiple web searches to answer the user's question." }
+#
+# # A planning facet, selecting the reserved erato/delegate_task tool so the
+# # model may plan its own sub-tasks while this facet is active. Requires
+# # delegation.tasks.enabled.
+# #
+# # CAUTION: always pair a reserved erato/* pattern with a real MCP pattern. An
+# # allowlist naming ONLY erato/* patterns narrows the derived MCP server filter
+# # to nothing, so the parent turn loses every MCP tool while the facet is
+# # selected.
+# [experimental_facets.facets.plan]
+# display_name = "Plan & delegate"
+# icon = "iconoir-task-list"
+# tool_call_allowlist = ["erato/delegate_task", "web-search-mcp/*"]
+#
+# # Per-facet overrides of the [delegation.tasks] runtime keys. Every key is
+# # optional and falls back to the global value.
+# [experimental_facets.facets.plan.delegation]
+# max_tasks_per_turn = 3
+# child_facet_ids = ["web_search"]

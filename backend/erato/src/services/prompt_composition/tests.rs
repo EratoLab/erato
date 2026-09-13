@@ -2686,6 +2686,7 @@ mod test_cases {
             }),
             hidden: true,
             hidden_always_active_for_platform: platform.map(str::to_string),
+            delegation: None,
             ..Default::default()
         };
         let experimental_facets = ExperimentalFacetsConfig {

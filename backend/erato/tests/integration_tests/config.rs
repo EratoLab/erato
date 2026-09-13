@@ -4208,10 +4208,10 @@ model_name = "gpt-4o"
         .try_deserialize()
         .expect("Failed to deserialize config");
 
-    let delegation = &config.assistants.delegation;
-    assert!(!delegation.enabled);
+    let delegation = &config.delegation;
+    assert!(!delegation.assistants.enabled);
     assert_eq!(delegation.run_timeout_seconds, 600);
-    assert_eq!(delegation.max_mentions_per_message, 3);
+    assert_eq!(delegation.assistants.max_mentions_per_message, 3);
     assert_eq!(delegation.result_max_chars, 16000);
     assert_eq!(delegation.auto_archive_after_days, 7);
     assert!(delegation.preamble.contains("delegated"));
@@ -4222,19 +4222,17 @@ model_name = "gpt-4o"
 }
 
 #[test]
-fn test_assistants_delegation_config_can_be_configured() {
-    let mut temp_file = Builder::new()
-        .suffix(".toml")
-        .tempfile()
-        .expect("Failed to create temporary file");
-    temp_file
-        .write_all(
-            br#"
+#[allow(deprecated)]
+fn test_deprecated_assistants_delegation_alias_lifts_all_eight_keys() {
+    let config = build_and_migrate_delegation_config(
+        r#"
 [assistants]
 enabled = true
 
 [assistants.delegation]
 enabled = true
+allow_background = true
+max_concurrent_background_runs = 9
 run_timeout_seconds = 120
 max_mentions_per_message = 5
 result_max_chars = 2000
@@ -4251,37 +4249,64 @@ model_name = "gpt-4o"
 
 [file_storage_providers]
 "#,
-        )
-        .expect("Failed to write configuration");
-    temp_file.flush().expect("Failed to flush temporary file");
-
-    let mut builder = AppConfig::config_schema_builder(
-        Some(vec![temp_file.path().to_string_lossy().into_owned()]),
-        false,
-    )
-    .expect("Failed to create config builder");
-    builder = builder
-        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
-        .unwrap();
-
-    let config: AppConfig = builder
-        .build()
-        .expect("Failed to build config schema")
-        .try_deserialize()
-        .expect("Failed to deserialize config");
-
-    let delegation = &config.assistants.delegation;
-    assert!(delegation.enabled);
-    assert_eq!(delegation.run_timeout_seconds, 120);
-    assert_eq!(delegation.max_mentions_per_message, 5);
-    assert_eq!(delegation.result_max_chars, 2000);
-    assert_eq!(delegation.auto_archive_after_days, 14);
-    assert_eq!(
-        delegation.preamble,
-        "Line one of the delegation directive.\n\nLine two with placeholders.\n{{expected_output_section}}{{constraints_section}}"
     );
 
-    let _ = config.migrate();
+    // All eight legacy leaves land on their replacement keys...
+    assert!(config.delegation.assistants.enabled);
+    assert_eq!(config.delegation.assistants.max_mentions_per_message, 5);
+    assert!(config.delegation.allow_background);
+    assert_eq!(config.delegation.max_concurrent_background_runs, 9);
+    assert_eq!(config.delegation.run_timeout_seconds, 120);
+    assert_eq!(config.delegation.result_max_chars, 2000);
+    assert_eq!(config.delegation.auto_archive_after_days, 14);
+    assert_eq!(
+        config.delegation.preamble,
+        "Line one of the delegation directive.\n\nLine two with placeholders.\n{{expected_output_section}}{{constraints_section}}"
+    );
+    // ...and the alias itself is cleared so nothing reads it downstream.
+    assert!(config.assistants.delegation.is_none());
+}
+
+#[test]
+fn test_delegation_config_can_be_configured_on_the_new_keys() {
+    let config = build_and_migrate_delegation_config(
+        r#"
+[assistants]
+enabled = true
+
+[delegation]
+run_timeout_seconds = 120
+result_max_chars = 2000
+
+[delegation.assistants]
+enabled = true
+max_mentions_per_message = 5
+
+[delegation.tasks]
+enabled = true
+max_tasks_per_turn = 2
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+
+    assert!(config.delegation.assistants.enabled);
+    assert_eq!(config.delegation.assistants.max_mentions_per_message, 5);
+    assert_eq!(config.delegation.run_timeout_seconds, 120);
+    assert_eq!(config.delegation.result_max_chars, 2000);
+    assert!(config.delegation.tasks.enabled);
+    assert_eq!(config.delegation.tasks.max_tasks_per_turn, 2);
+    // The task route carries no coupling to `assistants.enabled`, and an unset
+    // per-task budget inherits the generation cap.
+    assert_eq!(config.delegation.tasks.max_tool_calls_per_task, None);
+    assert_eq!(
+        config.effective_max_tool_calls_per_task(),
+        config.generation.max_tool_calls_per_message
+    );
 }
 
 fn build_and_migrate_delegation_config(delegation_toml: &str) -> AppConfig {
@@ -4329,11 +4354,11 @@ model_name = "gpt-4o"
 "#,
     );
 
-    assert_eq!(config.assistants.delegation.auto_archive_after_days, 0);
+    assert_eq!(config.delegation.auto_archive_after_days, 0);
 }
 
 #[test]
-#[should_panic(expected = "assistants.delegation.enabled requires assistants.enabled")]
+#[should_panic(expected = "delegation.assistants.enabled requires assistants.enabled")]
 fn test_assistants_delegation_enabled_requires_assistants_enabled() {
     build_and_migrate_delegation_config(
         r#"
@@ -4350,7 +4375,7 @@ model_name = "gpt-4o"
 }
 
 #[test]
-#[should_panic(expected = "assistants.delegation.run_timeout_seconds must be greater than 0")]
+#[should_panic(expected = "delegation.run_timeout_seconds must be greater than 0")]
 fn test_assistants_delegation_zero_run_timeout_is_invalid() {
     build_and_migrate_delegation_config(
         r#"
@@ -4370,7 +4395,7 @@ model_name = "gpt-4o"
 }
 
 #[test]
-#[should_panic(expected = "assistants.delegation.max_mentions_per_message must be at least 1")]
+#[should_panic(expected = "delegation.assistants.max_mentions_per_message must be at least 1")]
 fn test_assistants_delegation_zero_mentions_cap_is_invalid() {
     build_and_migrate_delegation_config(
         r#"
@@ -4390,7 +4415,7 @@ model_name = "gpt-4o"
 }
 
 #[test]
-#[should_panic(expected = "assistants.delegation.result_max_chars must be greater than 0")]
+#[should_panic(expected = "delegation.result_max_chars must be greater than 0")]
 fn test_assistants_delegation_zero_result_cap_is_invalid() {
     build_and_migrate_delegation_config(
         r#"
@@ -4410,7 +4435,7 @@ model_name = "gpt-4o"
 }
 
 #[test]
-#[should_panic(expected = "assistants.delegation.preamble cannot be empty")]
+#[should_panic(expected = "delegation.preamble cannot be empty")]
 fn test_assistants_delegation_empty_preamble_is_invalid() {
     build_and_migrate_delegation_config(
         r#"
@@ -4432,15 +4457,12 @@ model_name = "gpt-4o"
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_assistants_delegation_flag_readable_from_app_state(pool: Pool<Postgres>) {
     let mut app_config = hermetic_app_config(None, None);
-    app_config.assistants.delegation.enabled = true;
+    app_config.delegation.assistants.enabled = true;
 
     let app_state = test_app_state(app_config, pool).await;
 
-    assert!(app_state.config.assistants.delegation.enabled);
-    assert_eq!(
-        app_state.config.assistants.delegation.run_timeout_seconds,
-        600
-    );
+    assert!(app_state.config.delegation.assistants.enabled);
+    assert_eq!(app_state.config.delegation.run_timeout_seconds, 600);
 }
 
 #[test]
@@ -4455,7 +4477,7 @@ fn test_delegation_template_block_matches_rust_defaults() {
     ))
     .expect("read erato.template.toml");
     let start = template
-        .find("# [assistants.delegation]")
+        .find("# [delegation]")
         .expect("template contains the delegation block");
     let end = template[start..]
         .find("\n\n")
@@ -4511,8 +4533,8 @@ model_name = "gpt-4o"
         .expect("Failed to deserialize config");
 
     assert_eq!(
-        config.assistants.delegation,
-        erato_config::config::AssistantsDelegationConfig::default(),
+        config.delegation,
+        erato_config::config::DelegationConfig::default(),
         "erato.template.toml's delegation block drifted from the Rust defaults"
     );
 }
@@ -4536,6 +4558,251 @@ model_name = "gpt-4o"
 
 [file_storage_providers]
 "#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "is reserved")]
+fn test_client_tool_named_delegate_task_is_rejected() {
+    build_and_migrate_delegation_config(
+        r#"
+[assistants]
+enabled = true
+
+[client_tools.tools.bad]
+name = "delegate_task"
+description = "reserved-name probe"
+parameters = "{\"type\":\"object\",\"properties\":{}}"
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "is reserved")]
+fn test_client_tool_named_collect_tasks_is_rejected() {
+    build_and_migrate_delegation_config(
+        r#"
+[assistants]
+enabled = true
+
+[client_tools.tools.bad]
+name = "collect_tasks"
+description = "reserved-name probe"
+parameters = "{\"type\":\"object\",\"properties\":{}}"
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "reserved namespace `erato`")]
+fn test_client_tool_namespace_erato_is_rejected() {
+    build_and_migrate_delegation_config(
+        r#"
+[assistants]
+enabled = true
+
+[client_tools.tools.bad]
+name = "something_else"
+namespace = "erato"
+description = "reserved-namespace probe"
+parameters = "{\"type\":\"object\",\"properties\":{}}"
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "cannot be combined with `[delegation]`")]
+fn test_alias_combined_with_delegation_table_panics() {
+    build_and_migrate_delegation_config(
+        r#"
+[assistants]
+enabled = true
+
+[assistants.delegation]
+enabled = true
+
+[delegation]
+run_timeout_seconds = 120
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
+
+#[test]
+fn test_tasks_enabled_does_not_require_assistants_enabled() {
+    // The @-mention route is coupled to `assistants.enabled`; the task route
+    // deliberately is not, so a deployment can plan tasks without assistants.
+    let config = build_and_migrate_delegation_config(
+        r#"
+[delegation.tasks]
+enabled = true
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+
+    assert!(config.delegation.tasks.enabled);
+    assert!(!config.assistants.enabled);
+}
+
+#[test]
+#[should_panic(expected = "delegation.tasks.child_facet_ids references unknown facet 'nope'")]
+fn test_child_facet_ids_unknown_facet_panics() {
+    build_and_migrate_delegation_config(
+        r#"
+[delegation.tasks]
+enabled = true
+child_facet_ids = ["nope"]
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "delegation.child_facet_ids references unknown facet 'nope'")]
+fn test_per_facet_child_facet_ids_unknown_facet_panics() {
+    build_and_migrate_delegation_config(
+        r#"
+[experimental_facets.facets.plan]
+display_name = "Plan"
+
+[experimental_facets.facets.plan.delegation]
+child_facet_ids = ["nope"]
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
+
+#[test]
+fn test_facet_delegation_override_parses_dotted_and_inline_forms() {
+    let config = build_and_migrate_delegation_config(
+        r#"
+[experimental_facets.facets.web_search]
+display_name = "Web search"
+
+[experimental_facets.facets.dotted]
+display_name = "Dotted"
+
+[experimental_facets.facets.dotted.delegation]
+max_tasks_per_turn = 3
+child_facet_ids = ["web_search"]
+
+[experimental_facets.facets.inline]
+display_name = "Inline"
+delegation = { max_tool_calls_per_task = 4, persona = "bare" }
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+
+    let dotted = config.experimental_facets.facets["dotted"]
+        .delegation
+        .as_ref()
+        .expect("dotted facet carries a delegation override");
+    assert_eq!(dotted.max_tasks_per_turn, Some(3));
+    assert_eq!(
+        dotted.child_facet_ids.as_deref(),
+        Some(["web_search".to_string()].as_slice())
+    );
+    assert_eq!(dotted.persona, None);
+
+    let inline = config.experimental_facets.facets["inline"]
+        .delegation
+        .as_ref()
+        .expect("inline facet carries a delegation override");
+    assert_eq!(inline.max_tool_calls_per_task, Some(4));
+    assert_eq!(
+        inline.persona,
+        Some(erato_config::config::TaskPersona::Bare)
+    );
+    assert_eq!(inline.max_tasks_per_turn, None);
+
+    // An explicit per-task budget wins over the generation cap.
+    assert_eq!(
+        config.effective_max_tool_calls_per_task(),
+        config.generation.max_tool_calls_per_message
+    );
+}
+
+#[test]
+#[should_panic(expected = "MCP server id `erato` is reserved")]
+fn test_mcp_server_id_erato_is_rejected_at_startup() {
+    build_and_migrate_delegation_config(
+        r#"
+[mcp_servers.erato]
+transport_type = "streamable_http"
+url = "https://example.test/mcp"
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
+
+#[test]
+fn test_mcp_server_id_erato_is_rejected_in_from_toml_sources() {
+    // The admin-panel reload path returns the error instead of panicking, so a
+    // bad runtime override keeps the previous configuration.
+    let sources = vec![ConfigSourceFile {
+        source_filename: "erato.toml".to_string(),
+        contents: r#"
+[mcp_servers.erato]
+transport_type = "streamable_http"
+url = "https://example.test/mcp"
+"#
+        .to_string(),
+    }];
+
+    let err = McpRuntimeConfig::from_toml_sources(&sources)
+        .expect_err("a reserved MCP server id must be rejected");
+    assert!(
+        err.to_string()
+            .contains("MCP server id `erato` is reserved"),
+        "unexpected error: {err}"
     );
 }
 

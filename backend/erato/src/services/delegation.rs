@@ -6,7 +6,7 @@ use crate::services::background_tasks::StreamingEvent;
 use crate::services::delegation_trace::{DelegationTrace, DelegationTraceCollector, TraceChange};
 use crate::state::AppState;
 use axum::http::StatusCode;
-use erato_config::config::AssistantsDelegationConfig;
+use erato_config::config::DelegationConfig;
 use genai::chat::Tool as GenaiTool;
 use genai::chat::ToolName as GenaiToolName;
 use sea_orm::prelude::Uuid;
@@ -223,9 +223,9 @@ pub struct DelegationTarget {
 /// them into delegation targets.
 ///
 /// Rules, all enforced server-side: mentions require
-/// `assistants.delegation.enabled`; ids are deduplicated preserving order;
+/// `delegation.assistants.enabled`; ids are deduplicated preserving order;
 /// the deduplicated count is capped by
-/// `assistants.delegation.max_mentions_per_message`; the chat's own bound
+/// `delegation.assistants.max_mentions_per_message`; the chat's own bound
 /// assistant cannot be mentioned; every id must resolve through the checked
 /// owner-or-viewer assistant lookup, which also rejects archived assistants.
 /// The error message deliberately does not distinguish missing, archived, and
@@ -245,8 +245,8 @@ pub async fn validate_mentioned_assistants(
         return Ok(Vec::new());
     }
 
-    let delegation = &app_state.config.assistants.delegation;
-    if !delegation.enabled {
+    let delegation = &app_state.config.delegation;
+    if !delegation.assistants.enabled {
         return Err((
             StatusCode::BAD_REQUEST,
             "Assistant delegation is not enabled".to_string(),
@@ -265,12 +265,12 @@ pub async fn validate_mentioned_assistants(
 
     let deduped = dedupe_mentions(ids);
 
-    if deduped.len() > delegation.max_mentions_per_message {
+    if deduped.len() > delegation.assistants.max_mentions_per_message {
         return Err((
             StatusCode::BAD_REQUEST,
             format!(
                 "At most {} assistants can be mentioned per message",
-                delegation.max_mentions_per_message
+                delegation.assistants.max_mentions_per_message
             ),
         ));
     }
@@ -344,16 +344,18 @@ pub async fn resolve_persisted_mentions(
 /// Effective run mode for the delegated runs of a turn: an explicit request
 /// value wins over the mode persisted on the replayed user message, and absent
 /// both, the run is awaited. `Background` needs the deployment to opt in via
-/// `assistants.delegation.allow_background`; without it the request is
+/// `delegation.allow_background`; without it the request is
 /// downgraded to `Wait` rather than rejected — the client-side gate is UX,
 /// the server decides.
 pub fn resolve_delegation_run_mode(
     requested: Option<DelegationRunMode>,
     persisted: Option<DelegationRunMode>,
-    config: &AssistantsDelegationConfig,
+    config: &DelegationConfig,
 ) -> DelegationRunMode {
     let mode = requested.or(persisted).unwrap_or_default();
-    if mode == DelegationRunMode::Background && !(config.enabled && config.allow_background) {
+    if mode == DelegationRunMode::Background
+        && !(config.assistants.enabled && config.allow_background)
+    {
         tracing::debug!("Downgrading a background delegation request to wait: gate is off");
         return DelegationRunMode::Wait;
     }
@@ -624,9 +626,8 @@ fn run_delegated_child(
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), eyre::Report>> + Send>> {
     Box::pin(
         async move {
-            let run_timeout = std::time::Duration::from_secs(
-                app_state.config.assistants.delegation.run_timeout_seconds,
-            );
+            let run_timeout =
+                std::time::Duration::from_secs(app_state.config.delegation.run_timeout_seconds);
             crate::server::api::v1beta::message_streaming::with_generation_task_lifecycle(
                 &app_state.background_tasks,
                 &child_task,
@@ -894,8 +895,8 @@ pub(crate) async fn dispatch_delegate_tool_call(
 
     let dispatch_started = std::time::Instant::now();
     let parent_task = parent.map(|parent| parent.task);
-    let config = app_state.config.assistants.delegation.clone();
-    if !config.enabled {
+    let config = app_state.config.delegation.clone();
+    if !config.assistants.enabled {
         return Err("Assistant delegation is not enabled.".to_string());
     }
 
@@ -1210,6 +1211,7 @@ pub(crate) async fn dispatch_delegate_tool_call(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use erato_config::config::DelegationAssistantsConfig;
 
     /// Payloads are built from the tag the offer actually emits, so renaming it
     /// cannot quietly turn the escape attempts below into inert text.
@@ -1539,11 +1541,14 @@ mod tests {
         assert!(!background_description.contains("returns its final answer as the result"));
     }
 
-    fn delegation_config(enabled: bool, allow_background: bool) -> AssistantsDelegationConfig {
-        AssistantsDelegationConfig {
-            enabled,
+    fn delegation_config(enabled: bool, allow_background: bool) -> DelegationConfig {
+        DelegationConfig {
             allow_background,
-            ..AssistantsDelegationConfig::default()
+            assistants: DelegationAssistantsConfig {
+                enabled,
+                ..DelegationAssistantsConfig::default()
+            },
+            ..DelegationConfig::default()
         }
     }
 

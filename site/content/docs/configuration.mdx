@@ -3620,60 +3620,32 @@ Maximum number of files that can be associated with an assistant. The backend en
 max_files = 10
 ```
 
-#### `assistants.delegation.enabled`
+#### Deprecated compatibility
 
-{/* erato_toml_config_key: assistants.delegation.enabled */}
+The `[assistants.delegation]` table was replaced by the top-level [`delegation`](#delegation) section. It is still read until version `0.8.0`: a configuration that only sets `[assistants.delegation]` boots with a deprecation warning and identical runtime behavior. Setting both `[assistants.delegation]` and `[delegation]` is rejected at startup — move the keys rather than duplicating them.
 
-Whether in-chat delegation to @-mentioned assistants is enabled. When enabled, users can mention other assistants in a chat message, and the model can delegate a task to the mentioned assistant as an awaited child chat run. Requires `assistants.enabled`.
+| Deprecated key | Replacement |
+| --- | --- |
+| `assistants.delegation.enabled` | `delegation.assistants.enabled` |
+| `assistants.delegation.max_mentions_per_message` | `delegation.assistants.max_mentions_per_message` |
+| `assistants.delegation.allow_background` | `delegation.allow_background` |
+| `assistants.delegation.max_concurrent_background_runs` | `delegation.max_concurrent_background_runs` |
+| `assistants.delegation.run_timeout_seconds` | `delegation.run_timeout_seconds` |
+| `assistants.delegation.result_max_chars` | `delegation.result_max_chars` |
+| `assistants.delegation.auto_archive_after_days` | `delegation.auto_archive_after_days` |
+| `assistants.delegation.preamble` | `delegation.preamble` |
 
-**Default value:** `false`
+### `delegation`
 
-**Type:** `boolean`
+{/* erato_toml_config_key: delegation */}
 
-**Example:**
+Configuration for delegated runs — child chats that a conversation spawns to do a piece of work. Two offer routes share these settings: [`delegation.assistants`](#delegationassistants) for in-chat delegation to @-mentioned assistants, and [`delegation.tasks`](#delegationtasks) for tasks the model plans itself. Both are disabled by default.
 
-```toml
-[assistants.delegation]
-enabled = true
-```
+This section replaces the deprecated `[assistants.delegation]` table.
 
-#### `assistants.delegation.allow_background`
+#### `delegation.run_timeout_seconds`
 
-{/* erato_toml_config_key: assistants.delegation.allow_background */}
-
-Whether users may launch delegated runs in background mode, where the delegation tool returns at launch and the child run's result never flows back into the origin turn. When disabled, a request asking for background mode is downgraded to a normally awaited run rather than rejected. Requires `assistants.delegation.enabled`.
-
-**Default value:** `false`
-
-**Type:** `boolean`
-
-**Example:**
-
-```toml
-[assistants.delegation]
-allow_background = true
-```
-
-#### `assistants.delegation.max_concurrent_background_runs`
-
-{/* erato_toml_config_key: assistants.delegation.max_concurrent_background_runs */}
-
-Maximum number of a user's delegated background runs that may be in flight at once. A background delegation attempted while the cap is reached is refused as a tool-call error, which the model reports in prose; the turn itself still completes. A single message is also capped at this many background launches. The count is read over live generation leases without locking, so it is a soft bound — concurrent dispatches can briefly overshoot it. Set it to `0` to disable the cap. Only relevant when `assistants.delegation.allow_background` is enabled.
-
-**Default value:** `5`
-
-**Type:** `integer`
-
-**Example:**
-
-```toml
-[assistants.delegation]
-max_concurrent_background_runs = 10
-```
-
-#### `assistants.delegation.run_timeout_seconds`
-
-{/* erato_toml_config_key: assistants.delegation.run_timeout_seconds */}
+{/* erato_toml_config_key: delegation.run_timeout_seconds */}
 
 Maximum wall-clock duration in seconds a delegated child run may take before it is aborted. An awaited run is reported to the origin chat as timed out; a background run just stops, keeping whatever partial answer it produced in its own chat.
 
@@ -3684,32 +3656,15 @@ Maximum wall-clock duration in seconds a delegated child run may take before it 
 **Example:**
 
 ```toml
-[assistants.delegation]
-run_timeout_seconds = 300
+[delegation]
+run_timeout_seconds = 600
 ```
 
-#### `assistants.delegation.max_mentions_per_message`
+#### `delegation.result_max_chars`
 
-{/* erato_toml_config_key: assistants.delegation.max_mentions_per_message */}
+{/* erato_toml_config_key: delegation.result_max_chars */}
 
-Maximum number of assistants that can be mentioned in a single message.
-
-**Default value:** `3`
-
-**Type:** `integer` (at least 1)
-
-**Example:**
-
-```toml
-[assistants.delegation]
-max_mentions_per_message = 5
-```
-
-#### `assistants.delegation.result_max_chars`
-
-{/* erato_toml_config_key: assistants.delegation.result_max_chars */}
-
-Maximum number of characters of a delegate's final message that are returned to the origin chat. Longer results are truncated and marked as such in the tool result envelope.
+Maximum number of characters of a delegate's final message that are returned to the origin chat; longer results are truncated.
 
 **Default value:** `16000`
 
@@ -3718,17 +3673,49 @@ Maximum number of characters of a delegate's final message that are returned to 
 **Example:**
 
 ```toml
-[assistants.delegation]
-result_max_chars = 8000
+[delegation]
+result_max_chars = 16000
 ```
 
-#### `assistants.delegation.auto_archive_after_days`
+#### `delegation.allow_background`
 
-{/* erato_toml_config_key: assistants.delegation.auto_archive_after_days */}
+{/* erato_toml_config_key: delegation.allow_background */}
 
-Number of days without activity after which a finished delegated run is archived, whether or not the chat that spawned it was ever archived. Delegated runs are hidden from the chat listing, so without this they would accumulate indefinitely. Archiving the chat that spawned a run also archives the run right away, unless the run has not finished yet.
+Whether users may launch delegated runs in background mode, where the delegation tool returns at launch and the child run's result never flows back into the origin turn. When disabled, a request asking for background mode is downgraded to a normally awaited run rather than rejected.
 
-Archived chats are deleted after `cleanup_archived_max_age_days`, so this option requires `cleanup_enabled`. Set it to `0` to never archive a delegated run automatically. A run is also left alone once it is pinned, shared through a share link, or written into by the user.
+**Default value:** `false`
+
+**Type:** `boolean`
+
+**Example:**
+
+```toml
+[delegation]
+allow_background = true
+```
+
+#### `delegation.max_concurrent_background_runs`
+
+{/* erato_toml_config_key: delegation.max_concurrent_background_runs */}
+
+Maximum number of one user's delegated background runs that may be in flight at once; further background launches are refused until a run finishes. A single message is also capped at this many background launches. Counted over live generation leases without locking, so concurrent dispatches can briefly overshoot it — the cap exists to stop runaway fan-out, not to be exact. `0` disables the cap.
+
+**Default value:** `5`
+
+**Type:** `integer`
+
+**Example:**
+
+```toml
+[delegation]
+max_concurrent_background_runs = 5
+```
+
+#### `delegation.auto_archive_after_days`
+
+{/* erato_toml_config_key: delegation.auto_archive_after_days */}
+
+Number of days without activity after which a finished delegated run is archived, whether or not the chat that spawned it was ever archived. Archived runs are deleted by the cleanup worker after `cleanup_archived_max_age_days`, so this only has an effect if `cleanup_enabled` is `true`. `0` never archives a run automatically, and neither does a pin, an enabled share link, or a turn the user wrote into the run themselves.
 
 **Default value:** `7`
 
@@ -3737,13 +3724,13 @@ Archived chats are deleted after `cleanup_archived_max_age_days`, so this option
 **Example:**
 
 ```toml
-[assistants.delegation]
-auto_archive_after_days = 14
+[delegation]
+auto_archive_after_days = 7
 ```
 
-#### `assistants.delegation.preamble`
+#### `delegation.preamble`
 
-{/* erato_toml_config_key: assistants.delegation.preamble */}
+{/* erato_toml_config_key: delegation.preamble */}
 
 Directive rendered into the delegated chat's first turn, telling the delegate it runs as a delegated worker and where its final message ends up. The delegate's own system prompt is untouched; the directive is additive. The placeholder `{{result_disposition}}` is replaced with a sentence matching the run's mode — for an awaited run, that the final message is returned to the origin chat as the task result; for a background run, that the origin chat does not receive it and the user reads it in the run itself. The placeholders `{{expected_output_section}}` and `{{constraints_section}}` are replaced with formatted blocks when the origin model supplies the corresponding tool arguments, and with empty strings otherwise. A template that omits a placeholder simply renders without that part.
 
@@ -3754,10 +3741,149 @@ Directive rendered into the delegated chat's first turn, telling the delegate it
 **Example:**
 
 ```toml
-[assistants.delegation]
+[delegation]
 preamble = """
 You act on a delegated task from another conversation. Your final message is returned as the result.
 {{expected_output_section}}{{constraints_section}}"""
+```
+
+### `delegation.assistants`
+
+{/* erato_toml_config_key: delegation.assistants */}
+
+In-chat delegation to @-mentioned assistants.
+
+#### `delegation.assistants.enabled`
+
+{/* erato_toml_config_key: delegation.assistants.enabled */}
+
+Whether in-chat delegation to @-mentioned assistants is enabled. When enabled, users can mention other assistants in a chat message, and the model can delegate a task to the mentioned assistant as an awaited child chat run. Requires `assistants.enabled`.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+**Example:**
+
+```toml
+[delegation.assistants]
+enabled = true
+```
+
+#### `delegation.assistants.max_mentions_per_message`
+
+{/* erato_toml_config_key: delegation.assistants.max_mentions_per_message */}
+
+Maximum number of assistants that can be mentioned in a single message.
+
+**Default value:** `3`
+
+**Type:** `integer` (at least 1)
+
+**Example:**
+
+```toml
+[delegation.assistants]
+max_mentions_per_message = 3
+```
+
+### `delegation.tasks`
+
+{/* erato_toml_config_key: delegation.tasks */}
+
+Model-planned delegated tasks. Where the assistants route is driven by an explicit @-mention from the user, this route lets the model itself decide to split work off into a child run, using the reserved `erato/delegate_task` tool.
+
+Unlike the assistants route, this route has no dependency on `assistants.enabled` — a deployment can offer model-planned tasks without using assistants at all.
+
+Enabling the feature is not sufficient on its own: the tool is only offered when a selected facet's `tool_call_allowlist` also selects it, which keeps the capability scoped to the facets where planning makes sense.
+
+<Callout type="warn">
+  Always pair a reserved `erato/*` pattern with a real MCP pattern on the same facet. An allowlist naming only `erato/*` patterns narrows the derived MCP server filter to nothing, so the parent turn loses every MCP tool while that facet is selected.
+</Callout>
+
+#### `delegation.tasks.enabled`
+
+{/* erato_toml_config_key: delegation.tasks.enabled */}
+
+Whether the model may plan and dispatch its own delegated tasks with the reserved `erato/delegate_task` tool.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+**Example:**
+
+```toml
+[delegation.tasks]
+enabled = true
+```
+
+#### `delegation.tasks.max_tasks_per_turn`
+
+{/* erato_toml_config_key: delegation.tasks.max_tasks_per_turn */}
+
+Maximum number of tasks one origin turn may dispatch in total. A call beyond the budget is refused with a tool result rather than ending the turn, so the model can carry on with what it already has.
+
+**Default value:** `5`
+
+**Type:** `integer` (at least 1)
+
+**Example:**
+
+```toml
+[delegation.tasks]
+max_tasks_per_turn = 5
+```
+
+#### `delegation.tasks.max_tool_calls_per_task`
+
+{/* erato_toml_config_key: delegation.tasks.max_tool_calls_per_task */}
+
+Tool-call budget for a single task run. A task child gets its own budget, independent of the origin turn's. When unset, it inherits `generation.max_tool_calls_per_message`.
+
+**Default value:** unset (inherits `generation.max_tool_calls_per_message`)
+
+**Type:** `integer` (greater than 0)
+
+**Example:**
+
+```toml
+[delegation.tasks]
+max_tool_calls_per_task = 15
+```
+
+#### `delegation.tasks.persona`
+
+{/* erato_toml_config_key: delegation.tasks.persona */}
+
+Whether a task child runs with the origin chat's assistant persona (`"inherit"`) or on the bare model (`"bare"`). With `"inherit"`, a child spawned from a chat bound to an assistant uses that assistant's system prompt and model settings; a chat with no assistant bound runs bare either way.
+
+**Default value:** `"inherit"`
+
+**Type:** `string` (one of `"inherit"`, `"bare"`)
+
+**Example:**
+
+```toml
+[delegation.tasks]
+persona = "inherit"
+```
+
+#### `delegation.tasks.child_facet_ids`
+
+{/* erato_toml_config_key: delegation.tasks.child_facet_ids.[] */}
+
+Facets composed into every task child. Each entry must name a facet configured under `experimental_facets.facets`; an unknown id is rejected at startup. Use this to give task children a capability the origin turn does not need to carry itself, such as web search.
+
+**Default value:** `[]`
+
+**Type:** `list<string>`
+
+**Example:**
+
+```toml
+[delegation.tasks]
+child_facet_ids = ["web_search"]
 ```
 
 ### `assistant_hub`
@@ -4039,6 +4165,30 @@ additional_system_prompt = "You are assisting inside the Outlook add-in. Keep re
 
 - `hidden` - When `true`, the facet is a hidden baseline: never shown in the pool, not user-selectable, and injected as an always-on system prompt. Defaults to `false`.
 - `hidden_always_active_for_platform` - Optional platform identifier (e.g. `"outlook"`) restricting where a hidden facet auto-activates. Omit to apply on all platforms. Only meaningful together with `hidden = true`.
+
+##### Per-facet delegation overrides
+
+{/* erato_toml_config_key: experimental_facets.facets.<facet-id>.delegation.max_tasks_per_turn */}
+{/* erato_toml_config_key: experimental_facets.facets.<facet-id>.delegation.max_tool_calls_per_task */}
+{/* erato_toml_config_key: experimental_facets.facets.<facet-id>.delegation.persona */}
+{/* erato_toml_config_key: experimental_facets.facets.<facet-id>.delegation.child_facet_ids.[] */}
+
+A facet may override the [`delegation.tasks`](#delegationtasks) runtime keys while it is selected, so a dedicated planning facet can budget differently from the deployment default. Every key is optional and falls back to the global value.
+
+```toml
+[experimental_facets.facets.plan]
+display_name = "Plan & delegate"
+tool_call_allowlist = ["erato/delegate_task", "web-search-mcp/*"]
+
+[experimental_facets.facets.plan.delegation]
+max_tasks_per_turn = 3
+child_facet_ids = ["web_search"]
+```
+
+- `max_tasks_per_turn` - Overrides `delegation.tasks.max_tasks_per_turn`.
+- `max_tool_calls_per_task` - Overrides `delegation.tasks.max_tool_calls_per_task`.
+- `persona` - Overrides `delegation.tasks.persona`.
+- `child_facet_ids` - Overrides `delegation.tasks.child_facet_ids`. Each entry must name a configured facet.
 
 #### `experimental_facets.priority_order`
 
