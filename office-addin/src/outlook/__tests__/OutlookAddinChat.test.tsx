@@ -89,7 +89,9 @@ vi.mock("@erato/frontend/library", () => ({
   componentRegistry: {},
   extractTextFromContent: vi.fn(() => ""),
   transformEmailFencesForCopy: (text: string) => text,
+  findCapabilityByExtension: vi.fn(() => null),
   getSupportedFileTypes: vi.fn(() => ({})),
+  hasSupportedOperations: vi.fn(() => false),
   resolveComponentOverride: (override: unknown, fallback: unknown) =>
     override ?? fallback,
   useActiveModelSelection: () => ({

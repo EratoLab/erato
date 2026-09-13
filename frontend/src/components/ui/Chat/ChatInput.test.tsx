@@ -22,7 +22,7 @@ import { UploadTooLargeError } from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
-import { ChatInput } from "./ChatInput";
+import { ChatInput, type ComposerSizeLimit } from "./ChatInput";
 import { useToastStore } from "../Toast/toastStore";
 
 import type { AddMenuSection } from "./ChatInputAddMenu";
@@ -3524,6 +3524,7 @@ describe("ChatInput", () => {
           disabled?: boolean;
           remountKey?: number;
           chatId?: string | null;
+          sizeLimitExceeded?: ComposerSizeLimit | null;
         } = {},
       ) => {
         const { remountKey = 1, chatId = CHAT_ID, ...inputProps } = props;
@@ -3555,6 +3556,7 @@ describe("ChatInput", () => {
           disabled?: boolean;
           remountKey?: number;
           chatId?: string | null;
+          sizeLimitExceeded?: ComposerSizeLimit | null;
         } = {},
       ) => rerender(ui(context, props));
     };
@@ -3910,6 +3912,38 @@ describe("ChatInput", () => {
 
       // The busy gate clears and the queued message drains.
       rerender({ isPendingResponse: false }, { disabled: false });
+      await flushTimers();
+      expect(onSendMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it("holds the auto-send while the owner reports a size limit, then sends when it clears", async () => {
+      const { i18n } = await import("@lingui/core");
+      const onSendMessage = vi.fn();
+      const rerender = renderQueue(
+        { isPendingResponse: true },
+        onSendMessage,
+        i18n,
+      );
+
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: "next message" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      // A staged part grew past the limit while the message waited.
+      rerender(
+        { isPendingResponse: false },
+        {
+          sizeLimitExceeded: {
+            names: ["thread.eml"],
+            formatted: "50 MB",
+            kind: "size",
+          },
+        },
+      );
+      await flushTimers();
+      expect(onSendMessage).not.toHaveBeenCalled();
+
+      rerender({ isPendingResponse: false }, { sizeLimitExceeded: null });
       await flushTimers();
       expect(onSendMessage).toHaveBeenCalledTimes(1);
     });
@@ -5321,6 +5355,127 @@ describe("ChatInput", () => {
       expect(popover()).not.toBeInTheDocument();
       expect(onSendMessage).not.toHaveBeenCalled();
       expect(textarea).toHaveValue("@Researcher please dig in");
+    });
+  });
+
+  describe("owner size gate", () => {
+    const submitHandlerThatSends =
+      (
+        message: string,
+        attachedFiles: FileUploadItem[],
+        innerOnSendMessage: (message: string, inputFileIds?: string[]) => void,
+        isLoading: boolean,
+        disabled: boolean,
+        resetMessage: () => void,
+      ) =>
+      (event: FormEvent) => {
+        event.preventDefault();
+        if (isLoading || disabled) return;
+        const trimmed = message.trim();
+        const fileIds = attachedFiles.map((file) => file.id);
+        if (trimmed || fileIds.length > 0) {
+          innerOnSendMessage(trimmed, fileIds.length > 0 ? fileIds : undefined);
+          resetMessage();
+        }
+      };
+
+    const renderGated = async (
+      onSendMessage: () => void,
+      sizeLimitExceeded: ComposerSizeLimit | null,
+    ) => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      mockUseChatInputHandlers.mockReturnValue({
+        attachedFiles: [],
+        fileError: null,
+        setFileError: vi.fn(),
+        handleFilesUploaded: vi.fn(),
+        handleRemoveFile: vi.fn(),
+        handleRemoveAllFiles: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        createSubmitHandler: submitHandlerThatSends,
+      });
+      const { i18n } = await import("@lingui/core");
+      render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput
+              onSendMessage={onSendMessage}
+              chatId="chat-1"
+              sizeLimitExceeded={sizeLimitExceeded}
+            />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+    };
+
+    it("disables send and names the oversized parts and the limit", async () => {
+      await renderGated(vi.fn(), {
+        names: ["thread.eml", "deck.pdf"],
+        formatted: "50 MB",
+        kind: "size",
+      });
+
+      const textarea = screen.getByPlaceholderText(
+        "Cannot send: thread.eml, deck.pdf exceed the 50 MB limit. Remove them to send.",
+      );
+      fireEvent.change(textarea, { target: { value: "hello" } });
+      expect(textarea).not.toBeDisabled();
+
+      const send = screen.getByTestId("chat-input-send-message");
+      expect(send).toBeDisabled();
+      expect(send).toHaveAccessibleName(
+        "Cannot send: File size limit exceeded",
+      );
+    });
+
+    it("names the file count limit", async () => {
+      await renderGated(vi.fn(), {
+        names: [],
+        formatted: "10",
+        kind: "count",
+      });
+
+      expect(
+        screen.getByPlaceholderText(
+          "Cannot send: a message can carry at most 10 files. Remove some to send.",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("chat-input-send-message"),
+      ).toHaveAccessibleName("Cannot send: File count limit exceeded");
+    });
+
+    it("refuses a submit while the owner reports a limit, and sends once it clears", async () => {
+      const onSendMessage = vi.fn();
+      await renderGated(onSendMessage, {
+        names: ["thread.eml"],
+        formatted: "50 MB",
+        kind: "size",
+      });
+
+      const textarea = screen.getByRole("textbox");
+      fireEvent.change(textarea, { target: { value: "hello" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+      expect(onSendMessage).not.toHaveBeenCalled();
+      expect(textarea).toHaveValue("hello");
+    });
+
+    it("sends normally when the owner reports no limit", async () => {
+      const onSendMessage = vi.fn();
+      await renderGated(onSendMessage, null);
+
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: "hello" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+      expect(onSendMessage).toHaveBeenCalledTimes(1);
+      expect(
+        screen.getByTestId("chat-input-send-message"),
+      ).toHaveAccessibleName("Send message");
     });
   });
 });

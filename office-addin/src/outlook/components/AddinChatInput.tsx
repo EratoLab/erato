@@ -1,18 +1,23 @@
 import {
-  FileTypeUtil,
+  Button,
+  DEFAULT_MAX_FILES_PER_MESSAGE,
   GroupedFileAttachmentsPreview,
   SpinnerIcon,
   UploadTooLargeError,
   UploadUnknownError,
   fetchUploadFile,
+  formatFileSize,
   getIdToken,
   isUploadTooLarge,
   useChatInputControls,
+  useChatInputFeature,
+  useFileCapabilitiesContext,
   useFileUploadStore,
   useUploadFeature,
   validateFileSizes,
   type ChatInputControlsHandle,
   type ChatModel,
+  type ComposerSizeLimit,
   type FileAttachmentGroup,
   type FileAttachmentGroupItem,
   type ActionFacetRequest,
@@ -22,7 +27,15 @@ import {
   type FileUploadItem,
 } from "@erato/frontend/library";
 import { plural, t } from "@lingui/core/macro";
-import { forwardRef, useCallback, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { AddinChatInputCore } from "../../core/AddinChatInputCore";
 import { useOffice } from "../../providers/OfficeProvider";
@@ -51,36 +64,21 @@ import {
   toLocalOffsetIso,
 } from "../utils/outlookScheduleTool";
 import { restoreComposerDraft } from "../utils/restoreComposerDraft";
+import { findStagedSendLimit } from "../utils/stagedSendLimit";
 import { EmailTrimError } from "../utils/trimRawEmlBytes";
+import {
+  isPolicyExcluded,
+  validateStagedPart,
+  type StagedPartValidation,
+} from "../utils/validateStagedPart";
 
 import type { DropPipelineState } from "../hooks/useDropPipeline";
 
-function validateAttachment(
-  filename: string,
-  mimeType: string,
-  size: number,
-  globalMaxBytes: number,
-  globalMaxFormatted: string,
-): { ok: true } | { ok: false; reason: string } {
-  // Apply the backend's global cap first — per-type static caps in
-  // FileTypeUtil are typically more permissive, so the global is what
-  // most uploads will hit. Surfacing the actual server-side cap means
-  // the user sees the same message they'd get on a post-upload 413.
-  if (globalMaxBytes > 0 && size > globalMaxBytes) {
-    return {
-      ok: false,
-      reason: t({
-        id: "officeAddin.chatInput.validation.tooLarge",
-        message: `File exceeds the server limit of ${globalMaxFormatted}`,
-      }),
-    };
-  }
-  const result = FileTypeUtil.validateMetadata({ filename, mimeType });
-  if (!result.valid) {
-    return { ok: false, reason: result.error ?? "Invalid file" };
-  }
-  return { ok: true };
-}
+/** Verdicts keyed like the dismissals: thread message id or drop key, then attachment id. */
+type StagedPartVerdicts = ReadonlyMap<
+  string,
+  ReadonlyMap<string, StagedPartValidation>
+>;
 
 interface AddinChatInputProps {
   onSendMessage: (
@@ -112,18 +110,19 @@ interface AddinChatInputProps {
   onFacetSelectionChange?: (selectedFacetIds: string[]) => void;
   showSuggestedEmailSource?: boolean;
   /**
-   * Called after a send in which dropped emails were actually attached — i.e.
-   * their files uploaded successfully. The owner clears the drop from BOTH the
-   * provider drop-state and the AddinChat-owned dedup set (the two live in
-   * different layers, so neither can release the other alone). Intentionally
-   * NOT called when the email-file upload failed: in that path the message is
-   * sent without the emails, so the chips must stay for a retry.
+   * Called with the dropped emails a send attached, and with a single drop
+   * when the user removes it from its card. The owner clears the drop from
+   * BOTH the provider drop-state and the AddinChat-owned dedup set (the two
+   * live in different layers, so neither can release the other alone). A
+   * failed upload sends nothing, so the chips stay for a retry.
    */
   onEmailSourceDropsSent?: (
     drops: { key: string; messageId: string | null }[],
   ) => void;
   uploadFiles?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
   uploadError?: Error | string | null;
+  /** Overrides the limit check this component derives from its staged parts. */
+  sizeLimitExceeded?: ComposerSizeLimit | null;
   /**
    * `true` while one or more dropped emails are being expanded or
    * deduplicated. Gates the send button and renders a non-blocking inline
@@ -209,6 +208,9 @@ export const AddinChatInput = forwardRef<
     dropPipeline,
     onEmailSourceDropsSent,
     lastSchedulingSignalAt = null,
+    handleFileAttachments: ownerHandleFileAttachments,
+    sizeLimitExceeded: ownerSizeLimitExceeded = null,
+    uploadError: ownerUploadError = null,
     ...chatInputProps
   },
   ref,
@@ -319,11 +321,37 @@ export const AddinChatInput = forwardRef<
     restoreStagedEmailAttachment,
     dismissStagedEmailBody,
     restoreStagedEmailBody,
+    setPolicyExcludedAttachmentIds,
+    isThreadEmlStale,
+    isDropResolutionStale,
+    resolvedDrops,
+    resolvedParts,
+    resolvedTotalBytes,
   } = useOutlookEmailSource();
   const { maxSizeBytes: globalMaxSizeBytes, maxSizeFormatted } =
     useUploadFeature();
-  // The composer's alert renders and clears this store; a local copy would outlive it.
-  const setUploadStoreError = useFileUploadStore((state) => state.setError);
+  const { maxFiles: maxFilesPerMessage } = useChatInputFeature();
+  const { capabilities, isLoading: isLoadingCapabilities } =
+    useFileCapabilitiesContext();
+  // A declined send's error and the drops staged at that moment. The composer
+  // hides the banner on dismiss but only a new Error instance re-shows it, so
+  // each failure mints its own; it clears on the next send attempt and when
+  // one of those drops is removed.
+  const [sendFailure, setSendFailure] = useState<{
+    error: Error;
+    dropKeys: string[];
+  } | null>(null);
+  useEffect(() => {
+    if (!sendFailure) return;
+    const stagedKeys = new Set(stagedEmails.map((staged) => staged.key));
+    if (sendFailure.dropKeys.some((key) => !stagedKeys.has(key))) {
+      setSendFailure(null);
+    }
+  }, [sendFailure, stagedEmails]);
+  // A fresh owner error (a refused drop) outranks the held failure.
+  useEffect(() => {
+    if (ownerUploadError) setSendFailure(null);
+  }, [ownerUploadError]);
   // The composer clears itself on handoff, before this handler can size-check;
   // a declined send has to put the draft back.
   const chatInputControls = useChatInputControls();
@@ -368,8 +396,115 @@ export const AddinChatInput = forwardRef<
           isLoadingAttachments ||
           parentReplyContext !== null ||
           isLoadingParentReplyContext)));
+  // One verdict per rendered attachment row, shared by the rows and the
+  // exclusions handed to the provider so the two can never disagree.
+  const stagedPartVerdicts = useMemo<StagedPartVerdicts>(() => {
+    const limits = {
+      maxBytes: globalMaxSizeBytes,
+      maxFormatted: maxSizeFormatted,
+    };
+    const typePolicy = { capabilities, isLoading: isLoadingCapabilities };
+    const verdicts = new Map<string, Map<string, StagedPartValidation>>();
+    for (const staged of stagedEmails) {
+      if (staged.source === "current-thread") {
+        for (const message of staged.thread.messages) {
+          const perMessage = new Map<string, StagedPartValidation>();
+          for (const attachment of message.attachments) {
+            if (attachment.isInline) continue;
+            perMessage.set(
+              attachment.id,
+              validateStagedPart(attachment, limits, typePolicy),
+            );
+          }
+          verdicts.set(message.id, perMessage);
+        }
+        continue;
+      }
+      const perDrop = new Map<string, StagedPartValidation>();
+      for (const attachment of staged.parsed.attachments) {
+        if (attachment.disposition === "inline" || attachment.related) continue;
+        perDrop.set(
+          attachment.id,
+          validateStagedPart(attachment, limits, typePolicy),
+        );
+      }
+      verdicts.set(staged.key, perDrop);
+    }
+    return verdicts;
+  }, [
+    capabilities,
+    globalMaxSizeBytes,
+    isLoadingCapabilities,
+    maxSizeFormatted,
+    stagedEmails,
+  ]);
+
+  useEffect(() => {
+    for (const [key, perKey] of stagedPartVerdicts) {
+      const excluded: string[] = [];
+      for (const [attachmentId, verdict] of perKey) {
+        if (isPolicyExcluded(verdict)) excluded.push(attachmentId);
+      }
+      setPolicyExcludedAttachmentIds(key, excluded);
+    }
+  }, [setPolicyExcludedAttachmentIds, stagedPartVerdicts]);
+
+  // The composer's own attachments, mirrored here so the limit check can
+  // count them next to the staged emails it will upload alongside.
+  const [composerFiles, setComposerFiles] = useState<FileUploadItem[]>([]);
+  const handleFileAttachments = useCallback(
+    (files: FileUploadItem[]) => {
+      ownerHandleFileAttachments?.(files);
+      // The composer reports from inside a state updater.
+      void Promise.resolve().then(() => setComposerFiles(files));
+    },
+    [ownerHandleFileAttachments],
+  );
+  // The server caps a message at its own per-message count, whatever the
+  // composer was told.
+  const maxFiles = Math.min(
+    chatInputProps.maxFiles ?? DEFAULT_MAX_FILES_PER_MESSAGE,
+    maxFilesPerMessage,
+  );
+  const stagedLimitExceeded = useMemo<ComposerSizeLimit | null>(
+    () =>
+      findStagedSendLimit(
+        // The send only uploads the staged emails on this path.
+        shouldUseSuggestedEmailSource ? resolvedParts : [],
+        composerFiles,
+        {
+          maxBytes: globalMaxSizeBytes,
+          maxFormatted: maxSizeFormatted,
+          maxFiles,
+        },
+      ),
+    [
+      composerFiles,
+      globalMaxSizeBytes,
+      maxFiles,
+      maxSizeFormatted,
+      resolvedParts,
+      shouldUseSuggestedEmailSource,
+    ],
+  );
+  const sizeLimitExceeded = ownerSizeLimitExceeded ?? stagedLimitExceeded;
+
   const emailSourceGroups = useMemo<FileAttachmentGroup[]>(() => {
     const groups: FileAttachmentGroup[] = [];
+    const updatingLabel = t({
+      id: "officeAddin.fileSource.updatingThread",
+      message: "Updating…",
+    });
+    // What the send would upload right now, against the upload limit.
+    const used = formatFileSize(resolvedTotalBytes);
+    const limit = maxSizeFormatted;
+    const usedOfLimitLabel =
+      isThreadEmlStale || isDropResolutionStale
+        ? updatingLabel
+        : t({
+            id: "officeAddin.chatInput.stagedSize",
+            message: `${used} of ${limit}`,
+          });
 
     if (
       showSuggestedEmailSource &&
@@ -492,13 +627,10 @@ export const AddinChatInput = forwardRef<
                 const dismissed = staged.dismissedAttachmentIds.has(
                   attachment.id,
                 );
-                const validation = validateAttachment(
-                  attachment.filename,
-                  attachment.mimeType,
-                  attachment.size,
-                  globalMaxSizeBytes,
-                  maxSizeFormatted,
-                );
+                const validation = stagedPartVerdicts
+                  .get(message.id)
+                  ?.get(attachment.id);
+                const excluded = !!validation && isPolicyExcluded(validation);
                 return {
                   id: attachment.id,
                   file: {
@@ -507,13 +639,21 @@ export const AddinChatInput = forwardRef<
                     size: attachment.size,
                   },
                   selected: !dismissed,
-                  onToggle: () => {
-                    if (dismissed) {
-                      restoreStagedEmailAttachment(message.id, attachment.id);
-                    } else {
-                      dismissStagedEmailAttachment(message.id, attachment.id);
-                    }
-                  },
+                  onToggle: excluded
+                    ? undefined
+                    : () => {
+                        if (dismissed) {
+                          restoreStagedEmailAttachment(
+                            message.id,
+                            attachment.id,
+                          );
+                        } else {
+                          dismissStagedEmailAttachment(
+                            message.id,
+                            attachment.id,
+                          );
+                        }
+                      },
                   validation,
                 };
               });
@@ -547,8 +687,9 @@ export const AddinChatInput = forwardRef<
               id: "officeAddin.chatInput.emailFallback",
               message: "Email",
             }),
-          metaLabel:
-            messageCount === 1 ? t`1 message` : t`${messageCount} messages`,
+          metaLabel: `${
+            messageCount === 1 ? t`1 message` : t`${messageCount} messages`
+          } · ${usedOfLimitLabel}`,
           items,
           collapsible: true,
           defaultCollapsed: true,
@@ -558,6 +699,11 @@ export const AddinChatInput = forwardRef<
 
       // source === "drop" — one .eml dragged onto the chat, flat layout.
       const items: FileAttachmentGroupItem[] = [];
+      // The trimmed file is what gets sent, so its size is the one to show;
+      // a dismissed or failed drop has none and falls back to the original.
+      const resolvedDrop = resolvedDrops.find(
+        (drop) => drop.key === staged.key,
+      );
       items.push({
         kind: "selectableAttachment",
         id: `${staged.key}:body`,
@@ -568,8 +714,9 @@ export const AddinChatInput = forwardRef<
             id: "officeAddin.chatInput.emailBody",
             message: "Email body",
           }),
-          size: staged.parsed.rawEmlFile.size,
+          size: resolvedDrop?.file?.size ?? staged.parsed.rawEmlFile.size,
         },
+        metaLabel: isDropResolutionStale ? updatingLabel : undefined,
         selected: !staged.bodyDismissed,
         onToggle: () => {
           if (staged.bodyDismissed) {
@@ -586,16 +733,25 @@ export const AddinChatInput = forwardRef<
 
       for (const attachment of staged.parsed.attachments) {
         if (attachment.disposition === "inline" || attachment.related) {
+          // Part of the body rather than attached to it: always sent, so the
+          // row is read-only and counts toward the size like any other.
+          items.push({
+            kind: "selectableAttachment",
+            id: `${staged.key}:${attachment.id}`,
+            file: {
+              id: `${staged.key}:${attachment.id}`,
+              filename: attachment.filename,
+              size: attachment.size,
+            },
+            selected: true,
+          });
           continue;
         }
         const isDismissed = staged.dismissedAttachmentIds.has(attachment.id);
-        const validation = validateAttachment(
-          attachment.filename,
-          attachment.mimeType,
-          attachment.size,
-          globalMaxSizeBytes,
-          maxSizeFormatted,
-        );
+        const validation = stagedPartVerdicts
+          .get(staged.key)
+          ?.get(attachment.id);
+        const excluded = !!validation && isPolicyExcluded(validation);
         items.push({
           kind: "selectableAttachment",
           id: `${staged.key}:${attachment.id}`,
@@ -605,13 +761,15 @@ export const AddinChatInput = forwardRef<
             size: attachment.size,
           },
           selected: !isDismissed,
-          onToggle: () => {
-            if (isDismissed) {
-              restoreStagedEmailAttachment(staged.key, attachment.id);
-            } else {
-              dismissStagedEmailAttachment(staged.key, attachment.id);
-            }
-          },
+          onToggle: excluded
+            ? undefined
+            : () => {
+                if (isDismissed) {
+                  restoreStagedEmailAttachment(staged.key, attachment.id);
+                } else {
+                  dismissStagedEmailAttachment(staged.key, attachment.id);
+                }
+              },
           validation,
         });
       }
@@ -699,20 +857,54 @@ export const AddinChatInput = forwardRef<
     emailBodyFile,
     emailThreadLoadError,
     emailSubject,
-    globalMaxSizeBytes,
     hasDroppedStagedEmails,
+    isDropResolutionStale,
     isEmailBodyIncluded,
     isLoadingAttachments,
     isLoadingEmailBody,
     isLoadingParentReplyContext,
+    isThreadEmlStale,
     maxSizeFormatted,
     parentReplyContext,
+    resolvedDrops,
+    resolvedTotalBytes,
     restoreStagedEmailAttachment,
     restoreStagedEmailBody,
     selectedAttachmentItems,
     showSuggestedEmailSource,
     stagedEmails,
+    stagedPartVerdicts,
   ]);
+
+  // A dropped email leaves through the same door a sent one does, so the
+  // owner releases its dedup claim too. The card shows it only when expanded.
+  const emailSourceGroupActions = useMemo(() => {
+    const actions: Partial<Record<string, ReactNode>> = {};
+    for (const staged of stagedEmails) {
+      if (staged.source !== "drop") continue;
+      const drop = {
+        key: staged.key,
+        messageId: staged.parsed.messageId ?? null,
+      };
+      actions[`staged-email:${staged.key}`] = (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="self-start px-0 text-xs"
+          disabled={isUploadingEmail}
+          onClick={() => onEmailSourceDropsSent?.([drop])}
+          data-testid={`addin-staged-email-remove-${staged.key}`}
+        >
+          {t({
+            id: "officeAddin.chatInput.removeDroppedEmail",
+            message: "Remove",
+          })}
+        </Button>
+      );
+    }
+    return actions;
+  }, [isUploadingEmail, onEmailSourceDropsSent, stagedEmails]);
 
   const handleRemoveEmailSourceFile = useCallback(
     (fileId: string) => {
@@ -743,6 +935,7 @@ export const AddinChatInput = forwardRef<
       // actions like create-appointment can auto-prompt) while item-bound
       // executors treat it as a mismatch and fail closed.
       const sendItemIdentity = itemIdentity ?? NO_ITEM_SEND_IDENTITY;
+      setSendFailure(null);
 
       // Appointment fields are re-read from the LIVE item at send time:
       // editing an appointment form fires no ItemChanged, so the provider's
@@ -891,13 +1084,15 @@ export const AddinChatInput = forwardRef<
       }
 
       setIsUploadingEmail(true);
-      // Only this path's own alert is cleared; anything else stays until dismissed.
-      if (useFileUploadStore.getState().error instanceof UploadTooLargeError) {
-        setUploadStoreError(null);
-      }
+      // Every refused send ends the same way: nothing is dispatched, the
+      // draft comes back, and the dedup marker forgets the draft it never sent.
+      const declineSend = (error: Error) => {
+        setSendFailure({ error, dropKeys: sentDrops.map((drop) => drop.key) });
+        lastSentDraftFingerprintRef.current = previousDraftFingerprint;
+        restoreDraft(message, inputFileIds);
+      };
       let resolvedFileIds: string[] = [];
-      let uploadFailed = false;
-      // Outside the try so the 413 branch can name the files.
+      // Outside the try so the catch can name the files.
       let attemptedFileNames: string[] = [];
 
       try {
@@ -923,21 +1118,19 @@ export const AddinChatInput = forwardRef<
           return;
         }
 
-        // Sending anyway would answer from context the model never received.
-        // Chips stay so the user can drop the offender and retry.
+        // The composer gate normally refuses this earlier; it reads the
+        // resolution one deferred pass behind, so the files are checked again.
         const sizeValidation = validateFileSizes(
           filesToUpload,
           globalMaxSizeBytes,
         );
         if (!sizeValidation.valid) {
-          setUploadStoreError(
+          declineSend(
             new UploadTooLargeError(
               maxSizeFormatted,
               sizeValidation.oversizedFiles.map((file) => file.name),
             ),
           );
-          lastSentDraftFingerprintRef.current = previousDraftFingerprint;
-          restoreDraft(message, inputFileIds);
           return;
         }
 
@@ -961,7 +1154,7 @@ export const AddinChatInput = forwardRef<
       } catch (error) {
         if (error instanceof EmailTrimError) {
           // The untrimmed original would ship what the user removed.
-          setUploadStoreError(
+          declineSend(
             new UploadUnknownError(
               t({
                 id: "officeAddin.chatInput.emailTrimFailed",
@@ -969,21 +1162,29 @@ export const AddinChatInput = forwardRef<
               }),
             ),
           );
-          lastSentDraftFingerprintRef.current = previousDraftFingerprint;
-          restoreDraft(message, inputFileIds);
           return;
         }
-        uploadFailed = true;
         if (isUploadTooLarge(error)) {
-          setUploadStoreError(
+          declineSend(
             new UploadTooLargeError(maxSizeFormatted, attemptedFileNames),
           );
-        } else {
-          console.warn(
-            "Failed to upload Outlook email source files, sending without them:",
-            error,
-          );
+          return;
         }
+        console.warn("Failed to upload Outlook email source files:", error);
+        const names = (
+          attemptedFileNames.length > 0
+            ? attemptedFileNames
+            : resolvedParts.map((part) => part.name)
+        ).join(", ");
+        declineSend(
+          new UploadUnknownError(
+            t({
+              id: "officeAddin.chatInput.uploadFailed",
+              message: `Couldn't upload ${names}. The message was not sent.`,
+            }),
+          ),
+        );
+        return;
       } finally {
         setIsUploadingEmail(false);
       }
@@ -1000,12 +1201,7 @@ export const AddinChatInput = forwardRef<
         delegationRunMode,
       );
 
-      // Clear the drops only when their files actually uploaded. On a failed
-      // upload the message was sent WITHOUT them (see catch), so the chips must
-      // remain so the user can retry.
-      if (!uploadFailed) {
-        clearSentDrops();
-      }
+      clearSentDrops();
     },
     [
       calendarFetcher,
@@ -1027,10 +1223,10 @@ export const AddinChatInput = forwardRef<
       maxSizeFormatted,
       onEmailSourceDropsSent,
       replyFromReadAvailable,
+      resolvedParts,
       resolveSelectedFilesForSend,
       restoreDraft,
       scheduleFacetAvailable,
-      setUploadStoreError,
       shouldUseSuggestedEmailSource,
       stagedEmails,
     ],
@@ -1060,6 +1256,7 @@ export const AddinChatInput = forwardRef<
           >
             <GroupedFileAttachmentsPreview
               groups={emailSourceGroups}
+              groupActions={emailSourceGroupActions}
               onRemoveFile={handleRemoveEmailSourceFile}
               disabled={isUploadingEmail}
               showFileTypes={true}
@@ -1151,6 +1348,9 @@ export const AddinChatInput = forwardRef<
         ref={ref}
         chatId={chatId}
         {...chatInputProps}
+        handleFileAttachments={handleFileAttachments}
+        sizeLimitExceeded={sizeLimitExceeded}
+        uploadError={sendFailure?.error ?? ownerUploadError}
         onSendMessage={(
           message,
           inputFileIds,

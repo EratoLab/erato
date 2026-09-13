@@ -433,6 +433,7 @@ export {
   useAudioConversationalFeature,
   useFeatureConfig,
   useAssistantsFeature,
+  useChatInputFeature,
   useChatSharingFeature,
   useMessageFeedbackFeature,
   useTraceFeature,
@@ -491,6 +492,10 @@ export {
 } from "@/utils/adapters/contentPartAdapter";
 export { getSupportedFileTypes } from "@/utils/capabilitiesToFileTypes";
 export {
+  findCapabilityByExtension,
+  hasSupportedOperations,
+} from "@/utils/fileCapabilities";
+export {
   mapMessageToUiMessage,
   type UiChatMessage,
 } from "@/utils/adapters/messageAdapter";
@@ -521,7 +526,12 @@ export type {
   UserProfile,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 export { FileTypeUtil, type FileType } from "@/utils/fileTypes";
-export type { LocalFilePreviewItem } from "@/components/ui/FileUpload/FilePreviewBase";
+export type {
+  FileUploadItemWithSize,
+  LocalFilePreviewItem,
+} from "@/components/ui/FileUpload/FilePreviewBase";
+export { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
+export { formatFileSize } from "@/components/ui/FileUpload/FilePreviewBase";
 export { FileAttachmentsPreview } from "@/components/ui/FileUpload/FileAttachmentsPreview";
 export type { ChatInputAttachmentPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
 export type { FileAttachmentsPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";

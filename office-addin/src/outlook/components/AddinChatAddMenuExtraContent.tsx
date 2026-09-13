@@ -1,6 +1,7 @@
 import {
   PopoverSectionHeader,
   Row,
+  formatFileSize,
   useChatContext,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
@@ -11,22 +12,6 @@ import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 
 import type { ChatAddMenuExtraContentProps } from "@erato/frontend/library";
-
-function formatFileSize(size: number): string {
-  if (!Number.isFinite(size) || size <= 0) {
-    return "0 B";
-  }
-
-  if (size < 1024) {
-    return `${size} B`;
-  }
-
-  if (size < 1024 * 1024) {
-    return `${(size / 1024).toFixed(1)} KB`;
-  }
-
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 /**
  * Outlook add-in contribution to the unified chat "+" menu: the email-content
@@ -50,6 +35,7 @@ export function AddinChatAddMenuExtraContent({
   const {
     emailBodyFile,
     isThreadEmlStale,
+    isDropResolutionStale,
     isLoadingEmailBody,
     emailThreadLoadError,
     isEmailBodyDismissed,
@@ -214,7 +200,7 @@ export function AddinChatAddMenuExtraContent({
               data-testid="addin-add-menu-email-thread"
               trailing={
                 <span className="shrink-0 text-xs text-theme-fg-muted">
-                  {isThreadEmlStale
+                  {isThreadEmlStale || isDropResolutionStale
                     ? t({
                         id: "officeAddin.fileSource.updatingThread",
                         message: "Updating…",
