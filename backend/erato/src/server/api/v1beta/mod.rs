@@ -60,9 +60,11 @@ use crate::server::api::v1beta::assistants::{
     create_assistant, get_assistant, list_assistants, update_assistant,
 };
 use crate::server::api::v1beta::mcp_servers::{
-    CompleteMcpServerOauthResponse, DisconnectMcpServerOauthResponse, ListMcpServersResponse,
-    McpServerStatus, McpServerStatusValue, StartMcpServerOauthResponse, complete_mcp_server_oauth,
-    disconnect_mcp_server_oauth, list_mcp_servers, start_mcp_server_oauth,
+    CompleteMcpServerOauthResponse, DisconnectMcpServerOauthResponse, ListMcpServerToolsResponse,
+    ListMcpServersResponse, McpServerStatus, McpServerStatusValue, McpServerTool,
+    McpServerToolAnnotations, McpServerToolApproval, McpServerToolUserDecision,
+    StartMcpServerOauthResponse, complete_mcp_server_oauth, disconnect_mcp_server_oauth,
+    list_mcp_server_tools, list_mcp_servers, start_mcp_server_oauth,
 };
 use crate::server::api::v1beta::me_profile_middleware::{MeProfile, UserProfile};
 use crate::server::api::v1beta::message_streaming::{
@@ -179,6 +181,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         )
         .route("/models", get(available_models))
         .route("/mcp_servers", get(list_mcp_servers))
+        .route("/mcp_servers/{server_id}/tools", get(list_mcp_server_tools))
         .route(
             "/mcp_servers/{server_id}/oauth/start",
             post(start_mcp_server_oauth),
@@ -413,6 +416,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         prompt_optimizer,
         available_models,
         mcp_servers::list_mcp_servers,
+        mcp_servers::list_mcp_server_tools,
         mcp_servers::start_mcp_server_oauth,
         mcp_servers::complete_mcp_server_oauth,
         mcp_servers::disconnect_mcp_server_oauth,
@@ -504,6 +508,11 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         McpServerStatusValue,
         McpServerStatus,
         ListMcpServersResponse,
+        McpServerToolAnnotations,
+        McpServerToolApproval,
+        McpServerToolUserDecision,
+        McpServerTool,
+        ListMcpServerToolsResponse,
         StartMcpServerOauthResponse,
         CompleteMcpServerOauthResponse,
         DisconnectMcpServerOauthResponse,
