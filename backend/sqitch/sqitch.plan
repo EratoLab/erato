@@ -41,3 +41,4 @@
 0038_add_default_chat_provider_to_user_preferences 2026-08-25T00:00:00Z Codex <codex@openai.com> # Add per-user default chat provider preference
 0039_add_starting_assistant_to_user_preferences 2026-08-31T00:00:00Z bdart <dfiebig@bdart.de> # Add starting assistant to user preferences
 0040_add_assistant_usage_indexes 2026-09-07T00:00:00Z Codex <codex@openai.com> # Index assistant usage aggregation
+0041_notify_policy_fact_changes 2026-09-12T00:00:00Z Codex <codex@openai.com> # Post-commit notifications for authorization fact invalidation

@@ -12,6 +12,7 @@ use crate::models::pagination;
 use crate::policy::prelude::*;
 use crate::query_metrics::named_statement_from_sql_and_values;
 use eyre::{Report, eyre};
+use sea_orm::TransactionTrait;
 use sea_orm::prelude::*;
 use sea_orm::{
     ActiveValue, ColumnTrait, DatabaseConnection, EntityTrait, FromQueryResult, QueryFilter,
@@ -159,7 +160,7 @@ pub async fn get_or_create_chat(
 ) -> Result<(chats::Model, ChatCreationStatus), Report> {
     if let Some(existing_chat_id) = existing_chat_id {
         let existing_chat: Option<chats::Model> =
-            Chats::find_by_id(*existing_chat_id).one(conn).await?;
+            policy.load_chat_model(conn, *existing_chat_id).await?;
         // Return with error if the chat is not found
         let existing_chat = existing_chat.ok_or(eyre!("Chat {existing_chat_id} not found"))?;
         // Authorize the user to access the chat
@@ -182,9 +183,13 @@ pub async fn get_or_create_chat(
             title_by_user_provided: ActiveValue::Set(title_by_user_provided),
             ..Default::default()
         };
+        let observation = policy.observe_facts().await?;
+        let txn = conn.begin().await?;
         let created_chat = chats::Entity::insert(new_chat)
-            .exec_with_returning(conn)
+            .exec_with_returning(&txn)
             .await?;
+        txn.commit().await?;
+        policy.seed_committed_chat(&created_chat, observation).await;
         Ok((created_chat, ChatCreationStatus::Created))
     }
 }
@@ -713,6 +718,7 @@ pub async fn get_recent_chats(
         query_values.push(origin_chat_id.into());
     }
 
+    let observation = policy.observe_facts().await?;
     let chats_with_messages: Vec<ChatWithLatestMessage> =
         ChatWithLatestMessage::find_by_statement(named_statement_from_sql_and_values(
             sea_orm::DatabaseBackend::Postgres,
@@ -789,20 +795,35 @@ pub async fn get_recent_chats(
     )
     .await?;
 
-    // Should already be filtered to the correct user, but make sure to authorize.
-    let mut authorized_chats = Vec::new();
-    for chat_with_msg in chats_with_messages.iter() {
-        if authorize!(
-            policy,
-            subject,
-            &Resource::Chat(chat_with_msg.id.to_string()),
-            Action::Read
-        )
-        .is_ok()
-        {
-            authorized_chats.push(chat_with_msg);
-        }
+    // Fence publication against notifications received since this query started.
+    // Reuse these trusted attributes while their absolute cache lifetime allows.
+    for chat in &chats_with_messages {
+        policy
+            .seed_chat_projection(
+                chat.id,
+                chat.owner_user_id.clone(),
+                chat.archived_at,
+                observation,
+            )
+            .await;
     }
+
+    // Authorize the collection with one batched, coherent fact context.
+    let candidate_ids: Vec<_> = chats_with_messages.iter().map(|chat| chat.id).collect();
+    let allowed_ids: std::collections::HashSet<_> = policy
+        .filter_authorized_ids(
+            subject,
+            crate::policy::types::ResourceKind::Chat,
+            &candidate_ids,
+            Action::Read,
+        )
+        .await?
+        .into_iter()
+        .collect();
+    let authorized_chats: Vec<_> = chats_with_messages
+        .iter()
+        .filter(|chat| allowed_ids.contains(&chat.id))
+        .collect();
 
     // Collect all chat IDs for batch queries
     let authorized_chat_ids: Vec<Uuid> = authorized_chats.iter().map(|c| c.id).collect();
@@ -1007,8 +1028,8 @@ pub async fn get_chat_detail(
         Action::Read
     )?;
 
-    let chat = Chats::find_by_id(*chat_id)
-        .one(conn)
+    let chat = policy
+        .load_chat_model(conn, *chat_id)
         .await?
         .ok_or_else(|| eyre!("Chat with ID {} not found", chat_id))?;
 
@@ -1247,8 +1268,8 @@ pub async fn get_chat_by_message_id(
         .ok_or_else(|| eyre!("Message with ID {} not found", message_id))?;
 
     // Find the chat
-    let chat = Chats::find_by_id(message.chat_id)
-        .one(conn)
+    let chat = policy
+        .load_chat_model(conn, message.chat_id)
         .await?
         .ok_or_else(|| eyre!("Chat with ID {} not found", message.chat_id))?;
 
@@ -1272,8 +1293,8 @@ pub async fn update_chat_summary(
     summary: String,
 ) -> Result<chats::Model, Report> {
     // Find the chat
-    let chat = Chats::find_by_id(*chat_id)
-        .one(conn)
+    let chat = policy
+        .load_chat_model(conn, *chat_id)
         .await?
         .ok_or_else(|| eyre!("Chat with ID {} not found", chat_id))?;
 
@@ -1307,8 +1328,8 @@ pub async fn update_chat_title_by_user_provided(
     title_by_user_provided: Option<String>,
 ) -> Result<chats::Model, Report> {
     // Find the chat
-    let chat = Chats::find_by_id(*chat_id)
-        .one(conn)
+    let chat = policy
+        .load_chat_model(conn, *chat_id)
         .await?
         .ok_or_else(|| eyre!("Chat with ID {} not found", chat_id))?;
 
@@ -1336,8 +1357,8 @@ pub async fn update_chat_is_pinned(
     chat_id: &Uuid,
     is_pinned: bool,
 ) -> Result<chats::Model, Report> {
-    let chat = Chats::find_by_id(*chat_id)
-        .one(conn)
+    let chat = policy
+        .load_chat_model(conn, *chat_id)
         .await?
         .ok_or_else(|| eyre!("Chat with ID {} not found", chat_id))?;
 
@@ -1655,8 +1676,8 @@ pub async fn archive_chat(
     generation_stale_after_secs: u64,
 ) -> Result<chats::Model, Report> {
     // Find the chat
-    let chat = Chats::find_by_id(*chat_id)
-        .one(conn)
+    let chat = policy
+        .load_chat_model(conn, *chat_id)
         .await?
         .ok_or_else(|| eyre!("Chat with ID {} not found", chat_id))?;
 

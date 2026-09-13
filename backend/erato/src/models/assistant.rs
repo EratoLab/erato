@@ -356,19 +356,15 @@ async fn get_assistant_by_id_for_modification(
     allow_archived: bool,
     allow_shared_edit: bool,
 ) -> Result<assistants::Model, Report> {
-    // Build query
-    let mut query = Assistants::find_by_id(assistant_id);
-
-    // Only filter out archived assistants if not allowed
-    if !allow_archived {
-        query = query.filter(assistants::Column::ArchivedAt.is_null());
-    }
-
-    let assistant = query.one(conn).await?.wrap_err(if allow_archived {
-        "Assistant not found"
-    } else {
-        "Assistant not found or archived"
-    })?;
+    let assistant = policy
+        .load_assistant_model(conn, assistant_id)
+        .await?
+        .filter(|assistant| allow_archived || assistant.archived_at.is_none())
+        .wrap_err(if allow_archived {
+            "Assistant not found"
+        } else {
+            "Assistant not found or archived"
+        })?;
 
     if assistant_hub::is_hub_version_assistant(conn, assistant_id).await? {
         return Err(eyre::eyre!(

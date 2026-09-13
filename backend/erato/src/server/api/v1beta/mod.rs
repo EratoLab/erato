@@ -1996,8 +1996,6 @@ pub async fn upload_file(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    app_state.global_policy_engine.invalidate_data().await;
-
     // Return the list of uploaded files
     Ok(Json(FileUploadResponse {
         files: uploaded_files,
@@ -2255,8 +2253,6 @@ async fn link_sharepoint_file_impl(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
     }
-
-    app_state.global_policy_engine.invalidate_data().await;
 
     Ok(Json(FileUploadResponse {
         files: vec![FileUploadItem {
@@ -3430,7 +3426,7 @@ pub async fn create_chat(
     };
 
     // Create a new chat
-    let (chat, chat_status) = get_or_create_chat(
+    let (chat, _) = get_or_create_chat(
         &app_state.db,
         &policy,
         &me_user.to_subject(),
@@ -3441,11 +3437,6 @@ pub async fn create_chat(
     )
     .await
     .map_err(log_internal_server_error)?;
-
-    // Invalidate policy engine if a new chat was created
-    if chat_status == models::chat::ChatCreationStatus::Created {
-        app_state.global_policy_engine.invalidate_data().await;
-    }
 
     Ok(Json(CreateChatResponse {
         chat_id: chat.id.to_string(),
@@ -3933,8 +3924,6 @@ pub async fn archive_chat_endpoint(
         }
     })?;
 
-    app_state.global_policy_engine.invalidate_data().await;
-
     // Check if archived_at is set (it should be)
     let archived_at = updated_chat.archived_at.ok_or_else(|| {
         tracing::error!("Failed to archive chat: archived_at is None after update");
@@ -3971,8 +3960,6 @@ pub async fn archive_all_chats_endpoint(
     let archived_count = archive_all_unarchived_chats_for_owner(&app_state.db, &me_user.id)
         .await
         .map_err(log_internal_server_error)?;
-
-    app_state.global_policy_engine.invalidate_data().await;
 
     Ok(Json(ArchiveAllChatsResponse {
         archived_count: models::pagination::u64_to_i64_count(archived_count),

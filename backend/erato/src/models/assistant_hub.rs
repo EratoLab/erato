@@ -456,7 +456,6 @@ pub async fn submit_version(
     let hub_assistant = get_or_create_hub_assistant(conn, subject, source_assistant_id).await?;
     ensure_unique_version_number(conn, hub_assistant.id, &profile.version_number).await?;
     let cloned = clone_source_assistant(conn, source_assistant_id).await?;
-    policy.invalidate_data().await;
 
     let diff_summary =
         build_submission_diff(conn, config, subject, source_assistant_id, &profile).await?;

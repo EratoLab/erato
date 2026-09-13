@@ -1,4 +1,5 @@
 pub mod engine;
+pub(crate) mod facts;
 pub mod types;
 
 pub mod prelude {

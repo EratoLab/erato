@@ -1,10 +1,6 @@
+use super::facts::{Observation, PolicyFactsLoader, SharedFacts};
 use crate::config::{AppConfig, FacetPermissionRule, McpServerPermissionRule, ModelPermissionRule};
-use crate::db::entity::prelude::*;
-use crate::db::entity::{
-    assistant_file_uploads, assistant_hub_assistant_versions, assistants, chat_file_uploads,
-    file_uploads, share_grants, share_links,
-};
-use crate::db::entity_ext::chats;
+use crate::db::entity::chats;
 use crate::policy::types::{
     Action, Resource, ResourceId, ResourceKind, Subject, SubjectId, SubjectKind,
 };
@@ -12,255 +8,17 @@ use axum::http::StatusCode;
 use eyre::{Report, WrapErr, eyre};
 use regorus::Engine;
 use sea_orm::prelude::Uuid;
-use sea_orm::{DatabaseConnection, EntityTrait, FromQueryResult, QuerySelect};
+use sea_orm::{DatabaseConnection, EntityTrait};
 use serde_json::{Value as JsonValue, json};
-use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
-use std::time::{Duration, Instant};
-use tokio::sync::{Mutex, OwnedSemaphorePermit, RwLock, Semaphore};
-use tracing::instrument;
+#[cfg(test)]
+use std::time::Duration;
+use tokio::sync::{OwnedSemaphorePermit, RwLock, Semaphore};
 
 const BACKEND_POLICY: &str = include_str!("../../../policy/backend/backend.rego");
 // Bound CPU-heavy evaluations across all policy engines, including reloads.
 const MAX_CONCURRENT_POLICY_EVALUATIONS: usize = 4;
 static EVALUATION_SLOTS: OnceLock<Arc<Semaphore>> = OnceLock::new();
-
-const UNKNOWN_RESOURCE_REBUILD_INTERVAL: Duration = Duration::from_secs(10);
-
-/// Database/configuration access used by request-scoped engines when an
-/// authorization miss reveals that the local snapshot does not contain the
-/// requested resource.
-#[derive(Debug, Clone)]
-pub struct PolicyRebuildContext {
-    pub db: DatabaseConnection,
-    pub config: AppConfig,
-    pub last_miss_rebuild: Arc<Mutex<HashMap<(ResourceKind, Action), Instant>>>,
-    pub last_rebuild_time: Arc<RwLock<Option<Instant>>>,
-}
-
-impl PolicyRebuildContext {
-    async fn claim_miss_rebuild(&self, resource_kind: ResourceKind, action: Action) -> bool {
-        let mut last_rebuild = self.last_miss_rebuild.lock().await;
-        let now = Instant::now();
-        let key = (resource_kind, action);
-        if last_rebuild
-            .get(&key)
-            .is_some_and(|instant| now.duration_since(*instant) < UNKNOWN_RESOURCE_REBUILD_INTERVAL)
-        {
-            return false;
-        }
-
-        last_rebuild.insert(key, now);
-        true
-    }
-}
-
-/// Minimal chat attributes required for policy evaluation.
-#[derive(Debug, FromQueryResult)]
-struct ChatPolicyAttributes {
-    id: Uuid,
-    owner_user_id: String,
-    archived_at: Option<sea_orm::prelude::DateTimeWithTimeZone>,
-}
-
-/// Fetch minimal chat data required for policy evaluation.
-/// Only queries the `id` and `owner_user_id` fields.
-async fn fetch_chat_policy_data(db: &DatabaseConnection) -> Result<JsonValue, Report> {
-    let chats: Vec<ChatPolicyAttributes> = chats::Entity::find()
-        .select_only()
-        .column(chats::Column::Id)
-        .column(chats::Column::OwnerUserId)
-        .column(chats::Column::ArchivedAt)
-        .into_model::<ChatPolicyAttributes>()
-        .all(db)
-        .await?;
-
-    let mut chat_attributes = serde_json::Map::new();
-    for chat in chats {
-        let id_str = chat.id.to_string();
-        chat_attributes.insert(
-            id_str.clone(),
-            json!({
-                "id": id_str,
-                "owner_id": chat.owner_user_id,
-                "archived_at": chat.archived_at,
-            }),
-        );
-    }
-
-    Ok(json!(chat_attributes))
-}
-
-/// Minimal assistant attributes required for policy evaluation.
-#[derive(Debug, FromQueryResult)]
-struct AssistantPolicyAttributes {
-    id: Uuid,
-    owner_user_id: Uuid,
-}
-
-/// Fetch minimal assistant data required for policy evaluation.
-/// Only queries the `id` and `owner_user_id` fields.
-async fn fetch_assistant_policy_data(db: &DatabaseConnection) -> Result<JsonValue, Report> {
-    let assistants_list: Vec<AssistantPolicyAttributes> = Assistants::find()
-        .select_only()
-        .column(assistants::Column::Id)
-        .column(assistants::Column::OwnerUserId)
-        .into_model::<AssistantPolicyAttributes>()
-        .all(db)
-        .await?;
-
-    let mut assistant_attributes = serde_json::Map::new();
-    for assistant in assistants_list {
-        let id_str = assistant.id.to_string();
-        assistant_attributes.insert(
-            id_str.clone(),
-            json!({
-                "id": id_str,
-                "owner_id": assistant.owner_user_id.to_string(),
-            }),
-        );
-    }
-
-    Ok(json!(assistant_attributes))
-}
-
-/// Minimal file upload attributes required for policy evaluation.
-#[derive(Debug, FromQueryResult)]
-struct FileUploadPolicyAttributes {
-    id: Uuid,
-    owner_user_id: String,
-}
-
-/// Fetch minimal file upload data required for policy evaluation.
-/// Only queries the `id` and `owner_user_id` fields.
-async fn fetch_file_upload_policy_data(db: &DatabaseConnection) -> Result<JsonValue, Report> {
-    let file_uploads_list: Vec<FileUploadPolicyAttributes> = FileUploads::find()
-        .select_only()
-        .column(file_uploads::Column::Id)
-        .column(file_uploads::Column::OwnerUserId)
-        .into_model::<FileUploadPolicyAttributes>()
-        .all(db)
-        .await?;
-
-    let chat_relations: Vec<(Uuid, Uuid)> = ChatFileUploads::find()
-        .select_only()
-        .column(chat_file_uploads::Column::FileUploadId)
-        .column(chat_file_uploads::Column::ChatId)
-        .into_tuple::<(Uuid, Uuid)>()
-        .all(db)
-        .await?;
-
-    let assistant_relations: Vec<(Uuid, Uuid)> = AssistantFileUploads::find()
-        .select_only()
-        .column(assistant_file_uploads::Column::FileUploadId)
-        .column(assistant_file_uploads::Column::AssistantId)
-        .into_tuple::<(Uuid, Uuid)>()
-        .all(db)
-        .await?;
-
-    let mut linked_chat_ids_by_file: HashMap<Uuid, Vec<String>> = HashMap::new();
-    for (file_upload_id, chat_id) in chat_relations {
-        linked_chat_ids_by_file
-            .entry(file_upload_id)
-            .or_default()
-            .push(chat_id.to_string());
-    }
-
-    let mut linked_assistant_ids_by_file: HashMap<Uuid, Vec<String>> = HashMap::new();
-    for (file_upload_id, assistant_id) in assistant_relations {
-        linked_assistant_ids_by_file
-            .entry(file_upload_id)
-            .or_default()
-            .push(assistant_id.to_string());
-    }
-
-    let mut file_upload_attributes = serde_json::Map::new();
-    for file_upload in file_uploads_list {
-        let id_str = file_upload.id.to_string();
-        let linked_chat_ids = linked_chat_ids_by_file
-            .get(&file_upload.id)
-            .cloned()
-            .unwrap_or_default();
-        let linked_assistant_ids = linked_assistant_ids_by_file
-            .get(&file_upload.id)
-            .cloned()
-            .unwrap_or_default();
-        file_upload_attributes.insert(
-            id_str.clone(),
-            json!({
-                "id": id_str,
-                "owner_id": file_upload.owner_user_id,
-                "linked_chat_ids": linked_chat_ids,
-                "linked_assistant_ids": linked_assistant_ids,
-            }),
-        );
-    }
-
-    Ok(json!(file_upload_attributes))
-}
-
-/// Fetch share grants data for policy evaluation.
-async fn fetch_share_grants_policy_data(db: &DatabaseConnection) -> Result<JsonValue, Report> {
-    let grants: Vec<share_grants::Model> = ShareGrants::find().all(db).await?;
-
-    let grants_array: Vec<JsonValue> = grants
-        .into_iter()
-        .map(|grant| {
-            json!({
-                "id": grant.id.to_string(),
-                "resource_type": grant.resource_type,
-                "resource_id": grant.resource_id,
-                "subject_type": grant.subject_type,
-                "subject_id_type": grant.subject_id_type,
-                "subject_id": grant.subject_id,
-                "role": grant.role,
-            })
-        })
-        .collect();
-
-    Ok(json!(grants_array))
-}
-
-async fn fetch_assistant_hub_versions_policy_data(
-    db: &DatabaseConnection,
-) -> Result<JsonValue, Report> {
-    let versions: Vec<assistant_hub_assistant_versions::Model> =
-        AssistantHubAssistantVersions::find().all(db).await?;
-
-    let versions_array: Vec<JsonValue> = versions
-        .into_iter()
-        .map(|version| {
-            json!({
-                "id": version.id.to_string(),
-                "assistant_hub_assistant_id": version.assistant_hub_assistant_id.to_string(),
-                "assistant_id": version.assistant_id.to_string(),
-                "status": version.status,
-                "is_published": version.is_published,
-                "is_current_published_version": version.is_current_published_version,
-            })
-        })
-        .collect();
-
-    Ok(json!(versions_array))
-}
-
-async fn fetch_share_links_policy_data(db: &DatabaseConnection) -> Result<JsonValue, Report> {
-    let links: Vec<share_links::Model> = ShareLinks::find().all(db).await?;
-
-    let links_array: Vec<JsonValue> = links
-        .into_iter()
-        .map(|link| {
-            json!({
-                "id": link.id.to_string(),
-                "resource_type": link.resource_type,
-                "resource_id": link.resource_id,
-                "enabled": link.enabled,
-            })
-        })
-        .collect();
-
-    Ok(json!(links_array))
-}
 
 fn config_resources_policy_data(resource_ids: impl IntoIterator<Item = String>) -> JsonValue {
     let mut attributes = serde_json::Map::new();
@@ -373,12 +131,9 @@ pub(crate) use authorize;
 #[derive(Debug, Clone)]
 pub struct PolicyEngine {
     engine: Arc<RwLock<Engine>>,
-    data_needs_rebuild: Arc<RwLock<bool>>,
-    /// Serializes rebuilds process-wide (shared by request-scoped clones):
-    /// concurrent stale observers queue here and re-check staleness after
-    /// acquiring, so they coalesce into a single rebuild.
-    rebuild_lock: Arc<Mutex<()>>,
-    rebuild_context: Option<Arc<PolicyRebuildContext>>,
+    loader: Arc<RwLock<Option<PolicyFactsLoader>>>,
+    shared_facts: SharedFacts,
+    templates: moka::future::Cache<String, Arc<RwLock<Engine>>>,
     evaluation_slots: Arc<Semaphore>,
 }
 
@@ -389,152 +144,72 @@ impl Default for PolicyEngine {
 }
 
 impl PolicyEngine {
-    #[allow(unused)]
     pub fn new() -> Self {
-        let mut engine = Engine::new();
-        engine
-            .add_policy("backend".to_string(), BACKEND_POLICY.to_string())
-            .map_err(|err| eyre!(Box::new(err)))
-            .wrap_err("Failed to read backend policy")
-            .unwrap();
         Self {
-            engine: Arc::new(RwLock::new(engine)),
-            data_needs_rebuild: Arc::new(RwLock::new(true)),
-            rebuild_lock: Arc::new(Mutex::new(())),
-            rebuild_context: None,
+            engine: Arc::new(RwLock::new(Engine::new())),
+            loader: Arc::new(RwLock::new(None)),
+            shared_facts: SharedFacts::default(),
+            templates: moka::future::Cache::new(16),
             evaluation_slots: EVALUATION_SLOTS
                 .get_or_init(|| Arc::new(Semaphore::new(MAX_CONCURRENT_POLICY_EVALUATIONS)))
                 .clone(),
         }
     }
 
-    /// Clone the engine for use in a request handler.
-    /// This clone has no request-specific rebuild access. The staleness flag
-    /// remains shared so invalidations made by a request are visible to
-    /// subsequent requests.
-    pub fn clone_for_request(&self) -> Self {
-        Self {
-            engine: self.engine.clone(),
-            data_needs_rebuild: self.data_needs_rebuild.clone(),
-            rebuild_lock: self.rebuild_lock.clone(),
-            rebuild_context: None,
+    /// Prepare once per effective configuration, without any resource queries.
+    pub(crate) async fn for_request(
+        &self,
+        db: &DatabaseConnection,
+        config: &AppConfig,
+    ) -> Result<Self, Report> {
+        let data = configuration_data(config).to_string();
+        let engine = self
+            .templates
+            .try_get_with(data.clone(), async move {
+                tokio::task::spawn_blocking(move || {
+                    prepare_template(&data).map(|engine| Arc::new(RwLock::new(engine)))
+                })
+                .await
+                .map_err(|error| error.to_string())?
+            })
+            .await
+            .map_err(|error| eyre!(error.to_string()))?;
+        Ok(Self {
+            engine,
+            loader: Arc::new(RwLock::new(Some(PolicyFactsLoader::new(
+                db.clone(),
+                self.shared_facts.clone(),
+            )))),
+            shared_facts: self.shared_facts.clone(),
+            templates: self.templates.clone(),
             evaluation_slots: self.evaluation_slots.clone(),
-        }
+        })
     }
 
-    /// Clone the engine for a request that may perform a second-chance rebuild
-    /// after an unknown-resource authorization miss.
-    pub fn clone_for_request_with_context(&self, context: PolicyRebuildContext) -> Self {
-        Self {
-            engine: self.engine.clone(),
-            data_needs_rebuild: self.data_needs_rebuild.clone(),
-            rebuild_lock: self.rebuild_lock.clone(),
-            rebuild_context: Some(Arc::new(context)),
-            evaluation_slots: self.evaluation_slots.clone(),
-        }
-    }
-
+    #[cfg(test)]
     async fn set_data(&self, data: JsonValue) -> Result<(), Report> {
-        let mut guard = self.engine.write().await;
-        guard.clear_data();
-        guard
-            .add_data_json(&data.to_string())
-            .map_err(|e| eyre!(e))?;
-        *self.data_needs_rebuild.write().await = false;
+        let engine = prepare_template(&data.to_string()).map_err(|error| eyre!(error))?;
+        *self.engine.write().await = engine;
         Ok(())
     }
 
-    pub async fn invalidate_data(&self) {
-        *self.data_needs_rebuild.write().await = true;
-        // info!("Invalidated policy data");
-    }
-
-    #[instrument(skip_all)]
-    pub async fn rebuild_data(
-        &self,
-        db: &DatabaseConnection,
-        config: &AppConfig,
-    ) -> Result<(), Report> {
-        let _rebuild_guard =
-            crate::latency::stage("policy.rebuild_lock_wait", self.rebuild_lock.lock()).await;
-        let _hold_timer = crate::latency::StageTimer::new("policy.rebuild_lock_hold");
-        self.rebuild_data_locked(db, config).await
-    }
-
-    #[instrument(skip_all)]
-    async fn rebuild_data_locked(
-        &self,
-        db: &DatabaseConnection,
-        config: &AppConfig,
-    ) -> Result<(), Report> {
-        // Fetch policy data for each resource type
-        let chat_data = fetch_chat_policy_data(db).await?;
-        let assistant_data = fetch_assistant_policy_data(db).await?;
-        let file_upload_data = fetch_file_upload_policy_data(db).await?;
-        let share_grants_data = fetch_share_grants_policy_data(db).await?;
-        let assistant_hub_versions_data = fetch_assistant_hub_versions_policy_data(db).await?;
-        let share_links_data = fetch_share_links_policy_data(db).await?;
-        let chat_provider_data = config_resources_policy_data(
-            if let Some(chat_providers) = config.chat_providers.as_ref() {
-                chat_providers.providers.keys().cloned().collect()
-            } else if config.chat_provider.is_some() {
-                vec!["default".to_string()]
-            } else {
-                Vec::new()
-            },
-        );
-        let mcp_server_data = config_resources_policy_data(config.mcp_servers.keys().cloned());
-        let facet_data =
-            config_resources_policy_data(config.experimental_facets.facets.keys().cloned());
-
-        // Combine all resource attributes
-        let resource_attributes = json!({
-            "chat": chat_data,
-            "assistant": assistant_data,
-            "file_upload": file_upload_data,
-            "chat_provider": chat_provider_data,
-            "mcp_server": mcp_server_data,
-            "facet": facet_data,
-        });
-        let policy_data = json!({
-            "resource_attributes": resource_attributes,
-            "share_grants": share_grants_data,
-            "assistant_hub_versions": assistant_hub_versions_data,
-            "share_links": share_links_data,
-            "config": {
-                "chat_sharing": {
-                    "enabled": config.chat_sharing.enabled,
-                },
-                "assistants": {
-                    "enable_edit_sharing": config.assistants.enable_edit_sharing,
-                },
-            },
-            "config_permissions": build_config_permissions_policy_data(config),
-        });
-
-        self.set_data(policy_data).await?;
-        // info!("Finished policy data rebuild");
-        Ok(())
-    }
-
-    #[instrument(skip_all)]
+    /// Compatibility for non-request callers. Existing request configuration
+    /// must not be replaced by model helpers passing AppConfig::default().
     pub async fn rebuild_data_if_needed(
         &self,
         db: &DatabaseConnection,
         config: &AppConfig,
     ) -> Result<(), Report> {
-        if !*self.data_needs_rebuild.read().await {
-            return Ok(());
+        let mut loader = self.loader.write().await;
+        if loader.is_none() {
+            let request = self.for_request(db, config).await?;
+            *self.engine.write().await = request.engine.read().await.clone();
+            *loader = Some(PolicyFactsLoader::new(
+                db.clone(),
+                self.shared_facts.clone(),
+            ));
         }
-        let _rebuild_guard =
-            crate::latency::stage("policy.rebuild_lock_wait", self.rebuild_lock.lock()).await;
-        let _hold_timer = crate::latency::StageTimer::new("policy.rebuild_lock_hold");
-        // Re-check after acquiring: a rebuild that finished while we waited on
-        // the lock already covers this invalidation.
-        if !*self.data_needs_rebuild.read().await {
-            return Ok(());
-        }
-        self.rebuild_data_locked(db, config).await
+        Ok(())
     }
 
     pub async fn rebuild_data_if_needed_req(
@@ -542,11 +217,127 @@ impl PolicyEngine {
         db: &DatabaseConnection,
         config: &AppConfig,
     ) -> Result<(), StatusCode> {
-        self.rebuild_data_if_needed(db, config).await.map_err(|e| {
-            tracing::error!("Failed to rebuild policy data: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })
+        self.rebuild_data_if_needed(db, config)
+            .await
+            .map_err(|error| {
+                tracing::error!(%error, "Failed to initialize policy configuration");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })
     }
+
+    /// Compatibility for older callers. Committed change notifications
+    /// invalidate only affected in-memory generations.
+    pub async fn invalidate_data(&self) {}
+
+    pub(crate) async fn load_chat_model(
+        &self,
+        db: &DatabaseConnection,
+        id: Uuid,
+    ) -> Result<Option<chats::Model>, Report> {
+        let loader = self.loader.read().await.clone();
+        match loader {
+            Some(loader) => loader.load_chat_model(id).await,
+            None => Ok(chats::Entity::find_by_id(id).one(db).await?),
+        }
+    }
+
+    pub(crate) async fn load_assistant_model(
+        &self,
+        db: &DatabaseConnection,
+        id: Uuid,
+    ) -> Result<Option<crate::db::entity::assistants::Model>, Report> {
+        match self.loader.read().await.clone() {
+            Some(loader) => loader.load_assistant_model(id).await,
+            None => Ok(crate::db::entity::assistants::Entity::find_by_id(id)
+                .one(db)
+                .await?),
+        }
+    }
+
+    pub(crate) async fn load_file_model(
+        &self,
+        db: &DatabaseConnection,
+        id: Uuid,
+    ) -> Result<Option<crate::db::entity::file_uploads::Model>, Report> {
+        match self.loader.read().await.clone() {
+            Some(loader) => loader.load_file_model(id).await,
+            None => Ok(crate::db::entity::file_uploads::Entity::find_by_id(id)
+                .one(db)
+                .await?),
+        }
+    }
+
+    pub(crate) async fn observe_facts(&self) -> Result<Option<Observation>, Report> {
+        match self.loader.read().await.clone() {
+            Some(loader) => Ok(Some(loader.observe().await?)),
+            None => Ok(None),
+        }
+    }
+
+    pub(crate) async fn seed_chat_projection(
+        &self,
+        id: Uuid,
+        owner_user_id: String,
+        archived_at: Option<sea_orm::prelude::DateTimeWithTimeZone>,
+        observation: Option<Observation>,
+    ) {
+        if let (Some(loader), Some(observation)) = (self.loader.read().await.clone(), observation) {
+            loader
+                .seed_chat_projection(id, owner_user_id, archived_at, observation)
+                .await;
+        }
+    }
+
+    pub(crate) async fn seed_committed_chat(
+        &self,
+        chat: &chats::Model,
+        observation: Option<Observation>,
+    ) {
+        if let (Some(loader), Some(observation)) = (self.loader.read().await.clone(), observation) {
+            loader.seed_chat(chat, observation).await;
+        }
+    }
+}
+
+fn prepare_template(data: &str) -> Result<Engine, String> {
+    let mut engine = Engine::new();
+    engine
+        .add_policy("backend".to_string(), BACKEND_POLICY.to_string())
+        .map_err(|error| error.to_string())?;
+    engine
+        .add_data_json(data)
+        .map_err(|error| error.to_string())?;
+    engine
+        .set_input_json("{}")
+        .map_err(|error| error.to_string())?;
+    // Regorus 0.5 prepares on first evaluation; changing only input preserves it.
+    engine
+        .eval_bool_query("data.backend.allow".to_string(), false)
+        .map_err(|error| error.to_string())?;
+    Ok(engine)
+}
+
+fn configuration_data(config: &AppConfig) -> JsonValue {
+    let chat_provider_data =
+        config_resources_policy_data(if let Some(providers) = config.chat_providers.as_ref() {
+            providers.providers.keys().cloned().collect()
+        } else if config.chat_provider.is_some() {
+            vec!["default".to_string()]
+        } else {
+            Vec::new()
+        });
+    json!({
+        "resource_attributes": {
+            "chat_provider": chat_provider_data,
+            "mcp_server": config_resources_policy_data(config.mcp_servers.keys().cloned()),
+            "facet": config_resources_policy_data(config.experimental_facets.facets.keys().cloned()),
+        },
+        "config": {
+            "chat_sharing": { "enabled": config.chat_sharing.enabled },
+            "assistants": { "enable_edit_sharing": config.assistants.enable_edit_sharing },
+        },
+        "config_permissions": build_config_permissions_policy_data(config),
+    })
 }
 
 #[async_trait::async_trait]
@@ -585,11 +376,23 @@ impl PolicyEngine {
         organization_group_ids: &[String],
         groups: &[String],
     ) -> Result<(), Report> {
-        // info!("Authorizing");
-        // First validate the resource_kind-action combination as an assertion
         authorize_general(resource_kind, action);
-
-        let (allowed, resource_exists) = self
+        let loader = self.loader.read().await.clone();
+        let facts = match loader {
+            Some(loader) => {
+                let ids = if matches!(
+                    resource_kind,
+                    ResourceKind::Chat | ResourceKind::Assistant | ResourceKind::FileUpload
+                ) {
+                    vec![Uuid::parse_str(&resource_id.0).wrap_err("Invalid policy resource ID")?]
+                } else {
+                    vec![]
+                };
+                Some(loader.load(resource_kind, &ids, action).await?)
+            }
+            None => None,
+        };
+        let allowed = self
             .evaluate_authorization(
                 subject_kind,
                 subject_id,
@@ -598,49 +401,67 @@ impl PolicyEngine {
                 action,
                 organization_group_ids,
                 groups,
+                facts,
             )
             .await?;
-
         if allowed {
-            return Ok(());
+            Ok(())
+        } else {
+            Err(eyre!("User is not authorized to perform this action"))
         }
+    }
 
-        if !resource_exists
-            && resource_kind.is_snapshot_backed()
-            && let Some(context) = &self.rebuild_context
-            && context.claim_miss_rebuild(resource_kind, action).await
-        {
-            tracing::debug!(
-                ?resource_kind,
-                ?resource_id,
-                ?action,
-                "Authorization missed an unknown resource; rebuilding policy data once"
-            );
-            self.invalidate_data().await;
-            self.rebuild_data_if_needed(&context.db, &context.config)
-                .await
-                .wrap_err(
-                    "Failed to rebuild policy data after unknown-resource authorization miss",
-                )?;
-            *context.last_rebuild_time.write().await = Some(Instant::now());
-
-            let (allowed_after_rebuild, _) = self
-                .evaluate_authorization(
-                    subject_kind,
-                    subject_id,
-                    resource_kind,
-                    resource_id,
-                    action,
-                    organization_group_ids,
-                    groups,
-                )
-                .await?;
-            if allowed_after_rebuild {
-                return Ok(());
+    /// Resolve an entire collection and its relationships in batches in one
+    /// coherent context. Database failures are errors, never partial allows.
+    pub async fn filter_authorized_ids(
+        &self,
+        subject: &Subject,
+        kind: ResourceKind,
+        ids: &[Uuid],
+        action: Action,
+    ) -> Result<Vec<Uuid>, Report> {
+        authorize_general(kind, action);
+        let facts = match self.loader.read().await.clone() {
+            Some(loader) => Some(loader.load(kind, ids, action).await?),
+            None => None,
+        };
+        let (subject_kind, subject_id) = subject.clone().into_parts();
+        let mut input = json!({
+            "subject_kind": subject_kind, "subject_id": subject_id,
+            "resource_kind": kind, "action": action,
+            "organization_group_ids": subject.organization_group_ids(), "groups": [],
+        });
+        if let Some(facts) = facts {
+            input["facts"] = facts;
+        }
+        let ids = ids.to_vec();
+        let permit = self
+            .evaluation_slots
+            .clone()
+            .acquire_owned()
+            .await
+            .wrap_err("Policy evaluation queue closed")?;
+        evaluate_policy_snapshot(&self.engine, permit, move |mut engine| {
+            let mut input =
+                regorus::Value::from_json_str(&input.to_string()).map_err(|error| eyre!(error))?;
+            let mut allowed = Vec::new();
+            for id in ids {
+                input.as_object_mut().map_err(|error| eyre!(error))?.insert(
+                    regorus::Value::from("resource_id"),
+                    regorus::Value::from(id.to_string()),
+                );
+                // Regorus values share their nested facts across input clones.
+                engine.set_input(input.clone());
+                if engine
+                    .eval_bool_query("data.backend.allow".to_string(), false)
+                    .map_err(|error| eyre!(error))?
+                {
+                    allowed.push(id);
+                }
             }
-        }
-
-        Err(eyre!("User is not authorized to perform this action"))
+            Ok(allowed)
+        })
+        .await
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -653,62 +474,31 @@ impl PolicyEngine {
         action: Action,
         organization_group_ids: &[String],
         groups: &[String],
-    ) -> Result<(bool, bool), Report> {
-        // Wait before checking freshness or cloning; queued callers must not
-        // retain a policy read lock or an unnecessarily old snapshot.
+        facts: Option<JsonValue>,
+    ) -> Result<bool, Report> {
+        // Fact loading is complete before occupying CPU evaluation capacity.
         let permit = crate::latency::stage(
             "policy.evaluation_queue_wait",
             self.evaluation_slots.clone().acquire_owned(),
         )
         .await
         .wrap_err("Policy evaluation queue closed")?;
-
-        if *self.data_needs_rebuild.read().await {
-            if let Some(context) = &self.rebuild_context {
-                self.rebuild_data_if_needed(&context.db, &context.config)
-                    .await
-                    .wrap_err("Failed to rebuild stale policy data before authorization")?;
-            } else {
-                return Err(eyre!(
-                    "Policy data is stale and needs to be rebuilt before authorization"
-                ));
-            }
+        let mut input = json!({
+            "subject_kind": subject_kind, "subject_id": subject_id,
+            "resource_kind": resource_kind, "resource_id": resource_id, "action": action,
+            "organization_group_ids": organization_group_ids, "groups": groups,
+        });
+        if let Some(facts) = facts {
+            input["facts"] = facts;
         }
-
-        let subject_id = subject_id.clone();
-        let resource_id = resource_id.clone();
-        let organization_group_ids = organization_group_ids.to_vec();
-        let groups = groups.to_vec();
         evaluate_policy_snapshot(&self.engine, permit, move |mut engine| {
             let _evaluation_timer = crate::latency::StageTimer::new("policy.evaluate");
-            let evaluation_span = crate::latency::sync_span("policy.evaluate");
-            let _evaluation_span = evaluation_span.enter();
-
-            let input = json!({
-                "subject_kind": subject_kind,
-                "subject_id": subject_id,
-                "resource_kind": resource_kind,
-                "resource_id": resource_id,
-                "action": action,
-                "organization_group_ids": organization_group_ids,
-                "groups": groups,
-            });
-
             engine
-                .set_input_json(&serde_json::to_string(&input)?)
-                .map_err(|e| eyre!(e))?;
-
-            let allowed = crate::latency::sync_span("policy.query.allow")
-                .in_scope(|| engine.eval_bool_query("data.backend.allow".to_string(), false))
-                .map_err(|e| eyre!(e))?;
-            let resource_exists = resource_kind.is_snapshot_backed()
-                && crate::latency::sync_span("policy.query.resource_exists")
-                    .in_scope(|| {
-                        engine.eval_bool_query("data.backend.resource_exists".to_string(), false)
-                    })
-                    .map_err(|e| eyre!(e))?;
-
-            Ok((allowed, resource_exists))
+                .set_input_json(&input.to_string())
+                .map_err(|error| eyre!(error))?;
+            engine
+                .eval_bool_query("data.backend.allow".to_string(), false)
+                .map_err(|error| eyre!(error))
         })
         .await
     }
@@ -837,20 +627,6 @@ async fn evaluate_policy_snapshot<T: Send + 'static>(
     })
     .await
     .wrap_err("Policy evaluation blocking task failed")?
-}
-
-impl ResourceKind {
-    const fn is_snapshot_backed(self) -> bool {
-        matches!(
-            self,
-            Self::Chat
-                | Self::Assistant
-                | Self::FileUpload
-                | Self::ChatProvider
-                | Self::McpServer
-                | Self::Facet
-        )
-    }
 }
 
 // impl Authorize for PolicyEngine {}

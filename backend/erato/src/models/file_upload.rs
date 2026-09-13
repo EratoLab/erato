@@ -399,15 +399,14 @@ pub async fn get_file_upload_by_id(
     subject: &Subject,
     file_upload_id: &Uuid,
 ) -> Result<file_uploads::Model, Report> {
-    // Find the file upload
-    let file_upload = FileUploads::find_by_id(*file_upload_id)
-        .one(conn)
-        .await?
-        .wrap_err("File upload not found")?;
-
     policy
         .rebuild_data_if_needed(conn, &crate::config::AppConfig::default())
         .await?;
+
+    let file_upload = policy
+        .load_file_model(conn, *file_upload_id)
+        .await?
+        .wrap_err("File upload not found")?;
 
     authorize!(
         policy,

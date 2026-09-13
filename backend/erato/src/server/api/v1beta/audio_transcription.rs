@@ -662,7 +662,6 @@ async fn handle_control_frame(
                 Some(metadata.clone()),
             )
             .await?;
-            app_state.global_policy_engine.invalidate_data().await;
 
             let chunk_duration_ms = chunk_duration_ms.unwrap_or_else(|| {
                 app_state.config.audio_transcription.chunk_duration_seconds * 1000

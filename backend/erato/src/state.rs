@@ -2,8 +2,8 @@ use crate::actors::manager::ActorManager;
 use crate::config::{AppConfig, ChatProviderConfig, PromptSourceSpecification, SummaryConfig};
 use crate::distribution::Distribution;
 use crate::distribution::runtime::{McpAppState, ReloadableAppState};
-use crate::policy::engine::{PolicyEngine, PolicyRebuildContext};
-use crate::policy::types::{Action, ResourceKind, Subject};
+use crate::policy::engine::PolicyEngine;
+use crate::policy::types::Subject;
 use crate::query_metrics::install_postgres_query_metrics;
 use crate::services::background_tasks::BackgroundTaskManager;
 use crate::services::file_storage::{FileStorage, SHAREPOINT_PROVIDER_ID};
@@ -34,21 +34,19 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
-use tokio::sync::{Mutex, RwLock, Semaphore};
+use std::time::Duration;
+use tokio::sync::{RwLock, Semaphore};
 use tracing::instrument;
 use url::Url;
 
 const ENCRYPTED_VALUE_PREFIX: &str = "enc-v1";
 const DEFAULT_SUMMARY_SYSTEM_PROMPT: &str = "Generate a summary for the topic of the following chat, based on the first message to the chat. The summary should be a short single sentence description like e.g. `Regex Search-and-Replace with Ripgrep` or `Explain a customer support handoff`. Only return that sentence and nothing else.";
 
-/// Wrapper around PolicyEngine that tracks when it was last rebuilt
+/// Shared prepared templates and notification-invalidated authorization fact cache
 /// This is used for the global policy engine instance in AppState
 #[derive(Debug, Clone)]
 pub struct GlobalPolicyEngine {
     engine: PolicyEngine,
-    last_rebuild_time: Arc<RwLock<Option<Instant>>>,
-    last_miss_rebuild: Arc<Mutex<HashMap<(ResourceKind, Action), Instant>>>,
 }
 
 impl Default for GlobalPolicyEngine {
@@ -61,53 +59,30 @@ impl GlobalPolicyEngine {
     pub fn new() -> Self {
         Self {
             engine: PolicyEngine::new(),
-            last_rebuild_time: Arc::new(RwLock::new(None)),
-            last_miss_rebuild: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
-    /// Rebuild data if needed based on time threshold or explicit invalidation
+    pub async fn request_engine(
+        &self,
+        db: &DatabaseConnection,
+        config: &AppConfig,
+    ) -> Result<PolicyEngine, Report> {
+        self.engine.for_request(db, config).await
+    }
+
+    /// Create a request context without resource database queries
     /// Returns a request-scoped PolicyEngine clone for use in the request handler
     #[instrument(skip_all)]
     pub async fn get_engine_with_rebuild_check(
         &self,
         db: &DatabaseConnection,
         config: &AppConfig,
-        time_threshold: Duration,
+        _time_threshold: Duration,
     ) -> Result<PolicyEngine, Report> {
-        // The periodic refresh is expressed as an invalidation so it funnels
-        // through the same single-flight rebuild as explicit invalidations.
-        // Claiming the time slot under the write lock keeps concurrent requests
-        // from each scheduling their own refresh.
-        let time_based_refresh_due = {
-            let mut last_rebuild = self.last_rebuild_time.write().await;
-            let due = match *last_rebuild {
-                None => true,
-                Some(instant) => instant.elapsed() > time_threshold,
-            };
-            if due {
-                *last_rebuild = Some(Instant::now());
-            }
-            due
-        };
-        if time_based_refresh_due {
-            tracing::debug!("Policy data due for time-based refresh");
-            self.engine.invalidate_data().await;
-        }
-
-        self.engine.rebuild_data_if_needed(db, config).await?;
-
-        Ok(self
-            .engine
-            .clone_for_request_with_context(PolicyRebuildContext {
-                db: db.clone(),
-                config: config.clone(),
-                last_miss_rebuild: self.last_miss_rebuild.clone(),
-                last_rebuild_time: self.last_rebuild_time.clone(),
-            }))
+        self.request_engine(db, config).await
     }
 
-    /// Rebuild after an invalidation, coalescing with any concurrent rebuild.
+    /// Initialize configuration for non-request callers.
     pub async fn rebuild_data_if_needed(
         &self,
         db: &DatabaseConnection,
@@ -116,7 +91,7 @@ impl GlobalPolicyEngine {
         self.engine.rebuild_data_if_needed(db, config).await
     }
 
-    /// Invalidate the policy data, forcing a rebuild on next access
+    /// Compatibility: committed change notifications handle targeted invalidation.
     pub async fn invalidate_data(&self) {
         self.engine.invalidate_data().await;
     }

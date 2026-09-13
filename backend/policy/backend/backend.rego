@@ -69,6 +69,30 @@ package backend
 #   }
 # ]
 
+# Dynamic facts are supplied only by the trusted backend loader. The fallback
+# retains compatibility with standalone OPA fixtures.
+facts := value if value := input.facts
+
+else := {
+	"resource_attributes": legacy_resource_attributes,
+	"share_grants": legacy_share_grants,
+	"share_links": legacy_share_links,
+	"assistant_hub_versions": legacy_assistant_hub_versions,
+}
+
+legacy_resource_attributes := value if value := data.resource_attributes
+
+else := {}
+legacy_share_grants := value if value := data.share_grants
+
+else := []
+legacy_share_links := value if value := data.share_links
+
+else := []
+legacy_assistant_hub_versions := value if value := data.assistant_hub_versions
+
+else := []
+
 # `input` structure
 # {
 #   "subject_kind": "user",
@@ -79,7 +103,7 @@ package backend
 # }
 
 # Constants
-subject_kind_user = "user"
+subject_kind_user := "user"
 
 not_logged_in := "__not_logged_in__"
 organization_subject_type := "organization"
@@ -99,21 +123,26 @@ resource_kind_share_grant := "share_grant"
 resource_kind_chat_provider := "chat_provider"
 resource_kind_mcp_server := "mcp_server"
 resource_kind_facet := "facet"
+
 # Placeholder; to be removed in the future once we have some implementation variance
 resource_kind_other := "other"
 
 # Actions
 # If allowed, allows the resource to be read.
 action_read := "read"
+
 # If allowed on singleton resources, allows the resource to be created.
 action_create := "create"
+
 # If allowed on a chat, allows a message to be submitted.
 action_submit_message := "submit_message"
+
 # If allowed on a message, allows feedback to be submitted.
 action_submit_feedback := "submit_feedback"
 action_update := "update"
 action_delete := "delete"
 action_share := "share"
+
 # If allowed on a chat, allows reading the chat's shared view: the active
 # thread only, as served by the dedicated share-links messages route. Distinct
 # from `read`, which also exposes non-active-thread messages from
@@ -138,22 +167,21 @@ assistant_share_grant_read_role(grant) if {
 }
 
 has_enabled_share_link(resource_type, resource_id) if {
-	some link in data.share_links
+	some link in facts.share_links
 	link.resource_type == resource_type
 	link.resource_id == resource_id
 	link.enabled
 }
 
 # Default deny all access
-default allow = false
+default allow := false
 
-# True when the requested ID is present in the in-memory resource snapshot.
-# Authorization can still deny an existing resource; callers use this rule to
-# distinguish that case from a replica-local snapshot miss.
-default resource_exists = false
+# True when the requested ID is present in the current resource facts.
+# Existence does not itself grant access.
+default resource_exists := false
 
 resource_exists if {
-	data.resource_attributes[input.resource_kind][input.resource_id].id == input.resource_id
+	facts.resource_attributes[input.resource_kind][input.resource_id].id == input.resource_id
 }
 
 config_permission_rule_applies(rule, resource_id) if {
@@ -188,11 +216,11 @@ allow_config_resource(resource_kind) if {
 }
 
 can_read_assistant(assistant_id) if {
-	data.resource_attributes[resource_kind_assistant][assistant_id].owner_id == input.subject_id
+	facts.resource_attributes[resource_kind_assistant][assistant_id].owner_id == input.subject_id
 }
 
 assistant_hub_version_for_assistant(assistant_id) := version if {
-	some version in data.assistant_hub_versions
+	some version in facts.assistant_hub_versions
 	version.assistant_id == assistant_id
 }
 
@@ -208,7 +236,7 @@ assistant_share_grant_active(assistant_id) if {
 }
 
 can_read_assistant(assistant_id) if {
-	some grant in data.share_grants
+	some grant in facts.share_grants
 	grant.resource_type == "assistant"
 	grant.resource_id == assistant_id
 	grant.subject_type == "user"
@@ -218,13 +246,13 @@ can_read_assistant(assistant_id) if {
 }
 
 can_edit_assistant(assistant_id) if {
-	data.resource_attributes[resource_kind_assistant][assistant_id].owner_id == input.subject_id
+	facts.resource_attributes[resource_kind_assistant][assistant_id].owner_id == input.subject_id
 }
 
 can_edit_assistant(assistant_id) if {
 	assistant_edit_sharing_enabled
 	not assistant_hub_version_for_assistant(assistant_id)
-	some grant in data.share_grants
+	some grant in facts.share_grants
 	grant.resource_type == "assistant"
 	grant.resource_id == assistant_id
 	grant.subject_type == "user"
@@ -235,8 +263,9 @@ can_edit_assistant(assistant_id) if {
 can_edit_assistant(assistant_id) if {
 	assistant_edit_sharing_enabled
 	not assistant_hub_version_for_assistant(assistant_id)
-	some grant in data.share_grants
+	some grant in facts.share_grants
 	grant.resource_type == "assistant"
+	grant.resource_id == assistant_id
 	grant.subject_type == "organization"
 	grant.subject_id_type == organization_subject_id_type
 	grant.subject_id == organization_subject_id
@@ -246,8 +275,9 @@ can_edit_assistant(assistant_id) if {
 can_edit_assistant(assistant_id) if {
 	assistant_edit_sharing_enabled
 	not assistant_hub_version_for_assistant(assistant_id)
-	some grant in data.share_grants
+	some grant in facts.share_grants
 	grant.resource_type == "assistant"
+	grant.resource_id == assistant_id
 	grant.subject_type == "organization_group"
 	grant.role == "editor"
 	some group_id in input.organization_group_ids
@@ -255,7 +285,7 @@ can_edit_assistant(assistant_id) if {
 }
 
 can_read_assistant(assistant_id) if {
-	some grant in data.share_grants
+	some grant in facts.share_grants
 	grant.resource_type == "assistant"
 	grant.resource_id == assistant_id
 	grant.subject_type == organization_subject_type
@@ -268,11 +298,11 @@ can_read_assistant(assistant_id) if {
 can_read_shared_chat(chat_id) if {
 	chat_sharing_enabled
 	has_enabled_share_link(resource_kind_chat, chat_id)
-	data.resource_attributes[resource_kind_chat][chat_id].archived_at == null
+	facts.resource_attributes[resource_kind_chat][chat_id].archived_at == null
 }
 
 can_read_assistant(assistant_id) if {
-	some grant in data.share_grants
+	some grant in facts.share_grants
 	grant.resource_type == "assistant"
 	grant.resource_id == assistant_id
 	grant.subject_type == "organization_group"
@@ -294,7 +324,7 @@ allow if {
 	input.action in [action_read, action_update]
 
 	# Check ownership
-	data.resource_attributes[resource_kind_chat][input.resource_id].owner_id == input.subject_id
+	facts.resource_attributes[resource_kind_chat][input.resource_id].owner_id == input.subject_id
 }
 
 # A user can share chats they own.
@@ -303,7 +333,7 @@ allow if {
 	input.subject_id != not_logged_in
 	input.resource_kind == resource_kind_chat
 	input.action == action_share
-	data.resource_attributes[resource_kind_chat][input.resource_id].owner_id == input.subject_id
+	facts.resource_attributes[resource_kind_chat][input.resource_id].owner_id == input.subject_id
 }
 
 # A logged-in user can read the shared view of a chat when chat sharing is
@@ -327,7 +357,7 @@ allow if {
 	input.action == action_submit_message
 
 	# Check ownership
-	data.resource_attributes[resource_kind_chat][input.resource_id].owner_id == input.subject_id
+	facts.resource_attributes[resource_kind_chat][input.resource_id].owner_id == input.subject_id
 }
 
 # A logged-in user can create a chat.
@@ -371,7 +401,7 @@ allow if {
 	input.action in [action_read, action_share]
 
 	# Check ownership
-	data.resource_attributes[resource_kind_assistant][input.resource_id].owner_id == input.subject_id
+	facts.resource_attributes[resource_kind_assistant][input.resource_id].owner_id == input.subject_id
 }
 
 # An editor share grant allows updating an ordinary assistant when edit sharing
@@ -396,7 +426,7 @@ allow if {
 	input.action == action_read
 
 	# Check ownership
-	data.resource_attributes[resource_kind_file_upload][input.resource_id].owner_id == input.subject_id
+	facts.resource_attributes[resource_kind_file_upload][input.resource_id].owner_id == input.subject_id
 }
 
 # A user can update their own file uploads.
@@ -410,7 +440,7 @@ allow if {
 	input.action == action_update
 
 	# Check ownership
-	data.resource_attributes[resource_kind_file_upload][input.resource_id].owner_id == input.subject_id
+	facts.resource_attributes[resource_kind_file_upload][input.resource_id].owner_id == input.subject_id
 }
 
 # A user can read file uploads if they can access one of the linked chats.
@@ -424,8 +454,8 @@ allow if {
 	input.action == action_read
 
 	# Any linked chat owned by the subject grants access.
-	some chat_id in data.resource_attributes[resource_kind_file_upload][input.resource_id].linked_chat_ids
-	data.resource_attributes[resource_kind_chat][chat_id].owner_id == input.subject_id
+	some chat_id in facts.resource_attributes[resource_kind_file_upload][input.resource_id].linked_chat_ids
+	facts.resource_attributes[resource_kind_chat][chat_id].owner_id == input.subject_id
 }
 
 # A user can read file uploads linked to a chat they can `shared_read`: the
@@ -436,7 +466,7 @@ allow if {
 	input.resource_kind == resource_kind_file_upload
 	input.action == action_read
 
-	some chat_id in data.resource_attributes[resource_kind_file_upload][input.resource_id].linked_chat_ids
+	some chat_id in facts.resource_attributes[resource_kind_file_upload][input.resource_id].linked_chat_ids
 	can_read_shared_chat(chat_id)
 }
 
@@ -451,7 +481,7 @@ allow if {
 	input.action == action_read
 
 	# Any linked assistant that is readable by the subject grants access.
-	some assistant_id in data.resource_attributes[resource_kind_file_upload][input.resource_id].linked_assistant_ids
+	some assistant_id in facts.resource_attributes[resource_kind_file_upload][input.resource_id].linked_assistant_ids
 	can_read_assistant(assistant_id)
 }
 
@@ -466,7 +496,7 @@ allow if {
 	input.action == action_read
 
 	# Check if there's a share grant for this user and resource
-	some grant in data.share_grants
+	some grant in facts.share_grants
 	grant.resource_type == "assistant"
 	grant.resource_id == input.resource_id
 	grant.subject_type == "user"
@@ -484,7 +514,7 @@ allow if {
 	# Check for an organization-wide share grant.
 	input.resource_kind == resource_kind_assistant
 	input.action == action_read
-	some grant in data.share_grants
+	some grant in facts.share_grants
 	grant.resource_type == "assistant"
 	grant.resource_id == input.resource_id
 	grant.subject_type == organization_subject_type
@@ -505,7 +535,7 @@ allow if {
 	input.action == action_read
 
 	# Check if there's a share grant for an organization group
-	some grant in data.share_grants
+	some grant in facts.share_grants
 	grant.resource_type == "assistant"
 	grant.resource_id == input.resource_id
 	grant.subject_type == "organization_group"
@@ -549,7 +579,6 @@ allow if {
 	# Check for share grant create action
 	input.resource_kind == resource_kind_share_grant
 	input.action == action_create
-
 	# The authorization logic for checking resource ownership is handled in the model layer
 	# This just allows the action if the user is logged in
 }
@@ -563,7 +592,6 @@ allow if {
 	# Check for share grant read action
 	input.resource_kind == resource_kind_share_grant
 	input.action == action_read
-
 	# The authorization logic for checking resource ownership is handled in the model layer
 }
 
@@ -576,7 +604,6 @@ allow if {
 	# Check for share grant delete action
 	input.resource_kind == resource_kind_share_grant
 	input.action == action_delete
-
 	# The authorization logic for checking resource ownership is handled in the model layer
 }
 
@@ -589,6 +616,5 @@ allow if {
 	# Check for message feedback submit action
 	input.resource_kind == resource_kind_message_feedback
 	input.action == action_submit_feedback
-
 	# The authorization logic for checking message/chat ownership is handled in the model layer
 }

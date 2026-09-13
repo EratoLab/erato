@@ -1,0 +1,11 @@
+BEGIN;
+DROP TRIGGER policy_facts_changed ON public.chats;
+DROP TRIGGER policy_facts_changed ON public.assistants;
+DROP TRIGGER policy_facts_changed ON public.file_uploads;
+DROP TRIGGER policy_facts_changed ON public.chat_file_uploads;
+DROP TRIGGER policy_facts_changed ON public.assistant_file_uploads;
+DROP TRIGGER policy_facts_changed ON public.share_grants;
+DROP TRIGGER policy_facts_changed ON public.share_links;
+DROP TRIGGER policy_facts_changed ON public.assistant_hub_assistant_versions;
+DROP FUNCTION public.notify_policy_facts_changed();
+COMMIT;

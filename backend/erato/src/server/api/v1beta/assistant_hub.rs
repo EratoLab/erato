@@ -672,8 +672,6 @@ pub async fn submit_assistant_hub_version(
     .await
     .map_err(model_error_to_status)?;
 
-    app_state.global_policy_engine.invalidate_data().await;
-
     Ok((
         StatusCode::CREATED,
         Json(AssistantHubVersionResponse {
@@ -938,8 +936,6 @@ pub async fn review_assistant_hub_version(
     .await
     .map_err(model_error_to_status)?;
 
-    app_state.global_policy_engine.invalidate_data().await;
-
     Ok(Json(AssistantHubVersionResponse {
         version: records_to_response(&app_state, &me_user, vec![record], false)
             .await
@@ -976,8 +972,6 @@ pub async fn withdraw_assistant_hub_version(
     )
     .await
     .map_err(model_error_to_status)?;
-
-    app_state.global_policy_engine.invalidate_data().await;
 
     Ok(Json(AssistantHubVersionResponse {
         version: records_to_response(&app_state, &me_user, vec![record], false)
@@ -1020,8 +1014,6 @@ pub async fn set_assistant_hub_version_published(
     .await
     .map_err(model_error_to_status)?;
 
-    app_state.global_policy_engine.invalidate_data().await;
-
     Ok(Json(AssistantHubVersionResponse {
         version: records_to_response(&app_state, &me_user, vec![record], false)
             .await
@@ -1059,8 +1051,6 @@ pub async fn set_assistant_hub_version_current(
     )
     .await
     .map_err(model_error_to_status)?;
-
-    app_state.global_policy_engine.invalidate_data().await;
 
     Ok(Json(AssistantHubVersionResponse {
         version: records_to_response(&app_state, &me_user, vec![record], false)
