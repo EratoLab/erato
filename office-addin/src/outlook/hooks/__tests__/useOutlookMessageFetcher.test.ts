@@ -108,7 +108,6 @@ describe("useOutlookMessageFetcher", () => {
       shared: {
         owner: "shared@erato.test",
         targetMailbox: "shared@erato.test",
-        delegatePermissions: 1,
       },
     });
 
@@ -154,7 +153,6 @@ describe("useOutlookMessageFetcher", () => {
       shared: {
         owner: "shared@erato.test",
         targetMailbox: null,
-        delegatePermissions: null,
       },
     });
 
@@ -215,7 +213,6 @@ describe("useOutlookMessageFetcher", () => {
       shared: {
         owner: "alias@contoso.com",
         targetMailbox: "shared.team@contoso.onmicrosoft.com",
-        delegatePermissions: 1,
       },
     });
 
@@ -237,7 +234,6 @@ describe("useOutlookMessageFetcher", () => {
       shared: {
         owner: "shared@contoso.com",
         targetMailbox: null,
-        delegatePermissions: null,
       },
     });
 
@@ -257,7 +253,6 @@ describe("useOutlookMessageFetcher", () => {
       shared: {
         owner: "shared@contoso.com",
         targetMailbox: null,
-        delegatePermissions: null,
       },
     });
 
@@ -273,7 +268,6 @@ describe("useOutlookMessageFetcher", () => {
       sharedContext: {
         owner: "shared@contoso.com",
         targetMailbox: null,
-        delegatePermissions: null,
       },
       isLoadingSharedContext: false,
     });
@@ -299,7 +293,6 @@ describe("useOutlookMessageFetcher", () => {
     const shared = {
       owner: "shared@contoso.com",
       targetMailbox: null,
-      delegatePermissions: null,
     };
     const roots: Array<string | null> = [];
 
