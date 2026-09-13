@@ -223,6 +223,17 @@ function areFacetIdListsEqual(a: string[], b: string[]) {
   return a.every((facetId, index) => facetId === b[index]);
 }
 
+/**
+ * Why the composer refuses to send: a staged part (or several) over the
+ * upload size limit, or more files than a message may carry. `formatted`
+ * is the limit as shown to the user.
+ */
+export interface ComposerSizeLimit {
+  names: string[];
+  formatted: string;
+  kind: "size" | "count";
+}
+
 interface ChatInputProps {
   onSendMessage: (
     message: string,
@@ -277,6 +288,12 @@ interface ChatInputProps {
   onFacetSelectionChange?: (selectedFacetIds: string[]) => void;
   uploadFiles?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
   uploadError?: Error | string | null;
+  /**
+   * Blocks sending (and queuing/draining) the way a token overrun does,
+   * for owners that stage files the composer cannot see. The web passes
+   * nothing.
+   */
+  sizeLimitExceeded?: ComposerSizeLimit | null;
   onSelectedChatProviderIdChange?: (chatProviderId: string | null) => void;
   controlledAvailableModels?: ChatModel[];
   controlledSelectedModel?: ChatModel | null;
@@ -381,6 +398,7 @@ export const ChatInput = ({
   onFacetSelectionChange,
   uploadFiles: externalUploadFiles,
   uploadError: externalUploadError = null,
+  sizeLimitExceeded = null,
   onSelectedChatProviderIdChange,
   controlledAvailableModels,
   controlledSelectedModel,
@@ -535,6 +553,22 @@ export const ChatInput = ({
     resetTokenLimits,
     resetTokenLimitsOnFileRemoval,
   } = useTokenManagement();
+  const isComposerBlocked =
+    isAnyTokenLimitExceeded || sizeLimitExceeded !== null;
+  const sizeLimitPlaceholder = (() => {
+    if (!sizeLimitExceeded) {
+      return null;
+    }
+    const limit = sizeLimitExceeded.formatted;
+    if (sizeLimitExceeded.kind === "count") {
+      return t`Cannot send: a message can carry at most ${limit} files. Remove some to send.`;
+    }
+    const names = sizeLimitExceeded.names.join(", ");
+    return plural(sizeLimitExceeded.names.length, {
+      one: `Cannot send: ${names} exceeds the ${limit} limit. Remove it to send.`,
+      other: `Cannot send: ${names} exceed the ${limit} limit. Remove them to send.`,
+    });
+  })();
 
   // Use the custom hook for chat input handling
   const {
@@ -741,7 +775,7 @@ export const ChatInput = ({
   // the drain later fires.
   const enqueueCurrentMessage = useCallback(
     (decidedDelegation?: { runMode?: DelegationRunMode }): boolean => {
-      if (!isPendingResponse || isAnyTokenLimitExceeded) {
+      if (!isPendingResponse || isComposerBlocked) {
         return false;
       }
       // Leave the audio/dictation auto-send flows untouched.
@@ -788,7 +822,7 @@ export const ChatInput = ({
     },
     [
       isPendingResponse,
-      isAnyTokenLimitExceeded,
+      isComposerBlocked,
       isDictating,
       isDictationStarting,
       isDictationCompleting,
@@ -1382,8 +1416,7 @@ export const ChatInput = ({
     message,
     attachedFiles,
     (messageContent, inputFileIds) => {
-      // Don't allow sending if token limit is exceeded
-      if (isAnyTokenLimitExceeded) {
+      if (isComposerBlocked) {
         return;
       }
       // Don't allow sending until transcription completes for attached audio files
@@ -1433,6 +1466,8 @@ export const ChatInput = ({
     },
     isLoading ||
       isPendingResponse ||
+      // Refused before the handler clears the draft, so it survives.
+      isComposerBlocked ||
       hasIncompleteAudioTranscription ||
       isDictating ||
       isDictationStarting ||
@@ -1512,6 +1547,11 @@ export const ChatInput = ({
     if (disabled) {
       return;
     }
+    // Same hold for an owner-reported size or count overrun: the effect
+    // re-runs when the owner clears it.
+    if (sizeLimitExceeded) {
+      return;
+    }
     // Defer past this commit's post-render effects (a just-completed add-in
     // turn registers its confirmation card in one of them) before deciding.
     const timer = setTimeout(() => {
@@ -1569,6 +1609,7 @@ export const ChatInput = ({
     messagingError,
     hasPendingConfirmation,
     disabled,
+    sizeLimitExceeded,
     getQueuedBySessionId,
     composeSessionId,
     chatId,
@@ -1775,7 +1816,7 @@ export const ChatInput = ({
   // Add token limit exceeded to disabled state for the send button
   const isSendDisabled =
     isDisabled ||
-    isAnyTokenLimitExceeded ||
+    isComposerBlocked ||
     hasIncompleteAudioTranscription ||
     isDictating ||
     isDictationStarting ||
@@ -1843,7 +1884,7 @@ export const ChatInput = ({
     !isPendingResponse &&
     !disabled &&
     !isUploading &&
-    !isAnyTokenLimitExceeded &&
+    !isComposerBlocked &&
     !isRecording &&
     !hasIncompleteAudioTranscription &&
     !isDictationCompleting;
@@ -1862,7 +1903,7 @@ export const ChatInput = ({
   const canQueueMessage =
     isPendingResponse &&
     hasComposeContent &&
-    !isAnyTokenLimitExceeded &&
+    !isComposerBlocked &&
     !disabled &&
     !isUploading &&
     !isRecording &&
@@ -2727,7 +2768,7 @@ export const ChatInput = ({
                 placeholder={
                   isAnyTokenLimitExceeded
                     ? t`Message exceeds token limit. Please reduce length or remove files.`
-                    : placeholder
+                    : (sizeLimitPlaceholder ?? placeholder)
                 }
                 rows={1}
                 disabled={composeLocked}
@@ -2743,7 +2784,7 @@ export const ChatInput = ({
                   "max-h-[200px]",
                   "text-base",
                   "scrollbar-auto-hide",
-                  isAnyTokenLimitExceeded &&
+                  isComposerBlocked &&
                     "border-[var(--theme-error-border)] placeholder:text-[var(--theme-error-fg)]",
                 )}
               />
@@ -3099,7 +3140,11 @@ export const ChatInput = ({
                   aria-label={
                     isAnyTokenLimitExceeded
                       ? t`Cannot send: Token limit exceeded`
-                      : t`Send message`
+                      : sizeLimitExceeded?.kind === "size"
+                        ? t`Cannot send: File size limit exceeded`
+                        : sizeLimitExceeded?.kind === "count"
+                          ? t`Cannot send: File count limit exceeded`
+                          : t`Send message`
                   }
                 />
               )}

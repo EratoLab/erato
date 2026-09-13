@@ -327,6 +327,11 @@ msgstr "E-Mail-Kontext wird vorbereitet"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.removeDroppedEmail"
+msgstr "Entfernen"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.replyContext.groupLabel"
 msgstr "Antwortkontext"
 
@@ -342,13 +347,28 @@ msgstr "(kein Betreff)"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.stagedSize"
+msgstr "{used} von {limit}"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.unknownSender"
 msgstr "Unbekannter Absender"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.uploadFailed"
+msgstr "Hochladen von {names} fehlgeschlagen. Die Nachricht wurde nicht gesendet."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/validateStagedPart.ts
 msgid "officeAddin.chatInput.validation.tooLarge"
 msgstr "Datei überschreitet das Serverlimit von {globalMaxFormatted}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/validateStagedPart.ts
+msgid "officeAddin.chatInput.validation.unsupported"
+msgstr "Wird von der KI nicht gelesen"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookClientActions.ts
@@ -582,6 +602,7 @@ msgstr "E-Mail-Verlauf wird geladen..."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatAddMenuExtraContent.tsx
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.fileSource.updatingThread"
 msgstr "Wird aktualisiert…"
 

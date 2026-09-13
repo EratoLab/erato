@@ -50,8 +50,14 @@ export type FileAttachmentGroupItem =
       id: string;
       file: FileResource;
       selected: boolean;
-      onToggle: () => void;
+      /**
+       * Omit where inclusion is fixed: the row then renders read-only, with
+       * no checkbox that cannot change anything.
+       */
+      onToggle?: () => void;
       labelOverride?: string;
+      /** Replaces the derived type and size line, e.g. while a size is still being worked out. */
+      metaLabel?: string;
       /**
        * Pre-upload validation result. When `ok` is false, the row renders
        * a red error badge with `reason` so the user sees the failure
@@ -104,6 +110,11 @@ export type FileAttachmentGroupItem =
        * broken.
        */
       onToggle?: () => void;
+      /**
+       * Verdict on the message as a whole. When `ok` is false the header
+       * shows `reason` under its text; the attachment rows keep their own.
+       */
+      validation?: { ok: boolean; reason?: string };
       /** Initially collapsed when true. Default: true. */
       defaultCollapsed?: boolean;
       attachments: ThreadMessageAttachmentItem[];
@@ -443,6 +454,7 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
                     sublabel={item.sublabel}
                     selected={item.selected}
                     onToggle={item.onToggle}
+                    validation={item.validation}
                     disabled={disabled}
                     defaultCollapsed={item.defaultCollapsed}
                     attachmentCount={item.attachments.length}
@@ -481,11 +493,14 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
                     key={getFileKey(item)}
                     file={item.file}
                     variant="row"
-                    selection={{
-                      selected: item.selected,
-                      onToggle: item.onToggle,
-                    }}
+                    selection={
+                      item.onToggle
+                        ? { selected: item.selected, onToggle: item.onToggle }
+                        : undefined
+                    }
                     validation={item.validation}
+                    labelOverride={item.labelOverride}
+                    metaLabel={item.metaLabel}
                     disabled={disabled}
                     showType={rowTypeLabel}
                     showSize={showFileSizes}

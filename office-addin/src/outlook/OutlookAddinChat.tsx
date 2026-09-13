@@ -131,7 +131,8 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
   const {
     hasSelectedEmailSource,
     isEmailBodyIncluded,
-    emailBodyFile,
+    resolvedFiles,
+    stagedEmails,
     addDroppedEmail,
     removeDroppedEmail,
   } = useOutlookEmailSource();
@@ -427,12 +428,19 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
     shouldSuggestCurrentEmail && hasSelectedEmailSource && isEmailBodyIncluded
       ? currentEmailMessageId
       : null;
-  const isPreviewBodyIncluded =
-    shouldSuggestCurrentEmail && hasSelectedEmailSource && isEmailBodyIncluded;
+  // Mirrors the send gate in `AddinChatInput`: the suggested email rides on a
+  // fresh chat, drops ride whenever they are staged, and both upload every
+  // resolved `.eml`, so the estimate measures the same Files.
+  const hasDroppedStagedEmails = stagedEmails.some(
+    (staged) => staged.source === "drop",
+  );
+  const isPreviewIncluded =
+    (shouldSuggestCurrentEmail && hasSelectedEmailSource) ||
+    hasDroppedStagedEmails;
   const previewVirtualFiles = useMemo(
     () =>
-      isPreviewBodyIncluded && emailBodyFile ? [emailBodyFile] : undefined,
-    [emailBodyFile, isPreviewBodyIncluded],
+      isPreviewIncluded && resolvedFiles.length > 0 ? resolvedFiles : undefined,
+    [isPreviewIncluded, resolvedFiles],
   );
 
   const pendingSendItemIdentityRef = useRef<string | null>(null);

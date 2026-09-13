@@ -180,7 +180,9 @@ vi.mock("@erato/frontend/library", async () => {
       return context;
     },
 
+    findCapabilityByExtension: () => null,
     getSupportedFileTypes: () => ({}),
+    hasSupportedOperations: () => false,
     mapMessageToUiMessage: (message: unknown) => message,
     recentChatsQuery: () => ({ queryKey: ["recent-chats"] }),
     useArchiveChatEndpoint: () => ({

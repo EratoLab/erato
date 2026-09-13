@@ -23,12 +23,15 @@ import {
   restoreAttachment as applyRestoreAttachment,
   restoreBody as applyRestoreBody,
 } from "../utils/stagedEmailDismissals";
-import { trimRawEmlBytes } from "../utils/trimRawEmlBytes";
+import { EmailTrimError, trimEmlFileSync } from "../utils/trimRawEmlBytes";
 
 import type { ParentMessageMetadata } from "../utils/fetchOutlookMessage";
 import type { ParsedEmail } from "../utils/parsedEmail";
 import type { ParsedThread, ThreadMessage } from "../utils/parsedThread";
-import type { StagedEmailDismissalsMap } from "../utils/stagedEmailDismissals";
+import type {
+  StagedEmailDismissals,
+  StagedEmailDismissalsMap,
+} from "../utils/stagedEmailDismissals";
 import type { LocalFilePreviewItem } from "@erato/frontend/library";
 import type { ReactNode } from "react";
 
@@ -90,6 +93,87 @@ interface DroppedEmailEntry {
   parsed: ParsedEmail;
 }
 
+/** One dropped email after its dismissals have been applied to its bytes. */
+export interface ResolvedDrop {
+  key: string;
+  /** Null when the body is dismissed or the trim failed. */
+  file: File | null;
+  error?: EmailTrimError;
+  size: number;
+}
+
+/** One `.eml` that will be uploaded on send: the thread or a drop. */
+export interface ResolvedPart {
+  key: string;
+  name: string;
+  size: number;
+}
+
+interface ResolvedDropCacheEntry {
+  parsed: ParsedEmail;
+  dismissals: StagedEmailDismissals | undefined;
+  excludedAttachmentIds: ReadonlySet<string> | undefined;
+  resolved: ResolvedDrop;
+}
+
+type PolicyExcludedIdsMap = ReadonlyMap<string, ReadonlySet<string>>;
+
+const EMPTY_IDS: ReadonlySet<string> = new Set();
+
+function unionIds(
+  ...sets: (ReadonlySet<string> | undefined)[]
+): ReadonlySet<string> {
+  const present = sets.filter((set): set is ReadonlySet<string> =>
+    Boolean(set?.size),
+  );
+  if (present.length <= 1) return present[0] ?? EMPTY_IDS;
+  const union = new Set<string>();
+  for (const set of present) {
+    for (const id of set) union.add(id);
+  }
+  return union;
+}
+
+function sameIds(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const id of a) {
+    if (!b.has(id)) return false;
+  }
+  return true;
+}
+
+function resolveDrop(
+  entry: DroppedEmailEntry,
+  dismissals: StagedEmailDismissals | undefined,
+  excludedAttachmentIds: ReadonlySet<string> | undefined,
+): ResolvedDrop {
+  if (dismissals?.bodyDismissed) {
+    return { key: entry.key, file: null, size: 0 };
+  }
+  const indicesToRemove = collectDismissedIndices(
+    entry.parsed.attachments,
+    unionIds(dismissals?.attachmentIds, excludedAttachmentIds),
+  );
+  const { rawEmlFile } = entry.parsed;
+  if (indicesToRemove.length === 0) {
+    return { key: entry.key, file: rawEmlFile, size: rawEmlFile.size };
+  }
+  const file = trimEmlFileSync(
+    new Uint8Array(entry.parsed.rawBytes),
+    rawEmlFile,
+    indicesToRemove,
+  );
+  if (!file) {
+    return {
+      key: entry.key,
+      file: null,
+      error: new EmailTrimError(rawEmlFile.name),
+      size: 0,
+    };
+  }
+  return { key: entry.key, file, size: file.size };
+}
+
 interface OutlookEmailSourceContextValue {
   emailSubject: string;
   isEmailBodyIncluded: boolean;
@@ -102,6 +186,14 @@ interface OutlookEmailSourceContextValue {
    * instead of appearing frozen.
    */
   isThreadEmlStale: boolean;
+  /** The drop twin of `isThreadEmlStale`: a dismissal toggle has committed but `resolvedDrops` still reflects the previous input. */
+  isDropResolutionStale: boolean;
+  /** Every dropped email with its dismissals applied, in drop order. */
+  resolvedDrops: ResolvedDrop[];
+  /** The `.eml` files a send will upload: the thread first, then each drop that resolved. */
+  resolvedFiles: File[];
+  resolvedParts: ResolvedPart[];
+  resolvedTotalBytes: number;
   isLoadingEmailBody: boolean;
   /**
    * True when the open conversation failed to load entirely (Graph fetch
@@ -115,6 +207,12 @@ interface OutlookEmailSourceContextValue {
   restoreStagedEmailBody: (key: string) => void;
   dismissStagedEmailAttachment: (key: string, attachmentId: string) => void;
   restoreStagedEmailAttachment: (key: string, attachmentId: string) => void;
+  /**
+   * Attachments left out of the resolution by policy rather than by the
+   * user, keyed like the dismissals (thread message id or drop key). They
+   * are unioned with the user's dismissals; an empty list clears the key.
+   */
+  setPolicyExcludedAttachmentIds: (key: string, ids: readonly string[]) => void;
   addDroppedEmail: (parsed: ParsedEmail) => string | null;
   removeDroppedEmail: (key: string) => void;
   selectedAttachmentItems: LocalFilePreviewItem[];
@@ -136,6 +234,11 @@ const defaultValue: OutlookEmailSourceContextValue = {
   isEmailBodyIncluded: false,
   emailBodyFile: null,
   isThreadEmlStale: false,
+  isDropResolutionStale: false,
+  resolvedDrops: [],
+  resolvedFiles: [],
+  resolvedParts: [],
+  resolvedTotalBytes: 0,
   isLoadingEmailBody: false,
   emailThreadLoadError: false,
   currentThread: null,
@@ -144,6 +247,7 @@ const defaultValue: OutlookEmailSourceContextValue = {
   restoreStagedEmailBody: () => {},
   dismissStagedEmailAttachment: () => {},
   restoreStagedEmailAttachment: () => {},
+  setPolicyExcludedAttachmentIds: () => {},
   addDroppedEmail: () => null,
   removeDroppedEmail: () => {},
   selectedAttachmentItems: [],
@@ -192,6 +296,8 @@ export function OutlookEmailSourceProvider({
     useState(false);
   const [emailDismissals, setEmailDismissals] =
     useState<StagedEmailDismissalsMap>(() => new Map());
+  const [policyExcludedIds, setPolicyExcludedIds] =
+    useState<PolicyExcludedIdsMap>(() => new Map());
   const [droppedEmails, setDroppedEmails] = useState<DroppedEmailEntry[]>([]);
 
   // This provider is intentionally email-only. Appointment descriptions ride
@@ -325,9 +431,14 @@ export function OutlookEmailSourceProvider({
     return {
       thread: currentThread,
       includedMessages: includedThreadMessages,
-      dismissedAttachmentIds: threadStaged.dismissedAttachmentIds,
+      dismissedAttachmentIds: unionIds(
+        threadStaged.dismissedAttachmentIds,
+        ...currentThread.messages.map((message) =>
+          policyExcludedIds.get(message.id),
+        ),
+      ),
     };
-  }, [currentThread, includedThreadMessages, threadStaged]);
+  }, [currentThread, includedThreadMessages, policyExcludedIds, threadStaged]);
 
   // The full base64 synthesis is genuinely expensive on large threads (tens of
   // MB of attachments → a ~1-2s synchronous encode). Running it directly in a
@@ -357,6 +468,81 @@ export function OutlookEmailSourceProvider({
   // "recalculating", not a frozen click.
   const isThreadEmlStale = threadSynthInput !== deferredSynthInput;
 
+  // Same deferred pattern as the thread; cached per key so toggling one drop
+  // never remints (and re-digests) its siblings.
+  const dropSynthInput = useMemo(
+    () => ({ droppedEmails, emailDismissals, policyExcludedIds }),
+    [droppedEmails, emailDismissals, policyExcludedIds],
+  );
+  const deferredDropInput = useDeferredValue(dropSynthInput);
+  const resolvedDropCacheRef = useRef(
+    new Map<string, ResolvedDropCacheEntry>(),
+  );
+  const resolvedDrops = useMemo<ResolvedDrop[]>(() => {
+    const cache = resolvedDropCacheRef.current;
+    const liveKeys = new Set<string>();
+    const resolved = deferredDropInput.droppedEmails.map((entry) => {
+      liveKeys.add(entry.key);
+      const dismissals = deferredDropInput.emailDismissals.get(entry.key);
+      const excludedAttachmentIds = deferredDropInput.policyExcludedIds.get(
+        entry.key,
+      );
+      const cached = cache.get(entry.key);
+      if (
+        cached &&
+        cached.parsed === entry.parsed &&
+        cached.dismissals === dismissals &&
+        cached.excludedAttachmentIds === excludedAttachmentIds
+      ) {
+        return cached.resolved;
+      }
+      const next = resolveDrop(entry, dismissals, excludedAttachmentIds);
+      cache.set(entry.key, {
+        parsed: entry.parsed,
+        dismissals,
+        excludedAttachmentIds,
+        resolved: next,
+      });
+      return next;
+    });
+    for (const key of cache.keys()) {
+      if (!liveKeys.has(key)) cache.delete(key);
+    }
+    return resolved;
+  }, [deferredDropInput]);
+  const isDropResolutionStale = dropSynthInput !== deferredDropInput;
+
+  const resolvedFiles = useMemo<File[]>(() => {
+    const files: File[] = [];
+    if (threadEmlFile) files.push(threadEmlFile);
+    for (const drop of resolvedDrops) {
+      if (drop.file) files.push(drop.file);
+    }
+    return files;
+  }, [resolvedDrops, threadEmlFile]);
+
+  const resolvedParts = useMemo<ResolvedPart[]>(() => {
+    const parts: ResolvedPart[] = [];
+    if (threadEmlFile && threadStaged) {
+      parts.push({
+        key: threadStaged.key,
+        name: threadEmlFile.name,
+        size: threadEmlFile.size,
+      });
+    }
+    for (const drop of resolvedDrops) {
+      if (drop.file) {
+        parts.push({ key: drop.key, name: drop.file.name, size: drop.size });
+      }
+    }
+    return parts;
+  }, [resolvedDrops, threadEmlFile, threadStaged]);
+
+  const resolvedTotalBytes = useMemo(
+    () => resolvedParts.reduce((total, part) => total + part.size, 0),
+    [resolvedParts],
+  );
+
   const currentStagedDrop = stagedEmails.find(
     (staged): staged is Extract<StagedEmail, { source: "drop" }> =>
       staged.source === "drop",
@@ -364,9 +550,16 @@ export function OutlookEmailSourceProvider({
   const isEmailBodyDismissed = currentThread
     ? includedThreadMessages.length === 0
     : (currentStagedDrop?.bodyDismissed ?? false);
+  // A dismissed, failed or unresolved drop falls back to its original so the
+  // "+" menu keeps its restore row; only the resolved file is uploaded.
+  const currentResolvedDrop = currentStagedDrop
+    ? resolvedDrops.find((drop) => drop.key === currentStagedDrop.key)
+    : undefined;
   const emailBodyFile = currentThread
     ? threadEmlFile
-    : (currentStagedDrop?.parsed.rawEmlFile ?? null);
+    : (currentResolvedDrop?.file ??
+      currentStagedDrop?.parsed.rawEmlFile ??
+      null);
   const isEmailBodyIncluded = !!emailBodyFile && !isEmailBodyDismissed;
 
   const selectableAttachments = useMemo(() => {
@@ -411,6 +604,28 @@ export function OutlookEmailSourceProvider({
     [],
   );
 
+  // Callers re-apply on every render of the staged list, so an unchanged
+  // set must keep the previous map identity or the resolution reruns.
+  const setPolicyExcludedAttachmentIds = useCallback(
+    (key: string, ids: readonly string[]) => {
+      setPolicyExcludedIds((previous) => {
+        const existing = previous.get(key);
+        const next = new Set(ids);
+        if (existing ? sameIds(existing, next) : next.size === 0) {
+          return previous;
+        }
+        const map = new Map(previous);
+        if (next.size === 0) {
+          map.delete(key);
+        } else {
+          map.set(key, next);
+        }
+        return map;
+      });
+    },
+    [],
+  );
+
   // The dedup check has to be StrictMode-safe: returning a synchronous
   // "did we accept this?" answer from inside the setState updater would
   // misreport on the second invocation. Track known keys in a ref so the
@@ -437,6 +652,12 @@ export function OutlookEmailSourceProvider({
       previous.filter((entry) => entry.key !== key),
     );
     setEmailDismissals((previous) => {
+      if (!previous.has(key)) return previous;
+      const next = new Map(previous);
+      next.delete(key);
+      return next;
+    });
+    setPolicyExcludedIds((previous) => {
       if (!previous.has(key)) return previous;
       const next = new Map(previous);
       next.delete(key);
@@ -478,36 +699,20 @@ export function OutlookEmailSourceProvider({
   }, []);
 
   const resolveSelectedFilesForSend = useCallback(async (): Promise<File[]> => {
-    const filesToSend: File[] = [];
-
-    // Thread upload: reuse the exact File already built for the estimate, so
-    // what we upload is byte-identical to what the token estimate measured.
-    // It carries every non-dismissed message + their non-dismissed attachments
-    // as nested message/rfc822 parts, preserving version provenance — three
-    // files named "Lastenheft.pdf" land inside three different nested parts.
-    if (threadEmlFile) {
-      filesToSend.push(threadEmlFile);
+    // A drop whose dismissals could not be cut out is never replaced by its
+    // untrimmed original; the whole send is refused instead.
+    const failedDrop = resolvedDrops.find((drop) => drop.error);
+    if (failedDrop?.error) {
+      throw failedDrop.error;
     }
 
-    // Drop uploads: keep the existing per-drop trim path. Each drop is
-    // independent of the open thread.
-    for (const staged of stagedEmails) {
-      if (staged.source !== "drop") continue;
-      if (staged.bodyDismissed) continue;
-      const indicesToRemove = collectDismissedIndices(
-        staged.parsed.attachments,
-        staged.dismissedAttachmentIds,
-      );
-      if (indicesToRemove.length === 0) {
-        filesToSend.push(staged.parsed.rawEmlFile);
-        continue;
-      }
-      const trimmed = await trimRawEmlBytes(
-        staged.parsed.rawEmlFile,
-        indicesToRemove,
-      );
-      filesToSend.push(trimmed);
-    }
+    // Reuse the exact Files already built for the estimate, so what we upload
+    // is byte-identical to what the token estimate measured. The thread `.eml`
+    // carries every non-dismissed message + their non-dismissed attachments as
+    // nested message/rfc822 parts, preserving version provenance — three files
+    // named "Lastenheft.pdf" land inside three different nested parts. Each
+    // drop is independent of the open thread.
+    const filesToSend: File[] = [...resolvedFiles];
 
     // Office.js compose-mode fallback. Only invoked when there is no thread
     // and no drops — in read mode the thread .eml already carries the
@@ -545,9 +750,10 @@ export function OutlookEmailSourceProvider({
     currentThread,
     dismissedAttachmentIds,
     getAttachmentFile,
+    resolvedDrops,
+    resolvedFiles,
     selectableAttachments,
     stagedEmails,
-    threadEmlFile,
   ]);
 
   const value = useMemo<OutlookEmailSourceContextValue>(
@@ -556,6 +762,11 @@ export function OutlookEmailSourceProvider({
       isEmailBodyIncluded,
       emailBodyFile,
       isThreadEmlStale,
+      isDropResolutionStale,
+      resolvedDrops,
+      resolvedFiles,
+      resolvedParts,
+      resolvedTotalBytes,
       isLoadingEmailBody,
       emailThreadLoadError,
       currentThread,
@@ -564,6 +775,7 @@ export function OutlookEmailSourceProvider({
       restoreStagedEmailBody,
       dismissStagedEmailAttachment,
       restoreStagedEmailAttachment,
+      setPolicyExcludedAttachmentIds,
       addDroppedEmail,
       removeDroppedEmail,
       selectedAttachmentItems,
@@ -590,6 +802,11 @@ export function OutlookEmailSourceProvider({
       dismissedAttachmentIds,
       emailBodyFile,
       isThreadEmlStale,
+      isDropResolutionStale,
+      resolvedDrops,
+      resolvedFiles,
+      resolvedParts,
+      resolvedTotalBytes,
       isEmailBodyDismissed,
       emailThreadLoadError,
       isEmailBodyIncluded,
@@ -607,6 +824,7 @@ export function OutlookEmailSourceProvider({
       restoreStagedEmailAttachment,
       restoreStagedEmailBody,
       selectedAttachmentItems,
+      setPolicyExcludedAttachmentIds,
       stagedEmails,
     ],
   );

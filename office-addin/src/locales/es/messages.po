@@ -327,6 +327,11 @@ msgstr "Preparando el contexto del correo electrónico"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.removeDroppedEmail"
+msgstr "Quitar"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.replyContext.groupLabel"
 msgstr "Contexto de respuesta"
 
@@ -342,13 +347,28 @@ msgstr "(sin asunto)"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.stagedSize"
+msgstr "{used} de {limit}"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.unknownSender"
 msgstr "Remitente desconocido"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.uploadFailed"
+msgstr "No se pudo subir {names}. El mensaje no se envió."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/validateStagedPart.ts
 msgid "officeAddin.chatInput.validation.tooLarge"
 msgstr "El archivo supera el límite del servidor de {globalMaxFormatted}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/validateStagedPart.ts
+msgid "officeAddin.chatInput.validation.unsupported"
+msgstr "La IA no lo leerá"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookClientActions.ts
@@ -582,6 +602,7 @@ msgstr "Cargando hilo de correo..."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatAddMenuExtraContent.tsx
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.fileSource.updatingThread"
 msgstr "Actualizando…"
 
