@@ -130,6 +130,58 @@ describe("Input tokens", () => {
     },
   );
 
+  // A container that frames the textarea itself cannot switch the frame off
+  // from `className`: `rounded-none` and `focus:ring-0` are same-specificity
+  // utilities that lose to the base ones on stylesheet position. `frame={false}`
+  // omits them instead, so there is nothing left to outrank.
+  it.each([
+    ["without an error", undefined],
+    ["with an error", "Required"],
+  ])("omits Textarea's own frame when frame is false, %s", (_name, error) => {
+    render(<Textarea aria-label="Notes" error={error} frame={false} />);
+
+    const textarea = screen.getByRole("textbox", { name: "Notes" });
+
+    for (const cls of [
+      "[border-radius:var(--theme-radius-input)]",
+      "border-[var(--theme-border-field)]",
+      "focus:border-[var(--theme-border-field-focus)]",
+      "border-theme-error-border",
+      "focus:border-theme-error-border",
+      "focus:ring-2",
+      "focus:ring-theme-focus",
+      "focus:ring-theme-focus-error",
+    ]) {
+      expect(textarea.className).not.toContain(cls);
+    }
+
+    const tokens = textarea.className.split(/\s+/);
+    expect(tokens).not.toContain("border");
+    expect(tokens.filter((token) => token.includes("rounded"))).toEqual([]);
+
+    // Everything that is not frame chrome survives, including the suppressed
+    // native outline: the container draws the focus indicator instead.
+    expect(tokens).toContain("focus:outline-none");
+    expect(tokens).toContain("bg-theme-bg-secondary");
+    expect(textarea.className).toContain(
+      "[padding:var(--theme-spacing-input-padding-y)_var(--theme-spacing-input-padding-x)]",
+    );
+    expect(textarea.className).toContain("disabled:bg-theme-bg-primary");
+  });
+
+  it("keeps Textarea's frame by default", () => {
+    render(<Textarea aria-label="Notes" />);
+
+    const textarea = screen.getByRole("textbox", { name: "Notes" });
+    const tokens = textarea.className.split(/\s+/);
+
+    expect(tokens).toContain("border");
+    expect(tokens).toContain("focus:ring-2");
+    expect(textarea.className).toContain(
+      "[border-radius:var(--theme-radius-input)]",
+    );
+  });
+
   it("sizes textarea auto-resize from rendered row metrics", () => {
     let mockScrollHeight = 40;
 

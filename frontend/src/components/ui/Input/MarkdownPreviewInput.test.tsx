@@ -123,6 +123,42 @@ describe("MarkdownPreviewInput", () => {
     expect(markdownTab).toHaveAttribute("aria-selected", "true");
   });
 
+  // jsdom cannot measure a corner, so this asserts the arrangement that makes
+  // the corner right: the textarea is flush and frameless, and the frame that
+  // clips it owns the focus ring.
+  it.each([
+    ["without an error", undefined, "ring-theme-focus"],
+    ["with an error", "Description is required", "ring-theme-focus-error"],
+  ])(
+    "draws the focus ring on the frame, not the flush textarea, %s",
+    (_name, error, ringClass) => {
+      render(
+        <MarkdownPreviewInput
+          {...defaultProps}
+          id="description"
+          error={error}
+        />,
+      );
+
+      const textarea = screen.getByRole("textbox");
+      const tokens = textarea.className.split(/\s+/);
+      expect(tokens).not.toContain("border");
+      expect(tokens).not.toContain("rounded-none");
+      expect(tokens).not.toContain("border-0");
+      expect(tokens).not.toContain("focus:ring-0");
+      expect(textarea.className).not.toContain("focus:ring-2");
+      expect(textarea.className).not.toContain(
+        "[border-radius:var(--theme-radius-input)]",
+      );
+
+      const frame = screen.getByRole("tabpanel").parentElement;
+      expect(frame?.className).toContain("[&:has(textarea:focus)]:ring-2");
+      expect(frame?.className).toContain(
+        `[&:has(textarea:focus)]:${ringClass}`,
+      );
+    },
+  );
+
   it("points both tabs at the panel they actually control", () => {
     render(<MarkdownPreviewInput {...defaultProps} id="description" />);
 

@@ -11,7 +11,7 @@ import type { TextareaProps } from "./Textarea";
 type MarkdownPreviewTab = "markdown" | "preview";
 
 export interface MarkdownPreviewInputProps
-  extends Omit<TextareaProps, "className"> {
+  extends Omit<TextareaProps, "className" | "frame"> {
   /** Accessible label for the Markdown/Preview tab list. */
   tablistLabel: string;
   /** Label for the source editing tab. */
@@ -57,8 +57,19 @@ export function MarkdownPreviewInput({
   return (
     <div
       className={clsx(
-        "overflow-hidden rounded-[var(--theme-radius-input)] border border-[var(--theme-border-field)] bg-theme-bg-secondary",
-        error && "border-theme-error-border",
+        "overflow-hidden rounded-[var(--theme-radius-input)] border bg-theme-bg-secondary",
+        // The textarea inside is flush and draws no frame of its own, so the
+        // frame draws the focus indicator for it. It has to: the frame clips
+        // its children, so a ring on the textarea loses both of its vertical
+        // sides and follows the wrong corner on the rest.
+        //
+        // Scoped to a focused textarea rather than `focus-within` so that
+        // focusing a tab, which is also inside the frame, does not light up
+        // the whole field on top of the tab's own indicator. `:has()` also
+        // outranks the resting border, so the two never race.
+        error
+          ? "border-theme-error-border [&:has(textarea:focus)]:border-theme-error-border [&:has(textarea:focus)]:ring-2 [&:has(textarea:focus)]:ring-theme-focus-error"
+          : "border-[var(--theme-border-field)] [&:has(textarea:focus)]:border-[var(--theme-border-field-focus)] [&:has(textarea:focus)]:ring-2 [&:has(textarea:focus)]:ring-theme-focus",
         className,
       )}
     >
@@ -104,7 +115,7 @@ export function MarkdownPreviewInput({
             disabled={disabled}
             error={error}
             value={value}
-            className="rounded-none border-0 focus:ring-0"
+            frame={false}
           />
         ) : (
           <div className="min-h-[8.5rem] px-4 py-3 text-base text-theme-fg-primary">
