@@ -12,6 +12,8 @@
  * to know about attachment subtypes or the `@odata.type` discriminator.
  */
 
+import { NESTED_PARSE_LIMIT_BYTES, parseEmlBytes } from "./parsedEmail";
+
 import type { FetchConversationMessages } from "./fetchOutlookMessage";
 import type {
   FetchConversationOptions,
@@ -19,7 +21,7 @@ import type {
   GraphConversationMessage,
   GraphRecipient,
 } from "./fetchOutlookMessageGraph";
-import type { ParsedEmailAddress } from "./parsedEmail";
+import type { ParsedEmail, ParsedEmailAddress } from "./parsedEmail";
 
 const FILE_ATTACHMENT_TYPE = "#microsoft.graph.fileAttachment";
 const ITEM_ATTACHMENT_TYPE = "#microsoft.graph.itemAttachment";
@@ -41,6 +43,13 @@ export interface ThreadAttachment {
    * is never silently dropped. Null when bytes are present.
    */
   unavailableReason: string | null;
+  /**
+   * A forwarded email's own parts, parsed from `contentBytes`. Their ids
+   * extend this attachment's id (`<id>/att-0`), so the per-message dismissal
+   * set addresses every level. Absent when the part is not a message, is
+   * too large, or does not parse.
+   */
+  nested?: ParsedEmail;
 }
 
 export interface ThreadMessage {
@@ -112,6 +121,8 @@ export async function fetchCurrentThread(
 
   if (messages.length === 0) return null;
 
+  await expandForwardedMessages(messages);
+
   messages.sort((a, b) => {
     const aTime = a.date ? Date.parse(a.date) : 0;
     const bTime = b.date ? Date.parse(b.date) : 0;
@@ -125,6 +136,39 @@ export async function fetchCurrentThread(
     messages,
     incomplete,
   };
+}
+
+/**
+ * Parses each forwarded email the fetch layer delivered as bytes so its own
+ * attachments can be listed and dismissed. Failure leaves the forward opaque:
+ * the thread still loads, the part is still sent whole.
+ */
+async function expandForwardedMessages(messages: ThreadMessage[]) {
+  await Promise.all(
+    messages.flatMap((message) =>
+      message.attachments.map(async (attachment) => {
+        if (
+          attachment.contentBytes === null ||
+          attachment.contentBytes.byteLength > NESTED_PARSE_LIMIT_BYTES ||
+          attachment.mimeType.trim().toLowerCase() !== "message/rfc822"
+        ) {
+          return;
+        }
+        try {
+          const nested = await parseEmlBytes(attachment.contentBytes, {
+            filename: attachment.filename,
+            idPrefix: `${attachment.id}/`,
+          });
+          if (nested) attachment.nested = nested;
+        } catch (error) {
+          console.warn(
+            "[parsedThread] forwarded email could not be expanded:",
+            error,
+          );
+        }
+      }),
+    ),
+  );
 }
 
 function transformMessage(

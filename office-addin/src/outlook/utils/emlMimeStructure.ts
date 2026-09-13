@@ -42,6 +42,8 @@ export interface MimePart {
   contentTypeParams: Record<string, string>;
   contentDisposition: string | null;
   contentDispositionParams: Record<string, string>;
+  /** Lower-cased Content-Transfer-Encoding. Empty string if header missing (RFC 2045 default is 7bit). */
+  contentTransferEncoding: string;
   /** Decoded multipart boundary parameter (without surrounding quotes). `null` for non-multipart parts. */
   boundary: string | null;
   isMultipart: boolean;
@@ -49,8 +51,21 @@ export interface MimePart {
 }
 
 export function parseMimeStructure(bytes: Uint8Array): MimePart | null {
+  return parseMimeStructureAt(bytes, 0, bytes.length);
+}
+
+/**
+ * Parses `bytes[start, end)` as a complete message in place, so every byte
+ * range in the returned tree is absolute in `bytes`. Used to descend into a
+ * `message/rfc822` leaf without copying its body.
+ */
+export function parseMimeStructureAt(
+  bytes: Uint8Array,
+  start: number,
+  end: number,
+): MimePart | null {
   try {
-    return parsePart(bytes, 0, bytes.length, null);
+    return parsePart(bytes, start, end, null);
   } catch (error) {
     console.warn("[emlMimeStructure] parse failed:", error);
     return null;
@@ -88,6 +103,7 @@ function parsePart(
   const headers = parseHeaders(bytes, partStart, headerEnd.headersEnd);
   const ctHeader = findHeader(headers, "content-type");
   const cdHeader = findHeader(headers, "content-disposition");
+  const cteHeader = findHeader(headers, "content-transfer-encoding");
   const { value: contentType, params: contentTypeParams } = parseStructured(
     ctHeader?.value ?? "",
   );
@@ -113,6 +129,7 @@ function parsePart(
     contentTypeParams,
     contentDisposition,
     contentDispositionParams,
+    contentTransferEncoding: (cteHeader?.value ?? "").trim().toLowerCase(),
     boundary,
     isMultipart,
     children,

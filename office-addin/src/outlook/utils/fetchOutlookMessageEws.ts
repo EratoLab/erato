@@ -1644,13 +1644,14 @@ async function enrichMessageAttachmentsFromMime(
     if (!mimeBase64) return;
     const bytes = decodeBase64ToBuffer(mimeBase64);
     if (!bytes) return;
-    // `rfc822Attachments: true` forces nested message/rfc822 parts (Outlook
-    // ItemAttachments — e.g. a forwarded email) to be emitted as attachments
-    // regardless of their Content-Disposition. Without it, postal-mime inlines a
-    // disposition-less submessage, leaking its inner attachments into the parent
-    // and dropping the nested email itself, so the byte-less ItemAttachment never
-    // gets matched.
-    const parsed = await PostalMime.parse(bytes, { rfc822Attachments: true });
+    // Forced so a nested message/rfc822 part (an Outlook ItemAttachment such as
+    // a forwarded email) is emitted as one attachment whatever its
+    // Content-Disposition, including an explicit `inline`; an inlined
+    // submessage would leak its inner attachments into the parent and leave the
+    // byte-less ItemAttachment unmatched.
+    const parsed = await PostalMime.parse(bytes, {
+      forceRfc822Attachments: true,
+    });
     spliceMimeAttachmentBytes(message, parsed.attachments ?? []);
   } catch (error) {
     if (signal?.aborted) {

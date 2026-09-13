@@ -13,6 +13,10 @@
  *     canonical and keeps the real copy; later identical copies become a
  *     provenance marker naming where the full copy lives. Three different
  *     versions of `Lastenheft.pdf` = three byte streams = all kept.
+ *   - A dismissal inside a forwarded email is cut out of the forward's bytes
+ *     first, so the dedup compares and emits what the user kept. A forward
+ *     that cannot honour the dismissal throws `EmailTrimError`: the untrimmed
+ *     original must never ship in its place.
  *   - Attachments with no retrievable bytes (cloud references, un-fetchable
  *     items) are disclosed as markers, never silently dropped.
  *   - An image-only message (no body text, only inline images) gets a marker
@@ -23,7 +27,11 @@
  * message's html-vs-text body type.
  */
 
-import type { ThreadMessage } from "./parsedThread";
+import { collectDismissedPaths } from "./dismissedAttachmentPaths";
+import { trimEmlAttachments } from "./trimEmlAttachments";
+import { EmailTrimError } from "./trimRawEmlBytes";
+
+import type { ThreadAttachment, ThreadMessage } from "./parsedThread";
 import type {
   ThreadAttachmentInput,
   ThreadMessageInput,
@@ -66,7 +74,11 @@ export function buildThreadSynthInputs(
         continue;
       }
 
-      const bytes = new Uint8Array(attachment.contentBytes);
+      const bytes = trimDismissedNestedParts(
+        attachment,
+        attachment.contentBytes,
+        dismissedAttachmentIds,
+      );
       if (bytes.byteLength >= MIN_DEDUP_BYTES) {
         const duplicate = seen.find(
           (candidate) =>
@@ -90,7 +102,7 @@ export function buildThreadSynthInputs(
       attachments.push({
         filename: attachment.filename,
         mimeType: attachment.mimeType,
-        contentBytes: attachment.contentBytes,
+        contentBytes: bytes,
       });
     }
 
@@ -141,6 +153,25 @@ export function buildThreadSynthInputs(
   }
 
   return inputs;
+}
+
+function trimDismissedNestedParts(
+  attachment: ThreadAttachment,
+  contentBytes: ArrayBuffer,
+  dismissedAttachmentIds: ReadonlySet<string>,
+): Uint8Array {
+  const bytes = new Uint8Array(contentBytes);
+  if (!attachment.nested) return bytes;
+  const paths = collectDismissedPaths(
+    attachment.nested.attachments,
+    dismissedAttachmentIds,
+  );
+  if (paths.length === 0) return bytes;
+  const trimmed = trimEmlAttachments(bytes, paths);
+  if (!trimmed) {
+    throw new EmailTrimError(attachment.filename);
+  }
+  return trimmed;
 }
 
 /** A stable, human-readable handle for the message that holds a canonical
