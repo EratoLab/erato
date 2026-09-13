@@ -1667,7 +1667,8 @@ pub async fn delete_unstarted_delegated_chat(
     Ok(())
 }
 
-/// Archive a chat by setting its archived_at timestamp
+/// Archive a chat by setting its archived_at timestamp. An already-archived
+/// chat keeps its original timestamp.
 pub async fn archive_chat(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,
@@ -1689,11 +1690,13 @@ pub async fn archive_chat(
         Action::Update
     )?;
 
-    // Update the chat
-    let mut chat_active: chats::ActiveModel = chat.clone().into();
-    chat_active.archived_at = ActiveValue::Set(Some(Utc::now().into()));
-
-    let updated_chat = chat_active.update(conn).await?;
+    let updated_chat = if chat.archived_at.is_some() {
+        chat
+    } else {
+        let mut chat_active: chats::ActiveModel = chat.into();
+        chat_active.archived_at = ActiveValue::Set(Some(Utc::now().into()));
+        chat_active.update(conn).await?
+    };
 
     archive_delegated_descendants(
         conn,

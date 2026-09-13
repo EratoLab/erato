@@ -569,6 +569,56 @@ async fn test_unarchive_twice_is_a_no_op(pool: Pool<Postgres>) {
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_archive_twice_keeps_the_original_timestamp(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .expect("Failed to create user");
+
+    let server = create_test_server(app_state.clone());
+    let chat_id = create_chat_via_submit(&server).await;
+
+    archive_chat_via_api(&server, &chat_id).await;
+
+    chats::ActiveModel {
+        id: ActiveValue::Unchanged(Uuid::parse_str(&chat_id).expect("Invalid chat UUID")),
+        archived_at: ActiveValue::Set(Some((Utc::now() - Duration::days(2)).into())),
+        ..Default::default()
+    }
+    .update(&app_state.db)
+    .await
+    .expect("Failed to backdate the archive timestamp");
+    let archived_at = stored_chat(&app_state.db, &chat_id).await.archived_at;
+
+    let response = server
+        .post(&format!("/api/v1beta/chats/{chat_id}/archive"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({}))
+        .await;
+    response.assert_status_ok();
+
+    let body: Value = response.json();
+    let reported = chrono::DateTime::parse_from_rfc3339(
+        body["archived_at"]
+            .as_str()
+            .expect("Response missing 'archived_at'"),
+    )
+    .expect("Response 'archived_at' is not RFC 3339");
+    assert_eq!(Some(reported), archived_at);
+    assert_eq!(
+        stored_chat(&app_state.db, &chat_id).await.archived_at,
+        archived_at
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_unarchive_unknown_chat_returns_404(pool: Pool<Postgres>) {
     let (app_config, _server) = setup_mock_llm_server(None).await;
     let app_state = test_app_state(app_config, pool).await;
