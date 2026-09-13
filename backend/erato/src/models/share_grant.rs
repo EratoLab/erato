@@ -204,7 +204,6 @@ pub async fn create_share_grant_with_config(
         .await?;
 
     // Invalidate policy data so it gets rebuilt with the new share grant
-    policy.invalidate_data().await;
 
     Ok(created_grant)
 }
@@ -312,7 +311,6 @@ pub async fn delete_share_grant(
     ShareGrants::delete_by_id(grant_id).exec(conn).await?;
 
     // Invalidate policy data so it gets rebuilt without this share grant
-    policy.invalidate_data().await;
 
     Ok(())
 }

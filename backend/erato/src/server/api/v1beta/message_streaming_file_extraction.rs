@@ -453,7 +453,6 @@ async fn process_mcp_file_outputs(
 
     // The new file_upload rows must enter the policy data before the client
     // fetches their previews after the turn completes.
-    app_state.global_policy_engine.invalidate_data().await;
 
     Ok(file_pointers)
 }

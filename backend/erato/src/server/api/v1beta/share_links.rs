@@ -146,8 +146,6 @@ pub async fn set_share_link(
     .wrap_err("Failed to set share link")
     .map_err(|_| StatusCode::FORBIDDEN)?;
 
-    app_state.global_policy_engine.invalidate_data().await;
-
     Ok(Json(SetShareLinkResponse {
         share_link: ShareLink::from(crate::models::share_link::ShareLinkInfo::from(share_link)),
     }))

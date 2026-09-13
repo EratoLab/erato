@@ -7507,9 +7507,6 @@ pub async fn message_submit_sse(
             accept_user_write_into_delegated_run(&app_state, &chat).await?;
 
             let was_created = chat_status == ChatCreationStatus::Created;
-            if was_created {
-                app_state.global_policy_engine.invalidate_data().await;
-            }
 
             (
                 chat.id,
@@ -8436,27 +8433,13 @@ pub(crate) async fn run_message_submit_task(
 ) -> Result<(), Report> {
     tracing::info!("run_message_submit_task started for chat_id: {}", chat_id);
 
-    // Send ChatCreated before the policy rebuild so client navigation is not
-    // serialized behind it. This is authz-safe: the chat row is committed and
-    // the global engine invalidated before this task was spawned, so the
-    // client's post-navigation requests wait on (or perform) the same
-    // single-flight rebuild in the middleware and can never observe
-    // pre-create policy data. A rebuild failure no longer suppresses
-    // navigation; it surfaces as an error frame in the created chat.
+    // The insert is committed before navigation. Other
+    // requests and replicas can authorize the new chat directly by ID.
     if chat_was_created {
         tracing::info!("Sending ChatCreated event for chat_id: {}", chat_id);
         task.send_event(StreamingEvent::ChatCreated { chat_id })
             .await
             .map_err(Report::msg)?;
-
-        tracing::info!("Rebuilding policy data for newly created chat");
-        // Via the global engine: `policy` is a request-scoped clone whose
-        // severed staleness flag cannot see the handler's invalidation.
-        app_state
-            .global_policy_engine
-            .rebuild_data_if_needed(&app_state.db, &app_state.config)
-            .await
-            .wrap_err("Failed to rebuild policy data after chat creation")?;
     }
 
     tracing::info!("Fetching chat for chat_id: {}", chat_id);

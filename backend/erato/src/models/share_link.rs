@@ -127,7 +127,6 @@ pub async fn set_share_link_enabled(
         let mut active_model: share_links::ActiveModel = existing.into();
         active_model.enabled = Set(enabled);
         let updated = active_model.update(conn).await?;
-        policy.invalidate_data().await;
         return Ok(updated);
     }
 
@@ -142,7 +141,6 @@ pub async fn set_share_link_enabled(
     .exec_with_returning(conn)
     .await?;
 
-    policy.invalidate_data().await;
     Ok(created)
 }
 

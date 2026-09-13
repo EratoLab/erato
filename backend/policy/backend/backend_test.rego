@@ -1175,3 +1175,48 @@ test_facet_read_denied_without_matching_group_rule if {
 	} with data.resource_attributes as resource_attributes
 		with data.config_permissions as group_config_permissions
 }
+
+# The production input must completely replace legacy resource snapshots.
+test_input_facts_override_legacy_resource_ownership if {
+	not backend.allow with input as {
+		"subject_kind": "user", "subject_id": user_1_id,
+		"resource_kind": "chat", "resource_id": chat_1_id, "action": "read",
+		"facts": {"resource_attributes": {"chat": {}}},
+	}
+		with data.resource_attributes as resource_attributes
+}
+
+test_batch_organization_editor_grant_is_resource_scoped if {
+	not backend.allow with input as {
+		"subject_kind": "user", "subject_id": user_3_id,
+		"resource_kind": "assistant", "resource_id": assistant_2_id, "action": "update",
+		"facts": {
+			"resource_attributes": resource_attributes,
+			"assistant_hub_versions": [],
+			"share_grants": [{
+				"resource_type": "assistant", "resource_id": assistant_1_id,
+				"subject_type": "organization", "subject_id_type": "organization_id",
+				"subject_id": "__organization__", "role": "editor",
+			}],
+		},
+	}
+		with data.config as {"assistants": {"enable_edit_sharing": true}}
+}
+
+test_batch_group_editor_grant_is_resource_scoped if {
+	not backend.allow with input as {
+		"subject_kind": "user", "subject_id": user_3_id,
+		"resource_kind": "assistant", "resource_id": assistant_2_id, "action": "update",
+		"organization_group_ids": ["group"],
+		"facts": {
+			"resource_attributes": resource_attributes,
+			"assistant_hub_versions": [],
+			"share_grants": [{
+				"resource_type": "assistant", "resource_id": assistant_1_id,
+				"subject_type": "organization_group", "subject_id_type": "organization_group_id",
+				"subject_id": "group", "role": "editor",
+			}],
+		},
+	}
+		with data.config as {"assistants": {"enable_edit_sharing": true}}
+}

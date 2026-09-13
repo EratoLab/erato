@@ -871,9 +871,7 @@ async fn discard_unstarted_delegated_chat(
             %child_chat_id,
             "Failed to remove the delegated chat whose run never started"
         );
-        return;
     }
-    app_state.global_policy_engine.invalidate_data().await;
 }
 
 /// Dispatches a `delegate_to_assistant` call: validates the arguments against
@@ -1037,7 +1035,6 @@ pub(crate) async fn dispatch_delegate_tool_call(
         .background_tasks
         .start_task(child_chat.id, Uuid::new_v4())
         .await;
-    app_state.global_policy_engine.invalidate_data().await;
 
     let previous_message_id = match prepare_delegated_chat(
         app_state,

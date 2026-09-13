@@ -466,7 +466,6 @@ pub async fn create_assistant(
     .map_err(log_internal_server_error)?;
 
     // Invalidate policy data so the new assistant is available for sharing
-    app_state.global_policy_engine.invalidate_data().await;
 
     // Process file associations if provided
     if let Some(file_ids) = request.file_ids {
@@ -653,6 +652,19 @@ pub async fn list_assistants(
     .await
     .map_err(log_internal_server_error)?;
 
+    let assistant_ids: Vec<_> = assistants.iter().map(|assistant| assistant.id).collect();
+    let editable_ids: HashSet<_> = policy
+        .filter_authorized_ids(
+            &me_user.to_subject(),
+            crate::policy::types::ResourceKind::Assistant,
+            &assistant_ids,
+            crate::policy::types::Action::Update,
+        )
+        .await
+        .map_err(log_internal_server_error)?
+        .into_iter()
+        .collect();
+
     // Convert to API format
     let mut api_assistants = Vec::with_capacity(assistants.len());
     for assistant in assistants {
@@ -670,12 +682,7 @@ pub async fn list_assistants(
             created_at: assistant.created_at,
             updated_at: assistant.updated_at,
             archived_at: assistant.archived_at,
-            can_edit: assistant::can_subject_edit_assistant(
-                &policy,
-                &me_user.to_subject(),
-                assistant.id,
-            )
-            .await,
+            can_edit: editable_ids.contains(&assistant.id),
         });
     }
 
@@ -873,7 +880,6 @@ pub async fn update_assistant(
     })?;
 
     // Invalidate policy data to reflect the updated assistant
-    app_state.global_policy_engine.invalidate_data().await;
 
     // Process file associations if provided
     if let Some(new_file_ids_opt) = request.file_ids {
@@ -1079,7 +1085,6 @@ pub async fn archive_assistant(
             })?;
 
     // Invalidate policy data to reflect the archived assistant
-    app_state.global_policy_engine.invalidate_data().await;
 
     tracing::info!(
         "User {} archived assistant '{}' with ID: {}",

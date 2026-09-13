@@ -3,20 +3,10 @@ use axum::extract::{Request, State};
 use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::Response;
-use std::time::Duration;
 
-/// Time threshold for rebuilding policy data
-/// If the last rebuild was more than this duration ago, trigger a rebuild
-const POLICY_REBUILD_THRESHOLD: Duration = Duration::from_secs(60); // 1 minute
-
-/// Middleware that provides a PolicyEngine for each request
-///
-/// This middleware clones the global PolicyEngine from AppState. Before cloning,
-/// it checks if the policy data needs to be rebuilt based on:
-/// - Explicit invalidation (via `invalidate_data()`)
-/// - Time threshold (if more than 1 minute has passed since the last rebuild)
-///
-/// The cloned engine is then added to the request extensions for use by downstream handlers.
+/// Provide a prepared configuration template and a fresh request-local fact
+/// cache. Resource facts are loaded lazily by authorization, without a global
+/// freshness barrier.
 pub(crate) async fn policy_engine_middleware(
     State(app_state): State<AppState>,
     mut req: Request,
@@ -24,16 +14,12 @@ pub(crate) async fn policy_engine_middleware(
 ) -> Result<Response, StatusCode> {
     let effective_config =
         crate::latency::stage("request.configuration", app_state.effective_config()).await;
-    // Get a cloned PolicyEngine from the global instance, with rebuild check
+    // Configuration preparation is shared across requests.
     let policy_engine = crate::latency::stage(
         "request.policy",
         app_state
             .global_policy_engine
-            .get_engine_with_rebuild_check(
-                &app_state.db,
-                &effective_config,
-                POLICY_REBUILD_THRESHOLD,
-            ),
+            .request_engine(&app_state.db, &effective_config),
     )
     .await
     .map_err(|e| {

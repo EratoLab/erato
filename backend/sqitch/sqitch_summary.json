@@ -39,7 +39,8 @@
     "deploy/0037_normalize_empty_assistant_id_lists.sql",
     "deploy/0038_add_default_chat_provider_to_user_preferences.sql",
     "deploy/0039_add_starting_assistant_to_user_preferences.sql",
-    "deploy/0040_add_assistant_usage_indexes.sql"
+    "deploy/0040_add_assistant_usage_indexes.sql",
+    "deploy/0041_notify_policy_fact_changes.sql"
   ],
-  "latest_change": "e721a59a43aad8dffd00fdd65234fe92bcdb355d"
+  "latest_change": "7ffb0ef0e9fd64bbb75fe8852eee03c15c89c974"
 }
