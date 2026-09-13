@@ -4695,6 +4695,82 @@ async fn test_continuestream_denies_a_parked_tool_approval(pool: Pool<Postgres>)
     );
 }
 
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_continuestream_in_archived_chat_returns_409(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post().path("/v1/chat/completions");
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[(
+                "call_probe",
+                "publish_approval_probe",
+                json!({}),
+            )]),
+        );
+    });
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.mcp_servers.insert(
+        "mock_mcp_approval".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url(),
+            "/mcp/approval-policy",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_server_permissions.rules.insert(
+        "allow-mock-mcp".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["mock_mcp_approval".to_string()],
+        },
+    );
+    app_config.mcp_servers_global.approval = erato::config::McpToolApprovalConfig {
+        enabled: true,
+        preset: erato::config::McpToolApprovalPreset::Restrictive,
+        allow_always: false,
+    };
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let db = app_state.db.clone();
+    let server = app_server(app_state);
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "publish the approval probe" }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let chat_id = Uuid::parse_str(&extract_chat_id(&events).expect("Expected chat_id")).unwrap();
+    let assistant_message_id = assistant_message_id_from_events(&events);
+
+    archive_chat_via_api(&server, &chat_id.to_string()).await;
+
+    let continued = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": assistant_message_id,
+            "decision": "approve",
+        }))
+        .await;
+
+    assert_eq!(continued.status_code(), http::StatusCode::CONFLICT);
+    assert_eq!(
+        chats::Entity::find_by_id(chat_id)
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap()
+            .generation_state
+            .as_deref(),
+        Some("awaiting_approval")
+    );
+}
+
 /// A run that dies before it owns an assistant message to attach an error to
 /// still terminates every listener: the task lifecycle broadcasts the generic
 /// failure frame, closes with a single stream end, and marks the lease errored.

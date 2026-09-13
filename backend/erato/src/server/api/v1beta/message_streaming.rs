@@ -9902,7 +9902,10 @@ pub async fn client_tool_result(
     responses(
         (status = OK, content_type = "text/event-stream", body = MessageSubmitStreamingResponseMessage),
         (status = BAD_REQUEST, description = "The message has no pending approval or the decision is invalid"),
-        (status = UNAUTHORIZED, description = "When no valid JWT token is provided")
+        (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
+        (status = CONFLICT, description = "When the chat is archived"),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
+        (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
     security(
         ("bearer_auth" = [])
@@ -9944,6 +9947,23 @@ pub async fn continue_message_sse(
             "Always allow is disabled by MCP approval policy".to_string(),
         ));
     }
+
+    // The message load above authorized reads on this chat, so a missing or
+    // foreign chat has already 404'd and only a database fault reaches here.
+    let chat = get_chat_by_message_id(
+        &app_state.db,
+        &policy,
+        &me_user.to_subject(),
+        &request.message_id,
+    )
+    .await
+    .map_err(|e| {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to load chat for the approval decision: {}", e),
+        )
+    })?;
+    reject_if_archived(&chat)?;
 
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
     let app_state_for_worker = app_state.clone();
