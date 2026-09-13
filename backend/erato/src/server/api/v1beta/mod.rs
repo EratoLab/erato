@@ -3847,6 +3847,20 @@ pub async fn get_file_preview(
     Ok((headers, bytes))
 }
 
+/// Map a chat write failure to its status: a chat the caller may not touch is
+/// indistinguishable from one that does not exist.
+fn chat_write_error_status(error: Report) -> StatusCode {
+    let message = error.to_string();
+    if message.contains("not found")
+        || message.contains("not authorized")
+        || message.contains("Access denied")
+    {
+        StatusCode::NOT_FOUND
+    } else {
+        log_internal_server_error(error)
+    }
+}
+
 /// Request to archive a chat
 #[derive(Deserialize, ToSchema, Serialize)]
 pub struct ArchiveChatRequest {
@@ -3892,8 +3906,8 @@ pub struct ArchiveAllChatsResponse {
     responses(
         (status = OK, body = ArchiveChatResponse, description = "Successfully archived the chat"),
         (status = BAD_REQUEST, description = "Invalid chat ID format"),
-        (status = NOT_FOUND, description = "Chat not found"),
-        (status = UNAUTHORIZED, description = "User not authorized to archive this chat"),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
+        (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
         (status = INTERNAL_SERVER_ERROR, description = "Server error")
     ),
     security(
@@ -3927,13 +3941,7 @@ pub async fn archive_chat_endpoint(
         app_state.config.generation_status.stale_after_secs,
     )
     .await
-    .map_err(|e| {
-        if e.to_string().contains("not found") {
-            StatusCode::NOT_FOUND
-        } else {
-            log_internal_server_error(e)
-        }
-    })?;
+    .map_err(chat_write_error_status)?;
 
     // Check if archived_at is set (it should be)
     let archived_at = updated_chat.archived_at.ok_or_else(|| {
@@ -3962,8 +3970,8 @@ pub async fn archive_chat_endpoint(
     responses(
         (status = OK, body = UnarchiveChatResponse, description = "Successfully unarchived the chat"),
         (status = BAD_REQUEST, description = "Invalid chat ID format"),
-        (status = NOT_FOUND, description = "Chat not found"),
-        (status = UNAUTHORIZED, description = "User not authorized to unarchive this chat"),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
+        (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
         (status = INTERNAL_SERVER_ERROR, description = "Server error")
     ),
     security(
@@ -3988,13 +3996,7 @@ pub async fn unarchive_chat_endpoint(
 
     let updated_chat = unarchive_chat(&app_state.db, &policy, &me_user.to_subject(), &chat_id)
         .await
-        .map_err(|e| {
-            if e.to_string().contains("not found") {
-                StatusCode::NOT_FOUND
-            } else {
-                log_internal_server_error(e)
-            }
-        })?;
+        .map_err(chat_write_error_status)?;
 
     app_state.global_policy_engine.invalidate_data().await;
 

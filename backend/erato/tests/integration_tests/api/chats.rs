@@ -592,6 +592,78 @@ async fn test_unarchive_unknown_chat_returns_404(pool: Pool<Postgres>) {
     assert_eq!(response.status_code(), http::StatusCode::NOT_FOUND);
 }
 
+/// Refreshes the policy snapshot so the next request authorizes against the new row.
+async fn insert_chat_owned_by_a_stranger(app_state: &erato::state::AppState) -> Uuid {
+    let stranger = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        "stranger-subject",
+        None,
+    )
+    .await
+    .expect("Failed to create the other user");
+    let chat = chats::ActiveModel {
+        owner_user_id: ActiveValue::Set(stranger.id.to_string()),
+        ..Default::default()
+    }
+    .insert(&app_state.db)
+    .await
+    .expect("Failed to insert chat");
+    app_state.global_policy_engine.invalidate_data().await;
+    chat.id
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_archive_of_a_foreign_chat_returns_404(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .expect("Failed to create user");
+    let chat_id = insert_chat_owned_by_a_stranger(&app_state).await;
+
+    let server = create_test_server(app_state);
+
+    let response = server
+        .post(&format!("/api/v1beta/chats/{chat_id}/archive"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({}))
+        .await;
+
+    assert_eq!(response.status_code(), http::StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_unarchive_of_a_foreign_chat_returns_404(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .expect("Failed to create user");
+    let chat_id = insert_chat_owned_by_a_stranger(&app_state).await;
+
+    let server = create_test_server(app_state);
+
+    let response = server
+        .post(&format!("/api/v1beta/chats/{chat_id}/unarchive"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+
+    assert_eq!(response.status_code(), http::StatusCode::NOT_FOUND);
+}
+
 /// Test that recent chats resolve title with `title_by_user_provided` precedence.
 ///
 /// # Test Categories
