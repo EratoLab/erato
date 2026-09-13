@@ -107,36 +107,58 @@ export type FetchConversationMessages =
   OutlookMessageFetcher["fetchConversationMessages"];
 
 /**
- * Microsoft Graph backing (Exchange Online). Thin delegation to the existing
- * Graph functions — EXO behavior is byte-identical to the pre-seam direct
- * calls. `acquireToken` is expected to be bound to the `Mail.Read` scope.
+ * Microsoft Graph backing (Exchange Online). Thin delegation to the Graph
+ * functions — every request carries the options the call site passed.
+ *
+ * `owner` is the address of the mailbox the items live in, bound once here so
+ * every capability addresses the same store: absent, requests go to the
+ * signed-in user's `/me`; given (an item opened out of a shared or delegated
+ * mailbox), they go to that owner's `/users/{owner}` root. It is spread last
+ * so the binding wins over anything a call site put in `options` — call sites
+ * consume this seam precisely so they don't have to know where the mailbox
+ * lives.
+ *
+ * The scope `acquireToken` must carry follows that binding: `Mail.Read`
+ * without an owner, `Mail.Read.Shared` with one. Entra consent has no
+ * hierarchy, so binding an owner against a `Mail.Read`-only token 403s on
+ * every request.
+ *
+ * The `…ByInternetMessageId` lookups follow the same root deliberately, even
+ * though a dropped `.msg` can come from the user's own mailbox: a miss there
+ * is not fatal, it falls back to the local reader.
  */
 export function createGraphOutlookMessageFetcher(
   acquireToken: AcquireGraphToken,
+  { owner }: { owner?: string | null } = {},
 ): OutlookMessageFetcher {
   return {
     fetchMessageBytes: (ewsItemId, options) =>
-      fetchOutlookMessageBytesViaGraph(ewsItemId, acquireToken, options),
+      fetchOutlookMessageBytesViaGraph(ewsItemId, acquireToken, {
+        ...options,
+        owner,
+      }),
     fetchMessageFilesByInternetMessageId: (internetMessageId, options) =>
       fetchOutlookMessageFilesByInternetMessageIdViaGraph(
         internetMessageId,
         acquireToken,
-        options,
+        { ...options, owner },
       ),
     fetchMessageBytesByInternetMessageId: (internetMessageId, options) =>
       fetchOutlookMessageBytesByInternetMessageIdViaGraph(
         internetMessageId,
         acquireToken,
-        options,
+        { ...options, owner },
       ),
     fetchConversationMessages: (conversationId, options) =>
-      fetchConversationMessagesViaGraph(conversationId, acquireToken, options),
+      fetchConversationMessagesViaGraph(conversationId, acquireToken, {
+        ...options,
+        owner,
+      }),
     fetchParentMessageInConversation: (conversationId, options) =>
-      fetchParentMessageInConversationViaGraph(
-        conversationId,
-        acquireToken,
-        options,
-      ),
+      fetchParentMessageInConversationViaGraph(conversationId, acquireToken, {
+        ...options,
+        owner,
+      }),
   };
 }
 

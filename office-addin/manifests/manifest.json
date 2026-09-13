@@ -50,6 +50,10 @@
         {
           "name": "Mailbox.ReadWrite.User",
           "type": "Delegated"
+        },
+        {
+          "name": "Mailbox.SharedFolder",
+          "type": "Delegated"
         }
       ]
     }

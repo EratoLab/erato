@@ -313,7 +313,12 @@ describe("OutlookEmailSourceProvider — appointment isolation", () => {
 
     renderProvider();
 
-    expect(mockUseCurrentThread).toHaveBeenCalledWith(null, null, null);
+    expect(mockUseCurrentThread).toHaveBeenCalledWith(
+      null,
+      null,
+      null,
+      expect.objectContaining({ backendPending: false }),
+    );
     expect(captured!.emailSubject).toBe("");
     expect(captured!.selectedAttachmentItems).toEqual([]);
     expect(captured!.isLoadingAttachments).toBe(false);
@@ -326,5 +331,90 @@ describe("OutlookEmailSourceProvider — appointment isolation", () => {
     });
     expect(files).toEqual([]);
     expect(getAttachmentFile).not.toHaveBeenCalled();
+  });
+});
+
+describe("OutlookEmailSourceProvider — backend resolution", () => {
+  function primeReadItem() {
+    mockUseOutlookMailItem.mockReturnValue({
+      itemIdentity: "id-1",
+      mailItem: {
+        itemKind: "message",
+        itemId: "item-1",
+        conversationId: "conv-1",
+        internetMessageId: "<m2@x>",
+        subject: "Project kickoff",
+        isComposeMode: false,
+      },
+      attachments: [],
+      isLoadingAttachments: false,
+      getAttachmentFile: vi.fn(),
+    });
+    mockUseCurrentThread.mockReturnValue({
+      thread: null,
+      isLoading: false,
+      error: false,
+    });
+  }
+
+  it("forwards the probe window to the thread hook as pending", () => {
+    primeReadItem();
+    mockUseOutlookMessageFetcher.mockReturnValue({
+      fetcher: null,
+      mailboxRoot: null,
+      unavailableReason: "mailbox-location-pending",
+    });
+
+    renderProvider();
+
+    expect(mockUseCurrentThread).toHaveBeenCalledWith(
+      "item-1",
+      "conv-1",
+      null,
+      {
+        mailboxRoot: null,
+        backendPending: true,
+      },
+    );
+  });
+
+  it("does not report a steady-state missing backend as pending", () => {
+    primeReadItem();
+    mockUseOutlookMessageFetcher.mockReturnValue({
+      fetcher: null,
+      mailboxRoot: null,
+      unavailableReason: "graph-unavailable",
+    });
+
+    renderProvider();
+
+    expect(mockUseCurrentThread).toHaveBeenCalledWith(
+      "item-1",
+      "conv-1",
+      null,
+      {
+        mailboxRoot: null,
+        backendPending: false,
+      },
+    );
+  });
+
+  it("keys the thread on the mailbox root the fetcher is bound to", () => {
+    primeReadItem();
+    const fetchConversationMessages = vi.fn();
+    mockUseOutlookMessageFetcher.mockReturnValue({
+      fetcher: { fetchConversationMessages },
+      mailboxRoot: "shared@x",
+      unavailableReason: null,
+    });
+
+    renderProvider();
+
+    expect(mockUseCurrentThread).toHaveBeenCalledWith(
+      "item-1",
+      "conv-1",
+      fetchConversationMessages,
+      { mailboxRoot: "shared@x", backendPending: false },
+    );
   });
 });

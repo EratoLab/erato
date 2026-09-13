@@ -12,6 +12,23 @@ import type {
   FetchConversationOptions,
 } from "../utils/fetchOutlookMessage";
 
+export interface UseCurrentThreadOptions extends FetchConversationOptions {
+  /**
+   * Mailbox the conversation backend is bound to (see
+   * `useOutlookMessageFetcher().mailboxRoot`). Part of the cache key: an
+   * item's ids are the same whichever store answers, so without it the empty
+   * answer from the user's own store would be served forever once the shared
+   * owner resolves — `staleTime: Infinity` never refetches an existing key.
+   */
+  mailboxRoot?: string | null;
+  /**
+   * True while the backend is still being resolved (the fetcher hook reports
+   * `mailbox-location-pending`). Reported as loading rather than "no backend"
+   * so the composer's send gate stays closed until the thread can be fetched.
+   */
+  backendPending?: boolean;
+}
+
 export interface UseCurrentThreadResult {
   thread: ParsedThread | null;
   isLoading: boolean;
@@ -34,7 +51,8 @@ export interface UseCurrentThreadResult {
  *     `conversationId` is missing, or when `fetchConversationMessages` is
  *     null (no mail backend available — thread synthesis quietly stays off).
  *     `itemId === null` is the read-mode gate (drafts/compose items have no
- *     backend-reachable id).
+ *     backend-reachable id). The one exception is `backendPending`: with both
+ *     ids present and the backend still being resolved, `isLoading` is true.
  *   - Sets `isLoading=true` only for the initial fetch. Background refetches
  *     must not disable the composer after the email chip has materialized.
  *     TanStack Query supplies cancellation on item/conversation changes; the
@@ -51,11 +69,11 @@ export function useCurrentThread(
   itemId: string | null,
   conversationId: string | null,
   fetchConversationMessages: FetchConversationMessages | null,
-  options: FetchConversationOptions = {},
+  options: UseCurrentThreadOptions = {},
 ): UseCurrentThreadResult {
   // Stable transport reference avoids re-running the effect on every render
   // when the consumer passes an inline transport closure.
-  const { transport } = options;
+  const { transport, mailboxRoot = null, backendPending = false } = options;
   const enabled =
     itemId !== null &&
     conversationId !== null &&
@@ -67,6 +85,7 @@ export function useCurrentThread(
       "outlook-current-thread",
       itemId,
       conversationId,
+      mailboxRoot,
     ],
     enabled,
     retry: false,
@@ -98,7 +117,11 @@ export function useCurrentThread(
   }, [query.error, query.isError]);
 
   if (!enabled) {
-    return { thread: null, isLoading: false, error: false };
+    return {
+      thread: null,
+      isLoading: backendPending && itemId !== null && conversationId !== null,
+      error: false,
+    };
   }
 
   return {

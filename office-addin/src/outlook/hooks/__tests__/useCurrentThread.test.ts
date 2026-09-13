@@ -202,6 +202,7 @@ describe("useCurrentThread", () => {
       "outlook-current-thread",
       "item-1",
       "conv-1",
+      null,
     ];
     queryClient.setQueryData(queryKey, buildThread("Cached thread"));
 
@@ -259,5 +260,77 @@ describe("useCurrentThread", () => {
       expect(result.current.thread?.subject).toBe("Refetched thread");
     });
     expect(result.current.isLoading).toBe(false);
+  });
+
+  it("reports loading while the backend is still being resolved", () => {
+    const { result } = renderHook(
+      () =>
+        useCurrentThread("item-1", "conv-1", null, { backendPending: true }),
+      { wrapper: createWrapper() },
+    );
+    // The composer's send gate keys on this. "No backend" here would open
+    // the composer with no thread attached for one host round-trip per
+    // navigation.
+    expect(result.current).toEqual({
+      thread: null,
+      isLoading: true,
+      error: false,
+    });
+
+    const { result: withoutItem } = renderHook(
+      () => useCurrentThread(null, "conv-1", null, { backendPending: true }),
+      { wrapper: createWrapper() },
+    );
+    expect(withoutItem.current.isLoading).toBe(false);
+
+    const { result: steadyState } = renderHook(
+      () =>
+        useCurrentThread("item-1", "conv-1", null, { backendPending: false }),
+      { wrapper: createWrapper() },
+    );
+    expect(steadyState.current.isLoading).toBe(false);
+  });
+
+  it("refetches under a new key when the mailbox root changes for the same item", async () => {
+    type Fetch = NonNullable<Parameters<typeof useCurrentThread>[2]>;
+    const ownStore = vi.fn<Fetch>(async () => ({
+      messages: [],
+      state: "ok",
+    }));
+    const sharedStore = vi.fn<Fetch>(async () => ({
+      messages: [
+        {
+          id: "m1",
+          internetMessageId: "<m1@x>",
+          subject: "Shared-mailbox message",
+          body: { contentType: "text", content: "body" },
+          receivedDateTime: "2026-03-01T10:00:00Z",
+          isDraft: false,
+        },
+      ],
+      state: "ok",
+    }));
+
+    type Props = { fetch: Fetch | null; root: string | null };
+    const initialProps: Props = { fetch: ownStore, root: null };
+    const { result, rerender } = renderHook(
+      ({ fetch, root }: Props) =>
+        useCurrentThread("item-1", "conv-1", fetch, { mailboxRoot: root }),
+      { wrapper: createWrapper(), initialProps },
+    );
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+    expect(result.current.thread).toBeNull();
+
+    // The probe window, then the owner-rooted backend for the SAME ids. The
+    // ids alone would serve the cached empty answer forever.
+    rerender({ fetch: null, root: null });
+    rerender({ fetch: sharedStore, root: "shared@x" });
+    await waitFor(() => {
+      expect(result.current.thread?.subject).toBe("Shared-mailbox message");
+    });
+    expect(sharedStore).toHaveBeenCalledTimes(1);
+    expect(ownStore).toHaveBeenCalledTimes(1);
   });
 });

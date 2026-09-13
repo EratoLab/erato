@@ -141,6 +141,7 @@
         <Host xsi:type="MailHost">
           <!--{{OFFICE_ADDIN_MANIFEST_LAUNCH_EVENT_RUNTIMES}}-->
           <DesktopFormFactor>
+            <SupportsSharedFolders>true</SupportsSharedFolders>
             <ExtensionPoint xsi:type="MessageReadCommandSurface">
               <OfficeTab id="TabDefault">
                 <Group id="eratoGroup">
