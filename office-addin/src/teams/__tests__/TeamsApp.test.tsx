@@ -269,9 +269,57 @@ vi.mock("@erato/frontend/library", async () => {
     ChatMessage: () => null,
     DefaultMessageControls: () => null,
     DocumentIcon: () => null,
-    SidebarToggleIcon: () => null,
     useGenerationIndicatorCount: () => 0,
-    CountBadge: () => null,
+    SidebarToggle: ({
+      label,
+      expanded,
+      attentionCount = 0,
+      badgeTestId,
+      children,
+      surface: _surface,
+      dataUi: _dataUi,
+      ...props
+    }: Record<string, unknown> & {
+      label?: string;
+      expanded?: boolean;
+      attentionCount?: number;
+      badgeTestId?: string;
+      children?: ReactNode;
+      surface?: string;
+      dataUi?: string;
+      ref?: unknown;
+    }) => (
+      <button
+        aria-label={label}
+        aria-expanded={expanded}
+        {...(props as Record<string, never>)}
+      >
+        {children}
+        {attentionCount > 0 ? (
+          // The real badge is aria-hidden; the count reaches the a11y tree
+          // through the button's own label.
+          <span aria-hidden="true" data-testid={badgeTestId}>
+            {attentionCount}
+          </span>
+        ) : null}
+      </button>
+    ),
+    SidebarBand: ({
+      children,
+      className,
+      dataUi,
+      edge,
+    }: {
+      children?: ReactNode;
+      className?: string;
+      dataUi?: string;
+      edge: string;
+      flush?: boolean;
+    }) => (
+      <div className={className} data-ui={dataUi ?? `sidebar-${edge}`}>
+        {children}
+      </div>
+    ),
     FeedbackCommentDialog: () => null,
     FeedbackViewDialog: () => null,
     FilePreviewModal: () => null,

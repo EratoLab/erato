@@ -12,19 +12,7 @@ import { holdSessionPolicy, releaseSessionPolicy } from "./sessionPolicy";
 import { useGraphTokenOptional } from "../core/auth/GraphTokenProvider";
 
 import type { AddinStartViewProps } from "@erato/frontend/library";
-import type { CSSProperties, ReactNode } from "react";
-
-// Same composite recipe as the shell's floating controls: an opaque shell-app
-// base with the sidebar tone layered on top, so the control stays readable on
-// glass themes where the sidebar tone alone is translucent.
-const floatingToggleStyle: CSSProperties = {
-  backgroundColor: "var(--theme-shell-app, var(--theme-bg-primary))",
-  backgroundImage:
-    "linear-gradient(var(--theme-shell-sidebar), var(--theme-shell-sidebar))",
-  borderColor: "var(--theme-border-divider)",
-  borderRadius: "var(--theme-radius-shell)",
-  boxShadow: "var(--theme-elevation-shell)",
-};
+import type { ReactNode } from "react";
 
 /**
  * Hosts a kit-registered start view (`componentRegistry.AddinStartView`) in
@@ -78,12 +66,16 @@ export function OutlookStartViewSwitcher({
   const inChat = view === "chat";
   return (
     <div className="relative flex size-full min-w-0 flex-col">
+      {/* A view switcher, not a disclosure: no aria-expanded, and its glyph
+          swaps (mail ↔ chat) instead of flipping, so SidebarToggle's
+          expanded/rotation contract has nothing to say about it. It borrows
+          only the floating skin, which carries the opaque base these
+          controls need outside [data-ui="sidebar"]. */}
       <Button
         variant="sidebar-icon"
         icon={inChat ? <MailIcon /> : <ChatBubbleIcon />}
         onClick={() => setView(inChat ? "start" : "chat")}
-        className="absolute right-2 top-2 z-20 border"
-        style={floatingToggleStyle}
+        className="absolute right-2 top-2 z-20 floating-control-skin border"
         aria-label={
           inChat
             ? t({

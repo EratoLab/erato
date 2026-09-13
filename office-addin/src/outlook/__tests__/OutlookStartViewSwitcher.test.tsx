@@ -66,6 +66,22 @@ describe("OutlookStartViewSwitcher", () => {
     expect(screen.queryByTestId("chat-surface")).not.toBeInTheDocument();
   });
 
+  // The control paints from the stylesheet alone: an inline style here would
+  // be unreachable for a customer theme.
+  it("paints the toggle from the floating skin class, never inline", () => {
+    componentRegistry.AddinStartView = StubStartView;
+    render(
+      <OutlookStartViewSwitcher platform="outlook">
+        <div data-testid="chat-surface" />
+      </OutlookStartViewSwitcher>,
+    );
+
+    const toggle = screen.getByTestId("addin-start-view-toggle");
+    expect(toggle).not.toHaveAttribute("style");
+    expect(toggle).toHaveClass("floating-control-skin");
+    expect(toggle).toHaveClass("border");
+  });
+
   it("switches to chat via the start view's openChat prop", () => {
     componentRegistry.AddinStartView = StubStartView;
     render(

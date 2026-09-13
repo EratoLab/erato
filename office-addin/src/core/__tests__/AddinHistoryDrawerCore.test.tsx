@@ -111,6 +111,25 @@ vi.mock("@erato/frontend/library", () => ({
   NoFilterMatchesRow: () => <p data-testid="chat-history-no-filter-matches" />,
   sidebarInsetClassName: "sidebar-inset-geometry",
   SettingsIcon: () => null,
+  // Mirrors the primitive's own default hook so the header/footer lookups
+  // below assert what the real band emits.
+  SidebarBand: ({
+    edge,
+    flush: _flush,
+    dataUi,
+    className,
+    children,
+  }: {
+    edge: "header" | "footer";
+    flush?: boolean;
+    dataUi?: string;
+    className?: string;
+    children?: ReactNode;
+  }) => (
+    <div data-ui={dataUi ?? `sidebar-${edge}`} className={className}>
+      {children}
+    </div>
+  ),
   SidebarCollapsibleSection: ({
     title,
     actions,
@@ -138,7 +157,34 @@ vi.mock("@erato/frontend/library", () => ({
       {label}
     </button>
   ),
-  SidebarToggleIcon: () => null,
+  // `ref` reaches the DOM node as a plain prop (React 19), which the
+  // focus-return assertion below depends on: the drawer focuses the close
+  // control through that ref.
+  SidebarToggle: ({
+    label,
+    expanded,
+    surface,
+    attentionCount: _attentionCount,
+    badgeTestId: _badgeTestId,
+    dataUi,
+    ...props
+  }: Record<string, unknown> & {
+    label?: string;
+    expanded?: boolean;
+    surface?: string;
+    attentionCount?: number;
+    badgeTestId?: string;
+    dataUi?: string;
+  }) => (
+    <button
+      type="button"
+      aria-label={label}
+      aria-expanded={expanded}
+      data-surface={surface}
+      data-ui={dataUi}
+      {...props}
+    />
+  ),
   EditChatTitleDialog: (props: {
     isOpen: boolean;
     generatedTitle: string;
@@ -229,6 +275,28 @@ describe("AddinHistoryDrawerCore", () => {
   it("renders nothing while closed", () => {
     renderDrawer({ isOpen: false });
     expect(screen.queryByTestId("addin-history-drawer")).toBeNull();
+  });
+
+  // The bands and the close control come from the shared sidebar primitives,
+  // so the drawer only supplies placement — which is all this file can check.
+  // Where the flip lands is the primitive's own contract and is pinned in
+  // SidebarToggle.test.tsx against the real Button; asserting it here would
+  // only interrogate the stub below.
+  it("builds its chrome from the sidebar band primitives", () => {
+    renderDrawer();
+    const panel = screen.getByTestId("addin-history-drawer");
+
+    const header = panel.querySelector('[data-ui="sidebar-header"]');
+    const closeToggle = screen.getByTestId("addin-history-drawer-close");
+    expect(header).not.toBeNull();
+    expect(header?.contains(closeToggle)).toBe(true);
+    expect(closeToggle).toHaveAttribute("aria-expanded", "true");
+
+    const footer = panel.querySelector('[data-ui="sidebar-footer"]');
+    expect(footer).not.toBeNull();
+    expect(
+      footer?.contains(screen.getByTestId("addin-history-drawer-settings")),
+    ).toBe(true);
   });
 
   it("selects a row through the session path and closes", () => {

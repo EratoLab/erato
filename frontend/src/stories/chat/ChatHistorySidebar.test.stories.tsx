@@ -7,9 +7,10 @@ import {
 import { useState } from "react";
 
 import { ChatHistorySidebar } from "../../components/ui/Chat/ChatHistorySidebar";
+import { FeatureConfigProvider } from "../../providers/FeatureConfigProvider";
 
 import type { ChatSession } from "@/types/chat";
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Decorator, Meta, StoryObj } from "@storybook/react";
 
 const meta: Meta<typeof ChatHistorySidebar> = {
   title: "CHAT/ChatHistorySidebar/Tests",
@@ -145,18 +146,25 @@ export const CollapseTest: Story = {
     const sidebar = canvas.getByRole("complementary");
     await expect(sidebar.clientWidth).toBeGreaterThan(200);
 
-    const toggleButton = canvas.getByLabelText(/collapse sidebar/i);
-    await expect(toggleButton).toHaveAttribute("aria-expanded", "true");
+    const collapseButton = canvas.getByLabelText(/collapse sidebar/i);
+    await expect(collapseButton).toHaveAttribute("aria-expanded", "true");
 
-    // Test collapse
-    await user.click(toggleButton);
+    // Test collapse. The header control is the one that gets hidden, and it
+    // keeps announcing the expanded state; the control that takes over under
+    // the default `hidden` mode is the trigger floating over the
+    // conversation, so the collapsed state has to be read off that one.
+    await user.click(collapseButton);
     await new Promise((resolve) => setTimeout(resolve, 250));
-    await expect(toggleButton).toHaveAttribute("aria-expanded", "false");
+    const expandButton = await canvas.findByLabelText(/expand sidebar/i);
+    await expect(expandButton).toHaveAttribute("aria-expanded", "false");
 
     // Test expanding again
-    await user.click(toggleButton);
+    await user.click(expandButton);
     await new Promise((resolve) => setTimeout(resolve, 250));
-    await expect(toggleButton).toHaveAttribute("aria-expanded", "true");
+    await expect(canvas.getByLabelText(/collapse sidebar/i)).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
   },
 };
 
@@ -179,12 +187,74 @@ export const SessionInteractionTest: Story = {
 
     await user.click(sessionLink);
 
-    // Verify the selected state
-    await expect(sessionContainer).toHaveClass("bg-theme-bg-selected");
+    // Verify the selected state. The row states it with `data-selected`,
+    // beside the `aria-current` on its link — the contract a theme keys on.
+    // The utility classes that used to carry it belong to the row primitive
+    // now and are no longer on this element.
+    await expect(sessionContainer).toHaveAttribute("data-selected", "true");
+    await expect(sessionLink).toHaveAttribute("aria-current", "page");
 
-    // Test session hover state
+    // Hover is painted by CSS on the row's geometry class, and synthetic
+    // events never set `:hover`, so this only checks the row survives the
+    // pointer interaction.
     await user.hover(sessionContainer);
-    await expect(sessionContainer).toHaveClass("hover:bg-theme-bg-hover");
+    await expect(sessionContainer).toBeVisible();
+  },
+};
+
+/**
+ * The logo face only exists in slim mode, and the preview's feature config
+ * collapses to `hidden`, so this story supplies both the mode and a logo
+ * path of its own. The path is served by Storybook's static dir, which is
+ * what lets the sidebar's existence check for it resolve.
+ */
+const withSlimLogoConfig: Decorator = (Story) => (
+  <FeatureConfigProvider
+    config={{
+      sidebar: {
+        collapsedMode: "slim",
+        logoPath: "/erato-e.svg",
+        logoDarkPath: "/erato-e-dark.svg",
+      },
+    }}
+  >
+    <Story />
+  </FeatureConfigProvider>
+);
+
+export const SlimLogoFaceTest: Story = {
+  args: {
+    ...AccessibilityTest.args,
+    collapsed: true,
+  },
+  decorators: [withSlimLogoConfig],
+  play: async ({ canvasElement }) => {
+    const canvas = await waitForSidebarCanvas(canvasElement);
+
+    // The logo reaches the DOM only after its existence check resolves.
+    const logo = await canvas.findByAltText(/logo/i);
+    const toggle = canvas.getByLabelText(/expand sidebar/i);
+    await expect(toggle).toContainElement(logo);
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    // The face REPLACES the toggle's own glyph rather than joining it: the
+    // sidebar geometry probe measures the first aria-hidden node inside this
+    // button, so a second icon span here is what it would measure instead of
+    // the logo.
+    await expect(toggle.querySelector('[aria-hidden="true"]')).toBeNull();
+
+    const glyph = toggle.querySelector("svg");
+
+    if (!glyph) {
+      throw new Error("Logo face lost its toggle glyph");
+    }
+
+    // The glyph stays mounted behind the logo and CSS reveals it on :hover,
+    // which synthetic events never set — so this asserts the resting state,
+    // and the swap itself is checked by eye in
+    // CHAT/ChatHistorySidebar → Slim mode with logo.
+    await expect(glyph.parentElement).not.toBeVisible();
+    await expect(logo).toBeVisible();
   },
 };
 

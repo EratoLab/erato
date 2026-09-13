@@ -1124,6 +1124,37 @@ body {
     var(--theme-spacing-shell-compact-padding-x);
 }
 
+/* A band whose single child carries the sidebar inset and the row height
+   itself (the add-in drawer's Settings row): the band's own padding has to
+   lose. Source order is what decides it — this rule and .sidebar-section-skin
+   are both specificity 0,1,0 and this one comes later, so no `!important` is
+   needed to zero the padding. Callers pair it with dropping `flex` and
+   .sidebar-band-geometry: inside a flex row that lone child, which has no
+   width class, shrinks to its content and its hover surface stops spanning
+   the drawer. */
+.sidebar-band-flush {
+  padding: 0;
+}
+
+/* The floating and framed sidebar toggles. The opaque base is the whole
+   point: a shipped customer theme gives --theme-shell-sidebar 0.72 alpha and
+   blurs it with a backdrop-filter scoped to [data-ui="sidebar"]. These
+   controls sit OUTSIDE that element, so they inherit the translucent token
+   without the blur and paint the conversation straight through themselves.
+   background-color lays down an opaque shell base and the gradient paints the
+   (possibly translucent) sidebar token over it, so the control reads solid at
+   any alpha while still taking the theme's own colour. */
+.floating-control-skin {
+  background-color: var(--theme-shell-app, var(--theme-bg-primary));
+  background-image: linear-gradient(
+    var(--theme-shell-sidebar),
+    var(--theme-shell-sidebar)
+  );
+  border-color: var(--theme-border-divider);
+  border-radius: var(--theme-radius-shell);
+  box-shadow: var(--theme-elevation-shell);
+}
+
 /* One horizontal inset for every sidebar row surface: nav-row wrappers,
    section headers, the nav divider and the chat-list wrappers all read this
    token (header and footer read it through .sidebar-section-skin), so the

@@ -11,6 +11,7 @@ import type { ChatSession } from "@/types/chat";
 import type { Messages } from "@lingui/core";
 
 let mockedCollapsedMode = "hidden";
+let mockedLogoPath: string | null = null;
 let mockedAssistantsEnabled = false;
 let mockedAssistantHubEnabled = false;
 
@@ -46,13 +47,13 @@ vi.mock("@/providers/FeatureConfigProvider", () => ({
   }),
   useSidebarFeature: () => ({
     collapsedMode: mockedCollapsedMode,
-    logoPath: null,
+    logoPath: mockedLogoPath,
     logoDarkPath: null,
   }),
 }));
 
 vi.mock("@/utils/themeUtils", () => ({
-  checkFileExists: vi.fn(async () => false),
+  checkFileExists: vi.fn(async () => mockedLogoPath !== null),
 }));
 
 const historyListProps = vi.hoisted(
@@ -89,6 +90,7 @@ const sessions: ChatSession[] = [
 describe("ChatHistorySidebar", () => {
   beforeEach(async () => {
     mockedCollapsedMode = "hidden";
+    mockedLogoPath = null;
     mockedAssistantsEnabled = false;
     mockedAssistantHubEnabled = false;
     localStorage.clear();
@@ -96,6 +98,12 @@ describe("ChatHistorySidebar", () => {
     const { CHAT_HISTORY_FILTER_DEFAULTS, useChatHistoryFilterStore } =
       await import("@/hooks/chat/store/chatHistoryFilterStore");
     useChatHistoryFilterStore.setState({ ...CHAT_HISTORY_FILTER_DEFAULTS });
+    // The attention count comes from the real store, so a seeded chat would
+    // otherwise leak a badge into every later test.
+    const { useGenerationStatusStore } = await import(
+      "@/hooks/chat/store/generationStatusStore"
+    );
+    useGenerationStatusStore.getState().reset();
     const { i18n } = await import("@lingui/core");
     i18n.load("en", enMessages as unknown as Messages);
     i18n.activate("en");
@@ -128,13 +136,90 @@ describe("ChatHistorySidebar", () => {
     for (const property of ["background-color", "box-shadow"]) {
       expect(sidebar?.getAttribute("style") ?? "").not.toContain(property);
     }
-    expect(container.querySelector('[data-ui="sidebar-header"]')).toHaveClass(
-      "sidebar-section-skin",
-    );
-    expect(container.querySelector('[data-ui="sidebar-footer"]')).toHaveClass(
-      "sidebar-section-skin",
-    );
+    // Both bands come off one primitive: the shared height formula is what
+    // keeps header and footer within a pixel of each other, and it only
+    // works while nothing paints or sizes them inline.
+    for (const edge of ["sidebar-header", "sidebar-footer"]) {
+      const band = container.querySelector(`[data-ui="${edge}"]`);
+      expect(band).toHaveClass("sidebar-section-skin", "sidebar-band-geometry");
+      expect(band).not.toHaveAttribute("style");
+    }
     expect(screen.getByTestId("history-list")).toBeInTheDocument();
+  });
+
+  it("flips the expanded toggle's glyph rather than the button", async () => {
+    const { i18n } = await import("@lingui/core");
+    render(
+      <MemoryRouter>
+        <I18nProvider i18n={i18n}>
+          <ChatHistorySidebar
+            sessions={sessions}
+            currentSessionId="chat-1"
+            onSessionSelect={vi.fn()}
+            onSessionArchive={vi.fn()}
+            isLoading={false}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+
+    const toggle = screen.getByRole("button", { name: "collapse sidebar" });
+
+    // Rotating the button would turn its badge upside down and move it from
+    // the top-right corner to the bottom-left one, so the flip stays on the
+    // glyph span.
+    const glyph = toggle.querySelector('[aria-hidden="true"]');
+    expect(glyph).toHaveClass("rotate-180");
+    expect(glyph?.querySelector("svg")).not.toBeNull();
+    expect(toggle).not.toHaveClass("rotate-180");
+
+    // The shape enum rides data-surface; data-variant stays the themed
+    // "sidebar-icon" both shipped customer themes key their rules on.
+    expect(toggle).toHaveClass("sidebar-icon-col-geometry");
+    expect(toggle).toHaveAttribute("data-surface", "flush");
+    expect(toggle).toHaveAttribute("data-variant", "sidebar-icon");
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(toggle).toHaveAttribute("tabindex", "0");
+  });
+
+  it("paints the hidden-mode toggle from the floating recipe, not inline", async () => {
+    const { i18n } = await import("@lingui/core");
+    const { container } = render(
+      <MemoryRouter>
+        <I18nProvider i18n={i18n}>
+          <ChatHistorySidebar
+            sessions={sessions}
+            currentSessionId="chat-1"
+            onSessionSelect={vi.fn()}
+            onSessionArchive={vi.fn()}
+            isLoading={false}
+            collapsed={true}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+
+    const toggle = screen.getByRole("button", { name: "expand sidebar" });
+
+    // It floats over the conversation, outside the sidebar element a theme
+    // may blur — hence the opaque class recipe, and no inline surface.
+    expect(container.querySelector('[data-ui="sidebar"]')).not.toContainElement(
+      toggle,
+    );
+    expect(toggle).toHaveClass(
+      "floating-control-skin",
+      "border",
+      "absolute",
+      "left-2",
+      "top-2",
+      "z-30",
+    );
+    expect(toggle).not.toHaveAttribute("style");
+    // The caller positions it, so the primitive must not add `relative` —
+    // Tailwind emits it after `.absolute` and it would win.
+    expect(toggle).not.toHaveClass("relative");
+    expect(toggle).toHaveAttribute("data-surface", "floating");
+    expect(toggle).toHaveAttribute("data-variant", "sidebar-icon");
   });
 
   it("renders the active search nav item with the selected sidebar surface", async () => {
@@ -205,6 +290,122 @@ describe("ChatHistorySidebar", () => {
     );
     expect(searchItem).not.toHaveClass("justify-center");
     expect(searchItem).not.toHaveClass("px-3");
+
+    // The rail-column margin is what puts the toggle's box on the same
+    // centerline, so it has to reach the button element itself — a wrapper
+    // carrying it would centre nothing.
+    const toggle = screen.getByRole("button", { name: "expand sidebar" });
+    expect(toggle).toHaveClass("sidebar-icon-col-geometry");
+    expect(toggle).not.toHaveAttribute("style");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("nests the attention badge in the slim toggle, behind its glyph", async () => {
+    mockedCollapsedMode = "slim";
+    const { useGenerationStatusStore } = await import(
+      "@/hooks/chat/store/generationStatusStore"
+    );
+    useGenerationStatusStore.setState({
+      statusByChatId: {
+        "chat-2": {
+          kind: "running",
+          startedAt: new Date().toISOString(),
+          localSeenAt: Date.now(),
+        },
+      },
+    });
+
+    const { i18n } = await import("@lingui/core");
+    render(
+      <MemoryRouter>
+        <I18nProvider i18n={i18n}>
+          <ChatHistorySidebar
+            sessions={sessions}
+            currentSessionId="chat-1"
+            onSessionSelect={vi.fn()}
+            onSessionArchive={vi.fn()}
+            isLoading={false}
+            collapsed={true}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+
+    // The badge is aria-hidden, so the count only reaches assistive tech
+    // through the control's own name — and the bare phrase has to stay a
+    // literal prefix, because e2e looks the toggle up by substring.
+    const toggle = screen.getByRole("button", {
+      name: "expand sidebar, 1 chat needs attention",
+    });
+    const badge = screen.getByTestId("sidebar-generation-badge");
+    expect(badge).toHaveTextContent("1");
+    expect(toggle).toContainElement(badge);
+
+    // The geometry probe measures the first aria-hidden node in the button,
+    // so the badge must land after the glyph span, never before it.
+    const firstHidden = toggle.querySelector('[aria-hidden="true"]');
+    expect(firstHidden).not.toBe(badge);
+    expect(firstHidden?.querySelector("svg")).not.toBeNull();
+
+    // Nothing wraps the button any more, so it is the badge's own anchor.
+    expect(toggle).toHaveClass("relative");
+  });
+
+  // The logo face replaces the toggle's glyph span entirely, so the badge is
+  // the only aria-hidden node the primitive itself contributes. The face has
+  // to supply the anchor, or the rail centerline gets measured against a 16px
+  // pill in the corner instead of a centred 20px glyph.
+  it("keeps the geometry anchor on the glyph when a logo face carries the badge", async () => {
+    mockedCollapsedMode = "slim";
+    mockedLogoPath = "/custom-theme/sidebar-logo.svg";
+
+    const { useGenerationStatusStore } = await import(
+      "@/hooks/chat/store/generationStatusStore"
+    );
+    useGenerationStatusStore.setState({
+      statusByChatId: {
+        "chat-2": {
+          kind: "running",
+          startedAt: new Date().toISOString(),
+          localSeenAt: Date.now(),
+        },
+      },
+    });
+
+    const { i18n } = await import("@lingui/core");
+    render(
+      <MemoryRouter>
+        <I18nProvider i18n={i18n}>
+          <ChatHistorySidebar
+            sessions={sessions}
+            currentSessionId="chat-1"
+            onSessionSelect={vi.fn()}
+            onSessionArchive={vi.fn()}
+            isLoading={false}
+            collapsed={true}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+
+    // The logo resolves through an async existence check, and the face and the
+    // plain toggle are different components — React swaps the button node when
+    // it lands, so anchor on the image rather than on a button queried first.
+    const logo = await screen.findByAltText("Logo");
+    const toggle = logo.closest("button");
+    const badge = screen.getByTestId("sidebar-generation-badge");
+
+    // The e2e spec locates the logo as a descendant of the header's first
+    // button, so the face has to stay inside the control.
+    expect(toggle).not.toBeNull();
+    expect(toggle).toContainElement(badge);
+    expect(toggle).toHaveAccessibleName(
+      "expand sidebar, 1 chat needs attention",
+    );
+
+    const firstHidden = toggle?.querySelector('[aria-hidden="true"]');
+    expect(firstHidden).not.toBe(badge);
+    expect(firstHidden?.tagName.toLowerCase()).toBe("svg");
   });
 
   it("persists the recent chats section collapsed state across remounts", async () => {
