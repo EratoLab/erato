@@ -108,6 +108,79 @@ export function outlookAnchorFromItem(
 }
 
 /**
+ * A read-mode message selection that all resolves to one conversation — what
+ * the host reports when the user clicks a collapsed thread header and every
+ * message in the stack becomes selected.
+ */
+export interface OutlookSelectedConversation {
+  conversationId: string;
+  /** The host's first-listed message; hosts commonly list newest first. */
+  itemId: string;
+  messageCount: number;
+}
+
+/**
+ * Summarise a `getSelectedItemsAsync` result into the single conversation it
+ * describes, or `null` when it describes anything else. Everything fails
+ * closed: an empty selection, any non-message or non-read entry, a missing
+ * `conversationId`, or entries spanning more than one conversation.
+ *
+ * `conversationId` is typed non-optional but is only populated from Mailbox
+ * 1.14, so it is read defensively — the value check doubles as the 1.14 gate.
+ *
+ * Pure; safe to call during render or in a `useState` initializer.
+ */
+export function summarizeSelectedConversation(
+  details: readonly Office.SelectedItemDetails[] | null | undefined,
+): OutlookSelectedConversation | null {
+  if (!details || details.length === 0) return null;
+
+  const conversationId = (details[0] as { conversationId?: string })
+    .conversationId;
+  if (!conversationId) return null;
+
+  for (const entry of details) {
+    // Mocks and some hosts omit `itemType` entirely; that keeps meaning
+    // "message", as it does for `Office.context.mailbox.item`.
+    const itemType = String(
+      (entry as { itemType?: string }).itemType ?? "message",
+    ).toLowerCase();
+    if (itemType !== "message") return null;
+    if (String(entry.itemMode).toLowerCase() !== "read") return null;
+    const entryConversationId = (entry as { conversationId?: string })
+      .conversationId;
+    if (entryConversationId !== conversationId) return null;
+  }
+
+  return {
+    conversationId,
+    itemId: details[0].itemId,
+    messageCount: details.length,
+  };
+}
+
+/**
+ * Build an `OutlookSessionAnchor` for a conversation-level selection. No
+ * `itemIdentity` is minted: nothing here names a single message, so item-bound
+ * work (reply, insert) must keep failing closed.
+ *
+ * Pure; safe to call during render or in a `useState` initializer.
+ */
+export function outlookAnchorFromSelectedConversation(
+  selection: OutlookSelectedConversation,
+): OutlookSessionAnchor {
+  // `itemKind` is deliberately omitted: `strictAnchorsEqual` defaults both
+  // sides to "message", so clicking the header of the thread you are already
+  // reading compares EQUAL to that message's anchor (silent resume, no
+  // spurious ask-toast), while another thread's header stays a real context
+  // change.
+  return {
+    conversationId: selection.conversationId,
+    isCompose: false,
+  };
+}
+
+/**
  * Strict equality: same conversation, same mode (read vs. compose). Brand-new
  * composes have `conversationId === null` — null never equals null here, so a
  * fresh compose is always considered a new anchor.

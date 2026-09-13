@@ -2,6 +2,7 @@ import { useMemo } from "react";
 
 import { useDebouncedValue } from "./useDebouncedValue";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
+import { outlookAnchorFromSelectedConversation } from "../sessionPolicy";
 
 import type { OutlookSessionAnchor } from "../sessionPolicy";
 
@@ -17,13 +18,22 @@ const ANCHOR_DEBOUNCE_MS = 400;
  * (and any "ask" toast it spawns) from firing on every flicker.
  *
  * Returns `null` while the item provider is still loading (no observable
- * context yet) or when no Outlook item is available.
+ * context yet). With no single item — a collapsed conversation header selects
+ * every message in the stack, so the host reports no `mailbox.item` — the
+ * anchor is derived from the summarised selection instead; `null` only when
+ * neither is available.
  */
 export function useOutlookSessionAnchor(): OutlookSessionAnchor | null {
-  const { itemIdentity, mailItem, isLoading } = useOutlookMailItem();
+  const { itemIdentity, mailItem, selectedConversation, isLoading } =
+    useOutlookMailItem();
 
   const liveAnchor = useMemo<OutlookSessionAnchor | null>(() => {
-    if (isLoading || !mailItem) return null;
+    if (isLoading) return null;
+    if (!mailItem) {
+      return selectedConversation
+        ? outlookAnchorFromSelectedConversation(selectedConversation)
+        : null;
+    }
     return {
       conversationId: mailItem.conversationId,
       isCompose: mailItem.isComposeMode,
@@ -31,7 +41,7 @@ export function useOutlookSessionAnchor(): OutlookSessionAnchor | null {
       itemIdentity:
         mailItem.itemKind === "appointment" ? itemIdentity : undefined,
     };
-  }, [isLoading, itemIdentity, mailItem]);
+  }, [isLoading, itemIdentity, mailItem, selectedConversation]);
 
   // Leading-edge: the first observation passes through without waiting, so
   // cold-open lands the anchor instantly and the session policy can fire

@@ -178,6 +178,7 @@ export function OutlookEmailSourceProvider({
     attachments,
     isLoadingAttachments,
     getAttachmentFile,
+    selectedConversation,
   } = useOutlookMailItem();
   // Environment-dispatched message fetch; null when no mail backend is
   // available, in which case the thread preview and reply-context chip
@@ -199,8 +200,20 @@ export function OutlookEmailSourceProvider({
   // The source is nulled ONCE here so every derivation below is
   // appointment-blind by construction — never gate individual values.
   const emailItem = mailItem?.itemKind === "appointment" ? null : mailItem;
-  const itemId = emailItem?.itemId ?? null;
-  const conversationId = emailItem?.conversationId ?? null;
+  // Clicking a collapsed conversation header selects every message in the
+  // stack, so the host reports no single item — but it does report the
+  // conversation. The selection stands in only where there is NO item at all:
+  // gating on `mailItem` rather than `emailItem` keeps an open appointment
+  // from staging a mail thread beside it, and keeps a compose draft (which has
+  // a conversation but no `itemId`) from picking one up out of a stale
+  // selection. `useCurrentThread` takes `itemId` as its read-mode gate and
+  // fetches by `conversationId`, so the host's first-listed message satisfies
+  // the gate and the thread resolves; everything below still hangs off the
+  // null `emailItem` and stays fail-closed.
+  const headerSelection = mailItem ? null : selectedConversation;
+  const itemId = emailItem?.itemId ?? headerSelection?.itemId ?? null;
+  const conversationId =
+    emailItem?.conversationId ?? headerSelection?.conversationId ?? null;
   const isComposeMode = emailItem?.isComposeMode ?? false;
   const isLoadingEmailAttachments = emailItem ? isLoadingAttachments : false;
 
