@@ -6,7 +6,6 @@ use crate::frontend_environment::DeploymentVersion;
 #[cfg(all(feature = "profiling", target_os = "linux"))]
 use crate::profiling::{memory_profile_flamegraph, memory_profile_pprof};
 use crate::state::AppState;
-use crate::translation_po::TranslationPoCache;
 use axum::Extension;
 use axum::Json;
 use axum::extract::{Path, Query, State};
@@ -692,19 +691,20 @@ async fn runtime_translation(
         return StatusCode::NOT_FOUND.into_response();
     };
 
-    let reloadable = app_state.reloadable.read().await;
-    let Some(file) = reloadable.distribution_bundle.file(&filename) else {
-        return StatusCode::NOT_FOUND.into_response();
+    let compiled = {
+        let reloadable = app_state.reloadable.read().await;
+        reloadable
+            .distribution_bundle
+            .compiled_translation(&filename)
     };
-
-    let body =
-        match TranslationPoCache::default().compile_messages_json_from_contents(&file.contents) {
-            Ok(body) => body,
-            Err(error) => {
-                tracing::error!(locale, %error, "Failed to compile runtime translation catalog");
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        };
+    let body = match compiled {
+        Some(Ok(body)) => body,
+        Some(Err(error)) => {
+            tracing::error!(locale, %error, "Failed to compile runtime translation catalog");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+        None => return StatusCode::NOT_FOUND.into_response(),
+    };
 
     (
         [

@@ -16,6 +16,7 @@ use erato::services::sentry::{extend_with_sentry_layers, setup_sentry};
 use erato::startup_log;
 use erato::state::AppState;
 use erato::{ApiDoc, server};
+use std::sync::Arc;
 use std::time::Duration;
 use tower_http::cors::CorsLayer;
 use tower_http::set_header::SetResponseHeaderLayer;
@@ -198,10 +199,10 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
             axum::routing::get(move || async move { axum::Json(spec.clone()) }),
         )
         .fallback_service(serve_files_with_script.into_service())
-        .layer(Extension(build_frontend_registry(
+        .layer(Extension(Arc::new(build_frontend_registry(
             &config,
             &state.distribution,
-        )))
+        ))))
         .layer(Extension(DeploymentVersion::from_env()))
         .layer(CorsLayer::very_permissive())
         .layer(SetResponseHeaderLayer::overriding(
