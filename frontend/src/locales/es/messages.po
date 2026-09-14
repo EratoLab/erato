@@ -3588,6 +3588,16 @@ msgstr "¿Cómo debería llamarte el asistente? p. ej. Max Mustermann"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.allow.helper"
+msgstr "Se ejecuta sin preguntar; la política de aprobación no detiene esta herramienta."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.allow.label"
+msgstr "Permitir"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.approvals.always.helper"
 msgstr "Ejecuta esta herramienta sin preguntar."
 
@@ -3604,27 +3614,37 @@ msgstr "Muestra la confirmación en el chat cada vez que esta herramienta quiera
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.approvals.ask.label"
-msgstr "Preguntar antes de ejecutar"
+msgstr "Preguntar cada vez"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.description"
-msgstr "Tus decisiones de la confirmación en el chat se guardan aquí y se pueden cambiar en cualquier momento. Se aplican a tu cuenta en todos los dispositivos."
+#~ msgid "preferences.dialog.mcpServers.approvals.description"
+#~ msgstr "Tus decisiones de la confirmación en el chat se guardan aquí y se pueden cambiar en cualquier momento. Se aplican a tu cuenta en todos los dispositivos."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.empty"
-msgstr "Aún no hay decisiones. Cuando elijas \"Permitir siempre\" en un chat, la herramienta aparecerá aquí."
+#~ msgid "preferences.dialog.mcpServers.approvals.empty"
+#~ msgstr "Aún no hay decisiones. Cuando elijas \"Permitir siempre\" en un chat, la herramienta aparecerá aquí."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.heading"
-msgstr "Aprobaciones de herramientas"
+#~ msgid "preferences.dialog.mcpServers.approvals.heading"
+#~ msgstr "Aprobaciones de herramientas"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.approvals.loadError"
-msgstr "No se pudieron cargar las aprobaciones de herramientas. Inténtalo de nuevo."
+msgstr "No se pudieron cargar tus decisiones de herramientas. Inténtalo de nuevo."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.never.helper"
+msgstr "Mantiene esta herramienta fuera del alcance del asistente y la bloquea incluso cuando ya hay una confirmación en espera."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.never.label"
+msgstr "No permitir nunca"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
@@ -3777,57 +3797,62 @@ msgid "preferences.dialog.mcpServers.status.success.label"
 msgstr "Conectado"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpServerToolList.tsx
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.asksBeforeRunning"
 msgstr "Pregunta antes de ejecutar"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpServerToolList.tsx
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.canModify"
 msgstr "Puede modificar"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpServerToolList.tsx
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.notDeclared"
 msgstr "No declarado por el servidor"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpServerToolList.tsx
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.reachesOtherSystems"
 msgstr "Accede a otros sistemas"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpServerToolList.tsx
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.readsOnly"
 msgstr "Solo lee"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpServerToolList.tsx
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.tools.description"
+msgstr "Decide para cada herramienta de este servidor si puede ejecutarse por ti. Las decisiones se aplican a tu cuenta en todos los dispositivos; elegir \"Permitir siempre\" en un chat también se guarda aquí."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.empty"
 msgstr "Este servidor no te expone ninguna herramienta."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpServerToolList.tsx
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.failure"
 msgstr "No se pudieron listar las herramientas porque el servidor no está accesible."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpServerToolList.tsx
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.heading"
 msgstr "Herramientas"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpServerToolList.tsx
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.loadError"
 msgstr "No se pudieron cargar las herramientas de este servidor. Inténtalo de nuevo."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpServerToolList.tsx
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.loading"
 msgstr "Cargando herramientas..."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpServerToolList.tsx
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.needsAuthentication"
 msgstr "Conéctate para ver las herramientas."
 
