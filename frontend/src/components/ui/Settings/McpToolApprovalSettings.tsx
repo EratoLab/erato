@@ -1,126 +1,319 @@
 import { t } from "@lingui/core/macro";
 import { skipToken } from "@tanstack/react-query";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 
 import {
   useCreateUserToolApprovalSetting,
   useDeactivateUserToolApprovalSetting,
+  useListMcpServerTools,
   useListUserToolApprovalSettings,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import { RadioCard } from "../Controls/RadioCard";
 import { Alert } from "../Feedback/Alert";
+import { SettledInfoPill } from "../Trace/steps/ToolStatusPill";
 
-interface ApprovalRow {
-  mcpServerId: string;
-  toolName: string;
-}
+import type {
+  McpServerTool,
+  UserToolApprovalSetting,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { ReactNode } from "react";
 
-const rowKey = (row: ApprovalRow) => `${row.mcpServerId}/${row.toolName}`;
+// A listed roster only moves on a redeploy, and the backend serves a repeat
+// expand from its own session cache within this window anyway. Anything
+// short of a listing is retried on the next expand instead of being cached.
+const TOOLS_STALE_TIME_MS = 5 * 60 * 1000;
+
+const NEUTRAL_PILL = "bg-theme-bg-tertiary text-theme-fg-secondary";
+const ATTENTION_PILL = "bg-theme-warning-bg text-theme-warning-fg";
+
+/** The radio state of one tool; "ask" is the absence of a stored decision. */
+export type McpToolDecision = "ask" | "always" | "never";
 
 /**
- * Per-tool approval decisions, mirroring the add-in's client-action settings
- * idiom (BehaviorTabContent): one radiogroup per tool with the two decisions
- * the backend can honor — ask per use (no stored grant) or always allow (a
- * persisted grant). Rows exist only for tools the user has granted at some
- * point: they are keyed off stored grants, not the server's tool roster, so
- * the list grows with use. A row flipped back to "ask" stays visible for the
- * rest of the settings session so the flip feels stable and reversible; it
- * drops off on the next visit.
- *
- * With `serverId` the component becomes one server's permissions block for
- * an entity row: rows filter to that server and the redundant headings (the
- * section title and the per-server label) collapse to the scope sentence.
+ * A stored row is a decision, never a grant by itself: the same table holds
+ * denials, so presence alone must not read as "always".
+ */
+export const decisionOfSetting = (
+  setting: UserToolApprovalSetting | undefined,
+): McpToolDecision => {
+  if (setting === undefined) {
+    return "ask";
+  }
+  return setting.decision === "denied" ? "never" : "always";
+};
+
+/**
+ * What the row shows for a stored decision. A grant is only honored by the
+ * gate while the policy allows persistent grants and the tool would ask at
+ * all, so outside that a stale grant reads as the default state — the same
+ * fold the tool roster applies to `user_decision`.
+ */
+export const shownDecision = (
+  stored: McpToolDecision,
+  offersAlways: boolean,
+): McpToolDecision => (stored === "always" && !offersAlways ? "ask" : stored);
+
+/**
+ * Every badge is a straight lookup on a field the backend already decided;
+ * the same function that gates a run produced these values, so nothing here
+ * may re-derive them (an unannotated tool is NOT read-only under protocol
+ * defaults, and only the backend knows the configured preset).
+ */
+const toolBadges = (tool: McpServerTool) => {
+  const badges: { label: string; toneClassName: string }[] = [];
+  if (tool.annotations.read_only_hint) {
+    badges.push({
+      label: t({
+        id: "preferences.dialog.mcpServers.tools.badge.readsOnly",
+        message: "Reads only",
+      }),
+      toneClassName: NEUTRAL_PILL,
+    });
+  } else {
+    badges.push({
+      label: t({
+        id: "preferences.dialog.mcpServers.tools.badge.canModify",
+        message: "Can modify",
+      }),
+      toneClassName: ATTENTION_PILL,
+    });
+  }
+  if (tool.annotations.open_world_hint) {
+    badges.push({
+      label: t({
+        id: "preferences.dialog.mcpServers.tools.badge.reachesOtherSystems",
+        message: "Reaches other systems",
+      }),
+      toneClassName: NEUTRAL_PILL,
+    });
+  }
+  if (!tool.annotations.annotated) {
+    badges.push({
+      label: t({
+        id: "preferences.dialog.mcpServers.tools.badge.notDeclared",
+        message: "Not declared by the server",
+      }),
+      toneClassName: NEUTRAL_PILL,
+    });
+  }
+  if (tool.approval === "ask") {
+    badges.push({
+      label: t({
+        id: "preferences.dialog.mcpServers.tools.badge.asksBeforeRunning",
+        message: "Asks before running",
+      }),
+      toneClassName: NEUTRAL_PILL,
+    });
+  }
+  return badges;
+};
+
+function McpToolRow({
+  tool,
+  decision,
+  allowAlways,
+  radioGroupName,
+  disabled,
+  onDecide,
+}: {
+  tool: McpServerTool;
+  decision: McpToolDecision;
+  allowAlways: boolean;
+  radioGroupName: string;
+  disabled: boolean;
+  onDecide: (decision: McpToolDecision) => void;
+}) {
+  const asksBeforeRunning = tool.approval === "ask";
+  // A tool the policy runs unprompted never asks, so a persistent grant would
+  // change nothing for it; and the gate ignores grants while the policy does
+  // not honor them. Either way the option is not offered.
+  const offersAlways = asksBeforeRunning && allowAlways;
+  const shown = shownDecision(decision, offersAlways);
+
+  return (
+    <div
+      role="radiogroup"
+      aria-label={tool.title}
+      className="space-y-2"
+      data-testid="mcp-tool-approval-row"
+      data-tool-name={tool.name}
+    >
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span className="text-sm font-medium text-theme-fg-primary">
+            {tool.title}
+          </span>
+          {tool.title !== tool.name ? (
+            <span className="font-mono text-xs text-theme-fg-muted">
+              {tool.name}
+            </span>
+          ) : null}
+        </div>
+        {tool.description ? (
+          <p className="text-xs text-theme-fg-secondary">{tool.description}</p>
+        ) : null}
+        <ul className="flex flex-wrap gap-1" aria-label={tool.title}>
+          {toolBadges(tool).map((badge) => (
+            <li key={badge.label}>
+              <SettledInfoPill
+                label={badge.label}
+                toneClassName={badge.toneClassName}
+              />
+            </li>
+          ))}
+        </ul>
+      </div>
+      {/* The default state of a tool that never asks is plain "allowed". */}
+      <RadioCard
+        size="sm"
+        name={radioGroupName}
+        value="ask"
+        checked={shown === "ask"}
+        disabled={disabled}
+        onChange={() => onDecide("ask")}
+        label={
+          asksBeforeRunning
+            ? t({
+                id: "preferences.dialog.mcpServers.approvals.ask.label",
+                message: "Ask each time",
+              })
+            : t({
+                id: "preferences.dialog.mcpServers.approvals.allow.label",
+                message: "Allow",
+              })
+        }
+        helper={
+          asksBeforeRunning
+            ? t({
+                id: "preferences.dialog.mcpServers.approvals.ask.helper",
+                message:
+                  "Shows the in-chat confirmation each time this tool wants to run.",
+              })
+            : t({
+                id: "preferences.dialog.mcpServers.approvals.allow.helper",
+                message:
+                  "Runs without asking; the approval policy does not stop this tool.",
+              })
+        }
+      />
+      {offersAlways ? (
+        <RadioCard
+          size="sm"
+          name={radioGroupName}
+          value="always"
+          checked={shown === "always"}
+          disabled={disabled}
+          onChange={() => onDecide("always")}
+          label={t({
+            id: "preferences.dialog.mcpServers.approvals.always.label",
+            message: "Always allow",
+          })}
+          helper={t({
+            id: "preferences.dialog.mcpServers.approvals.always.helper",
+            message: "Runs this tool without asking.",
+          })}
+        />
+      ) : null}
+      <RadioCard
+        size="sm"
+        name={radioGroupName}
+        value="never"
+        checked={shown === "never"}
+        disabled={disabled}
+        onChange={() => onDecide("never")}
+        label={t({
+          id: "preferences.dialog.mcpServers.approvals.never.label",
+          message: "Never allow",
+        })}
+        helper={t({
+          id: "preferences.dialog.mcpServers.approvals.never.helper",
+          message:
+            "Keeps this tool away from the assistant and blocks it even when a confirmation is already waiting.",
+        })}
+      />
+    </div>
+  );
+}
+
+/**
+ * One MCP server's tools as the user's generations see them, each with the
+ * user's persistent decision for it. The roster comes from the server's
+ * enumeration and the decisions from the stored settings, so every tool is
+ * listed whether or not it has ever been decided on. Mounted inside the
+ * server's entity row, whose details unmount on collapse, so mounting IS the
+ * expand and the enumeration happens once per expand — repeat expands inside
+ * the stale window come from the query cache.
  */
 export function McpToolApprovalSettings({
-  isActive,
   serverId,
+  isActive,
 }: {
+  serverId: string;
+  /** Gates the fetches to the tab actually being shown. */
   isActive: boolean;
-  serverId?: string;
 }) {
   const radioGroupName = useId();
-  const [knownRows, setKnownRows] = useState<Map<string, ApprovalRow>>(
-    () => new Map(),
-  );
-  const [pendingKey, setPendingKey] = useState<string | null>(null);
+  const [pendingTool, setPendingTool] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const {
-    data: approvalsResponse,
-    error: loadError,
-    refetch,
+    data: toolsResponse,
+    error: toolsError,
+    isLoading: isToolsLoading,
+  } = useListMcpServerTools(
+    isActive ? { pathParams: { serverId } } : skipToken,
+    {
+      retry: false,
+      refetchOnWindowFocus: false,
+      staleTime: (query) =>
+        query.state.data?.status === "SUCCESS" ? TOOLS_STALE_TIME_MS : 0,
+    },
+  );
+  const {
+    data: settingsResponse,
+    error: settingsError,
+    refetch: refetchSettings,
   } = useListUserToolApprovalSettings(isActive ? {} : skipToken, {
     retry: false,
     refetchOnWindowFocus: false,
   });
-  const { mutateAsync: createApproval } = useCreateUserToolApprovalSetting();
-  const { mutateAsync: deactivateApproval } =
+  const { mutateAsync: createSetting } = useCreateUserToolApprovalSetting();
+  const { mutateAsync: deactivateSetting } =
     useDeactivateUserToolApprovalSetting();
 
-  // Grow the session roster from every fetch; never shrink, so a row whose
-  // grant was just deactivated keeps rendering (now at "ask").
-  useEffect(() => {
-    if (!approvalsResponse) {
-      return;
-    }
-    setKnownRows((prev) => {
-      let changed = false;
-      const next = new Map(prev);
-      for (const setting of approvalsResponse.settings) {
-        const key = `${setting.mcp_server_id}/${setting.tool_name}`;
-        if (!next.has(key)) {
-          next.set(key, {
-            mcpServerId: setting.mcp_server_id,
-            toolName: setting.tool_name,
-          });
-          changed = true;
-        }
+  const settingByToolName = useMemo(() => {
+    const map = new Map<string, UserToolApprovalSetting>();
+    for (const setting of settingsResponse?.settings ?? []) {
+      if (setting.mcp_server_id === serverId) {
+        map.set(setting.tool_name, setting);
       }
-      return changed ? next : prev;
-    });
-  }, [approvalsResponse]);
-
-  const grantIdByKey = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const setting of approvalsResponse?.settings ?? []) {
-      map.set(`${setting.mcp_server_id}/${setting.tool_name}`, setting.id);
     }
     return map;
-  }, [approvalsResponse]);
+  }, [settingsResponse, serverId]);
 
-  const serverGroups = useMemo(() => {
-    const groups = new Map<string, ApprovalRow[]>();
-    for (const row of knownRows.values()) {
-      if (serverId !== undefined && row.mcpServerId !== serverId) {
-        continue;
-      }
-      const rows = groups.get(row.mcpServerId) ?? [];
-      rows.push(row);
-      groups.set(row.mcpServerId, rows);
-    }
-    for (const rows of groups.values()) {
-      rows.sort((a, b) => a.toolName.localeCompare(b.toolName));
-    }
-    return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [knownRows, serverId]);
-
-  const setDecision = async (row: ApprovalRow, decision: "ask" | "always") => {
-    const key = rowKey(row);
-    const grantId = grantIdByKey.get(key);
-    if ((decision === "always") === (grantId !== undefined)) {
+  const decide = async (tool: McpServerTool, next: McpToolDecision) => {
+    const setting = settingByToolName.get(tool.name);
+    if (decisionOfSetting(setting) === next) {
       return;
     }
     setMutationError(null);
-    setPendingKey(key);
+    setPendingTool(tool.name);
     try {
-      if (decision === "ask" && grantId !== undefined) {
-        await deactivateApproval({ pathParams: { settingId: grantId } });
+      if (next === "ask") {
+        if (setting !== undefined) {
+          await deactivateSetting({ pathParams: { settingId: setting.id } });
+        }
       } else {
-        await createApproval({
-          body: { mcp_server_id: row.mcpServerId, tool_name: row.toolName },
+        await createSetting({
+          body: {
+            mcp_server_id: serverId,
+            tool_name: tool.name,
+            // eslint-disable-next-line lingui/no-unlocalized-strings -- API decision value
+            decision: next === "always" ? "always_allow" : "denied",
+          },
         });
       }
-      await refetch();
+      await refetchSettings();
     } catch {
       setMutationError(
         t({
@@ -129,116 +322,104 @@ export function McpToolApprovalSettings({
         }),
       );
     } finally {
-      setPendingKey(null);
+      setPendingTool(null);
     }
   };
+
+  let body: ReactNode = null;
+  if (toolsError) {
+    body = (
+      <Alert type="error">
+        {t({
+          id: "preferences.dialog.mcpServers.tools.loadError",
+          message: "Could not load the tools of this server. Please try again.",
+        })}
+      </Alert>
+    );
+  } else if (isToolsLoading || !toolsResponse) {
+    body = (
+      <p className="text-xs text-theme-fg-secondary">
+        {t({
+          id: "preferences.dialog.mcpServers.tools.loading",
+          message: "Loading tools...",
+        })}
+      </p>
+    );
+  } else if (toolsResponse.status === "NEEDS_AUTHENTICATION") {
+    body = (
+      <p className="text-xs text-theme-fg-secondary">
+        {t({
+          id: "preferences.dialog.mcpServers.tools.needsAuthentication",
+          message: "Connect to see tools.",
+        })}
+      </p>
+    );
+  } else if (toolsResponse.status !== "SUCCESS") {
+    body = (
+      <p className="text-xs text-theme-fg-secondary">
+        {t({
+          id: "preferences.dialog.mcpServers.tools.failure",
+          message:
+            "The tools could not be listed because the server is unreachable.",
+        })}
+      </p>
+    );
+  } else if (toolsResponse.tools.length === 0) {
+    body = (
+      <p className="text-sm italic text-theme-fg-muted">
+        {t({
+          id: "preferences.dialog.mcpServers.tools.empty",
+          message: "This server exposes no tools to you.",
+        })}
+      </p>
+    );
+  } else {
+    body = (
+      <div className="space-y-4">
+        {toolsResponse.tools.map((tool) => (
+          <McpToolRow
+            key={tool.name}
+            tool={tool}
+            decision={decisionOfSetting(settingByToolName.get(tool.name))}
+            allowAlways={toolsResponse.allow_always}
+            radioGroupName={`${radioGroupName}-${tool.name}`}
+            disabled={pendingTool !== null}
+            onDecide={(next) => void decide(tool, next)}
+          />
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3" data-testid="mcp-tool-approval-settings">
       <div className="space-y-1">
         <h3 className="text-sm font-medium text-theme-fg-primary">
           {t({
-            id: "preferences.dialog.mcpServers.approvals.heading",
-            message: "Tool approvals",
+            id: "preferences.dialog.mcpServers.tools.heading",
+            message: "Tools",
           })}
         </h3>
-        <p
-          className={
-            serverId !== undefined
-              ? "text-xs text-theme-fg-secondary"
-              : "text-sm text-theme-fg-secondary"
-          }
-        >
+        <p className="text-xs text-theme-fg-secondary">
           {t({
-            id: "preferences.dialog.mcpServers.approvals.description",
+            id: "preferences.dialog.mcpServers.tools.description",
             message:
-              "Your decisions from the in-chat confirmation are stored here and can be changed any time. They apply to your account on every device.",
+              'Decide for each tool of this server whether it may run for you. Decisions apply to your account on every device; choosing "Always allow" in a chat is stored here too.',
           })}
         </p>
       </div>
 
-      {loadError ? (
+      {settingsError ? (
         <Alert type="error">
           {t({
             id: "preferences.dialog.mcpServers.approvals.loadError",
-            message: "Could not load tool approvals. Please try again.",
+            message: "Could not load your tool decisions. Please try again.",
           })}
         </Alert>
       ) : null}
       {mutationError ? <Alert type="error">{mutationError}</Alert> : null}
 
-      {!loadError && serverGroups.length === 0 ? (
-        <p className="text-sm italic text-theme-fg-muted">
-          {t({
-            id: "preferences.dialog.mcpServers.approvals.empty",
-            message:
-              'No decisions yet. When you choose "Always allow" in a chat, the tool appears here.',
-          })}
-        </p>
-      ) : null}
-
-      {serverGroups.map(([groupServerId, rows]) => (
-        <div key={groupServerId} className="space-y-3">
-          {/* Inside an entity row the server is already the row's identity. */}
-          {serverId === undefined ? (
-            <p className="text-xs font-medium text-theme-fg-primary">
-              {groupServerId}
-            </p>
-          ) : null}
-          {rows.map((row) => {
-            const key = rowKey(row);
-            const decision =
-              grantIdByKey.get(key) !== undefined ? "always" : "ask";
-            return (
-              <div
-                key={key}
-                role="radiogroup"
-                aria-label={row.toolName}
-                className="space-y-2"
-                data-testid="mcp-tool-approval-row"
-                data-tool-name={row.toolName}
-              >
-                <p className="text-xs text-theme-fg-secondary">
-                  {row.toolName}
-                </p>
-                <RadioCard
-                  size="sm"
-                  name={`${radioGroupName}-${key}`}
-                  value="ask"
-                  checked={decision === "ask"}
-                  disabled={pendingKey !== null}
-                  onChange={() => void setDecision(row, "ask")}
-                  label={t({
-                    id: "preferences.dialog.mcpServers.approvals.ask.label",
-                    message: "Ask before running",
-                  })}
-                  helper={t({
-                    id: "preferences.dialog.mcpServers.approvals.ask.helper",
-                    message:
-                      "Shows the in-chat confirmation each time this tool wants to run.",
-                  })}
-                />
-                <RadioCard
-                  size="sm"
-                  name={`${radioGroupName}-${key}`}
-                  value="always"
-                  checked={decision === "always"}
-                  disabled={pendingKey !== null}
-                  onChange={() => void setDecision(row, "always")}
-                  label={t({
-                    id: "preferences.dialog.mcpServers.approvals.always.label",
-                    message: "Always allow",
-                  })}
-                  helper={t({
-                    id: "preferences.dialog.mcpServers.approvals.always.helper",
-                    message: "Runs this tool without asking.",
-                  })}
-                />
-              </div>
-            );
-          })}
-        </div>
-      ))}
+      {body}
     </div>
   );
 }

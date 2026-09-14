@@ -5,7 +5,6 @@ import { useListMcpServers } from "@/lib/generated/v1betaApi/v1betaApiComponents
 
 import { DesktopSidecarRow } from "./DesktopSidecarTabContent";
 import { EntityRow } from "./EntityRow";
-import { McpServerToolList } from "./McpServerToolList";
 import { McpToolApprovalSettings } from "./McpToolApprovalSettings";
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
@@ -155,8 +154,7 @@ function McpServerEntityRow({
         </Button>
       ) : null}
       {/* Details unmount on collapse, so this list fetches on expand only. */}
-      <McpServerToolList serverId={server.id} isActive={isActive} />
-      <McpToolApprovalSettings isActive={isActive} serverId={server.id} />
+      <McpToolApprovalSettings serverId={server.id} isActive={isActive} />
     </EntityRow>
   );
 }
