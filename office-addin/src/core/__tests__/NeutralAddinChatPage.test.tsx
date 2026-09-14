@@ -43,6 +43,7 @@ const spies = vi.hoisted(() => ({
         mentionedAssistants?: { id: string; name: string }[],
         delegationRunMode?: "wait" | "background",
         mcpWriteToolsEnabled?: boolean,
+        disabledMcpServerIds?: string[],
       ) => void;
     },
   },
@@ -467,6 +468,7 @@ describe("NeutralAddinChatPage host boundary", () => {
       [{ id: "assistant-9", name: "Research" }],
       "background",
       undefined,
+      undefined,
     );
   });
 
@@ -496,6 +498,37 @@ describe("NeutralAddinChatPage host boundary", () => {
       undefined,
       undefined,
       false,
+      undefined,
+    );
+  });
+
+  it("carries a new chat's switched-off servers through to the send", () => {
+    renderPage();
+
+    // Same first-send-only seed as the write switch, one slot further on;
+    // dropped, the row is created with every server on.
+    spies.inputProps.current?.onSendMessage(
+      "without linear",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      ["linear"],
+    );
+
+    expect(spies.sendMessage).toHaveBeenCalledWith(
+      "without linear",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      ["linear"],
     );
   });
 
