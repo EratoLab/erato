@@ -904,7 +904,7 @@ export function UserPreferencesDialog({
                   confirmMessage={t({
                     id: "preferences.dialog.dataTab.archiveAll.confirmMessage",
                     message:
-                      "This will archive every non-archived chat in your account. You can restore individual chats afterwards.",
+                      "This will archive every non-archived chat in your account. You can unarchive individual chats afterwards.",
                   })}
                 >
                   {isArchiving

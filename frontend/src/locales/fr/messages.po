@@ -3449,7 +3449,7 @@ msgstr "Archiver toutes les discussions"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.dataTab.archiveAll.confirmMessage"
-msgstr "Cela archivera toutes les discussions non archivées de votre compte. Vous pourrez restaurer des discussions individuellement par la suite."
+msgstr "Cela archivera toutes les discussions non archivées de votre compte. Vous pourrez désarchiver des discussions individuellement par la suite."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

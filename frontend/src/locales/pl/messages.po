@@ -3449,7 +3449,7 @@ msgstr "Archiwizuj wszystkie czaty"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.dataTab.archiveAll.confirmMessage"
-msgstr "Spowoduje to zarchiwizowanie wszystkich niezarchiwizowanych czatów na Twoim koncie. Poszczególne czaty możesz później przywrócić."
+msgstr "Spowoduje to zarchiwizowanie wszystkich niezarchiwizowanych czatów na Twoim koncie. Archiwizację poszczególnych czatów możesz później cofnąć."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

@@ -3449,7 +3449,7 @@ msgstr "Archivar todos los chats"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.dataTab.archiveAll.confirmMessage"
-msgstr "Esto archivará todos los chats no archivados de tu cuenta. Puedes restaurar chats individuales después."
+msgstr "Esto archivará todos los chats no archivados de tu cuenta. Puedes desarchivar chats individuales después."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
