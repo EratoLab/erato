@@ -732,6 +732,52 @@ describe("ChatMessage", () => {
       expect(
         screen.queryByTestId("mcp-disabled-servers-notice"),
       ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("mcp-disabled-tools-notice"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("footnotes a single tool the user switched off, in its server/tool spelling", async () => {
+      await renderAssistantMessage({
+        mcp_tools_disabled_by_user: ["linear/create_issue"],
+      });
+
+      expect(screen.getByTestId("mcp-disabled-tools-notice")).toHaveTextContent(
+        "The tool linear/create_issue is switched off for this chat, so it was not used.",
+      );
+      expect(
+        screen.queryByTestId("mcp-disabled-servers-notice"),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
+    });
+
+    it("enumerates several switched-off tools in one footnote", async () => {
+      await renderAssistantMessage({
+        mcp_tools_disabled_by_user: [
+          "linear/create_issue",
+          "github/create_issue",
+        ],
+      });
+
+      expect(screen.getByTestId("mcp-disabled-tools-notice")).toHaveTextContent(
+        "The tools linear/create_issue, github/create_issue are switched off for this chat, so they were not used.",
+      );
+    });
+
+    // A tool on a switched-off server is reported under the server only,
+    // so the two notes never name the same thing; both show when both apply.
+    it("shows the server and the tool footnotes side by side", async () => {
+      await renderAssistantMessage({
+        mcp_servers_disabled_by_user: ["github"],
+        mcp_tools_disabled_by_user: ["linear/create_issue"],
+      });
+
+      expect(
+        screen.getByTestId("mcp-disabled-servers-notice"),
+      ).toHaveTextContent("github is switched off");
+      expect(screen.getByTestId("mcp-disabled-tools-notice")).toHaveTextContent(
+        "linear/create_issue is switched off",
+      );
     });
   });
 

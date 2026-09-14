@@ -265,11 +265,27 @@ vi.mock("../Feedback/ChatWarnings/BudgetWarning", () => ({
 // The browser dialog is covered against the real component in its own test;
 // here only the wiring (gate + open/close) matters.
 vi.mock("./McpToolsBrowserModal", () => ({
-  McpToolsBrowserModal: (props: { isOpen: boolean }) => (
+  McpToolsBrowserModal: (props: {
+    isOpen: boolean;
+    disabledToolPatterns?: string[];
+    disabledServerIds?: string[];
+    toolSwitchesLocked?: boolean;
+    onToggleTool?: (serverId: string, toolName: string) => void;
+  }) => (
     <div
       data-testid="mcp-tools-browser-modal"
       data-open={String(props.isOpen)}
-    />
+      data-disabled-tools={(props.disabledToolPatterns ?? []).join(",")}
+      data-disabled-servers={(props.disabledServerIds ?? []).join(",")}
+      data-switches-locked={String(props.toolSwitchesLocked ?? false)}
+    >
+      {/* Stands in for one tool row's switch, so the wiring can be flipped. */}
+      <button
+        type="button"
+        data-testid="mcp-tools-browser-tool-probe"
+        onClick={() => props.onToggleTool?.("linear", "create_issue")}
+      />
+    </div>
   ),
 }));
 
@@ -5843,6 +5859,124 @@ describe("ChatInput", () => {
         undefined,
         undefined,
         ["linear"],
+      );
+    });
+
+    const browser = () => screen.getByTestId("mcp-tools-browser-modal");
+    const flipToolInBrowser = async () => {
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("mcp-tools-browser-tool-probe"));
+      });
+    };
+
+    it("switches a tool off on an existing chat through the update endpoint and tells the browser and the server row", async () => {
+      enableConnectors();
+      const mutateAsync = vi.fn().mockResolvedValue({});
+      mockUseUpdateChat.mockReturnValue({ mutateAsync, isPending: false });
+      mockUseChatDetail.mockReturnValue({
+        data: {
+          id: "chat-1",
+          mcp_write_tools_enabled: true,
+          disabled_mcp_server_ids: ["jira"],
+          disabled_mcp_tools: [],
+        },
+      });
+      const onSendMessage = vi.fn();
+      const textarea = await renderComposer("chat-1", onSendMessage);
+
+      expect(browser()).toHaveAttribute("data-switches-locked", "false");
+      expect(browser()).toHaveAttribute("data-disabled-servers", "jira");
+
+      await flipToolInBrowser();
+
+      expect(mutateAsync).toHaveBeenCalledWith({
+        pathParams: { chatId: "chat-1" },
+        body: { disabled_mcp_tools: ["linear/create_issue"] },
+      });
+      expect(browser()).toHaveAttribute(
+        "data-disabled-tools",
+        "linear/create_issue",
+      );
+      expect(serverSwitch("linear").description).toBe("1 tool switched off");
+
+      // The row is the writer for an existing chat: nothing rides on the send.
+      fireEvent.change(textarea, { target: { value: "without creating" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "without creating",
+        undefined,
+        undefined,
+        [],
+        [],
+      );
+    });
+
+    it("locks the browser's tool switches until an existing chat's row is read", async () => {
+      enableConnectors();
+      mockUseChatDetail.mockReturnValue({ data: undefined });
+      await renderComposer("chat-1");
+
+      expect(browser()).toHaveAttribute("data-switches-locked", "true");
+    });
+
+    it("carries the switched-off tools into the first send of a new chat", async () => {
+      enableConnectors();
+      const mutateAsync = vi.fn().mockResolvedValue({});
+      mockUseUpdateChat.mockReturnValue({ mutateAsync, isPending: false });
+      const onSendMessage = vi.fn();
+      const textarea = await renderComposer(null, onSendMessage);
+
+      expect(browser()).toHaveAttribute("data-switches-locked", "false");
+      await flipToolInBrowser();
+      expect(browser()).toHaveAttribute(
+        "data-disabled-tools",
+        "linear/create_issue",
+      );
+      expect(mutateAsync).not.toHaveBeenCalled();
+
+      fireEvent.change(textarea, { target: { value: "first message" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "first message",
+        undefined,
+        undefined,
+        [],
+        [],
+        undefined,
+        undefined,
+        undefined,
+        ["linear/create_issue"],
+      );
+    });
+
+    it("carries both switched-off lists into the first send when both were set", async () => {
+      enableConnectors();
+      mockUseUpdateChat.mockReturnValue({
+        mutateAsync: vi.fn().mockResolvedValue({}),
+        isPending: false,
+      });
+      const onSendMessage = vi.fn();
+      const textarea = await renderComposer(null, onSendMessage);
+
+      await act(async () => {
+        serverSwitch("linear").onToggle();
+      });
+      await flipToolInBrowser();
+
+      fireEvent.change(textarea, { target: { value: "first message" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "first message",
+        undefined,
+        undefined,
+        [],
+        [],
+        undefined,
+        undefined,
+        ["linear"],
+        ["linear/create_issue"],
       );
     });
 
