@@ -1,6 +1,7 @@
 import { test, expect, Page } from "@playwright/test";
 import { TAG_CI } from "./tags";
 import {
+  archiveChatFromRow,
   chatIsReadyToChat,
   chatIdFromUrl,
   ensureOpenSidebar,
@@ -282,7 +283,7 @@ test(
 );
 
 test(
-  "removing a new chat before it is listed leaves no ghost row",
+  "archiving a new chat before it is listed leaves no ghost row",
   { tag: TAG_CI },
   async ({ page }) => {
     const streamHold = await holdStreamAfterChatCreated(page);
@@ -308,12 +309,9 @@ test(
         page.getByTestId("chat-input-stop-generation"),
       ).toBeVisible();
 
-      // Remove the row while the list still cannot account for it, so nothing
+      // Archive the row while the list still cannot account for it, so nothing
       // but local state can take it away again.
-      await row.hover();
-      await row.getByRole("button", { name: "Open menu" }).click();
-      await page.getByRole("menuitem", { name: "Remove" }).click();
-      await page.getByRole("button", { name: "Confirm action" }).click();
+      await archiveChatFromRow(page, row);
 
       await expect(row).toHaveCount(0);
 

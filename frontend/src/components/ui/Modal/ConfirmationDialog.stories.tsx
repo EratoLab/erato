@@ -51,9 +51,9 @@ export const Open: Story = {
 export const Danger: Story = {
   args: {
     isOpen: true,
-    title: "Confirm Removal",
+    title: "Remove Access",
     message:
-      "Are you sure you want to remove this chat? This cannot be undone.",
+      "Are you sure you want to remove access for this user/group? This cannot be undone.",
     confirmButtonText: "Remove",
     confirmButtonVariant: "danger",
   },
@@ -86,26 +86,26 @@ export const RichMessage: Story = {
  *
  * A real `Button` configured with its built-in `confirmAction` /`confirmTitle` /
  * `confirmMessage` props pops the `ConfirmationDialog` on click. This is exactly
- * how the "Remove" chat-history action guards a data-loss operation
- * (ChatHistoryList.tsx:189) — the dialog is owned by the Button, not the caller.
+ * how the share-grant removal guards a data-loss operation (ShareGrantsList) —
+ * the dialog is owned by the Button, not the caller.
  */
 export const SurfacedViaButton: Story = {
   // args satisfy the Meta<ConfirmationDialog> shape; this story renders a Button
   // that owns its own ConfirmationDialog, so these values are unused directly.
   args: {
     isOpen: false,
-    title: "Confirm Removal",
-    message: "Are you sure you want to remove this chat?",
+    title: "Remove Access",
+    message: "Are you sure you want to remove access for this user/group?",
   },
   render: () => (
     <Button
       variant="danger"
       confirmAction
-      confirmTitle="Confirm Removal"
-      confirmMessage="Are you sure you want to remove this chat?"
+      confirmTitle="Remove Access"
+      confirmMessage="Are you sure you want to remove access for this user/group?"
       onClick={() => {}}
     >
-      Remove chat
+      Remove
     </Button>
   ),
 };

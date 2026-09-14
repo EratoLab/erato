@@ -452,7 +452,7 @@ export default function SearchPage() {
                             : {
                                 label: t({
                                   id: "chat.history.menu.remove",
-                                  message: "Remove",
+                                  message: "Archive",
                                 }),
                                 icon: <Trash className="size-4" />,
                                 variant: "danger" as const,
@@ -462,12 +462,12 @@ export default function SearchPage() {
                                 confirmAction: true,
                                 confirmTitle: t({
                                   id: "chat.history.menu.confirm_remove.title",
-                                  message: "Confirm Removal",
+                                  message: "Archive this chat?",
                                 }),
                                 confirmMessage: t({
                                   id: "chat.history.menu.confirm_remove.message",
                                   message:
-                                    "Are you sure you want to remove this chat?",
+                                    "Are you sure you want to archive this chat?",
                                 }),
                               },
                         ]}

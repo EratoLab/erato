@@ -151,7 +151,7 @@ describe("ChatHistoryList", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("withholds Remove from a run but keeps it on ordinary chats", async () => {
+    it("withholds Archive from a run but keeps it on ordinary chats", async () => {
       // Archiving a run cannot cancel a live generation or free a parked
       // approval.
       const { i18n } = await import("@lingui/core");
@@ -168,12 +168,12 @@ describe("ChatHistoryList", () => {
 
       const { rerender } = render(ui(run));
       expect(
-        screen.queryByRole("button", { name: "Remove" }),
+        screen.queryByRole("button", { name: "Archive" }),
       ).not.toBeInTheDocument();
 
       rerender(ui(sessions[0]));
       expect(
-        screen.getByRole("button", { name: "Remove" }),
+        screen.getByRole("button", { name: "Archive" }),
       ).toBeInTheDocument();
     });
 
@@ -227,7 +227,7 @@ describe("ChatHistoryList", () => {
       ).toBeInTheDocument();
     });
 
-    it("offers Unarchive and Rename in place of Remove, Pin and Share", async () => {
+    it("offers Unarchive and Rename in place of Archive, Pin and Share", async () => {
       await renderRow(archivedSession);
 
       expect(
@@ -237,7 +237,7 @@ describe("ChatHistoryList", () => {
         screen.getByRole("button", { name: "Rename" }),
       ).toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: "Remove" }),
+        screen.queryByRole("button", { name: "Archive" }),
       ).not.toBeInTheDocument();
       expect(
         screen.queryByRole("button", { name: "Pin" }),
@@ -247,7 +247,7 @@ describe("ChatHistoryList", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("withholds Unarchive as well as Remove from an archived run", async () => {
+    it("withholds Unarchive as well as Archive from an archived run", async () => {
       await renderRow({
         ...archivedSession,
         provenanceKind: "delegation",
@@ -262,7 +262,7 @@ describe("ChatHistoryList", () => {
         screen.queryByRole("button", { name: "Unarchive" }),
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: "Remove" }),
+        screen.queryByRole("button", { name: "Archive" }),
       ).not.toBeInTheDocument();
     });
 
@@ -276,7 +276,7 @@ describe("ChatHistoryList", () => {
         screen.getByRole("link", { name: "First chat" }),
       ).toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: "Remove" }),
+        screen.getByRole("button", { name: "Archive" }),
       ).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Pin" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Share" })).toBeInTheDocument();

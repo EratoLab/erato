@@ -333,26 +333,28 @@ const ChatHistoryListItem = memo<{
                           }),
                           icon: <ArchiveIcon className="size-4" />,
                           onClick: onUnarchive ?? (() => {}),
+                          testId: "chat-history-menu-unarchive",
                         },
                       ]
                     : [
                         {
                           label: t({
                             id: "chat.history.menu.remove",
-                            message: "Remove",
+                            message: "Archive",
                           }),
                           icon: <Trash className="size-4" />,
                           variant: "danger" as const,
                           onClick: onArchive ?? (() => {}),
+                          testId: "chat-history-menu-archive",
                           confirmAction: true,
                           confirmTitle: t({
                             id: "chat.history.menu.confirm_remove.title",
-                            message: "Confirm Removal",
+                            message: "Archive this chat?",
                           }),
                           confirmMessage: t({
                             id: "chat.history.menu.confirm_remove.message",
                             message:
-                              "Are you sure you want to remove this chat?",
+                              "Are you sure you want to archive this chat?",
                           }),
                         },
                       ]),

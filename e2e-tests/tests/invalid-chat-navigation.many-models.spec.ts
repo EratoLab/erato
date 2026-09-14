@@ -2,6 +2,7 @@ import { test, expect, Page } from "@playwright/test";
 import { TAG_CI } from "./tags";
 import {
   abortActiveStreamingRequest,
+  archiveChatFromRow,
   chatIsReadyToChat,
   ensureOpenSidebar,
   selectModel,
@@ -152,9 +153,6 @@ test(
     await ensureOpenSidebar(page);
     const sidebar = page.getByRole("complementary");
     const row = sidebar.locator(`[data-chat-id="${chatId}"]`).first();
-    await row.hover();
-    await row.getByRole("button", { name: "Open menu" }).click();
-    await page.getByRole("menuitem", { name: "Remove" }).click();
     // Wait for the archive to actually commit before sending, otherwise the
     // submit can read archived_at before it is set (a test race, not a bug).
     const archiveResp = page.waitForResponse(
@@ -163,7 +161,7 @@ test(
         r.request().method() === "POST",
       { timeout: 15000 },
     );
-    await page.getByRole("button", { name: "Confirm action" }).click();
+    await archiveChatFromRow(page, row);
     await archiveResp;
     console.log(`[archived] archived chat ${chatId}`);
 

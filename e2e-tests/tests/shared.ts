@@ -1,4 +1,4 @@
-import { expect, Page, Browser, test } from "@playwright/test";
+import { expect, Locator, Page, Browser, test } from "@playwright/test";
 import { execSync } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -193,6 +193,17 @@ export const ensureOpenSidebar = async (page: Page) => {
   if (await expandButton.isVisible()) {
     await expandButton.click();
   }
+};
+
+/**
+ * Archive a chat from its sidebar row menu. The menu item is addressed by test
+ * id, so its label is translated copy no spec has to spell out.
+ */
+export const archiveChatFromRow = async (page: Page, row: Locator) => {
+  await row.hover();
+  await row.getByRole("button", { name: "Open menu" }).click();
+  await page.getByTestId("chat-history-menu-archive").click();
+  await page.getByRole("button", { name: "Confirm action" }).click();
 };
 
 /** Glob for route interception; substring for request-URL matching. */

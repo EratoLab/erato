@@ -205,13 +205,13 @@ describe("SearchPage", () => {
     expect(
       within(archivedMenu).getByRole("button", { name: "Rename" }),
     ).toBeInTheDocument();
-    for (const name of ["Remove", "Pin", "Share"]) {
+    for (const name of ["Archive", "Pin", "Share"]) {
       expect(
         within(archivedMenu).queryByRole("button", { name }),
       ).not.toBeInTheDocument();
     }
 
-    for (const name of ["Remove", "Pin", "Share"]) {
+    for (const name of ["Archive", "Pin", "Share"]) {
       expect(
         within(activeMenu).getByRole("button", { name }),
       ).toBeInTheDocument();

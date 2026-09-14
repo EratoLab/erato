@@ -1742,6 +1742,11 @@ msgstr "No leídos"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.item.archived"
+msgstr "Archivado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.loading_more"
 msgstr "Cargando..."
@@ -1750,13 +1755,13 @@ msgstr "Cargando..."
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.confirm_remove.message"
-msgstr "¿Está seguro de que desea eliminar este chat?"
+msgstr "¿Está seguro de que desea archivar este chat?"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.confirm_remove.title"
-msgstr "Confirmar eliminación"
+msgstr "¿Archivar este chat?"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
@@ -1776,13 +1781,19 @@ msgstr "Límite de fijados alcanzado"
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.remove"
-msgstr "Eliminar"
+msgstr "Archivar"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.rename"
 msgstr "Renombrar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/pages/SearchPage.tsx
+msgid "chat.history.menu.unarchive"
+msgstr "Desarchivar"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
@@ -3432,7 +3443,7 @@ msgstr "Archivar todos los chats"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.dataTab.archiveAll.confirmMessage"
-msgstr "Esto archivará todos los chats no archivados de tu cuenta."
+msgstr "Esto archivará todos los chats no archivados de tu cuenta. Puedes restaurar chats individuales después."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

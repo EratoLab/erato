@@ -1742,6 +1742,11 @@ msgstr "Unread"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.item.archived"
+msgstr "Archived"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.loading_more"
 msgstr "Loading..."
@@ -1750,13 +1755,13 @@ msgstr "Loading..."
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.confirm_remove.message"
-msgstr "Are you sure you want to remove this chat?"
+msgstr "Are you sure you want to archive this chat?"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.confirm_remove.title"
-msgstr "Confirm Removal"
+msgstr "Archive this chat?"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
@@ -1776,13 +1781,19 @@ msgstr "Pin limit reached"
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.remove"
-msgstr "Remove"
+msgstr "Archive"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.rename"
 msgstr "Rename"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/pages/SearchPage.tsx
+msgid "chat.history.menu.unarchive"
+msgstr "Unarchive"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
@@ -3432,7 +3443,7 @@ msgstr "Archive all chats"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.dataTab.archiveAll.confirmMessage"
-msgstr "This will archive every non-archived chat in your account."
+msgstr "This will archive every non-archived chat in your account. You can restore individual chats afterwards."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

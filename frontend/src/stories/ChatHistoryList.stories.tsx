@@ -139,7 +139,7 @@ export const ArchivedRow: Story = {
     docs: {
       description: {
         story:
-          "An archived row carries the marker in its label and swaps Remove for Unarchive; Share drops out with it.",
+          "An archived row carries the marker in its label and swaps Archive for Unarchive; Share drops out with it.",
       },
     },
   },

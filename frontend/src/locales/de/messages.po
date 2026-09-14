@@ -1742,6 +1742,11 @@ msgstr "Ungelesen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.item.archived"
+msgstr "Archiviert"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.loading_more"
 msgstr "Laden..."
@@ -1750,13 +1755,13 @@ msgstr "Laden..."
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.confirm_remove.message"
-msgstr "Möchten Sie diesen Chat wirklich entfernen?"
+msgstr "Möchten Sie diesen Chat wirklich archivieren?"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.confirm_remove.title"
-msgstr "Entfernung bestätigen"
+msgstr "Diesen Chat archivieren?"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
@@ -1776,13 +1781,19 @@ msgstr "Anheftlimit erreicht"
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.remove"
-msgstr "Entfernen"
+msgstr "Archivieren"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.rename"
 msgstr "Umbenennen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/pages/SearchPage.tsx
+msgid "chat.history.menu.unarchive"
+msgstr "Archivierung aufheben"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
@@ -3432,7 +3443,7 @@ msgstr "Alle Chats archivieren"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.dataTab.archiveAll.confirmMessage"
-msgstr "Dadurch werden alle nicht archivierten Chats in deinem Konto archiviert."
+msgstr "Dadurch werden alle nicht archivierten Chats in deinem Konto archiviert. Du kannst einzelne Chats später wiederherstellen."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

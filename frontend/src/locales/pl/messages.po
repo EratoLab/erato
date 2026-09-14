@@ -1742,6 +1742,11 @@ msgstr "Nieprzeczytane"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.item.archived"
+msgstr "Zarchiwizowany"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.loading_more"
 msgstr "Ładowanie..."
@@ -1750,13 +1755,13 @@ msgstr "Ładowanie..."
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.confirm_remove.message"
-msgstr "Czy na pewno chcesz usunąć ten czat?"
+msgstr "Czy na pewno chcesz zarchiwizować ten czat?"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.confirm_remove.title"
-msgstr "Potwierdź usunięcie"
+msgstr "Zarchiwizować ten czat?"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
@@ -1776,13 +1781,19 @@ msgstr "Osiągnięto limit przypięć"
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.remove"
-msgstr "Usuń"
+msgstr "Archiwizuj"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.rename"
 msgstr "Zmień nazwę"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/pages/SearchPage.tsx
+msgid "chat.history.menu.unarchive"
+msgstr "Cofnij archiwizację"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
@@ -3432,7 +3443,7 @@ msgstr "Archiwizuj wszystkie czaty"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.dataTab.archiveAll.confirmMessage"
-msgstr "Spowoduje to zarchiwizowanie wszystkich niezarchiwizowanych czatów na Twoim koncie."
+msgstr "Spowoduje to zarchiwizowanie wszystkich niezarchiwizowanych czatów na Twoim koncie. Poszczególne czaty możesz później przywrócić."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
