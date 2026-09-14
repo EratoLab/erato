@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OutlookAddinChat as AddinChat } from "../OutlookAddinChat";
 import { OutlookEmailSourceProvider } from "../providers/OutlookEmailSourceProvider";
 
+import type * as OfficeDragAndDropModule from "../../hooks/useOfficeDragAndDrop";
+import type * as OutlookMailListDragModule from "../hooks/useOutlookMailListDrag";
 import type { ReactNode } from "react";
 
 // The SE crash regression test for ERMAIN-353: AddinChat used to call the
@@ -113,8 +115,7 @@ vi.mock("../../core/AddinHistoryDrawerCore", () => ({
 
 // Recorded, not replaced: these two drop paths never reach the shared dropzone.
 vi.mock("../hooks/useOutlookMailListDrag", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("../hooks/useOutlookMailListDrag")>();
+  const actual = await importOriginal<typeof OutlookMailListDragModule>();
   return {
     ...actual,
     useOutlookMailListDrag: (options: { disabled?: boolean }) => {
@@ -124,8 +125,7 @@ vi.mock("../hooks/useOutlookMailListDrag", async (importOriginal) => {
   };
 });
 vi.mock("../../hooks/useOfficeDragAndDrop", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("../../hooks/useOfficeDragAndDrop")>();
+  const actual = await importOriginal<typeof OfficeDragAndDropModule>();
   return {
     ...actual,
     useOfficeDragAndDrop: (options: { disabled?: boolean }) => {
