@@ -14,6 +14,7 @@ import {
 } from "@/types/chat";
 import { hasToolCalls as messageHasToolCalls } from "@/utils/adapters/toolCallAdapter";
 
+import { McpDisabledServersNotice } from "./McpDisabledServersNotice";
 import { McpNeedsAuthNotice } from "./McpNeedsAuthNotice";
 import { MessageAttachments } from "./MessageAttachments";
 import { Alert } from "../Feedback/Alert";
@@ -147,6 +148,11 @@ export const ChatMessage = memo(function ChatMessage({
   const siblingFiles = useMemo(
     () => Object.values(allFilesById),
     [allFilesById],
+  );
+
+  const mcpServersDisabledByUser = message.mcp_servers_disabled_by_user ?? [];
+  const mcpServersNeedingAuth = (message.mcp_servers_needing_auth ?? []).filter(
+    (serverId) => !mcpServersDisabledByUser.includes(serverId),
   );
 
   // Content validation
@@ -313,14 +319,20 @@ export const ChatMessage = memo(function ChatMessage({
               query params, which share-link pages do not mount, hence this
               flag. Routerless hosts (component-kit / add-in) are handled by
               the notice itself, which drops the button when its settings
-              hook reports no Router. */}
-          {message.mcp_servers_needing_auth &&
-            message.mcp_servers_needing_auth.length > 0 && (
-              <McpNeedsAuthNotice
-                serverIds={message.mcp_servers_needing_auth}
-                showConnect={!controlsContext.isSharedDialog}
-              />
-            )}
+              hook reports no Router.
+
+              A server the user switched off is still probed before it is
+              withheld, so it can sit in both lists; the switch-off is the
+              reason the user chose, so it is the one reported. */}
+          {mcpServersDisabledByUser.length > 0 && (
+            <McpDisabledServersNotice serverIds={mcpServersDisabledByUser} />
+          )}
+          {mcpServersNeedingAuth.length > 0 && (
+            <McpNeedsAuthNotice
+              serverIds={mcpServersNeedingAuth}
+              showConnect={!controlsContext.isSharedDialog}
+            />
+          )}
 
           {/* Display attached files if any — user messages render these
               above the body instead, see the hoisted slot. */}

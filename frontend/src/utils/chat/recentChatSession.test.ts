@@ -23,6 +23,7 @@ const recentChat = (id: string, assistantId?: string): RecentChat => ({
   last_message_at: "2026-08-14T10:00:00.000Z",
   is_pinned: false,
   mcp_write_tools_enabled: true,
+  disabled_mcp_server_ids: [],
   assistant_id: assistantId,
 });
 

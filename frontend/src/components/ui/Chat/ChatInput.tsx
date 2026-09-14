@@ -27,6 +27,7 @@ import {
 } from "@/hooks/chat/store/messageQueueStore";
 import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
 import { useBrowsableMcpServers } from "@/hooks/chat/useBrowsableMcpServers";
+import { useChatDisabledMcpServers } from "@/hooks/chat/useChatDisabledMcpServers";
 import { useChatMcpWriteTools } from "@/hooks/chat/useChatMcpWriteTools";
 import {
   useComposeSession,
@@ -40,6 +41,7 @@ import { UnsupportedFileTypeError } from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useOptionalTranslation } from "@/hooks/i18n";
 import { useChatInputHandlers } from "@/hooks/ui";
+import { useOpenMcpServersSettings } from "@/hooks/ui/useOpenMcpServersSettings";
 import { useIsMobile } from "@/hooks/useResponsive";
 import {
   fetchGetFile,
@@ -256,6 +258,11 @@ interface ChatInputProps {
      * existing chat is updated in place instead, so nothing rides along.
      */
     mcpWriteToolsEnabled?: boolean,
+    /**
+     * Likewise for the servers the user switched off before the chat
+     * existed; absent when none were.
+     */
+    disabledMcpServerIds?: string[],
   ) => void;
   onRegenerate?: () => void;
   handleFileAttachments?: (files: FileUploadItem[]) => void;
@@ -734,6 +741,13 @@ export const ChatInput = ({
     chatId,
     isAvailable: canBrowseMcpTools,
   });
+  const disabledMcpServers = useChatDisabledMcpServers({
+    chatId,
+    isAvailable: canBrowseMcpTools,
+  });
+  // A server awaiting authorization connects in the settings dialog; hosts
+  // without that chrome get the tool browser, which states the status.
+  const openMcpServersSettings = useOpenMcpServersSettings();
 
   // --- Wait-or-background for mentioned sends ------------------------------
   // Gated on the feature flags rather than `canMentionAssistants`: a restored
@@ -1464,6 +1478,7 @@ export const ChatInput = ({
       const delegationRunMode = pendingRunModeChoiceRef.current?.runMode;
 
       const mcpWriteToolsSeed = mcpWriteTools.newChatSeed;
+      const disabledMcpServersSeed = disabledMcpServers.newChatSeed;
 
       logger.log("Submit:", {
         messagePreview:
@@ -1475,10 +1490,22 @@ export const ChatInput = ({
         mentionedAssistantIds: resolvedMentions.map((mention) => mention.id),
         delegationRunMode,
         mcpWriteToolsSeed,
+        disabledMcpServersSeed,
       });
       // The trailing arguments are only passed when set: hosts compare the
       // call shape, and a chat that takes the defaults must look unchanged.
-      if (mcpWriteToolsSeed !== undefined) {
+      if (disabledMcpServersSeed !== undefined) {
+        onSendMessage(
+          messageContent,
+          inputFileIds,
+          selectedModel?.chat_provider_id,
+          selectedFacetIds,
+          resolvedMentions,
+          delegationRunMode,
+          mcpWriteToolsSeed,
+          disabledMcpServersSeed,
+        );
+      } else if (mcpWriteToolsSeed !== undefined) {
         onSendMessage(
           messageContent,
           inputFileIds,
@@ -1845,16 +1872,29 @@ export const ChatInput = ({
             writeToolsEnabled: mcpWriteTools.enabled,
             onToggleWriteTools: mcpWriteTools.toggle,
             onBrowse: () => setIsMcpToolsBrowserOpen(true),
-            disabled: composeLocked || mcpWriteTools.isSaving,
+            servers: mcpServers,
+            disabledServerIds: disabledMcpServers.disabledServerIds,
+            onToggleServer: disabledMcpServers.toggleServer,
+            onConnect:
+              openMcpServersSettings ?? (() => setIsMcpToolsBrowserOpen(true)),
+            disabled:
+              composeLocked ||
+              mcpWriteTools.isSaving ||
+              disabledMcpServers.isSaving,
             pausesHostActions: pausesHostActionsWhenWritesOff,
           })
         : undefined,
     [
       canBrowseMcpTools,
       composeLocked,
+      disabledMcpServers.disabledServerIds,
+      disabledMcpServers.isSaving,
+      disabledMcpServers.toggleServer,
+      mcpServers,
       mcpWriteTools.enabled,
       mcpWriteTools.isSaving,
       mcpWriteTools.toggle,
+      openMcpServersSettings,
       pausesHostActionsWhenWritesOff,
     ],
   );

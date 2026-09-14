@@ -74,6 +74,7 @@ const listedChat = (id: string): RecentChat => ({
   last_message_at: "2026-01-01T12:00:00.000Z",
   is_pinned: false,
   mcp_write_tools_enabled: true,
+  disabled_mcp_server_ids: [],
   last_selected_facets: ["listed-facet"],
 });
 

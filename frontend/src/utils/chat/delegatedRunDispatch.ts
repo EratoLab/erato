@@ -100,6 +100,7 @@ export function seedDispatchedDelegatedRun(
       // Inherited from the origin chat on the server; like the title, the
       // real value arrives with the refetched listing.
       mcp_write_tools_enabled: true,
+      disabled_mcp_server_ids: [],
       file_uploads: [],
     };
     if (!current) {

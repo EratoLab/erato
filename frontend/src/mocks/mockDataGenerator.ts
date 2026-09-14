@@ -117,6 +117,7 @@ export class MockDataGenerator {
       last_message_at: overrides?.last_message_at ?? new Date().toISOString(),
       is_pinned: overrides?.is_pinned ?? false,
       mcp_write_tools_enabled: overrides?.mcp_write_tools_enabled ?? true,
+      disabled_mcp_server_ids: overrides?.disabled_mcp_server_ids ?? [],
       file_uploads: overrides?.file_uploads ?? [],
       can_edit: overrides?.can_edit ?? true,
     };

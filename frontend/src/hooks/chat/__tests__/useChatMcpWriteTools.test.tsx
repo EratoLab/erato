@@ -24,6 +24,7 @@ const chatDetail = (mcpWriteToolsEnabled: boolean): ChatDetail => ({
   title_resolved: "Chat",
   is_pinned: false,
   mcp_write_tools_enabled: mcpWriteToolsEnabled,
+  disabled_mcp_server_ids: [],
   can_edit: true,
 });
 

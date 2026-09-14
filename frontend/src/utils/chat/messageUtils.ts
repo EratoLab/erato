@@ -119,6 +119,7 @@ export function mergeDisplayMessages(
 
 export interface SubmitStreamRequestBody {
   mcp_write_tools_enabled?: boolean;
+  disabled_mcp_server_ids?: string[];
   user_message: string;
   previous_message_id?: string;
   existing_chat_id?: string;
@@ -142,6 +143,10 @@ export interface SubmitStreamRequestBody {
  * @param mentionedAssistantIds Optional assistants to delegate this turn to.
  * @param delegationRunMode Optional run mode for delegated mentions; left out
  *   for the wire default ("wait").
+ * @param mcpWriteToolsEnabled Seeds a new chat's write switch; left out for
+ *   the server default.
+ * @param disabledMcpServerIds Seeds a new chat's switched-off servers; left
+ *   out when empty.
  * @returns The request body object.
  */
 export function constructSubmitStreamRequestBody(
@@ -156,6 +161,7 @@ export function constructSubmitStreamRequestBody(
   mentionedAssistantIds?: string[],
   delegationRunMode?: DelegationRunMode,
   mcpWriteToolsEnabled?: boolean,
+  disabledMcpServerIds?: string[],
 ): SubmitStreamRequestBody {
   const body: SubmitStreamRequestBody = {
     user_message: userMessageContent,
@@ -190,6 +196,9 @@ export function constructSubmitStreamRequestBody(
   }
   if (mcpWriteToolsEnabled !== undefined) {
     body.mcp_write_tools_enabled = mcpWriteToolsEnabled;
+  }
+  if (disabledMcpServerIds && disabledMcpServerIds.length > 0) {
+    body.disabled_mcp_server_ids = disabledMcpServerIds;
   }
 
   return body;

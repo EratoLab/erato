@@ -382,6 +382,7 @@ export const Chat = ({
       mentionedAssistants?: AssistantMention[],
       delegationRunMode?: DelegationRunMode,
       mcpWriteToolsEnabled?: boolean,
+      disabledMcpServerIds?: string[],
     ) => {
       logger.log("[CHAT_FLOW] Chat - handleSendMessage called", {
         files: inputFileIds,
@@ -391,6 +392,7 @@ export const Chat = ({
         mentionedAssistants,
         delegationRunMode,
         mcpWriteToolsEnabled,
+        disabledMcpServerIds,
       });
 
       baseHandleSendMessage(
@@ -402,6 +404,7 @@ export const Chat = ({
         mentionedAssistants,
         delegationRunMode,
         mcpWriteToolsEnabled,
+        disabledMcpServerIds,
       ).catch((error) => {
         logger.log("[CHAT_FLOW] Error sending message:", error);
       });
