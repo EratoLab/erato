@@ -62,6 +62,7 @@ export const AccessibilityTest: Story = {
     currentSessionId: "1",
     onSessionSelect: () => {},
     onSessionArchive: () => {},
+    onSessionUnarchive: () => {},
     isLoading: false,
   },
   play: async ({ canvasElement }) => {
@@ -95,6 +96,7 @@ export const LoadingStateTest: Story = {
     currentSessionId: null,
     onSessionSelect: () => {},
     onSessionArchive: () => {},
+    onSessionUnarchive: () => {},
     isLoading: true,
   },
   play: async ({ canvasElement }) => {
@@ -123,6 +125,7 @@ const CollapseTestComponent = () => {
       currentSessionId="1"
       onSessionSelect={() => {}}
       onSessionArchive={() => {}}
+      onSessionUnarchive={() => {}}
       isLoading={false}
     />
   );
@@ -134,6 +137,7 @@ export const CollapseTest: Story = {
     currentSessionId: "1",
     onSessionSelect: () => {},
     onSessionArchive: () => {},
+    onSessionUnarchive: () => {},
     isLoading: false,
     showTitle: true,
   },

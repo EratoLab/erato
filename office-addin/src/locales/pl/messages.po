@@ -679,6 +679,11 @@ msgid "officeAddin.historyDrawer.title"
 msgstr "Menu"
 
 #. js-lingui-explicit-id
+#: src/core/AddinHistoryDrawerCore.tsx
+msgid "officeAddin.historyDrawer.unarchiveFailed"
+msgstr "Nie udało się cofnąć archiwizacji czatu"
+
+#. js-lingui-explicit-id
 #: src/providers/OfficeProvider.tsx
 msgid "officeAddin.office.loading"
 msgstr "Ładowanie dodatku Office..."

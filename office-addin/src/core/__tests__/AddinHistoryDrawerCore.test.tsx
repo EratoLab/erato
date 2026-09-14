@@ -21,6 +21,7 @@ const spies = vi.hoisted(() => {
     navigateToChat: vi.fn(),
     createNewChat: vi.fn(async () => "temp"),
     archiveChat: vi.fn(async () => undefined),
+    unarchiveChat: vi.fn(async () => undefined),
     updateChatTitle: vi.fn(async () => undefined),
     fetchNextHistoryPage: vi.fn(async () => undefined),
     toastError: vi.fn(),
@@ -43,6 +44,7 @@ const spies = vi.hoisted(() => {
       onLoadMore?: () => void;
       onSessionSelect: (id: string) => void;
       onSessionArchive?: (id: string) => void;
+      onSessionUnarchive?: (id: string) => void;
       onSessionEditTitle?: (id: string) => void;
       onSessionShare?: (id: string) => void;
       disableRowLinks?: boolean;
@@ -185,6 +187,7 @@ vi.mock("@erato/frontend/library", async () => {
       navigateToChat: spies.navigateToChat,
       createNewChat: spies.createNewChat,
       archiveChat: spies.archiveChat,
+      unarchiveChat: spies.unarchiveChat,
       updateChatTitle: spies.updateChatTitle,
       fetchNextHistoryPage: spies.fetchNextHistoryPage,
     }),
@@ -592,6 +595,9 @@ describe("AddinHistoryDrawerCore", () => {
     secondPass.forEach((props, index) => {
       expect(props.onSessionSelect).toBe(firstPass[index]?.onSessionSelect);
       expect(props.onSessionArchive).toBe(firstPass[index]?.onSessionArchive);
+      expect(props.onSessionUnarchive).toBe(
+        firstPass[index]?.onSessionUnarchive,
+      );
       expect(props.onLoadMore).toBe(firstPass[index]?.onLoadMore);
     });
   });
@@ -619,6 +625,17 @@ describe("AddinHistoryDrawerCore", () => {
 
     await act(async () => {
       spies.historyListProps[0]?.onSessionArchive?.("c1");
+    });
+
+    expect(spies.toastError).toHaveBeenCalledTimes(1);
+  });
+
+  it("toasts when unarchiving fails", async () => {
+    spies.unarchiveChat.mockRejectedValueOnce(new Error("unarchive failed"));
+    renderDrawer();
+
+    await act(async () => {
+      spies.historyListProps[0]?.onSessionUnarchive?.("c1");
     });
 
     expect(spies.toastError).toHaveBeenCalledTimes(1);

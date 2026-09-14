@@ -73,6 +73,7 @@ export function AddinHistoryDrawerCore({
   // chunk and defeat ChatHistoryList's memo mid-stream.
   const {
     archiveChat,
+    unarchiveChat,
     createNewChat,
     fetchNextHistoryPage,
     navigateToChat,
@@ -250,6 +251,22 @@ export function AddinHistoryDrawerCore({
     [archiveChat],
   );
 
+  // Nothing about the row changes when unarchiving fails, so the toast is the
+  // only signal — and the rejection would otherwise escape unhandled.
+  const handleUnarchive = useCallback(
+    (sessionId: string) => {
+      unarchiveChat(sessionId).catch(() => {
+        toast.error({
+          title: t({
+            id: "officeAddin.historyDrawer.unarchiveFailed",
+            message: "Couldn't unarchive the chat",
+          }),
+        });
+      });
+    },
+    [unarchiveChat],
+  );
+
   const handleLoadMore = useCallback(
     () => void fetchNextHistoryPage(),
     [fetchNextHistoryPage],
@@ -347,6 +364,7 @@ export function AddinHistoryDrawerCore({
       showTimestamps={chatHistoryShowMetadata}
       onSessionSelect={handleSelect}
       onSessionArchive={handleArchive}
+      onSessionUnarchive={handleUnarchive}
       onSessionEditTitle={setTitleDialogSessionId}
       onSessionShare={sharingEnabled ? setShareDialogChatId : undefined}
       hasMore={carriesLoadMore && chat.hasNextHistoryPage}

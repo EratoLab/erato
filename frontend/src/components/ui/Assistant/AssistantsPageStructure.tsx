@@ -30,6 +30,7 @@ export default function AssistantsPageStructure({
     currentChatId,
     navigateToChat: switchSession,
     archiveChat,
+    unarchiveChat,
     createNewChat: createChat,
     updateChatTitle,
     pinChat,
@@ -87,6 +88,10 @@ export default function AssistantsPageStructure({
   // Handle archiving a session
   const handleArchiveSession = (sessionId: string) => {
     void archiveChat(sessionId);
+  };
+
+  const handleUnarchiveSession = (sessionId: string) => {
+    void unarchiveChat(sessionId);
   };
 
   const handlePinSession = useCallback(
@@ -170,6 +175,7 @@ export default function AssistantsPageStructure({
         currentSessionId={currentChatId ?? ""}
         onSessionSelect={handleSessionSelect}
         onSessionArchive={handleArchiveSession}
+        onSessionUnarchive={handleUnarchiveSession}
         onSessionEditTitle={handleEditTitleSession}
         onSessionShare={chatSharingEnabled ? handleOpenShareDialog : undefined}
         pinnedSessions={pinnedSessions}

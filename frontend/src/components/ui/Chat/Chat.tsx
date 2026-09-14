@@ -252,6 +252,7 @@ export const Chat = ({
     currentChatId,
     navigateToChat: switchSession,
     archiveChat,
+    unarchiveChat,
     updateChatTitle,
     pinChat,
     pinnedChats: pinnedChatHistory,
@@ -483,6 +484,10 @@ export const Chat = ({
   const handleArchiveSession = (sessionId: string) => {
     // Use void to explicitly ignore the promise returned by archiveChat
     void archiveChat(sessionId);
+  };
+
+  const handleUnarchiveSession = (sessionId: string) => {
+    void unarchiveChat(sessionId);
   };
 
   const [titleDialogChatId, setTitleDialogChatId] = useState<string | null>(
@@ -792,6 +797,7 @@ export const Chat = ({
           currentSessionId={currentChatId ?? ""}
           onSessionSelect={handleSessionSelectWrapper}
           onSessionArchive={handleArchiveSession}
+          onSessionUnarchive={handleUnarchiveSession}
           onSessionEditTitle={handleEditTitleSession}
           pinnedSessions={pinnedSessions}
           pinnedChatsLimit={pinnedChatsLimit}

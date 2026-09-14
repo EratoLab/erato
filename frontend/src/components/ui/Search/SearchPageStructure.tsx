@@ -30,6 +30,7 @@ export default function SearchPageStructure({
     currentChatId,
     navigateToChat: switchSession,
     archiveChat,
+    unarchiveChat,
     createNewChat: createChat,
     updateChatTitle,
     pinChat,
@@ -86,6 +87,10 @@ export default function SearchPageStructure({
   // Handle archiving a session
   const handleArchiveSession = (sessionId: string) => {
     void archiveChat(sessionId);
+  };
+
+  const handleUnarchiveSession = (sessionId: string) => {
+    void unarchiveChat(sessionId);
   };
 
   const handlePinSession = useCallback(
@@ -169,6 +174,7 @@ export default function SearchPageStructure({
         currentSessionId={currentChatId ?? ""}
         onSessionSelect={handleSessionSelect}
         onSessionArchive={handleArchiveSession}
+        onSessionUnarchive={handleUnarchiveSession}
         onSessionEditTitle={handleEditTitleSession}
         onSessionShare={chatSharingEnabled ? handleOpenShareDialog : undefined}
         pinnedSessions={pinnedSessions}

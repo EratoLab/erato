@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/Input/Input";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 import {
   SearchIcon,
+  ArchiveIcon,
   CloseIcon,
   EditIcon,
   PinIcon,
@@ -50,6 +51,7 @@ interface SearchResult {
   titleByUserProvided?: string | null;
   canEdit: boolean;
   isPinned: boolean;
+  isArchived: boolean;
   messageContent: string;
   timestamp: string;
   context?: string;
@@ -67,8 +69,14 @@ export default function SearchPage() {
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
   const { fetcherOptions } = useV1betaApiContext();
-  const { archiveChat, updateChatTitle, refetchHistory, pinChat, pinnedChats } =
-    useChatContext();
+  const {
+    archiveChat,
+    unarchiveChat,
+    updateChatTitle,
+    refetchHistory,
+    pinChat,
+    pinnedChats,
+  } = useChatContext();
 
   // Get feature configurations
   const { autofocus: shouldAutofocus } = useChatInputFeature();
@@ -150,6 +158,7 @@ export default function SearchPage() {
           titleByUserProvided: chat.title_by_user_provided,
           canEdit: chat.can_edit,
           isPinned: chat.is_pinned,
+          isArchived: chat.archived_at != null,
           messageContent: chat.title_resolved,
           timestamp: chat.last_message_at,
         }),
@@ -200,6 +209,11 @@ export default function SearchPage() {
 
   const handleArchiveResult = async (chatId: string) => {
     await archiveChat(chatId);
+    await Promise.all([refetchHistory(), refetchSearchResults()]);
+  };
+
+  const handleUnarchiveResult = async (chatId: string) => {
+    await unarchiveChat(chatId);
     await Promise.all([refetchHistory(), refetchSearchResults()]);
   };
 
@@ -366,7 +380,7 @@ export default function SearchPage() {
                     >
                       <DropdownMenu
                         items={[
-                          ...(pinnedChatsEnabled
+                          ...(pinnedChatsEnabled && !result.isArchived
                             ? [
                                 {
                                   label: result.isPinned
@@ -401,7 +415,7 @@ export default function SearchPage() {
                                 },
                               ]
                             : []),
-                          ...(chatSharingEnabled
+                          ...(chatSharingEnabled && !result.isArchived
                             ? [
                                 {
                                   label: t({
@@ -424,27 +438,38 @@ export default function SearchPage() {
                             onClick: () => setTitleDialogChatId(result.chatId),
                             disabled: !result.canEdit,
                           },
-                          {
-                            label: t({
-                              id: "chat.history.menu.remove",
-                              message: "Remove",
-                            }),
-                            icon: <Trash className="size-4" />,
-                            variant: "danger",
-                            onClick: () => {
-                              void handleArchiveResult(result.chatId);
-                            },
-                            confirmAction: true,
-                            confirmTitle: t({
-                              id: "chat.history.menu.confirm_remove.title",
-                              message: "Confirm Removal",
-                            }),
-                            confirmMessage: t({
-                              id: "chat.history.menu.confirm_remove.message",
-                              message:
-                                "Are you sure you want to remove this chat?",
-                            }),
-                          },
+                          result.isArchived
+                            ? {
+                                label: t({
+                                  id: "chat.history.menu.unarchive",
+                                  message: "Unarchive",
+                                }),
+                                icon: <ArchiveIcon className="size-4" />,
+                                onClick: () => {
+                                  void handleUnarchiveResult(result.chatId);
+                                },
+                              }
+                            : {
+                                label: t({
+                                  id: "chat.history.menu.remove",
+                                  message: "Remove",
+                                }),
+                                icon: <Trash className="size-4" />,
+                                variant: "danger" as const,
+                                onClick: () => {
+                                  void handleArchiveResult(result.chatId);
+                                },
+                                confirmAction: true,
+                                confirmTitle: t({
+                                  id: "chat.history.menu.confirm_remove.title",
+                                  message: "Confirm Removal",
+                                }),
+                                confirmMessage: t({
+                                  id: "chat.history.menu.confirm_remove.message",
+                                  message:
+                                    "Are you sure you want to remove this chat?",
+                                }),
+                              },
                         ]}
                       />
                     </div>
