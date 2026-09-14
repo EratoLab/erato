@@ -7,6 +7,7 @@ import { getOptionalTranslation } from "@/hooks/i18n";
 
 import { DropdownMenu } from "../Controls/DropdownMenu";
 import { AtSignIcon, ChevronDownIcon, ResolvedIcon, ToolsIcon } from "../icons";
+import { isAddMenuToolItem } from "./ChatInputAddMenu";
 
 import type { AddMenuSection } from "./ChatInputAddMenu";
 import type { DropdownMenuItem } from "../Controls/DropdownMenu";
@@ -23,12 +24,17 @@ interface FacetSelectorProps {
    * menu renders, so both hosts offer identical assistant rows.
    */
   assistantSection?: AddMenuSection;
+  /**
+   * The connectors group (write toggle, tool browser) rendered between the
+   * facets and the assistants — again the same section the "+" menu shows.
+   */
+  mcpToolsSection?: AddMenuSection;
   /** Disable the whole control (composer lock). */
   disabled?: boolean;
   /**
    * Extra gate for the facet rows alone (enforced facet settings). The
-   * assistants group stays live: a chat whose tools are locked may still
-   * delegate.
+   * assistants and connectors groups stay live: a chat whose tools are
+   * locked may still delegate or pause writes.
    */
   toolsDisabled?: boolean;
   className?: string;
@@ -47,6 +53,7 @@ export const FacetSelector = ({
   onlySingleFacet,
   showFacetIndicatorWithDisplayName,
   assistantSection,
+  mcpToolsSection,
   disabled = false,
   toolsDisabled = false,
   className = "",
@@ -113,44 +120,63 @@ export const FacetSelector = ({
       };
     });
 
-    if (!assistantSection) {
-      return facetItems;
+    const items: DropdownMenuItem[] = [...facetItems];
+    for (const section of [mcpToolsSection, assistantSection]) {
+      if (!section) {
+        continue;
+      }
+      // The group label is only worth a row when there is something above it
+      // to separate the group from.
+      section.items.forEach((item, index) => {
+        const sectionHeader =
+          index === 0 && items.length > 0 ? section.header : undefined;
+        items.push(
+          isAddMenuToolItem(item)
+            ? {
+                id: item.id,
+                label: item.label,
+                description: item.description,
+                icon: item.icon,
+                onClick: item.onToggle,
+                checked: item.checked,
+                disabled: item.disabled,
+                sectionHeader,
+              }
+            : {
+                id: item.id,
+                label: item.label,
+                description: item.description,
+                icon: item.icon,
+                onClick: item.onSelect,
+                disabled: item.disabled,
+                closesImmediately: item.closesImmediately,
+                sectionHeader,
+              },
+        );
+      });
     }
-
-    // The group label is only worth a row when there is something above it to
-    // separate the assistants from.
-    return [
-      ...facetItems,
-      ...assistantSection.items.map((item, index) => ({
-        id: item.id,
-        label: item.label,
-        onClick: item.onSelect,
-        disabled: item.disabled,
-        closesImmediately: item.closesImmediately,
-        sectionHeader:
-          index === 0 && facetItems.length > 0
-            ? assistantSection.header
-            : undefined,
-      })),
-    ];
+    return items;
   }, [
     assistantSection,
     facets,
+    mcpToolsSection,
     selectedFacetIdsSet,
     toggleFacetSelection,
     toolsDisabled,
   ]);
 
-  if (facets.length === 0 && !assistantSection) {
+  if (facets.length === 0 && !assistantSection && !mcpToolsSection) {
     return null;
   }
 
-  // Without facets the control carries assistants alone, so the trigger has to
-  // say so — the delegation surface must stay reachable on a facet-less deployment.
-  const isAssistantsOnly = facets.length === 0;
-  // Locked tools leave the menu worth opening only for the assistants; with no
-  // assistants group every row is dead, so the trigger goes inert instead.
-  const isMenuInert = disabled || (toolsDisabled && !assistantSection);
+  // Without facets or connectors the control carries assistants alone, so the
+  // trigger has to say so — the delegation surface must stay reachable on a
+  // facet-less deployment.
+  const isAssistantsOnly = facets.length === 0 && !mcpToolsSection;
+  // Locked tools leave the menu worth opening only for the injected groups;
+  // with none every row is dead, so the trigger goes inert instead.
+  const isMenuInert =
+    disabled || (toolsDisabled && !assistantSection && !mcpToolsSection);
 
   return (
     <div

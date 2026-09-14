@@ -42,6 +42,8 @@ export interface DropdownMenuItem {
   confirmButtonVariant?: ButtonVariant;
   checked?: boolean;
   testId?: string;
+  /** Optional secondary muted line under the label. */
+  description?: React.ReactNode;
   /**
    * Skip the close delay. Required of any row that opens a dialog: the delayed
    * close returns focus to the trigger *after* the dialog has focused itself,
@@ -130,7 +132,16 @@ const MenuItem = memo(
       }
     >
       <span className={clsx("flex-1", noWrap && "whitespace-nowrap")}>
-        {item.label}
+        {item.description ? (
+          <>
+            <span className="block">{item.label}</span>
+            <span className="block text-xs font-normal text-theme-fg-muted">
+              {item.description}
+            </span>
+          </>
+        ) : (
+          item.label
+        )}
       </span>
     </Row>
   ),
