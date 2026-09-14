@@ -146,8 +146,9 @@ impl From<&chats::Model> for Resource {
 /// If the chat is not found, an error is returned.
 /// If `existing_chat_id` is not provided, create a new chat, with `owner_user_id` as the owner.
 /// If `assistant_id` is provided when creating a new chat, the assistant configuration will be stored.
-/// `mcp_write_tools_enabled` and `disabled_mcp_server_ids` seed the new
-/// chat's tool settings; `None` keeps the column default.
+/// `mcp_write_tools_enabled`, `disabled_mcp_server_ids` and
+/// `disabled_mcp_tools` seed the new chat's tool settings; `None` keeps the
+/// column default.
 ///
 /// Returns a tuple of (chat model, creation status) where the status indicates whether
 /// the chat was newly created or already existed.
@@ -162,6 +163,7 @@ pub async fn get_or_create_chat(
     title_by_user_provided: Option<String>,
     mcp_write_tools_enabled: Option<bool>,
     disabled_mcp_server_ids: Option<Vec<String>>,
+    disabled_mcp_tools: Option<Vec<String>>,
 ) -> Result<(chats::Model, ChatCreationStatus), Report> {
     if let Some(existing_chat_id) = existing_chat_id {
         let existing_chat: Option<chats::Model> =
@@ -190,7 +192,10 @@ pub async fn get_or_create_chat(
                 .map(ActiveValue::Set)
                 .unwrap_or(ActiveValue::NotSet),
             disabled_mcp_server_ids: disabled_mcp_server_ids
-                .map(|ids| ActiveValue::Set(dedup_server_ids(ids)))
+                .map(|ids| ActiveValue::Set(dedup_keep_order(ids)))
+                .unwrap_or(ActiveValue::NotSet),
+            disabled_mcp_tools: disabled_mcp_tools
+                .map(|patterns| ActiveValue::Set(dedup_keep_order(patterns)))
                 .unwrap_or(ActiveValue::NotSet),
             ..Default::default()
         };
@@ -228,6 +233,7 @@ pub async fn get_or_create_chat_by_previous_message_id(
     title_by_user_provided: Option<String>,
     mcp_write_tools_enabled: Option<bool>,
     disabled_mcp_server_ids: Option<Vec<String>>,
+    disabled_mcp_tools: Option<Vec<String>>,
 ) -> Result<(chats::Model, ChatCreationStatus), Report> {
     if let Some(message_id) = previous_message_id {
         // Find the message to get its chat_id
@@ -251,6 +257,7 @@ pub async fn get_or_create_chat_by_previous_message_id(
             None, // title_by_user_provided is ignored when existing_chat_id is provided
             None, // mcp_write_tools_enabled is ignored when existing_chat_id is provided
             None, // disabled_mcp_server_ids is ignored when existing_chat_id is provided
+            None, // disabled_mcp_tools is ignored when existing_chat_id is provided
         )
         .await
     } else {
@@ -266,6 +273,7 @@ pub async fn get_or_create_chat_by_previous_message_id(
             title_by_user_provided,
             mcp_write_tools_enabled,
             disabled_mcp_server_ids,
+            disabled_mcp_tools,
         )
         .await
     }
@@ -285,9 +293,9 @@ pub fn chat_is_delegated_run(chat: &chats::Model) -> bool {
 /// Create a chat owned by `owner_user_id`, bound to `assistant_id`, carrying a
 /// provenance envelope. The caller must have access-checked the assistant (the
 /// `POST /me/chats` pattern) — this function only authorizes chat creation.
-/// The write toggle and the disabled servers are copied from the parent row:
-/// a run spawned from a chat with writes off, or with a server switched off,
-/// must not regain them.
+/// The write toggle, the disabled servers and the disabled tools are copied
+/// from the parent row: a run spawned from a chat with writes off, or with a
+/// server or tool switched off, must not regain them.
 #[allow(clippy::too_many_arguments)]
 pub async fn create_delegated_chat(
     conn: &DatabaseConnection,
@@ -299,6 +307,7 @@ pub async fn create_delegated_chat(
     title: String,
     mcp_write_tools_enabled: bool,
     disabled_mcp_server_ids: Vec<String>,
+    disabled_mcp_tools: Vec<String>,
 ) -> Result<chats::Model, Report> {
     authorize!(policy, subject, &Resource::ChatSingleton, Action::Create)?;
 
@@ -312,6 +321,7 @@ pub async fn create_delegated_chat(
         title_by_user_provided: ActiveValue::Set(Some(title)),
         mcp_write_tools_enabled: ActiveValue::Set(mcp_write_tools_enabled),
         disabled_mcp_server_ids: ActiveValue::Set(disabled_mcp_server_ids),
+        disabled_mcp_tools: ActiveValue::Set(disabled_mcp_tools),
         ..Default::default()
     };
     Ok(chats::Entity::insert(new_chat)
@@ -450,6 +460,8 @@ pub struct RecentChat {
     pub mcp_write_tools_enabled: bool,
     /// MCP servers the user switched off for this chat.
     pub disabled_mcp_server_ids: Vec<String>,
+    /// `server/tool` patterns of MCP tools the user switched off for this chat.
+    pub disabled_mcp_tools: Vec<String>,
     /// Owner of the chat (for permission checks at the API boundary)
     pub owner_user_id: String,
     /// The chat provider ID used for the most recent message
@@ -524,6 +536,7 @@ struct ChatWithLatestMessage {
     is_pinned: bool,
     mcp_write_tools_enabled: bool,
     disabled_mcp_server_ids: Vec<String>,
+    disabled_mcp_tools: Vec<String>,
     assistant_id: Option<Uuid>,
     active_generation_started_at: Option<DateTimeWithTimeZone>,
     pending_tool_approval_at: Option<DateTimeWithTimeZone>,
@@ -672,6 +685,7 @@ pub async fn get_recent_chats(
             "chats"."is_pinned",
             "chats"."mcp_write_tools_enabled",
             "chats"."disabled_mcp_server_ids",
+            "chats"."disabled_mcp_tools",
             "chats"."assistant_id",
             CASE
                 WHEN "chats"."archived_at" IS NULL
@@ -989,6 +1003,7 @@ pub async fn get_recent_chats(
                 is_pinned: chat_with_msg.is_pinned,
                 mcp_write_tools_enabled: chat_with_msg.mcp_write_tools_enabled,
                 disabled_mcp_server_ids: chat_with_msg.disabled_mcp_server_ids.clone(),
+                disabled_mcp_tools: chat_with_msg.disabled_mcp_tools.clone(),
                 owner_user_id: chat_with_msg.owner_user_id.clone(),
                 last_chat_provider_id,
                 last_selected_facets,
@@ -1032,6 +1047,7 @@ pub struct ChatDetail {
     pub is_pinned: bool,
     pub mcp_write_tools_enabled: bool,
     pub disabled_mcp_server_ids: Vec<String>,
+    pub disabled_mcp_tools: Vec<String>,
     pub owner_user_id: String,
     pub assistant_id: Option<Uuid>,
     pub assistant_name: Option<String>,
@@ -1112,6 +1128,7 @@ pub async fn get_chat_detail(
         is_pinned: chat.is_pinned,
         mcp_write_tools_enabled: chat.mcp_write_tools_enabled,
         disabled_mcp_server_ids: chat.disabled_mcp_server_ids,
+        disabled_mcp_tools: chat.disabled_mcp_tools,
         owner_user_id: chat.owner_user_id,
         assistant_id: chat.assistant_id,
         assistant_name,
@@ -1473,17 +1490,44 @@ pub async fn update_chat_disabled_mcp_server_ids(
 
     let mut chat_active: chats::ActiveModel = chat.into();
     chat_active.disabled_mcp_server_ids =
-        ActiveValue::Set(dedup_server_ids(disabled_mcp_server_ids));
+        ActiveValue::Set(dedup_keep_order(disabled_mcp_server_ids));
     Ok(chat_active.update(conn).await?)
 }
 
-/// The stored server list keeps the caller's order but no repeats, so a
-/// client toggling the same row twice cannot grow it.
-fn dedup_server_ids(server_ids: Vec<String>) -> Vec<String> {
+/// Replace the set of `server/tool` patterns of MCP tools the user switched
+/// off for a chat. Patterns are stored as given: one naming a tool the
+/// server no longer exposes is a harmless no-op at generation time.
+pub async fn update_chat_disabled_mcp_tools(
+    conn: &DatabaseConnection,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    chat_id: &Uuid,
+    disabled_mcp_tools: Vec<String>,
+) -> Result<chats::Model, Report> {
+    let chat = Chats::find_by_id(*chat_id)
+        .one(conn)
+        .await?
+        .ok_or_else(|| eyre!("Chat with ID {} not found", chat_id))?;
+
+    authorize!(
+        policy,
+        subject,
+        &Resource::Chat(chat.id.to_string()),
+        Action::Update
+    )?;
+
+    let mut chat_active: chats::ActiveModel = chat.into();
+    chat_active.disabled_mcp_tools = ActiveValue::Set(dedup_keep_order(disabled_mcp_tools));
+    Ok(chat_active.update(conn).await?)
+}
+
+/// A stored list keeps the caller's order but no repeats, so a client
+/// toggling the same row twice cannot grow it.
+fn dedup_keep_order(values: Vec<String>) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
-    server_ids
+    values
         .into_iter()
-        .filter(|server_id| seen.insert(server_id.clone()))
+        .filter(|value| seen.insert(value.clone()))
         .collect()
 }
 

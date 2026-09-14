@@ -4280,6 +4280,7 @@ async fn spawn_listed_delegated_run(
         title.to_string(),
         true,
         Vec::new(),
+        Vec::new(),
     )
     .await
     .unwrap();
@@ -4362,6 +4363,7 @@ async fn test_listing_hides_delegated_runs_and_exposes_provenance(pool: Pool<Pos
             },
             format!("Delegated run {index}"),
             true,
+            Vec::new(),
             Vec::new(),
         )
         .await
@@ -4755,6 +4757,7 @@ fn answer_metadata(
         mcp_servers_unavailable: None,
         mcp_servers_needing_auth: None,
         mcp_servers_disabled_by_user: None,
+        mcp_tools_disabled_by_user: None,
     }
 }
 
@@ -5086,6 +5089,7 @@ async fn test_delegated_run_outcome_reports_failures(pool: Pool<Postgres>) {
         "Seeded only".to_string(),
         true,
         Vec::new(),
+        Vec::new(),
     )
     .await
     .unwrap()
@@ -5187,6 +5191,7 @@ async fn test_parked_delegated_chat_stays_reachable(pool: Pool<Postgres>) {
         },
         "Parked delegated run".to_string(),
         true,
+        Vec::new(),
         Vec::new(),
     )
     .await
@@ -5762,6 +5767,7 @@ async fn spawn_delegated_run(
         title.to_string(),
         true,
         Vec::new(),
+        Vec::new(),
     )
     .await
     .expect("create delegated chat");
@@ -5796,6 +5802,7 @@ async fn spawn_handoff_branch(
         },
         "Handoff branch".to_string(),
         true,
+        Vec::new(),
         Vec::new(),
     )
     .await
@@ -6217,6 +6224,7 @@ async fn test_submit_into_live_delegated_run_conflicts(pool: Pool<Postgres>) {
         "Continuable run".to_string(),
         true,
         Vec::new(),
+        Vec::new(),
     )
     .await
     .unwrap();
@@ -6567,6 +6575,7 @@ async fn test_chat_detail_carries_provenance_and_run_parameters(pool: Pool<Postg
         "Summarize the numbers".to_string(),
         true,
         Vec::new(),
+        Vec::new(),
     )
     .await
     .unwrap();
@@ -6652,6 +6661,7 @@ async fn test_chat_detail_reports_adopted_and_archived_runs(pool: Pool<Postgres>
         },
         "Adoptable run".to_string(),
         true,
+        Vec::new(),
         Vec::new(),
     )
     .await

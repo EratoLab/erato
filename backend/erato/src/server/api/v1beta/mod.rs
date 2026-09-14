@@ -27,7 +27,8 @@ use crate::models::chat::{
     RecentChatTypeFilter, RecentChatsFilter, archive_all_unarchived_chats_for_owner, archive_chat,
     get_frequent_assistants, get_generating_chats, get_or_create_chat, get_recent_chats,
     resolve_chat_display_name, unarchive_chat, update_chat_disabled_mcp_server_ids,
-    update_chat_is_pinned, update_chat_mcp_write_tools_enabled, update_chat_title_by_user_provided,
+    update_chat_disabled_mcp_tools, update_chat_is_pinned, update_chat_mcp_write_tools_enabled,
+    update_chat_title_by_user_provided,
 };
 use crate::models::file_capability::{
     FileCapability, FileOperation, find_file_capability_by_filename, get_file_capabilities,
@@ -1327,6 +1328,9 @@ pub struct RecentChat {
     /// MCP servers the user switched off for this chat; their tools are not
     /// offered to the model.
     disabled_mcp_server_ids: Vec<String>,
+    /// `server/tool` patterns of MCP tools the user switched off for this
+    /// chat; matching tools are not offered to the model.
+    disabled_mcp_tools: Vec<String>,
     /// The chat provider ID used for the most recent message
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
@@ -1433,6 +1437,9 @@ pub struct ChatDetail {
     /// MCP servers the user switched off for this chat; their tools are not
     /// offered to the model.
     disabled_mcp_server_ids: Vec<String>,
+    /// `server/tool` patterns of MCP tools the user switched off for this
+    /// chat; matching tools are not offered to the model.
+    disabled_mcp_tools: Vec<String>,
     /// Whether the current user can edit this chat.
     can_edit: bool,
     /// The assistant ID if this chat is based on an assistant.
@@ -1577,6 +1584,11 @@ pub struct ChatMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     mcp_servers_disabled_by_user: Option<Vec<String>>,
+    /// `server/tool` names of MCP tools withheld from this generation because
+    /// the user switched the tool off for the chat
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    mcp_tools_disabled_by_user: Option<Vec<String>>,
     /// When the message was created
     created_at: DateTime<FixedOffset>,
     /// When the message was last updated
@@ -2323,6 +2335,9 @@ impl ChatMessage {
         let mcp_servers_disabled_by_user = generation_metadata
             .as_ref()
             .and_then(|metadata| metadata.mcp_servers_disabled_by_user.clone());
+        let mcp_tools_disabled_by_user = generation_metadata
+            .as_ref()
+            .and_then(|metadata| metadata.mcp_tools_disabled_by_user.clone());
         let chat_provider_id = get_generation_chat_provider_id_from_message(&msg)?;
         Ok(ChatMessage {
             id: msg.id.to_string(),
@@ -2335,6 +2350,7 @@ impl ChatMessage {
             mcp_servers_unavailable,
             mcp_servers_needing_auth,
             mcp_servers_disabled_by_user,
+            mcp_tools_disabled_by_user,
             created_at: msg.created_at,
             updated_at: msg.updated_at,
             previous_message_id: msg.previous_message_id.map(|id| id.to_string()),
@@ -3193,6 +3209,7 @@ async fn extend_recent_chats_to_api_model(
             is_pinned: chat.is_pinned,
             mcp_write_tools_enabled: chat.mcp_write_tools_enabled,
             disabled_mcp_server_ids: chat.disabled_mcp_server_ids.clone(),
+            disabled_mcp_tools: chat.disabled_mcp_tools.clone(),
             last_chat_provider_id: chat.last_chat_provider_id.clone(),
             last_selected_facets: chat.last_selected_facets.clone(),
             last_model,
@@ -3398,6 +3415,14 @@ pub struct UpdateChatRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     disabled_mcp_server_ids: Option<Vec<String>>,
+    /// `server/tool` patterns of MCP tools to switch off for this chat;
+    /// replaces the stored list. Matching tools are withheld from the model.
+    /// Only ever narrows the set the policy, assistant, facets and the
+    /// server list allow; a pattern naming a tool the server no longer
+    /// exposes does nothing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    disabled_mcp_tools: Option<Vec<String>>,
 }
 
 /// Response for update_chat endpoint.
@@ -3418,6 +3443,8 @@ pub struct UpdateChatResponse {
     mcp_write_tools_enabled: bool,
     /// MCP servers the user switched off for this chat.
     disabled_mcp_server_ids: Vec<String>,
+    /// `server/tool` patterns of MCP tools the user switched off for this chat.
+    disabled_mcp_tools: Vec<String>,
 }
 
 /// Create a new chat without an initial message
@@ -3486,6 +3513,7 @@ pub async fn create_chat(
         &me_user.id,
         assistant_id.as_ref(),
         title_by_user_provided,
+        None,
         None,
         None,
     )
@@ -3557,6 +3585,7 @@ pub async fn chat_detail(
         is_pinned: chat.is_pinned,
         mcp_write_tools_enabled: chat.mcp_write_tools_enabled,
         disabled_mcp_server_ids: chat.disabled_mcp_server_ids,
+        disabled_mcp_tools: chat.disabled_mcp_tools,
         can_edit,
         assistant_id: chat.assistant_id.map(|id| id.to_string()),
         assistant_name: chat.assistant_name,
@@ -3573,7 +3602,7 @@ pub async fn chat_detail(
 /// Update mutable fields on a chat.
 ///
 /// Supports updating the user-provided title, pin state, the MCP write
-/// tools toggle and the disabled MCP server list.
+/// tools toggle and the disabled MCP server and tool lists.
 #[utoipa::path(
     put,
     path = "/me/chats/{chat_id}",
@@ -3611,6 +3640,7 @@ pub async fn update_chat(
         is_pinned,
         mcp_write_tools_enabled,
         disabled_mcp_server_ids,
+        disabled_mcp_tools,
     } = request;
     let subject = me_user.to_subject();
     let update = async {
@@ -3619,7 +3649,8 @@ pub async fn update_chat(
         // unless it is supplied too.
         let title_only = is_pinned.is_none()
             && mcp_write_tools_enabled.is_none()
-            && disabled_mcp_server_ids.is_none();
+            && disabled_mcp_server_ids.is_none()
+            && disabled_mcp_tools.is_none();
         let mut updated_chat = None;
         if let Some(is_pinned) = is_pinned {
             updated_chat = Some(
@@ -3647,6 +3678,18 @@ pub async fn update_chat(
                     &subject,
                     &chat_id,
                     disabled_mcp_server_ids,
+                )
+                .await?,
+            );
+        }
+        if let Some(disabled_mcp_tools) = disabled_mcp_tools {
+            updated_chat = Some(
+                update_chat_disabled_mcp_tools(
+                    &app_state.db,
+                    &policy,
+                    &subject,
+                    &chat_id,
+                    disabled_mcp_tools,
                 )
                 .await?,
             );
@@ -3680,6 +3723,7 @@ pub async fn update_chat(
         is_pinned: updated_chat.is_pinned,
         mcp_write_tools_enabled: updated_chat.mcp_write_tools_enabled,
         disabled_mcp_server_ids: updated_chat.disabled_mcp_server_ids,
+        disabled_mcp_tools: updated_chat.disabled_mcp_tools,
     }))
 }
 
