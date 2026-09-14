@@ -2089,6 +2089,11 @@ msgid "chat.message.mcpDisabledServers.text"
 msgstr "{serverCount, plural, one {{serverList} is switched off for this chat, so its tools were not used.} other {{serverList} are switched off for this chat, so their tools were not used.}}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/McpDisabledToolsNotice.tsx
+msgid "chat.message.mcpDisabledTools.text"
+msgstr "{toolCount, plural, one {The tool {toolList} is switched off for this chat, so it was not used.} other {The tools {toolList} are switched off for this chat, so they were not used.}}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/McpNeedsAuthNotice.tsx
 msgid "chat.message.mcpNeedsAuth.connect"
 msgstr "Connect"
@@ -2283,6 +2288,11 @@ msgstr "The tools each connected server offers in your chats. Decide what may ru
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.browseDescriptionWithSwitches"
+msgstr "The tools each connected server offers in this chat. Switch a tool off to keep it out of this chat; decide what may run for you at all in Settings."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
 msgid "chatInput.connectors.browseTitle"
 msgstr "Connected tools"
 
@@ -2295,6 +2305,26 @@ msgstr "Manage in Settings"
 #: src/components/ui/Chat/mcpToolsSection.ts
 msgid "chatInput.connectors.sectionHeader"
 msgstr "Connectors"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+msgid "chatInput.connectors.server.disabledTools"
+msgstr "{disabledToolCount, plural, one {# tool switched off} other {# tools switched off}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.server.switchedOff"
+msgstr "Switched off for this chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.tool.switchCaption"
+msgstr "In this chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.tool.switchLabel"
+msgstr "Use {toolTitle} in this chat"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/DelegationRunModePopover.tsx

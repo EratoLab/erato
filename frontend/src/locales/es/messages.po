@@ -2089,6 +2089,11 @@ msgid "chat.message.mcpDisabledServers.text"
 msgstr "{serverCount, plural, one {{serverList} está desactivado para este chat, por lo que no se usaron sus herramientas.} other {{serverList} están desactivados para este chat, por lo que no se usaron sus herramientas.}}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/McpDisabledToolsNotice.tsx
+msgid "chat.message.mcpDisabledTools.text"
+msgstr "{toolCount, plural, one {La herramienta {toolList} está desactivada para este chat, por lo que no se usó.} other {Las herramientas {toolList} están desactivadas para este chat, por lo que no se usaron.}}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/McpNeedsAuthNotice.tsx
 msgid "chat.message.mcpNeedsAuth.connect"
 msgstr "Conectar"
@@ -2283,6 +2288,11 @@ msgstr "Las herramientas que cada servidor conectado ofrece en tus chats. Decide
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.browseDescriptionWithSwitches"
+msgstr "Las herramientas que cada servidor conectado ofrece en este chat. Desactiva una herramienta para dejarla fuera de este chat; decide en Configuración qué puede ejecutarse para ti."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
 msgid "chatInput.connectors.browseTitle"
 msgstr "Herramientas conectadas"
 
@@ -2295,6 +2305,26 @@ msgstr "Gestionar en Configuración"
 #: src/components/ui/Chat/mcpToolsSection.ts
 msgid "chatInput.connectors.sectionHeader"
 msgstr "Conectores"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+msgid "chatInput.connectors.server.disabledTools"
+msgstr "{disabledToolCount, plural, one {# herramienta desactivada} other {# herramientas desactivadas}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.server.switchedOff"
+msgstr "Desactivado para este chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.tool.switchCaption"
+msgstr "En este chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.tool.switchLabel"
+msgstr "Usar {toolTitle} en este chat"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/DelegationRunModePopover.tsx
