@@ -1349,7 +1349,8 @@ pub async fn update_chat_title_by_user_provided(
     Ok(updated_chat)
 }
 
-/// Update whether a chat is pinned by its owner.
+/// Update whether a chat is pinned by its owner. An archived chat cannot be
+/// pinned; unpinning one stays allowed.
 pub async fn update_chat_is_pinned(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,
@@ -1368,6 +1369,13 @@ pub async fn update_chat_is_pinned(
         &Resource::Chat(chat.id.to_string()),
         Action::Update
     )?;
+
+    if is_pinned && chat.archived_at.is_some() {
+        return Err(eyre!(
+            "Chat with ID {} is archived and cannot be pinned",
+            chat_id
+        ));
+    }
 
     let mut chat_active: chats::ActiveModel = chat.into();
     chat_active.is_pinned = ActiveValue::Set(is_pinned);

@@ -3531,8 +3531,9 @@ pub async fn chat_detail(
     responses(
         (status = OK, body = UpdateChatResponse, description = "Successfully updated the chat"),
         (status = BAD_REQUEST, description = "Invalid chat ID format"),
-        (status = NOT_FOUND, description = "Chat not found"),
-        (status = UNAUTHORIZED, description = "User not authorized to update this chat"),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
+        (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
+        (status = CONFLICT, description = "When pinning an archived chat"),
         (status = INTERNAL_SERVER_ERROR, description = "Server error")
     ),
     security(
@@ -3594,13 +3595,7 @@ pub async fn update_chat(
         )
         .await
     }
-    .map_err(|e| {
-        if e.to_string().contains("not found") {
-            StatusCode::NOT_FOUND
-        } else {
-            log_internal_server_error(e)
-        }
-    })?;
+    .map_err(chat_write_error_status)?;
 
     let title_resolved = resolve_chat_display_name(
         updated_chat.title_by_user_provided.as_deref(),
@@ -3856,6 +3851,8 @@ fn chat_write_error_status(error: Report) -> StatusCode {
         || message.contains("Access denied")
     {
         StatusCode::NOT_FOUND
+    } else if message.contains("is archived") {
+        StatusCode::CONFLICT
     } else {
         log_internal_server_error(error)
     }

@@ -765,6 +765,73 @@ async fn test_unarchive_of_a_foreign_chat_returns_404(pool: Pool<Postgres>) {
     assert_eq!(response.status_code(), http::StatusCode::NOT_FOUND);
 }
 
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_pinning_an_archived_chat_returns_409(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .expect("Failed to create user");
+
+    let server = create_test_server(app_state.clone());
+    let chat_id = create_chat_via_submit(&server).await;
+    archive_chat_via_api(&server, &chat_id).await;
+
+    let response = server
+        .put(&format!("/api/v1beta/me/chats/{chat_id}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "is_pinned": true }))
+        .await;
+    assert_eq!(response.status_code(), http::StatusCode::CONFLICT);
+    assert!(!stored_chat(&app_state.db, &chat_id).await.is_pinned);
+
+    // Unpinning and renaming stay open on an archived chat.
+    server
+        .put(&format!("/api/v1beta/me/chats/{chat_id}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "is_pinned": false }))
+        .await
+        .assert_status_ok();
+    server
+        .put(&format!("/api/v1beta/me/chats/{chat_id}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "title_by_user_provided": "Kept" }))
+        .await
+        .assert_status_ok();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_update_of_a_foreign_chat_returns_404(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .expect("Failed to create user");
+    let chat_id = insert_chat_owned_by_a_stranger(&app_state).await;
+
+    let server = create_test_server(app_state);
+
+    let response = server
+        .put(&format!("/api/v1beta/me/chats/{chat_id}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "title_by_user_provided": "Mine now" }))
+        .await;
+
+    assert_eq!(response.status_code(), http::StatusCode::NOT_FOUND);
+}
+
 /// Test that recent chats resolve title with `title_by_user_provided` precedence.
 ///
 /// # Test Categories
