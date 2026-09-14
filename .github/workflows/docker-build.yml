@@ -211,6 +211,13 @@ jobs:
         if: success() || failure()
         run: pnpm run lint:strict
 
+      # Pins the selectors both this package's and the add-in's lint configs
+      # consume. Vitest collects only *.test.{ts,tsx}, so it needs its own step.
+      - name: "Frontend lint rule tests"
+        working-directory: ./frontend
+        if: success() || failure()
+        run: pnpm run test:eslint-rules
+
       - name: "Frontend typecheck"
         working-directory: ./frontend
         if: success() || failure()
