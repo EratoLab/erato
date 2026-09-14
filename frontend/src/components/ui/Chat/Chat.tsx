@@ -659,18 +659,19 @@ export const Chat = ({
     );
   }
 
+  // A closed composer drops the welcome entirely: its starter prompts fill a
+  // composer that cannot send, and the centered layout hides `topContent`,
+  // which is where the reason the chat is closed is written.
   const showEmptyState =
     !!emptyStateComponent &&
     messageOrder.length === 0 &&
     !chatLoading &&
     !isPendingResponse &&
+    !composerDisabled &&
     editingMessageId === null;
-  // The centered layout drops `topContent`, so a chat that cannot take a
-  // message would show a welcome screen with no reason given and no way out.
   const centeredEmpty =
     (forceCenteredEmptyState || emptyStateLayout === "centered") &&
-    showEmptyState &&
-    !composerDisabled;
+    showEmptyState;
   const bottomEmpty = !centeredEmpty && showEmptyState;
   const layoutMode = centeredEmpty
     ? "centered"

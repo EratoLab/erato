@@ -602,14 +602,17 @@ describe("Chat empty-state shell", () => {
     expect(dropzoneCalls.at(-1)?.disabled).toBe(true);
   });
 
-  it("drops the centered layout while the composer is closed, keeping the strip", () => {
+  it("drops the welcome while the composer is closed, keeping the strip", () => {
     const { container } = renderChat({
       emptyStateComponent: welcome,
+      emptyStateBelowComponent: supplementary,
       topContent: <div data-testid="top-content-stub" />,
       composerDisabled: true,
     });
 
     expect(shell(container, "chat-empty-state-centered-shell")).toBeNull();
+    expect(screen.queryByTestId("welcome-stub")).toBeNull();
+    expect(screen.queryByTestId("below-stub")).toBeNull();
     expect(screen.getByTestId("top-content-stub")).toBeInTheDocument();
   });
 
