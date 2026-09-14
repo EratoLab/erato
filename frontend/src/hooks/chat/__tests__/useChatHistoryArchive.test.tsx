@@ -43,6 +43,7 @@ import {
   CHAT_HISTORY_FILTER_DEFAULTS,
   useChatHistoryFilterStore,
 } from "@/hooks/chat/store/chatHistoryFilterStore";
+import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 
 import { useChatHistory } from "../useChatHistory";
 
@@ -292,6 +293,23 @@ describe("useChatHistory unarchiveChat", () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ["generatingChats"],
     });
+  });
+
+  it("deletes the generation status entry instead of tombstoning it", async () => {
+    useGenerationStatusStore.setState({
+      statusByChatId: {
+        chat5: { kind: "cleared", startedAt: "2026-09-01T10:00:00.000Z" },
+      },
+    });
+    const { result } = renderHook(() => useChatHistory(), { wrapper });
+
+    await act(async () => {
+      await result.current.unarchiveChat("chat5");
+    });
+
+    expect(
+      useGenerationStatusStore.getState().statusByChatId.chat5,
+    ).toBeUndefined();
   });
 
   it("touches no cache when the mutation fails", async () => {

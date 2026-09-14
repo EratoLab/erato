@@ -27,6 +27,7 @@ import {
   CHAT_HISTORY_FILTER_DEFAULTS,
   type ChatHistoryFilterValues,
 } from "./store/chatHistoryFilterStore";
+import { useGenerationStatusStore } from "./store/generationStatusStore";
 
 import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { InfiniteData, QueryClient } from "@tanstack/react-query";
@@ -258,9 +259,8 @@ export function useInfiniteRecentChats({
 }
 
 /**
- * Callback that unarchives a chat and refreshes every surface that showed it
- * as archived. A plain refetch is safe where archiving needs cache surgery:
- * it re-derives each page offset from the pages it just fetched.
+ * A plain refetch is safe here where archiving needs cache surgery: it
+ * re-derives each page offset from the pages it just fetched.
  */
 export function useUnarchiveChat() {
   const queryClient = useQueryClient();
@@ -274,6 +274,10 @@ export function useUnarchiveChat() {
         logger.log(`Failed to unarchive chat ${chatId}:`, error);
         throw error;
       }
+
+      // Deleted rather than tombstoned: a tombstone keeps the old startedAt,
+      // which the returning generation's own seed would then lose against.
+      useGenerationStatusStore.getState().clearStatus(chatId);
 
       await Promise.all([
         queryClient.invalidateQueries({
