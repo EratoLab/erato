@@ -23,10 +23,10 @@ spec:
       labels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 8 }}
         app.kubernetes.io/component: erato-app
         app.kubernetes.io/app-version: {{ .Chart.AppVersion }}
-      {{- if or .Values.backend.podAnnotations .Values.commonAnnotations }}
-      {{- $podAnnotations := include "common.tplvalues.merge" ( dict "values" ( list .Values.backend.podAnnotations .Values.commonAnnotations ) "context" . ) }}
+      {{- $podAnnotations := include "common.tplvalues.merge" ( dict "values" ( list .Values.backend.podAnnotations .Values.commonAnnotations ) "context" . ) | fromYaml }}
+      {{- $_ := set $podAnnotations "checksum/config" (include (print $.Template.BasePath "/backend-configmaps.yaml") . | sha256sum) }}
+      {{- $_ := set $podAnnotations "checksum/metrics-config" (include (print $.Template.BasePath "/backend-metrics-configmap.yaml") . | sha256sum) }}
       annotations: {{- include "common.tplvalues.render" ( dict "value" $podAnnotations "context" $) | nindent 8 }}
-      {{- end }}
     spec:
       {{- include "erato.imagePullSecrets" . | nindent 6 }}
       initContainers:

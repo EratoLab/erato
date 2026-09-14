@@ -24,10 +24,9 @@ spec:
       labels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 8 }}
         app.kubernetes.io/component: oauth2-proxy
         app.kubernetes.io/app-version: {{ .Chart.AppVersion }}
-      {{- if or .Values.oauth2Proxy.podAnnotations .Values.commonAnnotations }}
-      {{- $podAnnotations := include "common.tplvalues.merge" ( dict "values" ( list .Values.oauth2Proxy.podAnnotations .Values.commonAnnotations ) "context" . ) }}
+      {{- $podAnnotations := include "common.tplvalues.merge" ( dict "values" ( list .Values.oauth2Proxy.podAnnotations .Values.commonAnnotations ) "context" . ) | fromYaml }}
+      {{- $_ := set $podAnnotations "checksum/config" (include (print $.Template.BasePath "/oauth2-proxy-configmap.yaml") . | sha256sum) }}
       annotations: {{- include "common.tplvalues.render" ( dict "value" $podAnnotations "context" $) | nindent 8 }}
-      {{- end }}
     spec:
       {{- include "erato.imagePullSecrets" . | nindent 6 }}
       {{- if .Values.oauth2Proxy.extraInitContainers }}
