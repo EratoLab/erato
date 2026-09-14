@@ -517,6 +517,17 @@ describe("Chat empty-state shell", () => {
     expect(screen.queryByTestId("message-list-stub")).toBeNull();
   });
 
+  it("drops the centered layout while the composer is closed, keeping the strip", () => {
+    const { container } = renderChat({
+      emptyStateComponent: welcome,
+      topContent: <div data-testid="top-content-stub" />,
+      composerDisabled: true,
+    });
+
+    expect(shell(container, "chat-empty-state-centered-shell")).toBeNull();
+    expect(screen.getByTestId("top-content-stub")).toBeInTheDocument();
+  });
+
   it.each(layoutModes)(
     "keeps the same composer node and draft through pending and first message (%s)",
     (mode) => {

@@ -661,9 +661,12 @@ export const Chat = ({
     !chatLoading &&
     !isPendingResponse &&
     editingMessageId === null;
+  // The centered layout drops `topContent`, so a chat that cannot take a
+  // message would show a welcome screen with no reason given and no way out.
   const centeredEmpty =
     (forceCenteredEmptyState || emptyStateLayout === "centered") &&
-    showEmptyState;
+    showEmptyState &&
+    !composerDisabled;
   const bottomEmpty = !centeredEmpty && showEmptyState;
   const layoutMode = centeredEmpty
     ? "centered"
