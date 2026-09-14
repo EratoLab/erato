@@ -643,6 +643,11 @@ export type ChatDetail = {
    */
   disabled_mcp_server_ids: string[];
   /**
+   * `server/tool` patterns of MCP tools the user switched off for this
+   * chat; matching tools are not offered to the model.
+   */
+  disabled_mcp_tools: string[];
+  /**
    * Delegated runs only: the result shape the dispatching model asked for.
    */
   expected_output?: string;
@@ -759,6 +764,11 @@ export type ChatMessage = {
    * MCP server IDs that were unavailable while preparing this generation
    */
   mcp_servers_unavailable?: string[];
+  /**
+   * `server/tool` names of MCP tools withheld from this generation because
+   * the user switched the tool off for the chat
+   */
+  mcp_tools_disabled_by_user?: string[];
   /**
    * Assistants the user @-mentioned in this message, resolved to display
    * names at read time. Mentions whose assistant no longer resolves are
@@ -1789,6 +1799,13 @@ export type MessageSubmitRequest = {
    */
   disabled_mcp_server_ids?: string[];
   /**
+   * `server/tool` patterns of MCP tools a newly created chat starts with
+   * switched off; matching tools are withheld from the model. Ignored when
+   * existing_chat_id is provided; `PUT /me/chats/{chat_id}` changes the
+   * list on an existing chat.
+   */
+  disabled_mcp_tools?: string[];
+  /**
    * The ID of an existing chat to use. If provided, the chat with this ID will be used instead of creating a new one.
    * This is useful for scenarios where you have created a chat first (e.g. for file uploads) before sending the first message.
    *
@@ -2133,6 +2150,11 @@ export type RecentChat = {
    * offered to the model.
    */
   disabled_mcp_server_ids: string[];
+  /**
+   * `server/tool` patterns of MCP tools the user switched off for this
+   * chat; matching tools are not offered to the model.
+   */
+  disabled_mcp_tools: string[];
   /**
    * Files uploaded to this chat
    */
@@ -2825,6 +2847,14 @@ export type UpdateChatRequest = {
    */
   disabled_mcp_server_ids?: string[];
   /**
+   * `server/tool` patterns of MCP tools to switch off for this chat;
+   * replaces the stored list. Matching tools are withheld from the model.
+   * Only ever narrows the set the policy, assistant, facets and the
+   * server list allow; a pattern naming a tool the server no longer
+   * exposes does nothing.
+   */
+  disabled_mcp_tools?: string[];
+  /**
    * Whether the chat should be pinned.
    */
   is_pinned?: boolean | null | undefined;
@@ -2855,6 +2885,10 @@ export type UpdateChatResponse = {
    * MCP servers the user switched off for this chat.
    */
   disabled_mcp_server_ids: string[];
+  /**
+   * `server/tool` patterns of MCP tools the user switched off for this chat.
+   */
+  disabled_mcp_tools: string[];
   /**
    * Whether the chat is pinned by its owner.
    */

@@ -3367,7 +3367,7 @@ export type UpdateChatVariables = {
 
 /**
  * Supports updating the user-provided title, pin state, the MCP write
- * tools toggle and the disabled MCP server list.
+ * tools toggle and the disabled MCP server and tool lists.
  */
 export const fetchUpdateChat = (
   variables: UpdateChatVariables,
@@ -3389,7 +3389,7 @@ export const fetchUpdateChat = (
 
 /**
  * Supports updating the user-provided title, pin state, the MCP write
- * tools toggle and the disabled MCP server list.
+ * tools toggle and the disabled MCP server and tool lists.
  */
 export const useUpdateChat = (
   options?: Omit<
