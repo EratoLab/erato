@@ -646,6 +646,7 @@ export const Chat = ({
     onUploaded: handleDropUploaded,
     acceptedFileTypes,
     isUploading,
+    disabled: composerDisabled,
     maxSize: maxSizeBytes,
     maxSizeFormatted,
   });

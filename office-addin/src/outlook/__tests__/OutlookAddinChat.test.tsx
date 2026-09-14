@@ -27,12 +27,15 @@ const {
   useConversationDropzoneMock,
   dismissSessionToastsMock,
   fileUploadState,
+  chatHeaderState,
 } = vi.hoisted(() => ({
   fileUploadState: { error: null, setError: vi.fn() },
+  chatHeaderState: { composerLocked: false },
   useConversationDropzoneMock: vi.fn(
     (_options: {
       extraAcceptMimeTypes?: Record<string, string[]>;
       onReceive?: (count: number) => unknown;
+      disabled?: boolean;
     }) => ({
       getRootProps: () => ({}),
       getInputProps: () => ({}),
@@ -68,6 +71,10 @@ vi.mock("@erato/frontend/library", async () => {
     }),
     // Records the options AddinChat passes; the `.msg` advertising test reads
     // them back.
+    useChatHeader: () => ({
+      header: null,
+      composerLocked: chatHeaderState.composerLocked,
+    }),
     useConversationDropzone: useConversationDropzoneMock,
     useFileUploadStore: Object.assign(
       (selector?: (state: typeof fileUploadState) => unknown) =>
@@ -102,6 +109,7 @@ vi.mock("../../core/AddinHistoryDrawerCore", () => ({
 describe("AddinChat without any Graph provider mounted (Exchange SE / unsupported hosts)", () => {
   beforeEach(() => {
     i18n.activate("en");
+    chatHeaderState.composerLocked = false;
   });
 
   afterEach(() => {
@@ -151,6 +159,21 @@ describe("AddinChat without any Graph provider mounted (Exchange SE / unsupporte
 
     const dropzoneOptions = useConversationDropzoneMock.mock.calls.at(-1)?.[0];
     expect(dropzoneOptions?.onReceive).toBeTypeOf("function");
+  });
+
+  it("closes the dropzone once the chat refuses messages", () => {
+    renderWithoutGraphProvider(<AddinChat />);
+    expect(useConversationDropzoneMock.mock.calls.at(-1)?.[0]?.disabled).toBe(
+      false,
+    );
+
+    chatHeaderState.composerLocked = true;
+    cleanup();
+    renderWithoutGraphProvider(<AddinChat />);
+
+    expect(useConversationDropzoneMock.mock.calls.at(-1)?.[0]?.disabled).toBe(
+      true,
+    );
   });
 
   // A pending ask toast floats interactive above the aria-modal drawer but

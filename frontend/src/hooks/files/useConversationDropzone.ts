@@ -30,6 +30,11 @@ interface UseConversationDropzoneOptions {
    */
   extraAcceptMimeTypes?: Record<string, string[]>;
   isUploading?: boolean;
+  /**
+   * When true no drop is read and `isDragActive` stays false, so a surface
+   * that refuses messages does not advertise an upload it will not accept.
+   */
+  disabled?: boolean;
   /** Per-file limit in bytes, from `useUploadFeature()`. */
   maxSize?: number;
   /** Formatted limit for the too-large message. */
@@ -73,6 +78,7 @@ export function useConversationDropzone({
   acceptedFileTypes,
   extraAcceptMimeTypes,
   isUploading = false,
+  disabled = false,
   maxSize,
   maxSizeFormatted,
   onError,
@@ -183,7 +189,7 @@ export function useConversationDropzone({
     onError: handleReadError,
     accept,
     multiple: true,
-    disabled: isUploading,
+    disabled: disabled || isUploading,
     validator: validateSize,
     noClick: true,
     noKeyboard: true,

@@ -485,6 +485,7 @@ function NeutralAddinChatHost({ controller }: AddinChatHostProps) {
     onUploaded: (files) => controller.chatInputControls.addUploadedFiles(files),
     acceptedFileTypes: controller.acceptedFileTypes,
     isUploading: controller.isUploading,
+    disabled: controller.composerLocked,
     maxSize: maxSizeBytes,
     maxSizeFormatted,
   });
