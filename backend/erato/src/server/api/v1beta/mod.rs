@@ -27,7 +27,7 @@ use crate::models::chat::{
     RecentChatTypeFilter, RecentChatsFilter, archive_all_unarchived_chats_for_owner, archive_chat,
     get_frequent_assistants, get_generating_chats, get_or_create_chat, get_recent_chats,
     resolve_chat_display_name, unarchive_chat, update_chat_is_pinned,
-    update_chat_title_by_user_provided,
+    update_chat_mcp_write_tools_enabled, update_chat_title_by_user_provided,
 };
 use crate::models::file_capability::{
     FileCapability, FileOperation, find_file_capability_by_filename, get_file_capabilities,
@@ -1321,6 +1321,9 @@ pub struct RecentChat {
     archived_at: Option<DateTime<FixedOffset>>,
     /// Whether this chat is pinned by its owner.
     is_pinned: bool,
+    /// Whether the model may be offered MCP write tools and client actions
+    /// in this chat. Off, only tools the server marks read-only are offered.
+    mcp_write_tools_enabled: bool,
     /// The chat provider ID used for the most recent message
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
@@ -1421,6 +1424,9 @@ pub struct ChatDetail {
     archived_at: Option<DateTime<FixedOffset>>,
     /// Whether this chat is pinned by its owner.
     is_pinned: bool,
+    /// Whether the model may be offered MCP write tools and client actions
+    /// in this chat. Off, only tools the server marks read-only are offered.
+    mcp_write_tools_enabled: bool,
     /// Whether the current user can edit this chat.
     can_edit: bool,
     /// The assistant ID if this chat is based on an assistant.
@@ -3170,6 +3176,7 @@ async fn extend_recent_chats_to_api_model(
             file_uploads: file_references,
             archived_at: chat.archived_at,
             is_pinned: chat.is_pinned,
+            mcp_write_tools_enabled: chat.mcp_write_tools_enabled,
             last_chat_provider_id: chat.last_chat_provider_id.clone(),
             last_selected_facets: chat.last_selected_facets.clone(),
             last_model,
@@ -3364,6 +3371,11 @@ pub struct UpdateChatRequest {
     /// Whether the chat should be pinned.
     #[serde(skip_serializing_if = "Option::is_none")]
     is_pinned: Option<bool>,
+    /// Whether the model may be offered MCP write tools and client actions
+    /// in this chat. Off, only tools the server marks read-only are offered
+    /// and client-action proposals are withheld.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mcp_write_tools_enabled: Option<bool>,
 }
 
 /// Response for update_chat endpoint.
@@ -3379,6 +3391,9 @@ pub struct UpdateChatResponse {
     title_resolved: String,
     /// Whether the chat is pinned by its owner.
     is_pinned: bool,
+    /// Whether the model may be offered MCP write tools and client actions
+    /// in this chat.
+    mcp_write_tools_enabled: bool,
 }
 
 /// Create a new chat without an initial message
@@ -3447,6 +3462,7 @@ pub async fn create_chat(
         &me_user.id,
         assistant_id.as_ref(),
         title_by_user_provided,
+        None,
     )
     .await
     .map_err(log_internal_server_error)?;
@@ -3514,6 +3530,7 @@ pub async fn chat_detail(
         title_resolved: chat.title_resolved,
         archived_at: chat.archived_at,
         is_pinned: chat.is_pinned,
+        mcp_write_tools_enabled: chat.mcp_write_tools_enabled,
         can_edit,
         assistant_id: chat.assistant_id.map(|id| id.to_string()),
         assistant_name: chat.assistant_name,
@@ -3529,7 +3546,8 @@ pub async fn chat_detail(
 
 /// Update mutable fields on a chat.
 ///
-/// Supports updating the user-provided title and pin state.
+/// Supports updating the user-provided title, pin state and the MCP write
+/// tools toggle.
 #[utoipa::path(
     put,
     path = "/me/chats/{chat_id}",
@@ -3565,46 +3583,48 @@ pub async fn update_chat(
     let UpdateChatRequest {
         title_by_user_provided,
         is_pinned,
+        mcp_write_tools_enabled,
     } = request;
-    let updated_chat = if let Some(is_pinned) = is_pinned {
-        match update_chat_is_pinned(
-            &app_state.db,
-            &policy,
-            &me_user.to_subject(),
-            &chat_id,
-            is_pinned,
-        )
-        .await
-        {
-            Ok(updated_chat) => {
-                // A pin-only request preserves the existing title. If both
-                // mutable fields are supplied, apply both updates.
-                if let Some(title_by_user_provided) = title_by_user_provided {
-                    update_chat_title_by_user_provided(
-                        &app_state.db,
-                        &policy,
-                        &me_user.to_subject(),
-                        &chat_id,
-                        Some(title_by_user_provided),
-                    )
-                    .await
-                } else {
-                    Ok(updated_chat)
-                }
-            }
-            Err(error) => Err(error),
+    let subject = me_user.to_subject();
+    let update = async {
+        // A request naming only the title treats an omitted title as a
+        // removal; one that names any other field leaves the title alone
+        // unless it is supplied too.
+        let title_only = is_pinned.is_none() && mcp_write_tools_enabled.is_none();
+        let mut updated_chat = None;
+        if let Some(is_pinned) = is_pinned {
+            updated_chat = Some(
+                update_chat_is_pinned(&app_state.db, &policy, &subject, &chat_id, is_pinned)
+                    .await?,
+            );
         }
-    } else {
-        update_chat_title_by_user_provided(
-            &app_state.db,
-            &policy,
-            &me_user.to_subject(),
-            &chat_id,
-            title_by_user_provided,
-        )
-        .await
-    }
-    .map_err(chat_write_error_status)?;
+        if let Some(mcp_write_tools_enabled) = mcp_write_tools_enabled {
+            updated_chat = Some(
+                update_chat_mcp_write_tools_enabled(
+                    &app_state.db,
+                    &policy,
+                    &subject,
+                    &chat_id,
+                    mcp_write_tools_enabled,
+                )
+                .await?,
+            );
+        }
+        if title_only || title_by_user_provided.is_some() {
+            updated_chat = Some(
+                update_chat_title_by_user_provided(
+                    &app_state.db,
+                    &policy,
+                    &subject,
+                    &chat_id,
+                    title_by_user_provided,
+                )
+                .await?,
+            );
+        }
+        Ok::<_, eyre::Report>(updated_chat.expect("at least one chat update ran"))
+    };
+    let updated_chat = update.await.map_err(chat_write_error_status)?;
 
     let title_resolved = resolve_chat_display_name(
         updated_chat.title_by_user_provided.as_deref(),
@@ -3617,6 +3637,7 @@ pub async fn update_chat(
         title_by_user_provided: updated_chat.title_by_user_provided,
         title_resolved,
         is_pinned: updated_chat.is_pinned,
+        mcp_write_tools_enabled: updated_chat.mcp_write_tools_enabled,
     }))
 }
 

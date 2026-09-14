@@ -4257,6 +4257,7 @@ async fn spawn_listed_delegated_run(
             run_mode: None,
         },
         title.to_string(),
+        true,
     )
     .await
     .unwrap();
@@ -4338,6 +4339,7 @@ async fn test_listing_hides_delegated_runs_and_exposes_provenance(pool: Pool<Pos
                     .then_some(erato::models::message::DelegationRunMode::Background),
             },
             format!("Delegated run {index}"),
+            true,
         )
         .await
         .unwrap();
@@ -5058,6 +5060,7 @@ async fn test_delegated_run_outcome_reports_failures(pool: Pool<Postgres>) {
             run_mode: None,
         },
         "Seeded only".to_string(),
+        true,
     )
     .await
     .unwrap()
@@ -5158,6 +5161,7 @@ async fn test_parked_delegated_chat_stays_reachable(pool: Pool<Postgres>) {
             run_mode: None,
         },
         "Parked delegated run".to_string(),
+        true,
     )
     .await
     .unwrap();
@@ -5730,6 +5734,7 @@ async fn spawn_delegated_run(
             run_mode: None,
         },
         title.to_string(),
+        true,
     )
     .await
     .expect("create delegated chat");
@@ -5763,6 +5768,7 @@ async fn spawn_handoff_branch(
             run_mode: None,
         },
         "Handoff branch".to_string(),
+        true,
     )
     .await
     .expect("create handoff chat");
@@ -6181,6 +6187,7 @@ async fn test_submit_into_live_delegated_run_conflicts(pool: Pool<Postgres>) {
             run_mode: None,
         },
         "Continuable run".to_string(),
+        true,
     )
     .await
     .unwrap();
@@ -6529,6 +6536,7 @@ async fn test_chat_detail_carries_provenance_and_run_parameters(pool: Pool<Postg
             run_mode: None,
         },
         "Summarize the numbers".to_string(),
+        true,
     )
     .await
     .unwrap();
@@ -6613,6 +6621,7 @@ async fn test_chat_detail_reports_adopted_and_archived_runs(pool: Pool<Postgres>
             run_mode: None,
         },
         "Adoptable run".to_string(),
+        true,
     )
     .await
     .unwrap();
