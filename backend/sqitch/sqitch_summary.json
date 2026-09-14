@@ -43,7 +43,8 @@
     "deploy/0041_notify_policy_fact_changes.sql",
     "deploy/0042_add_decision_to_user_tool_approval_settings.sql",
     "deploy/0043_add_mcp_write_tools_enabled_to_chats.sql",
-    "deploy/0044_add_disabled_mcp_server_ids_to_chats.sql"
+    "deploy/0044_add_disabled_mcp_server_ids_to_chats.sql",
+    "deploy/0045_add_disabled_mcp_tools_to_chats.sql"
   ],
-  "latest_change": "d822cf9ee655a4d581e30797d8423ce08d8957e4"
+  "latest_change": "deeb2f94edea545e674b2a43e1923fa3f6d5c811"
 }
