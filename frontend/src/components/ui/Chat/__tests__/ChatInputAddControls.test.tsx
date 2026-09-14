@@ -5,6 +5,7 @@ import { componentRegistry } from "@/config/componentRegistry";
 
 import { ChatInputAddControls } from "../ChatInputAddControls";
 import { buildAssistantMentionSection } from "../assistantMentionSection";
+import { buildMcpToolsSection } from "../mcpToolsSection";
 
 import type { AddMenuSection } from "../ChatInputAddMenu";
 import type { ChatAddMenuExtraContentProps } from "@/config/componentRegistry";
@@ -30,6 +31,7 @@ function renderControls(
   props: Partial<{
     uploadDisabled: boolean;
     assistantSection: AddMenuSection;
+    mcpToolsSection: AddMenuSection;
   }> = {},
 ) {
   return render(
@@ -117,5 +119,59 @@ describe("ChatInputAddControls", () => {
 
     expect(onBrowse).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("renders the connectors write switch as a checkbox row that keeps the menu open", () => {
+    const onToggleWriteTools = vi.fn();
+    renderControls({
+      mcpToolsSection: buildMcpToolsSection({
+        writeToolsEnabled: true,
+        onToggleWriteTools,
+        onBrowse: vi.fn(),
+      }),
+    });
+    fireEvent.click(screen.getByTestId("chat-input-add-menu-trigger"));
+
+    expect(screen.getByText("Connectors")).toBeInTheDocument();
+    const toggle = screen.getByTestId(
+      "chat-input-add-menu-extra-allow-write-operations",
+    );
+    expect(toggle).toHaveAttribute("role", "menuitemcheckbox");
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+    expect(
+      screen.getByText(
+        "Off, only tools the server marks read-only are offered.",
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(toggle);
+    expect(onToggleWriteTools).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+  });
+
+  it("orders the connectors between the tools and the assistants", () => {
+    renderControls({
+      assistantSection: buildAssistantMentionSection({
+        assistants: [{ id: "a-1", name: "Researcher" }],
+        onSelect: vi.fn(),
+        onBrowse: vi.fn(),
+      }),
+      mcpToolsSection: buildMcpToolsSection({
+        writeToolsEnabled: false,
+        onToggleWriteTools: vi.fn(),
+        onBrowse: vi.fn(),
+      }),
+    });
+    fireEvent.click(screen.getByTestId("chat-input-add-menu-trigger"));
+
+    const rows = screen
+      .getAllByTestId(/^chat-input-add-menu-extra-/)
+      .map((row) => row.dataset.testid);
+    expect(rows).toEqual([
+      "chat-input-add-menu-extra-allow-write-operations",
+      "chat-input-add-menu-extra-browse-tools",
+      "chat-input-add-menu-extra-a-1",
+      "chat-input-add-menu-extra-browse-assistants",
+    ]);
   });
 });

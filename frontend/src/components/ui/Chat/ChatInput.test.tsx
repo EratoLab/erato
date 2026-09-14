@@ -5510,4 +5510,216 @@ describe("ChatInput", () => {
       ).toHaveAccessibleName("Send message");
     });
   });
+
+  describe("connectors", () => {
+    const CONNECTED = {
+      id: "linear",
+      connection_status: "SUCCESS",
+      authentication_mode: "oauth2",
+    };
+    const UNCONNECTED = {
+      id: "jira",
+      connection_status: "NEEDS_AUTHENTICATION",
+      authentication_mode: "oauth2",
+    };
+
+    const submitHandlerThatSends =
+      (
+        message: string,
+        attachedFiles: FileUploadItem[],
+        innerOnSendMessage: (message: string, inputFileIds?: string[]) => void,
+        isLoading: boolean,
+        disabled: boolean,
+        resetMessage: () => void,
+      ) =>
+      (event: FormEvent) => {
+        event.preventDefault();
+        if (isLoading || disabled) return;
+        const trimmed = message.trim();
+        if (trimmed) {
+          innerOnSendMessage(trimmed, undefined);
+          resetMessage();
+        }
+      };
+
+    const enableConnectors = (servers: unknown[] = [CONNECTED]) => {
+      mockUseUserPreferencesFeature.mockReturnValue({
+        mcpServersTabEnabled: true,
+      });
+      mockUseListMcpServers.mockReturnValue({ data: { servers } });
+      mockUseChatInputHandlers.mockReturnValue({
+        attachedFiles: [],
+        fileError: null,
+        setFileError: vi.fn(),
+        handleFilesUploaded: vi.fn(),
+        handleRemoveFile: vi.fn(),
+        handleRemoveAllFiles: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        createSubmitHandler: submitHandlerThatSends,
+      });
+    };
+
+    const renderComposer = async (
+      chatId: string | null,
+      onSendMessage: (...args: unknown[]) => void = vi.fn(),
+      props: { pausesHostActionsWhenWritesOff?: boolean } = {},
+    ) => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const { i18n } = await import("@lingui/core");
+      render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput
+              onSendMessage={onSendMessage}
+              chatId={chatId}
+              {...props}
+            />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+      return screen.getByPlaceholderText("Type a message...");
+    };
+
+    const latestConnectorsSection = () =>
+      (
+        mockFacetSelector.mock.calls.at(-1)?.[0] as {
+          mcpToolsSection?: AddMenuSection;
+        }
+      ).mcpToolsSection;
+
+    const writeToggle = () => {
+      const section = latestConnectorsSection();
+      const item = section?.items.find(
+        (candidate) => candidate.id === "allow-write-operations",
+      );
+      if (!item || !("onToggle" in item)) {
+        throw new Error("write toggle not offered");
+      }
+      return item;
+    };
+
+    it("offers the connectors group once a connected server exists", async () => {
+      enableConnectors([UNCONNECTED, CONNECTED]);
+      await renderComposer("chat-1");
+
+      expect(latestConnectorsSection()?.header).toBe("Connectors");
+      expect(screen.getByTestId("mcp-tools-browser-modal")).toHaveAttribute(
+        "data-open",
+        "false",
+      );
+    });
+
+    it("withholds the group while no server is connected for the user", async () => {
+      enableConnectors([UNCONNECTED]);
+      await renderComposer("chat-1");
+
+      expect(mockFacetSelector).not.toHaveBeenCalled();
+      expect(
+        screen.queryByTestId("mcp-tools-browser-modal"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("stays silent while the settings tab is off, even with servers listed", async () => {
+      enableConnectors([CONNECTED]);
+      mockUseUserPreferencesFeature.mockReturnValue({
+        mcpServersTabEnabled: false,
+      });
+      await renderComposer("chat-1");
+
+      expect(mockFacetSelector).not.toHaveBeenCalled();
+    });
+
+    it("turns writes off on an existing chat through the update endpoint", async () => {
+      enableConnectors();
+      const mutateAsync = vi.fn().mockResolvedValue({});
+      mockUseUpdateChat.mockReturnValue({ mutateAsync, isPending: false });
+      mockUseChatDetail.mockReturnValue({
+        data: { id: "chat-1", mcp_write_tools_enabled: true },
+      });
+      const onSendMessage = vi.fn();
+      const textarea = await renderComposer("chat-1", onSendMessage);
+
+      expect(writeToggle().checked).toBe(true);
+      await act(async () => {
+        writeToggle().onToggle();
+      });
+
+      expect(mutateAsync).toHaveBeenCalledWith({
+        pathParams: { chatId: "chat-1" },
+        body: { mcp_write_tools_enabled: false },
+      });
+      expect(writeToggle().checked).toBe(false);
+
+      // The row is the writer for an existing chat: nothing rides on the send.
+      fireEvent.change(textarea, { target: { value: "now read only" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "now read only",
+        undefined,
+        undefined,
+        [],
+        [],
+      );
+    });
+
+    it("carries writes-off into the first send of a new chat", async () => {
+      enableConnectors();
+      const mutateAsync = vi.fn().mockResolvedValue({});
+      mockUseUpdateChat.mockReturnValue({ mutateAsync, isPending: false });
+      const onSendMessage = vi.fn();
+      const textarea = await renderComposer(null, onSendMessage);
+
+      await act(async () => {
+        writeToggle().onToggle();
+      });
+      expect(writeToggle().checked).toBe(false);
+      expect(mutateAsync).not.toHaveBeenCalled();
+
+      fireEvent.change(textarea, { target: { value: "first message" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "first message",
+        undefined,
+        undefined,
+        [],
+        [],
+        undefined,
+        false,
+      );
+    });
+
+    it("sends a new chat that keeps the default without the seed", async () => {
+      enableConnectors();
+      const onSendMessage = vi.fn();
+      const textarea = await renderComposer(null, onSendMessage);
+
+      fireEvent.change(textarea, { target: { value: "first message" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "first message",
+        undefined,
+        undefined,
+        [],
+        [],
+      );
+    });
+
+    it("names the paused host actions when the host asks for it", async () => {
+      enableConnectors();
+      await renderComposer("chat-1", vi.fn(), {
+        pausesHostActionsWhenWritesOff: true,
+      });
+
+      expect(writeToggle().description).toBe(
+        "Off, only tools the server marks read-only are offered. Also pauses Outlook actions like Reply and Send.",
+      );
+    });
+  });
 });
