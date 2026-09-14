@@ -97,6 +97,9 @@ export function seedDispatchedDelegatedRun(
       last_message_at: new Date().toISOString(),
       can_edit: true,
       is_pinned: false,
+      // Inherited from the origin chat on the server; like the title, the
+      // real value arrives with the refetched listing.
+      mcp_write_tools_enabled: true,
       file_uploads: [],
     };
     if (!current) {

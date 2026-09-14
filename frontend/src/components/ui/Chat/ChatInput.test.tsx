@@ -43,8 +43,12 @@ const mockUseAudioTranscriptionFeature = vi.fn();
 const mockUseAudioDictationFeature = vi.fn();
 const mockUseAudioConversationalFeature = vi.fn();
 const mockUseAssistantsFeature = vi.fn();
+const mockUseUserPreferencesFeature = vi.fn();
 const mockUseListAssistants = vi.fn();
 const mockUseFrequentAssistants = vi.fn();
+const mockUseListMcpServers = vi.fn();
+const mockUseChatDetail = vi.fn();
+const mockUseUpdateChat = vi.fn();
 const mockUseOptionalTranslation = vi.fn();
 const mockUseActiveModelSelection = vi.fn();
 const mockUseTokenManagement = vi.fn();
@@ -71,6 +75,7 @@ vi.mock("@/providers/FeatureConfigProvider", () => ({
   useAudioDictationFeature: () => mockUseAudioDictationFeature(),
   useAudioConversationalFeature: () => mockUseAudioConversationalFeature(),
   useAssistantsFeature: () => mockUseAssistantsFeature(),
+  useUserPreferencesFeature: () => mockUseUserPreferencesFeature(),
   useErrorReportFeature: () => ({
     showVerboseAssistantErrors: false,
     showCopyErrorReport: false,
@@ -111,6 +116,13 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   useListAssistants: (...args: unknown[]) => mockUseListAssistants(...args),
   useFrequentAssistants: (...args: unknown[]) =>
     mockUseFrequentAssistants(...args),
+  useListMcpServers: (...args: unknown[]) => mockUseListMcpServers(...args),
+  useChatDetail: (...args: unknown[]) => mockUseChatDetail(...args),
+  useUpdateChat: (...args: unknown[]) => mockUseUpdateChat(...args),
+  chatDetailQuery: (variables: { pathParams: { chatId: string } }) => ({
+    queryKey: ["me", "chats", variables.pathParams.chatId],
+  }),
+  recentChatsQuery: () => ({ queryKey: ["me", "recent_chats"] }),
 }));
 
 vi.mock("@/components/ui/FileUpload", () => ({
@@ -250,6 +262,17 @@ vi.mock("../Feedback/ChatWarnings/BudgetWarning", () => ({
   BudgetWarning: () => null,
 }));
 
+// The browser dialog is covered against the real component in its own test;
+// here only the wiring (gate + open/close) matters.
+vi.mock("./McpToolsBrowserModal", () => ({
+  McpToolsBrowserModal: (props: { isOpen: boolean }) => (
+    <div
+      data-testid="mcp-tools-browser-modal"
+      data-open={String(props.isOpen)}
+    />
+  ),
+}));
+
 vi.mock("../icons", () => ({
   ArrowUpIcon: () => <span>send</span>,
   CloseIcon: () => <span>close</span>,
@@ -297,6 +320,15 @@ describe("ChatInput", () => {
     });
     mockUseListAssistants.mockReturnValue({ data: undefined });
     mockUseFrequentAssistants.mockReturnValue({ data: undefined });
+    mockUseUserPreferencesFeature.mockReturnValue({
+      mcpServersTabEnabled: false,
+    });
+    mockUseListMcpServers.mockReturnValue({ data: undefined });
+    mockUseChatDetail.mockReturnValue({ data: undefined });
+    mockUseUpdateChat.mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue({}),
+      isPending: false,
+    });
     mockUseAudioTranscriptionFeature.mockReturnValue({ enabled: false });
     mockUseAudioDictationFeature.mockReturnValue({ enabled: false });
     mockUseAudioConversationalFeature.mockReturnValue({ enabled: false });

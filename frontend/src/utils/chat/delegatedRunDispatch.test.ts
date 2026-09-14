@@ -50,6 +50,7 @@ const existingRun = (id: string): RecentChat => ({
   file_uploads: [],
   last_message_at: "2026-08-19T12:00:00.000Z",
   is_pinned: false,
+  mcp_write_tools_enabled: true,
   provenance_kind: "delegation",
   provenance_run_mode: "background",
   origin_chat_id: ORIGIN_CHAT_ID,

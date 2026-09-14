@@ -26,6 +26,8 @@ import {
   useQueuedMessage,
 } from "@/hooks/chat/store/messageQueueStore";
 import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
+import { useBrowsableMcpServers } from "@/hooks/chat/useBrowsableMcpServers";
+import { useChatMcpWriteTools } from "@/hooks/chat/useChatMcpWriteTools";
 import {
   useComposeSession,
   type ComposeDraftState,
@@ -82,9 +84,11 @@ import { ChatInputTokenUsage } from "./ChatInputTokenUsage";
 import { ChatUsageAdvisory } from "./ChatUsageAdvisory";
 import { DelegationRunModePopover } from "./DelegationRunModePopover";
 import { FacetSelector } from "./FacetSelector";
+import { McpToolsBrowserModal } from "./McpToolsBrowserModal";
 import { ModelSelector } from "./ModelSelector";
 import { WaveformButton } from "./WaveformButton";
 import { buildAssistantMentionSection } from "./assistantMentionSection";
+import { buildMcpToolsSection } from "./mcpToolsSection";
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
 import { BudgetWarning } from "../Feedback/ChatWarnings/BudgetWarning";
@@ -246,6 +250,12 @@ interface ChatInputProps {
      */
     mentionedAssistants?: AssistantMention[],
     delegationRunMode?: DelegationRunMode,
+    /**
+     * Present only on the first send of a new chat whose writes the user
+     * turned off beforehand: the request seeds the chat row with it. An
+     * existing chat is updated in place instead, so nothing rides along.
+     */
+    mcpWriteToolsEnabled?: boolean,
   ) => void;
   onRegenerate?: () => void;
   handleFileAttachments?: (files: FileUploadItem[]) => void;
@@ -313,6 +323,12 @@ interface ChatInputProps {
    * inline advisory.
    */
   renderUsageAdvisory?: boolean;
+  /**
+   * Whether this host proposes actions of its own that the per-chat write
+   * switch pauses too (the Outlook add-in's Reply and Send). Only the
+   * toggle's description changes; the switch stays one control.
+   */
+  pausesHostActionsWhenWritesOff?: boolean;
 }
 
 interface DictationTarget {
@@ -407,6 +423,7 @@ export const ChatInput = ({
   controlledIsAudioMode,
   onControlledIsAudioModeChange,
   renderUsageAdvisory = true,
+  pausesHostActionsWhenWritesOff = false,
   ref,
 }: ChatInputPropsWithRef) => {
   const {
@@ -700,12 +717,23 @@ export const ChatInput = ({
     text: string;
   } | null>(null);
   const [isAssistantBrowserOpen, setIsAssistantBrowserOpen] = useState(false);
+  const [isMcpToolsBrowserOpen, setIsMcpToolsBrowserOpen] = useState(false);
   const mentionPopoverRef = useRef<AssistantMentionPopoverHandle>(null);
   const {
     isAvailable: canMentionAssistants,
     suggested: suggestedAssistants,
     all: mentionableAssistants,
   } = useMentionableAssistants(assistantId);
+
+  // --- Connectors: per-chat write switch and the tool browser ---------------
+  // Gated like the mentions: on a host-injected feature flag plus a live
+  // listing, never on env — the add-in gets the group through the same hook.
+  const { isAvailable: canBrowseMcpTools, servers: mcpServers } =
+    useBrowsableMcpServers();
+  const mcpWriteTools = useChatMcpWriteTools({
+    chatId,
+    isAvailable: canBrowseMcpTools,
+  });
 
   // --- Wait-or-background for mentioned sends ------------------------------
   // Gated on the feature flags rather than `canMentionAssistants`: a restored
@@ -1435,6 +1463,8 @@ export const ChatInput = ({
       // "wait" stays undefined so the request omits the field.
       const delegationRunMode = pendingRunModeChoiceRef.current?.runMode;
 
+      const mcpWriteToolsSeed = mcpWriteTools.newChatSeed;
+
       logger.log("Submit:", {
         messagePreview:
           messageContent.substring(0, 20) +
@@ -1444,8 +1474,21 @@ export const ChatInput = ({
         selectedFacetIds,
         mentionedAssistantIds: resolvedMentions.map((mention) => mention.id),
         delegationRunMode,
+        mcpWriteToolsSeed,
       });
-      if (delegationRunMode) {
+      // The trailing arguments are only passed when set: hosts compare the
+      // call shape, and a chat that takes the defaults must look unchanged.
+      if (mcpWriteToolsSeed !== undefined) {
+        onSendMessage(
+          messageContent,
+          inputFileIds,
+          selectedModel?.chat_provider_id,
+          selectedFacetIds,
+          resolvedMentions,
+          delegationRunMode,
+          mcpWriteToolsSeed,
+        );
+      } else if (delegationRunMode) {
         onSendMessage(
           messageContent,
           inputFileIds,
@@ -1795,6 +1838,27 @@ export const ChatInput = ({
     ],
   );
 
+  const mcpToolsSection = useMemo(
+    () =>
+      canBrowseMcpTools
+        ? buildMcpToolsSection({
+            writeToolsEnabled: mcpWriteTools.enabled,
+            onToggleWriteTools: mcpWriteTools.toggle,
+            onBrowse: () => setIsMcpToolsBrowserOpen(true),
+            disabled: composeLocked || mcpWriteTools.isSaving,
+            pausesHostActions: pausesHostActionsWhenWritesOff,
+          })
+        : undefined,
+    [
+      canBrowseMcpTools,
+      composeLocked,
+      mcpWriteTools.enabled,
+      mcpWriteTools.isSaving,
+      mcpWriteTools.toggle,
+      pausesHostActionsWhenWritesOff,
+    ],
+  );
+
   // Collapse the file-upload button and the Tools dropdown into a single "+"
   // menu (ChatInputAddControls): on mobile, or whenever a host registers extra
   // add-menu content (e.g. the Outlook add-in's email-content sources, which
@@ -1811,7 +1875,8 @@ export const ChatInput = ({
     (canUploadFiles ||
       hasFacets ||
       hasAddMenuExtraContent ||
-      canMentionAssistants);
+      canMentionAssistants ||
+      canBrowseMcpTools);
 
   // Add token limit exceeded to disabled state for the send button
   const isSendDisabled =
@@ -2654,6 +2719,17 @@ export const ChatInput = ({
           />
         )}
 
+        {canBrowseMcpTools && (
+          <McpToolsBrowserModal
+            isOpen={isMcpToolsBrowserOpen}
+            onClose={() => {
+              setIsMcpToolsBrowserOpen(false);
+              focusInput();
+            }}
+            servers={mcpServers}
+          />
+        )}
+
         <div
           className={clsx(
             "relative w-full",
@@ -2818,6 +2894,7 @@ export const ChatInput = ({
                     selectedFacetIds={selectedFacetIds}
                     onToggleFacet={toggleFacetId}
                     assistantSection={assistantMentionSection}
+                    mcpToolsSection={mcpToolsSection}
                     disabled={composeLocked}
                     uploadDisabled={attachedFiles.length >= maxFiles}
                     toolsDisabled={enforceSelectedFacetIds}
@@ -2846,11 +2923,13 @@ export const ChatInput = ({
                       />
                     )}
                     {(availableFacets.length > 0 ||
-                      assistantMentionSection) && (
+                      assistantMentionSection !== undefined ||
+                      mcpToolsSection !== undefined) && (
                       <FacetSelector
                         facets={availableFacets}
                         selectedFacetIds={selectedFacetIds}
                         assistantSection={assistantMentionSection}
+                        mcpToolsSection={mcpToolsSection}
                         onSelectionChange={(nextSelectedFacetIds) => {
                           userSelectedFacetsSessionRef.current =
                             composeSessionId;

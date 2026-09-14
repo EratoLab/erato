@@ -19,6 +19,7 @@ describe("useModelHistory", () => {
       can_edit: true,
       file_uploads: [],
       is_pinned: isPinned,
+      mcp_write_tools_enabled: true,
       last_message_at: "2026-09-08T12:00:00Z",
       last_model: {
         chat_provider_id: "available-model",

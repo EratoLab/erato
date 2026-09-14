@@ -261,6 +261,7 @@ const backgroundRun = (id: string) =>
     can_edit: false,
     file_uploads: [],
     is_pinned: false,
+    mcp_write_tools_enabled: true,
     last_message_at: "2026-08-19T12:00:00.000Z",
     assistant_id: "assistant-1",
     assistant_name: "Research Assistant",

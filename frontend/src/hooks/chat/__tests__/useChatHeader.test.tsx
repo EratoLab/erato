@@ -31,6 +31,7 @@ const delegatedRun = (overrides: Partial<ChatDetail> = {}): ChatDetail => ({
   id: "run-1",
   title_resolved: "Summarize the numbers",
   is_pinned: false,
+  mcp_write_tools_enabled: true,
   can_edit: true,
   assistant_id: "assistant-1",
   assistant_name: "Research Helper",

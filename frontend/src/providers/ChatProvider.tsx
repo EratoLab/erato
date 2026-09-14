@@ -87,6 +87,7 @@ export interface ChatContextValue {
     actionFacet?: { id: string; args?: Record<string, string> },
     mentionedAssistants?: AssistantMention[],
     delegationRunMode?: DelegationRunMode,
+    mcpWriteToolsEnabled?: boolean,
   ) => Promise<string | undefined>;
   editMessage: (
     messageId: string,
