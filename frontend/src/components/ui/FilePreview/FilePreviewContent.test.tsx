@@ -103,7 +103,7 @@ vi.mock("./XlsxPreview", async () => {
 });
 
 const renderWithTheme = (ui: React.ReactElement) =>
-  render(<ThemeProvider>{ui}</ThemeProvider>);
+  render(<ThemeProvider enableCustomTheme={false}>{ui}</ThemeProvider>);
 
 const mockFetchBuffer = () => {
   const buffer = new Uint8Array([1, 2, 3]).buffer;
@@ -240,7 +240,7 @@ describe("FilePreviewContent", () => {
     ).toBeInTheDocument();
 
     rerender(
-      <ThemeProvider>
+      <ThemeProvider enableCustomTheme={false}>
         <FilePreviewContent
           filename="legacy-slides.ppt"
           url="https://files.example.com/download/legacy-slides.ppt"

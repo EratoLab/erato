@@ -23,7 +23,7 @@ async function renderPreview(ui: React.ReactElement) {
   i18n.activate("en");
   return render(
     <I18nProvider i18n={i18n}>
-      <ThemeProvider>{ui}</ThemeProvider>
+      <ThemeProvider enableCustomTheme={false}>{ui}</ThemeProvider>
     </I18nProvider>,
   );
 }
@@ -226,7 +226,7 @@ describe("TeamsTranscriptPreview", () => {
     const { i18n } = await import("@lingui/core");
     rerender(
       <I18nProvider i18n={i18n}>
-        <ThemeProvider>
+        <ThemeProvider enableCustomTheme={false}>
           <TeamsTranscriptPreview
             filename="teams-Design_review.md"
             url="https://files.example.com/teams-Design_review.md"

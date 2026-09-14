@@ -9,7 +9,7 @@ import type { UiImagePart } from "@/utils/adapters/contentPartAdapter";
 import type React from "react";
 
 const renderWithTheme = (ui: React.ReactElement) =>
-  render(<ThemeProvider>{ui}</ThemeProvider>);
+  render(<ThemeProvider enableCustomTheme={false}>{ui}</ThemeProvider>);
 
 const images: UiImagePart[] = [
   {

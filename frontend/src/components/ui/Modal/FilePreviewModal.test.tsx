@@ -57,7 +57,7 @@ const makeFile = (overrides: Partial<FileUploadItem> = {}): FileUploadItem => ({
 });
 
 const renderWithTheme = (ui: React.ReactElement) =>
-  render(<ThemeProvider>{ui}</ThemeProvider>);
+  render(<ThemeProvider enableCustomTheme={false}>{ui}</ThemeProvider>);
 
 describe("FilePreviewModal", () => {
   it("previews PDF files from the preview URL", async () => {

@@ -53,7 +53,7 @@ describe("AssistantWelcomeScreen", () => {
     };
 
     render(
-      <ThemeProvider>
+      <ThemeProvider enableCustomTheme={false}>
         <I18nProvider i18n={i18n}>
           <MemoryRouter>
             <AssistantWelcomeScreen assistant={assistant} />
@@ -93,7 +93,7 @@ describe("AssistantWelcomeScreen", () => {
     };
 
     render(
-      <ThemeProvider>
+      <ThemeProvider enableCustomTheme={false}>
         <I18nProvider i18n={i18n}>
           <MemoryRouter>
             <AssistantWelcomeScreen assistant={assistant} />
@@ -132,7 +132,7 @@ describe("AssistantWelcomeScreen", () => {
     };
 
     render(
-      <ThemeProvider>
+      <ThemeProvider enableCustomTheme={false}>
         <I18nProvider i18n={i18n}>
           <MemoryRouter>
             <AssistantWelcomeScreen assistant={assistant} />
@@ -175,7 +175,7 @@ describe("AssistantWelcomeScreen", () => {
     };
 
     render(
-      <ThemeProvider>
+      <ThemeProvider enableCustomTheme={false}>
         <I18nProvider i18n={i18n}>
           <MemoryRouter>
             <AssistantWelcomeScreen assistant={assistant} />
@@ -220,7 +220,7 @@ describe("AssistantWelcomeScreen", () => {
 
     it("keeps identity above and the conversations block below", () => {
       render(
-        <ThemeProvider>
+        <ThemeProvider enableCustomTheme={false}>
           <I18nProvider i18n={i18n}>
             <MemoryRouter>
               <AssistantWelcomeScreen
@@ -259,7 +259,7 @@ describe("AssistantWelcomeScreen", () => {
 
     it("opens the configuration from the upper part on its own", () => {
       render(
-        <ThemeProvider>
+        <ThemeProvider enableCustomTheme={false}>
           <I18nProvider i18n={i18n}>
             <MemoryRouter>
               <AssistantWelcomeUpper assistant={assistant} />
@@ -277,7 +277,7 @@ describe("AssistantWelcomeScreen", () => {
 
     it("renders the loading spinner in the lower part", () => {
       const { container } = render(
-        <ThemeProvider>
+        <ThemeProvider enableCustomTheme={false}>
           <I18nProvider i18n={i18n}>
             <MemoryRouter>
               <AssistantWelcomeLower assistant={assistant} isLoadingChats />
@@ -312,7 +312,7 @@ describe("AssistantWelcomeScreen", () => {
     };
 
     render(
-      <ThemeProvider>
+      <ThemeProvider enableCustomTheme={false}>
         <I18nProvider i18n={i18n}>
           <MemoryRouter>
             <AssistantWelcomeScreen
@@ -365,7 +365,7 @@ describe("AssistantWelcomeScreen", () => {
       props: Partial<React.ComponentProps<typeof AssistantWelcomeScreen>>,
     ) =>
       render(
-        <ThemeProvider>
+        <ThemeProvider enableCustomTheme={false}>
           <I18nProvider i18n={i18n}>
             <MemoryRouter>
               <AssistantWelcomeScreen assistant={assistant} {...props} />
@@ -391,7 +391,7 @@ describe("AssistantWelcomeScreen", () => {
       // Opening a conversation swaps the welcome screen out of the tree while
       // the router stays mounted.
       const tree = (conversationOpen: boolean) => (
-        <ThemeProvider>
+        <ThemeProvider enableCustomTheme={false}>
           <I18nProvider i18n={i18n}>
             <MemoryRouter>
               {conversationOpen ? (

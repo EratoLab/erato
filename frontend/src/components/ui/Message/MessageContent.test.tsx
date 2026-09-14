@@ -39,7 +39,7 @@ const renderWithTheme = (ui: React.ReactElement) => {
   return render(
     <I18nProvider i18n={i18n}>
       <StaticFeatureConfigProvider>
-        <ThemeProvider>{ui}</ThemeProvider>
+        <ThemeProvider enableCustomTheme={false}>{ui}</ThemeProvider>
       </StaticFeatureConfigProvider>
     </I18nProvider>,
   );
@@ -434,7 +434,7 @@ describe("MessageContent", () => {
     rerender(
       <I18nProvider i18n={i18n}>
         <StaticFeatureConfigProvider>
-          <ThemeProvider>
+          <ThemeProvider enableCustomTheme={false}>
             <MessageContent
               isStreaming
               content={[
@@ -1273,7 +1273,7 @@ describe("MessageContent", () => {
         <StaticFeatureConfigProvider
           config={{ trace: { maskReasoningText: false } }}
         >
-          <ThemeProvider>
+          <ThemeProvider enableCustomTheme={false}>
             <MessageContent
               content={[
                 {
@@ -1298,7 +1298,7 @@ describe("MessageContent", () => {
         <StaticFeatureConfigProvider
           config={{ trace: { maskReasoningText: true } }}
         >
-          <ThemeProvider>
+          <ThemeProvider enableCustomTheme={false}>
             <MessageContent
               content={[
                 {
