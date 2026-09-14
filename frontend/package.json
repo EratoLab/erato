@@ -33,6 +33,9 @@
       "types": "./component-kit/vite.d.ts",
       "import": "./component-kit/vite.mjs",
       "require": "./component-kit/vite.cjs"
+    },
+    "./component-kit/check-kit-manifest": {
+      "import": "./component-kit/check-kit-manifest.mjs"
     }
   },
   "scripts": {
