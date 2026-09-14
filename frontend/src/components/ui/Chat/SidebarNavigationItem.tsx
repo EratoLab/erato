@@ -15,7 +15,12 @@ const sidebarLinkClassName =
 const sidebarNavigationRowClassName =
   "sidebar-content-col-geometry items-center gap-3 py-2 pr-3";
 
-/** Icon geometry every sidebar nav row shares; apply it to the `icon` node. */
+/**
+ * Icon geometry every sidebar nav row shares; apply it to the `icon` node.
+ * A bundle of utilities rather than a declared host class, so it is deliberately
+ * absent from ERATO_GEOMETRY_CLASS — themes reach the icon column through
+ * `.sidebar-icon-col-geometry` instead.
+ */
 export const sidebarNavigationIconClassName =
   "size-4 shrink-0 text-theme-fg-secondary";
 

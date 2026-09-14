@@ -4,12 +4,13 @@ import { memo, useEffect, useState } from "react";
 
 import { Collapse, COLLAPSE_DURATION_MS } from "../Controls/Collapse";
 import { DisclosureChevron } from "../Controls/DisclosureChevron";
+import { ERATO_GEOMETRY_CLASS } from "../styles/geometryClassNames";
 
 // Nav rows and chat rows share one themeable geometry class so a single
 // theme.css channel reaches both row families.
-export const sidebarItemClassName = "sidebar-row-geometry";
+export const sidebarItemClassName = ERATO_GEOMETRY_CLASS.sidebarRowGeometry;
 // Horizontal inset for every row surface; see .sidebar-inset-geometry.
-export const sidebarInsetClassName = "sidebar-inset-geometry";
+export const sidebarInsetClassName = ERATO_GEOMETRY_CLASS.sidebarInsetGeometry;
 
 export const parsePersistedBoolean = (value: unknown) =>
   typeof value === "boolean" ? value : null;

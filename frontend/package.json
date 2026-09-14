@@ -33,6 +33,9 @@
       "types": "./component-kit/vite.d.ts",
       "import": "./component-kit/vite.mjs",
       "require": "./component-kit/vite.cjs"
+    },
+    "./component-kit/check-kit-manifest": {
+      "import": "./component-kit/check-kit-manifest.mjs"
     }
   },
   "scripts": {
@@ -52,6 +55,7 @@
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "test": "vitest",
+    "test:eslint-rules": "node eslint/__tests__/themable-geometry.test.mjs",
     "test:ui": "vitest --ui",
     "coverage": "vitest run --coverage",
     "codegen:generate": "openapi-codegen gen v1betaApi",

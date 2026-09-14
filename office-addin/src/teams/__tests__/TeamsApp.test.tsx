@@ -141,32 +141,10 @@ vi.mock("../../core/AddinSettingsDialogCore", () => ({
 
 vi.mock("@erato/frontend/library", async () => {
   const { createContext, useContext, useState } = await import("react");
+  const mock = await import("../../test/helpers/eratoLibraryMock");
   const ChatContext = createContext<ChatContextValue | null>(null);
-  const passthrough = ({ children }: { children?: ReactNode }) => children;
 
-  return {
-    ApiProvider: passthrough,
-    DesktopSidecarProvider: passthrough,
-    FeatureConfigProvider: passthrough,
-    FileCapabilitiesProvider: passthrough,
-    GenerationStatusPoller: () => null,
-    useGenerationStatusStore: Object.assign(() => undefined, {
-      getState: () => ({ setCurrentChatId: () => undefined }),
-    }),
-    I18nProvider: passthrough,
-    ProfileProvider: passthrough,
-    ThemeProvider: passthrough,
-    Toaster: () => null,
-    DelegatedRunOpenProvider: passthrough,
-    DelegatedRunsSection: () => null,
-    useDelegatedRunHeader: () => ({ header: null, composerLocked: false }),
-    toast: {
-      info: vi.fn(),
-      success: vi.fn(),
-      warning: vi.fn(),
-      error: vi.fn(),
-    },
-    createBrowserClientInfo: (info: unknown) => info,
+  return mock.createEratoLibraryMock({
     useTheme: () => ({
       setSystemThemeOverride: spies.setSystemThemeOverride,
     }),
@@ -180,24 +158,7 @@ vi.mock("@erato/frontend/library", async () => {
       return context;
     },
 
-    findCapabilityByExtension: () => null,
-    getSupportedFileTypes: () => ({}),
-    hasSupportedOperations: () => false,
-    mapMessageToUiMessage: (message: unknown) => message,
-    recentChatsQuery: () => ({ queryKey: ["recent-chats"] }),
-    useArchiveChatEndpoint: () => ({
-      mutateAsync: vi.fn(async () => undefined),
-    }),
-    useBudgetStatus: () => undefined,
     useChatMessaging: spies.useChatMessaging,
-    useFileCapabilitiesContext: () => ({ capabilities: [] }),
-    useFileDropzone: () => ({
-      uploadFiles: vi.fn(async () => []),
-      isUploading: false,
-      uploadedFiles: [],
-      error: null,
-      clearFiles: vi.fn(),
-    }),
     useFeatureConfig: () => ({
       upload: { maxSizeBytes: 10 * 1024 * 1024 },
     }),
@@ -206,172 +167,17 @@ vi.mock("@erato/frontend/library", async () => {
       maxSizeBytes: 10 * 1024 * 1024,
       maxSizeFormatted: "10 MB",
     }),
-    useFileUploadStore: (
-      selector?: (state: {
-        silentChatId: string | null;
-        setError: (error: unknown) => void;
-      }) => unknown,
-    ) => {
-      const state = { silentChatId: null, setError: vi.fn() };
-      return selector ? selector(state) : state;
-    },
     useMessagingStore: Object.assign(() => spies.messagingStore, {
       getState: () => spies.messagingStore,
     }),
-    useModelHistory: () => ({ currentChatLastModel: null }),
     usePersistedState: <T,>(key: string, initialValue: T) => {
       spies.usePersistedState(key);
       return useState(initialValue);
     },
-    useInfiniteRecentChats: () => ({
-      chats: [],
-      isLoading: false,
-      error: null,
-      refetch: vi.fn(async () => undefined),
-      fetchNextPage: vi.fn(async () => undefined),
-      hasNextPage: false,
-      isFetchingNextPage: false,
-      queryKey: ["recent-chats"],
-    }),
-    createChatHistoryFilterStore: () => {
-      const state = {
-        typeFilter: "all",
-        statusFilter: "active",
-        groupBy: "date",
-        setTypeFilter: vi.fn(),
-        setStatusFilter: vi.fn(),
-        setGroupBy: vi.fn(),
-        resetToDefaults: vi.fn(),
-      };
-      return Object.assign(
-        (selector: (s: typeof state) => unknown) => selector(state),
-        { getState: () => state },
-      );
-    },
-    removeArchivedChatFromLists: vi.fn(async () => () => undefined),
-    seedGenerationStatusFromListing: vi.fn(),
-    useAssistantsFeature: () => ({
-      enabled: false,
-      delegationEnabled: false,
-      delegationAllowBackground: false,
-    }),
-    useChatHistoryFilterFoldback: () => undefined,
     useUpdateChatTitle: () => spies.updateChatTitle,
 
-    ChatErrorBoundary: passthrough,
-    Button: ({
-      icon: _icon,
-      ...props
-    }: Record<string, unknown> & { icon?: unknown; ref?: unknown }) => (
-      <button {...(props as Record<string, never>)} />
-    ),
-    ChatInputControlsProvider: passthrough,
-    ChatMessage: () => null,
-    DefaultMessageControls: () => null,
-    DocumentIcon: () => null,
-    useGenerationIndicatorCount: () => 0,
-    SidebarToggle: ({
-      label,
-      expanded,
-      attentionCount = 0,
-      badgeTestId,
-      children,
-      surface: _surface,
-      dataUi: _dataUi,
-      ...props
-    }: Record<string, unknown> & {
-      label?: string;
-      expanded?: boolean;
-      attentionCount?: number;
-      badgeTestId?: string;
-      children?: ReactNode;
-      surface?: string;
-      dataUi?: string;
-      ref?: unknown;
-    }) => (
-      <button
-        aria-label={label}
-        aria-expanded={expanded}
-        {...(props as Record<string, never>)}
-      >
-        {children}
-        {attentionCount > 0 ? (
-          // The real badge is aria-hidden; the count reaches the a11y tree
-          // through the button's own label.
-          <span aria-hidden="true" data-testid={badgeTestId}>
-            {attentionCount}
-          </span>
-        ) : null}
-      </button>
-    ),
-    SidebarBand: ({
-      children,
-      className,
-      dataUi,
-      edge,
-    }: {
-      children?: ReactNode;
-      className?: string;
-      dataUi?: string;
-      edge: string;
-      flush?: boolean;
-    }) => (
-      <div className={className} data-ui={dataUi ?? `sidebar-${edge}`}>
-        {children}
-      </div>
-    ),
-    FeedbackCommentDialog: () => null,
-    FeedbackViewDialog: () => null,
-    FilePreviewModal: () => null,
     MessageList: () => <div data-testid="teams-message-list" />,
-    MessageEditProvider: passthrough,
-    chatMessagesQuery: () => ({ queryKey: ["chat-messages"] }),
-    componentRegistry: {},
-    extractTextFromContent: () => "",
-    resolveComponentOverride: (override: unknown, fallback: unknown) =>
-      override ?? fallback,
-    transformEmailFencesForCopy: (value: string) => value,
-    useActiveModelSelection: () => ({
-      availableModels: [],
-      selectedModel: null,
-      setSelectedModel: vi.fn(),
-      isSelectionReady: true,
-    }),
-    useModelSwitches: () => ({}),
-    useConversationDropzone: () => ({
-      getRootProps: () => ({}),
-      getInputProps: () => ({}),
-      isDragActive: false,
-      isDragAccept: false,
-    }),
-    useFilePreviewModal: () => ({
-      isPreviewModalOpen: false,
-      fileToPreview: null,
-      openPreviewModal: vi.fn(),
-      closePreviewModal: vi.fn(),
-    }),
-    useFileUploadWithTokenCheck: () => ({
-      uploadFiles: vi.fn(async () => []),
-      uploadError: null,
-      isUploading: false,
-    }),
-    useMessageFeedback: () => ({
-      feedbackDialogState: { isOpen: false },
-      feedbackViewDialogState: { isOpen: false, feedback: null },
-      feedbackConfig: undefined,
-      handleFeedbackSubmit: vi.fn(),
-      handleFeedbackViewDialogRemove: vi.fn(),
-      closeFeedbackDialog: vi.fn(),
-      closeFeedbackViewDialog: vi.fn(),
-      handleFeedbackDialogSubmit: vi.fn(),
-      openFeedbackDialog: vi.fn(),
-      openFeedbackViewDialog: vi.fn(),
-      switchToEditMode: vi.fn(),
-      canEditFeedback: vi.fn(() => false),
-    }),
-    useProfile: () => ({ profile: undefined }),
-    useStandardMessageActions: () => vi.fn(),
-  };
+  });
 });
 
 vi.mock("../../core/AddinHistoryDrawerCore", () => ({

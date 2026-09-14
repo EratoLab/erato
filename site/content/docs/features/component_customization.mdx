@@ -269,16 +269,30 @@ export const componentRegistry: ComponentRegistry = {
 
 ### Building Blocks
 
-Your custom renderer can import and reuse these components from the core codebase:
+Your custom renderer can import and reuse these host components. They all arrive as named imports from the single `@erato/frontend/shared` specifier, which the host import map resolves to the app bundle's own module instance:
 
-| Component          | Import                                      | Purpose                               |
-| ------------------ | ------------------------------------------- | ------------------------------------- |
-| `MessageContent`   | `@/components/ui/Message/MessageContent`    | Renders markdown, code blocks, images |
-| `LoadingIndicator` | `@/components/ui/Feedback/LoadingIndicator` | Shows streaming/thinking states       |
-| `ToolCallDisplay`  | `@/components/ui/ToolCall`                  | Renders tool call results             |
-| `Avatar`           | `@/components/ui/Feedback/Avatar`           | User/assistant avatar                 |
-| `ImageLightbox`    | `@/components/ui/Message/ImageLightbox`     | Full-size image modal                 |
-| `Alert`            | `@/components/ui/Feedback/Alert`            | Error display                         |
+| Component                                        | Purpose                                |
+| ------------------------------------------------ | -------------------------------------- |
+| `MessageContent`                                 | Renders markdown, code blocks, images  |
+| `LoadingIndicator`                               | Shows streaming/thinking states        |
+| `ToolCallInput`, `ToolCallOutput`, `JsonDisplay` | Render tool call arguments and results |
+| `Avatar`                                         | User/assistant avatar                  |
+| `ImageLightbox`                                  | Full-size image modal                  |
+| `Alert`                                          | Error display                          |
+
+```ts
+import {
+  Alert,
+  Avatar,
+  ImageLightbox,
+  LoadingIndicator,
+  MessageContent,
+} from "@erato/frontend/shared";
+```
+
+A runtime kit cannot resolve the `@/…` alias at all — that alias only exists inside the frontend's own build. An import written against it fails module linking before the kit's entry point runs, which takes the kit's version handshake down with it and leaves every override silently on its default. Deep paths such as `@/components/ui/Message/MessageContent` are not a second way in; `@erato/frontend/shared` is the whole surface. The `@/customer/components/…` paths in the registration snippets above are a different thing and stay as they are: those are for the in-tree fork, where the alias does resolve.
+
+Host class names are a parallel channel with the same property — kits paste them as string literals, so a rename breaks them silently. See [Class Hooks](./theming#class-hooks) for the declared list and for which rules a kit's own utilities can and cannot override.
 
 ### What the Example Demonstrates
 
