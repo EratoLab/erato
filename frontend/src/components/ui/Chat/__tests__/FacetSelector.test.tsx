@@ -262,8 +262,31 @@ describe("FacetSelector", () => {
     );
 
     const row = screen.getByRole("menuitem", { name: /^linear/ });
-    expect(within(row).queryByRole("img", { hidden: true })).toBeNull();
+    // The tick is the only SVG in a section row, so its absence is the
+    // switched-off state itself.
+    expect(row.querySelector("svg")).toBeNull();
     fireEvent.click(row);
     expect(onToggleServer).toHaveBeenCalledWith("linear");
+  });
+
+  it("renders a server that is on as a ticked row", async () => {
+    renderSelector({
+      facets: [WEB_SEARCH],
+      withAssistants: false,
+      withConnectors: true,
+      servers: [
+        {
+          id: "linear",
+          connection_status: "SUCCESS",
+          authentication_mode: "oauth2",
+        },
+      ],
+      disabledServerIds: [],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+
+    const row = await screen.findByRole("menuitem", { name: /^linear/ });
+    expect(row.querySelector("svg")).not.toBeNull();
   });
 });
