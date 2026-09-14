@@ -638,6 +638,11 @@ export type ChatDetail = {
    */
   constraints?: string;
   /**
+   * MCP servers the user switched off for this chat; their tools are not
+   * offered to the model.
+   */
+  disabled_mcp_server_ids: string[];
+  /**
    * Delegated runs only: the result shape the dispatching model asked for.
    */
   expected_output?: string;
@@ -740,6 +745,11 @@ export type ChatMessage = {
    * Whether this message is in the active thread
    */
   is_message_in_active_thread: boolean;
+  /**
+   * MCP server IDs whose tools were withheld from this generation because
+   * the user switched the server off for the chat
+   */
+  mcp_servers_disabled_by_user?: string[];
   /**
    * MCP server IDs skipped for this generation because the requesting user
    * has not completed the server's OAuth authorization yet
@@ -1772,6 +1782,13 @@ export type MessageSubmitRequest = {
   chat_provider_id?: string;
   delegation_run_mode?: DelegationRunMode;
   /**
+   * MCP servers a newly created chat starts with switched off; their tools
+   * are withheld from the model. Ignored when existing_chat_id is
+   * provided; `PUT /me/chats/{chat_id}` changes the list on an existing
+   * chat.
+   */
+  disabled_mcp_server_ids?: string[];
+  /**
    * The ID of an existing chat to use. If provided, the chat with this ID will be used instead of creating a new one.
    * This is useful for scenarios where you have created a chat first (e.g. for file uploads) before sending the first message.
    *
@@ -2111,6 +2128,11 @@ export type RecentChat = {
    * @example completed
    */
   delegated_run_outcome?: string;
+  /**
+   * MCP servers the user switched off for this chat; their tools are not
+   * offered to the model.
+   */
+  disabled_mcp_server_ids: string[];
   /**
    * Files uploaded to this chat
    */
@@ -2797,6 +2819,12 @@ export type UpdateAssistantResponse = AssistantWithFiles;
  */
 export type UpdateChatRequest = {
   /**
+   * MCP servers to switch off for this chat; replaces the stored list.
+   * Their tools are withheld from the model. Only ever narrows the set the
+   * policy, assistant and facets allow.
+   */
+  disabled_mcp_server_ids?: string[];
+  /**
    * Whether the chat should be pinned.
    */
   is_pinned?: boolean | null | undefined;
@@ -2823,6 +2851,10 @@ export type UpdateChatResponse = {
    * The ID of the updated chat
    */
   chat_id: string;
+  /**
+   * MCP servers the user switched off for this chat.
+   */
+  disabled_mcp_server_ids: string[];
   /**
    * Whether the chat is pinned by its owner.
    */
