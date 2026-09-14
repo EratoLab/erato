@@ -1124,6 +1124,28 @@ body {
     var(--theme-spacing-shell-compact-padding-x);
 }
 
+/* For a band whose single child carries the inset and the row height itself.
+   Must stay AFTER .sidebar-section-skin: both are specificity 0,1,0, so source
+   order alone is what zeroes the padding without an `!important`. */
+.sidebar-band-flush {
+  padding: 0;
+}
+
+/* The floating and framed sidebar toggles. A customer theme gives
+   --theme-shell-sidebar alpha and blurs it inside [data-ui="sidebar"]; these
+   controls sit outside it, so they would paint the conversation through
+   themselves. The gradient lays the sidebar tone over an opaque base. */
+.floating-control-skin {
+  background-color: var(--theme-shell-app, var(--theme-bg-primary));
+  background-image: linear-gradient(
+    var(--theme-shell-sidebar),
+    var(--theme-shell-sidebar)
+  );
+  border-color: var(--theme-border-divider);
+  border-radius: var(--theme-radius-shell);
+  box-shadow: var(--theme-elevation-shell);
+}
+
 /* One horizontal inset for every sidebar row surface: nav-row wrappers,
    section headers, the nav divider and the chat-list wrappers all read this
    token (header and footer read it through .sidebar-section-skin), so the
@@ -1189,6 +1211,11 @@ body {
    box is the max of the control size and the content. */
 .sidebar-icon-col-geometry {
   --sidebar-icon-col-content: 1.25rem;
+  /* The margin below centres the control only at its intrinsic width, and the
+     button geometry sets `width` with no `min-width`. These controls are direct
+     flex items of the band's row, so a band with generous padding would
+     otherwise shrink them off the rail centerline. */
+  flex: none;
   margin-left: calc(
     var(--theme-layout-sidebar-slim-width) / 2 -
       var(--theme-spacing-shell-compact-padding-x) -

@@ -7,9 +7,10 @@ import {
 import { useState } from "react";
 
 import { ChatHistorySidebar } from "../../components/ui/Chat/ChatHistorySidebar";
+import { FeatureConfigProvider } from "../../providers/FeatureConfigProvider";
 
 import type { ChatSession } from "@/types/chat";
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Decorator, Meta, StoryObj } from "@storybook/react";
 
 const meta: Meta<typeof ChatHistorySidebar> = {
   title: "CHAT/ChatHistorySidebar/Tests",
@@ -145,18 +146,23 @@ export const CollapseTest: Story = {
     const sidebar = canvas.getByRole("complementary");
     await expect(sidebar.clientWidth).toBeGreaterThan(200);
 
-    const toggleButton = canvas.getByLabelText(/collapse sidebar/i);
-    await expect(toggleButton).toHaveAttribute("aria-expanded", "true");
+    const collapseButton = canvas.getByLabelText(/collapse sidebar/i);
+    await expect(collapseButton).toHaveAttribute("aria-expanded", "true");
 
-    // Test collapse
-    await user.click(toggleButton);
+    // The header control keeps announcing `expanded`; under the default
+    // `hidden` mode the floating trigger is what reports the collapsed state.
+    await user.click(collapseButton);
     await new Promise((resolve) => setTimeout(resolve, 250));
-    await expect(toggleButton).toHaveAttribute("aria-expanded", "false");
+    const expandButton = await canvas.findByLabelText(/expand sidebar/i);
+    await expect(expandButton).toHaveAttribute("aria-expanded", "false");
 
     // Test expanding again
-    await user.click(toggleButton);
+    await user.click(expandButton);
     await new Promise((resolve) => setTimeout(resolve, 250));
-    await expect(toggleButton).toHaveAttribute("aria-expanded", "true");
+    await expect(canvas.getByLabelText(/collapse sidebar/i)).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
   },
 };
 
@@ -179,12 +185,65 @@ export const SessionInteractionTest: Story = {
 
     await user.click(sessionLink);
 
-    // Verify the selected state
-    await expect(sessionContainer).toHaveClass("bg-theme-bg-selected");
+    // `data-selected` beside the link's `aria-current` is the theme contract.
+    await expect(sessionContainer).toHaveAttribute("data-selected", "true");
+    await expect(sessionLink).toHaveAttribute("aria-current", "page");
 
-    // Test session hover state
+    // Synthetic events never set `:hover`, so this only checks it survives.
     await user.hover(sessionContainer);
-    await expect(sessionContainer).toHaveClass("hover:bg-theme-bg-hover");
+    await expect(sessionContainer).toBeVisible();
+  },
+};
+
+/**
+ * The logo face exists only in slim mode, and the preview defaults to
+ * `hidden`, so this story supplies the mode and a static-dir logo path.
+ */
+const withSlimLogoConfig: Decorator = (Story) => (
+  <FeatureConfigProvider
+    config={{
+      sidebar: {
+        collapsedMode: "slim",
+        logoPath: "/erato-e.svg",
+        logoDarkPath: "/erato-e-dark.svg",
+      },
+    }}
+  >
+    <Story />
+  </FeatureConfigProvider>
+);
+
+export const SlimLogoFaceTest: Story = {
+  args: {
+    ...AccessibilityTest.args,
+    collapsed: true,
+  },
+  decorators: [withSlimLogoConfig],
+  play: async ({ canvasElement }) => {
+    const canvas = await waitForSidebarCanvas(canvasElement);
+
+    // The logo reaches the DOM only after its existence check resolves.
+    const logo = await canvas.findByAltText(/logo/i);
+    const toggle = canvas.getByLabelText(/expand sidebar/i);
+    await expect(toggle).toContainElement(logo);
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    // The face replaces the glyph rather than joining it: the geometry probe
+    // would otherwise measure a second icon span.
+    await expect(toggle.querySelector('[aria-hidden="true"]')).toBeNull();
+
+    const glyph = toggle.querySelector("svg");
+
+    if (!glyph) {
+      throw new Error("Logo face lost its toggle glyph");
+    }
+
+    // The glyph stays mounted behind the logo and CSS reveals it on :hover,
+    // which synthetic events never set — so this asserts the resting state,
+    // and the swap itself is checked by eye in
+    // CHAT/ChatHistorySidebar → Slim mode with logo.
+    await expect(glyph.parentElement).not.toBeVisible();
+    await expect(logo).toBeVisible();
   },
 };
 

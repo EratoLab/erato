@@ -36,6 +36,7 @@ import { checkFileExists } from "@/utils/themeUtils";
 import { ChatHistoryFilterMenu } from "./ChatHistoryFilterMenu";
 import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
 import { FrequentAssistantsList } from "./FrequentAssistantsList";
+import { SidebarBand } from "./SidebarBand";
 import {
   parsePersistedBoolean,
   SidebarCollapsibleSection as CollapsibleSection,
@@ -49,8 +50,7 @@ import {
   SidebarResizeHandle,
   useApplySidebarWidth,
 } from "./SidebarResizeHandle";
-import { Button } from "../Controls/Button";
-import { CountBadge } from "../Controls/CountBadge";
+import { SidebarToggle } from "./SidebarToggle";
 import { UserProfileThemeDropdown } from "../Controls/UserProfileThemeDropdown";
 import { CopyErrorButton } from "../Feedback/CopyErrorButton";
 import {
@@ -61,8 +61,10 @@ import {
   ResolvedIcon,
 } from "../icons";
 
+import type { SidebarToggleSurface } from "./SidebarToggle";
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
+import type { ReactNode } from "react";
 
 // Create logger for this component
 const logger = createLogger("UI", "ChatHistorySidebar");
@@ -78,22 +80,46 @@ const ASSISTANTS_SECTION_EXPANDED_STORAGE_KEY =
 const GENERATION_ANNOUNCE_DEBOUNCE_MS = 1000;
 
 /**
- * Count badge for the collapsed-rail toggles; anchors on the nearest
- * positioned ancestor.
+ * The expand control, wherever the sidebar is collapsed. It reads the
+ * attention count itself so a count change repaints this button rather than
+ * the whole sidebar, and says the number aloud because the badge that draws
+ * it is aria-hidden.
  */
-const GenerationRailBadge = () => {
-  const count = useGenerationIndicatorCount();
-
-  if (count === 0) return null;
+const SidebarExpandToggle = ({
+  surface,
+  onToggle,
+  className,
+  children,
+}: {
+  surface: SidebarToggleSurface;
+  onToggle?: () => void;
+  className?: string;
+  children?: ReactNode;
+}) => {
+  const attentionCount = useGenerationIndicatorCount();
 
   return (
-    <CountBadge
-      variant="attention"
-      data-testid="sidebar-generation-badge"
-      className="absolute -right-0.5 -top-0.5"
+    <SidebarToggle
+      surface={surface}
+      expanded={false}
+      onClick={onToggle}
+      label={
+        attentionCount > 0
+          ? t({
+              id: "chat.history.generation.expandWithAttention",
+              message: plural(attentionCount, {
+                one: "expand sidebar, # chat needs attention",
+                other: "expand sidebar, # chats need attention",
+              }),
+            })
+          : t`expand sidebar`
+      }
+      attentionCount={attentionCount}
+      badgeTestId="sidebar-generation-badge"
+      className={className}
     >
-      {count}
-    </CountBadge>
+      {children}
+    </SidebarToggle>
   );
 };
 
@@ -133,7 +159,6 @@ const SidebarLogo = memo<{
   logoPath: string;
   onToggle?: () => void;
 }>(({ logoPath, onToggle }) => {
-  const [isHovered, setIsHovered] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
 
   useEffect(() => {
@@ -142,42 +167,34 @@ const SidebarLogo = memo<{
 
   if (imgFailed) {
     return (
-      <Button
-        onClick={onToggle}
-        variant="sidebar-icon"
-        icon={<SidebarToggleIcon />}
+      <SidebarExpandToggle
+        surface="flush"
+        onToggle={onToggle}
         className="sidebar-icon-col-geometry"
-        aria-label={t`expand sidebar`}
-        aria-expanded="false"
       />
     );
   }
 
   return (
-    <Button
-      onClick={onToggle}
-      variant="sidebar-icon"
-      aria-label={t`expand sidebar`}
-      aria-expanded="false"
-      className="sidebar-icon-col-geometry sidebar-icon-col-geometry-logo relative"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+    // A named group: the primitive passes no pointer handlers through, and an
+    // unnamed one would fire on any ancestor that happens to be a `group`.
+    <SidebarExpandToggle
+      surface="flush"
+      onToggle={onToggle}
+      className="group/logo sidebar-icon-col-geometry sidebar-icon-col-geometry-logo relative"
     >
       <img
         src={logoPath}
         alt={t`Logo`}
-        className={clsx(
-          "max-h-8 max-w-8 transition-opacity",
-          isHovered && "opacity-30",
-        )}
+        className="max-h-8 max-w-8 transition-opacity group-hover/logo:opacity-30"
         onError={() => setImgFailed(true)}
       />
-      {isHovered && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <SidebarToggleIcon className="size-5" />
-        </div>
-      )}
-    </Button>
+      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/logo:opacity-100">
+        {/* Load-bearing: the geometry probe aligns the rail on the button's
+            first aria-hidden node, and the badge is aria-hidden too. */}
+        <SidebarToggleIcon aria-hidden="true" className="size-5" />
+      </div>
+    </SidebarExpandToggle>
   );
 });
 
@@ -192,31 +209,22 @@ const ChatHistoryHeader = memo<{
   sidebarLogoPath?: string | null;
 }>(
   ({ collapsed, isSlimMode, onToggleCollapse, showTitle, sidebarLogoPath }) => (
-    <div
-      className="sidebar-section-skin sidebar-band-geometry flex border-b"
-      data-ui="sidebar-header"
-    >
+    <SidebarBand edge="header">
       {/* In slim mode, show logo with hover toggle or just toggle button */}
       {isSlimMode && (
         <div className="flex w-full items-center">
-          <div className="relative">
-            {sidebarLogoPath ? (
-              <SidebarLogo
-                logoPath={sidebarLogoPath}
-                onToggle={onToggleCollapse}
-              />
-            ) : (
-              <Button
-                onClick={onToggleCollapse}
-                variant="sidebar-icon"
-                icon={<SidebarToggleIcon />}
-                className="sidebar-icon-col-geometry"
-                aria-label={t`expand sidebar`}
-                aria-expanded="false"
-              />
-            )}
-            <GenerationRailBadge />
-          </div>
+          {sidebarLogoPath ? (
+            <SidebarLogo
+              logoPath={sidebarLogoPath}
+              onToggle={onToggleCollapse}
+            />
+          ) : (
+            <SidebarExpandToggle
+              surface="flush"
+              onToggle={onToggleCollapse}
+              className="sidebar-icon-col-geometry"
+            />
+          )}
         </div>
       )}
       {/* In expanded mode, show toggle button and title */}
@@ -229,13 +237,12 @@ const ChatHistoryHeader = memo<{
             collapsed ? "pointer-events-none opacity-0" : "opacity-100",
           )}
         >
-          <Button
+          <SidebarToggle
+            surface="flush"
+            expanded
             onClick={onToggleCollapse}
-            variant="sidebar-icon"
-            icon={<SidebarToggleIcon />}
-            className="sidebar-icon-col-geometry rotate-180"
-            aria-label={t`collapse sidebar`}
-            aria-expanded="true"
+            label={t`collapse sidebar`}
+            className="sidebar-icon-col-geometry"
             tabIndex={collapsed ? -1 : 0}
           />
           <div className="flex flex-1 items-center">
@@ -247,7 +254,7 @@ const ChatHistoryHeader = memo<{
           </div>
         </div>
       )}
-    </div>
+    </SidebarBand>
   ),
 );
 
@@ -355,10 +362,7 @@ const ChatHistoryFooter = memo<{
   onSignOut: () => void;
   isSlimMode?: boolean;
 }>(({ userProfile, onSignOut }) => (
-  <div
-    className="sidebar-section-skin sidebar-band-geometry flex items-center border-t"
-    data-ui="sidebar-footer"
-  >
+  <SidebarBand edge="footer" className="items-center">
     {/* The trigger's rail-column margin holds in both modes, so the slim
         rail needs no extra centering here. */}
     <UserProfileThemeDropdown
@@ -366,7 +370,7 @@ const ChatHistoryFooter = memo<{
       onSignOut={onSignOut}
       className="flex w-full items-center"
     />
-  </div>
+  </SidebarBand>
 ));
 
 // eslint-disable-next-line lingui/no-unlocalized-strings
@@ -699,16 +703,6 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       [isSlimMode],
     );
 
-    const hiddenToggleStyle = useMemo(
-      () => ({
-        backgroundColor: "var(--theme-shell-sidebar)",
-        borderColor: "var(--theme-border-divider)",
-        borderRadius: "var(--theme-radius-shell)",
-        boxShadow: "var(--theme-elevation-shell)",
-      }),
-      [],
-    );
-
     const ResolvedChatHistoryList = useMemo(
       () =>
         resolveComponentOverride(
@@ -728,20 +722,14 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
           >
             {generationAnnouncement}
           </div>
-          {/* Absolutely positioned toggle button when collapsed in hidden mode */}
+          {/* Placement stays here: the add-in's floating trigger disagrees
+              about the z-index. */}
           {isHiddenMode && (
-            <div className="absolute left-2 top-2 z-30">
-              <Button
-                onClick={onToggleCollapse}
-                variant="sidebar-icon"
-                icon={<SidebarToggleIcon />}
-                className="border"
-                style={hiddenToggleStyle}
-                aria-label={t`expand sidebar`}
-                aria-expanded="false"
-              />
-              <GenerationRailBadge />
-            </div>
+            <SidebarExpandToggle
+              surface="floating"
+              onToggle={onToggleCollapse}
+              className="absolute left-2 top-2 z-30"
+            />
           )}
 
           <aside

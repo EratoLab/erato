@@ -345,6 +345,16 @@ export {
   NewChatItem,
   NoFilterMatchesRow,
 } from "@/components/ui/Chat/ChatHistorySidebar";
+export {
+  SidebarBand,
+  type SidebarBandEdge,
+  type SidebarBandProps,
+} from "@/components/ui/Chat/SidebarBand";
+export {
+  SidebarToggle,
+  type SidebarToggleProps,
+  type SidebarToggleSurface,
+} from "@/components/ui/Chat/SidebarToggle";
 export { EditChatTitleDialog } from "@/components/ui/Chat/EditChatTitleDialog";
 export { ChatShareDialog } from "@/components/ui/Chat/ChatShareDialog";
 export {

@@ -1,5 +1,4 @@
 import {
-  Button,
   ChatHistoryFilterMenu,
   ChatHistoryList,
   ChatHistoryListSkeleton,
@@ -9,9 +8,10 @@ import {
   NoFilterMatchesRow,
   SettingsIcon,
   sidebarInsetClassName,
+  SidebarBand,
   SidebarCollapsibleSection,
   SidebarNavigationItem,
-  SidebarToggleIcon,
+  SidebarToggle,
   hasActiveFilters,
   mapRecentChatToSession,
   sidebarNavigationIconClassName,
@@ -396,26 +396,22 @@ export function AddinHistoryDrawerCore({
         >
           {/* Same header anatomy as the web sidebar: the toggle sits where
               the floating trigger sat, so open/close reads as one control. */}
-          <div
-            className="sidebar-section-skin sidebar-band-geometry flex border-b"
-            data-ui="sidebar-header"
-          >
+          <SidebarBand edge="header">
             <div className="flex w-full items-center">
-              <Button
+              <SidebarToggle
                 ref={toggleRef}
+                surface="flush"
+                expanded={true}
                 onClick={onClose}
-                variant="sidebar-icon"
-                icon={<SidebarToggleIcon />}
-                className="sidebar-icon-col-geometry rotate-180"
-                aria-label={t({
+                className="sidebar-icon-col-geometry"
+                label={t({
                   id: "officeAddin.historyDrawer.close",
                   message: "Close menu",
                 })}
-                aria-expanded="true"
                 data-testid="addin-history-drawer-close"
               />
             </div>
-          </div>
+          </SidebarBand>
 
           <NewChatItem onNewChat={handleNewChat} />
 
@@ -488,14 +484,7 @@ export function AddinHistoryDrawerCore({
 
           {sectionsAfterHistory}
 
-          {/* !p-0: the nav row carries the sidebar inset channel itself, so
-              the band's own padding must lose — and it needs the important
-              modifier because the skin class shares specificity and comes
-              later in the built stylesheet. */}
-          <div
-            className="sidebar-section-skin border-t !p-0"
-            data-ui="sidebar-footer"
-          >
+          <SidebarBand edge="footer" flush={true}>
             <SidebarNavigationItem
               label={t({
                 id: "officeAddin.headerMenu.settings",
@@ -508,7 +497,7 @@ export function AddinHistoryDrawerCore({
               }}
               data-ui="addin-history-drawer-settings"
             />
-          </div>
+          </SidebarBand>
         </div>
       </div>
 

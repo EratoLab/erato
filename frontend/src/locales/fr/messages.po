@@ -1686,6 +1686,11 @@ msgid "chat.history.generation.error"
 msgstr "Erreur"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "chat.history.generation.expandWithAttention"
+msgstr "{attentionCount, plural, one {développer la barre latérale, # conversation requiert votre attention} other {développer la barre latérale, # conversations requièrent votre attention}}"
+
+#. js-lingui-explicit-id
 #: src/utils/chatHistoryGrouping.ts
 msgid "chat.history.generation.finished"
 msgstr "Terminé"

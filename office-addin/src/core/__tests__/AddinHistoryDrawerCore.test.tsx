@@ -111,6 +111,24 @@ vi.mock("@erato/frontend/library", () => ({
   NoFilterMatchesRow: () => <p data-testid="chat-history-no-filter-matches" />,
   sidebarInsetClassName: "sidebar-inset-geometry",
   SettingsIcon: () => null,
+  // Mirrors the primitive's default hook, which the lookups below assert on.
+  SidebarBand: ({
+    edge,
+    flush: _flush,
+    dataUi,
+    className,
+    children,
+  }: {
+    edge: "header" | "footer";
+    flush?: boolean;
+    dataUi?: string;
+    className?: string;
+    children?: ReactNode;
+  }) => (
+    <div data-ui={dataUi ?? `sidebar-${edge}`} className={className}>
+      {children}
+    </div>
+  ),
   SidebarCollapsibleSection: ({
     title,
     actions,
@@ -138,7 +156,32 @@ vi.mock("@erato/frontend/library", () => ({
       {label}
     </button>
   ),
-  SidebarToggleIcon: () => null,
+  // `ref` is a plain prop in React 19; the focus-return assertion needs it.
+  SidebarToggle: ({
+    label,
+    expanded,
+    surface,
+    attentionCount: _attentionCount,
+    badgeTestId: _badgeTestId,
+    dataUi,
+    ...props
+  }: Record<string, unknown> & {
+    label?: string;
+    expanded?: boolean;
+    surface?: string;
+    attentionCount?: number;
+    badgeTestId?: string;
+    dataUi?: string;
+  }) => (
+    <button
+      type="button"
+      aria-label={label}
+      aria-expanded={expanded}
+      data-surface={surface}
+      data-ui={dataUi}
+      {...props}
+    />
+  ),
   EditChatTitleDialog: (props: {
     isOpen: boolean;
     generatedTitle: string;
@@ -229,6 +272,25 @@ describe("AddinHistoryDrawerCore", () => {
   it("renders nothing while closed", () => {
     renderDrawer({ isOpen: false });
     expect(screen.queryByTestId("addin-history-drawer")).toBeNull();
+  });
+
+  // The drawer only supplies placement — the rest is the primitive's contract,
+  // pinned in SidebarToggle.test.tsx against the real Button.
+  it("builds its chrome from the sidebar band primitives", () => {
+    renderDrawer();
+    const panel = screen.getByTestId("addin-history-drawer");
+
+    const header = panel.querySelector('[data-ui="sidebar-header"]');
+    const closeToggle = screen.getByTestId("addin-history-drawer-close");
+    expect(header).not.toBeNull();
+    expect(header?.contains(closeToggle)).toBe(true);
+    expect(closeToggle).toHaveAttribute("aria-expanded", "true");
+
+    const footer = panel.querySelector('[data-ui="sidebar-footer"]');
+    expect(footer).not.toBeNull();
+    expect(
+      footer?.contains(screen.getByTestId("addin-history-drawer-settings")),
+    ).toBe(true);
   });
 
   it("selects a row through the session path and closes", () => {
