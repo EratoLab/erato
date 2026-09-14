@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
+  chatDetailQuery,
   fetchCompleteMcpServerOauth,
   fetchUpdateProfilePreferences,
   profileQuery,
@@ -523,9 +524,15 @@ export function UserPreferencesDialog({
     setIsArchiving(true);
     try {
       const recentChatsQueryKey = recentChatsQuery({}).queryKey;
+      // Every chat is archived, so the whole per-chat prefix is stale — chat
+      // detail above all, which is where a surface reads archived_at.
+      const perChatQueryKey = chatDetailQuery({
+        pathParams: { chatId: "" },
+      }).queryKey.slice(0, -1);
 
       await archiveAllChatsMutation({});
       await queryClient.invalidateQueries({ queryKey: recentChatsQueryKey });
+      await queryClient.invalidateQueries({ queryKey: perChatQueryKey });
       await queryClient.refetchQueries({
         queryKey: recentChatsQueryKey,
         type: "active",
