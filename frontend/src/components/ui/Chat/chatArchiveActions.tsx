@@ -8,6 +8,9 @@ import type { ChatAttentionStatus } from "@/utils/chatHistoryGrouping";
 export const archivedChatLabel = () =>
   t({ id: "chat.history.item.archived", message: "Archived" });
 
+export const unarchiveActionLabel = () =>
+  t({ id: "chat.history.menu.unarchive", message: "Unarchive" });
+
 export const ArchivedChatPill = ({ label }: { label: string }) => (
   <span
     className="pill-geometry inline-flex shrink-0 items-center border border-theme-border bg-theme-bg-secondary px-2 py-0.5 text-xs font-medium text-theme-fg-muted"
@@ -35,7 +38,7 @@ export const buildArchiveMenuItems = ({
   if (archived) {
     return [
       {
-        label: t({ id: "chat.history.menu.unarchive", message: "Unarchive" }),
+        label: unarchiveActionLabel(),
         icon: <UndoIcon className="size-4" />,
         onClick: onUnarchive ?? (() => {}),
         testId: "chat-history-menu-unarchive",

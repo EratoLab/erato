@@ -15,8 +15,6 @@ export interface DelegatedRunHeaderProps extends DelegatedRunProvenance {
   constraints?: string;
   /** The delegate is still working; the run cannot take a message yet. */
   isRunning?: boolean;
-  /** Archived, possibly by the cascade from the chat that dispatched it. */
-  isArchived?: boolean;
   /**
    * Opens the origin chat in the host's own way. Left unset, the origin
    * renders as a link to its chat route; a host without those routes
@@ -37,29 +35,6 @@ const Field = ({ label, value }: { label: string; value: string }) => (
 );
 
 /**
- * States the run header explains rather than letting the user discover them
- * by writing a message and getting a 409 back.
- */
-const stateNote = (
-  isRunning: boolean,
-  isArchived: boolean,
-): string | undefined => {
-  if (isRunning) {
-    return t({
-      id: "chat.delegatedRun.state.running",
-      message: "The delegate is still working on this run.",
-    });
-  }
-  if (isArchived) {
-    return t({
-      id: "chat.delegatedRun.state.archived",
-      message: "This run is archived and no longer takes messages.",
-    });
-  }
-  return undefined;
-};
-
-/**
  * Says what a delegated chat is, at the top of the chat itself.
  *
  * A run opens on a brief a model wrote for another model, which reads as a
@@ -73,7 +48,6 @@ export const DelegatedRunHeader = ({
   expectedOutput,
   constraints,
   isRunning = false,
-  isArchived = false,
   onOpenOrigin,
   ...provenance
 }: DelegatedRunHeaderProps) => {
@@ -83,7 +57,12 @@ export const DelegatedRunHeader = ({
     return null;
   }
   const originChatId = origin.chatId;
-  const note = stateNote(isRunning, isArchived);
+  const note = isRunning
+    ? t({
+        id: "chat.delegatedRun.state.running",
+        message: "The delegate is still working on this run.",
+      })
+    : null;
   const hasParameters = Boolean(expectedOutput) || Boolean(constraints);
   const originHref = origin.chatId
     ? getChatUrl(origin.chatId, origin.assistantId)

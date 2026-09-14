@@ -154,10 +154,10 @@ export interface AddinChatController {
   setIsSettingsOpen: (isOpen: boolean) => void;
   isHistoryMenuOpen: boolean;
   setIsHistoryMenuOpen: (isOpen: boolean) => void;
-  /** Banner identifying the open chat as a delegated run; null otherwise. */
+  /** Strip explaining a state that refuses messages; null when none does. */
   chatHeader: ReactNode;
-  /** A delegate still writing the run refuses sends with a 409; closing the
-   * composer is how the user learns that instead of by sending into it. */
+  /** A run its delegate is still writing, or an archived chat, refuses sends
+   * with a 409; closing the composer is how the user learns that. */
   composerLocked: boolean;
   openDelegatedRun: NonNullable<DelegatedRunsSectionProps["onOpenRun"]>;
   /** Opens any chat in-pane via the session controller; also handed to deep
