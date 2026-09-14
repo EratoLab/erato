@@ -1,5 +1,6 @@
 import { t } from "@lingui/core/macro";
 
+import { CHAT_HISTORY_ROW_MENU_ID } from "./chatHistoryRowMenuIds";
 import { ArchiveIcon, UndoIcon } from "../icons";
 
 import type { DropdownMenuItem } from "../Controls/DropdownMenu";
@@ -47,15 +48,20 @@ export const buildArchiveMenuItems = ({
   onArchive?: () => void;
   onUnarchive?: () => void;
 }): DropdownMenuItem[] => {
+  // Gated on the handler like every other item: a caller that forgets to
+  // forward one would otherwise ship a visible, clickable, inert action.
   if (archived) {
-    return [
-      {
-        label: unarchiveActionLabel(),
-        icon: <UndoIcon className="size-4" />,
-        onClick: onUnarchive ?? (() => {}),
-        testId: "chat-history-menu-unarchive",
-      },
-    ];
+    return onUnarchive
+      ? [
+          {
+            id: CHAT_HISTORY_ROW_MENU_ID.unarchive,
+            label: unarchiveActionLabel(),
+            icon: <UndoIcon className="size-4" />,
+            onClick: onUnarchive,
+            testId: "chat-history-menu-unarchive",
+          },
+        ]
+      : [];
   }
 
   // Archiving is reversible, so only work already under way is worth asking
@@ -75,18 +81,21 @@ export const buildArchiveMenuItems = ({
           })
         : null;
 
-  return [
-    {
-      label: t({ id: "chat.history.menu.remove", message: "Archive" }),
-      icon: <ArchiveIcon className="size-4" />,
-      onClick: onArchive ?? (() => {}),
-      testId: "chat-history-menu-archive",
-      confirmAction: warning != null,
-      confirmTitle: t({
-        id: "chat.history.menu.confirm_remove.title",
-        message: "Archive this chat?",
-      }),
-      confirmMessage: warning ?? undefined,
-    },
-  ];
+  return onArchive
+    ? [
+        {
+          id: CHAT_HISTORY_ROW_MENU_ID.archive,
+          label: t({ id: "chat.history.menu.remove", message: "Archive" }),
+          icon: <ArchiveIcon className="size-4" />,
+          onClick: onArchive,
+          testId: "chat-history-menu-archive",
+          confirmAction: warning != null,
+          confirmTitle: t({
+            id: "chat.history.menu.confirm_remove.title",
+            message: "Archive this chat?",
+          }),
+          confirmMessage: warning ?? undefined,
+        },
+      ]
+    : [];
 };

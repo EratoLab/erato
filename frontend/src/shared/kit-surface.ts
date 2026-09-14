@@ -86,14 +86,25 @@ export { Tooltip } from "@/components/ui/Controls/Tooltip";
 // The gating lives in the menu hook, so a kit renders the items it returns
 // rather than deciding anything about archiving, runs or pin limits itself.
 export {
+  chatHistoryRowMenuOptions,
   useChatHistoryRowMenuItems,
   useChatHistoryRowPresentation,
 } from "@/components/ui/Chat/ChatHistoryList";
 export type { ChatHistoryRowMenuOptions } from "@/components/ui/Chat/ChatHistoryList";
+// Stable per-item keys, so a kit restores its own glyphs by mapping over the
+// gated array instead of rebuilding it.
+export { CHAT_HISTORY_ROW_MENU_ID } from "@/components/ui/Chat/chatHistoryRowMenuIds";
+export type { ChatHistoryRowMenuId } from "@/components/ui/Chat/chatHistoryRowMenuIds";
+// Host-authored contract test. A kit runs it against its own override and goes
+// red the day the host adds a row behaviour the kit has never heard of.
+export { chatHistoryListConformanceFailures } from "./chatHistoryConformance";
+export type { ChatHistoryConformanceHarness } from "./chatHistoryConformance";
 // Pinned alongside the hook that feeds it: only two registry-reachable
 // importers keep it on the generated surface, and a kit rendering its own
-// rows needs both halves or neither.
+// rows needs both halves or neither. The pill is in the same position and
+// reaches a kit that places the badges itself rather than rendering `badges`.
 export { ChatAttentionStatusDot } from "@/components/ui/Chat/ChatAttentionStatusDot";
+export { ArchivedChatPill } from "@/components/ui/Chat/chatArchiveActions";
 
 // Declared dependencies of shipped kits that still reached the surface only as
 // an import-graph byproduct. Same failure mode as the block above, except these
@@ -177,13 +188,10 @@ export {
   type EratoGeometryClassKey,
 } from "@/components/ui/styles/geometryClassNames";
 
-// Bump on breaking changes to the shared host surface. Kits compare this at
-// startup and warn loudly when their expected contract does not match.
-export const ERATO_SHARED_SURFACE_VERSION = 1;
-
-// Bump on purely additive growth of the surface, so a kit can require a name
-// that exists without demanding a new major.
-export const ERATO_SHARED_SURFACE_MINOR = 7;
+export {
+  ERATO_SHARED_SURFACE_MINOR,
+  ERATO_SHARED_SURFACE_VERSION,
+} from "./surfaceVersion";
 
 // The string half of the same contract: every value and type this module pins,
 // so tooling on either side of the boundary can diff a kit's declared needs
@@ -192,11 +200,13 @@ export const ERATO_SHARED_SURFACE_MINOR = 7;
 export const ERATO_KIT_SURFACE_EXPORTS = [
   "Alert",
   "ArchiveIcon",
+  "ArchivedChatPill",
   "AttachmentNotice",
   "AttachmentTile",
   "AttachmentTileList",
   "Avatar",
   "Button",
+  "CHAT_HISTORY_ROW_MENU_ID",
   "Card",
   "CardControl",
   "CardProps",
@@ -205,6 +215,8 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "CardTone",
   "CardVariant",
   "ChatAttentionStatusDot",
+  "ChatHistoryConformanceHarness",
+  "ChatHistoryRowMenuId",
   "ChatHistoryRowMenuOptions",
   "ChevronDownIcon",
   "ChevronRightIcon",
@@ -291,6 +303,8 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "ToolCallOutput",
   "ToolCallOutputProps",
   "Tooltip",
+  "chatHistoryListConformanceFailures",
+  "chatHistoryRowMenuOptions",
   "messageStyles",
   "resolvePopoverViewportPadding",
   "useChatHistoryRowMenuItems",

@@ -21,6 +21,7 @@ import {
   archivedChatLabel,
   buildArchiveMenuItems,
 } from "./chatArchiveActions";
+import { CHAT_HISTORY_ROW_MENU_ID } from "./chatHistoryRowMenuIds";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { DropdownMenu } from "../Controls/DropdownMenu";
 import { Row } from "../Controls/Row";
@@ -36,6 +37,7 @@ import {
 
 import type { DropdownMenuItem } from "../Controls/DropdownMenu";
 import type { ChatSession } from "@/types/chat";
+import type { DelegatedRunOrigin } from "@/utils/chat/delegatedRunOrigin";
 import type { ChatAttentionStatus } from "@/utils/chatHistoryGrouping";
 import type { ReactNode } from "react";
 
@@ -44,6 +46,9 @@ const logger = createLogger("UI", "ChatHistoryList");
 // scrollport whenever the themeable row inset is below the ring width.
 const sidebarRowLinkClassName =
   "focus-ring-inset block rounded-[var(--theme-radius-shell)]";
+// Authored once: a list that defaulted it separately could neutralise the pin
+// gate without touching the gate.
+export const DEFAULT_PINNED_CHATS_LIMIT = 5;
 
 /**
  * Row title: a real backend title, else the recorded user-message hint, else
@@ -82,27 +87,28 @@ const ChatItemIcon = memo(() => {
 ChatItemIcon.displayName = "ChatItemIcon";
 
 /**
- * Row title, attention status, archived marker and composed aria label — the
- * shape a component kit needs when it overrides this list. Exposed as the
- * resolved result rather than its ingredients so kits cannot reimplement
- * `resolveSessionRowStatus` and end up with a dot that disagrees with the
- * session's group.
+ * Row title, attention status, archived marker, delegated-run origin and the
+ * composed aria label — the shape a component kit needs when it overrides this
+ * list. Exposed as the resolved result rather than its ingredients so kits
+ * cannot reimplement `resolveSessionRowStatus` and end up with a dot that
+ * disagrees with the session's group.
  *
- * Render `badges` rather than its ingredients: an indicator added to it later
- * reaches every list that overrides this one without touching the kit.
- *
- * `extraLabels` is folded into `ariaLabel`.
+ * Render `badges` and `subline` rather than their ingredients: an indicator
+ * added to either then reaches every list that overrides this one without
+ * touching the kit. The trade is deliberate — the host owns the markup of
+ * both, so a kit restyles them through CSS rather than by rebuilding them.
  */
 export const useChatHistoryRowPresentation = (
   session: ChatSession,
-  extraLabels: (string | null | undefined)[] = [],
 ): {
   title: string;
   status: ChatAttentionStatus | null;
   statusLabel: string | null;
   archived: boolean;
   archivedLabel: string | null;
+  runOrigin: DelegatedRunOrigin | null;
   badges: ReactNode;
+  subline: ReactNode;
   ariaLabel: string;
 } => {
   const title = useRowTitle(session);
@@ -110,6 +116,7 @@ export const useChatHistoryRowPresentation = (
   const statusLabel = status ? chatAttentionStatusLabel(status) : null;
   const archived = session.archivedAt != null;
   const archivedLabel = archived ? archivedChatLabel() : null;
+  const runOrigin = delegatedRunOrigin(session);
 
   return {
     title,
@@ -117,20 +124,29 @@ export const useChatHistoryRowPresentation = (
     statusLabel,
     archived,
     archivedLabel,
+    runOrigin,
     badges: (
       <>
         {status && <ChatAttentionStatusDot status={status} />}
         {archivedLabel && <ArchivedChatPill label={archivedLabel} />}
       </>
     ),
-    ariaLabel: [title, archivedLabel, ...extraLabels, statusLabel]
+    subline: runOrigin ? (
+      <p
+        className="truncate text-xs text-theme-fg-muted"
+        title={runOrigin.label}
+        data-testid="chat-history-item-run-origin"
+      >
+        {runOrigin.label}
+      </p>
+    ) : null,
+    ariaLabel: [title, archivedLabel, runOrigin?.label, statusLabel]
       .filter(Boolean)
       .join(", "),
   };
 };
 
-export interface ChatHistoryRowMenuOptions {
-  session: ChatSession;
+export interface ChatHistoryRowMenuHandlers {
   pinnedChatsCount: number;
   pinnedChatsLimit: number;
   onArchive?: () => void;
@@ -140,28 +156,44 @@ export interface ChatHistoryRowMenuOptions {
   onPin?: () => void;
 }
 
+export interface ChatHistoryRowMenuOptions extends ChatHistoryRowMenuHandlers {
+  session: ChatSession;
+}
+
+/** What the gates read, for a row that is not a `ChatSession`. */
+export interface ChatHistoryRowMenuState {
+  archived: boolean;
+  isPinned: boolean;
+  canEdit: boolean;
+  /** Delegated runs get neither archive action; see the hook below. */
+  isRun: boolean;
+  status: ChatAttentionStatus | null;
+}
+
 /**
- * The row's dropdown items, already gated from the session alone. A caller
- * renders the array as it comes; nothing it leaves out can drop a rule.
+ * The row's dropdown items, already gated. A caller renders the array as it
+ * comes; nothing it leaves out can drop a rule.
+ *
+ * Every item carries a stable `id`, so a kit can swap icons or reorder by
+ * mapping over the result without reproducing a gate. An id it does not
+ * recognise keeps the host's own icon.
+ *
+ * Pure, so a row the caller resolved some other way — the search page lists
+ * chats it fetched differently — runs the same gates without a session.
  */
-export const useChatHistoryRowMenuItems = ({
-  session,
-  pinnedChatsCount,
-  pinnedChatsLimit,
-  onArchive,
-  onUnarchive,
-  onEditTitle,
-  onShare,
-  onPin,
-}: ChatHistoryRowMenuOptions): DropdownMenuItem[] => {
-  const status = useChatRowStatus(session.id, session);
-  const archived = session.archivedAt != null;
-  const isPinned = session.isPinned ?? false;
-  const canEdit = session.canEdit ?? true;
+export const buildChatHistoryRowMenuItems = (
+  { archived, isPinned, canEdit, isRun, status }: ChatHistoryRowMenuState,
+  {
+    pinnedChatsCount,
+    pinnedChatsLimit,
+    onArchive,
+    onUnarchive,
+    onEditTitle,
+    onShare,
+    onPin,
+  }: ChatHistoryRowMenuHandlers,
+): DropdownMenuItem[] => {
   const isPinLimitReached = !isPinned && pinnedChatsCount >= pinnedChatsLimit;
-  // Keyed on provenance, not on the origin label: `delegatedRunOrigin` is
-  // null for a run that records no origin at all, and that is still a run.
-  const isRun = session.provenanceKind === DELEGATION_PROVENANCE_KIND;
   const pinMenuLabel = isPinLimitReached
     ? t({
         id: "chat.history.menu.pinLimitReached",
@@ -181,6 +213,7 @@ export const useChatHistoryRowMenuItems = ({
     ...(onPin && !archived
       ? [
           {
+            id: CHAT_HISTORY_ROW_MENU_ID.pin,
             label: pinMenuLabel,
             icon: isPinned ? (
               <PinSlashIcon className="size-4" />
@@ -195,6 +228,7 @@ export const useChatHistoryRowMenuItems = ({
     ...(onShare && !archived
       ? [
           {
+            id: CHAT_HISTORY_ROW_MENU_ID.share,
             label: t({
               id: "chat.share.button",
               message: "Share",
@@ -208,6 +242,7 @@ export const useChatHistoryRowMenuItems = ({
     ...(onEditTitle
       ? [
           {
+            id: CHAT_HISTORY_ROW_MENU_ID.rename,
             label: t({
               id: "chat.history.menu.rename",
               message: "Rename",
@@ -231,6 +266,60 @@ export const useChatHistoryRowMenuItems = ({
   ];
 };
 
+/**
+ * The menu half of a list's props, curried per row. The kit-facing lists pass
+ * their whole props object, so an action added here reaches every override
+ * without one of them naming its callback.
+ */
+export const chatHistoryRowMenuOptions = (
+  {
+    onSessionArchive,
+    onSessionUnarchive,
+    onSessionEditTitle,
+    onSessionShare,
+    onSessionPin,
+    pinnedChatsCount = 0,
+    pinnedChatsLimit = DEFAULT_PINNED_CHATS_LIMIT,
+  }: ChatHistoryListProps,
+  session: ChatSession,
+): ChatHistoryRowMenuOptions => ({
+  session,
+  pinnedChatsCount,
+  pinnedChatsLimit,
+  onArchive: onSessionArchive ? () => onSessionArchive(session.id) : undefined,
+  onUnarchive: onSessionUnarchive
+    ? () => onSessionUnarchive(session.id)
+    : undefined,
+  onEditTitle: onSessionEditTitle
+    ? () => onSessionEditTitle(session.id)
+    : undefined,
+  onShare: onSessionShare ? () => onSessionShare(session.id) : undefined,
+  onPin: onSessionPin
+    ? () => onSessionPin(session.id, !(session.isPinned ?? false))
+    : undefined,
+});
+
+/** The gated items for a listed `ChatSession`, status resolved from the stores. */
+export const useChatHistoryRowMenuItems = ({
+  session,
+  ...handlers
+}: ChatHistoryRowMenuOptions): DropdownMenuItem[] => {
+  const status = useChatRowStatus(session.id, session);
+
+  return buildChatHistoryRowMenuItems(
+    {
+      archived: session.archivedAt != null,
+      isPinned: session.isPinned ?? false,
+      canEdit: session.canEdit ?? true,
+      // Keyed on provenance, not on the origin label: `delegatedRunOrigin` is
+      // null for a run that records no origin at all, and that is still a run.
+      isRun: session.provenanceKind === DELEGATION_PROVENANCE_KIND,
+      status,
+    },
+    handlers,
+  );
+};
+
 export interface ChatHistoryListProps {
   sessions: ChatSession[];
   currentSessionId: string | null;
@@ -242,7 +331,6 @@ export interface ChatHistoryListProps {
   onSessionPin?: (sessionId: string, isPinned: boolean) => void;
   pinnedChatsCount?: number;
   pinnedChatsLimit?: number;
-  onShowDetails?: (sessionId: string) => void;
   className?: string;
   /**
    * Layout configuration
@@ -279,53 +367,29 @@ const getFileCountLabel = (count: number) =>
   });
 
 const ChatHistoryListItem = memo<{
-  session: ChatSession;
   isActive: boolean;
   layout: "default" | "compact";
   onSelect: () => void;
-  onArchive?: () => void;
-  onUnarchive?: () => void;
-  onEditTitle?: () => void;
-  onShare?: () => void;
-  onPin?: () => void;
-  pinnedChatsCount: number;
-  pinnedChatsLimit: number;
-  onShowDetails?: () => void;
+  menuOptions: ChatHistoryRowMenuOptions;
   showTimestamps?: boolean;
   disableRowLinks?: boolean;
 }>(
   ({
-    session,
     isActive,
     layout,
     onSelect,
-    onArchive,
-    onUnarchive,
-    onEditTitle,
-    onShare,
-    onPin,
-    pinnedChatsCount,
-    pinnedChatsLimit,
-    onShowDetails,
+    menuOptions,
     showTimestamps = true,
     disableRowLinks = false,
   }) => {
-    const runOrigin = delegatedRunOrigin(session);
+    const { session } = menuOptions;
     const {
       title: rowTitle,
       badges,
+      subline,
       ariaLabel: rowAriaLabel,
-    } = useChatHistoryRowPresentation(session, [runOrigin?.label]);
-    const menuItems = useChatHistoryRowMenuItems({
-      session,
-      pinnedChatsCount,
-      pinnedChatsLimit,
-      onArchive,
-      onUnarchive,
-      onEditTitle,
-      onShare,
-      onPin,
-    });
+    } = useChatHistoryRowPresentation(session);
+    const menuItems = useChatHistoryRowMenuItems(menuOptions);
     // A stable Date instance: an inline `new Date(...)` would defeat
     // MessageTimestamp's shallow memo on every list render.
     const updatedAtDate = useMemo(
@@ -368,15 +432,7 @@ const ChatHistoryListItem = memo<{
             />
           </div>
         </div>
-        {runOrigin && (
-          <p
-            className="truncate text-xs text-theme-fg-muted"
-            title={runOrigin.label}
-            data-testid="chat-history-item-run-origin"
-          >
-            {runOrigin.label}
-          </p>
-        )}
+        {subline}
         {layout !== "compact" && showTimestamps && (
           <>
             <p
@@ -443,19 +499,11 @@ const ChatHistoryListItem = memo<{
 // eslint-disable-next-line lingui/no-unlocalized-strings
 ChatHistoryListItem.displayName = "ChatHistoryListItem";
 
-export const ChatHistoryList = memo<ChatHistoryListProps>(
-  ({
+export const ChatHistoryList = memo<ChatHistoryListProps>((props) => {
+  const {
     sessions,
     currentSessionId,
     onSessionSelect,
-    onSessionArchive,
-    onSessionUnarchive,
-    onSessionEditTitle,
-    onSessionShare,
-    onSessionPin,
-    pinnedChatsCount = 0,
-    pinnedChatsLimit = 5,
-    onShowDetails,
     className,
     layout = "default",
     isLoading = false,
@@ -464,99 +512,72 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
     onLoadMore,
     showTimestamps = true,
     disableRowLinks = false,
-  }) => {
-    const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
+  } = props;
+  const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
 
-    useEffect(() => {
-      const sentinel = loadMoreSentinelRef.current;
-      if (!sentinel || !hasMore || !onLoadMore) {
-        return;
-      }
-
-      const observer = new IntersectionObserver(
-        (entries) => {
-          if (entries.some((entry) => entry.isIntersecting) && !isLoadingMore) {
-            onLoadMore();
-          }
-        },
-        { rootMargin: "120px" }, // eslint-disable-line lingui/no-unlocalized-strings -- IntersectionObserver CSS length, not user-facing text
-      );
-
-      observer.observe(sentinel);
-      return () => observer.disconnect();
-    }, [hasMore, isLoadingMore, onLoadMore]);
-
-    if (isLoading) {
-      return <ChatHistoryListSkeleton layout={layout} />;
+  useEffect(() => {
+    const sentinel = loadMoreSentinelRef.current;
+    if (!sentinel || !hasMore || !onLoadMore) {
+      return;
     }
 
-    return (
-      <div
-        className={clsx(
-          // No overflow-y here: the sidebar wrapper (ChatHistorySidebar) owns the
-          // single scroll region; a second scroller caused rare double scrollbars.
-          "flex w-full min-w-0 flex-col gap-1",
-          className,
-        )}
-        data-ui="chat-history-list"
-      >
-        {sessions.map((session) => (
-          <ChatHistoryListItem
-            key={session.id}
-            session={session}
-            isActive={currentSessionId === session.id}
-            layout={layout}
-            showTimestamps={showTimestamps}
-            disableRowLinks={disableRowLinks}
-            onSelect={() => {
-              logger.log(`Session item click: ${session.id}`);
-              onSessionSelect(session.id);
-            }}
-            onArchive={
-              onSessionArchive ? () => onSessionArchive(session.id) : undefined
-            }
-            onUnarchive={
-              onSessionUnarchive
-                ? () => onSessionUnarchive(session.id)
-                : undefined
-            }
-            onEditTitle={
-              onSessionEditTitle
-                ? () => onSessionEditTitle(session.id)
-                : undefined
-            }
-            onShare={
-              onSessionShare ? () => onSessionShare(session.id) : undefined
-            }
-            onPin={
-              onSessionPin
-                ? () => onSessionPin(session.id, !session.isPinned)
-                : undefined
-            }
-            pinnedChatsCount={pinnedChatsCount}
-            pinnedChatsLimit={pinnedChatsLimit}
-            onShowDetails={
-              onShowDetails ? () => onShowDetails(session.id) : undefined
-            }
-          />
-        ))}
-        {hasMore && (
-          <div
-            ref={loadMoreSentinelRef}
-            className="flex justify-center py-2"
-            data-ui="chat-history-load-more-sentinel"
-            aria-label={t({
-              id: "chat.history.loading_more",
-              message: "Loading...",
-            })}
-          >
-            {isLoadingMore && <SpinnerIcon size="md" aria-hidden />}
-          </div>
-        )}
-      </div>
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting) && !isLoadingMore) {
+          onLoadMore();
+        }
+      },
+      { rootMargin: "120px" }, // eslint-disable-line lingui/no-unlocalized-strings -- IntersectionObserver CSS length, not user-facing text
     );
-  },
-);
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, isLoadingMore, onLoadMore]);
+
+  if (isLoading) {
+    return <ChatHistoryListSkeleton layout={layout} />;
+  }
+
+  return (
+    <div
+      className={clsx(
+        // No overflow-y here: the sidebar wrapper (ChatHistorySidebar) owns the
+        // single scroll region; a second scroller caused rare double scrollbars.
+        "flex w-full min-w-0 flex-col gap-1",
+        className,
+      )}
+      data-ui="chat-history-list"
+    >
+      {sessions.map((session) => (
+        <ChatHistoryListItem
+          key={session.id}
+          isActive={currentSessionId === session.id}
+          layout={layout}
+          showTimestamps={showTimestamps}
+          disableRowLinks={disableRowLinks}
+          onSelect={() => {
+            logger.log(`Session item click: ${session.id}`);
+            onSessionSelect(session.id);
+          }}
+          menuOptions={chatHistoryRowMenuOptions(props, session)}
+        />
+      ))}
+      {hasMore && (
+        <div
+          ref={loadMoreSentinelRef}
+          className="flex justify-center py-2"
+          data-ui="chat-history-load-more-sentinel"
+          aria-label={t({
+            id: "chat.history.loading_more",
+            message: "Loading...",
+          })}
+        >
+          {isLoadingMore && <SpinnerIcon size="md" aria-hidden />}
+        </div>
+      )}
+    </div>
+  );
+});
 
 // eslint-disable-next-line lingui/no-unlocalized-strings
 ChatHistoryList.displayName = "ChatHistoryList";

@@ -6,6 +6,7 @@ import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationReg
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
 import { messages as enMessages } from "@/locales/en/messages.json";
+import { chatHistoryListConformanceFailures } from "@/shared/chatHistoryConformance";
 
 import {
   ChatHistoryList,
@@ -21,6 +22,7 @@ import type { Messages } from "@lingui/core";
 import type { ReactNode } from "react";
 
 const timestampCreatedAtLog = vi.hoisted(() => [] as Date[]);
+const dropdownItemsLog = vi.hoisted(() => [] as unknown[][]);
 
 vi.mock("@/components/ui", () => ({
   MessageTimestamp: ({ createdAt }: { createdAt: Date }) => {
@@ -45,20 +47,23 @@ vi.mock("../Controls/DropdownMenu", () => ({
       confirmMessage?: string;
     }>;
   }) => (
-    <div data-testid="row-menu">
-      {items.map((item) => (
-        <button
-          key={String(item.label)}
-          disabled={item.disabled}
-          type="button"
-          data-confirms={item.confirmAction ? "" : undefined}
-          data-confirm-message={item.confirmMessage}
-        >
-          {item.icon}
-          {item.label}
-        </button>
-      ))}
-    </div>
+    dropdownItemsLog.push(items),
+    (
+      <div data-testid="row-menu">
+        {items.map((item) => (
+          <button
+            key={String(item.label)}
+            disabled={item.disabled}
+            type="button"
+            data-confirms={item.confirmAction ? "" : undefined}
+            data-confirm-message={item.confirmMessage}
+          >
+            {item.icon}
+            {item.label}
+          </button>
+        ))}
+      </div>
+    )
   ),
 }));
 
@@ -326,13 +331,13 @@ describe("ChatHistoryList", () => {
 
       const { result } = renderHook(
         () =>
-          useChatHistoryRowPresentation(
-            {
-              ...sessions[0],
-              archivedAt: new Date("2024-01-05").toISOString(),
-            },
-            ["From Q3 planning"],
-          ),
+          useChatHistoryRowPresentation({
+            ...sessions[0],
+            archivedAt: new Date("2024-01-05").toISOString(),
+            provenanceKind: "delegation",
+            originChatId: "origin-1",
+            originChatTitle: "Q3 planning",
+          }),
         {
           wrapper: ({ children }) => (
             <I18nProvider i18n={i18n}>{children}</I18nProvider>
@@ -401,6 +406,31 @@ describe("ChatHistoryList", () => {
         ).not.toBeInTheDocument();
       });
 
+      it("keeps the pill ahead of the title so a long title cannot push it out", async () => {
+        const { i18n } = await import("@lingui/core");
+        render(
+          <I18nProvider i18n={i18n}>
+            <ChatHistoryList
+              sessions={[
+                {
+                  ...sessions[0],
+                  archivedAt: new Date("2024-01-05").toISOString(),
+                },
+              ]}
+              currentSessionId={null}
+              onSessionSelect={vi.fn()}
+            />
+          </I18nProvider>,
+        );
+
+        const pill = screen.getByTestId("chat-history-item-archived");
+        const title = screen.getByTitle("First chat");
+        expect(
+          pill.compareDocumentPosition(title) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+      });
+
       it("carries the attention status dot", async () => {
         useGenerationStatusStore.setState({
           statusByChatId: {
@@ -419,6 +449,44 @@ describe("ChatHistoryList", () => {
           "data-status",
           "running",
         );
+      });
+    });
+
+    // The second indicator the row already had. It rides the hook rather than
+    // the row so an override inherits it the same way it inherits the badges.
+    describe("subline", () => {
+      const renderSubline = async (session: ChatSession) => {
+        const { i18n } = await import("@lingui/core");
+        const { result } = renderHook(
+          () => useChatHistoryRowPresentation(session),
+          {
+            wrapper: ({ children }) => (
+              <I18nProvider i18n={i18n}>{children}</I18nProvider>
+            ),
+          },
+        );
+        render(<div>{result.current.subline}</div>);
+      };
+
+      it("carries the delegated run's origin", async () => {
+        await renderSubline({
+          ...sessions[0],
+          provenanceKind: "delegation",
+          originChatId: "origin-1",
+          originChatTitle: "Q3 planning",
+        });
+
+        expect(
+          screen.getByTestId("chat-history-item-run-origin"),
+        ).toHaveTextContent("From Q3 planning");
+      });
+
+      it("is empty for an ordinary chat", async () => {
+        await renderSubline(sessions[0]);
+
+        expect(
+          screen.queryByTestId("chat-history-item-run-origin"),
+        ).not.toBeInTheDocument();
       });
     });
   });
@@ -527,6 +595,9 @@ describe("ChatHistoryList", () => {
       expect(atLimit[0].disabled).toBe(true);
 
       const readOnly = await renderMenu({ ...sessions[0], canEdit: false });
+      // The array first: `every` on an empty one passes, so hiding the items
+      // instead of disabling them would slip through the flag check alone.
+      expect(labels(readOnly)).toEqual(["Pin", "Share", "Rename", "Archive"]);
       expect(
         readOnly
           .filter((item) => item.label !== "Archive")
@@ -545,6 +616,22 @@ describe("ChatHistoryList", () => {
         ),
       ).toEqual(["Archive"]);
     });
+  });
+
+  // The host runs its own contract suite so the cases cannot describe only
+  // what this list happens to do; each kit runs the same export against its
+  // override.
+  it("satisfies the row conformance suite it publishes to kits", async () => {
+    const { i18n } = await import("@lingui/core");
+
+    expect(
+      chatHistoryListConformanceFailures(ChatHistoryList, {
+        render: (element) =>
+          render(<I18nProvider i18n={i18n}>{element}</I18nProvider>),
+        openRowMenu: () =>
+          (dropdownItemsLog.at(-1) ?? []) as DropdownMenuItem[],
+      }),
+    ).toEqual([]);
   });
 
   describe("archive confirmation", () => {

@@ -23,6 +23,8 @@
  * ```
  */
 
+import { ERATO_SHARED_SURFACE_MINOR } from "@/shared/surfaceVersion";
+
 import type { AssistantWelcomeScreenProps } from "@/components/ui/Assistant/AssistantWelcomeScreen";
 import type { ChatHistoryListProps } from "@/components/ui/Chat/ChatHistoryList";
 import type { ChatMessageProps } from "@/components/ui/Chat/ChatMessage";
@@ -271,6 +273,12 @@ export type ComponentKitComponentRegistration = {
 export interface ComponentKitRegistration {
   name: string;
   components: ComponentKitComponentRegistration[];
+  /**
+   * The `ERATO_SHARED_SURFACE_MINOR` the kit was built against. Declaring it
+   * turns a host that is too old to satisfy the kit into one loud error here
+   * instead of an override that silently misbehaves.
+   */
+  requiresSharedSurfaceMinor?: number;
 }
 
 declare global {
@@ -353,6 +361,18 @@ export const componentRegistry: ComponentRegistry = buildComponentRegistry(
 export const applyComponentKitRegistrations = (): void => {
   if (typeof window === "undefined") {
     return;
+  }
+  // Only reaches a kit whose module linked: one that named a value this host
+  // does not export never evaluates, so nothing of it is here to check.
+  for (const kit of window.ERATO_COMPONENT_KITS ?? []) {
+    if (
+      kit.requiresSharedSurfaceMinor !== undefined &&
+      kit.requiresSharedSurfaceMinor > ERATO_SHARED_SURFACE_MINOR
+    ) {
+      console.error(
+        `component kit "${kit.name}" needs shared surface 1.${kit.requiresSharedSurfaceMinor}, host ships 1.${ERATO_SHARED_SURFACE_MINOR}`,
+      );
+    }
   }
   Object.assign(
     componentRegistry,
