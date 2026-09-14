@@ -183,13 +183,17 @@ vi.mock("@/hooks/chat/useMessageFeedback", () => ({
   }),
 }));
 
+const dropzoneCalls = vi.hoisted(() => [] as { disabled?: boolean }[]);
 vi.mock("@/hooks/files/useConversationDropzone", () => ({
-  useConversationDropzone: () => ({
-    getRootProps: () => ({}),
-    getInputProps: () => ({}),
-    isDragActive: false,
-    isDragAccept: false,
-  }),
+  useConversationDropzone: (options: { disabled?: boolean }) => {
+    dropzoneCalls.push(options);
+    return {
+      getRootProps: () => ({}),
+      getInputProps: () => ({}),
+      isDragActive: false,
+      isDragAccept: false,
+    };
+  },
 }));
 
 vi.mock("@/hooks/files/useFileUploadWithTokenCheck", () => ({
@@ -524,6 +528,7 @@ describe("Chat empty-state shell", () => {
     testState.emptyStateLayout = "centered";
     testState.showUsageAdvisory = true;
     testState.sidebar = { isOpen: false, collapsedMode: "hidden" };
+    dropzoneCalls.length = 0;
     useGenerationStatusStore.getState().reset();
     mockRuns([]);
     i18n.load("en", enMessages as unknown as Messages);
@@ -549,6 +554,19 @@ describe("Chat empty-state shell", () => {
     expect(shell(container, "chat-empty-state-centered-shell")).toBeNull();
     expect(screen.getByTestId("welcome-stub")).toBeInTheDocument();
     expect(screen.queryByTestId("message-list-stub")).toBeNull();
+  });
+
+  it("closes the drop target with the composer, not only the textarea", () => {
+    const { rerenderChat } = renderChat();
+    expect(dropzoneCalls.at(-1)?.disabled).toBe(false);
+
+    rerenderChat({ composerDisabled: true });
+
+    expect(screen.getByTestId("chat-input-stub")).toHaveAttribute(
+      "data-disabled",
+      "true",
+    );
+    expect(dropzoneCalls.at(-1)?.disabled).toBe(true);
   });
 
   it("drops the centered layout while the composer is closed, keeping the strip", () => {
