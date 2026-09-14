@@ -189,7 +189,9 @@ describe("McpToolApprovalCard", () => {
 
     expect(screen.queryByRole("button", { name: "Allow once" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Deny" })).toBeNull();
-    expect(screen.getByText(/archived and no longer takes messages/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/archived and no longer takes messages/),
+    ).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

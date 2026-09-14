@@ -2,7 +2,7 @@ import { t } from "@lingui/core/macro";
 import { useContext, useEffect, useState } from "react";
 
 import { getIdToken } from "@/auth/tokenStore";
-import { archivedNoticeText } from "@/components/ui/Chat/ArchivedChatNotice";
+import { archivedNoticeText } from "@/components/ui/Chat/chatArchiveActions";
 import { ToolCallInput } from "@/components/ui/ToolCall";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";

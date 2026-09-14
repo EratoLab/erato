@@ -16,6 +16,7 @@ export { AssistantWelcomeUpper } from "@/components/ui/Assistant/AssistantWelcom
 export type { AssistantWelcomeScreenProps } from "@/components/ui/Assistant/AssistantWelcomeScreen";
 export { ArchivedChatPill } from "@/components/ui/Chat/chatArchiveActions";
 export { archivedChatLabel } from "@/components/ui/Chat/chatArchiveActions";
+export { archivedNoticeText } from "@/components/ui/Chat/chatArchiveActions";
 export { buildArchiveMenuItems } from "@/components/ui/Chat/chatArchiveActions";
 export { unarchiveActionLabel } from "@/components/ui/Chat/chatArchiveActions";
 export { ChatAttentionStatusDot } from "@/components/ui/Chat/ChatAttentionStatusDot";

@@ -318,7 +318,8 @@ export const Chat = ({
   );
   // Edit, regenerate and Share are writes, so they follow the composer's lock:
   // a run its delegate is still writing refuses them exactly as it refuses a send.
-  const canEditForCurrentChat = useChatCanEdit(currentChatId) && !composerDisabled;
+  const canEditForCurrentChat =
+    useChatCanEdit(currentChatId) && !composerDisabled;
   const modelSwitches = useModelSwitches(
     messages,
     messageOrder,

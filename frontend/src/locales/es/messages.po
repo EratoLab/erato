@@ -1451,7 +1451,7 @@ msgid "chat.ai_usage_advisory"
 msgstr "Está interactuando con un chatbot de IA. Las respuestas generadas pueden contener errores fácticos y deben verificarse antes de usarse."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ArchivedChatNotice.tsx
+#: src/components/ui/Chat/chatArchiveActions.tsx
 msgid "chat.archived.notice"
 msgstr "Este chat está archivado y ya no acepta mensajes."
 
@@ -1516,7 +1516,7 @@ msgid "chat.delegatedRun.expectedOutput"
 msgstr "Resultado esperado"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ArchivedChatNotice.tsx
+#: src/components/ui/Chat/chatArchiveActions.tsx
 msgid "chat.delegatedRun.state.archived"
 msgstr "Esta ejecución está archivada y ya no acepta mensajes."
 

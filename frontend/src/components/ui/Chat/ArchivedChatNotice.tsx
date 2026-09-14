@@ -1,10 +1,8 @@
-import { t } from "@lingui/core/macro";
-
 import { useChatContext } from "@/providers/ChatProvider";
 
 import { Button } from "../Controls/Button";
 import { UndoIcon } from "../icons";
-import { unarchiveActionLabel } from "./chatArchiveActions";
+import { archivedNoticeText, unarchiveActionLabel } from "./chatArchiveActions";
 import { notifyUnarchiveFailed } from "./unarchiveFeedback";
 
 export interface ArchivedChatNoticeProps {
@@ -12,18 +10,6 @@ export interface ArchivedChatNoticeProps {
   /** A run is archived and restored by the chat that dispatched it, so it says so and withholds the way back. */
   variant?: "chat" | "run";
 }
-
-// No retention period in the copy: the cleanup setting reaches no API.
-export const archivedNoticeText = (variant: "chat" | "run" = "chat") =>
-  variant === "run"
-    ? t({
-        id: "chat.delegatedRun.state.archived",
-        message: "This run is archived and no longer takes messages.",
-      })
-    : t({
-        id: "chat.archived.notice",
-        message: "This chat is archived and no longer takes messages.",
-      });
 
 export const ArchivedChatNotice = ({
   chatId,
@@ -36,7 +22,9 @@ export const ArchivedChatNotice = ({
       className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs"
       data-testid="archived-chat-notice"
     >
-      <p className="min-w-0 text-theme-fg-muted">{archivedNoticeText(variant)}</p>
+      <p className="min-w-0 text-theme-fg-muted">
+        {archivedNoticeText(variant)}
+      </p>
       {variant === "chat" ? (
         <Button
           type="button"

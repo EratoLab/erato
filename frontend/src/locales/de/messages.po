@@ -1451,7 +1451,7 @@ msgid "chat.ai_usage_advisory"
 msgstr "Sie interagieren mit einem KI-Chatbot. Generierte Antworten können sachliche Fehler enthalten und sollten vor der Verwendung überprüft werden."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ArchivedChatNotice.tsx
+#: src/components/ui/Chat/chatArchiveActions.tsx
 msgid "chat.archived.notice"
 msgstr "Dieser Chat ist archiviert und nimmt keine Nachrichten mehr an."
 
@@ -1516,7 +1516,7 @@ msgid "chat.delegatedRun.expectedOutput"
 msgstr "Erwartetes Ergebnis"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ArchivedChatNotice.tsx
+#: src/components/ui/Chat/chatArchiveActions.tsx
 msgid "chat.delegatedRun.state.archived"
 msgstr "Dieser Lauf ist archiviert und nimmt keine Nachrichten mehr an."
 

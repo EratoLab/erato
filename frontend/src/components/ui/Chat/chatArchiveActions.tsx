@@ -11,6 +11,18 @@ export const archivedChatLabel = () =>
 export const unarchiveActionLabel = () =>
   t({ id: "chat.history.menu.unarchive", message: "Unarchive" });
 
+// No retention period in the copy: the cleanup setting reaches no API.
+export const archivedNoticeText = (variant: "chat" | "run" = "chat") =>
+  variant === "run"
+    ? t({
+        id: "chat.delegatedRun.state.archived",
+        message: "This run is archived and no longer takes messages.",
+      })
+    : t({
+        id: "chat.archived.notice",
+        message: "This chat is archived and no longer takes messages.",
+      });
+
 export const ArchivedChatPill = ({ label }: { label: string }) => (
   <span
     className="pill-geometry inline-flex shrink-0 items-center border border-theme-border bg-theme-bg-secondary px-2 py-0.5 text-xs font-medium text-theme-fg-muted"
