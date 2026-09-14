@@ -279,9 +279,8 @@ export function useUnarchiveChat() {
       // which the returning generation's own seed would then lose against.
       useGenerationStatusStore.getState().clearStatus(chatId);
 
-      // Settle in-flight list fetches first: a variant the invalidation does
-      // not refetch (a disabled one) would otherwise drop its own stale flag
-      // when its earlier fetch resolves, and serve pre-unarchive rows.
+      // Settle in-flight list fetches: a variant disabled mid-fetch is marked
+      // stale but never refetched, and its late resolve clears that flag.
       await queryClient.cancelQueries({
         queryKey: recentChatsQuery({}).queryKey,
       });

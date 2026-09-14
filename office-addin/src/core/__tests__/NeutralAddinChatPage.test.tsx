@@ -395,6 +395,22 @@ describe("NeutralAddinChatPage host boundary", () => {
     expect(spies.clearNewlyCreatedChatId).toHaveBeenCalled();
   });
 
+  it("refreshes the archived chat's detail after archiving", async () => {
+    const invalidateQueries = vi.spyOn(
+      QueryClient.prototype,
+      "invalidateQueries",
+    );
+    renderPage();
+
+    await act(async () => {
+      await spies.chatContextValue.current?.archiveChat("chat-1");
+    });
+
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["chat-detail"],
+    });
+  });
+
   it("hands the session's chat to the delegated-runs bar and opens a run in-pane", () => {
     renderPage();
 

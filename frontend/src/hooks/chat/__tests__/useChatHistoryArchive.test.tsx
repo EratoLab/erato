@@ -342,7 +342,13 @@ describe("useChatHistory unarchiveChat", () => {
     ).toBeUndefined();
   });
 
-  it("touches no cache when the mutation fails", async () => {
+  it("touches no cache and no status marker when the mutation fails", async () => {
+    const parked = {
+      kind: "action_required",
+      startedAt: "2026-09-01T10:00:00.000Z",
+      localSeenAt: 0,
+    } as const;
+    useGenerationStatusStore.setState({ statusByChatId: { chat5: parked } });
     mockUnarchiveMutation.mockRejectedValueOnce(new Error("boom"));
     const cancelSpy = vi.spyOn(queryClient, "cancelQueries");
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
@@ -356,5 +362,8 @@ describe("useChatHistory unarchiveChat", () => {
 
     expect(cancelSpy).not.toHaveBeenCalled();
     expect(invalidateSpy).not.toHaveBeenCalled();
+    expect(useGenerationStatusStore.getState().statusByChatId.chat5).toEqual(
+      parked,
+    );
   });
 });

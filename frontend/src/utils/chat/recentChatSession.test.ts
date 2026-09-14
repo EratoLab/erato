@@ -81,6 +81,10 @@ describe("mapRecentChatToSession", () => {
     expect(session.metadata?.fileCount).toBe(0);
   });
 
+  it("leaves the archived timestamp unset for a chat that is not archived", () => {
+    expect(mapRecentChatToSession(recentChat("c1")).archivedAt).toBeUndefined();
+  });
+
   it("carries the provenance envelope onto the session row model", () => {
     const session = mapRecentChatToSession({
       ...recentChat("c1"),
