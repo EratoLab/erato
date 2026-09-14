@@ -302,16 +302,18 @@ test(
       );
 
       const row = sidebar.locator(`[data-chat-id="${chatId}"]`);
+      const rowLink = sidebar.locator(`a:has([data-chat-id="${chatId}"])`);
       await expect(row).toBeVisible({ timeout: 5000 });
       // The turn is parked, so the removal below provably happens inside the
       // window where only local state accounts for the row.
       await expect(
         page.getByTestId("chat-input-stop-generation"),
       ).toBeVisible();
+      // The confirm step below exists only while the row is generating.
+      await expect(rowLink).toHaveAttribute("aria-label", /, Running$/);
 
       // Archive the row while the list still cannot account for it, so nothing
-      // but local state can take it away again. The parked turn leaves the row
-      // generating, which is the case that still confirms.
+      // but local state can take it away again.
       await archiveChatFromRow(page, row, { confirm: true });
 
       await expect(row).toHaveCount(0);

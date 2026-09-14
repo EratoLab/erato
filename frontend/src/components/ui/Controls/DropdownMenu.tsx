@@ -41,7 +41,6 @@ export interface DropdownMenuItem {
   confirmMessage?: string;
   confirmButtonVariant?: ButtonVariant;
   checked?: boolean;
-  /** `data-testid` on the row, for a caller whose label is translated. */
   testId?: string;
   /**
    * Skip the close delay. Required of any row that opens a dialog: the delayed

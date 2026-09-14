@@ -251,8 +251,6 @@ export function AddinHistoryDrawerCore({
     [archiveChat],
   );
 
-  // Nothing about the row changes when unarchiving fails, so the toast is the
-  // only signal — and the rejection would otherwise escape unhandled.
   const handleUnarchive = useCallback(
     (sessionId: string) => {
       unarchiveChat(sessionId).catch(() => {
