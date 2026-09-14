@@ -1,5 +1,5 @@
 import { skipToken, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   chatDetailQuery,
@@ -53,22 +53,29 @@ export function useChatMcpWriteTools({
   const { mutateAsync: updateChat, isPending: isSaving } = useUpdateChat();
 
   const [newChatEnabled, setNewChatEnabled] = useState(true);
-  // The value shown between the user's flip and the server's confirmation;
-  // cleared once the fetched row carries the answer.
+  // The value shown from the user's flip until the row is next fetched or
+  // the flip fails; the cache is patched with the same value on success.
   const [optimisticEnabled, setOptimisticEnabled] = useState<boolean | null>(
     null,
   );
 
+  // The local value outlives the null-to-id rename of a new chat on purpose:
+  // it seeded the row, so it is the right thing to show until the row is
+  // fetched. A switch between two existing chats starts from the default.
+  const previousChatIdRef = useRef(chatId);
   useEffect(() => {
-    if (!chatId) {
+    const previousChatId = previousChatIdRef.current;
+    previousChatIdRef.current = chatId;
+    if (!chatId || previousChatId) {
       setNewChatEnabled(true);
     }
     setOptimisticEnabled(null);
   }, [chatId]);
 
-  const serverEnabled = chatDetail?.mcp_write_tools_enabled ?? true;
   const enabled = chatId
-    ? (optimisticEnabled ?? serverEnabled)
+    ? (optimisticEnabled ??
+      chatDetail?.mcp_write_tools_enabled ??
+      newChatEnabled)
     : newChatEnabled;
 
   const toggle = useCallback(() => {

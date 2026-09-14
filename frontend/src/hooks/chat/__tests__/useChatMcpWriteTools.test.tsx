@@ -108,6 +108,22 @@ describe("useChatMcpWriteTools", () => {
     );
   });
 
+  it("keeps showing the seeded value while the new chat's row is still loading", () => {
+    const { result, rerender } = renderWriteTools(null);
+
+    act(() => result.current.toggle());
+    expect(result.current.enabled).toBe(false);
+
+    // The chat got its id from the first send; the detail is not in yet.
+    rerender({ id: "chat-1" });
+    expect(result.current.enabled).toBe(false);
+    expect(result.current.newChatSeed).toBeUndefined();
+
+    mockUseChatDetail.mockReturnValue({ data: chatDetail(false) });
+    rerender({ id: "chat-1" });
+    expect(result.current.enabled).toBe(false);
+  });
+
   it("starts a fresh new chat with writes on again after leaving one that was off", () => {
     const { result, rerender } = renderWriteTools(null);
 
@@ -122,5 +138,16 @@ describe("useChatMcpWriteTools", () => {
     rerender({ id: null });
     expect(result.current.enabled).toBe(true);
     expect(result.current.newChatSeed).toBeUndefined();
+  });
+
+  it("starts from the default when switching between two existing chats", () => {
+    const { result, rerender } = renderWriteTools(null);
+
+    act(() => result.current.toggle());
+    rerender({ id: "chat-1" });
+    expect(result.current.enabled).toBe(false);
+
+    rerender({ id: "chat-2" });
+    expect(result.current.enabled).toBe(true);
   });
 });

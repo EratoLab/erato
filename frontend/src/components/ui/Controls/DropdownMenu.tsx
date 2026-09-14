@@ -135,7 +135,9 @@ const MenuItem = memo(
         {item.description ? (
           <>
             <span className="block">{item.label}</span>
-            <span className="block text-xs font-normal text-theme-fg-muted">
+            {/* A description is a sentence, so it wraps even in a no-wrap
+                menu; the cap keeps a wordy one from widening every row. */}
+            <span className="block max-w-[36ch] whitespace-normal text-xs font-normal text-theme-fg-muted">
               {item.description}
             </span>
           </>
