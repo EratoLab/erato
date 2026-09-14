@@ -279,6 +279,15 @@ export function useUnarchiveChat() {
       // which the returning generation's own seed would then lose against.
       useGenerationStatusStore.getState().clearStatus(chatId);
 
+      // Settle in-flight list fetches first: a variant the invalidation does
+      // not refetch (a disabled one) would otherwise drop its own stale flag
+      // when its earlier fetch resolves, and serve pre-unarchive rows.
+      await queryClient.cancelQueries({
+        queryKey: recentChatsQuery({}).queryKey,
+      });
+
+      // Awaited where archiving is not: no optimistic insert puts the row
+      // back, so it only returns once the lists have refetched.
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: recentChatsQuery({}).queryKey,

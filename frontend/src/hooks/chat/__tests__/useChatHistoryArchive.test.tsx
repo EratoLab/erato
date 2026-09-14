@@ -265,6 +265,7 @@ describe("useChatHistory archiveChat optimistic removal", () => {
 describe("useChatHistory unarchiveChat", () => {
   it("refetches the lists instead of editing cached pages in place", async () => {
     const setQueriesDataSpy = vi.spyOn(queryClient, "setQueriesData");
+    const cancelSpy = vi.spyOn(queryClient, "cancelQueries");
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
     const { result } = renderHook(() => useChatHistory(), { wrapper });
 
@@ -276,6 +277,7 @@ describe("useChatHistory unarchiveChat", () => {
       pathParams: { chatId: "chat5" },
     });
     expect(setQueriesDataSpy).not.toHaveBeenCalled();
+    expect(cancelSpy).toHaveBeenCalledWith({ queryKey: ["recentChats"] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["recentChats"] });
   });
 
@@ -314,6 +316,7 @@ describe("useChatHistory unarchiveChat", () => {
 
   it("touches no cache when the mutation fails", async () => {
     mockUnarchiveMutation.mockRejectedValueOnce(new Error("boom"));
+    const cancelSpy = vi.spyOn(queryClient, "cancelQueries");
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
     const { result } = renderHook(() => useChatHistory(), { wrapper });
 
@@ -323,6 +326,7 @@ describe("useChatHistory unarchiveChat", () => {
       );
     });
 
+    expect(cancelSpy).not.toHaveBeenCalled();
     expect(invalidateSpy).not.toHaveBeenCalled();
   });
 });
