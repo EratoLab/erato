@@ -66,11 +66,8 @@ export function OutlookStartViewSwitcher({
   const inChat = view === "chat";
   return (
     <div className="relative flex size-full min-w-0 flex-col">
-      {/* A view switcher, not a disclosure: no aria-expanded, and its glyph
-          swaps (mail ↔ chat) instead of flipping, so SidebarToggle's
-          expanded/rotation contract has nothing to say about it. It borrows
-          only the floating skin, which carries the opaque base these
-          controls need outside [data-ui="sidebar"]. */}
+      {/* A view switcher, not a disclosure — no aria-expanded, and the glyph
+          swaps rather than flips — so it borrows the skin, not SidebarToggle. */}
       <Button
         variant="sidebar-icon"
         icon={inChat ? <MailIcon /> : <ChatBubbleIcon />}

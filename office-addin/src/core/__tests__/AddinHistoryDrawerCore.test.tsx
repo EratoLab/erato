@@ -111,8 +111,7 @@ vi.mock("@erato/frontend/library", () => ({
   NoFilterMatchesRow: () => <p data-testid="chat-history-no-filter-matches" />,
   sidebarInsetClassName: "sidebar-inset-geometry",
   SettingsIcon: () => null,
-  // Mirrors the primitive's own default hook so the header/footer lookups
-  // below assert what the real band emits.
+  // Mirrors the primitive's default hook, which the lookups below assert on.
   SidebarBand: ({
     edge,
     flush: _flush,
@@ -157,9 +156,7 @@ vi.mock("@erato/frontend/library", () => ({
       {label}
     </button>
   ),
-  // `ref` reaches the DOM node as a plain prop (React 19), which the
-  // focus-return assertion below depends on: the drawer focuses the close
-  // control through that ref.
+  // `ref` is a plain prop in React 19; the focus-return assertion needs it.
   SidebarToggle: ({
     label,
     expanded,
@@ -277,11 +274,8 @@ describe("AddinHistoryDrawerCore", () => {
     expect(screen.queryByTestId("addin-history-drawer")).toBeNull();
   });
 
-  // The bands and the close control come from the shared sidebar primitives,
-  // so the drawer only supplies placement — which is all this file can check.
-  // Where the flip lands is the primitive's own contract and is pinned in
-  // SidebarToggle.test.tsx against the real Button; asserting it here would
-  // only interrogate the stub below.
+  // The drawer only supplies placement — the rest is the primitive's contract,
+  // pinned in SidebarToggle.test.tsx against the real Button.
   it("builds its chrome from the sidebar band primitives", () => {
     renderDrawer();
     const panel = screen.getByTestId("addin-history-drawer");

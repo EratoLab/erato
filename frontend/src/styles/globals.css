@@ -1124,26 +1124,17 @@ body {
     var(--theme-spacing-shell-compact-padding-x);
 }
 
-/* A band whose single child carries the sidebar inset and the row height
-   itself (the add-in drawer's Settings row): the band's own padding has to
-   lose. Source order is what decides it — this rule and .sidebar-section-skin
-   are both specificity 0,1,0 and this one comes later, so no `!important` is
-   needed to zero the padding. Callers pair it with dropping `flex` and
-   .sidebar-band-geometry: inside a flex row that lone child, which has no
-   width class, shrinks to its content and its hover surface stops spanning
-   the drawer. */
+/* For a band whose single child carries the inset and the row height itself.
+   Must stay AFTER .sidebar-section-skin: both are specificity 0,1,0, so source
+   order alone is what zeroes the padding without an `!important`. */
 .sidebar-band-flush {
   padding: 0;
 }
 
-/* The floating and framed sidebar toggles. The opaque base is the whole
-   point: a shipped customer theme gives --theme-shell-sidebar 0.72 alpha and
-   blurs it with a backdrop-filter scoped to [data-ui="sidebar"]. These
-   controls sit OUTSIDE that element, so they inherit the translucent token
-   without the blur and paint the conversation straight through themselves.
-   background-color lays down an opaque shell base and the gradient paints the
-   (possibly translucent) sidebar token over it, so the control reads solid at
-   any alpha while still taking the theme's own colour. */
+/* The floating and framed sidebar toggles. A customer theme gives
+   --theme-shell-sidebar alpha and blurs it inside [data-ui="sidebar"]; these
+   controls sit outside it, so they would paint the conversation through
+   themselves. The gradient lays the sidebar tone over an opaque base. */
 .floating-control-skin {
   background-color: var(--theme-shell-app, var(--theme-bg-primary));
   background-image: linear-gradient(

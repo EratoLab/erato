@@ -1688,7 +1688,7 @@ msgstr "Fehler"
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
 msgid "chat.history.generation.expandWithAttention"
-msgstr ""
+msgstr "{attentionCount, plural, one {Seitenleiste erweitern, # Chat erfordert Aufmerksamkeit} other {Seitenleiste erweitern, # Chats erfordern Aufmerksamkeit}}"
 
 #. js-lingui-explicit-id
 #: src/utils/chatHistoryGrouping.ts

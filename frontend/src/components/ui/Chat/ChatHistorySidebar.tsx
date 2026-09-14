@@ -80,21 +80,10 @@ const ASSISTANTS_SECTION_EXPANDED_STORAGE_KEY =
 const GENERATION_ANNOUNCE_DEBOUNCE_MS = 1000;
 
 /**
- * The expand control, wherever the sidebar is collapsed: the slim rail's
- * header (bare, or behind the logo face) and the hidden mode's floating
- * trigger.
- *
- * It reads the attention count here rather than taking it as a prop so a
- * count change repaints this one button instead of the whole sidebar — the
- * isolation the standalone badge component used to provide.
- *
- * The counted name keeps the bare phrase as a literal PREFIX on purpose:
- * eight e2e call sites look this control up by accessible name, and
- * Playwright matches names case-insensitively by SUBSTRING, so
- * "expand sidebar, 3 chats need attention" still resolves while
- * "3 chats need attention — expand sidebar" would break all of them. The
- * count reaches the name at all because the badge itself is aria-hidden, so
- * the control has to say the number the badge only draws.
+ * The expand control, wherever the sidebar is collapsed. It reads the
+ * attention count itself so a count change repaints this button rather than
+ * the whole sidebar, and says the number aloud because the badge that draws
+ * it is aria-hidden.
  */
 const SidebarExpandToggle = ({
   surface,
@@ -187,11 +176,8 @@ const SidebarLogo = memo<{
   }
 
   return (
-    // The face is the toggle's own children, so the logo stays a descendant
-    // of the header's first <button> (an e2e spec locates it there). The
-    // hover swap is CSS rather than state because the primitive passes no
-    // pointer handlers through; the group is NAMED so only this control's
-    // hover drives it, never some ancestor that happens to be a `group`.
+    // A named group: the primitive passes no pointer handlers through, and an
+    // unnamed one would fire on any ancestor that happens to be a `group`.
     <SidebarExpandToggle
       surface="flush"
       onToggle={onToggle}
@@ -204,11 +190,8 @@ const SidebarLogo = memo<{
         onError={() => setImgFailed(true)}
       />
       <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/logo:opacity-100">
-        {/* aria-hidden is load-bearing, not decoration. The sidebar geometry
-            probe takes the button's first [aria-hidden="true"] node as the
-            glyph to align the rail against, and the attention badge is
-            aria-hidden as well. Without this the badge would win that lookup
-            whenever a generation is running. */}
+        {/* Load-bearing: the geometry probe aligns the rail on the button's
+            first aria-hidden node, and the badge is aria-hidden too. */}
         <SidebarToggleIcon aria-hidden="true" className="size-5" />
       </div>
     </SidebarExpandToggle>
@@ -230,8 +213,6 @@ const ChatHistoryHeader = memo<{
       {/* In slim mode, show logo with hover toggle or just toggle button */}
       {isSlimMode && (
         <div className="flex w-full items-center">
-          {/* No positioned wrapper: the attention badge rides inside the
-              button, which carries `relative` itself. */}
           {sidebarLogoPath ? (
             <SidebarLogo
               logoPath={sidebarLogoPath}
@@ -256,8 +237,6 @@ const ChatHistoryHeader = memo<{
             collapsed ? "pointer-events-none opacity-0" : "opacity-100",
           )}
         >
-          {/* The flip lives on the glyph, not the button: the primitive
-              derives it from `expanded`. */}
           <SidebarToggle
             surface="flush"
             expanded
@@ -383,8 +362,6 @@ const ChatHistoryFooter = memo<{
   onSignOut: () => void;
   isSlimMode?: boolean;
 }>(({ userProfile, onSignOut }) => (
-  // `items-center` is this site's layout, not band geometry, so it stays a
-  // caller utility.
   <SidebarBand edge="footer" className="items-center">
     {/* The trigger's rail-column margin holds in both modes, so the slim
         rail needs no extra centering here. */}
@@ -745,10 +722,8 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
           >
             {generationAnnouncement}
           </div>
-          {/* Absolutely positioned toggle button when collapsed in hidden
-              mode. The placement stays here — the add-in's floating trigger
-              disagrees about the z-index — while the opaque surface comes
-              from the `floating` surface's own recipe. */}
+          {/* Placement stays here: the add-in's floating trigger disagrees
+              about the z-index. */}
           {isHiddenMode && (
             <SidebarExpandToggle
               surface="floating"

@@ -136,9 +136,7 @@ describe("ChatHistorySidebar", () => {
     for (const property of ["background-color", "box-shadow"]) {
       expect(sidebar?.getAttribute("style") ?? "").not.toContain(property);
     }
-    // Both bands come off one primitive: the shared height formula is what
-    // keeps header and footer within a pixel of each other, and it only
-    // works while nothing paints or sizes them inline.
+    // One primitive, one height formula — and only while nothing sizes it inline.
     for (const edge of ["sidebar-header", "sidebar-footer"]) {
       const band = container.querySelector(`[data-ui="${edge}"]`);
       expect(band).toHaveClass("sidebar-section-skin", "sidebar-band-geometry");
@@ -165,16 +163,11 @@ describe("ChatHistorySidebar", () => {
 
     const toggle = screen.getByRole("button", { name: "collapse sidebar" });
 
-    // Rotating the button would turn its badge upside down and move it from
-    // the top-right corner to the bottom-left one, so the flip stays on the
-    // glyph span.
     const glyph = toggle.querySelector('[aria-hidden="true"]');
     expect(glyph).toHaveClass("rotate-180");
     expect(glyph?.querySelector("svg")).not.toBeNull();
     expect(toggle).not.toHaveClass("rotate-180");
 
-    // The shape enum rides data-surface; data-variant stays the themed
-    // "sidebar-icon" both shipped customer themes key their rules on.
     expect(toggle).toHaveClass("sidebar-icon-col-geometry");
     expect(toggle).toHaveAttribute("data-surface", "flush");
     expect(toggle).toHaveAttribute("data-variant", "sidebar-icon");
@@ -201,8 +194,7 @@ describe("ChatHistorySidebar", () => {
 
     const toggle = screen.getByRole("button", { name: "expand sidebar" });
 
-    // It floats over the conversation, outside the sidebar element a theme
-    // may blur — hence the opaque class recipe, and no inline surface.
+    // Outside the element a theme blurs, so the surface must be opaque.
     expect(container.querySelector('[data-ui="sidebar"]')).not.toContainElement(
       toggle,
     );
@@ -215,8 +207,7 @@ describe("ChatHistorySidebar", () => {
       "z-30",
     );
     expect(toggle).not.toHaveAttribute("style");
-    // The caller positions it, so the primitive must not add `relative` —
-    // Tailwind emits it after `.absolute` and it would win.
+    // The caller positions it, so the primitive must not add `relative`.
     expect(toggle).not.toHaveClass("relative");
     expect(toggle).toHaveAttribute("data-surface", "floating");
     expect(toggle).toHaveAttribute("data-variant", "sidebar-icon");
@@ -280,8 +271,7 @@ describe("ChatHistorySidebar", () => {
       '[data-ui="sidebar-search-item"]',
     );
 
-    // Rail-column geometry: the same token-derived column in both modes, so
-    // the icon does not move when the width animates.
+    // The same token-derived column in both modes, so the icon does not move.
     expect(searchItem).toHaveClass(
       "sidebar-content-col-geometry",
       "py-2",
@@ -291,9 +281,7 @@ describe("ChatHistorySidebar", () => {
     expect(searchItem).not.toHaveClass("justify-center");
     expect(searchItem).not.toHaveClass("px-3");
 
-    // The rail-column margin is what puts the toggle's box on the same
-    // centerline, so it has to reach the button element itself — a wrapper
-    // carrying it would centre nothing.
+    // The margin has to reach the button itself; a wrapper would centre nothing.
     const toggle = screen.getByRole("button", { name: "expand sidebar" });
     expect(toggle).toHaveClass("sidebar-icon-col-geometry");
     expect(toggle).not.toHaveAttribute("style");
@@ -331,9 +319,8 @@ describe("ChatHistorySidebar", () => {
       </MemoryRouter>,
     );
 
-    // The badge is aria-hidden, so the count only reaches assistive tech
-    // through the control's own name — and the bare phrase has to stay a
-    // literal prefix, because e2e looks the toggle up by substring.
+    // The badge is aria-hidden, so the name carries the count — bare phrase
+    // first, because e2e looks the toggle up by substring.
     const toggle = screen.getByRole("button", {
       name: "expand sidebar, 1 chat needs attention",
     });
@@ -341,13 +328,11 @@ describe("ChatHistorySidebar", () => {
     expect(badge).toHaveTextContent("1");
     expect(toggle).toContainElement(badge);
 
-    // The geometry probe measures the first aria-hidden node in the button,
-    // so the badge must land after the glyph span, never before it.
+    // The probe measures the first aria-hidden node, so the badge comes last.
     const firstHidden = toggle.querySelector('[aria-hidden="true"]');
     expect(firstHidden).not.toBe(badge);
     expect(firstHidden?.querySelector("svg")).not.toBeNull();
 
-    // Nothing wraps the button any more, so it is the badge's own anchor.
     expect(toggle).toHaveClass("relative");
   });
 

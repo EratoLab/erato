@@ -5,8 +5,7 @@ import { SidebarToggle } from "./SidebarToggle";
 
 import type { SidebarToggleProps } from "./SidebarToggle";
 
-// Container-scoped rather than `screen`-scoped: several cases render two
-// toggles side by side to compare them, and both carry the same roles.
+// Container-scoped: some cases render two toggles to compare them.
 const renderToggle = (props: Partial<SidebarToggleProps> = {}) => {
   const { container } = render(
     <SidebarToggle
@@ -21,10 +20,8 @@ const renderToggle = (props: Partial<SidebarToggleProps> = {}) => {
 };
 
 describe("SidebarToggle", () => {
-  // The silent one. Button writes data-variant={variant} BEFORE spreading the
-  // rest of its props, so any prop named data-variant would erase
-  // "sidebar-icon" — the attribute both shipped customer themes key their
-  // sidebar-control rules on. The shape enum therefore rides data-surface.
+  // Button writes data-variant before spreading props, so a data-variant here
+  // would erase the "sidebar-icon" both customer themes key their rules on.
   it("keeps the sidebar-icon variant channel and reports its shape separately", () => {
     for (const surface of ["floating", "flush", "framed"] as const) {
       const toggle = renderToggle({ surface });
@@ -35,8 +32,7 @@ describe("SidebarToggle", () => {
     }
   });
 
-  // The skin only sets border-color; the width has to come with it or the
-  // frame silently disappears from the standalone triggers.
+  // The skin sets border-color only; without a width the frame disappears.
   it("paints only the standalone surfaces", () => {
     expect(renderToggle({ surface: "floating" })).toHaveClass(
       "floating-control-skin",
@@ -64,8 +60,7 @@ describe("SidebarToggle", () => {
     expect(toggle).toHaveAttribute("aria-expanded", "true");
   });
 
-  // Rotating the button would flip its badge upside down and move it from the
-  // top-right corner to the bottom-left one.
+  // Rotating the button would turn its badge upside down and corner to corner.
   it("rotates the glyph, never the button", () => {
     const toggle = renderToggle({
       expanded: true,
@@ -88,8 +83,7 @@ describe("SidebarToggle", () => {
     );
   });
 
-  // The add-in's drawer trigger reports the state but keeps its glyph still:
-  // it sits behind the open drawer, where a flipped chevron points at nothing.
+  // The add-in's drawer trigger sits behind the open drawer, so it stays still.
   it("can report expanded without turning the glyph", () => {
     const toggle = renderToggle({ expanded: true, flipOnExpand: false });
 
@@ -99,9 +93,8 @@ describe("SidebarToggle", () => {
     );
   });
 
-  // The e2e geometry probe measures the first [aria-hidden="true"] node in the
-  // button; CountBadge is aria-hidden too, so a badge ahead of the icon would
-  // quietly become what the rail-centerline assertion measures.
+  // The geometry probe measures the button's first aria-hidden node, and
+  // CountBadge is aria-hidden too.
   it("renders the badge after the icon, under the caller's test id", () => {
     const toggle = renderToggle({
       attentionCount: 3,
@@ -129,9 +122,8 @@ describe("SidebarToggle", () => {
     expect(toggle).not.toHaveClass("relative");
   });
 
-  // Tailwind emits .relative AFTER .absolute, so an unconditional `relative`
-  // would outrank a caller that positions the control itself and drag the
-  // floating trigger back into flow.
+  // Tailwind emits .relative after .absolute, so an unconditional one would
+  // outrank a caller that positions the control itself.
   it("anchors the badge itself only when the caller has not positioned it", () => {
     expect(
       renderToggle({ attentionCount: 1, badgeTestId: "in-flow" }),
@@ -147,8 +139,7 @@ describe("SidebarToggle", () => {
     ).not.toHaveClass("relative");
   });
 
-  // A second glyph inside the logo face would give the geometry probe a
-  // different node to measure.
+  // A second glyph would give the geometry probe another node to measure.
   it("lets a custom face replace the default glyph", () => {
     const toggle = renderToggle({
       children: <img alt="Logo" src="/logo.svg" />,

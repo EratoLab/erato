@@ -149,10 +149,8 @@ export const CollapseTest: Story = {
     const collapseButton = canvas.getByLabelText(/collapse sidebar/i);
     await expect(collapseButton).toHaveAttribute("aria-expanded", "true");
 
-    // Test collapse. The header control is the one that gets hidden, and it
-    // keeps announcing the expanded state; the control that takes over under
-    // the default `hidden` mode is the trigger floating over the
-    // conversation, so the collapsed state has to be read off that one.
+    // The header control keeps announcing `expanded`; under the default
+    // `hidden` mode the floating trigger is what reports the collapsed state.
     await user.click(collapseButton);
     await new Promise((resolve) => setTimeout(resolve, 250));
     const expandButton = await canvas.findByLabelText(/expand sidebar/i);
@@ -187,26 +185,19 @@ export const SessionInteractionTest: Story = {
 
     await user.click(sessionLink);
 
-    // Verify the selected state. The row states it with `data-selected`,
-    // beside the `aria-current` on its link — the contract a theme keys on.
-    // The utility classes that used to carry it belong to the row primitive
-    // now and are no longer on this element.
+    // `data-selected` beside the link's `aria-current` is the theme contract.
     await expect(sessionContainer).toHaveAttribute("data-selected", "true");
     await expect(sessionLink).toHaveAttribute("aria-current", "page");
 
-    // Hover is painted by CSS on the row's geometry class, and synthetic
-    // events never set `:hover`, so this only checks the row survives the
-    // pointer interaction.
+    // Synthetic events never set `:hover`, so this only checks it survives.
     await user.hover(sessionContainer);
     await expect(sessionContainer).toBeVisible();
   },
 };
 
 /**
- * The logo face only exists in slim mode, and the preview's feature config
- * collapses to `hidden`, so this story supplies both the mode and a logo
- * path of its own. The path is served by Storybook's static dir, which is
- * what lets the sidebar's existence check for it resolve.
+ * The logo face exists only in slim mode, and the preview defaults to
+ * `hidden`, so this story supplies the mode and a static-dir logo path.
  */
 const withSlimLogoConfig: Decorator = (Story) => (
   <FeatureConfigProvider
@@ -237,10 +228,8 @@ export const SlimLogoFaceTest: Story = {
     await expect(toggle).toContainElement(logo);
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
 
-    // The face REPLACES the toggle's own glyph rather than joining it: the
-    // sidebar geometry probe measures the first aria-hidden node inside this
-    // button, so a second icon span here is what it would measure instead of
-    // the logo.
+    // The face replaces the glyph rather than joining it: the geometry probe
+    // would otherwise measure a second icon span.
     await expect(toggle.querySelector('[aria-hidden="true"]')).toBeNull();
 
     const glyph = toggle.querySelector("svg");

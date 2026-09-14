@@ -572,19 +572,14 @@ export function AddinChatCoreView({
     () => setIsSettingsOpen(true),
     [setIsSettingsOpen],
   );
-  // The pane's one aggregate signal: with the drawer shut, no row is on
-  // screen to carry a status dot, so a run that ended in another chat has
-  // nowhere else to announce itself. The count rides the accessible name as
-  // well as the badge — the badge is hidden from the a11y tree, a bare
-  // number being noise to read out.
+  // With the drawer shut no row carries a status dot, so this is the pane's
+  // only aggregate signal. The name says the count; the badge is aria-hidden.
   const attentionCount = useGenerationIndicatorCount();
-  // One bag for both placements: the two differ in paint and position only,
-  // and the drawer's control must read identically either way.
+  // One bag for both placements: they differ in paint and position only.
   const historyTriggerProps = {
     expanded: controller.isHistoryMenuOpen,
-    // Report the state, keep the glyph still. This trigger sits behind the
-    // open drawer, so a flipped chevron points at nothing and only shows
-    // through the scrim — and it did not flip before the primitive existed.
+    // Sits behind the open drawer, where a flipped chevron points at nothing —
+    // and it never flipped before the primitive existed.
     flipOnExpand: false,
     onClick: () => setIsHistoryMenuOpen(true),
     label:

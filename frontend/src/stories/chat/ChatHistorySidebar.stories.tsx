@@ -8,14 +8,9 @@ import type { ChatSession } from "@/types/chat";
 import type { Decorator, Meta, StoryObj } from "@storybook/react";
 
 /**
- * The preview wraps every story in a bare `FeatureConfigProvider`, whose
- * `sidebar.collapsedMode` is `hidden`. A story that means to show the slim
- * rail has to say so itself — under the default it renders the floating
- * trigger instead, which is a different surface with a different skin. The
- * nested provider wins over the preview's, so this only names what changes.
- *
- * Below the 640px breakpoint `useResponsiveCollapsedMode` forces `hidden`
- * back on whatever this sets, so the slim stories need a wide canvas.
+ * The preview defaults every story to `collapsedMode: "hidden"`, so a story
+ * that means to show the slim rail has to say so. Below 640px
+ * `useResponsiveCollapsedMode` forces `hidden` back, so slim needs a wide canvas.
  */
 const withSidebarConfig = (sidebar: {
   collapsedMode: "hidden" | "slim";
