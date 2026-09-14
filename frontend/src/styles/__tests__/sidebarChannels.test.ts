@@ -73,6 +73,14 @@ describe("sidebar chrome shape channels", () => {
     );
   });
 
+  it("keeps the rail column at its intrinsic width", () => {
+    // The margin centres the control only at its natural size, and the button
+    // geometry sets width with no min-width. As a direct flex item of the
+    // band's row it shrinks instead, which put it at 27 against a rail centre
+    // of 32 under a wide band.
+    declares(".sidebar-icon-col-geometry", "flex", "none");
+  });
+
   it("reads its corner from a token, so a theme can retune it", () => {
     // The four inline borderRadius objects this replaced were unreachable at
     // any specificity.

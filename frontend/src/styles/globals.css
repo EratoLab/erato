@@ -1211,6 +1211,11 @@ body {
    box is the max of the control size and the content. */
 .sidebar-icon-col-geometry {
   --sidebar-icon-col-content: 1.25rem;
+  /* The margin below centres the control only at its intrinsic width, and the
+     button geometry sets `width` with no `min-width`. These controls are direct
+     flex items of the band's row, so a band with generous padding would
+     otherwise shrink them off the rail centerline. */
+  flex: none;
   margin-left: calc(
     var(--theme-layout-sidebar-slim-width) / 2 -
       var(--theme-spacing-shell-compact-padding-x) -
