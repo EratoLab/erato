@@ -45,6 +45,7 @@ import { ChatShareDialog } from "./ChatShareDialog";
 import { ChatUsageAdvisory } from "./ChatUsageAdvisory";
 import { DelegatedRunsSection } from "./DelegatedRunsSection";
 import { EditChatTitleDialog } from "./EditChatTitleDialog";
+import { notifyUnarchiveFailed } from "./unarchiveFeedback";
 import { Button } from "../Controls/Button";
 import { ChatErrorBoundary } from "../Feedback/ChatErrorBoundary";
 import { FeedbackCommentDialog } from "../Feedback/FeedbackCommentDialog";
@@ -487,7 +488,7 @@ export const Chat = ({
   };
 
   const handleUnarchiveSession = (sessionId: string) => {
-    void unarchiveChat(sessionId);
+    void unarchiveChat(sessionId).catch(notifyUnarchiveFailed);
   };
 
   const [titleDialogChatId, setTitleDialogChatId] = useState<string | null>(

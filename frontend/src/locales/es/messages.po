@@ -1741,7 +1741,7 @@ msgid "chat.history.group.unread"
 msgstr "No leídos"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/components/ui/Chat/chatArchiveActions.tsx
 msgid "chat.history.item.archived"
 msgstr "Archivado"
 
@@ -1752,23 +1752,17 @@ msgid "chat.history.loading_more"
 msgstr "Cargando..."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/components/ui/Chat/chatArchiveActions.tsx
 msgid "chat.history.menu.confirm_archive.action_required"
 msgstr "Este chat está esperando la aprobación de una herramienta. Archivarlo la descarta y desarchivarlo no reanudará la respuesta."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/components/ui/Chat/chatArchiveActions.tsx
 msgid "chat.history.menu.confirm_archive.running"
 msgstr "Este chat todavía está generando. Archivarlo no detendrá la respuesta."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
-#~ msgid "chat.history.menu.confirm_remove.message"
-#~ msgstr "¿Está seguro de que desea archivar este chat?"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/components/ui/Chat/chatArchiveActions.tsx
 msgid "chat.history.menu.confirm_remove.title"
 msgstr "¿Archivar este chat?"
 
@@ -1787,8 +1781,7 @@ msgid "chat.history.menu.pinLimitReached"
 msgstr "Límite de fijados alcanzado"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
+#: src/components/ui/Chat/chatArchiveActions.tsx
 msgid "chat.history.menu.remove"
 msgstr "Archivar"
 
@@ -1799,8 +1792,7 @@ msgid "chat.history.menu.rename"
 msgstr "Renombrar"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
+#: src/components/ui/Chat/chatArchiveActions.tsx
 msgid "chat.history.menu.unarchive"
 msgstr "Desarchivar"
 
@@ -1857,6 +1849,11 @@ msgstr "Título personalizado"
 #: src/components/ui/Chat/EditChatTitleDialog.tsx
 msgid "chat.history.rename.userProvided.placeholder"
 msgstr "Déjelo vacío para usar el título generado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/unarchiveFeedback.ts
+msgid "chat.history.unarchiveFailed"
+msgstr "No se pudo desarchivar el chat"
 
 #. js-lingui-explicit-id
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts

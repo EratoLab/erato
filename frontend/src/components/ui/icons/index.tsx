@@ -23,6 +23,7 @@ import {
   WarningTriangle,
   ArrowUp,
   ArrowLeft,
+  Undo,
   WarningCircle,
   CheckCircle,
   Code,
@@ -155,6 +156,10 @@ export const WarningIcon = ({ className, ...props }: IconProps) => (
 // Additional icons for component replacements
 export const ArrowUpIcon = ({ className, ...props }: IconProps) => (
   <ArrowUp className={className} {...props} />
+);
+
+export const UndoIcon = ({ className, ...props }: IconProps) => (
+  <Undo className={className} {...props} />
 );
 
 export const StopIcon = ({ className, ...props }: IconProps) => (

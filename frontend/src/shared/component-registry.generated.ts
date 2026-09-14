@@ -14,6 +14,9 @@ export { AssistantWelcomeLower } from "@/components/ui/Assistant/AssistantWelcom
 export { AssistantWelcomeScreen } from "@/components/ui/Assistant/AssistantWelcomeScreen";
 export { AssistantWelcomeUpper } from "@/components/ui/Assistant/AssistantWelcomeScreen";
 export type { AssistantWelcomeScreenProps } from "@/components/ui/Assistant/AssistantWelcomeScreen";
+export { ArchivedChatPill } from "@/components/ui/Chat/chatArchiveActions";
+export { archivedChatLabel } from "@/components/ui/Chat/chatArchiveActions";
+export { buildArchiveMenuItems } from "@/components/ui/Chat/chatArchiveActions";
 export { ChatAttentionStatusDot } from "@/components/ui/Chat/ChatAttentionStatusDot";
 export { ChatHistoryList } from "@/components/ui/Chat/ChatHistoryList";
 export { ChatHistoryListSkeleton } from "@/components/ui/Chat/ChatHistoryList";
@@ -231,6 +234,7 @@ export { ThumbsUp } from "@/components/ui/icons/index";
 export { TimerIcon } from "@/components/ui/icons/index";
 export { ToolsIcon } from "@/components/ui/icons/index";
 export { Trash } from "@/components/ui/icons/index";
+export { UndoIcon } from "@/components/ui/icons/index";
 export { VoiceIcon } from "@/components/ui/icons/index";
 export { WarningCircle } from "@/components/ui/icons/index";
 export { WarningCircleIcon } from "@/components/ui/icons/index";

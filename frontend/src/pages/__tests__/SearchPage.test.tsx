@@ -10,6 +10,8 @@ import {
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useToastStore } from "@/components/ui/Toast/toastStore";
+import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { fetchRecentChats } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { messages as enMessages } from "@/locales/en/messages.json";
 import { useChatContext } from "@/providers/ChatProvider";
@@ -60,11 +62,22 @@ vi.mock("@/components/ui/Controls/DropdownMenu", () => ({
   DropdownMenu: ({
     items,
   }: {
-    items: Array<{ label: ReactNode; onClick?: () => void }>;
+    items: Array<{
+      label: ReactNode;
+      onClick?: () => void;
+      confirmAction?: boolean;
+      confirmMessage?: string;
+    }>;
   }) => (
     <div data-testid="result-menu">
       {items.map((item) => (
-        <button key={String(item.label)} type="button" onClick={item.onClick}>
+        <button
+          key={String(item.label)}
+          type="button"
+          onClick={item.onClick}
+          data-confirms={item.confirmAction ? "" : undefined}
+          data-confirm-message={item.confirmMessage}
+        >
           {item.label}
         </button>
       ))}
@@ -144,6 +157,11 @@ const allFeaturesOn = {
 describe("SearchPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useGenerationStatusStore.setState({
+      statusByChatId: {},
+      currentChatId: null,
+    });
+    useToastStore.getState().clear();
     mockUseInfiniteQuery.mockReturnValue({
       data: undefined,
       isLoading: false,
@@ -245,5 +263,82 @@ describe("SearchPage", () => {
     );
     await waitFor(() => expect(page.refetch).toHaveBeenCalled());
     expect(refetchHistory).toHaveBeenCalled();
+  });
+
+  it("marks an archived result in its accessible name", () => {
+    mockUseInfiniteQuery.mockReturnValue(
+      pageOf([
+        recentChat({
+          id: "archived-1",
+          archived_at: "2024-02-01T00:00:00Z",
+          last_message_at: "2024-02-02T00:00:00Z",
+        }),
+        recentChat({ id: "active-1" }),
+      ]),
+    );
+
+    renderPage(allFeaturesOn);
+
+    expect(screen.getAllByTestId("chat-history-item-archived")).toHaveLength(1);
+    expect(
+      screen.getByRole("link", { name: "archived-1, Archived" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "active-1" })).toBeInTheDocument();
+  });
+
+  it("warns before archiving a result that is still generating", () => {
+    mockUseInfiniteQuery.mockReturnValue(
+      pageOf([recentChat({ id: "running-1" }), recentChat({ id: "idle-1" })]),
+    );
+    useGenerationStatusStore.setState({
+      statusByChatId: {
+        "running-1": {
+          kind: "running",
+          startedAt: new Date().toISOString(),
+          localSeenAt: Date.now(),
+        },
+      },
+      currentChatId: null,
+    });
+
+    renderPage(allFeaturesOn);
+
+    const [runningMenu, idleMenu] = screen.getAllByTestId("result-menu");
+    const runningArchive = within(runningMenu).getByRole("button", {
+      name: "Archive",
+    });
+    expect(runningArchive).toHaveAttribute("data-confirms");
+    expect(runningArchive.getAttribute("data-confirm-message")).toContain(
+      "still generating",
+    );
+    expect(
+      within(idleMenu).getByRole("button", { name: "Archive" }),
+    ).not.toHaveAttribute("data-confirms");
+  });
+
+  it("toasts when unarchiving fails", async () => {
+    vi.mocked(useChatContext).mockReturnValue({
+      archiveChat: vi.fn(),
+      unarchiveChat: vi.fn(() => Promise.reject(new Error("nope"))),
+      updateChatTitle: vi.fn(),
+      refetchHistory: vi.fn(),
+      pinChat: vi.fn(),
+      pinnedChats: [],
+    } as unknown as ReturnType<typeof useChatContext>);
+    mockUseInfiniteQuery.mockReturnValue(
+      pageOf([
+        recentChat({ id: "archived-1", archived_at: "2024-02-01T00:00:00Z" }),
+      ]),
+    );
+
+    renderPage(allFeaturesOn);
+    fireEvent.click(screen.getByRole("button", { name: "Unarchive" }));
+
+    await waitFor(() =>
+      expect(useToastStore.getState().toasts).toHaveLength(1),
+    );
+    expect(useToastStore.getState().toasts[0]).toMatchObject({
+      variant: "error",
+    });
   });
 });

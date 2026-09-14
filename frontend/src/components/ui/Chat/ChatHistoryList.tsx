@@ -3,33 +3,35 @@ import clsx from "clsx";
 import { memo, useEffect, useMemo, useRef } from "react";
 
 import { MessageTimestamp } from "@/components/ui";
-import { useHasPendingConfirmation } from "@/hooks/chat/store/confirmationRegistryStore";
-import { useGenerationStatusFor } from "@/hooks/chat/store/generationStatusStore";
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
+import { useChatRowStatus } from "@/hooks/chat/useChatRowStatus";
 import { useThemedIcon } from "@/hooks/ui";
 import { delegatedRunOrigin } from "@/utils/chat/delegatedRunOrigin";
-import { resolveRecentChatTitle } from "@/utils/chat/recentChatSession";
-import { getChatUrl } from "@/utils/chat/urlUtils";
 import {
-  chatAttentionStatusLabel,
-  resolveSessionRowStatus,
-} from "@/utils/chatHistoryGrouping";
+  DELEGATION_PROVENANCE_KIND,
+  resolveRecentChatTitle,
+} from "@/utils/chat/recentChatSession";
+import { getChatUrl } from "@/utils/chat/urlUtils";
+import { chatAttentionStatusLabel } from "@/utils/chatHistoryGrouping";
 import { createLogger } from "@/utils/debugLogger";
 
 import { ChatAttentionStatusDot } from "./ChatAttentionStatusDot";
+import {
+  ArchivedChatPill,
+  archivedChatLabel,
+  buildArchiveMenuItems,
+} from "./chatArchiveActions";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { DropdownMenu } from "../Controls/DropdownMenu";
 import { Row } from "../Controls/Row";
 import { SpinnerIcon } from "../Feedback/SpinnerIcon";
 import {
-  ArchiveIcon,
   EditIcon,
   ResolvedIcon,
   MultiplePagesIcon,
   PinIcon,
   PinSlashIcon,
   ShareIcon,
-  Trash,
 } from "../icons";
 
 import type { ChatSession } from "@/types/chat";
@@ -77,12 +79,6 @@ const ChatItemIcon = memo(() => {
 // eslint-disable-next-line lingui/no-unlocalized-strings -- Component display name, not user-facing text
 ChatItemIcon.displayName = "ChatItemIcon";
 
-const useRowStatus = (session: ChatSession): ChatAttentionStatus | null => {
-  const storeStatus = useGenerationStatusFor(session.id);
-  const hasPendingConfirmation = useHasPendingConfirmation(session.id);
-  return resolveSessionRowStatus(session, storeStatus, hasPendingConfirmation);
-};
-
 /**
  * Row title, attention status, archived marker and composed aria label — the
  * shape a component kit needs when it overrides this list. Exposed as the
@@ -104,12 +100,10 @@ export const useChatHistoryRowPresentation = (
   ariaLabel: string;
 } => {
   const title = useRowTitle(session);
-  const status = useRowStatus(session);
+  const status = useChatRowStatus(session.id, session);
   const statusLabel = status ? chatAttentionStatusLabel(status) : null;
   const archived = session.archivedAt != null;
-  const archivedLabel = archived
-    ? t({ id: "chat.history.item.archived", message: "Archived" })
-    : null;
+  const archivedLabel = archived ? archivedChatLabel() : null;
 
   return {
     title,
@@ -206,8 +200,9 @@ const ChatHistoryListItem = memo<{
     showTimestamps = true,
     disableRowLinks = false,
   }) => {
-    // Present only for delegated runs, so it doubles as the "this row is a
-    // run" test — the rows only a widened filter puts in this list.
+    // Keyed on provenance, not on the origin label: `delegatedRunOrigin` is
+    // null for a run that records no origin at all, and that is still a run.
+    const isRun = session.provenanceKind === DELEGATION_PROVENANCE_KIND;
     const runOrigin = delegatedRunOrigin(session);
     const {
       title: rowTitle,
@@ -237,22 +232,6 @@ const ChatHistoryListItem = memo<{
             id: "chat.history.menu.pin",
             message: "Pin",
           });
-    // Archiving is reversible, so only work already under way is worth asking
-    // about — that is the part unarchiving cannot put back.
-    const archiveWarning =
-      generationStatus === "running"
-        ? t({
-            id: "chat.history.menu.confirm_archive.running",
-            message:
-              "This chat is still generating. Archiving will not stop the response.",
-          })
-        : generationStatus === "action_required"
-          ? t({
-              id: "chat.history.menu.confirm_archive.action_required",
-              message:
-                "This chat is waiting for a tool approval. Archiving abandons it, and unarchiving will not resume the response.",
-            })
-          : null;
     const fileCountLabel = getFileCountLabel(session.metadata?.fileCount ?? 0);
     const rowBody = (
       // Row owns the row geometry, the selected fill and the hover tint; the
@@ -277,14 +256,7 @@ const ChatHistoryListItem = memo<{
             <span className="truncate font-medium" title={rowTitle}>
               {rowTitle}
             </span>
-            {archivedLabel && (
-              <span
-                className="pill-geometry inline-flex shrink-0 items-center border border-theme-border bg-theme-bg-secondary px-2 py-0.5 text-xs font-medium text-theme-fg-muted"
-                data-testid="chat-history-item-archived"
-              >
-                {archivedLabel}
-              </span>
-            )}
+            {archivedLabel && <ArchivedChatPill label={archivedLabel} />}
           </div>
           {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent bubbling */}
           <div
@@ -336,40 +308,16 @@ const ChatHistoryListItem = memo<{
                       },
                     ]
                   : []),
-                // Runs get neither: archiving cannot cancel a live generation
-                // or free a parked approval, and retention re-archives them.
-                ...(runOrigin
+                // Runs get neither: archiving cannot cancel a live generation or
+                // free a parked approval, and cleanup re-archives unadopted runs.
+                ...(isRun
                   ? []
-                  : isArchived
-                    ? [
-                        {
-                          label: t({
-                            id: "chat.history.menu.unarchive",
-                            message: "Unarchive",
-                          }),
-                          icon: <ArchiveIcon className="size-4" />,
-                          onClick: onUnarchive ?? (() => {}),
-                          testId: "chat-history-menu-unarchive",
-                        },
-                      ]
-                    : [
-                        {
-                          label: t({
-                            id: "chat.history.menu.remove",
-                            message: "Archive",
-                          }),
-                          icon: <Trash className="size-4" />,
-                          variant: "danger" as const,
-                          onClick: onArchive ?? (() => {}),
-                          testId: "chat-history-menu-archive",
-                          confirmAction: archiveWarning != null,
-                          confirmTitle: t({
-                            id: "chat.history.menu.confirm_remove.title",
-                            message: "Archive this chat?",
-                          }),
-                          confirmMessage: archiveWarning ?? undefined,
-                        },
-                      ]),
+                  : buildArchiveMenuItems({
+                      archived: isArchived,
+                      status: generationStatus,
+                      onArchive,
+                      onUnarchive,
+                    })),
               ]}
             />
           </div>

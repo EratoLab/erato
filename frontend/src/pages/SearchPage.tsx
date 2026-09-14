@@ -7,6 +7,12 @@ import { useDebounce } from "use-debounce";
 
 import { ChatShareDialog } from "@/components/ui/Chat/ChatShareDialog";
 import { EditChatTitleDialog } from "@/components/ui/Chat/EditChatTitleDialog";
+import {
+  ArchivedChatPill,
+  archivedChatLabel,
+  buildArchiveMenuItems,
+} from "@/components/ui/Chat/chatArchiveActions";
+import { notifyUnarchiveFailed } from "@/components/ui/Chat/unarchiveFeedback";
 import { Card } from "@/components/ui/Container/Card";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { Button } from "@/components/ui/Controls/Button";
@@ -16,14 +22,13 @@ import { Input } from "@/components/ui/Input/Input";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 import {
   SearchIcon,
-  ArchiveIcon,
   CloseIcon,
   EditIcon,
   PinIcon,
   PinSlashIcon,
   ShareIcon,
-  Trash,
 } from "@/components/ui/icons";
+import { useChatRowStatus } from "@/hooks/chat/useChatRowStatus";
 import { usePageAlignment } from "@/hooks/ui";
 import {
   fetchRecentChats,
@@ -56,6 +61,139 @@ interface SearchResult {
   timestamp: string;
   context?: string;
 }
+
+const SearchResultRow = ({
+  result,
+  pinnedChatsEnabled,
+  chatSharingEnabled,
+  pinnedChatsCount,
+  pinnedChatsLimit,
+  onOpen,
+  onPin,
+  onShare,
+  onRename,
+  onArchive,
+  onUnarchive,
+}: {
+  result: SearchResult;
+  pinnedChatsEnabled: boolean;
+  chatSharingEnabled: boolean;
+  pinnedChatsCount: number;
+  pinnedChatsLimit: number;
+  onOpen: () => void;
+  onPin: () => void;
+  onShare: () => void;
+  onRename: () => void;
+  onArchive: () => void;
+  onUnarchive: () => void;
+}) => {
+  // The search payload carries no generation state, but the stores are keyed
+  // by chat id, so the row reads the same status the sidebar does.
+  const status = useChatRowStatus(result.chatId);
+  const archivedLabel = result.isArchived ? archivedChatLabel() : null;
+  const isPinLimitReached =
+    !result.isPinned && pinnedChatsCount >= pinnedChatsLimit;
+
+  return (
+    <Card
+      variant="interactive"
+      as="a"
+      href={getChatUrl(result.chatId)}
+      data-ui="search-result-card"
+      onClick={(e) => {
+        // Allow cmd/ctrl-click to open in new tab
+        if (e.metaKey || e.ctrlKey) {
+          return;
+        }
+        if (e.defaultPrevented) {
+          return;
+        }
+        // Prevent default navigation for normal clicks
+        e.preventDefault();
+        onOpen();
+      }}
+      className="block"
+      bodyClassName="flex items-center gap-4"
+      aria-label={[result.chatTitle, archivedLabel].filter(Boolean).join(", ")}
+    >
+      <h3 className="line-clamp-1 min-w-0 flex-1 font-medium text-theme-fg-primary">
+        {result.chatTitle}
+      </h3>
+      {archivedLabel && <ArchivedChatPill label={archivedLabel} />}
+      <div className="shrink-0 text-xs text-theme-fg-muted">
+        <MessageTimestamp createdAt={new Date(result.timestamp)} />
+      </div>
+      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent anchor navigation from menu clicks */}
+      <div
+        className="shrink-0"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+      >
+        <DropdownMenu
+          items={[
+            ...(pinnedChatsEnabled && !result.isArchived
+              ? [
+                  {
+                    label: result.isPinned
+                      ? t({
+                          id: "chat.history.menu.unpin",
+                          message: "Unpin",
+                        })
+                      : isPinLimitReached
+                        ? t({
+                            id: "chat.history.menu.pinLimitReached",
+                            message: "Pin limit reached",
+                          })
+                        : t({
+                            id: "chat.history.menu.pin",
+                            message: "Pin",
+                          }),
+                    icon: result.isPinned ? (
+                      <PinSlashIcon className="size-4" />
+                    ) : (
+                      <PinIcon className="size-4" />
+                    ),
+                    onClick: onPin,
+                    disabled: !result.canEdit || isPinLimitReached,
+                  },
+                ]
+              : []),
+            ...(chatSharingEnabled && !result.isArchived
+              ? [
+                  {
+                    label: t({
+                      id: "chat.share.button",
+                      message: "Share",
+                    }),
+                    icon: <ShareIcon className="size-4" />,
+                    onClick: onShare,
+                    disabled: !result.canEdit,
+                  },
+                ]
+              : []),
+            {
+              label: t({
+                id: "chat.history.menu.rename",
+                message: "Rename",
+              }),
+              icon: <EditIcon className="size-4" />,
+              onClick: onRename,
+              disabled: !result.canEdit,
+            },
+            ...buildArchiveMenuItems({
+              archived: result.isArchived,
+              status,
+              onArchive,
+              onUnarchive,
+            }),
+          ]}
+        />
+      </div>
+    </Card>
+  );
+};
 
 export default function SearchPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -213,7 +351,12 @@ export default function SearchPage() {
   };
 
   const handleUnarchiveResult = async (chatId: string) => {
-    await unarchiveChat(chatId);
+    try {
+      await unarchiveChat(chatId);
+    } catch {
+      notifyUnarchiveFailed();
+      return;
+    }
     await Promise.all([refetchHistory(), refetchSearchResults()]);
   };
 
@@ -340,130 +483,26 @@ export default function SearchPage() {
 
               <div className="grid gap-3">
                 {searchResults.map((result) => (
-                  <Card
+                  <SearchResultRow
                     key={result.id}
-                    variant="interactive"
-                    as="a"
-                    href={getChatUrl(result.chatId)}
-                    data-ui="search-result-card"
-                    onClick={(e) => {
-                      // Allow cmd/ctrl-click to open in new tab
-                      if (e.metaKey || e.ctrlKey) {
-                        return;
-                      }
-                      if (e.defaultPrevented) {
-                        return;
-                      }
-                      // Prevent default navigation for normal clicks
-                      e.preventDefault();
-                      handleResultClick(result);
+                    result={result}
+                    pinnedChatsEnabled={pinnedChatsEnabled}
+                    chatSharingEnabled={chatSharingEnabled}
+                    pinnedChatsCount={pinnedChatsCount}
+                    pinnedChatsLimit={pinnedChatsLimit}
+                    onOpen={() => handleResultClick(result)}
+                    onPin={() => {
+                      void handlePinResult(result.chatId, !result.isPinned);
                     }}
-                    className="block"
-                    bodyClassName="flex items-center gap-4"
-                    aria-label={result.chatTitle}
-                  >
-                    <h3 className="line-clamp-1 min-w-0 flex-1 font-medium text-theme-fg-primary">
-                      {result.chatTitle}
-                    </h3>
-                    <div className="shrink-0 text-xs text-theme-fg-muted">
-                      <MessageTimestamp
-                        createdAt={new Date(result.timestamp)}
-                      />
-                    </div>
-                    {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent anchor navigation from menu clicks */}
-                    <div
-                      className="shrink-0"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                    >
-                      <DropdownMenu
-                        items={[
-                          ...(pinnedChatsEnabled && !result.isArchived
-                            ? [
-                                {
-                                  label: result.isPinned
-                                    ? t({
-                                        id: "chat.history.menu.unpin",
-                                        message: "Unpin",
-                                      })
-                                    : pinnedChatsCount >= pinnedChatsLimit
-                                      ? t({
-                                          id: "chat.history.menu.pinLimitReached",
-                                          message: "Pin limit reached",
-                                        })
-                                      : t({
-                                          id: "chat.history.menu.pin",
-                                          message: "Pin",
-                                        }),
-                                  icon: result.isPinned ? (
-                                    <PinSlashIcon className="size-4" />
-                                  ) : (
-                                    <PinIcon className="size-4" />
-                                  ),
-                                  onClick: () => {
-                                    void handlePinResult(
-                                      result.chatId,
-                                      !result.isPinned,
-                                    );
-                                  },
-                                  disabled:
-                                    !result.canEdit ||
-                                    (!result.isPinned &&
-                                      pinnedChatsCount >= pinnedChatsLimit),
-                                },
-                              ]
-                            : []),
-                          ...(chatSharingEnabled && !result.isArchived
-                            ? [
-                                {
-                                  label: t({
-                                    id: "chat.share.button",
-                                    message: "Share",
-                                  }),
-                                  icon: <ShareIcon className="size-4" />,
-                                  onClick: () =>
-                                    setShareDialogChatId(result.chatId),
-                                  disabled: !result.canEdit,
-                                },
-                              ]
-                            : []),
-                          {
-                            label: t({
-                              id: "chat.history.menu.rename",
-                              message: "Rename",
-                            }),
-                            icon: <EditIcon className="size-4" />,
-                            onClick: () => setTitleDialogChatId(result.chatId),
-                            disabled: !result.canEdit,
-                          },
-                          result.isArchived
-                            ? {
-                                label: t({
-                                  id: "chat.history.menu.unarchive",
-                                  message: "Unarchive",
-                                }),
-                                icon: <ArchiveIcon className="size-4" />,
-                                onClick: () => {
-                                  void handleUnarchiveResult(result.chatId);
-                                },
-                              }
-                            : {
-                                label: t({
-                                  id: "chat.history.menu.remove",
-                                  message: "Archive",
-                                }),
-                                icon: <Trash className="size-4" />,
-                                variant: "danger" as const,
-                                onClick: () => {
-                                  void handleArchiveResult(result.chatId);
-                                },
-                              },
-                        ]}
-                      />
-                    </div>
-                  </Card>
+                    onShare={() => setShareDialogChatId(result.chatId)}
+                    onRename={() => setTitleDialogChatId(result.chatId)}
+                    onArchive={() => {
+                      void handleArchiveResult(result.chatId);
+                    }}
+                    onUnarchive={() => {
+                      void handleUnarchiveResult(result.chatId);
+                    }}
+                  />
                 ))}
               </div>
 

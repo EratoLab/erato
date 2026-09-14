@@ -1,5 +1,5 @@
 import { I18nProvider } from "@lingui/react";
-import { render, screen } from "@testing-library/react";
+import { render, renderHook, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
@@ -7,7 +7,11 @@ import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusSto
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
-import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
+import {
+  ChatHistoryList,
+  ChatHistoryListSkeleton,
+  useChatHistoryRowPresentation,
+} from "./ChatHistoryList";
 
 import type { ChatSession } from "@/types/chat";
 import type { Messages } from "@lingui/core";
@@ -160,8 +164,6 @@ describe("ChatHistoryList", () => {
     });
 
     it("withholds Archive from a run but keeps it on ordinary chats", async () => {
-      // Archiving a run cannot cancel a live generation or free a parked
-      // approval.
       const { i18n } = await import("@lingui/core");
       const ui = (session: ChatSession) => (
         <I18nProvider i18n={i18n}>
@@ -274,6 +276,17 @@ describe("ChatHistoryList", () => {
       ).not.toBeInTheDocument();
     });
 
+    it("withholds them from a run whose origin no longer resolves", async () => {
+      await renderRow({ ...archivedSession, provenanceKind: "delegation" });
+
+      expect(
+        screen.queryByRole("button", { name: "Unarchive" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Archive" }),
+      ).not.toBeInTheDocument();
+    });
+
     it("leaves an active row unmarked with its full menu", async () => {
       await renderRow(sessions[0]);
 
@@ -291,6 +304,60 @@ describe("ChatHistoryList", () => {
       expect(
         screen.queryByRole("button", { name: "Unarchive" }),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  describe("useChatHistoryRowPresentation", () => {
+    it("returns the archived marker and folds it into the accessible name", async () => {
+      const { i18n } = await import("@lingui/core");
+      useGenerationStatusStore.setState({
+        statusByChatId: {
+          "chat-1": {
+            kind: "running",
+            startedAt: new Date().toISOString(),
+            localSeenAt: Date.now(),
+          },
+        },
+        currentChatId: null,
+      });
+
+      const { result } = renderHook(
+        () =>
+          useChatHistoryRowPresentation(
+            {
+              ...sessions[0],
+              archivedAt: new Date("2024-01-05").toISOString(),
+            },
+            ["From Q3 planning"],
+          ),
+        {
+          wrapper: ({ children }) => (
+            <I18nProvider i18n={i18n}>{children}</I18nProvider>
+          ),
+        },
+      );
+
+      expect(result.current.archived).toBe(true);
+      expect(result.current.archivedLabel).toBe("Archived");
+      expect(result.current.ariaLabel).toBe(
+        "First chat, Archived, From Q3 planning, Running",
+      );
+    });
+
+    it("returns no marker for an active chat", async () => {
+      const { i18n } = await import("@lingui/core");
+      const { result } = renderHook(
+        () => useChatHistoryRowPresentation(sessions[0]),
+        {
+          wrapper: ({ children }) => (
+            <I18nProvider i18n={i18n}>{children}</I18nProvider>
+          ),
+        },
+      );
+
+      expect(result.current.archived).toBe(false);
+      expect(result.current.archivedLabel).toBeNull();
+      expect(result.current.ariaLabel).toBe("First chat");
     });
   });
 
