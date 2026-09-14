@@ -197,13 +197,22 @@ export const ensureOpenSidebar = async (page: Page) => {
 
 /**
  * Archive a chat from its sidebar row menu. The menu item is addressed by test
- * id, so its label is translated copy no spec has to spell out.
+ * id, so its label is translated copy no spec has to spell out. Only a row that
+ * is generating or waiting on a tool approval gets a confirmation dialog, so
+ * `confirm` has to be told rather than probed for — an absent dialog and one
+ * that has not mounted yet look the same.
  */
-export const archiveChatFromRow = async (page: Page, row: Locator) => {
+export const archiveChatFromRow = async (
+  page: Page,
+  row: Locator,
+  { confirm = false }: { confirm?: boolean } = {},
+) => {
   await row.hover();
   await row.getByRole("button", { name: "Open menu" }).click();
   await page.getByTestId("chat-history-menu-archive").click();
-  await page.getByRole("button", { name: "Confirm action" }).click();
+  if (confirm) {
+    await page.getByRole("button", { name: "Confirm action" }).click();
+  }
 };
 
 /** Glob for route interception; substring for request-URL matching. */

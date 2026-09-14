@@ -1753,13 +1753,22 @@ msgstr "Chargement..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
-msgid "chat.history.menu.confirm_remove.message"
-msgstr "Êtes-vous sûr de vouloir archiver ce chat ?"
+msgid "chat.history.menu.confirm_archive.action_required"
+msgstr "Ce chat attend l'autorisation d'un outil. L'archiver abandonne cette demande, et le désarchiver ne reprendra pas la réponse."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.menu.confirm_archive.running"
+msgstr "Ce chat est encore en cours de génération. L'archiver n'interrompt pas la réponse."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
+#~ msgid "chat.history.menu.confirm_remove.message"
+#~ msgstr "Êtes-vous sûr de vouloir archiver ce chat ?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "chat.history.menu.confirm_remove.title"
 msgstr "Archiver ce chat ?"
 

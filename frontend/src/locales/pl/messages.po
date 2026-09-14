@@ -1753,13 +1753,22 @@ msgstr "Ładowanie..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
-msgid "chat.history.menu.confirm_remove.message"
-msgstr "Czy na pewno chcesz zarchiwizować ten czat?"
+msgid "chat.history.menu.confirm_archive.action_required"
+msgstr "Ten czat czeka na zatwierdzenie narzędzia. Zarchiwizowanie go przerywa oczekiwanie, a cofnięcie archiwizacji nie wznowi odpowiedzi."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.menu.confirm_archive.running"
+msgstr "Ten czat nadal generuje odpowiedź. Zarchiwizowanie go jej nie przerwie."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
+#~ msgid "chat.history.menu.confirm_remove.message"
+#~ msgstr "Czy na pewno chcesz zarchiwizować ten czat?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "chat.history.menu.confirm_remove.title"
 msgstr "Zarchiwizować ten czat?"
 

@@ -1753,13 +1753,22 @@ msgstr "Laden..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
-msgid "chat.history.menu.confirm_remove.message"
-msgstr "Möchten Sie diesen Chat wirklich archivieren?"
+msgid "chat.history.menu.confirm_archive.action_required"
+msgstr "Dieser Chat wartet auf eine Tool-Genehmigung. Durch das Archivieren geht sie verloren, und das Aufheben der Archivierung setzt die Antwort nicht fort."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.menu.confirm_archive.running"
+msgstr "Dieser Chat generiert noch. Das Archivieren stoppt die Antwort nicht."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
+#~ msgid "chat.history.menu.confirm_remove.message"
+#~ msgstr "Möchten Sie diesen Chat wirklich archivieren?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "chat.history.menu.confirm_remove.title"
 msgstr "Diesen Chat archivieren?"
 

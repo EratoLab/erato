@@ -34,11 +34,19 @@ vi.mock("../Controls/DropdownMenu", () => ({
       label: ReactNode;
       icon?: ReactNode;
       disabled?: boolean;
+      confirmAction?: boolean;
+      confirmMessage?: string;
     }>;
   }) => (
     <div data-testid="row-menu">
       {items.map((item) => (
-        <button key={String(item.label)} disabled={item.disabled} type="button">
+        <button
+          key={String(item.label)}
+          disabled={item.disabled}
+          type="button"
+          data-confirms={item.confirmAction ? "" : undefined}
+          data-confirm-message={item.confirmMessage}
+        >
           {item.icon}
           {item.label}
         </button>
@@ -283,6 +291,60 @@ describe("ChatHistoryList", () => {
       expect(
         screen.queryByRole("button", { name: "Unarchive" }),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  describe("archive confirmation", () => {
+    const renderArchiveItem = async () => {
+      const { i18n } = await import("@lingui/core");
+      render(
+        <I18nProvider i18n={i18n}>
+          <ChatHistoryList
+            sessions={[sessions[0]]}
+            currentSessionId={null}
+            onSessionSelect={vi.fn()}
+            onSessionArchive={vi.fn()}
+          />
+        </I18nProvider>,
+      );
+      return screen.getByRole("button", { name: "Archive" });
+    };
+
+    it("asks nothing of an idle row", async () => {
+      expect(await renderArchiveItem()).not.toHaveAttribute("data-confirms");
+    });
+
+    it("warns that a running generation carries on", async () => {
+      useGenerationStatusStore.setState({
+        statusByChatId: {
+          "chat-1": {
+            kind: "running",
+            startedAt: new Date().toISOString(),
+            localSeenAt: Date.now(),
+          },
+        },
+        currentChatId: null,
+      });
+
+      const item = await renderArchiveItem();
+
+      expect(item).toHaveAttribute("data-confirms");
+      expect(item.getAttribute("data-confirm-message")).toContain(
+        "still generating",
+      );
+    });
+
+    it("warns that a parked approval cannot be resumed", async () => {
+      useConfirmationRegistryStore.setState({
+        pendingIdsByChatId: { "chat-1": ["approval-1"] },
+      });
+
+      const item = await renderArchiveItem();
+
+      expect(item).toHaveAttribute("data-confirms");
+      expect(item.getAttribute("data-confirm-message")).toContain(
+        "tool approval",
+      );
     });
   });
 

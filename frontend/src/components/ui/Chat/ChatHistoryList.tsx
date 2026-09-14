@@ -237,6 +237,22 @@ const ChatHistoryListItem = memo<{
             id: "chat.history.menu.pin",
             message: "Pin",
           });
+    // Archiving is reversible, so only work already under way is worth asking
+    // about — that is the part unarchiving cannot put back.
+    const archiveWarning =
+      generationStatus === "running"
+        ? t({
+            id: "chat.history.menu.confirm_archive.running",
+            message:
+              "This chat is still generating. Archiving will not stop the response.",
+          })
+        : generationStatus === "action_required"
+          ? t({
+              id: "chat.history.menu.confirm_archive.action_required",
+              message:
+                "This chat is waiting for a tool approval. Archiving abandons it, and unarchiving will not resume the response.",
+            })
+          : null;
     const fileCountLabel = getFileCountLabel(session.metadata?.fileCount ?? 0);
     const rowBody = (
       // Row owns the row geometry, the selected fill and the hover tint; the
@@ -346,16 +362,12 @@ const ChatHistoryListItem = memo<{
                           variant: "danger" as const,
                           onClick: onArchive ?? (() => {}),
                           testId: "chat-history-menu-archive",
-                          confirmAction: true,
+                          confirmAction: archiveWarning != null,
                           confirmTitle: t({
                             id: "chat.history.menu.confirm_remove.title",
                             message: "Archive this chat?",
                           }),
-                          confirmMessage: t({
-                            id: "chat.history.menu.confirm_remove.message",
-                            message:
-                              "Are you sure you want to archive this chat?",
-                          }),
+                          confirmMessage: archiveWarning ?? undefined,
                         },
                       ]),
               ]}

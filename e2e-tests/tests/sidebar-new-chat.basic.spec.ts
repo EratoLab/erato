@@ -310,8 +310,9 @@ test(
       ).toBeVisible();
 
       // Archive the row while the list still cannot account for it, so nothing
-      // but local state can take it away again.
-      await archiveChatFromRow(page, row);
+      // but local state can take it away again. The parked turn leaves the row
+      // generating, which is the case that still confirms.
+      await archiveChatFromRow(page, row, { confirm: true });
 
       await expect(row).toHaveCount(0);
 

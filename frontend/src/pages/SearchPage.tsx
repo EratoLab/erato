@@ -459,16 +459,6 @@ export default function SearchPage() {
                                 onClick: () => {
                                   void handleArchiveResult(result.chatId);
                                 },
-                                confirmAction: true,
-                                confirmTitle: t({
-                                  id: "chat.history.menu.confirm_remove.title",
-                                  message: "Archive this chat?",
-                                }),
-                                confirmMessage: t({
-                                  id: "chat.history.menu.confirm_remove.message",
-                                  message:
-                                    "Are you sure you want to archive this chat?",
-                                }),
                               },
                         ]}
                       />
