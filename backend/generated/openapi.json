@@ -1766,7 +1766,7 @@
       "put": {
         "tags": [],
         "summary": "Update mutable fields on a chat.",
-        "description": "Supports updating the user-provided title and pin state.",
+        "description": "Supports updating the user-provided title, pin state and the MCP write\ntools toggle.",
         "operationId": "update_chat",
         "parameters": [
           {
@@ -4934,6 +4934,7 @@
           "id",
           "title_resolved",
           "is_pinned",
+          "mcp_write_tools_enabled",
           "can_edit"
         ],
         "properties": {
@@ -4973,6 +4974,10 @@
           "is_pinned": {
             "type": "boolean",
             "description": "Whether this chat is pinned by its owner."
+          },
+          "mcp_write_tools_enabled": {
+            "type": "boolean",
+            "description": "Whether the model may be offered MCP write tools and client actions\nin this chat. Off, only tools the server marks read-only are offered."
           },
           "origin_assistant_id": {
             "type": "string",
@@ -7237,6 +7242,10 @@
             "description": "The IDs of any files attached to this message. These files must already be uploaded to the file_uploads table.\nThe files should normally only be provided with the first message they appear in the chat. After that they can assumed to be part of the chat history.",
             "example": "[\"00000000-0000-0000-0000-000000000000\"]"
           },
+          "mcp_write_tools_enabled": {
+            "type": "boolean",
+            "description": "Whether a newly created chat offers the model MCP write tools and\nclient actions. Defaults to enabled. Ignored when existing_chat_id is\nprovided; `PUT /me/chats/{chat_id}` changes it on an existing chat."
+          },
           "mentioned_assistant_ids": {
             "type": "array",
             "items": {
@@ -7906,6 +7915,7 @@
           "last_message_at",
           "file_uploads",
           "is_pinned",
+          "mcp_write_tools_enabled",
           "can_edit"
         ],
         "properties": {
@@ -7969,6 +7979,10 @@
               "type": "string"
             },
             "description": "The facets selected for the most recent message"
+          },
+          "mcp_write_tools_enabled": {
+            "type": "boolean",
+            "description": "Whether the model may be offered MCP write tools and client actions\nin this chat. Off, only tools the server marks read-only are offered."
           },
           "origin_assistant_id": {
             "type": "string",
@@ -9164,6 +9178,13 @@
             ],
             "description": "Whether the chat should be pinned."
           },
+          "mcp_write_tools_enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether the model may be offered MCP write tools and client actions\nin this chat. Off, only tools the server marks read-only are offered\nand client-action proposals are withheld."
+          },
           "title_by_user_provided": {
             "type": "string",
             "description": "Optional user-provided title update.\n- `\\\"some title\\\"` sets the title\n- `null` removes a previously set title\n- omitted is treated the same as `null`"
@@ -9176,7 +9197,8 @@
         "required": [
           "chat_id",
           "title_resolved",
-          "is_pinned"
+          "is_pinned",
+          "mcp_write_tools_enabled"
         ],
         "properties": {
           "chat_id": {
@@ -9186,6 +9208,10 @@
           "is_pinned": {
             "type": "boolean",
             "description": "Whether the chat is pinned by its owner."
+          },
+          "mcp_write_tools_enabled": {
+            "type": "boolean",
+            "description": "Whether the model may be offered MCP write tools and client actions\nin this chat."
           },
           "title_by_summary": {
             "type": [
