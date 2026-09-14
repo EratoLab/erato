@@ -169,10 +169,29 @@ describe("FacetSelector", () => {
         "Off, only tools the server marks read-only are offered.",
       ),
     ).toBeInTheDocument();
-    expect(within(toggle).queryByRole("img", { hidden: true })).toBeNull();
+    // Section rows carry no leading icon, so the only SVG in the row is the
+    // tick — present exactly while the switch is on.
+    expect(toggle.querySelector("svg")).not.toBeNull();
 
     fireEvent.click(toggle);
     expect(onToggleWriteTools).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the connectors write switch unticked while writes are off", async () => {
+    renderSelector({
+      facets: [WEB_SEARCH],
+      withAssistants: false,
+      withConnectors: true,
+      writeToolsEnabled: false,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+
+    expect(await screen.findByText("Connectors")).toBeInTheDocument();
+    const toggle = screen.getByRole("menuitem", {
+      name: /Allow write operations/,
+    });
+    expect(toggle.querySelector("svg")).toBeNull();
   });
 
   // Connectors are tools, so a facet-less deployment with a connector keeps

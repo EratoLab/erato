@@ -5614,8 +5614,18 @@ describe("ChatInput", () => {
       );
     });
 
-    it("withholds the group while no server is connected for the user", async () => {
+    // A server the user still has to authorize is listed too: the browser is
+    // where its Authorize affordance lives, so the group must be reachable.
+    it("offers the group while the only listed server awaits authorization", async () => {
       enableConnectors([UNCONNECTED]);
+      await renderComposer("chat-1");
+
+      expect(latestConnectorsSection()?.header).toBe("Connectors");
+      expect(writeToggle().checked).toBe(true);
+    });
+
+    it("withholds the group while no server is listed for the user", async () => {
+      enableConnectors([]);
       await renderComposer("chat-1");
 
       expect(mockFacetSelector).not.toHaveBeenCalled();

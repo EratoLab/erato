@@ -20,9 +20,11 @@ export interface BrowsableMcpServers {
 /**
  * The MCP servers the composer may offer to browse. Available only where the
  * host enables the Servers & Tools settings — the same flag the settings
- * dialog reads, injected by the host through the feature config — and at
- * least one server is actually connected for this user; the query stays
- * unissued while the flag is off, so a deployment without MCP pays nothing.
+ * dialog reads, injected by the host through the feature config — and the
+ * listing returns at least one server for this user (connected or not: a
+ * server still awaiting authorization is offered so the browser can reach
+ * its Authorize affordance); the query stays unissued while the flag is
+ * off, so a deployment without MCP pays nothing.
  */
 export function useBrowsableMcpServers(): BrowsableMcpServers {
   const { mcpServersTabEnabled } = useUserPreferencesFeature();
@@ -36,9 +38,7 @@ export function useBrowsableMcpServers(): BrowsableMcpServers {
   return useMemo(() => {
     const servers = data?.servers ?? [];
     return {
-      isAvailable:
-        mcpServersTabEnabled &&
-        servers.some((server) => server.connection_status === "SUCCESS"),
+      isAvailable: mcpServersTabEnabled && servers.length > 0,
       servers,
     };
   }, [data, mcpServersTabEnabled]);
