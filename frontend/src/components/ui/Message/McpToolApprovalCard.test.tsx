@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
+import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { ChatContext } from "@/providers/ChatProvider";
 
 import { McpToolApprovalCard } from "./McpToolApprovalCard";
@@ -13,7 +14,7 @@ vi.mock("@/auth/tokenStore", () => ({
   getIdToken: () => null,
 }));
 
-const archived = { value: false };
+const archived: { value: boolean | undefined } = { value: false };
 vi.mock("@/hooks/chat/useChatArchived", () => ({
   useChatArchived: () => archived.value,
 }));
@@ -51,6 +52,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   archived.value = false;
   useConfirmationRegistryStore.setState({ pendingIdsByChatId: {} });
+  useGenerationStatusStore.getState().reset();
 });
 
 describe("McpToolApprovalCard", () => {
@@ -193,6 +195,64 @@ describe("McpToolApprovalCard", () => {
       screen.getByText(/archived and no longer takes messages/),
     ).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("neither holds the registry nor seeds the marker on an archived chat", () => {
+    archived.value = true;
+
+    render(
+      withChatContext(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={approvalRequest}
+          resolution={null}
+        />,
+      ),
+    );
+
+    expect(useConfirmationRegistryStore.getState().hasPending("chat-1")).toBe(
+      false,
+    );
+    expect(
+      useGenerationStatusStore.getState().statusByChatId["chat-1"],
+    ).toBeUndefined();
+  });
+
+  it("holds the registry but seeds nothing until the chat is known", () => {
+    archived.value = undefined;
+
+    render(
+      withChatContext(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={approvalRequest}
+          resolution={null}
+        />,
+      ),
+    );
+
+    expect(useConfirmationRegistryStore.getState().hasPending("chat-1")).toBe(
+      true,
+    );
+    expect(
+      useGenerationStatusStore.getState().statusByChatId["chat-1"],
+    ).toBeUndefined();
+  });
+
+  it("seeds the marker once the chat is known not to be archived", () => {
+    render(
+      withChatContext(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={approvalRequest}
+          resolution={null}
+        />,
+      ),
+    );
+
+    expect(
+      useGenerationStatusStore.getState().statusByChatId["chat-1"]?.kind,
+    ).toBe("action_required");
   });
 
   it("does not register an already-resolved request", () => {

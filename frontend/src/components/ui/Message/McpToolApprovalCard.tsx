@@ -72,13 +72,16 @@ export const McpToolApprovalCard = ({
     (state) => state.unregisterConfirmation,
   );
   useEffect(() => {
-    if (!chatId || !isPending) {
+    // Held while archived is still unknown: releasing it would let a queued
+    // send out ahead of a decision the chat may yet take.
+    if (!chatId || !isPending || isArchived === true) {
       return;
     }
     registerConfirmation(chatId, registrationId);
     return () => unregisterConfirmation(chatId, registrationId);
   }, [
     chatId,
+    isArchived,
     isPending,
     registrationId,
     registerConfirmation,
@@ -91,11 +94,12 @@ export const McpToolApprovalCard = ({
   // server-side awaiting_approval generation state this card renders.
   const requestedAt = request.requested_at;
   useEffect(() => {
-    if (!chatId || !isPending) {
+    // Durable and never cleaned up, so it waits until the chat is known.
+    if (!chatId || !isPending || isArchived !== false) {
       return;
     }
     useGenerationStatusStore.getState().seedActionRequired(chatId, requestedAt);
-  }, [chatId, isPending, requestedAt]);
+  }, [chatId, isArchived, isPending, requestedAt]);
 
   const decide = async (decision: "approve" | "reject" | "approve_always") => {
     setIsBusy(true);
