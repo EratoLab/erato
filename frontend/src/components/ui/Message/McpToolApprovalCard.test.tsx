@@ -13,6 +13,11 @@ vi.mock("@/auth/tokenStore", () => ({
   getIdToken: () => null,
 }));
 
+const archived = { value: false };
+vi.mock("@/hooks/chat/useChatArchived", () => ({
+  useChatArchived: () => archived.value,
+}));
+
 const approvalRequest = {
   tool_call_id: "tool-call-1",
   tool_name: "publish_approval_probe",
@@ -44,6 +49,7 @@ const withChatContext = (ui: ReactNode, chatId = "chat-1") => (
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  archived.value = false;
   useConfirmationRegistryStore.setState({ pendingIdsByChatId: {} });
 });
 
@@ -163,6 +169,27 @@ describe("McpToolApprovalCard", () => {
     ).toBeInTheDocument();
 
     fireEvent.click(alwaysAllow);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("withdraws the decision from an archived chat, which refuses the write", () => {
+    archived.value = true;
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      withChatContext(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={approvalRequest}
+          resolution={null}
+        />,
+      ),
+    );
+
+    expect(screen.queryByRole("button", { name: "Allow once" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Deny" })).toBeNull();
+    expect(screen.getByText(/archived and no longer takes messages/)).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

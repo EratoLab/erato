@@ -2,9 +2,11 @@ import { t } from "@lingui/core/macro";
 import { useContext, useEffect, useState } from "react";
 
 import { getIdToken } from "@/auth/tokenStore";
+import { archivedNoticeText } from "@/components/ui/Chat/ArchivedChatNotice";
 import { ToolCallInput } from "@/components/ui/ToolCall";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
+import { useChatArchived } from "@/hooks/chat/useChatArchived";
 import { ChatContext } from "@/providers/ChatProvider";
 
 import { ResolvedIcon } from "../icons";
@@ -59,6 +61,9 @@ export const McpToolApprovalCard = ({
   // add-in's client-action cards (ERMAIN-470).
   const isPending = resolution === null && localResolution === null;
   const chatId = chatContext?.currentChatId ?? null;
+  // The approval is durable, so it outlives an archive. Continuing it is a
+  // write the backend refuses, so the card states that instead of offering it.
+  const isArchived = useChatArchived(chatId);
   const [registrationId] = useState(() => globalThis.crypto.randomUUID());
   const registerConfirmation = useConfirmationRegistryStore(
     (state) => state.registerConfirmation,
@@ -183,7 +188,8 @@ export const McpToolApprovalCard = ({
               })
         }
         onDeny={() => void decide("reject")}
-        status="pending"
+        status={isArchived ? "dismissed" : "pending"}
+        resolvedLabel={isArchived ? archivedNoticeText() : undefined}
         isBusy={isBusy}
         scrollIntoViewOnMount
         data-testid="mcp-tool-approval-card"
