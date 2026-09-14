@@ -152,8 +152,8 @@ describe("ChatHistoryList", () => {
     });
 
     it("withholds Remove from a run but keeps it on ordinary chats", async () => {
-      // Archiving a run neither checks nor cancels an in-flight generation,
-      // strands one parked on a tool approval, and cannot be undone.
+      // Archiving a run cannot cancel a live generation or free a parked
+      // approval.
       const { i18n } = await import("@lingui/core");
       const ui = (session: ChatSession) => (
         <I18nProvider i18n={i18n}>
@@ -189,6 +189,100 @@ describe("ChatHistoryList", () => {
       expect(
         screen.getByRole("link", { name: /Draft the summary/ }),
       ).toHaveAccessibleName(/action required/i);
+    });
+  });
+
+  describe("archived rows", () => {
+    const archivedSession: ChatSession = {
+      ...sessions[0],
+      archivedAt: new Date("2024-01-05").toISOString(),
+    };
+
+    const renderRow = async (session: ChatSession) => {
+      const { i18n } = await import("@lingui/core");
+      render(
+        <I18nProvider i18n={i18n}>
+          <ChatHistoryList
+            sessions={[session]}
+            currentSessionId={null}
+            onSessionSelect={vi.fn()}
+            onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
+            onSessionEditTitle={vi.fn()}
+            onSessionShare={vi.fn()}
+            onSessionPin={vi.fn()}
+          />
+        </I18nProvider>,
+      );
+    };
+
+    it("marks the row and carries the marker in its accessible name", async () => {
+      await renderRow(archivedSession);
+
+      expect(
+        screen.getByTestId("chat-history-item-archived"),
+      ).toHaveTextContent("Archived");
+      expect(
+        screen.getByRole("link", { name: "First chat, Archived" }),
+      ).toBeInTheDocument();
+    });
+
+    it("offers Unarchive and Rename in place of Remove, Pin and Share", async () => {
+      await renderRow(archivedSession);
+
+      expect(
+        screen.getByRole("button", { name: "Unarchive" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Rename" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Remove" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Pin" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Share" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("withholds Unarchive as well as Remove from an archived run", async () => {
+      await renderRow({
+        ...archivedSession,
+        provenanceKind: "delegation",
+        originChatId: "origin-1",
+        originChatTitle: "Q3 planning",
+      });
+
+      expect(
+        screen.getByRole("button", { name: "Rename" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Unarchive" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Remove" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("leaves an active row unmarked with its full menu", async () => {
+      await renderRow(sessions[0]);
+
+      expect(
+        screen.queryByTestId("chat-history-item-archived"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: "First chat" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Remove" }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Pin" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Share" })).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Unarchive" }),
+      ).not.toBeInTheDocument();
     });
   });
 

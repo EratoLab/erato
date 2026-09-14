@@ -22,6 +22,7 @@ import { DropdownMenu } from "../Controls/DropdownMenu";
 import { Row } from "../Controls/Row";
 import { SpinnerIcon } from "../Feedback/SpinnerIcon";
 import {
+  ArchiveIcon,
   EditIcon,
   ResolvedIcon,
   MultiplePagesIcon,
@@ -83,10 +84,11 @@ const useRowStatus = (session: ChatSession): ChatAttentionStatus | null => {
 };
 
 /**
- * Row title, attention status and composed aria label — the shape a component
- * kit needs when it overrides this list. Exposed as the resolved result rather
- * than its ingredients so kits cannot reimplement `resolveSessionRowStatus`
- * and end up with a dot that disagrees with the session's group.
+ * Row title, attention status, archived marker and composed aria label — the
+ * shape a component kit needs when it overrides this list. Exposed as the
+ * resolved result rather than its ingredients so kits cannot reimplement
+ * `resolveSessionRowStatus` and end up with a dot that disagrees with the
+ * session's group.
  *
  * `extraLabels` is folded into `ariaLabel`.
  */
@@ -97,17 +99,27 @@ export const useChatHistoryRowPresentation = (
   title: string;
   status: ChatAttentionStatus | null;
   statusLabel: string | null;
+  archived: boolean;
+  archivedLabel: string | null;
   ariaLabel: string;
 } => {
   const title = useRowTitle(session);
   const status = useRowStatus(session);
   const statusLabel = status ? chatAttentionStatusLabel(status) : null;
+  const archived = session.archivedAt != null;
+  const archivedLabel = archived
+    ? t({ id: "chat.history.item.archived", message: "Archived" })
+    : null;
 
   return {
     title,
     status,
     statusLabel,
-    ariaLabel: [title, ...extraLabels, statusLabel].filter(Boolean).join(", "),
+    archived,
+    archivedLabel,
+    ariaLabel: [title, archivedLabel, ...extraLabels, statusLabel]
+      .filter(Boolean)
+      .join(", "),
   };
 };
 
@@ -116,6 +128,7 @@ export interface ChatHistoryListProps {
   currentSessionId: string | null;
   onSessionSelect: (sessionId: string) => void;
   onSessionArchive?: (sessionId: string) => void;
+  onSessionUnarchive?: (sessionId: string) => void;
   onSessionEditTitle?: (sessionId: string) => void;
   onSessionShare?: (sessionId: string) => void;
   onSessionPin?: (sessionId: string, isPinned: boolean) => void;
@@ -163,6 +176,7 @@ const ChatHistoryListItem = memo<{
   layout: "default" | "compact";
   onSelect: () => void;
   onArchive?: () => void;
+  onUnarchive?: () => void;
   onEditTitle?: () => void;
   onShare?: () => void;
   onPin?: () => void;
@@ -180,6 +194,7 @@ const ChatHistoryListItem = memo<{
     layout,
     onSelect,
     onArchive,
+    onUnarchive,
     onEditTitle,
     onShare,
     onPin,
@@ -197,6 +212,8 @@ const ChatHistoryListItem = memo<{
     const {
       title: rowTitle,
       status: generationStatus,
+      archived: isArchived,
+      archivedLabel,
       ariaLabel: rowAriaLabel,
     } = useChatHistoryRowPresentation(session, [runOrigin?.label]);
     // A stable Date instance: an inline `new Date(...)` would defeat
@@ -244,6 +261,14 @@ const ChatHistoryListItem = memo<{
             <span className="truncate font-medium" title={rowTitle}>
               {rowTitle}
             </span>
+            {archivedLabel && (
+              <span
+                className="pill-geometry inline-flex shrink-0 items-center border border-theme-border bg-theme-bg-secondary px-2 py-0.5 text-xs font-medium text-theme-fg-muted"
+                data-testid="chat-history-item-archived"
+              >
+                {archivedLabel}
+              </span>
+            )}
           </div>
           {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent bubbling */}
           <div
@@ -255,7 +280,7 @@ const ChatHistoryListItem = memo<{
             <DropdownMenu
               triggerButtonVariant="sidebar-icon"
               items={[
-                ...(onPin
+                ...(onPin && !isArchived
                   ? [
                       {
                         label: pinMenuLabel,
@@ -269,7 +294,7 @@ const ChatHistoryListItem = memo<{
                       },
                     ]
                   : []),
-                ...(onShare
+                ...(onShare && !isArchived
                   ? [
                       {
                         label: t({
@@ -295,34 +320,42 @@ const ChatHistoryListItem = memo<{
                       },
                     ]
                   : []),
-                // Withheld from delegated runs: archiving one neither checks
-                // nor cancels a generation still in flight, a run parked on a
-                // tool approval can never be resumed afterwards, and there is
-                // no unarchive route to undo any of it. Runs age out on their
-                // own; the purpose-built runs list offers no destructive
-                // action either.
+                // Runs get neither: archiving cannot cancel a live generation
+                // or free a parked approval, and retention re-archives them.
                 ...(runOrigin
                   ? []
-                  : [
-                      {
-                        label: t({
-                          id: "chat.history.menu.remove",
-                          message: "Remove",
-                        }),
-                        icon: <Trash className="size-4" />,
-                        variant: "danger" as const,
-                        onClick: onArchive ?? (() => {}),
-                        confirmAction: true,
-                        confirmTitle: t({
-                          id: "chat.history.menu.confirm_remove.title",
-                          message: "Confirm Removal",
-                        }),
-                        confirmMessage: t({
-                          id: "chat.history.menu.confirm_remove.message",
-                          message: "Are you sure you want to remove this chat?",
-                        }),
-                      },
-                    ]),
+                  : isArchived
+                    ? [
+                        {
+                          label: t({
+                            id: "chat.history.menu.unarchive",
+                            message: "Unarchive",
+                          }),
+                          icon: <ArchiveIcon className="size-4" />,
+                          onClick: onUnarchive ?? (() => {}),
+                        },
+                      ]
+                    : [
+                        {
+                          label: t({
+                            id: "chat.history.menu.remove",
+                            message: "Remove",
+                          }),
+                          icon: <Trash className="size-4" />,
+                          variant: "danger" as const,
+                          onClick: onArchive ?? (() => {}),
+                          confirmAction: true,
+                          confirmTitle: t({
+                            id: "chat.history.menu.confirm_remove.title",
+                            message: "Confirm Removal",
+                          }),
+                          confirmMessage: t({
+                            id: "chat.history.menu.confirm_remove.message",
+                            message:
+                              "Are you sure you want to remove this chat?",
+                          }),
+                        },
+                      ]),
               ]}
             />
           </div>
@@ -408,6 +441,7 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
     currentSessionId,
     onSessionSelect,
     onSessionArchive,
+    onSessionUnarchive,
     onSessionEditTitle,
     onSessionShare,
     onSessionPin,
@@ -472,6 +506,11 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
             }}
             onArchive={
               onSessionArchive ? () => onSessionArchive(session.id) : undefined
+            }
+            onUnarchive={
+              onSessionUnarchive
+                ? () => onSessionUnarchive(session.id)
+                : undefined
             }
             onEditTitle={
               onSessionEditTitle
