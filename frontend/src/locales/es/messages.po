@@ -1516,9 +1516,9 @@ msgid "chat.delegatedRun.expectedOutput"
 msgstr "Resultado esperado"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/DelegatedRunHeader.tsx
-#~ msgid "chat.delegatedRun.state.archived"
-#~ msgstr "Esta ejecución está archivada y ya no acepta mensajes."
+#: src/components/ui/Chat/ArchivedChatNotice.tsx
+msgid "chat.delegatedRun.state.archived"
+msgstr "Esta ejecución está archivada y ya no acepta mensajes."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/DelegatedRunHeader.tsx

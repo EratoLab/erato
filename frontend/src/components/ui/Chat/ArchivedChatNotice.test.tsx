@@ -42,10 +42,10 @@ describe("ArchivedChatNotice", () => {
   });
 
   it("states the archive but withholds the way back for a delegated run", () => {
-    render(<ArchivedChatNotice chatId="run-1" canUnarchive={false} />);
+    render(<ArchivedChatNotice chatId="run-1" variant="run" />);
 
     expect(screen.getByTestId("archived-chat-notice")).toHaveTextContent(
-      "This chat is archived",
+      "This run is archived",
     );
     expect(unarchiveButton()).toBeNull();
   });

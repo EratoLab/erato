@@ -87,12 +87,10 @@ export const useChatHeader = (
       />
     );
     return {
-      // A run is archived and restored by the chat that dispatched it, so the
-      // notice states the fact without offering the way back, as its row does.
       header: isArchived ? (
         <div className="space-y-1.5">
           {runHeader}
-          <ArchivedChatNotice chatId={chat.id} canUnarchive={false} />
+          <ArchivedChatNotice chatId={chat.id} variant="run" />
         </div>
       ) : (
         runHeader
