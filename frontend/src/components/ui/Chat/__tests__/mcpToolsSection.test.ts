@@ -200,6 +200,23 @@ describe("buildMcpToolsSection", () => {
       expect(onToggleServer).toHaveBeenCalledWith("wiki");
     });
 
+    it("locks only the switches while the chat's list is not known yet", () => {
+      const section = build({
+        servers: [server("linear"), server("jira", "NEEDS_AUTHENTICATION")],
+        onToggleServer: vi.fn(),
+        onConnect: vi.fn(),
+        serverSwitchesLocked: true,
+      });
+
+      expect(itemOf(section, "linear").disabled).toBe(true);
+      expect(itemOf(section, "jira").disabled).toBe(false);
+      expect(
+        section.items
+          .filter((item) => !item.id.startsWith("server-"))
+          .every((item) => !item.disabled),
+      ).toBe(true);
+    });
+
     it("locks the server rows with the rest of the group", () => {
       const section = build({
         servers: [server("linear"), server("jira", "NEEDS_AUTHENTICATION")],

@@ -117,6 +117,41 @@ describe("useChatDisabledMcpServers", () => {
     await waitFor(() => expect(result.current.disabledServerIds).toEqual([]));
   });
 
+  it("locks the switches and drops a flip while an existing chat's row is not in yet", async () => {
+    const { result, rerender } = renderDisabledServers("chat-1");
+
+    // The PUT replaces the whole list: built from anything but the row, it
+    // would re-enable every server the row already holds.
+    expect(result.current.isReady).toBe(false);
+    expect(result.current.disabledServerIds).toEqual([]);
+    act(() => result.current.toggleServer("linear"));
+    expect(result.current.disabledServerIds).toEqual([]);
+    expect(mockUpdateChat).not.toHaveBeenCalled();
+
+    mockUseChatDetail.mockReturnValue({ data: chatDetail(["github"]) });
+    rerender({ id: "chat-1" });
+    expect(result.current.isReady).toBe(true);
+
+    act(() => result.current.toggleServer("linear"));
+    await waitFor(() =>
+      expect(mockUpdateChat).toHaveBeenCalledWith({
+        pathParams: { chatId: "chat-1" },
+        body: { disabled_mcp_server_ids: ["github", "linear"] },
+      }),
+    );
+  });
+
+  it("is ready for a new chat right away and stays ready on the optimistic list", async () => {
+    const { result } = renderDisabledServers(null);
+    expect(result.current.isReady).toBe(true);
+
+    mockUseChatDetail.mockReturnValue({ data: chatDetail([]) });
+    const existing = renderDisabledServers("chat-1");
+    act(() => existing.result.current.toggleServer("linear"));
+    expect(existing.result.current.isReady).toBe(true);
+    await waitFor(() => expect(mockUpdateChat).toHaveBeenCalledTimes(1));
+  });
+
   it("does not fetch the row while the switches are not offered", () => {
     renderHook(
       () => useChatDisabledMcpServers({ chatId: "chat-1", isAvailable: false }),
@@ -135,10 +170,12 @@ describe("useChatDisabledMcpServers", () => {
     act(() => result.current.toggleServer("linear"));
     expect(result.current.disabledServerIds).toEqual(["linear"]);
 
-    // The chat got its id from the first send; the detail is not in yet.
+    // The chat got its id from the first send; the detail is not in yet, so
+    // the seeded list is shown but nothing can be written from it.
     rerender({ id: "chat-1" });
     expect(result.current.disabledServerIds).toEqual(["linear"]);
     expect(result.current.newChatSeed).toBeUndefined();
+    expect(result.current.isReady).toBe(false);
 
     mockUseChatDetail.mockReturnValue({ data: chatDetail(["linear"]) });
     rerender({ id: "chat-1" });

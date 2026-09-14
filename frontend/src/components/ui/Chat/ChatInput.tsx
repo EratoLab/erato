@@ -1875,6 +1875,7 @@ export const ChatInput = ({
             servers: mcpServers,
             disabledServerIds: disabledMcpServers.disabledServerIds,
             onToggleServer: disabledMcpServers.toggleServer,
+            serverSwitchesLocked: !disabledMcpServers.isReady,
             onConnect:
               openMcpServersSettings ?? (() => setIsMcpToolsBrowserOpen(true)),
             disabled:
@@ -1888,6 +1889,7 @@ export const ChatInput = ({
       canBrowseMcpTools,
       composeLocked,
       disabledMcpServers.disabledServerIds,
+      disabledMcpServers.isReady,
       disabledMcpServers.isSaving,
       disabledMcpServers.toggleServer,
       mcpServers,

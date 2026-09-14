@@ -31,6 +31,12 @@ interface McpToolsSectionOptions {
   disabledServerIds?: string[];
   onToggleServer?: (serverId: string) => void;
   /**
+   * Locks the server switches alone: the chat's list is not known yet, so a
+   * flip has no base. The connect rows, the write switch and the browser row
+   * stay live.
+   */
+  serverSwitchesLocked?: boolean;
+  /**
    * Where a server still awaiting the user's authorization sends them: its
    * row is not a switch — there is nothing to switch off — but the way to
    * connect.
@@ -68,6 +74,7 @@ export function buildMcpToolsSection({
   servers = [],
   disabledServerIds = [],
   onToggleServer,
+  serverSwitchesLocked = false,
   onConnect,
   disabled = false,
   pausesHostActions = false,
@@ -91,7 +98,7 @@ export function buildMcpToolsSection({
       label: server.id,
       description: mcpServerDescription(server) ?? undefined,
       checked: !disabledServerIdSet.has(server.id),
-      disabled,
+      disabled: disabled || serverSwitchesLocked,
       onToggle: () => onToggleServer?.(server.id),
     };
   });

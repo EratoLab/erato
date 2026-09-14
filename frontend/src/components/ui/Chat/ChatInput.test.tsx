@@ -5800,6 +5800,24 @@ describe("ChatInput", () => {
       );
     });
 
+    it("locks the server switches on an existing chat until its row is read", async () => {
+      enableConnectors();
+      const mutateAsync = vi.fn().mockResolvedValue({});
+      mockUseUpdateChat.mockReturnValue({ mutateAsync, isPending: false });
+      await renderComposer("chat-1");
+
+      // The update replaces the whole list, so a flip without the row as its
+      // base would re-enable whatever the row holds; the write switch and the
+      // browser row do not depend on the list and stay live.
+      expect(serverSwitch("linear").disabled).toBe(true);
+      expect(writeToggle().disabled).toBe(false);
+      await act(async () => {
+        serverSwitch("linear").onToggle();
+      });
+      expect(mutateAsync).not.toHaveBeenCalled();
+      expect(serverSwitch("linear").checked).toBe(true);
+    });
+
     it("carries the switched-off servers into the first send of a new chat", async () => {
       enableConnectors();
       const mutateAsync = vi.fn().mockResolvedValue({});

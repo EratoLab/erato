@@ -18,9 +18,19 @@ const EMPTY: string[] = [];
 export interface ChatDisabledMcpServers {
   /** The servers switched off; the optimistic list while a save is in flight. */
   disabledServerIds: string[];
-  /** Flips one server: a PUT on an existing chat, local state on a new one. */
+  /**
+   * Flips one server: a PUT on an existing chat, local state on a new one.
+   * A no-op while `isReady` is false.
+   */
   toggleServer: (serverId: string) => void;
   isSaving: boolean;
+  /**
+   * False while an existing chat's row has not been read yet. The PUT
+   * replaces the whole list, so a flip computed from any other base would
+   * silently re-enable the servers the row already holds; the switches stay
+   * locked until the row is in.
+   */
+  isReady: boolean;
   /**
    * What the first submit of a new chat must carry: the list once the user
    * switched a server off before the chat existed, otherwise undefined so
@@ -80,11 +90,13 @@ export function useChatDisabledMcpServers({
     setOptimisticDisabledIds(null);
   }, [chatId]);
 
-  const disabledServerIds = chatId
-    ? (optimisticDisabledIds ??
-      chatDetail?.disabled_mcp_server_ids ??
-      newChatDisabledIds)
-    : newChatDisabledIds;
+  // The row's list is the only base a replacement may be built from; the
+  // local list is shown across the rename but never written back.
+  const rowDisabledIds = chatId
+    ? (optimisticDisabledIds ?? chatDetail?.disabled_mcp_server_ids)
+    : undefined;
+  const isReady = !chatId || rowDisabledIds !== undefined;
+  const disabledServerIds = rowDisabledIds ?? newChatDisabledIds;
 
   const toggleServer = useCallback(
     (serverId: string) => {
@@ -92,7 +104,10 @@ export function useChatDisabledMcpServers({
         setNewChatDisabledIds((previous) => toggled(previous, serverId));
         return;
       }
-      const next = toggled(disabledServerIds, serverId);
+      if (rowDisabledIds === undefined) {
+        return;
+      }
+      const next = toggled(rowDisabledIds, serverId);
       setOptimisticDisabledIds(next);
       void (async () => {
         try {
@@ -121,7 +136,7 @@ export function useChatDisabledMcpServers({
         }
       })();
     },
-    [chatId, disabledServerIds, queryClient, updateChat],
+    [chatId, queryClient, rowDisabledIds, updateChat],
   );
 
   return useMemo(
@@ -129,11 +144,19 @@ export function useChatDisabledMcpServers({
       disabledServerIds,
       toggleServer,
       isSaving,
+      isReady,
       newChatSeed:
         !chatId && newChatDisabledIds.length > 0
           ? newChatDisabledIds
           : undefined,
     }),
-    [chatId, disabledServerIds, isSaving, newChatDisabledIds, toggleServer],
+    [
+      chatId,
+      disabledServerIds,
+      isReady,
+      isSaving,
+      newChatDisabledIds,
+      toggleServer,
+    ],
   );
 }
