@@ -11,8 +11,11 @@ import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 
 import {
+  chatDetailQuery,
   fetchRecentChats,
+  generatingChatsQuery,
   recentChatsQuery,
+  useUnarchiveChatEndpoint,
   useUpdateChat,
   type RecentChatsError,
   type RecentChatsQueryParams,
@@ -252,6 +255,40 @@ export function useInfiniteRecentChats({
     isFetchingNextPage,
     queryKey,
   };
+}
+
+/**
+ * Callback that unarchives a chat and refreshes every surface that showed it
+ * as archived. A plain refetch is safe where archiving needs cache surgery:
+ * it re-derives each page offset from the pages it just fetched.
+ */
+export function useUnarchiveChat() {
+  const queryClient = useQueryClient();
+  const { mutateAsync: unarchiveChatMutation } = useUnarchiveChatEndpoint();
+
+  return useCallback(
+    async (chatId: string) => {
+      try {
+        await unarchiveChatMutation({ pathParams: { chatId } });
+      } catch (error) {
+        logger.log(`Failed to unarchive chat ${chatId}:`, error);
+        throw error;
+      }
+
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: recentChatsQuery({}).queryKey,
+        }),
+        queryClient.invalidateQueries({
+          queryKey: chatDetailQuery({ pathParams: { chatId } }).queryKey,
+        }),
+        queryClient.invalidateQueries({
+          queryKey: generatingChatsQuery({}).queryKey,
+        }),
+      ]);
+    },
+    [queryClient, unarchiveChatMutation],
+  );
 }
 
 /**

@@ -28,6 +28,7 @@ const spies = vi.hoisted(() => ({
     AddinStartView: null as (() => ReactNode) | null,
   },
   setGenerationCurrentChatId: vi.fn(),
+  unarchiveChat: vi.fn(async () => undefined),
   updateChatTitle: vi.fn(async () => undefined),
   runOpenHandler: { current: null as ((chatId: string) => void) | null },
   chatContextValue: { current: null as ChatContextValue | null },
@@ -114,6 +115,7 @@ vi.mock("@erato/frontend/library", async () => {
       return context;
     },
 
+    useUnarchiveChat: () => spies.unarchiveChat,
     useChatMessaging: spies.useChatMessaging,
     useGenerationStatusStore: Object.assign(vi.fn(), {
       getState: () => ({

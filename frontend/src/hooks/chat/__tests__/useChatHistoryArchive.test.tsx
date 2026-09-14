@@ -15,18 +15,24 @@ vi.mock("react-router-dom", async () => {
 });
 
 const mockArchiveMutation = vi.fn();
+const mockUnarchiveMutation = vi.fn();
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   fetchRecentChats: vi.fn(),
   useArchiveChatEndpoint: () => ({ mutateAsync: mockArchiveMutation }),
+  useUnarchiveChatEndpoint: () => ({ mutateAsync: mockUnarchiveMutation }),
   useUpdateChat: () => ({ mutateAsync: vi.fn() }),
   // Mirrors the generated queryKeyFn: queryParams become a key segment when
   // present, so each filter combination gets its own cache entry.
   recentChatsQuery: (v: { queryParams?: Record<string, unknown> }) => ({
     queryKey: v.queryParams ? ["recentChats", v.queryParams] : ["recentChats"],
   }),
+  chatDetailQuery: (v: { pathParams: { chatId: string } }) => ({
+    queryKey: ["chatDetail", { chatId: v.pathParams.chatId }],
+  }),
   chatMessagesQuery: (v: { pathParams: { chatId: string } }) => ({
     queryKey: ["chatMessages", { chatId: v.pathParams.chatId }],
   }),
+  generatingChatsQuery: () => ({ queryKey: ["generatingChats"] }),
 }));
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiContext", () => ({
@@ -76,26 +82,27 @@ let queryClient: QueryClient;
 const wrapper = ({ children }: { children: ReactNode }) =>
   createElement(QueryClientProvider, { client: queryClient }, children);
 
-describe("useChatHistory archiveChat optimistic removal", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    useChatHistoryFilterStore.setState({ ...CHAT_HISTORY_FILTER_DEFAULTS });
-    mockArchiveMutation.mockResolvedValue(undefined);
-    queryClient = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, staleTime: Infinity, gcTime: Infinity },
-      },
-    });
-
-    // Seed two loaded pages. Page 0: chat0..chat29, Page 1: chat30..chat44.
-    const page0Ids = Array.from({ length: 30 }, (_, i) => `chat${i}`);
-    const page1Ids = Array.from({ length: 15 }, (_, i) => `chat${i + 30}`);
-    queryClient.setQueryData(queryKey, {
-      pageParams: [0, 30],
-      pages: [makePage(0, page0Ids, true), makePage(30, page1Ids, false)],
-    });
+beforeEach(() => {
+  vi.clearAllMocks();
+  useChatHistoryFilterStore.setState({ ...CHAT_HISTORY_FILTER_DEFAULTS });
+  mockArchiveMutation.mockResolvedValue(undefined);
+  mockUnarchiveMutation.mockResolvedValue({ chat_id: "chat5" });
+  queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Infinity, gcTime: Infinity },
+    },
   });
 
+  // Seed two loaded pages. Page 0: chat0..chat29, Page 1: chat30..chat44.
+  const page0Ids = Array.from({ length: 30 }, (_, i) => `chat${i}`);
+  const page1Ids = Array.from({ length: 15 }, (_, i) => `chat${i + 30}`);
+  queryClient.setQueryData(queryKey, {
+    pageParams: [0, 30],
+    pages: [makePage(0, page0Ids, true), makePage(30, page1Ids, false)],
+  });
+});
+
+describe("useChatHistory archiveChat optimistic removal", () => {
   it("removes exactly one row and no other chat disappears (2+ pages)", async () => {
     const { result } = renderHook(() => useChatHistory(), { wrapper });
 
@@ -127,7 +134,7 @@ describe("useChatHistory archiveChat optimistic removal", () => {
     expect(cancelSpy).toHaveBeenCalledWith({ queryKey: ["recentChats"] });
   });
 
-  it("does not refetch the list (no invalidate)", async () => {
+  it("does not refetch the list, only the archived chat's detail", async () => {
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
     const { result } = renderHook(() => useChatHistory(), { wrapper });
 
@@ -135,7 +142,12 @@ describe("useChatHistory archiveChat optimistic removal", () => {
       await result.current.archiveChat("chat5");
     });
 
-    expect(invalidateSpy).not.toHaveBeenCalled();
+    expect(invalidateSpy).not.toHaveBeenCalledWith({
+      queryKey: ["recentChats"],
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["chatDetail", { chatId: "chat5" }],
+    });
   });
 
   it("keeps the row and refetches instead when archived chats are shown", async () => {
@@ -159,6 +171,9 @@ describe("useChatHistory archiveChat optimistic removal", () => {
     // refetch (not cache surgery) delivers its archived state.
     expect(result.current.chats.map((c) => c.id)).toContain("chat5");
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["recentChats"] });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["chatDetail", { chatId: "chat5" }],
+    });
   });
 
   it("removes the row from sibling filter variants and marks archived-inclusive ones stale", async () => {
@@ -243,5 +258,53 @@ describe("useChatHistory archiveChat optimistic removal", () => {
       "chat5",
       "chat6",
     ]);
+  });
+});
+
+describe("useChatHistory unarchiveChat", () => {
+  it("refetches the lists instead of editing cached pages in place", async () => {
+    const setQueriesDataSpy = vi.spyOn(queryClient, "setQueriesData");
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const { result } = renderHook(() => useChatHistory(), { wrapper });
+
+    await act(async () => {
+      await result.current.unarchiveChat("chat5");
+    });
+
+    expect(mockUnarchiveMutation).toHaveBeenCalledWith({
+      pathParams: { chatId: "chat5" },
+    });
+    expect(setQueriesDataSpy).not.toHaveBeenCalled();
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["recentChats"] });
+  });
+
+  it("invalidates the chat detail and the generating list", async () => {
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const { result } = renderHook(() => useChatHistory(), { wrapper });
+
+    await act(async () => {
+      await result.current.unarchiveChat("chat5");
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["chatDetail", { chatId: "chat5" }],
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["generatingChats"],
+    });
+  });
+
+  it("touches no cache when the mutation fails", async () => {
+    mockUnarchiveMutation.mockRejectedValueOnce(new Error("boom"));
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const { result } = renderHook(() => useChatHistory(), { wrapper });
+
+    await act(async () => {
+      await expect(result.current.unarchiveChat("chat5")).rejects.toThrow(
+        "boom",
+      );
+    });
+
+    expect(invalidateSpy).not.toHaveBeenCalled();
   });
 });

@@ -46,10 +46,15 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   useRecentChats: vi.fn(),
   fetchRecentChats: vi.fn(),
   useArchiveChatEndpoint: vi.fn(),
+  useUnarchiveChatEndpoint: vi.fn(() => ({ mutateAsync: vi.fn() })),
   useUpdateChat: vi.fn(),
+  chatDetailQuery: vi.fn((variables: { pathParams: { chatId: string } }) => ({
+    queryKey: ["chatDetail", { chatId: variables.pathParams.chatId }],
+  })),
   chatMessagesQuery: vi.fn((variables: { pathParams: { chatId: string } }) => ({
     queryKey: ["chatMessages", { chatId: variables.pathParams.chatId }],
   })),
+  generatingChatsQuery: vi.fn(() => ({ queryKey: ["generatingChats"] })),
   recentChatsQuery: vi.fn(() => ({ queryKey: ["recentChats"] })),
 }));
 

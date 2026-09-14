@@ -113,11 +113,15 @@ import type { StateCreator } from "zustand";
 
 // Mock dependencies
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
+  chatDetailQuery: vi.fn((variables: { pathParams: { chatId: string } }) => ({
+    queryKey: ["chatDetail", { chatId: variables.pathParams.chatId }],
+  })),
   chatMessagesQuery: vi.fn((variables: { pathParams: { chatId: string } }) => ({
     queryKey: ["chatMessages", { chatId: variables.pathParams.chatId }],
   })),
   fetchChatMessages: vi.fn(),
   fetchRecentChats: vi.fn(),
+  generatingChatsQuery: vi.fn(() => ({ queryKey: ["generatingChats"] })),
   recentChatsQuery: vi.fn(() => ({
     queryKey: ["recentChats"],
   })),
@@ -125,6 +129,7 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   useMessageSubmitSse: vi.fn(),
   useRecentChats: vi.fn(),
   useArchiveChatEndpoint: vi.fn(),
+  useUnarchiveChatEndpoint: vi.fn(() => ({ mutateAsync: vi.fn() })),
   useUpdateChat: vi.fn(),
 }));
 

@@ -15,6 +15,7 @@ import {
   useArchiveChatEndpoint,
   useUpdateChat,
   recentChatsQuery,
+  chatDetailQuery,
   chatMessagesQuery,
   type RecentChatsError,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
@@ -31,6 +32,7 @@ import { getStreamKey, useMessagingStore } from "./store/messagingStore";
 import {
   removeArchivedChatFromLists,
   useInfiniteRecentChats,
+  useUnarchiveChat,
   useUpdateChatTitle,
   type RecentChatsListFilters,
 } from "./useInfiniteRecentChats";
@@ -496,6 +498,9 @@ export function useChatHistory({
         void queryClient.invalidateQueries({
           queryKey: recentChatsQuery({}).queryKey,
         });
+        void queryClient.invalidateQueries({
+          queryKey: chatDetailQuery({ pathParams: { chatId } }).queryKey,
+        });
         return;
       }
 
@@ -521,6 +526,10 @@ export function useChatHistory({
           body: {}, // Send empty object as body
         });
 
+        void queryClient.invalidateQueries({
+          queryKey: chatDetailQuery({ pathParams: { chatId } }).queryKey,
+        });
+
         // If the archived chat was the current one, navigate to the new chat page
         if (currentChatId === chatId) {
           navigate("/chat/new", { replace: true });
@@ -538,6 +547,8 @@ export function useChatHistory({
     },
     [archiveChatMutation, queryClient, currentChatId, navigate, statusFilter],
   );
+
+  const unarchiveChat = useUnarchiveChat();
 
   // Update chat title_by_user_provided
   const updateChatTitle = useUpdateChatTitle();
@@ -576,6 +587,7 @@ export function useChatHistory({
     navigateToChat,
     createNewChat,
     archiveChat,
+    unarchiveChat,
     updateChatTitle,
     pinChat,
     isNewChatPending,
