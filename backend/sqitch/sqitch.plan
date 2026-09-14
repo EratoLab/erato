@@ -44,3 +44,4 @@
 0041_notify_policy_fact_changes 2026-09-12T00:00:00Z Codex <codex@openai.com> # Post-commit notifications for authorization fact invalidation
 0042_add_decision_to_user_tool_approval_settings 2026-09-13T00:00:00Z bdart <dfiebig@bdart.de> # Add per-user MCP tool decision to approval settings
 0043_add_mcp_write_tools_enabled_to_chats 2026-09-13T00:00:00Z bdart <dfiebig@bdart.de> # Add per-chat MCP write tools toggle
+0044_add_disabled_mcp_server_ids_to_chats 2026-09-14T00:00:00Z bdart <dfiebig@bdart.de> # Add per-chat disabled MCP server list

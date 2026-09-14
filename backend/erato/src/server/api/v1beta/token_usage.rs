@@ -374,6 +374,7 @@ pub async fn token_usage_estimate(
             generation_heartbeat_at: None,
             generation_ended_at: None,
             mcp_write_tools_enabled: true,
+            disabled_mcp_server_ids: Vec::new(),
         };
         chat = Some(synthetic_chat);
     }

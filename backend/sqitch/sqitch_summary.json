@@ -42,7 +42,8 @@
     "deploy/0040_add_assistant_usage_indexes.sql",
     "deploy/0041_notify_policy_fact_changes.sql",
     "deploy/0042_add_decision_to_user_tool_approval_settings.sql",
-    "deploy/0043_add_mcp_write_tools_enabled_to_chats.sql"
+    "deploy/0043_add_mcp_write_tools_enabled_to_chats.sql",
+    "deploy/0044_add_disabled_mcp_server_ids_to_chats.sql"
   ],
-  "latest_change": "81dc69a38767e3548b9debdd4a1fbbb3bcf6ca22"
+  "latest_change": "d822cf9ee655a4d581e30797d8423ce08d8957e4"
 }
