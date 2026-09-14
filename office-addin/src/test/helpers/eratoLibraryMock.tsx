@@ -195,6 +195,11 @@ export const DEFAULT_STUBS = {
   ERATO_KIT_SURFACE_EXPORTS: [] as readonly string[],
   ERATO_SHARED_SURFACE_VERSION: 1,
   ERATO_SHARED_SURFACE_MINOR: 0,
+  // Empty for the same reason as the export list: no add-in module reads a
+  // class off the record, and mirroring 60-odd host class names here would be
+  // a second copy to keep in step with globals.css. A test that renders
+  // something reading one supplies the entry it needs.
+  ERATO_GEOMETRY_CLASS: {} as Record<string, string>,
 
   // Host chrome the add-in compositions mount but never assert on.
   ApiProvider: StubPassthrough,
