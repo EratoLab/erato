@@ -225,6 +225,140 @@ Messages also expose `data-role="user"` and `data-role="assistant"` on the messa
 
 `message-body` wraps the avatar and the message content. On a user message carrying files, `message-attachments` is a sibling rendered above it, so a fill applied to `message-body` covers the text without covering the attachments; on an assistant message the attachments stay inside `message-body` and the hook is absent. Themes that need to work against both shapes can branch on `:has([data-ui="message-body"])`.
 
+## Class Hooks
+
+Alongside the `data-ui` attributes, the app publishes a set of global class names. Component kits, customer `theme.css` overlays and the Office add-in all paste these as bare string literals — nothing imports them across the boundary — so they are a public contract with no compiler standing behind them. The declared list lives in one record in the frontend, `ERATO_GEOMETRY_CLASS`, and a test reads both that record and `globals.css`, so a class renamed or dropped on the host side fails in CI.
+
+That test exists because on the theme side the failure is invisible. A shipped customer theme once carried a rule keyed on two button geometry class names the app had never emitted. Nothing complained: a selector that matches nothing is valid CSS, the browser logs nothing, and the theme went on building and deploying. The rule simply did nothing for a whole release, and it was caught by eye rather than by a test. A theme repository cannot test for this — it holds no copy of the host's markup — so the host is the only side where a guard can live, which is what makes the record the contract. Renaming one of these in `globals.css` breaks every kit and theme that targets it, silently. Add to the list when a class becomes themeable, and ship a migration when one has to change.
+
+| Class                                                                  | Surface                                                                        | Kind     | Position            |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------ | -------- | ------------------- |
+| `alert-geometry`                                                       | Inline alert banner: corner and padding                                        | geometry | `@layer components` |
+| `anchored-popover-skin`                                                | Every popover panel: fill, hairline, shadow; declares `--dropdown-item-radius` | skin     | after the layer     |
+| `app-shell-skin`                                                       | App shell background                                                           | skin     | after the layer     |
+| `attachment-badge-geometry`                                            | Remove button on a staged attachment; an intrinsic circle                      | geometry | `@layer components` |
+| `attachment-group-frame-geometry`                                      | Attachment group frame                                                         | geometry | after the layer     |
+| `attachment-group-geometry`                                            | Attachment group outer box                                                     | geometry | after the layer     |
+| `attachment-group-header-geometry`                                     | Attachment group header band                                                   | geometry | after the layer     |
+| `attachment-group-items-geometry`                                      | Attachment group item area                                                     | geometry | after the layer     |
+| `attachment-notice-geometry`                                           | Status or loading row inside a group                                           | geometry | `@layer components` |
+| `attachment-notice-icon-skin`                                          | That row's icon                                                                | skin     | after the layer     |
+| `attachment-notice-label-skin`                                         | That row's label                                                               | skin     | after the layer     |
+| `attachment-notice-skin`                                               | That row's fill and border, per `data-tone`                                    | skin     | after the layer     |
+| `attachment-tile-geometry`                                             | Attachment chip corner                                                         | geometry | `@layer components` |
+| `attachment-tile-icon-geometry`                                        | Icon plate behind a document chip's glyph                                      | geometry | `@layer components` |
+| `attachment-tile-icon-skin`                                            | That plate's tint                                                              | skin     | after the layer     |
+| `avatar-geometry`                                                      | Avatar circle                                                                  | geometry | `@layer components` |
+| `btn-geometry-sm`, `btn-geometry-md`, `btn-geometry-lg`                | Shared button padding and minimum size, per size                               | geometry | `@layer components` |
+| `btn-geometry-icon-sm`, `btn-geometry-icon-md`, `btn-geometry-icon-lg` | The same for icon-only buttons                                                 | geometry | `@layer components` |
+| `card-body-geometry`                                                   | Card body inset; publishes the corner and inset a nested card derives          | geometry | `@layer components` |
+| `card-geometry`                                                        | Card frame corner, from `--card-radius`                                        | geometry | `@layer components` |
+| `card-skin`                                                            | Card border, fill and shadow, with tone, hover, selected and expanded variants | skin     | after the layer     |
+| `chat-body-skin`                                                       | Conversation body background                                                   | skin     | after the layer     |
+| `chat-header-skin`                                                     | Chat header background                                                         | skin     | after the layer     |
+| `chat-input-controls-geometry`                                         | Composer control row                                                           | geometry | `@layer components` |
+| `chat-input-shell-geometry`                                            | Composer shell padding                                                         | geometry | `@layer components` |
+| `chat-input-shell-skin`                                                | Composer shell fill and border                                                 | skin     | after the layer     |
+| `chat-input-textarea-geometry`                                         | Composer textarea box                                                          | geometry | `@layer components` |
+| `chat-message-skin`                                                    | Message shell paint                                                            | skin     | after the layer     |
+| `dropdown-item-geometry`                                               | Menu row padding and its derived corner                                        | geometry | `@layer components` |
+| `dropdown-panel-chrome-geometry`                                       | Popover panel inset                                                            | geometry | `@layer components` |
+| `floating-control-skin`                                                | Floating and framed sidebar toggle: corner, hairline, shadow, opaque base      | skin     | after the layer     |
+| `focus-ring`                                                           | Standard `focus-visible` ring, with offset                                     | state    | after the layer     |
+| `focus-ring-inset`                                                     | The same ring drawn inside the box                                             | state    | after the layer     |
+| `focus-ring-tight`                                                     | The same ring with no offset                                                   | state    | after the layer     |
+| `list-row-geometry`                                                    | Plain list row corner                                                          | geometry | after the layer     |
+| `message-frame-geometry`                                               | Framed alert, worn by the composer's non-alert notices as well                 | geometry | `@layer components` |
+| `modal-close-geometry`                                                 | Dialog close button; a circle                                                  | geometry | `@layer components` |
+| `modal-overlay-skin`                                                   | Dialog scrim                                                                   | skin     | after the layer     |
+| `modal-section-geometry`                                               | Dialog section padding                                                         | geometry | `@layer components` |
+| `modal-shell-frame-geometry`                                           | Dialog maximum width and height                                                | geometry | `@layer components` |
+| `modal-shell-skin`                                                     | Dialog panel paint                                                             | skin     | after the layer     |
+| `option-card-geometry`                                                 | Option card corner                                                             | geometry | `@layer components` |
+| `page-shell-skin`                                                      | Page shell background                                                          | skin     | after the layer     |
+| `pill-geometry`                                                        | Badge, chip and status pill capsule                                            | geometry | `@layer components` |
+| `sidebar-band-geometry`                                                | Sidebar header and footer band: derived minimum height and padding             | geometry | after the layer     |
+| `sidebar-content-col-geometry`                                         | Sidebar row content column                                                     | geometry | after the layer     |
+| `sidebar-icon-col-geometry`                                            | Sidebar row icon column                                                        | geometry | after the layer     |
+| `sidebar-icon-col-geometry-avatar`                                     | Its avatar variant                                                             | geometry | after the layer     |
+| `sidebar-icon-col-geometry-logo`                                       | Its logo variant                                                               | geometry | after the layer     |
+| `sidebar-inset-geometry`                                               | Sidebar horizontal inset                                                       | geometry | after the layer     |
+| `sidebar-label-col-geometry`                                           | Sidebar row label column                                                       | geometry | after the layer     |
+| `sidebar-row-geometry`                                                 | Sidebar row minimum height and corner                                          | geometry | after the layer     |
+| `sidebar-row-selected`                                                 | Selected sidebar row fill                                                      | state    | after the layer     |
+| `sidebar-section-skin`                                                 | Sidebar band fill and divider                                                  | skin     | after the layer     |
+| `sidebar-skin`                                                         | Sidebar background                                                             | skin     | after the layer     |
+| `sidebar-trailing-col-geometry`                                        | Sidebar row trailing column                                                    | geometry | after the layer     |
+| `spinner-geometry`                                                     | Loading ring                                                                   | geometry | `@layer components` |
+| `tab-item-geometry`                                                    | One tab                                                                        | geometry | `@layer components` |
+| `tab-rail-geometry`                                                    | Tab strip                                                                      | geometry | `@layer components` |
+| `tab-rail-track-geometry`                                              | Segmented control track                                                        | geometry | `@layer components` |
+| `theme-transition`                                                     | Shared colour, shadow and transform transition                                 | motion   | after the layer     |
+| `thread-message-card-geometry`                                         | Email thread message card                                                      | geometry | after the layer     |
+
+**Kind** says what the class sets: `geometry` is shape and spacing, `skin` is paint, and `state` and `motion` cover the few that are neither.
+
+One more name is declared API but has no row above, because it has no rule of its own: `group`, Tailwind's hover-scope marker. Host message controls compile their `group-hover:` variants down to `.group:hover`, so a kit that wraps host controls in its own markup has to carry a literal `group` class for those host styles to reach in.
+
+## Which Rule Wins
+
+**Position** in the table is a position in one output file, and that is the whole mechanism. This is worth stating plainly, because the name invites the wrong picture: the frontend is on Tailwind 3, where `@layer` is a build-time directive rather than a CSS cascade layer. Tailwind hoists the `@layer components` block up to where `@tailwind components` sits and emits no `@layer` at-rules at all, so the built stylesheet has no cascade layers in it. Nothing here wins on layer precedence, because there are no layers. Everything is specificity, then source order.
+
+The order that comes out of the build is:
+
+1. Geometry classes, hoisted to the components position
+2. Tailwind utilities
+3. Skin classes, and the fifteen geometry classes marked "after the layer"
+4. `theme.css`, which is a separate stylesheet
+
+So a caller's `p-0` overrides `card-geometry` because it comes later at the same specificity, which is exactly what geometry is for: a host component hands out a default shape a caller can adjust without a fight. And `card-skin` overrides that same `p-0` because it comes later still, which is what skin is for: paint the host keeps control of.
+
+The fifteen unlayered geometry classes are the practical catch in that ordering, and the reason the column is worth reading. They predate the convention and sit after the utilities, so a kit's own `rounded-*` or `p-*` utility written on markup that carries `sidebar-row-geometry` or `list-row-geometry` does **not** override it — the class wins. They are frozen where they are rather than corrected, since moving one into the layer would change which rule wins, and that is a visual change, not a refactor. The test pins the exact set so it cannot quietly grow; new geometry classes go inside the layer.
+
+For a theme author all of this collapses to one rule, because `theme.css` comes after the entire file either way. Match the host selector's specificity and your rule wins; fall short of it and it loses. There is no case anywhere in this system where a less specific rule wins on position alone. Compound host selectors are where a theme rule falls short — `card-skin` alone has eleven heads, several of them carrying `[data-tone=…]` or `:hover` — so match those heads rather than reaching for `!important`. The two-knob advice above is the same point from the other side: moving `--card-border` reaches every state at one stroke, where a `border-color` rule has to out-specify each variant.
+
+It is worth naming the belief this replaces, since it is a natural one and it is wrong: skins are not unlayered so that `theme.css` can override them. Being unlayered does nothing for a theme at all. It changes which **app** rules a class beats — utilities, above all — and changes nothing about `theme.css`, which is appended to `<head>` last as a `link[data-theme-styles]` element and therefore comes after layered and unlayered rules alike. What lets a theme win is where it loads.
+
+### Write Every Zero as `0px`
+
+A bare `0` is a `<number>`, not a `<length>`. Inside `calc()` or `max()` that is a type error, and the consequence is silent: the whole expression becomes invalid, the property reading it is invalid at computed-value time and falls back to its initial value, and nothing appears in the console. A `var()` fallback does not rescue it either, since a fallback fires only when a variable is unset, never when its value is invalid.
+
+The card nest is where this bites. A card body derives what its nested children use:
+
+```css
+.card-body-geometry {
+  --card-child-radius: max(0px, var(--card-radius) - var(--card-inset));
+  --card-child-inset: max(0px, var(--card-inset) - 0.25rem);
+
+  padding: var(--card-inset);
+}
+```
+
+A theme that wants flush cards reaches for the inset, reasonably enough:
+
+```css
+/* Wrong. The padding collapses as asked; every nested corner goes square. */
+[data-ui="card"] {
+  --card-inset: 0;
+}
+```
+
+`padding: 0` is perfectly valid, so the visible half of the change works and the result looks right at the top level. Both derivations are now invalid, though, so nested cards lose their corner and their inset together, and a nest that should stay concentric goes square from the second level down. The fix is one character:
+
+```css
+[data-ui="card"] {
+  --card-inset: 0px;
+}
+```
+
+The rule has no exceptions. In a theme, in a kit, on any custom property a `calc()` or `max()` might read, write `0px`. Radius, inset and gap variables are all read that way somewhere — the tab rail derives a tab's corner from `--tab-rail-track-padding` the same way, and a bare `0` there squares every tab.
+
+### Dialogs Are Not Inside the Page Shell
+
+`ModalBase` renders through a portal into `document.body`, so dialog markup is not a descendant of `app-shell` or `page-shell`. A theme rule scoped under either — `[data-ui="page-shell"] [data-ui="card"]`, say — reaches the whole app except its dialogs. The usual course is that the gap is noticed late and covered by a second, near-duplicate rule; a shipped theme carries two such workarounds for exactly this reason.
+
+Scope dialog rules on the portaled tree itself instead: `modal-overlay` for the scrim and `modal-shell` for the panel, both emitted inside the portal. Theme tokens are unaffected either way, since they are written to `:root` along with the mode attribute and so reach dialog content normally. Only descendant selectors rooted at a shell hook miss it.
+
 ## Surface Glossary
 
 The names people use for these surfaces rarely match the component names, and the same surface can be drawn by the host or by a component kit. This table maps the everyday name to the hook a theme keys on and to where its corner radius comes from, so a theme can give any of them a different shape without touching per-component rules. Elements that carry a `data-ui` hook never use Tailwind rounding utilities; a lint rule enforces that, so every such corner is reachable from a theme.
