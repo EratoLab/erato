@@ -522,8 +522,8 @@ export function useChatHistory({
           body: {}, // Send empty object as body
         });
 
-        // An archived chat has no row, so its status must not keep counting;
-        // cleared only on success so a failed archive keeps the row's marker.
+        // An archived chat carries no marker; cleared only on success so a
+        // failed archive keeps the row's marker.
         useGenerationStatusStore.getState().clearStatus(chatId);
         useChatHistoryStore.getState().clearTitleHint(chatId);
 

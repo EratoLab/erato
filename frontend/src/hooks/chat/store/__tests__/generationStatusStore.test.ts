@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  seedGenerationStatusFromListing,
   selectAttentionCount,
   selectPollDriverCount,
   selectRunningCount,
@@ -394,6 +395,30 @@ describe("generationStatusStore", () => {
       store().reset();
       expect(store().statusByChatId).toEqual({});
       expect(store().currentChatId).toBeNull();
+    });
+  });
+
+  describe("seedGenerationStatusFromListing", () => {
+    it("seeds running and parked rows but never an archived one", () => {
+      seedGenerationStatusFromListing([
+        { id: "running", active_generation_started_at: iso(0) },
+        { id: "parked", pending_tool_approval_at: iso(0) },
+        {
+          id: "archived-running",
+          active_generation_started_at: iso(0),
+          archived_at: iso(1000),
+        },
+        {
+          id: "archived-parked",
+          pending_tool_approval_at: iso(0),
+          archived_at: iso(1000),
+        },
+      ]);
+
+      expect(statusOf("running")?.kind).toBe("running");
+      expect(statusOf("parked")?.kind).toBe("action_required");
+      expect(statusOf("archived-running")).toBeUndefined();
+      expect(statusOf("archived-parked")).toBeUndefined();
     });
   });
 

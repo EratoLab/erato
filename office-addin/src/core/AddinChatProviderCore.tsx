@@ -254,8 +254,8 @@ function AddinChatDataProvider({
       void queryClient.invalidateQueries({
         queryKey: chatDetailQuery({ pathParams: { chatId } }).queryKey,
       });
-      // An archived chat has no row, so its status must not keep counting;
-      // cleared only on success so a failed archive keeps the row's marker.
+      // An archived chat carries no marker; cleared only on success so a
+      // failed archive keeps the row's marker.
       useGenerationStatusStore.getState().clearStatus(chatId);
       if (session.currentChatId === chatId) {
         session.beginNewChat();
