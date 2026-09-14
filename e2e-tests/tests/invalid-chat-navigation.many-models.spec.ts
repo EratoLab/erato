@@ -153,10 +153,13 @@ test(
     );
     expect(archiveResp.status()).toBe(200);
 
-    // The pinned list answers the same path and can land first.
-    const listAfterArchive = page.waitForResponse(
-      (r) =>
-        r.url().includes(RECENT_CHATS_URL) && !r.url().includes("pinned=true"),
+    // The pinned list answers the same path, and a listing fetched before the
+    // archive can still be in flight — both still carry the id, so skip them.
+    const listWithoutChat = page.waitForResponse(
+      async (r) =>
+        r.url().includes(RECENT_CHATS_URL) &&
+        !r.url().includes("pinned=true") &&
+        !(await r.text()).includes(chatId),
       { timeout: 15000 },
     );
     // No readiness wait here: it ends on an enabled composer, which is exactly
@@ -172,7 +175,7 @@ test(
     const sidebar = page.getByRole("complementary");
     await expect(sidebar).toBeVisible();
     const row = sidebar.locator(`[data-chat-id="${chatId}"]`);
-    await listAfterArchive;
+    await listWithoutChat;
     await expect(row).toHaveCount(0);
 
     const unarchiveResp = page.waitForResponse(
@@ -186,7 +189,7 @@ test(
 
     await expect(notice).toHaveCount(0, { timeout: 15000 });
     await expect(textboxOf(page)).toBeEnabled({ timeout: 15000 });
-    await expect(row).toBeVisible({ timeout: 15000 });
+    await expect(row.first()).toBeVisible({ timeout: 15000 });
     console.log(
       "[archived] api>=400:",
       JSON.stringify(api.filter((a) => a.status >= 400)),
