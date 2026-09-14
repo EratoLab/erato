@@ -28,7 +28,9 @@ import {
   PinSlashIcon,
   ShareIcon,
 } from "@/components/ui/icons";
+import { useChatHistoryFilterStore } from "@/hooks/chat/store/chatHistoryFilterStore";
 import { useChatRowStatus } from "@/hooks/chat/useChatRowStatus";
+import { buildRecentChatsFilterParams } from "@/hooks/chat/useInfiniteRecentChats";
 import { usePageAlignment } from "@/hooks/ui";
 import {
   fetchRecentChats,
@@ -233,6 +235,19 @@ export default function SearchPage() {
   const backendSearchQuery = debouncedSearchQuery.trim();
   const isShowingRecent = backendSearchQuery === "";
 
+  const statusFilter = useChatHistoryFilterStore((state) => state.statusFilter);
+  // Status follows the sidebar's filter, which is on screen here, so an archive
+  // from either surface edits the same cache entries.
+  const searchQueryParams = {
+    limit: SEARCH_PAGE_SIZE,
+    ...(backendSearchQuery ? { q: backendSearchQuery } : {}),
+    ...buildRecentChatsFilterParams({
+      typeFilter: "all",
+      statusFilter,
+      delegatedFilter: "hidden",
+    }),
+  };
+
   const {
     data: recentChatsPages,
     isLoading,
@@ -244,12 +259,7 @@ export default function SearchPage() {
     error: searchError,
   } = useInfiniteQuery({
     queryKey: [
-      ...recentChatsQuery({
-        queryParams: {
-          limit: SEARCH_PAGE_SIZE,
-          ...(backendSearchQuery ? { q: backendSearchQuery } : {}),
-        },
-      }).queryKey,
+      ...recentChatsQuery({ queryParams: searchQueryParams }).queryKey,
       "search-infinite",
     ],
     initialPageParam: 0,
@@ -258,11 +268,7 @@ export default function SearchPage() {
       return fetchRecentChats(
         {
           ...fetcherOptions,
-          queryParams: {
-            limit: SEARCH_PAGE_SIZE,
-            offset,
-            ...(backendSearchQuery ? { q: backendSearchQuery } : {}),
-          },
+          queryParams: { ...searchQueryParams, offset },
         },
         signal,
       );

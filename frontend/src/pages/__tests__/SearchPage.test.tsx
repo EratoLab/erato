@@ -1,6 +1,7 @@
 import { i18n, type Messages } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -11,6 +12,10 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useToastStore } from "@/components/ui/Toast/toastStore";
+import {
+  CHAT_HISTORY_FILTER_DEFAULTS,
+  useChatHistoryFilterStore,
+} from "@/hooks/chat/store/chatHistoryFilterStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { fetchRecentChats } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { messages as enMessages } from "@/locales/en/messages.json";
@@ -157,6 +162,7 @@ const allFeaturesOn = {
 describe("SearchPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useChatHistoryFilterStore.setState({ ...CHAT_HISTORY_FILTER_DEFAULTS });
     useGenerationStatusStore.setState({
       statusByChatId: {},
       currentChatId: null,
@@ -199,6 +205,44 @@ describe("SearchPage", () => {
     expect(
       vi.mocked(fetchRecentChats).mock.calls[0][0].queryParams,
     ).not.toHaveProperty("include_delegated");
+  });
+
+  const lastRequest = () => {
+    const [{ queryKey, queryFn }] = mockUseInfiniteQuery.mock.calls.at(-1) as [
+      {
+        queryKey: unknown[];
+        queryFn: (context: { pageParam: number }) => unknown;
+      },
+    ];
+    queryFn({ pageParam: 0 });
+    return {
+      queryKey,
+      queryParams: vi.mocked(fetchRecentChats).mock.calls.at(-1)?.[0]
+        .queryParams as Record<string, unknown>,
+    };
+  };
+
+  it("lists only active chats under the sidebar's default status filter", () => {
+    renderPage();
+
+    const { queryKey, queryParams } = lastRequest();
+    for (const part of queryKey) {
+      expect(part).not.toHaveProperty("include_archived");
+    }
+    expect(queryParams).not.toHaveProperty("include_archived");
+  });
+
+  it("asks for archived chats in key and request once the sidebar shows all", () => {
+    renderPage();
+    act(() => {
+      useChatHistoryFilterStore.setState({ statusFilter: "all" });
+    });
+
+    const { queryKey, queryParams } = lastRequest();
+    expect(queryKey).toContainEqual(
+      expect.objectContaining({ include_archived: true }),
+    );
+    expect(queryParams).toHaveProperty("include_archived", true);
   });
 
   it("offers Unarchive and Rename alone on an archived result", () => {
