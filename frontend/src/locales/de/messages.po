@@ -2308,8 +2308,18 @@ msgstr "Konnektoren"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
+msgid "chatInput.connectors.server.allToolsDisabled"
+msgstr "Alle Tools ausgeschaltet"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
 msgid "chatInput.connectors.server.disabledTools"
 msgstr "{disabledToolCount, plural, one {# Tool ausgeschaltet} other {# Tools ausgeschaltet}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+msgid "chatInput.connectors.server.someToolsDisabled"
+msgstr "Einige Tools ausgeschaltet"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
@@ -2320,6 +2330,11 @@ msgstr "Für diesen Chat ausgeschaltet"
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
 msgid "chatInput.connectors.tool.switchCaption"
 msgstr "In diesem Chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.tool.switchedOffByRule"
+msgstr "Für diesen Chat durch die Regel {coveringPattern} ausgeschaltet"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
