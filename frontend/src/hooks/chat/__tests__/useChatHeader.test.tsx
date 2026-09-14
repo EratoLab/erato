@@ -2,7 +2,7 @@ import { skipToken } from "@tanstack/react-query";
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useDelegatedRunHeader } from "../useDelegatedRunHeader";
+import { useChatHeader } from "../useChatHeader";
 
 import type { ChatDetail } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
@@ -31,7 +31,7 @@ const delegatedRun = (overrides: Partial<ChatDetail> = {}): ChatDetail => ({
   ...overrides,
 });
 
-describe("useDelegatedRunHeader", () => {
+describe("useChatHeader", () => {
   beforeEach(() => {
     mockUseChatDetail.mockReset();
     mockUseGenerationStatusFor.mockReset();
@@ -41,7 +41,7 @@ describe("useDelegatedRunHeader", () => {
   it("asks for the chat by id rather than reading a listing row", () => {
     mockUseChatDetail.mockReturnValue({ data: delegatedRun() });
 
-    renderHook(() => useDelegatedRunHeader("run-1"));
+    renderHook(() => useChatHeader("run-1"));
 
     expect(mockUseChatDetail).toHaveBeenCalledWith({
       pathParams: { chatId: "run-1" },
@@ -51,7 +51,7 @@ describe("useDelegatedRunHeader", () => {
   it("renders a header for a delegated run and leaves its composer open", () => {
     mockUseChatDetail.mockReturnValue({ data: delegatedRun() });
 
-    const { result } = renderHook(() => useDelegatedRunHeader("run-1"));
+    const { result } = renderHook(() => useChatHeader("run-1"));
 
     expect(result.current.header).not.toBeNull();
     expect(result.current.composerLocked).toBe(false);
@@ -62,7 +62,7 @@ describe("useDelegatedRunHeader", () => {
       data: delegatedRun({ provenance_kind: undefined }),
     });
 
-    const { result } = renderHook(() => useDelegatedRunHeader("chat-1"));
+    const { result } = renderHook(() => useChatHeader("chat-1"));
 
     expect(result.current.header).toBeNull();
     expect(result.current.composerLocked).toBe(false);
@@ -71,7 +71,7 @@ describe("useDelegatedRunHeader", () => {
   it("renders nothing while the chat has not loaded", () => {
     mockUseChatDetail.mockReturnValue({ data: undefined });
 
-    const { result } = renderHook(() => useDelegatedRunHeader("run-1"));
+    const { result } = renderHook(() => useChatHeader("run-1"));
 
     expect(result.current.header).toBeNull();
   });
@@ -84,7 +84,7 @@ describe("useDelegatedRunHeader", () => {
       localSeenAt: 0,
     });
 
-    const { result } = renderHook(() => useDelegatedRunHeader("run-1"));
+    const { result } = renderHook(() => useChatHeader("run-1"));
 
     expect(result.current.composerLocked).toBe(true);
   });
@@ -99,7 +99,7 @@ describe("useDelegatedRunHeader", () => {
       localSeenAt: 0,
     });
 
-    const { result } = renderHook(() => useDelegatedRunHeader("run-1"));
+    const { result } = renderHook(() => useChatHeader("run-1"));
 
     expect(result.current.composerLocked).toBe(false);
   });
@@ -109,7 +109,7 @@ describe("useDelegatedRunHeader", () => {
       data: delegatedRun({ archived_at: "2026-08-19T10:00:00Z" }),
     });
 
-    const { result } = renderHook(() => useDelegatedRunHeader("run-1"));
+    const { result } = renderHook(() => useChatHeader("run-1"));
 
     expect(result.current.composerLocked).toBe(true);
   });
@@ -117,7 +117,7 @@ describe("useDelegatedRunHeader", () => {
   it("does not fetch without a chat id", () => {
     mockUseChatDetail.mockReturnValue({ data: undefined });
 
-    renderHook(() => useDelegatedRunHeader(undefined));
+    renderHook(() => useChatHeader(undefined));
 
     expect(mockUseChatDetail).toHaveBeenCalledWith(skipToken);
   });

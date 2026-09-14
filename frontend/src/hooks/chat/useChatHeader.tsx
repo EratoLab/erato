@@ -18,7 +18,7 @@ import { useGenerationStatusFor } from "./store/generationStatusStore";
 
 import type { ReactNode } from "react";
 
-export interface DelegatedRunHeaderState {
+export interface ChatHeaderState {
   /** Null unless the chat is a delegated run. */
   header: ReactNode | null;
   /**
@@ -41,13 +41,13 @@ const delegateIsWriting = (
   (generationKind === "running" || generationKind === "action_required") &&
   !adoptedAt;
 
-export const useDelegatedRunHeader = (
+export const useChatHeader = (
   chatId: string | null | undefined,
   options?: {
     /** Forwarded to the header's origin link; see `DelegatedRunHeaderProps`. */
     onOpenOrigin?: (chatId: string) => void;
   },
-): DelegatedRunHeaderState => {
+): ChatHeaderState => {
   const onOpenOrigin = options?.onOpenOrigin;
   const { data: chat } = useChatDetail(
     chatId ? { pathParams: { chatId } } : skipToken,

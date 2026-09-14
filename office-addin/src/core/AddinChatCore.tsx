@@ -20,8 +20,8 @@ import {
   transformEmailFencesForCopy,
   useActiveModelSelection,
   useChatContext,
+  useChatHeader,
   useConversationDropzone,
-  useDelegatedRunHeader,
   useFileCapabilitiesContext,
   useFilePreviewModal,
   useFileUploadWithTokenCheck,
@@ -155,7 +155,7 @@ export interface AddinChatController {
   isHistoryMenuOpen: boolean;
   setIsHistoryMenuOpen: (isOpen: boolean) => void;
   /** Banner identifying the open chat as a delegated run; null otherwise. */
-  delegatedRunHeader: ReactNode;
+  chatHeader: ReactNode;
   /** A delegate still writing the run refuses sends with a 409; closing the
    * composer is how the user learns that instead of by sending into it. */
   composerLocked: boolean;
@@ -231,7 +231,7 @@ function useAddinChatController({
     () => ({ onOpenOrigin: openChatById }),
     [openChatById],
   );
-  const { header: delegatedRunHeader, composerLocked } = useDelegatedRunHeader(
+  const { header: chatHeader, composerLocked } = useChatHeader(
     chat.currentChatId,
     runHeaderOptions,
   );
@@ -471,7 +471,7 @@ function useAddinChatController({
     setIsSettingsOpen,
     isHistoryMenuOpen,
     setIsHistoryMenuOpen,
-    delegatedRunHeader,
+    chatHeader,
     composerLocked,
     openDelegatedRun,
     openChatById,
@@ -708,14 +708,14 @@ export function AddinChatCoreView({
                 </div>
               ) : null}
               {beforeMessages}
-              {controller.delegatedRunHeader ? (
+              {controller.chatHeader ? (
                 // pl-10 clears the floating drawer trigger, which otherwise
                 // sits on the header's title; with a header row the trigger
                 // is in flow and needs no clearance.
                 <div
                   className={`relative z-10 shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3${TopLeftAccessory ? "" : " pl-10"}${hasStartViewToggle && !TopLeftAccessory ? " pr-10" : ""}`}
                 >
-                  {controller.delegatedRunHeader}
+                  {controller.chatHeader}
                 </div>
               ) : null}
               <MessageEditProvider value={controller.messageEditValue}>
