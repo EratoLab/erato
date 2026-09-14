@@ -112,7 +112,7 @@ describe("createEntraAuthSource", () => {
     });
     expect(pca.acquireTokenSilent).toHaveBeenCalledWith(
       expect.objectContaining({
-        scopes: ["User.Read"],
+        scopes: ["User.Read", "openid", "profile", "email"],
         loginHint: "user@example.com",
       }),
     );
@@ -206,7 +206,7 @@ describe("createEntraAuthSource", () => {
     ).resolves.toEqual({ idToken: "id-token", accessToken: "access-token" });
     expect(pca.acquireTokenPopup).toHaveBeenCalledWith(
       expect.objectContaining({
-        scopes: ["User.Read"],
+        scopes: ["User.Read", "openid", "profile", "email"],
         prompt: "select_account",
       }),
     );
@@ -226,7 +226,7 @@ describe("createEntraAuthSource", () => {
     expect(pca.acquireTokenSilent).not.toHaveBeenCalled();
     expect(pca.acquireTokenPopup).toHaveBeenCalledWith(
       expect.objectContaining({
-        scopes: ["User.Read"],
+        scopes: ["User.Read", "openid", "profile", "email"],
         prompt: "select_account",
         loginHint: "user@example.com",
       }),
@@ -278,7 +278,7 @@ describe("createEntraAuthSource", () => {
     ).resolves.toEqual({ idToken: "id-token", accessToken: "access-token" });
     expect(pca.acquireTokenPopup).toHaveBeenCalledWith(
       expect.objectContaining({
-        scopes: ["User.Read"],
+        scopes: ["User.Read", "openid", "profile", "email"],
         prompt: "select_account",
         loginHint: "user@example.com",
       }),

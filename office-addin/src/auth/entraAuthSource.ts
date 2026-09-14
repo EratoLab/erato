@@ -16,8 +16,11 @@ import {
   type LoginHintResolver,
 } from "../core/auth/AuthSource";
 
-/** Scopes for the Layer-1 bootstrap token that gets redeemed for the session. */
-const OAUTH2_PROXY_SESSION_SCOPES = ["User.Read"];
+/**
+ * Request email explicitly for the ID token redeemed into the proxy session.
+ * Entra can still omit the claim; downstream consumers must handle its absence.
+ */
+const OAUTH2_PROXY_SESSION_SCOPES = ["User.Read", "openid", "profile", "email"];
 
 /**
  * MSAL silent-acquire failures that mean "no usable session yet — fall to an
