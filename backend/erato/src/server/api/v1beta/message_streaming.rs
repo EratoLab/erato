@@ -2375,6 +2375,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         denied: _,
         unavailable_server_ids: mcp_servers_unavailable,
         needing_auth_server_ids: mcp_servers_needing_auth,
+        missing_credential_server_ids: _,
     } = resolve_generation_mcp_tools(
         app_state,
         policy,
@@ -6199,6 +6200,7 @@ pub(crate) struct GenerationMcpToolSet {
     pub denied: HashSet<(String, String)>,
     pub unavailable_server_ids: Vec<String>,
     pub needing_auth_server_ids: Vec<String>,
+    pub missing_credential_server_ids: Vec<String>,
 }
 
 /// Resolve the MCP tool set of one generation: facet and action-facet
@@ -6284,15 +6286,17 @@ async fn resolve_generation_mcp_tools(
         .map(|tool| tool.tool.name.to_string())
         .collect();
 
+    // Read even when discovery came back empty: a continuation must still
+    // recognise a denied tool whose server is down right now.
     let denied: HashSet<(String, String)> = match inputs.user_id {
-        Some(user_id) if !generation_mcp_tools.is_empty() => {
+        Some(user_id) => {
             crate::models::user_tool_approval_setting::list_denied(&app_state.db, user_id)
                 .await?
                 .into_iter()
                 .map(|setting| (setting.mcp_server_id, setting.tool_name))
                 .collect()
         }
-        _ => HashSet::new(),
+        None => HashSet::new(),
     };
     let tools = if denied.is_empty() {
         generation_mcp_tools
@@ -6313,6 +6317,7 @@ async fn resolve_generation_mcp_tools(
         denied,
         unavailable_server_ids: tool_discovery.unavailable_server_ids,
         needing_auth_server_ids: tool_discovery.needing_auth_server_ids,
+        missing_credential_server_ids: tool_discovery.missing_credential_server_ids,
     })
 }
 
@@ -10187,6 +10192,7 @@ async fn run_continue_message_task(
         denied: denied_mcp_tools,
         unavailable_server_ids: mcp_servers_unavailable,
         needing_auth_server_ids: mcp_servers_needing_auth,
+        missing_credential_server_ids: mcp_servers_missing_credential,
     } = resolve_generation_mcp_tools(
         app_state,
         policy,
@@ -10312,15 +10318,11 @@ async fn run_continue_message_task(
             ended_at: Some(now_timestamp()),
         }
     } else {
-        // An outage keeps the park retryable; every other miss — the user
-        // denied the tool meanwhile, or the rebuilt set excludes it — is
-        // answered with a refusal the model can work around.
+        // A denial is final whatever the server's state. Otherwise a server
+        // that was merely unreachable, or that this request carried no
+        // credential for, keeps the park retryable; only a tool the rebuilt
+        // set excludes is answered with a refusal the model can work around.
         let server_id = &approval_request.mcp_server_id;
-        if mcp_servers_unavailable.contains(server_id)
-            || mcp_servers_needing_auth.contains(server_id)
-        {
-            return Err(eyre!("Approved MCP tool is no longer available"));
-        }
         let error_message = if denied_mcp_tools
             .contains(&(server_id.clone(), approval_request.tool_name.clone()))
         {
@@ -10328,6 +10330,11 @@ async fn run_continue_message_task(
                 "The user has disabled the tool '{}' in their settings; the call was not executed.",
                 approval_request.tool_name
             )
+        } else if mcp_servers_unavailable.contains(server_id)
+            || mcp_servers_needing_auth.contains(server_id)
+            || mcp_servers_missing_credential.contains(server_id)
+        {
+            return Err(eyre!("Approved MCP tool is no longer available"));
         } else {
             format!(
                 "The tool '{}' is not available in this chat; the call was not executed.",
