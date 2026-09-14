@@ -276,6 +276,7 @@ export const DEFAULT_STUBS = {
   useBudgetStatus: () => undefined,
   useChatCanEdit: () => false,
   useChatHeader: () => ({ header: null, composerLocked: false }),
+  useChatHistoryRowMenuItems: () => [],
   useChatHistoryFilterFoldback: () => undefined,
   useConversationDropzone: () => ({
     getRootProps: () => ({}),
