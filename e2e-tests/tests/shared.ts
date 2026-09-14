@@ -196,11 +196,8 @@ export const ensureOpenSidebar = async (page: Page) => {
 };
 
 /**
- * Archive a chat from its sidebar row menu. The menu item is addressed by test
- * id, so its label is translated copy no spec has to spell out. Only a row that
- * is generating or waiting on a tool approval gets a confirmation dialog, so
- * `confirm` has to be told rather than probed for — an absent dialog and one
- * that has not mounted yet look the same.
+ * Only a generating or approval-parked row confirms, and `confirm` has to be
+ * told rather than probed: an absent dialog and one still mounting look alike.
  */
 export const archiveChatFromRow = async (
   page: Page,
