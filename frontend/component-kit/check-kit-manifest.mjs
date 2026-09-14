@@ -136,6 +136,12 @@ const blankComments = (source) => {
   return out.join("");
 };
 
+// Escapes every regex metacharacter, not just the separator. A partial escape
+// that leaves backslashes alone is how an interpolated pattern quietly stops
+// meaning what its source says.
+const escapeForRegExp = (literal) =>
+  literal.replace(/[\\^$.*+?()[\]{}|/]/g, "\\$&");
+
 // The gap between the keyword and the specifier may span lines but may not
 // contain a quote, a semicolon or a second import/export keyword. Without that
 // last guard a semicolon-free statement ahead of the import — `export type X =
@@ -143,7 +149,7 @@ const blankComments = (source) => {
 // match, so the wrong keyword decides whether the statement is type-only and
 // the wrong brace group is read as its specifier list.
 const STATEMENT_PATTERN = new RegExp(
-  `\\b(?:import|export)\\b(?:(?!\\b(?:import|export)\\b)[^;"'\`])*?["'](${LIBRARY_SPECIFIER.replace(/\//g, "\\/")}|${SHARED_SPECIFIER.replace(/\//g, "\\/")})["']\\)?`,
+  `\\b(?:import|export)\\b(?:(?!\\b(?:import|export)\\b)[^;"'\`])*?["'](${escapeForRegExp(LIBRARY_SPECIFIER)}|${escapeForRegExp(SHARED_SPECIFIER)})["']\\)?`,
   "g",
 );
 
