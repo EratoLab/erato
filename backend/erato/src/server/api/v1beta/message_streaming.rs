@@ -6176,11 +6176,6 @@ async fn get_assistant_files_for_generation(
     Ok(converted_files)
 }
 
-/// Filter MCP tools based on assistant configuration
-///
-/// If the assistant has specific mcp_server_ids configured, only tools from those servers are returned.
-/// If the assistant has no mcp_server_ids configured (None), all tools are returned.
-/// If no assistant is configured, all tools are returned.
 /// Everything that decides which MCP tools a generation may call.
 pub(crate) struct GenerationMcpToolInputs<'a> {
     pub effective_selected_facet_ids: &'a [String],
@@ -6321,6 +6316,11 @@ async fn resolve_generation_mcp_tools(
     })
 }
 
+/// Filter MCP tools based on assistant configuration
+///
+/// If the assistant has specific mcp_server_ids configured, only tools from those servers are returned.
+/// If the assistant has no mcp_server_ids configured (None), all tools are returned.
+/// If no assistant is configured, all tools are returned.
 fn filter_mcp_tools_by_assistant(
     all_tools: Vec<crate::services::mcp_session_manager::ManagedTool>,
     assistant_config: Option<&crate::models::assistant::AssistantWithFiles>,
