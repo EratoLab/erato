@@ -5,57 +5,56 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AddinSettingsDialogCore } from "../AddinSettingsDialogCore";
 
 import type { TabRailProps } from "@erato/frontend/library";
-import type { ReactNode } from "react";
 
 const featureFlags = vi.hoisted(() => ({ audio: false, mcpServers: false }));
 
-vi.mock("@erato/frontend/library", () => ({
-  AppearanceTabContent: () => <div data-testid="appearance-settings" />,
-  TextSizeSetting: () => <div data-testid="text-size-settings" />,
-  AudioInputTabContent: () => null,
-  ServersToolsPane: () => null,
-  ModalBase: ({
-    children,
-    isOpen,
-  }: {
-    children: ReactNode;
-    isOpen: boolean;
-  }) => (isOpen ? children : null),
-  // Renders real tabs from the options: the assertions below resolve tabs
-  // by role and name and panels through the tab ids, so a null stub would
-  // turn them into false failures and a permissive one into false passes.
-  TabRail: ({
-    options,
-    value,
-    onChange,
-    "aria-label": ariaLabel,
-  }: TabRailProps<string>) => (
-    <div role="tablist" aria-label={ariaLabel}>
-      {options.map((option) => (
-        <button
-          key={option.value}
-          id={option.id}
-          type="button"
-          role="tab"
-          aria-selected={value === option.value ? "true" : "false"}
-          aria-controls={option.panelId}
-          onClick={() => onChange(option.value)}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  ),
-  useFeatureConfig: () => ({
-    audioTranscription: { enabled: featureFlags.audio },
-    audioDictation: { enabled: false },
-    audioConversational: { enabled: false },
-    userPreferences: {
-      desktopSidecarTabEnabled: false,
-      mcpServersTabEnabled: featureFlags.mcpServers,
-    },
-  }),
-}));
+vi.mock("@erato/frontend/library", async () => {
+  // The core zone rule reads any `src/` import as host behavior reaching a
+  // host-neutral file; a test-only stub set is neither.
+  // eslint-disable-next-line import/no-restricted-paths
+  const mock = await import("../../test/helpers/eratoLibraryMock");
+
+  return mock.createEratoLibraryMock({
+    AppearanceTabContent: () => <div data-testid="appearance-settings" />,
+    TextSizeSetting: () => <div data-testid="text-size-settings" />,
+    AudioInputTabContent: () => null,
+    ServersToolsPane: () => null,
+    // Renders real tabs from the options: the assertions below resolve tabs
+    // by role and name and panels through the tab ids, so a null stub would
+    // turn them into false failures and a permissive one into false passes.
+    TabRail: ({
+      options,
+      value,
+      onChange,
+      "aria-label": ariaLabel,
+    }: TabRailProps<string>) => (
+      <div role="tablist" aria-label={ariaLabel}>
+        {options.map((option) => (
+          <button
+            key={option.value}
+            id={option.id}
+            type="button"
+            role="tab"
+            aria-selected={value === option.value ? "true" : "false"}
+            aria-controls={option.panelId}
+            onClick={() => onChange(option.value)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    ),
+    useFeatureConfig: () => ({
+      audioTranscription: { enabled: featureFlags.audio },
+      audioDictation: { enabled: false },
+      audioConversational: { enabled: false },
+      userPreferences: {
+        desktopSidecarTabEnabled: false,
+        mcpServersTabEnabled: featureFlags.mcpServers,
+      },
+    }),
+  });
+});
 vi.mock("../UserSettingsTabContent", () => ({
   UserSettingsTabContent: () => <div data-testid="user-settings" />,
 }));

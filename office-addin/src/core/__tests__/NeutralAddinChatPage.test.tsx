@@ -93,17 +93,17 @@ const spies = vi.hoisted(() => ({
 }));
 
 vi.mock("@erato/frontend/library", async () => {
-  const { createContext, useContext, useState } = await import("react");
+  const { createContext, useContext } = await import("react");
+  // The core zone rule reads any `src/` import as host behavior reaching a
+  // host-neutral file; a test-only stub set is neither.
+  // eslint-disable-next-line import/no-restricted-paths
+  const mock = await import("../../test/helpers/eratoLibraryMock");
   // Real context + throwing reader mirror the library, so these tests only
   // pass when AddinChatProviderCore actually provides the value AddinChatCore
   // consumes.
   const ChatContext = createContext<ChatContextValue | null>(null);
 
-  return {
-    ProfileProvider: ({ children }: { children?: ReactNode }) => children,
-    FileCapabilitiesProvider: ({ children }: { children?: ReactNode }) =>
-      children,
-
+  return mock.createEratoLibraryMock({
     ChatContext,
     useChatContext: () => {
       const context = useContext(ChatContext);
@@ -114,33 +114,7 @@ vi.mock("@erato/frontend/library", async () => {
       return context;
     },
 
-    findCapabilityByExtension: () => null,
-    getSupportedFileTypes: () => ({}),
-    hasSupportedOperations: () => false,
-    mapMessageToUiMessage: (message: unknown) => message,
-    recentChatsQuery: () => ({ queryKey: ["recent-chats"] }),
-    useArchiveChatEndpoint: () => ({
-      mutateAsync: vi.fn(async () => undefined),
-    }),
-    useBudgetStatus: () => undefined,
     useChatMessaging: spies.useChatMessaging,
-    useFileCapabilitiesContext: () => ({ capabilities: [] }),
-    useFileDropzone: () => ({
-      uploadFiles: vi.fn(async () => []),
-      isUploading: false,
-      uploadedFiles: [],
-      error: null,
-      clearFiles: vi.fn(),
-    }),
-    useFileUploadStore: (
-      selector?: (state: {
-        silentChatId: string | null;
-        setError: (error: unknown) => void;
-      }) => unknown,
-    ) => {
-      const state = { silentChatId: null, setError: vi.fn() };
-      return selector ? selector(state) : state;
-    },
     useGenerationStatusStore: Object.assign(vi.fn(), {
       getState: () => ({
         setCurrentChatId: spies.setGenerationCurrentChatId,
@@ -164,34 +138,12 @@ vi.mock("@erato/frontend/library", async () => {
         { getState: readState },
       );
     },
-    removeArchivedChatFromLists: vi.fn(async () => () => undefined),
-    seedGenerationStatusFromListing: vi.fn(),
-    useAssistantsFeature: () => ({
-      enabled: false,
-      delegationEnabled: false,
-      delegationAllowBackground: false,
-    }),
-    useChatHistoryFilterFoldback: () => undefined,
     useInfiniteRecentChats: spies.useInfiniteRecentChats,
     useUpdateChatTitle: () => spies.updateChatTitle,
     useMessagingStore: Object.assign(() => spies.messagingStore, {
       getState: () => spies.messagingStore,
     }),
-    useModelHistory: () => ({ currentChatLastModel: null }),
-    usePersistedState: <T,>(_key: string, initialValue: T) =>
-      useState(initialValue),
 
-    ChatErrorBoundary: ({ children }: { children?: ReactNode }) => children,
-    Button: ({
-      icon: _icon,
-      ...props
-    }: Record<string, unknown> & { icon?: unknown; ref?: unknown }) => (
-      <button {...(props as Record<string, never>)} />
-    ),
-    ChatInputControlsProvider: ({ children }: { children?: ReactNode }) =>
-      children,
-    ChatMessage: () => null,
-    DefaultMessageControls: () => null,
     DelegatedRunOpenProvider: ({
       onOpen,
       children,
@@ -217,122 +169,18 @@ vi.mock("@erato/frontend/library", async () => {
       />
     ),
     useDelegatedRunHeader: spies.useDelegatedRunHeader,
-    DocumentIcon: () => null,
     useGenerationIndicatorCount: () => spies.generationIndicatorCount.current,
-    SidebarToggle: ({
-      label,
-      expanded,
-      attentionCount = 0,
-      badgeTestId,
-      children,
-      surface: _surface,
-      dataUi: _dataUi,
-      ...props
-    }: Record<string, unknown> & {
-      label?: string;
-      expanded?: boolean;
-      attentionCount?: number;
-      badgeTestId?: string;
-      children?: ReactNode;
-      surface?: string;
-      dataUi?: string;
-      ref?: unknown;
-    }) => (
-      <button
-        aria-label={label}
-        aria-expanded={expanded}
-        {...(props as Record<string, never>)}
-      >
-        {children}
-        {attentionCount > 0 ? (
-          // The real badge is aria-hidden; the count reaches the a11y tree
-          // through the button's own label.
-          <span aria-hidden="true" data-testid={badgeTestId}>
-            {attentionCount}
-          </span>
-        ) : null}
-      </button>
-    ),
-    SidebarBand: ({
-      children,
-      className,
-      dataUi,
-      edge,
-    }: {
-      children?: ReactNode;
-      className?: string;
-      dataUi?: string;
-      edge: string;
-      flush?: boolean;
-    }) => (
-      <div className={className} data-ui={dataUi ?? `sidebar-${edge}`}>
-        {children}
-      </div>
-    ),
-    FeedbackCommentDialog: () => null,
-    FeedbackViewDialog: () => null,
-    FilePreviewModal: () => null,
     MessageList: ({ modelSwitches }: { modelSwitches?: unknown }) => (
       <div
         data-testid="neutral-message-list"
         data-model-switches={JSON.stringify(modelSwitches ?? null)}
       />
     ),
-    MessageEditProvider: ({ children }: { children?: ReactNode }) => children,
-    chatMessagesQuery: () => ({ queryKey: ["chat-messages"] }),
     componentRegistry: spies.componentRegistry,
-    extractTextFromContent: () => "",
-    resolveComponentOverride: (override: unknown, fallback: unknown) =>
-      override ?? fallback,
-    transformEmailFencesForCopy: (value: string) => value,
-    useActiveModelSelection: () => ({
-      availableModels: [],
-      selectedModel: null,
-      setSelectedModel: vi.fn(),
-      isSelectionReady: true,
-    }),
     useModelSwitches: () => ({
       "message-2": { fromModel: "Model One", toModel: "Model Two" },
     }),
-    useConversationDropzone: () => ({
-      getRootProps: () => ({}),
-      getInputProps: () => ({}),
-      isDragActive: false,
-      isDragAccept: false,
-    }),
-    useFilePreviewModal: () => ({
-      isPreviewModalOpen: false,
-      fileToPreview: null,
-      openPreviewModal: vi.fn(),
-      closePreviewModal: vi.fn(),
-    }),
-    useFileUploadWithTokenCheck: () => ({
-      uploadFiles: vi.fn(async () => []),
-      uploadError: null,
-      isUploading: false,
-    }),
-    useUploadFeature: () => ({
-      enabled: true,
-      maxSizeBytes: 20 * 1024 * 1024,
-      maxSizeFormatted: "20 MB",
-    }),
-    useMessageFeedback: () => ({
-      feedbackDialogState: { isOpen: false },
-      feedbackViewDialogState: { isOpen: false, feedback: null },
-      feedbackConfig: undefined,
-      handleFeedbackSubmit: vi.fn(),
-      handleFeedbackViewDialogRemove: vi.fn(),
-      closeFeedbackDialog: vi.fn(),
-      closeFeedbackViewDialog: vi.fn(),
-      handleFeedbackDialogSubmit: vi.fn(),
-      openFeedbackDialog: vi.fn(),
-      openFeedbackViewDialog: vi.fn(),
-      switchToEditMode: vi.fn(),
-      canEditFeedback: vi.fn(() => false),
-    }),
-    useProfile: () => ({ profile: undefined }),
-    useStandardMessageActions: () => vi.fn(),
-  };
+  });
 });
 
 vi.mock("../AddinHistoryDrawerCore", () => ({

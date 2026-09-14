@@ -61,162 +61,147 @@ const spies = vi.hoisted(() => {
   };
 });
 
-vi.mock("@erato/frontend/library", () => ({
-  Button: ({
-    icon: _icon,
-    ...props
-  }: Record<string, unknown> & { icon?: ReactNode }) => <button {...props} />,
-  ChatHistoryFilterMenu: ({ store }: { store: unknown }) => {
-    spies.filterMenuStore.current = store;
-    return <div data-testid="filter-menu" />;
-  },
-  ChatHistoryList: (props: (typeof spies.historyListProps)[number]) => {
-    spies.historyListProps.push(props);
-    return (
-      <div data-testid="history-list">
-        {props.sessions.map((session) => (
-          <div key={session.id}>
+vi.mock("@erato/frontend/library", async () => {
+  // The core zone rule reads any `src/` import as host behavior reaching a
+  // host-neutral file; a test-only stub set is neither.
+  // eslint-disable-next-line import/no-restricted-paths
+  const mock = await import("../../test/helpers/eratoLibraryMock");
+
+  return mock.createEratoLibraryMock({
+    ChatHistoryFilterMenu: ({ store }: { store: unknown }) => {
+      spies.filterMenuStore.current = store;
+      return <div data-testid="filter-menu" />;
+    },
+    ChatHistoryList: (props: (typeof spies.historyListProps)[number]) => {
+      spies.historyListProps.push(props);
+      return (
+        <div data-testid="history-list">
+          {props.sessions.map((session) => (
+            <div key={session.id}>
+              <button
+                type="button"
+                data-testid={`row-${session.id}`}
+                onClick={() => props.onSessionSelect(session.id)}
+              />
+              <button
+                type="button"
+                data-testid={`rename-${session.id}`}
+                onClick={() => props.onSessionEditTitle?.(session.id)}
+              />
+            </div>
+          ))}
+          {props.hasMore ? (
             <button
               type="button"
-              data-testid={`row-${session.id}`}
-              onClick={() => props.onSessionSelect(session.id)}
+              data-testid="load-more"
+              onClick={() => props.onLoadMore?.()}
             />
-            <button
-              type="button"
-              data-testid={`rename-${session.id}`}
-              onClick={() => props.onSessionEditTitle?.(session.id)}
-            />
-          </div>
-        ))}
-        {props.hasMore ? (
-          <button
-            type="button"
-            data-testid="load-more"
-            onClick={() => props.onLoadMore?.()}
-          />
-        ) : null}
+          ) : null}
+        </div>
+      );
+    },
+    ChatHistoryListSkeleton: () => <div data-testid="chat-history-skeleton" />,
+    ChatShareDialog: ({ isOpen }: { isOpen: boolean }) =>
+      isOpen ? <div data-testid="share-dialog" /> : null,
+    NewChatItem: ({ onNewChat }: { onNewChat?: () => void }) => (
+      <button
+        type="button"
+        data-testid="new-chat-item"
+        onClick={() => onNewChat?.()}
+      />
+    ),
+    NoFilterMatchesRow: () => (
+      <p data-testid="chat-history-no-filter-matches" />
+    ),
+    SidebarCollapsibleSection: ({
+      title,
+      actions,
+      children,
+    }: {
+      title: string;
+      actions?: ReactNode;
+      children: ReactNode;
+    }) => (
+      <div data-testid="collapsible-section" data-title={title}>
+        {actions}
+        {children}
       </div>
-    );
-  },
-  ChatHistoryListSkeleton: () => <div data-testid="chat-history-skeleton" />,
-  ChatShareDialog: ({ isOpen }: { isOpen: boolean }) =>
-    isOpen ? <div data-testid="share-dialog" /> : null,
-  NewChatItem: ({ onNewChat }: { onNewChat?: () => void }) => (
-    <button
-      type="button"
-      data-testid="new-chat-item"
-      onClick={() => onNewChat?.()}
-    />
-  ),
-  NoFilterMatchesRow: () => <p data-testid="chat-history-no-filter-matches" />,
-  sidebarInsetClassName: "sidebar-inset-geometry",
-  SettingsIcon: () => null,
-  // Mirrors the primitive's default hook, which the lookups below assert on.
-  SidebarBand: ({
-    edge,
-    flush: _flush,
-    dataUi,
-    className,
-    children,
-  }: {
-    edge: "header" | "footer";
-    flush?: boolean;
-    dataUi?: string;
-    className?: string;
-    children?: ReactNode;
-  }) => (
-    <div data-ui={dataUi ?? `sidebar-${edge}`} className={className}>
-      {children}
-    </div>
-  ),
-  SidebarCollapsibleSection: ({
-    title,
-    actions,
-    children,
-  }: {
-    title: string;
-    actions?: ReactNode;
-    children: ReactNode;
-  }) => (
-    <div data-testid="collapsible-section" data-title={title}>
-      {actions}
-      {children}
-    </div>
-  ),
-  SidebarNavigationItem: ({
-    label,
-    onClick,
-    "data-ui": dataUi,
-  }: {
-    label: string;
-    onClick?: () => void;
-    "data-ui"?: string;
-  }) => (
-    <button type="button" data-testid={dataUi} onClick={() => onClick?.()}>
-      {label}
-    </button>
-  ),
-  // `ref` is a plain prop in React 19; the focus-return assertion needs it.
-  SidebarToggle: ({
-    label,
-    expanded,
-    surface,
-    attentionCount: _attentionCount,
-    badgeTestId: _badgeTestId,
-    dataUi,
-    ...props
-  }: Record<string, unknown> & {
-    label?: string;
-    expanded?: boolean;
-    surface?: string;
-    attentionCount?: number;
-    badgeTestId?: string;
-    dataUi?: string;
-  }) => (
-    <button
-      type="button"
-      aria-label={label}
-      aria-expanded={expanded}
-      data-surface={surface}
-      data-ui={dataUi}
-      {...props}
-    />
-  ),
-  EditChatTitleDialog: (props: {
-    isOpen: boolean;
-    generatedTitle: string;
-    onSubmit?: (title: string) => Promise<void> | void;
-  }) => {
-    spies.renameDialogProps.current = props;
-    return props.isOpen ? <div data-testid="rename-dialog" /> : null;
-  },
-  toast: { error: spies.toastError },
-  hasActiveFilters: (values: { typeFilter: string; statusFilter: string }) =>
-    values.typeFilter !== "all" || values.statusFilter !== "active",
-  mapRecentChatToSession: (chat: { id: string }) => ({ id: chat.id }),
-  sidebarNavigationIconClassName: "",
-  useAssistantsFeature: () => ({ enabled: true }),
-  useChatContext: () => ({
-    ...spies.chatContext,
-    navigateToChat: spies.navigateToChat,
-    createNewChat: spies.createNewChat,
-    archiveChat: spies.archiveChat,
-    updateChatTitle: spies.updateChatTitle,
-    fetchNextHistoryPage: spies.fetchNextHistoryPage,
-  }),
-  useChatSharingFeature: () => ({ enabled: spies.sharingEnabled.current }),
-  useFeatureConfig: () => ({
-    sidebar: { chatHistoryShowMetadata: spies.showMetadata.current },
-  }),
-  useGroupedChatSessions: (sessions: { id: string }[]) =>
-    sessions.length === 0
-      ? []
-      : [
-          { key: "a", label: "Group A", sessions: sessions.slice(0, 1) },
-          { key: "b", label: "Group B", sessions: sessions.slice(1) },
-        ].filter((group) => group.sessions.length > 0),
-  useSanitizedChatHistoryFilters: () => spies.filters,
-}));
+    ),
+    SidebarNavigationItem: ({
+      label,
+      onClick,
+      "data-ui": dataUi,
+    }: {
+      label: string;
+      onClick?: () => void;
+      "data-ui"?: string;
+    }) => (
+      <button type="button" data-testid={dataUi} onClick={() => onClick?.()}>
+        {label}
+      </button>
+    ),
+    // `ref` is a plain prop in React 19; the focus-return assertion needs it.
+    SidebarToggle: ({
+      label,
+      expanded,
+      surface,
+      attentionCount: _attentionCount,
+      badgeTestId: _badgeTestId,
+      dataUi,
+      ...props
+    }: Record<string, unknown> & {
+      label?: string;
+      expanded?: boolean;
+      surface?: string;
+      attentionCount?: number;
+      badgeTestId?: string;
+      dataUi?: string;
+    }) => (
+      <button
+        type="button"
+        aria-label={label}
+        aria-expanded={expanded}
+        data-surface={surface}
+        data-ui={dataUi}
+        {...props}
+      />
+    ),
+    EditChatTitleDialog: (props: {
+      isOpen: boolean;
+      generatedTitle: string;
+      onSubmit?: (title: string) => Promise<void> | void;
+    }) => {
+      spies.renameDialogProps.current = props;
+      return props.isOpen ? <div data-testid="rename-dialog" /> : null;
+    },
+    toast: { error: spies.toastError },
+    hasActiveFilters: (values: { typeFilter: string; statusFilter: string }) =>
+      values.typeFilter !== "all" || values.statusFilter !== "active",
+    mapRecentChatToSession: (chat: { id: string }) => ({ id: chat.id }),
+    sidebarNavigationIconClassName: "",
+    useAssistantsFeature: () => ({ enabled: true }),
+    useChatContext: () => ({
+      ...spies.chatContext,
+      navigateToChat: spies.navigateToChat,
+      createNewChat: spies.createNewChat,
+      archiveChat: spies.archiveChat,
+      updateChatTitle: spies.updateChatTitle,
+      fetchNextHistoryPage: spies.fetchNextHistoryPage,
+    }),
+    useChatSharingFeature: () => ({ enabled: spies.sharingEnabled.current }),
+    useFeatureConfig: () => ({
+      sidebar: { chatHistoryShowMetadata: spies.showMetadata.current },
+    }),
+    useGroupedChatSessions: (sessions: { id: string }[]) =>
+      sessions.length === 0
+        ? []
+        : [
+            { key: "a", label: "Group A", sessions: sessions.slice(0, 1) },
+            { key: "b", label: "Group B", sessions: sessions.slice(1) },
+          ].filter((group) => group.sessions.length > 0),
+    useSanitizedChatHistoryFilters: () => spies.filters,
+  });
+});
 
 const fakeFilterStore = (() =>
   undefined) as unknown as ChatHistoryFilterStoreHook;

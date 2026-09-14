@@ -48,168 +48,34 @@ vi.mock("../components/sessionAskToast", () => ({
   showSessionAskToast: vi.fn(),
 }));
 
-vi.mock("@erato/frontend/library", () => ({
-  // Transitive needs of the real SessionAuthProvider / EntraGraphTokenProvider
-  // modules (imported via useOutlookMessageFetcher, not mounted here).
-  setAuthRecoveryHandler: vi.fn(),
-  // Client-tool registry used by useOutlookClientTools; returns an unregister.
-  registerClientToolExecutor: vi.fn(() => vi.fn()),
-  toast: {
-    info: vi.fn(),
-    success: vi.fn(),
-    warning: vi.fn(),
-    error: vi.fn(),
-  },
-  // AddinChat's own imports.
-  ChatErrorBoundary: ({ children }: { children?: ReactNode }) => children,
-  Button: ({
-    icon: _icon,
-    ...props
-  }: Record<string, unknown> & { icon?: unknown; ref?: unknown }) => (
-    <button {...(props as Record<string, never>)} />
-  ),
-  ChatInputControlsProvider: ({ children }: { children?: ReactNode }) =>
-    children,
-  ChatMessage: () => null,
-  DefaultMessageControls: () => null,
-  DelegatedRunOpenProvider: ({ children }: { children?: ReactNode }) =>
-    children,
-  DelegatedRunsSection: () => null,
-  useDelegatedRunHeader: () => ({ header: null, composerLocked: false }),
-  DocumentIcon: () => null,
-  useGenerationIndicatorCount: () => 0,
-  SidebarToggle: ({
-    label,
-    expanded,
-    attentionCount = 0,
-    badgeTestId,
-    children,
-    surface: _surface,
-    dataUi: _dataUi,
-    ...props
-  }: Record<string, unknown> & {
-    label?: string;
-    expanded?: boolean;
-    attentionCount?: number;
-    badgeTestId?: string;
-    children?: ReactNode;
-    surface?: string;
-    dataUi?: string;
-    ref?: unknown;
-  }) => (
-    <button
-      aria-label={label}
-      aria-expanded={expanded}
-      {...(props as Record<string, never>)}
-    >
-      {children}
-      {attentionCount > 0 ? (
-        // The real badge is aria-hidden; the count reaches the a11y tree
-        // through the button's own label.
-        <span aria-hidden="true" data-testid={badgeTestId}>
-          {attentionCount}
-        </span>
-      ) : null}
-    </button>
-  ),
-  SidebarBand: ({
-    children,
-    className,
-    dataUi,
-    edge,
-  }: {
-    children?: ReactNode;
-    className?: string;
-    dataUi?: string;
-    edge: string;
-    flush?: boolean;
-  }) => (
-    <div className={className} data-ui={dataUi ?? `sidebar-${edge}`}>
-      {children}
-    </div>
-  ),
-  FeedbackCommentDialog: () => null,
-  FeedbackViewDialog: () => null,
-  FilePreviewModal: () => null,
-  MessageList: () => null,
-  MessageEditProvider: ({ children }: { children?: ReactNode }) => children,
-  chatMessagesQuery: vi.fn(() => ({ queryKey: ["chat-messages"] })),
-  componentRegistry: {},
-  extractTextFromContent: vi.fn(() => ""),
-  transformEmailFencesForCopy: (text: string) => text,
-  findCapabilityByExtension: vi.fn(() => null),
-  getSupportedFileTypes: vi.fn(() => ({})),
-  hasSupportedOperations: vi.fn(() => false),
-  resolveComponentOverride: (override: unknown, fallback: unknown) =>
-    override ?? fallback,
-  useActiveModelSelection: () => ({
-    availableModels: [],
-    selectedModel: null,
-    setSelectedModel: vi.fn(),
-    isSelectionReady: true,
-  }),
-  useModelSwitches: () => ({}),
-  useChatContext: () => ({
-    messages: {},
-    messageOrder: [],
-    sendMessage: vi.fn(async () => {}),
-    editMessage: vi.fn(async () => {}),
-    regenerateMessage: vi.fn(async () => {}),
-    isMessagingLoading: false,
-    isPendingResponse: false,
-    chats: [],
-    currentChatId: null,
-    createNewChat: vi.fn(async () => {}),
-    refetchHistory: vi.fn(async () => {}),
-    currentChatLastModel: undefined,
-  }),
-  useConversationDropzone: useConversationDropzoneMock,
-  // useOutlookMessageFetcher reads the sidecar client; none is mounted here.
-  useDesktopSidecar: () => ({ client: null }),
-  useFileCapabilitiesContext: () => ({ capabilities: {} }),
-  useFilePreviewModal: () => ({
-    isPreviewModalOpen: false,
-    fileToPreview: null,
-    openPreviewModal: vi.fn(),
-    closePreviewModal: vi.fn(),
-  }),
-  useFacets: () => ({ data: { action_facets: [] } }),
-  useFileUploadStore: Object.assign(
-    (selector?: (state: typeof fileUploadState) => unknown) =>
-      selector ? selector(fileUploadState) : fileUploadState,
-    { getState: () => fileUploadState },
-  ),
-  UploadUnknownError: class extends Error {},
-  useFileUploadWithTokenCheck: () => ({
-    uploadFiles: vi.fn(async () => []),
-    uploadError: null,
-    isUploading: false,
-  }),
-  useUploadFeature: () => ({
-    enabled: true,
-    maxSizeBytes: 20 * 1024 * 1024,
-    maxSizeFormatted: "20 MB",
-  }),
-  useMessageFeedback: () => ({
-    feedbackDialogState: { isOpen: false },
-    feedbackViewDialogState: { isOpen: false, feedback: null },
-    feedbackConfig: undefined,
-    handleFeedbackSubmit: vi.fn(),
-    closeFeedbackDialog: vi.fn(),
-    closeFeedbackViewDialog: vi.fn(),
-    handleFeedbackDialogSubmit: vi.fn(),
-    openFeedbackDialog: vi.fn(),
-    openFeedbackViewDialog: vi.fn(),
-    switchToEditMode: vi.fn(),
-    canEditFeedback: vi.fn(() => false),
-  }),
-  usePersistedState: (_key: string, defaultValue: unknown) => [
-    defaultValue,
-    vi.fn(),
-  ],
-  useProfile: () => ({ profile: undefined }),
-  useStandardMessageActions: () => vi.fn(),
-}));
+vi.mock("@erato/frontend/library", async () => {
+  const mock = await import("../../test/helpers/eratoLibraryMock");
+
+  return mock.createEratoLibraryMock({
+    useChatContext: () => ({
+      messages: {},
+      messageOrder: [],
+      sendMessage: vi.fn(async () => {}),
+      editMessage: vi.fn(async () => {}),
+      regenerateMessage: vi.fn(async () => {}),
+      isMessagingLoading: false,
+      isPendingResponse: false,
+      chats: [],
+      currentChatId: null,
+      createNewChat: vi.fn(async () => {}),
+      refetchHistory: vi.fn(async () => {}),
+      currentChatLastModel: undefined,
+    }),
+    // Records the options AddinChat passes; the `.msg` advertising test reads
+    // them back.
+    useConversationDropzone: useConversationDropzoneMock,
+    useFileUploadStore: Object.assign(
+      (selector?: (state: typeof fileUploadState) => unknown) =>
+        selector ? selector(fileUploadState) : fileUploadState,
+      { getState: () => fileUploadState },
+    ),
+  });
+});
 
 // Both chat-input children pull large library surfaces of their own; they are
 // not part of the regression under test.
