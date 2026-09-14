@@ -30,10 +30,7 @@ interface UseConversationDropzoneOptions {
    */
   extraAcceptMimeTypes?: Record<string, string[]>;
   isUploading?: boolean;
-  /**
-   * When true no drop is read and `isDragActive` stays false, so a surface
-   * that refuses messages does not advertise an upload it will not accept.
-   */
+  /** Also holds `isDragActive` false, so the caller's overlay stays hidden. */
   disabled?: boolean;
   /** Per-file limit in bytes, from `useUploadFeature()`. */
   maxSize?: number;
@@ -212,8 +209,19 @@ export function useConversationDropzone({
     },
     [onReceive],
   );
+  const isClosed = disabled || isUploading;
   const getRootProps = useCallback(
     (props: RootProps = {}) => {
+      if (isClosed) {
+        // react-dropzone withholds every drag handler while disabled, and its
+        // document-level guard skips targets inside the root — without these
+        // the browser opens the dropped file over the app.
+        return {
+          ...getDropzoneRootProps(props),
+          onDragOver: swallowDrag,
+          onDrop: swallowDrag,
+        };
+      }
       if (!onReceive) return getDropzoneRootProps(props);
       const consumerOnDrop = props.onDrop;
       return getDropzoneRootProps({
@@ -227,11 +235,13 @@ export function useConversationDropzone({
         },
       });
     },
-    [getDropzoneRootProps, handleReceive, onReceive],
+    [getDropzoneRootProps, handleReceive, isClosed, onReceive],
   );
 
   return { getRootProps, getInputProps, isDragActive, isDragAccept };
 }
+
+const swallowDrag = (event: DragEvent) => event.preventDefault();
 
 // Mirrors react-dropzone's own file-drag test so a string-only drag (an
 // Outlook mail-list row) never announces files that will not arrive.

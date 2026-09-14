@@ -732,5 +732,26 @@ describe("useConversationDropzone", () => {
 
       expect(lastDisabled()).toBe(true);
     });
+
+    it("swallows the drop rather than letting the browser open the file", () => {
+      const { result } = renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          disabled: true,
+        }),
+      );
+
+      const root = result.current.getRootProps() as {
+        onDragOver: (event: unknown) => void;
+        onDrop: (event: unknown) => void;
+      };
+      const preventDefault = vi.fn();
+      root.onDragOver({ preventDefault });
+      root.onDrop({ preventDefault });
+
+      expect(preventDefault).toHaveBeenCalledTimes(2);
+      expect(mockUploadFiles).not.toHaveBeenCalled();
+    });
   });
 });
