@@ -19,6 +19,7 @@ import {
   resolveComponentOverride,
   transformEmailFencesForCopy,
   useActiveModelSelection,
+  useChatCanEdit,
   useChatContext,
   useChatHeader,
   useConversationDropzone,
@@ -261,10 +262,7 @@ function useAddinChatController({
     },
   );
 
-  const canEditForCurrentChat = Array.isArray(chat.chats)
-    ? !!chat.chats.find((item) => item.id === (chat.currentChatId ?? ""))
-        ?.can_edit
-    : false;
+  const canEditForCurrentChat = useChatCanEdit(chat.currentChatId);
   const currentChatLastSelectedFacets = useMemo(() => {
     if (!Array.isArray(chat.chats)) return undefined;
     return chat.chats.find((item) => item.id === (chat.currentChatId ?? ""))

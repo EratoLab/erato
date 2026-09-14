@@ -274,6 +274,7 @@ export const DEFAULT_STUBS = {
     delegationAllowBackground: false,
   }),
   useBudgetStatus: () => undefined,
+  useChatCanEdit: () => false,
   useChatHeader: () => ({ header: null, composerLocked: false }),
   useChatHistoryFilterFoldback: () => undefined,
   useConversationDropzone: () => ({

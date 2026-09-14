@@ -21,7 +21,10 @@ import { messages as enMessages } from "@/locales/en/messages.json";
 import { Chat } from "./Chat";
 import { DefaultMessageControls } from "../Message/DefaultMessageControls";
 
-import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  ChatDetail,
+  RecentChat,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { MessageControlsContext } from "@/types/message-controls";
 import type { Messages } from "@lingui/core";
 
@@ -41,6 +44,7 @@ vi.mock("./ChatHistorySidebar", () => ({
 const testState = vi.hoisted(
   (): {
     chatContext: Record<string, unknown>;
+    chatDetail: ChatDetail | undefined;
     chatSharingEnabled: boolean;
     emptyStateLayout: "bottom" | "centered";
     showUsageAdvisory: boolean;
@@ -48,6 +52,7 @@ const testState = vi.hoisted(
     sidebar: { isOpen: boolean; collapsedMode: "slim" | "hidden" };
   } => ({
     chatContext: {},
+    chatDetail: undefined,
     chatSharingEnabled: true,
     emptyStateLayout: "bottom",
     showUsageAdvisory: true,
@@ -234,7 +239,16 @@ vi.mock("@/providers/FeatureConfigProvider", () => ({
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   chatMessagesQuery: vi.fn(() => ({ queryKey: ["chatMessages"] })),
   useRecentChats: vi.fn(() => ({ data: undefined, isLoading: false })),
+  useChatDetail: vi.fn(() => ({ data: testState.chatDetail })),
 }));
+
+const chatDetail = (overrides: Partial<ChatDetail> = {}): ChatDetail => ({
+  id: "origin-1",
+  title_resolved: "Origin",
+  is_pinned: false,
+  can_edit: true,
+  ...overrides,
+});
 
 const backgroundRun = (id: string) =>
   ({
@@ -319,6 +333,7 @@ describe("Chat surface composition", () => {
     chatLists.chats = [];
     chatLists.pinnedChats = [];
     testState.chatContext = {};
+    testState.chatDetail = undefined;
     testState.chatSharingEnabled = true;
     testState.emptyStateLayout = "bottom";
     testState.showUsageAdvisory = true;
@@ -337,11 +352,11 @@ describe("Chat surface composition", () => {
     (isPinned) => {
       const chat = {
         ...backgroundRun("origin-1"),
-        can_edit: true,
         is_pinned: isPinned,
         last_selected_facets: ["selected-facet"],
       };
       chatLists[isPinned ? "pinnedChats" : "chats"] = [chat];
+      testState.chatDetail = chatDetail();
 
       renderChat({ messageOrder: ["user-1"] });
 
@@ -357,6 +372,24 @@ describe("Chat surface composition", () => {
 
   it("keeps editing and sharing unavailable for a pinned chat without permission", () => {
     chatLists.pinnedChats = [{ ...backgroundRun("origin-1"), is_pinned: true }];
+    testState.chatDetail = chatDetail({ can_edit: false });
+
+    renderChat({ messageOrder: ["user-1"] });
+
+    expect(screen.queryByLabelText("Edit message")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Regenerate response"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Share" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("withdraws editing and sharing from an archived chat the user owns", () => {
+    chatLists.chats = [backgroundRun("origin-1")];
+    testState.chatDetail = chatDetail({
+      archived_at: "2026-09-01T12:00:00.000Z",
+    });
 
     renderChat({ messageOrder: ["user-1"] });
 
@@ -486,6 +519,7 @@ describe("Chat empty-state shell", () => {
     chatLists.chats = [];
     chatLists.pinnedChats = [];
     testState.chatContext = {};
+    testState.chatDetail = undefined;
     testState.chatSharingEnabled = true;
     testState.emptyStateLayout = "centered";
     testState.showUsageAdvisory = true;
@@ -651,9 +685,10 @@ describe("Chat top bar", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    chatLists.chats = [{ ...backgroundRun("origin-1"), can_edit: true }];
+    chatLists.chats = [backgroundRun("origin-1")];
     chatLists.pinnedChats = [];
     testState.chatContext = {};
+    testState.chatDetail = chatDetail();
     testState.chatSharingEnabled = true;
     testState.emptyStateLayout = "bottom";
     testState.showUsageAdvisory = true;

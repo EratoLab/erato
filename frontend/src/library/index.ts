@@ -28,6 +28,7 @@ export {
   useChatHeader,
   type ChatHeaderState,
 } from "@/hooks/chat/useChatHeader";
+export { useChatCanEdit } from "@/hooks/chat/useChatCanEdit";
 export {
   seedGenerationStatusFromListing,
   useGenerationStatusStore,

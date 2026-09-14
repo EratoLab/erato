@@ -14,6 +14,7 @@ import {
   useModelSwitches,
   useStandardMessageActions,
 } from "@/hooks/chat";
+import { useChatCanEdit } from "@/hooks/chat/useChatCanEdit";
 import { useMessageFeedback } from "@/hooks/chat/useMessageFeedback";
 import { useConversationDropzone } from "@/hooks/files/useConversationDropzone";
 import { useFileUploadWithTokenCheck } from "@/hooks/files/useFileUploadWithTokenCheck";
@@ -315,7 +316,7 @@ export const Chat = ({
         : undefined),
     [chatHistory, pinnedChatHistory, currentChatId],
   );
-  const canEditForCurrentChat = currentChat?.can_edit ?? false;
+  const canEditForCurrentChat = useChatCanEdit(currentChatId);
   const modelSwitches = useModelSwitches(
     messages,
     messageOrder,
