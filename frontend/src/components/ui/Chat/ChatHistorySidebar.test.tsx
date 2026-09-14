@@ -164,6 +164,7 @@ describe("ChatHistorySidebar", () => {
             currentSessionId="chat-1"
             onSessionSelect={vi.fn()}
             onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
             isLoading={false}
           />
         </I18nProvider>
@@ -194,6 +195,7 @@ describe("ChatHistorySidebar", () => {
             currentSessionId="chat-1"
             onSessionSelect={vi.fn()}
             onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
             isLoading={false}
             collapsed={true}
           />
@@ -323,6 +325,7 @@ describe("ChatHistorySidebar", () => {
             currentSessionId="chat-1"
             onSessionSelect={vi.fn()}
             onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
             isLoading={false}
             collapsed={true}
           />
@@ -377,6 +380,7 @@ describe("ChatHistorySidebar", () => {
             currentSessionId="chat-1"
             onSessionSelect={vi.fn()}
             onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
             isLoading={false}
             collapsed={true}
           />
