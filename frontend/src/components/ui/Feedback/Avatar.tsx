@@ -2,6 +2,7 @@ import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import React, { useEffect, useMemo, useState } from "react";
 
+import { useOptionalTheme } from "@/components/providers/ThemeProvider";
 import { defaultThemeConfig } from "@/config/themeConfig";
 import { mapApiUserProfileToUiProfile } from "@/utils/adapters/userProfileAdapter";
 
@@ -25,14 +26,21 @@ export const Avatar = React.memo<AvatarProps>(
 
     const [imageLoadFailed, setImageLoadFailed] = useState(false);
     const avatarUrl = uiProfile?.avatarUrl ?? null;
+    const themeContext = useOptionalTheme();
 
     // Compute assistant avatar path once
     const assistantAvatarPath = useMemo(() => {
-      if (typeof userOrAssistant !== "undefined" && !userOrAssistant) {
-        return defaultThemeConfig.getAssistantAvatarPath(undefined);
-      }
-      return null;
-    }, [userOrAssistant]);
+      if (typeof userOrAssistant === "undefined" || userOrAssistant)
+        return null;
+
+      // The provider is the only place that knows whether the asset actually
+      // exists, so trust its answer -- including a deliberate null. Falling
+      // back to the convention path here would re-request the missing file.
+      if (themeContext) return themeContext.assetPaths.assistantAvatar;
+
+      // Rendered outside a ThemeProvider (tests, stories): best effort only.
+      return defaultThemeConfig.getAssistantAvatarPath(undefined);
+    }, [themeContext, userOrAssistant]);
 
     useEffect(() => {
       setImageLoadFailed(false);

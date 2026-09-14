@@ -32,6 +32,43 @@ export interface LayoutConfig {
 }
 
 /**
+ * Declaration for an optional theme asset that a theme pack may ship.
+ *
+ * Paths follow the same resolution rules as `icons`: `./file.svg` (or a bare
+ * `file.svg`) resolves against the theme pack directory, `/file.svg` is used
+ * as-is, and absolute URLs are passed through untouched.
+ */
+export interface ThemeAssetDeclaration {
+  path: string;
+  /** Variant used in dark mode. Falls back to `path` when omitted. */
+  darkPath?: string;
+}
+
+/**
+ * Optional assets a theme pack may declare.
+ *
+ * Each key is tri-state, and the distinction between `null` and *absent*
+ * matters:
+ * - a declaration object: use those paths, no existence check is performed
+ * - `null`: the pack deliberately does not ship this asset, so it is never
+ *   requested
+ * - key absent: fall back to the historical filename convention beside
+ *   `theme.json`, probed once
+ */
+export interface ThemeAssets {
+  assistantAvatar?: ThemeAssetDeclaration | null;
+  sidebarLogo?: ThemeAssetDeclaration | null;
+}
+
+/** Keys of {@link ThemeAssets}, for iterating without losing type safety. */
+export const THEME_ASSET_KEYS = [
+  "assistantAvatar",
+  "sidebarLogo",
+] as const satisfies readonly (keyof ThemeAssets)[];
+
+export type ThemeAssetKey = (typeof THEME_ASSET_KEYS)[number];
+
+/**
  * Custom theme configuration interface
  */
 export interface CustomThemeConfig {
@@ -56,6 +93,7 @@ export interface CustomThemeConfig {
     actions?: Record<string, string>;
     navigation?: Record<string, string>;
   };
+  assets?: ThemeAssets;
   layout?: LayoutConfig;
 }
 
