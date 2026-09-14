@@ -9,9 +9,9 @@ import {
   useListUserToolApprovalSettings,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
+import { McpToolSummary } from "./McpToolSummary";
 import { RadioCard } from "../Controls/RadioCard";
 import { Alert } from "../Feedback/Alert";
-import { SettledInfoPill } from "../Trace/steps/ToolStatusPill";
 
 import type {
   McpServerTool,
@@ -23,9 +23,6 @@ import type { ReactNode } from "react";
 // expand from its own session cache within this window anyway. Anything
 // short of a listing is retried on the next expand instead of being cached.
 const TOOLS_STALE_TIME_MS = 5 * 60 * 1000;
-
-const NEUTRAL_PILL = "bg-theme-bg-tertiary text-theme-fg-secondary";
-const ATTENTION_PILL = "bg-theme-warning-bg text-theme-warning-fg";
 
 /** The radio state of one tool; "ask" is the absence of a stored decision. */
 export type McpToolDecision = "ask" | "always" | "never";
@@ -53,61 +50,6 @@ export const shownDecision = (
   stored: McpToolDecision,
   offersAlways: boolean,
 ): McpToolDecision => (stored === "always" && !offersAlways ? "ask" : stored);
-
-/**
- * Every badge is a straight lookup on a field the backend already decided;
- * the same function that gates a run produced these values, so nothing here
- * may re-derive them (an unannotated tool is NOT read-only under protocol
- * defaults, and only the backend knows the configured preset).
- */
-const toolBadges = (tool: McpServerTool) => {
-  const badges: { label: string; toneClassName: string }[] = [];
-  if (tool.annotations.read_only_hint) {
-    badges.push({
-      label: t({
-        id: "preferences.dialog.mcpServers.tools.badge.readsOnly",
-        message: "Reads only",
-      }),
-      toneClassName: NEUTRAL_PILL,
-    });
-  } else {
-    badges.push({
-      label: t({
-        id: "preferences.dialog.mcpServers.tools.badge.canModify",
-        message: "Can modify",
-      }),
-      toneClassName: ATTENTION_PILL,
-    });
-  }
-  if (tool.annotations.open_world_hint) {
-    badges.push({
-      label: t({
-        id: "preferences.dialog.mcpServers.tools.badge.reachesOtherSystems",
-        message: "Reaches other systems",
-      }),
-      toneClassName: NEUTRAL_PILL,
-    });
-  }
-  if (!tool.annotations.annotated) {
-    badges.push({
-      label: t({
-        id: "preferences.dialog.mcpServers.tools.badge.notDeclared",
-        message: "Not declared by the server",
-      }),
-      toneClassName: NEUTRAL_PILL,
-    });
-  }
-  if (tool.approval === "ask") {
-    badges.push({
-      label: t({
-        id: "preferences.dialog.mcpServers.tools.badge.asksBeforeRunning",
-        message: "Asks before running",
-      }),
-      toneClassName: NEUTRAL_PILL,
-    });
-  }
-  return badges;
-};
 
 function McpToolRow({
   tool,
@@ -139,31 +81,7 @@ function McpToolRow({
       data-testid="mcp-tool-approval-row"
       data-tool-name={tool.name}
     >
-      <div className="space-y-1">
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <span className="text-sm font-medium text-theme-fg-primary">
-            {tool.title}
-          </span>
-          {tool.title !== tool.name ? (
-            <span className="font-mono text-xs text-theme-fg-muted">
-              {tool.name}
-            </span>
-          ) : null}
-        </div>
-        {tool.description ? (
-          <p className="text-xs text-theme-fg-secondary">{tool.description}</p>
-        ) : null}
-        <ul className="flex flex-wrap gap-1" aria-label={tool.title}>
-          {toolBadges(tool).map((badge) => (
-            <li key={badge.label}>
-              <SettledInfoPill
-                label={badge.label}
-                toneClassName={badge.toneClassName}
-              />
-            </li>
-          ))}
-        </ul>
-      </div>
+      <McpToolSummary tool={tool} />
       {/* The default state of a tool that never asks is plain "allowed". */}
       <RadioCard
         size="sm"

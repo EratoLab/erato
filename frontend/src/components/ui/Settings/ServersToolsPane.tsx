@@ -6,11 +6,11 @@ import { useListMcpServers } from "@/lib/generated/v1betaApi/v1betaApiComponents
 import { DesktopSidecarRow } from "./DesktopSidecarTabContent";
 import { EntityRow } from "./EntityRow";
 import { McpToolApprovalSettings } from "./McpToolApprovalSettings";
+import { mcpServerDescription, mcpServerStatus } from "./mcpServerStatus";
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
 import { LinkIcon, LinkSlashIcon, ResolvedIcon } from "../icons";
 
-import type { EntityRowStatus } from "./EntityRow";
 import type { McpServerStatus } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ReactNode } from "react";
 
@@ -28,58 +28,6 @@ export interface ServersToolsMcpConfig {
   /** Hosts without an in-place OAuth flow hide Disconnect too. */
   showDisconnect?: boolean;
 }
-
-const mcpServerStatus = (server: McpServerStatus): EntityRowStatus => {
-  switch (server.connection_status) {
-    case "SUCCESS":
-      return {
-        tone: "success",
-        label: t({
-          id: "preferences.dialog.mcpServers.status.success.label",
-          message: "Connected",
-        }),
-      };
-    case "NEEDS_AUTHENTICATION":
-      return {
-        tone: "warning",
-        label: t({
-          id: "preferences.dialog.mcpServers.status.needsAuthentication.label",
-          message: "Needs authentication",
-        }),
-      };
-    default:
-      return {
-        tone: "error",
-        label: t({
-          id: "preferences.dialog.mcpServers.status.failure.label",
-          message: "Connection failed",
-        }),
-      };
-  }
-};
-
-/**
- * Detail sentence only where it adds something beyond the header's status
- * word: what to do (authorize) or what failed. A healthy connection needs no
- * restatement.
- */
-const mcpServerDescription = (server: McpServerStatus): string | null => {
-  switch (server.connection_status) {
-    case "SUCCESS":
-      return null;
-    case "NEEDS_AUTHENTICATION":
-      return t({
-        id: "preferences.dialog.mcpServers.status.needsAuthentication.description",
-        message: "Authorization is required before this server can be used.",
-      });
-    default:
-      return t({
-        id: "preferences.dialog.mcpServers.status.failure.description",
-        message:
-          "The server is configured, but the backend could not connect to it.",
-      });
-  }
-};
 
 function McpServerEntityRow({
   server,

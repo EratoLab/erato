@@ -92,6 +92,24 @@ export {
 } from "@/components/ui/Settings/EntityRow";
 export { McpToolApprovalSettings } from "@/components/ui/Settings/McpToolApprovalSettings";
 export {
+  McpToolSummary,
+  mcpToolBadges,
+} from "@/components/ui/Settings/McpToolSummary";
+export {
+  mcpServerDescription,
+  mcpServerStatus,
+} from "@/components/ui/Settings/mcpServerStatus";
+export {
+  McpToolsBrowserModal,
+  type McpToolsBrowserModalProps,
+} from "@/components/ui/Chat/McpToolsBrowserModal";
+export {
+  buildMcpToolsSection,
+  MCP_TOOLS_SECTION_ID,
+  MCP_TOOLS_WRITE_TOGGLE_ITEM_ID,
+  MCP_TOOLS_BROWSE_ITEM_ID,
+} from "@/components/ui/Chat/mcpToolsSection";
+export {
   ServersToolsPane,
   type ServersToolsMcpConfig,
 } from "@/components/ui/Settings/ServersToolsPane";
