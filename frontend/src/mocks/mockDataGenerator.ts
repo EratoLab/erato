@@ -118,6 +118,7 @@ export class MockDataGenerator {
       is_pinned: overrides?.is_pinned ?? false,
       mcp_write_tools_enabled: overrides?.mcp_write_tools_enabled ?? true,
       disabled_mcp_server_ids: overrides?.disabled_mcp_server_ids ?? [],
+      disabled_mcp_tools: overrides?.disabled_mcp_tools ?? [],
       file_uploads: overrides?.file_uploads ?? [],
       can_edit: overrides?.can_edit ?? true,
     };

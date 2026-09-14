@@ -52,6 +52,7 @@ const existingRun = (id: string): RecentChat => ({
   is_pinned: false,
   mcp_write_tools_enabled: true,
   disabled_mcp_server_ids: [],
+  disabled_mcp_tools: [],
   provenance_kind: "delegation",
   provenance_run_mode: "background",
   origin_chat_id: ORIGIN_CHAT_ID,

@@ -1431,6 +1431,7 @@ export function useChatMessaging(
       delegationRunMode?: DelegationRunMode,
       mcpWriteToolsEnabled?: boolean,
       disabledMcpServerIds?: string[],
+      disabledMcpTools?: string[],
     ): Promise<string | undefined> => {
       // Prevent duplicate submissions
       if (isSubmittingForKey(streamKey)) {
@@ -1547,10 +1548,14 @@ export function useChatMessaging(
         // so the settings are written onto that row instead, in one call.
         const seedsDisabledServers =
           disabledMcpServerIds !== undefined && disabledMcpServerIds.length > 0;
+        const seedsDisabledTools =
+          disabledMcpTools !== undefined && disabledMcpTools.length > 0;
         if (
           !chatId &&
           silentChatId &&
-          (mcpWriteToolsEnabled !== undefined || seedsDisabledServers)
+          (mcpWriteToolsEnabled !== undefined ||
+            seedsDisabledServers ||
+            seedsDisabledTools)
         ) {
           await updateChatForSeed({
             pathParams: { chatId: silentChatId },
@@ -1560,6 +1565,9 @@ export function useChatMessaging(
                 : {}),
               ...(seedsDisabledServers
                 ? { disabled_mcp_server_ids: disabledMcpServerIds }
+                : {}),
+              ...(seedsDisabledTools
+                ? { disabled_mcp_tools: disabledMcpTools }
                 : {}),
             },
           });
@@ -1577,6 +1585,7 @@ export function useChatMessaging(
           delegationRunMode,
           effectiveChatIdForRequest ? undefined : mcpWriteToolsEnabled,
           effectiveChatIdForRequest ? undefined : disabledMcpServerIds,
+          effectiveChatIdForRequest ? undefined : disabledMcpTools,
         );
 
         logger.log("[DEBUG_STREAMING] sendMessage: Sending requestBody:", {

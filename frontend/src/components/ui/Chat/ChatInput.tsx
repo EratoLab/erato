@@ -28,6 +28,7 @@ import {
 import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
 import { useBrowsableMcpServers } from "@/hooks/chat/useBrowsableMcpServers";
 import { useChatDisabledMcpServers } from "@/hooks/chat/useChatDisabledMcpServers";
+import { useChatDisabledMcpTools } from "@/hooks/chat/useChatDisabledMcpTools";
 import { useChatMcpWriteTools } from "@/hooks/chat/useChatMcpWriteTools";
 import {
   useComposeSession,
@@ -263,6 +264,11 @@ interface ChatInputProps {
      * existed; absent when none were.
      */
     disabledMcpServerIds?: string[],
+    /**
+     * Likewise for the single tools (`server/tool`) the user switched off
+     * before the chat existed; absent when none were.
+     */
+    disabledMcpTools?: string[],
   ) => void;
   onRegenerate?: () => void;
   handleFileAttachments?: (files: FileUploadItem[]) => void;
@@ -742,6 +748,10 @@ export const ChatInput = ({
     isAvailable: canBrowseMcpTools,
   });
   const disabledMcpServers = useChatDisabledMcpServers({
+    chatId,
+    isAvailable: canBrowseMcpTools,
+  });
+  const disabledMcpTools = useChatDisabledMcpTools({
     chatId,
     isAvailable: canBrowseMcpTools,
   });
@@ -1479,6 +1489,7 @@ export const ChatInput = ({
 
       const mcpWriteToolsSeed = mcpWriteTools.newChatSeed;
       const disabledMcpServersSeed = disabledMcpServers.newChatSeed;
+      const disabledMcpToolsSeed = disabledMcpTools.newChatSeed;
 
       logger.log("Submit:", {
         messagePreview:
@@ -1491,10 +1502,23 @@ export const ChatInput = ({
         delegationRunMode,
         mcpWriteToolsSeed,
         disabledMcpServersSeed,
+        disabledMcpToolsSeed,
       });
       // The trailing arguments are only passed when set: hosts compare the
       // call shape, and a chat that takes the defaults must look unchanged.
-      if (disabledMcpServersSeed !== undefined) {
+      if (disabledMcpToolsSeed !== undefined) {
+        onSendMessage(
+          messageContent,
+          inputFileIds,
+          selectedModel?.chat_provider_id,
+          selectedFacetIds,
+          resolvedMentions,
+          delegationRunMode,
+          mcpWriteToolsSeed,
+          disabledMcpServersSeed,
+          disabledMcpToolsSeed,
+        );
+      } else if (disabledMcpServersSeed !== undefined) {
         onSendMessage(
           messageContent,
           inputFileIds,
@@ -1876,12 +1900,14 @@ export const ChatInput = ({
             disabledServerIds: disabledMcpServers.disabledServerIds,
             onToggleServer: disabledMcpServers.toggleServer,
             serverSwitchesLocked: !disabledMcpServers.isReady,
+            disabledToolPatterns: disabledMcpTools.disabledToolPatterns,
             onConnect:
               openMcpServersSettings ?? (() => setIsMcpToolsBrowserOpen(true)),
             disabled:
               composeLocked ||
               mcpWriteTools.isSaving ||
-              disabledMcpServers.isSaving,
+              disabledMcpServers.isSaving ||
+              disabledMcpTools.isSaving,
             pausesHostActions: pausesHostActionsWhenWritesOff,
           })
         : undefined,
@@ -1892,6 +1918,8 @@ export const ChatInput = ({
       disabledMcpServers.isReady,
       disabledMcpServers.isSaving,
       disabledMcpServers.toggleServer,
+      disabledMcpTools.disabledToolPatterns,
+      disabledMcpTools.isSaving,
       mcpServers,
       mcpWriteTools.enabled,
       mcpWriteTools.isSaving,
@@ -2769,6 +2797,14 @@ export const ChatInput = ({
               focusInput();
             }}
             servers={mcpServers}
+            disabledToolPatterns={disabledMcpTools.disabledToolPatterns}
+            onToggleTool={disabledMcpTools.toggleTool}
+            toolSwitchesLocked={
+              composeLocked ||
+              !disabledMcpTools.isReady ||
+              disabledMcpTools.isSaving
+            }
+            disabledServerIds={disabledMcpServers.disabledServerIds}
           />
         )}
 

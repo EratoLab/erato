@@ -34,6 +34,8 @@ export interface UiChatMessage extends Message {
   mcp_servers_needing_auth?: string[];
   /** MCP server IDs withheld because the user switched them off for the chat */
   mcp_servers_disabled_by_user?: string[];
+  /** `server/tool` names withheld because the user switched them off for the chat */
+  mcp_tools_disabled_by_user?: string[];
   /** Backend-rendered assistant error report for support/debugging */
   error_report?: string;
 }
@@ -78,6 +80,8 @@ export function mapApiMessageToUiMessage(
     mcp_servers_needing_auth: apiMessage.mcp_servers_needing_auth ?? undefined,
     mcp_servers_disabled_by_user:
       apiMessage.mcp_servers_disabled_by_user ?? undefined,
+    mcp_tools_disabled_by_user:
+      apiMessage.mcp_tools_disabled_by_user ?? undefined,
     action_facet_id: apiMessage.action_facet_id ?? undefined,
     action_facet_args: apiMessage.action_facet_args ?? undefined,
     mentioned_assistants: apiMessage.mentioned_assistants ?? undefined,

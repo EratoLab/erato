@@ -1,4 +1,6 @@
-import { t } from "@lingui/core/macro";
+import { plural, t } from "@lingui/core/macro";
+
+import { countDisabledMcpTools } from "@/utils/chat/mcpToolPatterns";
 
 import {
   mcpServerDescription,
@@ -36,6 +38,12 @@ interface McpToolsSectionOptions {
    * stay live.
    */
   serverSwitchesLocked?: boolean;
+  /**
+   * The chat's switched-off `server/tool` patterns; a server row that is on
+   * says how many of its tools are off, which is the trail into the browser
+   * where they are switched.
+   */
+  disabledToolPatterns?: string[];
   /**
    * Where a server still awaiting the user's authorization sends them: its
    * row is not a switch — there is nothing to switch off — but the way to
@@ -75,11 +83,38 @@ export function buildMcpToolsSection({
   disabledServerIds = [],
   onToggleServer,
   serverSwitchesLocked = false,
+  disabledToolPatterns = [],
   onConnect,
   disabled = false,
   pausesHostActions = false,
 }: McpToolsSectionOptions): AddMenuSection {
   const disabledServerIdSet = new Set(disabledServerIds);
+
+  // Only a healthy, switched-on server gets the count: a failed server's
+  // row explains the failure instead, and a switched-off one offers nothing
+  // for the count to narrow.
+  const disabledToolsDescription = (server: McpServerStatus) => {
+    if (
+      server.connection_status !== "SUCCESS" ||
+      disabledServerIdSet.has(server.id)
+    ) {
+      return undefined;
+    }
+    const disabledToolCount = countDisabledMcpTools(
+      disabledToolPatterns,
+      server.id,
+    );
+    if (disabledToolCount === 0) {
+      return undefined;
+    }
+    return t({
+      id: "chatInput.connectors.server.disabledTools",
+      message: plural(disabledToolCount, {
+        one: "# tool switched off",
+        other: "# tools switched off",
+      }),
+    });
+  };
 
   const serverItems: AddMenuSectionItem[] = servers.map((server) => {
     const id = mcpToolsServerItemId(server.id);
@@ -96,7 +131,8 @@ export function buildMcpToolsSection({
     return {
       id,
       label: server.id,
-      description: mcpServerDescription(server) ?? undefined,
+      description:
+        mcpServerDescription(server) ?? disabledToolsDescription(server),
       checked: !disabledServerIdSet.has(server.id),
       disabled: disabled || serverSwitchesLocked,
       onToggle: () => onToggleServer?.(server.id),

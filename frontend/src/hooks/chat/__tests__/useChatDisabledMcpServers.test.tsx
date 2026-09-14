@@ -25,6 +25,7 @@ const chatDetail = (disabledMcpServerIds: string[]): ChatDetail => ({
   is_pinned: false,
   mcp_write_tools_enabled: true,
   disabled_mcp_server_ids: disabledMcpServerIds,
+  disabled_mcp_tools: [],
   can_edit: true,
 });
 
