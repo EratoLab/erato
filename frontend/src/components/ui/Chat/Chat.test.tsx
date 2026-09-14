@@ -374,6 +374,17 @@ describe("Chat surface composition", () => {
     },
   );
 
+  it("offers editing and sharing on a finished delegated run", () => {
+    chatLists.chats = [];
+    testState.chatDetail = chatDetail({ provenance_kind: "delegation" });
+
+    renderChat({ messageOrder: ["user-1"] });
+
+    expect(screen.getByLabelText("Edit message")).toBeInTheDocument();
+    expect(screen.getByLabelText("Regenerate response")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Share" })).toBeInTheDocument();
+  });
+
   it("keeps editing and sharing unavailable for a pinned chat without permission", () => {
     chatLists.pinnedChats = [{ ...backgroundRun("origin-1"), is_pinned: true }];
     testState.chatDetail = chatDetail({ can_edit: false });
