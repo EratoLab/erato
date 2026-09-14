@@ -2084,6 +2084,11 @@ msgid "chat.message.link.fallback"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/McpDisabledServersNotice.tsx
+msgid "chat.message.mcpDisabledServers.text"
+msgstr "{serverCount, plural, one {{serverList} est désactivé pour ce chat, ses outils n'ont donc pas été utilisés.} other {{serverList} sont désactivés pour ce chat, leurs outils n'ont donc pas été utilisés.}}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/McpNeedsAuthNotice.tsx
 msgid "chat.message.mcpNeedsAuth.connect"
 msgstr "Connecter"
