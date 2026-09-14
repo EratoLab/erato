@@ -19,7 +19,8 @@ vi.mock("@/components/providers/ThemeProvider", () => ({
   useTheme: () => ({
     effectiveTheme: "light",
     customThemeName: null,
-    assetPaths: { assistantAvatar: null, sidebarLogo: null },
+    // The sidebar reads its logo from here, not from the existence check.
+    assetPaths: { assistantAvatar: null, sidebarLogo: mockedLogoPath },
   }),
 }));
 
