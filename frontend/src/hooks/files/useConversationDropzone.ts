@@ -217,6 +217,7 @@ export function useConversationDropzone({
         // guard skips the root, so without these the browser opens the file.
         return {
           ...getDropzoneRootProps(props),
+          onDragEnter: swallowDrag,
           onDragOver: swallowDrag,
           onDrop: swallowDrag,
         };
@@ -240,7 +241,12 @@ export function useConversationDropzone({
   return { getRootProps, getInputProps, isDragActive, isDragAccept };
 }
 
-const swallowDrag = (event: DragEvent) => event.preventDefault();
+// Cancelled with effect "none": no drop fires, no file opens, and the cursor
+// says so. Blink fires only dragenter on the frame a target changes.
+const swallowDrag = (event: DragEvent) => {
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "none";
+};
 
 // Mirrors react-dropzone's own file-drag test so a string-only drag (an
 // Outlook mail-list row) never announces files that will not arrive.

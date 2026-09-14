@@ -743,14 +743,18 @@ describe("useConversationDropzone", () => {
       );
 
       const root = result.current.getRootProps() as {
+        onDragEnter: (event: unknown) => void;
         onDragOver: (event: unknown) => void;
         onDrop: (event: unknown) => void;
       };
       const preventDefault = vi.fn();
-      root.onDragOver({ preventDefault });
-      root.onDrop({ preventDefault });
+      const dataTransfer = { dropEffect: "copy" };
+      root.onDragEnter({ preventDefault, dataTransfer });
+      root.onDragOver({ preventDefault, dataTransfer });
+      root.onDrop({ preventDefault, dataTransfer });
 
-      expect(preventDefault).toHaveBeenCalledTimes(2);
+      expect(preventDefault).toHaveBeenCalledTimes(3);
+      expect(dataTransfer.dropEffect).toBe("none");
       expect(mockUploadFiles).not.toHaveBeenCalled();
     });
   });
