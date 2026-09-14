@@ -4,7 +4,10 @@ import { useId } from "react";
 
 import { useOpenMcpServersSettings } from "@/hooks/ui/useOpenMcpServersSettings";
 import { useListMcpServerTools } from "@/lib/generated/v1betaApi/v1betaApiComponents";
-import { isMcpToolDisabled } from "@/utils/chat/mcpToolPatterns";
+import {
+  isMcpToolDisabled,
+  mcpToolCoveringPattern,
+} from "@/utils/chat/mcpToolPatterns";
 
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
@@ -50,6 +53,16 @@ function McpToolRow({
   const isOn =
     toolSwitch === null ||
     !isMcpToolDisabled(toolSwitch.disabledToolPatterns, serverId, tool.name);
+  // A wildcard entry keeps the tool off whatever the switch does, so the
+  // switch is shown off and locked rather than claiming a flip would help.
+  const coveringPattern =
+    toolSwitch === null
+      ? null
+      : mcpToolCoveringPattern(
+          toolSwitch.disabledToolPatterns,
+          serverId,
+          tool.name,
+        );
 
   return (
     <li
@@ -69,7 +82,7 @@ function McpToolRow({
             id={switchId}
             type="checkbox"
             checked={isOn}
-            disabled={toolSwitch.locked}
+            disabled={toolSwitch.locked || coveringPattern !== null}
             onChange={() => toolSwitch.onToggleTool(serverId, tool.name)}
             aria-label={t({
               id: "chatInput.connectors.tool.switchLabel",
@@ -79,10 +92,15 @@ function McpToolRow({
             className="size-4 accent-[var(--theme-fg-accent)] focus:ring-theme-fg-accent focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50"
           />
           <span aria-hidden="true">
-            {t({
-              id: "chatInput.connectors.tool.switchCaption",
-              message: "In this chat",
-            })}
+            {coveringPattern !== null
+              ? t({
+                  id: "chatInput.connectors.tool.switchedOffByRule",
+                  message: `Switched off for this chat by the rule ${coveringPattern}`,
+                })
+              : t({
+                  id: "chatInput.connectors.tool.switchCaption",
+                  message: "In this chat",
+                })}
           </span>
         </label>
       ) : null}

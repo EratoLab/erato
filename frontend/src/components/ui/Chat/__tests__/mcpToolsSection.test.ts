@@ -260,6 +260,34 @@ describe("buildMcpToolsSection", () => {
       );
     });
 
+    // A wildcard entry has no number without the roster; the row says how
+    // far it reaches instead of counting the entry as one tool.
+    it("says all or some tools are off for a server a wildcard entry covers", () => {
+      const section = build({
+        servers: [server("linear"), server("files"), server("github")],
+        disabledToolPatterns: [
+          "linear/*",
+          "files/read/*",
+          "files/write_file",
+          "github/create_issue",
+        ],
+        onToggleServer: vi.fn(),
+      });
+
+      const linear = itemOf(section, "linear");
+      const files = itemOf(section, "files");
+      const github = itemOf(section, "github");
+      expect(isAddMenuToolItem(linear) && linear.description).toBe(
+        "All tools switched off",
+      );
+      expect(isAddMenuToolItem(files) && files.description).toBe(
+        "Some tools switched off",
+      );
+      expect(isAddMenuToolItem(github) && github.description).toBe(
+        "1 tool switched off",
+      );
+    });
+
     it("locks the server rows with the rest of the group", () => {
       const section = build({
         servers: [server("linear"), server("jira", "NEEDS_AUTHENTICATION")],

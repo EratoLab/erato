@@ -92,7 +92,8 @@ export function buildMcpToolsSection({
 
   // Only a healthy, switched-on server gets the count: a failed server's
   // row explains the failure instead, and a switched-off one offers nothing
-  // for the count to narrow.
+  // for the count to narrow. A wildcard entry has no number without the
+  // roster, so the row says how far it reaches instead.
   const disabledToolsDescription = (server: McpServerStatus) => {
     if (
       server.connection_status !== "SUCCESS" ||
@@ -104,6 +105,18 @@ export function buildMcpToolsSection({
       disabledToolPatterns,
       server.id,
     );
+    if (disabledToolCount === "all") {
+      return t({
+        id: "chatInput.connectors.server.allToolsDisabled",
+        message: "All tools switched off",
+      });
+    }
+    if (disabledToolCount === "some") {
+      return t({
+        id: "chatInput.connectors.server.someToolsDisabled",
+        message: "Some tools switched off",
+      });
+    }
     if (disabledToolCount === 0) {
       return undefined;
     }

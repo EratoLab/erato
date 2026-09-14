@@ -272,7 +272,7 @@ describe("McpToolsBrowserModal", () => {
       expect(onToggleTool).toHaveBeenCalledWith("linear", "get_issue");
     });
 
-    it("matches a switch by its exact server/tool entry only", async () => {
+    it("keeps a same-named tool of another server on", async () => {
       stubToolsFetch({
         linear: linearRoster(),
         github: roster("github", [
@@ -288,6 +288,45 @@ describe("McpToolsBrowserModal", () => {
       await screen.findAllByTestId("mcp-tools-browser-tool");
 
       expect(toolSwitch("create_issue")).toBeChecked();
+    });
+
+    // The list's grammar is wider than what the switches write: a wildcard
+    // entry keeps a tool off whatever the switch does, so the row shows it
+    // off and says why instead of offering a flip that would not help.
+    it("shows a tool covered by a wildcard entry as off and locked, with the entry named", async () => {
+      stubToolsFetch({ linear: linearRoster() });
+      const onToggleTool = vi.fn();
+      renderModal([server("linear")], vi.fn(), {
+        disabledToolPatterns: ["linear/*"],
+        onToggleTool,
+      });
+
+      expand(serverRow("linear"));
+      await screen.findAllByTestId("mcp-tools-browser-tool");
+
+      expect(toolSwitch("get_issue")).not.toBeChecked();
+      expect(toolSwitch("get_issue")).toBeDisabled();
+      expect(toolSwitch("create_issue")).not.toBeChecked();
+      expect(toolSwitch("create_issue")).toBeDisabled();
+      expect(
+        screen.getAllByText("Switched off for this chat by the rule linear/*"),
+      ).toHaveLength(2);
+      expect(screen.queryByText("In this chat")).not.toBeInTheDocument();
+    });
+
+    it("locks a tool the wildcard covers even when its exact entry is present too", async () => {
+      stubToolsFetch({ linear: linearRoster() });
+      renderModal([server("linear")], vi.fn(), {
+        disabledToolPatterns: ["linear/create_issue", "linear"],
+        onToggleTool: vi.fn(),
+      });
+
+      expand(serverRow("linear"));
+      await screen.findAllByTestId("mcp-tools-browser-tool");
+
+      expect(toolSwitch("create_issue")).not.toBeChecked();
+      expect(toolSwitch("create_issue")).toBeDisabled();
+      expect(toolSwitch("get_issue")).toBeDisabled();
     });
 
     it("locks the switches while the chat's list is not read yet", async () => {
