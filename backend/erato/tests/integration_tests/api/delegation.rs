@@ -1511,15 +1511,16 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
     )
     .await;
     let parent_chat = create_chat(&server, Some(&origin_assistant)).await;
-    // Writes off and a server switched off on the parent: delegation is not
-    // a write, so the run still happens, and the child must start with the
-    // same toggle and the same disabled servers.
+    // Writes off and a server and a tool switched off on the parent:
+    // delegation is not a write, so the run still happens, and the child
+    // must start with the same toggle and the same disabled lists.
     server
         .put(&format!("/api/v1beta/me/chats/{parent_chat}"))
         .with_bearer_token(TEST_JWT_TOKEN)
         .json(&json!({
             "mcp_write_tools_enabled": false,
             "disabled_mcp_server_ids": ["files"],
+            "disabled_mcp_tools": ["crm/send_invoice"],
         }))
         .await
         .assert_status_ok();
@@ -1642,6 +1643,11 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
         child_chat.disabled_mcp_server_ids,
         vec!["files".to_string()],
         "the child inherits the parent's disabled servers"
+    );
+    assert_eq!(
+        child_chat.disabled_mcp_tools,
+        vec!["crm/send_invoice".to_string()],
+        "the child inherits the parent's disabled tools"
     );
     let configuration = erato::models::chat::AssistantConfiguration::from_json(
         child_chat.assistant_configuration.as_ref().unwrap(),
