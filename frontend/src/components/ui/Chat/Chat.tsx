@@ -660,9 +660,8 @@ export const Chat = ({
     );
   }
 
-  // A closed composer drops the welcome entirely: its starter prompts fill a
-  // composer that cannot send, and the centered layout hides `topContent`,
-  // which is where the reason the chat is closed is written.
+  // A closed composer drops the welcome: its starter prompts fill a composer
+  // that cannot send, and the centered layout hides `topContent` with it.
   const showEmptyState =
     !!emptyStateComponent &&
     messageOrder.length === 0 &&

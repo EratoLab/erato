@@ -213,9 +213,8 @@ export function useConversationDropzone({
   const getRootProps = useCallback(
     (props: RootProps = {}) => {
       if (isClosed) {
-        // react-dropzone withholds every drag handler while disabled, and its
-        // document-level guard skips targets inside the root — without these
-        // the browser opens the dropped file over the app.
+        // react-dropzone drops its handlers while disabled and its document
+        // guard skips the root, so without these the browser opens the file.
         return {
           ...getDropzoneRootProps(props),
           onDragOver: swallowDrag,
