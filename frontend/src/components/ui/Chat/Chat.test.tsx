@@ -406,6 +406,39 @@ describe("Chat surface composition", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("withdraws editing and sharing wherever the composer is closed", () => {
+    chatLists.chats = [backgroundRun("origin-1")];
+    testState.chatDetail = chatDetail();
+
+    renderChat({ messageOrder: ["user-1"], composerDisabled: true });
+
+    expect(screen.queryByLabelText("Edit message")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Regenerate response"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Share" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("waits for the chat itself before offering editing and sharing", () => {
+    chatLists.chats = [backgroundRun("origin-1")];
+    testState.chatDetail = undefined;
+
+    const { rerenderChat } = renderChat({ messageOrder: ["user-1"] });
+
+    expect(screen.queryByLabelText("Edit message")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Share" }),
+    ).not.toBeInTheDocument();
+
+    testState.chatDetail = chatDetail();
+    rerenderChat({ messageOrder: ["user-1"] });
+
+    expect(screen.getByLabelText("Edit message")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Share" })).toBeInTheDocument();
+  });
+
   it("mounts the delegated-runs bar directly above the composer", () => {
     mockRuns([backgroundRun("run-1")]);
 
