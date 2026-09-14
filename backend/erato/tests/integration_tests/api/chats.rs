@@ -20,9 +20,9 @@ use std::collections::HashMap;
 
 use crate::test_app_state;
 use crate::test_utils::{
-    TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt, archive_chat_via_api,
-    create_test_server, extract_chat_id, parse_sse_events, setup_mock_llm_server,
-    unarchive_chat_via_api,
+    JwtTokenBuilder, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt,
+    archive_chat_via_api, create_test_server, extract_chat_id, parse_sse_events,
+    setup_mock_llm_server, unarchive_chat_via_api,
 };
 
 /// Test retrieving recent chats for the authenticated user.
@@ -1341,6 +1341,143 @@ async fn test_update_chat_title_by_user_provided(pool: Pool<Postgres>) {
     assert!(chat_item["title_by_user_provided"].is_null());
     assert_eq!(chat_item["title_by_summary"].as_str(), Some("Auto Summary"));
     assert_eq!(chat_item["title_resolved"].as_str(), Some("Auto Summary"));
+}
+
+/// The write toggle round-trips through `PUT /me/chats/{chat_id}`, is read
+/// back on the chat detail and the listing, leaves the title alone when it is
+/// the only field named, and is owner-only.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `authorization`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_update_chat_mcp_write_tools_enabled(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+    erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .expect("Failed to create user");
+    let other_subject = "other-user-write-toggle";
+    erato::models::user::get_or_create_user(&app_state.db, TEST_USER_ISSUER, other_subject, None)
+        .await
+        .expect("Failed to create the other user");
+    let other_token = JwtTokenBuilder::new()
+        .issuer(TEST_USER_ISSUER)
+        .subject(other_subject)
+        .build();
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let create_response = server
+        .post("/api/v1beta/me/chats")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "title_by_user_provided": "Quiet chat" }))
+        .await;
+    create_response.assert_status_ok();
+    let chat_id = create_response.json::<Value>()["chat_id"]
+        .as_str()
+        .expect("Expected chat_id in create response")
+        .to_string();
+
+    async fn detail(server: &TestServer, chat_id: &str) -> Value {
+        let response = server
+            .get(&format!("/api/v1beta/me/chats/{chat_id}"))
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .await;
+        response.assert_status_ok();
+        response.json::<Value>()
+    }
+    assert_eq!(
+        detail(&server, &chat_id).await["mcp_write_tools_enabled"],
+        true
+    );
+
+    // Flag-only update: the title is untouched.
+    let off = server
+        .put(&format!("/api/v1beta/me/chats/{chat_id}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "mcp_write_tools_enabled": false }))
+        .await;
+    off.assert_status_ok();
+    let off = off.json::<Value>();
+    assert_eq!(off["mcp_write_tools_enabled"], false);
+    assert_eq!(off["title_by_user_provided"], "Quiet chat");
+    let after_off = detail(&server, &chat_id).await;
+    assert_eq!(after_off["mcp_write_tools_enabled"], false);
+    assert_eq!(after_off["title_by_user_provided"], "Quiet chat");
+
+    // Title-only update: the flag is untouched.
+    let renamed = server
+        .put(&format!("/api/v1beta/me/chats/{chat_id}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "title_by_user_provided": "Still quiet" }))
+        .await;
+    renamed.assert_status_ok();
+    let renamed = renamed.json::<Value>();
+    assert_eq!(renamed["mcp_write_tools_enabled"], false);
+    assert_eq!(renamed["title_by_user_provided"], "Still quiet");
+
+    // Pin and flag together, with no title: both applied, title kept.
+    let both = server
+        .put(&format!("/api/v1beta/me/chats/{chat_id}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "is_pinned": true, "mcp_write_tools_enabled": true }))
+        .await;
+    both.assert_status_ok();
+    let both = both.json::<Value>();
+    assert_eq!(both["is_pinned"], true);
+    assert_eq!(both["mcp_write_tools_enabled"], true);
+    assert_eq!(both["title_by_user_provided"], "Still quiet");
+
+    // Another user cannot flip it, and learns nothing about the chat.
+    let foreign = server
+        .put(&format!("/api/v1beta/me/chats/{chat_id}"))
+        .with_bearer_token(&other_token)
+        .json(&json!({ "mcp_write_tools_enabled": false }))
+        .await;
+    foreign.assert_status(http::StatusCode::NOT_FOUND);
+    assert_eq!(
+        detail(&server, &chat_id).await["mcp_write_tools_enabled"],
+        true
+    );
+
+    // The listing reads the stored value back.
+    server
+        .put(&format!("/api/v1beta/me/chats/{chat_id}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "mcp_write_tools_enabled": false }))
+        .await
+        .assert_status_ok();
+    server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "existing_chat_id": chat_id, "user_message": "hello" }))
+        .await
+        .assert_status_ok();
+    let recent = server
+        .get("/api/v1beta/me/recent_chats")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    recent.assert_status_ok();
+    let recent = recent.json::<Value>();
+    let listed = recent["chats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|chat| chat["id"] == chat_id.as_str())
+        .expect("chat listed");
+    assert_eq!(listed["mcp_write_tools_enabled"], false);
+    assert_eq!(listed["title_by_user_provided"], "Still quiet");
 }
 
 /// Test retrieving all messages from a specific chat.

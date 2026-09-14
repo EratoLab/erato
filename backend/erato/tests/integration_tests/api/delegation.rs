@@ -1511,6 +1511,14 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
     )
     .await;
     let parent_chat = create_chat(&server, Some(&origin_assistant)).await;
+    // Writes off on the parent: delegation is not a write, so the run still
+    // happens, and the child must start with the same toggle.
+    server
+        .put(&format!("/api/v1beta/me/chats/{parent_chat}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "mcp_write_tools_enabled": false }))
+        .await
+        .assert_status_ok();
 
     let response = submit_with_mentions(
         &server,
@@ -1621,6 +1629,10 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
     assert_eq!(
         child_chat.title_by_user_provided.as_deref(),
         Some("CHILD-TASK-BRIEF: summarize the numbers")
+    );
+    assert!(
+        !child_chat.mcp_write_tools_enabled,
+        "the child inherits the parent's write toggle"
     );
     let configuration = erato::models::chat::AssistantConfiguration::from_json(
         child_chat.assistant_configuration.as_ref().unwrap(),
