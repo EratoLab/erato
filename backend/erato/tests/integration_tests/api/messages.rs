@@ -6,8 +6,9 @@ use axum_test::TestServer;
 use chrono::Utc;
 use erato::config::{
     ActionFacetConfig, ClientToolConfig, ExperimentalFacetsConfig, FacetConfig,
-    McpServerAuthenticationConfig, McpServerConfig, McpServerOauth2AuthenticationConfig,
-    ModelSettings, PromptSourceSpecification, SecretConfigString,
+    McpServerAuthenticationConfig, McpServerConfig, McpServerForwardedAuthenticationConfig,
+    McpServerForwardedCredential, McpServerOauth2AuthenticationConfig, ModelSettings,
+    PromptSourceSpecification, SecretConfigString,
 };
 use erato::db::entity::{chat_file_uploads, chats, file_uploads};
 use erato::models::message::{GenerationInputMessages, GenerationParameters};
@@ -5017,6 +5018,389 @@ async fn test_continuestream_refuses_a_tool_denied_after_the_park(pool: Pool<Pos
     assert_eq!(
         settings[0]["decision"], "denied",
         "approve_always on a stale card must not overwrite the denial"
+    );
+}
+
+/// A denial outranks the server's health: a parked approval on a tool the
+/// user has since denied is refused even when the tool's server cannot be
+/// reached at continuation time, instead of the park staying retryable
+/// behind an outage error. The continuation runs on a fresh app state so the
+/// session cache is cold, as after a restart.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_continuestream_refuses_a_denied_tool_while_its_server_is_down(pool: Pool<Postgres>) {
+    const TOOL_RESULT: &str = "approval probe published";
+    const REFUSAL: &str = "has disabled the tool";
+    let continuation_recorder = RequestBodyRecorder::new();
+
+    let mut mocks = MockSet::new();
+    {
+        let recorder = continuation_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[REFUSAL], &[]))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                build_openai_text_streaming_response(&["DENIED-WHILE-DOWN-ANSWER"]),
+            );
+        });
+    }
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &[REFUSAL]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[(
+                "call_probe",
+                "publish_approval_probe",
+                json!({}),
+            )]),
+        );
+    });
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.mcp_servers.insert(
+        "mock_mcp_approval".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url(),
+            "/mcp/approval-policy",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_server_permissions.rules.insert(
+        "allow-mock-mcp".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["mock_mcp_approval".to_string()],
+        },
+    );
+    app_config.mcp_servers_global.approval = erato::config::McpToolApprovalConfig {
+        enabled: true,
+        preset: erato::config::McpToolApprovalPreset::Restrictive,
+        allow_always: true,
+    };
+    // The same deployment after the server went down: every request to it
+    // now fails, so discovery reports it unavailable.
+    let mut app_config_server_down = app_config.clone();
+    app_config_server_down.mcp_servers.insert(
+        "mock_mcp_approval".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url(),
+            "/mcp/list-tools-500",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+
+    let app_state = test_app_state(app_config, pool.clone()).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let db = app_state.db.clone();
+    let server = app_server(app_state);
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "publish the approval probe" }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let chat_id = Uuid::parse_str(&extract_chat_id(&events).expect("Expected chat_id")).unwrap();
+    let assistant_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    assert_eq!(
+        chats::Entity::find_by_id(chat_id)
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap()
+            .generation_state
+            .as_deref(),
+        Some("awaiting_approval")
+    );
+
+    let denied = server
+        .post("/api/v1beta/me/mcp-tool-approval-settings")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "mcp_server_id": "mock_mcp_approval",
+            "tool_name": "publish_approval_probe",
+            "decision": "denied",
+        }))
+        .await;
+    denied.assert_status_ok();
+    drop(server);
+
+    let server = app_server(test_app_state(app_config_server_down, pool).await);
+    let continued = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": assistant_message_id,
+            "decision": "approve",
+        }))
+        .await;
+    continued.assert_status_ok();
+    let continued_events = parse_sse_events(&continued);
+    assert_eq!(
+        extract_full_text(&continued_events),
+        "DENIED-WHILE-DOWN-ANSWER"
+    );
+    assert!(
+        !continued_events
+            .iter()
+            .filter_map(|event| serde_json::from_str::<Value>(&event.data).ok())
+            .any(|json| json["message_type"] == "error"),
+        "the denial must not surface as an outage error"
+    );
+
+    let continuation_bodies = continuation_recorder.bodies();
+    assert_eq!(continuation_bodies.len(), 1);
+    assert!(
+        !continuation_bodies[0].contains(TOOL_RESULT),
+        "a denied tool must not be executed"
+    );
+    assert!(
+        recorded_tool_offers(&continuation_bodies)
+            .iter()
+            .flatten()
+            .all(|name| name != "publish_approval_probe"),
+        "the denied tool must not be offered to the continued turn"
+    );
+
+    let resumed = erato::db::entity::messages::Entity::find_by_id(assistant_message_id)
+        .one(&db)
+        .await
+        .unwrap()
+        .expect("Expected the resumed assistant message");
+    let resumed_content = resumed.raw_message["content"].as_array().unwrap().clone();
+    let content_types: Vec<&str> = resumed_content
+        .iter()
+        .map(|part| part["content_type"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        content_types,
+        vec!["tool_approval_request", "tool_approval", "tool_use", "text"]
+    );
+    assert_eq!(resumed_content[2]["status"], "error");
+    assert_eq!(resumed_content[2]["output"]["status"], "rejected");
+    assert!(
+        resumed_content[2]["output"]["error"]
+            .as_str()
+            .unwrap()
+            .contains(REFUSAL)
+    );
+    assert_eq!(
+        chats::Entity::find_by_id(chat_id)
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap()
+            .generation_state
+            .as_deref(),
+        Some("completed")
+    );
+}
+
+/// A continuation that arrives without the forwarded credential the tool's
+/// server needs does not burn the park: discovery skips the server, the
+/// approval is left untouched, and a later continuation carrying the token
+/// runs the approved call.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_continuestream_keeps_the_park_when_the_forwarded_credential_is_missing(
+    pool: Pool<Postgres>,
+) {
+    const TOOL_RESULT: &str = "approval probe published";
+    const FORWARDED_TOKEN: &str = "forwarded-access-token";
+    let continuation_recorder = RequestBodyRecorder::new();
+
+    let mut mocks = MockSet::new();
+    {
+        let recorder = continuation_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[TOOL_RESULT], &[]))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                build_openai_text_streaming_response(&["APPROVAL-CONTINUED-ANSWER"]),
+            );
+        });
+    }
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &[TOOL_RESULT]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[(
+                "call_probe",
+                "publish_approval_probe",
+                json!({}),
+            )]),
+        );
+    });
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    // The approval route ignores the bearer it is sent; what matters is that
+    // a session for it can only be keyed while the request carries a token.
+    app_config.mcp_servers.insert(
+        "mock_mcp_approval".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url(),
+            "/mcp/approval-policy",
+            McpServerAuthenticationConfig::Forwarded {
+                forwarded: McpServerForwardedAuthenticationConfig {
+                    credential: McpServerForwardedCredential::AccessToken,
+                    ..Default::default()
+                },
+            },
+        ),
+    );
+    app_config.mcp_server_permissions.rules.insert(
+        "allow-mock-mcp".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["mock_mcp_approval".to_string()],
+        },
+    );
+    app_config.mcp_servers_global.approval = erato::config::McpToolApprovalConfig {
+        enabled: true,
+        preset: erato::config::McpToolApprovalPreset::Restrictive,
+        allow_always: false,
+    };
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let db = app_state.db.clone();
+    let server = app_server(app_state);
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header("X-Forwarded-Access-Token", FORWARDED_TOKEN)
+        .json(&json!({ "user_message": "publish the approval probe" }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let chat_id = Uuid::parse_str(&extract_chat_id(&events).expect("Expected chat_id")).unwrap();
+    let assistant_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    assert_eq!(
+        chats::Entity::find_by_id(chat_id)
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap()
+            .generation_state
+            .as_deref(),
+        Some("awaiting_approval")
+    );
+
+    // The approval arrives without the token, as during a token refresh. The
+    // continuation fails outright, which the test client surfaces as a panic
+    // on the broken stream.
+    let without_token = futures::FutureExt::catch_unwind(std::panic::AssertUnwindSafe(
+        std::future::IntoFuture::into_future(
+            server
+                .post("/api/v1beta/me/messages/continuestream")
+                .with_bearer_token(TEST_JWT_TOKEN)
+                .json(&json!({
+                    "message_id": assistant_message_id,
+                    "decision": "approve",
+                })),
+        ),
+    ))
+    .await;
+    let failure = without_token.expect_err("a continuation that cannot reach the server must fail");
+    let failure = failure
+        .downcast_ref::<String>()
+        .cloned()
+        .expect("the stream failure carries its cause");
+    assert!(
+        failure.contains("Approved MCP tool is no longer available"),
+        "{failure}"
+    );
+    assert!(
+        continuation_recorder.bodies().is_empty(),
+        "the model must not be contacted while the approval is still parked"
+    );
+    let parked = erato::db::entity::messages::Entity::find_by_id(assistant_message_id)
+        .one(&db)
+        .await
+        .unwrap()
+        .expect("Expected the parked assistant message");
+    let parked_content_types: Vec<String> = parked.raw_message["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|part| part["content_type"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(
+        parked_content_types,
+        vec!["tool_approval_request"],
+        "the park must survive a continuation without the credential"
+    );
+
+    let with_token = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header("X-Forwarded-Access-Token", FORWARDED_TOKEN)
+        .json(&json!({
+            "message_id": assistant_message_id,
+            "decision": "approve",
+        }))
+        .await;
+    with_token.assert_status_ok();
+    assert_eq!(
+        extract_full_text(&parse_sse_events(&with_token)),
+        "APPROVAL-CONTINUED-ANSWER"
+    );
+    assert_eq!(continuation_recorder.bodies().len(), 1);
+
+    let resumed = erato::db::entity::messages::Entity::find_by_id(assistant_message_id)
+        .one(&db)
+        .await
+        .unwrap()
+        .expect("Expected the resumed assistant message");
+    let resumed_content = resumed.raw_message["content"].as_array().unwrap().clone();
+    let content_types: Vec<&str> = resumed_content
+        .iter()
+        .map(|part| part["content_type"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        content_types,
+        vec!["tool_approval_request", "tool_approval", "tool_use", "text"]
+    );
+    assert_eq!(resumed_content[2]["status"], "success");
+    assert!(
+        serde_json::to_string(&resumed_content[2]["output"])
+            .unwrap()
+            .contains(TOOL_RESULT)
+    );
+    assert_eq!(
+        chats::Entity::find_by_id(chat_id)
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap()
+            .generation_state
+            .as_deref(),
+        Some("completed")
     );
 }
 
