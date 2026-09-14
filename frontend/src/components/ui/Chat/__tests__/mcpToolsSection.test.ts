@@ -3,10 +3,22 @@ import { describe, expect, it, vi } from "vitest";
 import { isAddMenuToolItem } from "../ChatInputAddMenu";
 import {
   buildMcpToolsSection,
+  mcpToolsServerItemId,
   MCP_TOOLS_BROWSE_ITEM_ID,
   MCP_TOOLS_SECTION_ID,
   MCP_TOOLS_WRITE_TOGGLE_ITEM_ID,
 } from "../mcpToolsSection";
+
+import type { McpServerStatus } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
+const server = (
+  id: string,
+  connectionStatus: McpServerStatus["connection_status"] = "SUCCESS",
+): McpServerStatus => ({
+  id,
+  connection_status: connectionStatus,
+  authentication_mode: "oauth2",
+});
 
 const build = (
   overrides: Partial<Parameters<typeof buildMcpToolsSection>[0]> = {},
@@ -95,5 +107,108 @@ describe("buildMcpToolsSection", () => {
     const section = build({ disabled: true });
 
     expect(section.items.every((item) => item.disabled)).toBe(true);
+  });
+
+  describe("server rows", () => {
+    const itemOf = (section: ReturnType<typeof build>, serverId: string) => {
+      const item = section.items.find(
+        (candidate) => candidate.id === mcpToolsServerItemId(serverId),
+      );
+      if (!item) {
+        throw new Error(`row for ${serverId} missing`);
+      }
+      return item;
+    };
+
+    it("lists one switch per server ahead of the write switch, ticked unless switched off", () => {
+      const section = build({
+        servers: [server("linear"), server("github")],
+        disabledServerIds: ["github"],
+        onToggleServer: vi.fn(),
+      });
+
+      expect(section.items.map((item) => item.id)).toEqual([
+        "server-linear",
+        "server-github",
+        MCP_TOOLS_WRITE_TOGGLE_ITEM_ID,
+        MCP_TOOLS_BROWSE_ITEM_ID,
+      ]);
+      const linear = itemOf(section, "linear");
+      const github = itemOf(section, "github");
+      expect(isAddMenuToolItem(linear) && linear.checked).toBe(true);
+      expect(isAddMenuToolItem(github) && github.checked).toBe(false);
+      expect(linear.label).toBe("linear");
+      expect(isAddMenuToolItem(linear) && linear.description).toBeUndefined();
+    });
+
+    it("flips the server the row belongs to", () => {
+      const onToggleServer = vi.fn();
+      const section = build({
+        servers: [server("linear"), server("github")],
+        onToggleServer,
+      });
+
+      const github = itemOf(section, "github");
+      if (!isAddMenuToolItem(github)) {
+        throw new Error("server row is not a switch");
+      }
+      github.onToggle();
+      expect(onToggleServer).toHaveBeenCalledWith("github");
+    });
+
+    // Nothing to switch off before the user connects; the row is the way
+    // to connect instead, and it opens a dialog like the browse row.
+    it("offers a connect row instead of a switch for a server awaiting authorization", () => {
+      const onConnect = vi.fn();
+      const onToggleServer = vi.fn();
+      const section = build({
+        servers: [server("jira", "NEEDS_AUTHENTICATION")],
+        onToggleServer,
+        onConnect,
+      });
+
+      const jira = itemOf(section, "jira");
+      expect(isAddMenuToolItem(jira)).toBe(false);
+      if (isAddMenuToolItem(jira)) {
+        throw new Error("connect row is a switch");
+      }
+      expect(jira.description).toBe("Needs authentication");
+      expect(jira.closesImmediately).toBe(true);
+      jira.onSelect();
+      expect(onConnect).toHaveBeenCalledTimes(1);
+      expect(onToggleServer).not.toHaveBeenCalled();
+    });
+
+    it("keeps a failed server's switch live and says why it is idle", () => {
+      const onToggleServer = vi.fn();
+      const section = build({
+        servers: [server("wiki", "FAILURE")],
+        disabledServerIds: ["wiki"],
+        onToggleServer,
+      });
+
+      const wiki = itemOf(section, "wiki");
+      if (!isAddMenuToolItem(wiki)) {
+        throw new Error("server row is not a switch");
+      }
+      expect(wiki.checked).toBe(false);
+      expect(wiki.disabled).toBe(false);
+      expect(wiki.description).toBe(
+        "The server is configured, but the backend could not connect to it.",
+      );
+      wiki.onToggle();
+      expect(onToggleServer).toHaveBeenCalledWith("wiki");
+    });
+
+    it("locks the server rows with the rest of the group", () => {
+      const section = build({
+        servers: [server("linear"), server("jira", "NEEDS_AUTHENTICATION")],
+        onToggleServer: vi.fn(),
+        onConnect: vi.fn(),
+        disabled: true,
+      });
+
+      expect(section.items.every((item) => item.disabled)).toBe(true);
+    });
   });
 });

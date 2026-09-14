@@ -634,6 +634,107 @@ describe("ChatMessage", () => {
     });
   });
 
+  describe("MCP servers switched off by the user", () => {
+    const renderAssistantMessage = async (
+      overrides: Partial<UiChatMessage>,
+    ) => {
+      const message: UiChatMessage = {
+        id: "msg_mcp_disabled",
+        content: [{ content_type: "text", text: "Answered without tools" }],
+        role: "assistant",
+        sender: "assistant",
+        authorId: "assistant_1",
+        createdAt: new Date("2025-01-01T12:00:00Z").toISOString(),
+        status: "complete",
+        ...overrides,
+      };
+      const Controls = () => <div data-testid="message-controls-probe" />;
+      const { i18n } = await import("@lingui/core");
+      i18n.load("en", enMessages as unknown as Messages);
+      i18n.activate("en");
+      render(
+        <I18nProvider i18n={i18n}>
+          <MemoryRouter>
+            <ChatMessage
+              message={message}
+              controls={Controls}
+              controlsContext={{
+                currentUserId: "user_1",
+                dialogOwnerId: "user_1",
+                isSharedDialog: false,
+              }}
+              onMessageAction={async () => true}
+            />
+          </MemoryRouter>
+        </I18nProvider>,
+      );
+    };
+
+    it("footnotes the servers the user switched off, without a connect affordance", async () => {
+      await renderAssistantMessage({
+        mcp_servers_disabled_by_user: ["linear"],
+      });
+
+      expect(
+        screen.getByTestId("mcp-disabled-servers-notice"),
+      ).toHaveTextContent(
+        "linear is switched off for this chat, so its tools were not used.",
+      );
+      expect(
+        screen.queryByTestId("mcp-needs-auth-notice"),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
+    });
+
+    it("enumerates several switched-off servers in one footnote", async () => {
+      await renderAssistantMessage({
+        mcp_servers_disabled_by_user: ["linear", "github"],
+      });
+
+      expect(
+        screen.getByTestId("mcp-disabled-servers-notice"),
+      ).toHaveTextContent(
+        "linear, github are switched off for this chat, so their tools were not used.",
+      );
+    });
+
+    // The generation probes a server before withholding it, so the same id
+    // can be reported as awaiting connection too; the switch-off is the
+    // reason the user chose, so only that one is shown for it.
+    it("reports a server as switched off rather than unconnected when it is both", async () => {
+      await renderAssistantMessage({
+        mcp_servers_disabled_by_user: ["linear"],
+        mcp_servers_needing_auth: ["linear", "jira"],
+      });
+
+      expect(
+        screen.getByTestId("mcp-disabled-servers-notice"),
+      ).toHaveTextContent("linear is switched off");
+      expect(screen.getByTestId("mcp-needs-auth-notice")).toHaveTextContent(
+        "jira is available in this chat but not connected, so its tools were not used.",
+      );
+    });
+
+    it("drops the needs-auth notice entirely when every unconnected server is switched off", async () => {
+      await renderAssistantMessage({
+        mcp_servers_disabled_by_user: ["linear"],
+        mcp_servers_needing_auth: ["linear"],
+      });
+
+      expect(
+        screen.queryByTestId("mcp-needs-auth-notice"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("renders nothing without the metadata", async () => {
+      await renderAssistantMessage({});
+
+      expect(
+        screen.queryByTestId("mcp-disabled-servers-notice"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   describe("assistant mentions", () => {
     const renderMessage = async (message: UiChatMessage) => {
       const Controls = () => <div data-testid="message-controls-probe" />;

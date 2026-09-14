@@ -125,6 +125,42 @@ describe("constructSubmitStreamRequestBody", () => {
     );
   });
 
+  it("seeds the switched-off servers into a new chat's body only when there are any", () => {
+    const body = constructSubmitStreamRequestBody(
+      "hello",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      ["linear", "github"],
+    );
+
+    expect(body.disabled_mcp_server_ids).toEqual(["linear", "github"]);
+    expect(body).not.toHaveProperty("mcp_write_tools_enabled");
+    expect(
+      constructSubmitStreamRequestBody(
+        "hello",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        [],
+      ),
+    ).not.toHaveProperty("disabled_mcp_server_ids");
+  });
+
   it("carries the delegation run mode when one was chosen", () => {
     const body = constructSubmitStreamRequestBody(
       "ask @Researcher",

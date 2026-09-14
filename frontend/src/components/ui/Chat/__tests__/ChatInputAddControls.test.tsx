@@ -174,4 +174,60 @@ describe("ChatInputAddControls", () => {
       "chat-input-add-menu-extra-browse-assistants",
     ]);
   });
+
+  it("renders each server as a checkbox row ahead of the write switch and flips it in place", () => {
+    const onToggleServer = vi.fn();
+    const onConnect = vi.fn();
+    renderControls({
+      mcpToolsSection: buildMcpToolsSection({
+        writeToolsEnabled: true,
+        onToggleWriteTools: vi.fn(),
+        onBrowse: vi.fn(),
+        servers: [
+          {
+            id: "linear",
+            connection_status: "SUCCESS",
+            authentication_mode: "oauth2",
+          },
+          {
+            id: "jira",
+            connection_status: "NEEDS_AUTHENTICATION",
+            authentication_mode: "oauth2",
+          },
+        ],
+        disabledServerIds: ["linear"],
+        onToggleServer,
+        onConnect,
+      }),
+    });
+    fireEvent.click(screen.getByTestId("chat-input-add-menu-trigger"));
+
+    const rows = screen
+      .getAllByTestId(/^chat-input-add-menu-extra-/)
+      .map((row) => row.dataset.testid);
+    expect(rows).toEqual([
+      "chat-input-add-menu-extra-server-linear",
+      "chat-input-add-menu-extra-server-jira",
+      "chat-input-add-menu-extra-allow-write-operations",
+      "chat-input-add-menu-extra-browse-tools",
+    ]);
+
+    const linear = screen.getByTestId(
+      "chat-input-add-menu-extra-server-linear",
+    );
+    expect(linear).toHaveAttribute("role", "menuitemcheckbox");
+    expect(linear).toHaveAttribute("aria-checked", "false");
+    fireEvent.click(linear);
+    expect(onToggleServer).toHaveBeenCalledWith("linear");
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+
+    // Awaiting authorization: a plain row that leads to connecting, and it
+    // closes the menu at once like every row that opens a dialog.
+    const jira = screen.getByTestId("chat-input-add-menu-extra-server-jira");
+    expect(jira).toHaveAttribute("role", "menuitem");
+    expect(jira).toHaveTextContent("Needs authentication");
+    fireEvent.click(jira);
+    expect(onConnect).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
 });
