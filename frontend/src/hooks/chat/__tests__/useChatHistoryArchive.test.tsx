@@ -86,6 +86,7 @@ const wrapper = ({ children }: { children: ReactNode }) =>
 beforeEach(() => {
   vi.clearAllMocks();
   useChatHistoryFilterStore.setState({ ...CHAT_HISTORY_FILTER_DEFAULTS });
+  useGenerationStatusStore.getState().reset();
   mockArchiveMutation.mockResolvedValue(undefined);
   mockUnarchiveMutation.mockResolvedValue({ chat_id: "chat5" });
   queryClient = new QueryClient({
@@ -259,6 +260,33 @@ describe("useChatHistory archiveChat optimistic removal", () => {
       "chat5",
       "chat6",
     ]);
+  });
+
+  it("clears the generation status marker only once the mutation succeeds", async () => {
+    const parked = {
+      kind: "action_required",
+      startedAt: "2026-09-01T10:00:00.000Z",
+      localSeenAt: 0,
+    } as const;
+    useGenerationStatusStore.setState({ statusByChatId: { chat5: parked } });
+    mockArchiveMutation.mockRejectedValueOnce(new Error("boom"));
+    const { result } = renderHook(() => useChatHistory(), { wrapper });
+
+    await act(async () => {
+      await expect(result.current.archiveChat("chat5")).rejects.toThrow("boom");
+    });
+
+    expect(useGenerationStatusStore.getState().statusByChatId.chat5).toEqual(
+      parked,
+    );
+
+    await act(async () => {
+      await result.current.archiveChat("chat5");
+    });
+
+    expect(
+      useGenerationStatusStore.getState().statusByChatId.chat5,
+    ).toBeUndefined();
   });
 });
 

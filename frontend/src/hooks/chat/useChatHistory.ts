@@ -510,10 +510,6 @@ export function useChatHistory({
       // outside the cache and no list edit can take away; drop it too.
       clearPendingChat(chatId);
 
-      // An archived chat has no row, so its status must not keep counting.
-      useGenerationStatusStore.getState().clearStatus(chatId);
-      useChatHistoryStore.getState().clearTitleHint(chatId);
-
       const rollbackListRemoval = await removeArchivedChatFromLists(
         queryClient,
         chatId,
@@ -525,6 +521,11 @@ export function useChatHistory({
           pathParams: { chatId },
           body: {}, // Send empty object as body
         });
+
+        // An archived chat has no row, so its status must not keep counting;
+        // cleared only on success so a failed archive keeps the row's marker.
+        useGenerationStatusStore.getState().clearStatus(chatId);
+        useChatHistoryStore.getState().clearTitleHint(chatId);
 
         void queryClient.invalidateQueries({
           queryKey: chatDetailQuery({ pathParams: { chatId } }).queryKey,
