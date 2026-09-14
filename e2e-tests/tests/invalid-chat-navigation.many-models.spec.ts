@@ -153,13 +153,21 @@ test(
     );
     expect(archiveResp.status()).toBe(200);
 
-    // The pinned list answers the same path, and a listing fetched before the
-    // archive can still be in flight — both still carry the id, so skip them.
+    // The pinned list answers the same path and still carries the id, so skip
+    // it; a failed listing has no ids at all and must not count either.
     const listWithoutChat = page.waitForResponse(
-      async (r) =>
-        r.url().includes(RECENT_CHATS_URL) &&
-        !r.url().includes("pinned=true") &&
-        !(await r.text()).includes(chatId),
+      async (r) => {
+        if (
+          !r.url().includes(RECENT_CHATS_URL) ||
+          r.url().includes("pinned=true") ||
+          !r.ok()
+        ) {
+          return false;
+        }
+        // A body the browser already discarded must not reject the wait.
+        const body = await r.text().catch(() => null);
+        return body !== null && !body.includes(chatId);
+      },
       { timeout: 15000 },
     );
     // No readiness wait here: it ends on an enabled composer, which is exactly
