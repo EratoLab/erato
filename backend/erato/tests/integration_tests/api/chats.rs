@@ -832,6 +832,79 @@ async fn test_update_of_a_foreign_chat_returns_404(pool: Pool<Postgres>) {
     assert_eq!(response.status_code(), http::StatusCode::NOT_FOUND);
 }
 
+async fn listed_chat(server: &TestServer, query: &str, chat_id: &str) -> Value {
+    let response = server
+        .get(&format!("/api/v1beta/me/recent_chats{query}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status_ok();
+    let body: Value = response.json();
+    body["chats"]
+        .as_array()
+        .expect("Response missing 'chats' array")
+        .iter()
+        .find(|chat| chat["id"] == chat_id)
+        .cloned()
+        .expect("Chat not listed")
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_archived_listing_rows_carry_no_generation_markers(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .expect("Failed to create user");
+
+    let server = create_test_server(app_state.clone());
+    let parked = create_chat_via_submit(&server).await;
+    let running = create_chat_via_submit(&server).await;
+
+    chats::ActiveModel {
+        id: ActiveValue::Unchanged(Uuid::parse_str(&parked).expect("Invalid chat UUID")),
+        active_generation_id: ActiveValue::Set(Some(Uuid::new_v4())),
+        generation_state: ActiveValue::Set(Some("awaiting_approval".to_string())),
+        generation_started_at: ActiveValue::Set(Some(Utc::now().into())),
+        generation_heartbeat_at: ActiveValue::Set(None),
+        generation_ended_at: ActiveValue::Set(Some(Utc::now().into())),
+        ..Default::default()
+    }
+    .update(&app_state.db)
+    .await
+    .expect("Failed to park the chat on a tool approval");
+    chats::ActiveModel {
+        id: ActiveValue::Unchanged(Uuid::parse_str(&running).expect("Invalid chat UUID")),
+        active_generation_id: ActiveValue::Set(Some(Uuid::new_v4())),
+        generation_state: ActiveValue::Set(Some("running".to_string())),
+        generation_started_at: ActiveValue::Set(Some(Utc::now().into())),
+        generation_heartbeat_at: ActiveValue::Set(Some(Utc::now().into())),
+        generation_ended_at: ActiveValue::Set(None),
+        ..Default::default()
+    }
+    .update(&app_state.db)
+    .await
+    .expect("Failed to mark the chat as running");
+
+    assert!(listed_chat(&server, "", &parked).await["pending_tool_approval_at"].is_string());
+    assert!(listed_chat(&server, "", &running).await["active_generation_started_at"].is_string());
+
+    archive_chat_via_api(&server, &parked).await;
+    archive_chat_via_api(&server, &running).await;
+
+    let parked_row = listed_chat(&server, "?include_archived=true", &parked).await;
+    assert!(parked_row["archived_at"].is_string());
+    assert!(parked_row["pending_tool_approval_at"].is_null());
+    let running_row = listed_chat(&server, "?include_archived=true", &running).await;
+    assert!(running_row["archived_at"].is_string());
+    assert!(running_row["active_generation_started_at"].is_null());
+}
+
 /// Test that recent chats resolve title with `title_by_user_provided` precedence.
 ///
 /// # Test Categories

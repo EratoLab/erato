@@ -639,12 +639,14 @@ pub async fn get_recent_chats(
             "chats"."is_pinned",
             "chats"."assistant_id",
             CASE
-                WHEN "chats"."generation_state" = 'running'
+                WHEN "chats"."archived_at" IS NULL
+                    AND "chats"."generation_state" = 'running'
                     AND "chats"."generation_heartbeat_at" > now() - make_interval(secs => {generation_stale_after_secs})
                 THEN "chats"."generation_started_at"
             END AS "active_generation_started_at",
             CASE
-                WHEN "chats"."generation_state" = 'awaiting_approval'
+                WHEN "chats"."archived_at" IS NULL
+                    AND "chats"."generation_state" = 'awaiting_approval'
                 THEN "chats"."generation_ended_at"
             END AS "pending_tool_approval_at",
             ("chats"."assistant_configuration" #>> '{{provenance,kind}}') AS "provenance_kind",
