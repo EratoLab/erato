@@ -12,7 +12,14 @@
 // `@erato/frontend/library` by design — it bundles the library instead of
 // borrowing the host's, so the rule below is simply not its contract.
 //
-// The declared surface is read from the emitted `.d.ts` rather than from
+// The second, advisory half checks names against ERATO_KIT_SURFACE_EXPORTS.
+// That list is only the subset of the surface the host pins by hand; the rest
+// arrives through star re-exports, which are legitimate API but have nothing
+// anchoring them, so a refactor elsewhere can drop one and take a kit offline.
+// Hence a warning, not a failure: the name works today, and the fix is a host
+// decision, not something the kit author can make at the import site.
+//
+// The pinned list is read from the emitted `.d.ts` rather than from
 // `dist-library/shared.mjs`: that module touches `document` at module scope, so
 // Node cannot import it, and the chunk it lives in is content-hash named.
 
@@ -52,11 +59,12 @@ const surfaceDeclarationPath = path.join(
   "kit-surface.d.ts",
 );
 
-const readDeclaredSurface = () => {
+// Null when the host tarball predates the pinned list or was never built: the
+// import rule below still holds, so the advisory half is skipped rather than
+// turned into a build failure a kit author cannot act on.
+const readPinnedNames = () => {
   if (!fs.existsSync(surfaceDeclarationPath)) {
-    throw new Error(
-      `Erato shared surface declaration does not exist: ${surfaceDeclarationPath}. Build @erato/frontend first.`,
-    );
+    return null;
   }
 
   const declaration = fs.readFileSync(surfaceDeclarationPath, "utf8");
@@ -64,19 +72,11 @@ const readDeclaredSurface = () => {
     declaration,
   );
   if (!tuple) {
-    throw new Error(
-      `ERATO_KIT_SURFACE_EXPORTS is missing from ${surfaceDeclarationPath}. Rebuild @erato/frontend.`,
-    );
+    return null;
   }
 
   const names = [...tuple[1].matchAll(/"([^"]+)"/g)].map((match) => match[1]);
-  if (names.length === 0) {
-    throw new Error(
-      `ERATO_KIT_SURFACE_EXPORTS is empty in ${surfaceDeclarationPath}. Rebuild @erato/frontend.`,
-    );
-  }
-
-  return new Set(names);
+  return names.length > 0 ? new Set(names) : null;
 };
 
 // Comments are blanked before matching so that prose inside an import statement
@@ -137,10 +137,13 @@ const blankComments = (source) => {
 };
 
 // The gap between the keyword and the specifier may span lines but may not
-// contain a quote or a semicolon, so a match can never run across a preceding
-// complete statement and mis-report its keyword or its line.
+// contain a quote, a semicolon or a second import/export keyword. Without that
+// last guard a semicolon-free statement ahead of the import — `export type X =
+// …` under a `semi: false` formatter, or an object literal — is inside the
+// match, so the wrong keyword decides whether the statement is type-only and
+// the wrong brace group is read as its specifier list.
 const STATEMENT_PATTERN = new RegExp(
-  `\\b(?:import|export)\\b[^;"'\`]*?["'](${LIBRARY_SPECIFIER.replace(/\//g, "\\/")}|${SHARED_SPECIFIER.replace(/\//g, "\\/")})["']\\)?`,
+  `\\b(?:import|export)\\b(?:(?!\\b(?:import|export)\\b)[^;"'\`])*?["'](${LIBRARY_SPECIFIER.replace(/\//g, "\\/")}|${SHARED_SPECIFIER.replace(/\//g, "\\/")})["']\\)?`,
   "g",
 );
 
@@ -159,6 +162,32 @@ const namedValueSpecifiers = (statement) => {
     .filter((entry) => entry.length > 0 && !/^type\s/.test(entry))
     .map((entry) => entry.split(/\s+as\s+/)[0].trim())
     .filter((entry) => entry.length > 0);
+};
+
+// What a statement binds at runtime, or null when nothing survives the type
+// erasure. A per-specifier `import { type X }` is erased exactly like a leading
+// `import type {`, so it has no runtime binding to reject. An empty array means
+// the binding is the module itself rather than a name: a default or namespace
+// import, a bare side-effect import, a star re-export, a dynamic `import(...)`
+// — each one links the module whatever its braces say.
+const runtimeBindings = (statement) => {
+  const named = namedValueSpecifiers(statement);
+  if (named.length > 0) {
+    return named;
+  }
+
+  const outsideBraces = statement
+    .replace(/^(?:import|export)\b/, " ")
+    .replace(/\{[^}]*\}/, " ")
+    .replace(/["'][^"']*["']\)?$/, " ")
+    .replace(/\bfrom\b/, " ")
+    .trim();
+
+  if (outsideBraces.length > 0) {
+    return [];
+  }
+
+  return /\{[^}]*\}/.test(statement) ? null : [];
 };
 
 const collectSourceFiles = (target, collected) => {
@@ -185,14 +214,14 @@ const collectSourceFiles = (target, collected) => {
   }
 };
 
-const scanFile = (filePath, declaredSurface) => {
+const scanFile = (filePath, pinnedNames) => {
   const source = fs.readFileSync(filePath, "utf8");
   if (!source.includes("@erato/frontend/")) {
     return [];
   }
 
   const code = blankComments(source);
-  const violations = [];
+  const findings = [];
   STATEMENT_PATTERN.lastIndex = 0;
 
   let match = STATEMENT_PATTERN.exec(code);
@@ -201,25 +230,37 @@ const scanFile = (filePath, declaredSurface) => {
     const line = (code.slice(0, match.index).match(/\n/g)?.length ?? 0) + 1;
     const text = source.slice(match.index, match.index + match[0].length);
 
+    if (isTypeOnlyStatement(statement)) {
+      match = STATEMENT_PATTERN.exec(code);
+      continue;
+    }
+
     if (match[1] === LIBRARY_SPECIFIER) {
-      if (!isTypeOnlyStatement(statement)) {
-        violations.push({
+      const bindings = runtimeBindings(statement);
+      if (bindings !== null) {
+        const what =
+          bindings.length > 0
+            ? `imports ${bindings.map((name) => `"${name}"`).join(", ")} as a runtime value from`
+            : "links the runtime module";
+        findings.push({
+          level: "error",
           filePath,
           line,
           text,
-          reason: `imports runtime values from "${LIBRARY_SPECIFIER}"; that specifier is types-only for kits. Write "import type {" / "export type {", or take the value from "${SHARED_SPECIFIER}".`,
+          reason: `${what} "${LIBRARY_SPECIFIER}"; that specifier is types-only for kits. Write "import type {" / "export type {" or prefix the specifier with "type", or take the value from "${SHARED_SPECIFIER}".`,
         });
       }
-    } else if (!isTypeOnlyStatement(statement)) {
-      const undeclared = namedValueSpecifiers(statement).filter(
-        (name) => !declaredSurface.has(name),
+    } else if (pinnedNames !== null) {
+      const unpinned = namedValueSpecifiers(statement).filter(
+        (name) => !pinnedNames.has(name),
       );
-      if (undeclared.length > 0) {
-        violations.push({
+      if (unpinned.length > 0) {
+        findings.push({
+          level: "warning",
           filePath,
           line,
           text,
-          reason: `imports ${undeclared.map((name) => `"${name}"`).join(", ")} from "${SHARED_SPECIFIER}", which the host does not declare. Add the name to ERATO_KIT_SURFACE_EXPORTS in the host's shared surface, or the kit breaks whenever an unrelated refactor drops it.`,
+          reason: `imports ${unpinned.map((name) => `"${name}"`).join(", ")} from "${SHARED_SPECIFIER}" through a star re-export. Nothing in ERATO_KIT_SURFACE_EXPORTS pins the name, so an unrelated host refactor can drop it and take this kit offline; ask the host to pin it.`,
         });
       }
     }
@@ -227,14 +268,14 @@ const scanFile = (filePath, declaredSurface) => {
     match = STATEMENT_PATTERN.exec(code);
   }
 
-  return violations;
+  return findings;
 };
 
 const USAGE = `Usage: check-kit-manifest [path...]   (default: src)
 
 Checks a COMPONENT KIT source tree: runtime values may only come from
-"${SHARED_SPECIFIER}", and only names the host declares. Not for host
-shells such as office-addin, which bundle "${LIBRARY_SPECIFIER}" on purpose.`;
+"${SHARED_SPECIFIER}", "${LIBRARY_SPECIFIER}" is types-only. Not for a
+host shell such as office-addin, which bundles the library on purpose.`;
 
 export const main = (argv = []) => {
   if (argv.includes("--help") || argv.includes("-h")) {
@@ -243,7 +284,7 @@ export const main = (argv = []) => {
   }
 
   const targets = argv.length > 0 ? argv : ["src"];
-  const declaredSurface = readDeclaredSurface();
+  const pinnedNames = readPinnedNames();
   const files = [];
 
   for (const target of targets) {
@@ -254,33 +295,54 @@ export const main = (argv = []) => {
     collectSourceFiles(resolved, files);
   }
 
-  const violations = files.flatMap((filePath) =>
-    scanFile(filePath, declaredSurface),
-  );
+  const findings = files.flatMap((filePath) => scanFile(filePath, pinnedNames));
 
-  for (const violation of violations) {
-    const relative = path.relative(process.cwd(), violation.filePath);
-    const location = relative.startsWith("..") ? violation.filePath : relative;
-    console.error(`${location}:${violation.line}: ${violation.reason}`);
-    for (const line of violation.text.split("\n")) {
-      console.error(`    ${line}`);
+  for (const finding of findings) {
+    const relative = path.relative(process.cwd(), finding.filePath);
+    const location = relative.startsWith("..") ? finding.filePath : relative;
+    const report = finding.level === "error" ? console.error : console.warn;
+    report(`${location}:${finding.line}: ${finding.level}: ${finding.reason}`);
+    for (const line of finding.text.split("\n")) {
+      report(`    ${line}`);
     }
   }
 
-  if (violations.length > 0) {
+  const errors = findings.filter((finding) => finding.level === "error").length;
+  const warnings = findings.length - errors;
+  const scope =
+    pinnedNames === null
+      ? `${files.length} file(s), pinned-name check skipped (${surfaceDeclarationPath} has no ERATO_KIT_SURFACE_EXPORTS)`
+      : `${files.length} file(s) against ${pinnedNames.size} pinned name(s)`;
+
+  if (errors > 0) {
     console.error(
-      `check-kit-manifest: ${violations.length} violation(s) in ${files.length} file(s).`,
+      `check-kit-manifest: ${errors} error(s), ${warnings} warning(s) in ${scope}.`,
     );
     process.exitCode = 1;
     return 1;
   }
 
-  console.log(
-    `check-kit-manifest: ${files.length} file(s) clean against ${declaredSurface.size} declared surface names.`,
-  );
+  console.log(`check-kit-manifest: clean, ${warnings} warning(s) in ${scope}.`);
   return 0;
 };
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+// argv[1] is the path as typed; Node resolves the module entry through its
+// symlinks. Both have to be realpathed or a package-manager symlink makes this
+// guard silently false and the whole check a no-op.
+const invokedDirectly = () => {
+  if (process.argv[1] === undefined) {
+    return false;
+  }
+  try {
+    return (
+      fs.realpathSync(path.resolve(process.argv[1])) ===
+      fileURLToPath(import.meta.url)
+    );
+  } catch {
+    return false;
+  }
+};
+
+if (invokedDirectly()) {
   main(process.argv.slice(2));
 }
