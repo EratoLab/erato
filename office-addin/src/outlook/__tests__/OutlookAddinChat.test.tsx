@@ -28,9 +28,14 @@ const {
   dismissSessionToastsMock,
   fileUploadState,
   chatHeaderState,
+  dragOptions,
 } = vi.hoisted(() => ({
   fileUploadState: { error: null, setError: vi.fn() },
   chatHeaderState: { composerLocked: false },
+  dragOptions: {
+    mailList: [] as { disabled?: boolean }[],
+    office: [] as { disabled?: boolean }[],
+  },
   useConversationDropzoneMock: vi.fn(
     (_options: {
       extraAcceptMimeTypes?: Record<string, string[]>;
@@ -106,10 +111,36 @@ vi.mock("../../core/AddinHistoryDrawerCore", () => ({
   AddinHistoryDrawerCore: () => null,
 }));
 
+// Recorded, not replaced: these two drop paths never reach the shared dropzone.
+vi.mock("../hooks/useOutlookMailListDrag", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../hooks/useOutlookMailListDrag")>();
+  return {
+    ...actual,
+    useOutlookMailListDrag: (options: { disabled?: boolean }) => {
+      dragOptions.mailList.push(options);
+      return actual.useOutlookMailListDrag(options as never);
+    },
+  };
+});
+vi.mock("../../hooks/useOfficeDragAndDrop", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../hooks/useOfficeDragAndDrop")>();
+  return {
+    ...actual,
+    useOfficeDragAndDrop: (options: { disabled?: boolean }) => {
+      dragOptions.office.push(options);
+      return actual.useOfficeDragAndDrop(options as never);
+    },
+  };
+});
+
 describe("AddinChat without any Graph provider mounted (Exchange SE / unsupported hosts)", () => {
   beforeEach(() => {
     i18n.activate("en");
     chatHeaderState.composerLocked = false;
+    dragOptions.mailList.length = 0;
+    dragOptions.office.length = 0;
   });
 
   afterEach(() => {
@@ -161,11 +192,12 @@ describe("AddinChat without any Graph provider mounted (Exchange SE / unsupporte
     expect(dropzoneOptions?.onReceive).toBeTypeOf("function");
   });
 
-  it("closes the dropzone once the chat refuses messages", () => {
+  it("closes every drop path once the chat refuses messages", () => {
     renderWithoutGraphProvider(<AddinChat />);
     expect(useConversationDropzoneMock.mock.calls.at(-1)?.[0]?.disabled).toBe(
       false,
     );
+    expect(dragOptions.office.at(-1)?.disabled).toBe(false);
 
     chatHeaderState.composerLocked = true;
     cleanup();
@@ -174,6 +206,8 @@ describe("AddinChat without any Graph provider mounted (Exchange SE / unsupporte
     expect(useConversationDropzoneMock.mock.calls.at(-1)?.[0]?.disabled).toBe(
       true,
     );
+    expect(dragOptions.mailList.at(-1)?.disabled).toBe(true);
+    expect(dragOptions.office.at(-1)?.disabled).toBe(true);
   });
 
   // A pending ask toast floats interactive above the aria-modal drawer but
