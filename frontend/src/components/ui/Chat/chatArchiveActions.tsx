@@ -1,6 +1,7 @@
 import { t } from "@lingui/core/macro";
 
 import { CHAT_HISTORY_ROW_MENU_ID } from "./chatHistoryRowMenuIds";
+import { CHAT_HISTORY_ROW_TEST_ID } from "./chatHistoryRowTestIds";
 import { ArchiveIcon, UndoIcon } from "../icons";
 
 import type { DropdownMenuItem } from "../Controls/DropdownMenu";
@@ -27,7 +28,7 @@ export const archivedNoticeText = (variant: "chat" | "run" = "chat") =>
 export const ArchivedChatPill = ({ label }: { label: string }) => (
   <span
     className="pill-geometry inline-flex shrink-0 items-center border border-theme-border bg-theme-bg-secondary px-2 py-0.5 text-xs font-medium text-theme-fg-muted"
-    data-testid="chat-history-item-archived"
+    data-testid={CHAT_HISTORY_ROW_TEST_ID.archived}
   >
     {label}
   </span>

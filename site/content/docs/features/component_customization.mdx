@@ -130,10 +130,20 @@ reorder the host's items, insert its own anywhere, and give any item its own
 icon or label. Ids the host gates OUT for a row must stay out: an item rendered
 inert is worse than one that is missing.
 
+The cases find a row by `CHAT_HISTORY_ROW_TEST_ID.row` and read the badges
+through the other ids on that record, so an override has to satisfy two
+structural rules: the row element carries that attribute, and the row's
+accessible name is on that element or on an ancestor of it.
+
 `component-kit-example/src/components/ExampleChatHistoryList.test.tsx` is a
 working harness for a kit that passes the gated array to the host's
 `DropdownMenu`: it stubs that one export so `openRowMenu` can return the items
-the menu was handed. A kit that draws its own menu reads its own DOM instead.
+the menu was handed. A kit that draws its own menu component stubs that
+component the same way and returns the array it was handed — `openRowMenu`
+returns `DropdownMenuItem[]`, and `id` and `confirmAction` have no DOM
+projection to read before a click. The stub has to be installed by the test
+file's own `vi.mock` factory, so this is one thing the host cannot hand over
+ready-made.
 
 The main frontend loads a small runtime entrypoint first, then component kit
 entrypoints, then the main app entrypoint. Component kits can assume

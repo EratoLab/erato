@@ -22,6 +22,7 @@ import {
   buildArchiveMenuItems,
 } from "./chatArchiveActions";
 import { CHAT_HISTORY_ROW_MENU_ID } from "./chatHistoryRowMenuIds";
+import { CHAT_HISTORY_ROW_TEST_ID } from "./chatHistoryRowTestIds";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { DropdownMenu } from "../Controls/DropdownMenu";
 import { Row } from "../Controls/Row";
@@ -135,7 +136,7 @@ export const useChatHistoryRowPresentation = (
       <p
         className="truncate text-xs text-theme-fg-muted"
         title={runOrigin.label}
-        data-testid="chat-history-item-run-origin"
+        data-testid={CHAT_HISTORY_ROW_TEST_ID.runOrigin}
       >
         {runOrigin.label}
       </p>
@@ -418,7 +419,8 @@ const ChatHistoryListItem = memo<{
           "sidebar-content-col-geometry sidebar-trailing-col-geometry flex-col py-1.5 pb-3.5",
           layout === "compact" ? "gap-0.5" : "gap-1",
         )}
-        data-chat-id={session.id}
+        // Spread, because the attribute NAME is the pinned part.
+        {...{ [CHAT_HISTORY_ROW_TEST_ID.row]: session.id }}
         data-ui="chat-history-item"
       >
         <div className="flex items-center justify-between gap-2">

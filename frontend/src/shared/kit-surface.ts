@@ -95,6 +95,10 @@ export type { ChatHistoryRowMenuOptions } from "@/components/ui/Chat/ChatHistory
 // gated array instead of rebuilding it.
 export { CHAT_HISTORY_ROW_MENU_ID } from "@/components/ui/Chat/chatHistoryRowMenuIds";
 export type { ChatHistoryRowMenuId } from "@/components/ui/Chat/chatHistoryRowMenuIds";
+// The DOM half of the same idea: the attribute and test ids the contract suite
+// probes, so a kit that places the badges itself or writes its own harness
+// resolves the spellings instead of copying them out of our test source.
+export { CHAT_HISTORY_ROW_TEST_ID } from "@/components/ui/Chat/chatHistoryRowTestIds";
 // The contract test for these rows is NOT here: it is test infrastructure and
 // everything on this surface ships to end users. It lives in "@erato/frontend/conformance".
 // Pinned alongside the hook that feeds it: only two registry-reachable
@@ -205,6 +209,7 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "Avatar",
   "Button",
   "CHAT_HISTORY_ROW_MENU_ID",
+  "CHAT_HISTORY_ROW_TEST_ID",
   "Card",
   "CardControl",
   "CardProps",

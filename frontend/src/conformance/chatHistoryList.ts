@@ -16,6 +16,7 @@
 import { createElement } from "react";
 
 import { CHAT_HISTORY_ROW_MENU_ID } from "@/components/ui/Chat/chatHistoryRowMenuIds";
+import { CHAT_HISTORY_ROW_TEST_ID } from "@/components/ui/Chat/chatHistoryRowTestIds";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { DELEGATION_PROVENANCE_KIND } from "@/utils/chat/recentChatSession";
 
@@ -79,10 +80,19 @@ const listProps = (
 });
 
 const row = (container: HTMLElement) =>
-  container.querySelector("[data-chat-id]");
+  container.querySelector(`[${CHAT_HISTORY_ROW_TEST_ID.row}]`);
 
-const rowLabel = (container: HTMLElement) =>
-  row(container)?.closest("[aria-label]")?.getAttribute("aria-label") ?? "";
+/**
+ * Searched upwards first and then inside, because both are legal markup: the
+ * host names the row element itself, while a kit that marks the `<li>` and
+ * labels the button within it is just as correct.
+ */
+const rowLabel = (container: HTMLElement) => {
+  const element = row(container);
+  const labelled =
+    element?.closest("[aria-label]") ?? element?.querySelector("[aria-label]");
+  return labelled?.getAttribute("aria-label") ?? "";
+};
 
 const text = (container: HTMLElement, testId: string) =>
   container.querySelector(`[data-testid="${testId}"]`)?.textContent?.trim() ??
@@ -122,9 +132,15 @@ const statusDotFailures = (
   container: HTMLElement,
   status: ChatAttentionStatus,
 ): string[] => {
-  const dot = container.querySelector('[data-testid="chat-generation-status"]');
+  const dot = container.querySelector(
+    `[data-testid="${CHAT_HISTORY_ROW_TEST_ID.status}"]`,
+  );
   if (!dot) {
-    return [`no status dot on a "${status}" row`];
+    // Named here rather than in a comment: every status case failing this way
+    // at once means the store below is not the store the override reads.
+    return [
+      `no status dot on a "${status}" row (if every status case fails, the test build holds two copies of @erato/frontend)`,
+    ];
   }
 
   const shown = dot.getAttribute("data-status");
@@ -223,13 +239,15 @@ const CASES: ConformanceCase[] = [
     ],
     menuMustNotContain: [CHAT_HISTORY_ROW_MENU_ID.unarchive],
     check: (container) => [
-      ...(text(container, "chat-history-item-archived") === null
+      ...(text(container, CHAT_HISTORY_ROW_TEST_ID.archived) === null
         ? []
         : ["an unarchived row renders the archived pill"]),
-      ...(text(container, "chat-history-item-run-origin") === null
+      ...(text(container, CHAT_HISTORY_ROW_TEST_ID.runOrigin) === null
         ? []
         : ["an ordinary chat renders a delegated-run origin"]),
-      ...(container.querySelector('[data-testid="chat-generation-status"]')
+      ...(container.querySelector(
+        `[data-testid="${CHAT_HISTORY_ROW_TEST_ID.status}"]`,
+      )
         ? ["an idle row renders a status dot"]
         : []),
     ],
@@ -247,7 +265,7 @@ const CASES: ConformanceCase[] = [
       CHAT_HISTORY_ROW_MENU_ID.archive,
     ],
     check: (container) => {
-      const pill = text(container, "chat-history-item-archived");
+      const pill = text(container, CHAT_HISTORY_ROW_TEST_ID.archived);
       return [
         ...(pill === null ? ["no archived pill on an archived row"] : []),
         ...(pill !== null && !rowLabel(container).includes(pill)
@@ -269,7 +287,7 @@ const CASES: ConformanceCase[] = [
       CHAT_HISTORY_ROW_MENU_ID.unarchive,
     ],
     check: (container) => {
-      const origin = text(container, "chat-history-item-run-origin");
+      const origin = text(container, CHAT_HISTORY_ROW_TEST_ID.runOrigin);
       return [
         ...(origin ? [] : ["no origin line on a delegated run"]),
         ...(origin && !rowLabel(container).includes(origin)
