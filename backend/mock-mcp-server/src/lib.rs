@@ -1017,6 +1017,9 @@ impl ServerHandler for ApprovalPolicyServer {
 pub const UNTRUSTED_TEXT_TOOL_NAME: &str = "render_untrusted_text";
 /// Name of the plainly described tool on the same server.
 pub const PLAIN_TEXT_TOOL_NAME: &str = "read_plain_text";
+/// Name that carries an invisible bidi mark, so display cleaning would
+/// change it: a client must still address the tool by this exact string.
+pub const HOSTILE_NAME_TOOL_NAME: &str = "read\u{200E}file";
 /// Markup that must reach the client verbatim, as inert text.
 pub const UNTRUSTED_TEXT_MARKUP: &str = "<b>bold</b> [x](y) <script>alert(1)</script>";
 /// Characters the length cap must count, not the bytes.
@@ -1065,6 +1068,11 @@ impl ServerHandler for UntrustedTextServer {
                 rmcp::model::Tool::new(
                     PLAIN_TEXT_TOOL_NAME,
                     "Reads a plainly described fixture",
+                    rmcp::model::JsonObject::new(),
+                ),
+                rmcp::model::Tool::new(
+                    HOSTILE_NAME_TOOL_NAME,
+                    "Reads a fixture under a name display cleaning would alter",
                     rmcp::model::JsonObject::new(),
                 ),
             ],
@@ -1361,7 +1369,11 @@ fn builtin_mechanisms() -> Vec<MechanismSummary> {
             name: "Untrusted text server",
             description: "Tool text with markup, bidi overrides, control characters and an oversized body",
             endpoint: "Streamable HTTP /mcp/untrusted-text",
-            tools: &[UNTRUSTED_TEXT_TOOL_NAME, PLAIN_TEXT_TOOL_NAME],
+            tools: &[
+                UNTRUSTED_TEXT_TOOL_NAME,
+                PLAIN_TEXT_TOOL_NAME,
+                HOSTILE_NAME_TOOL_NAME,
+            ],
         },
         MechanismSummary {
             name: "500 simulation endpoint",

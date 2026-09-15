@@ -528,7 +528,7 @@ async fn test_list_mcp_server_tools_sanitizes_vendor_text(pool: Pool<Postgres>) 
     let body: Value = response.json();
     assert_eq!(body["status"], "SUCCESS");
     let tools = body["tools"].as_array().expect("tools array");
-    assert_eq!(tools.len(), 2);
+    assert_eq!(tools.len(), 3);
     let untrusted = tools
         .iter()
         .find(|tool| tool["name"] == mock_mcp_server::UNTRUSTED_TEXT_TOOL_NAME)
@@ -559,4 +559,40 @@ async fn test_list_mcp_server_tools_sanitizes_vendor_text(pool: Pool<Postgres>) 
 
     assert_eq!(plain["description"], "Reads a plainly described fixture");
     assert_eq!(plain["description_truncated"], false);
+
+    // The name is the key a client posts back, so it leaves verbatim even
+    // where cleaning would change it; only the title is the cleaned form.
+    let hostile = tools
+        .iter()
+        .find(|tool| tool["name"] == mock_mcp_server::HOSTILE_NAME_TOOL_NAME)
+        .expect("tool with a hostile name listed under its declared name");
+    assert_eq!(hostile["title"], "readfile");
+    assert_eq!(hostile["user_decision"], "none");
+
+    let decision = server
+        .post("/api/v1beta/me/mcp-tool-approval-settings")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "mcp_server_id": "untrusted",
+            "tool_name": mock_mcp_server::HOSTILE_NAME_TOOL_NAME,
+            "decision": "denied",
+        }))
+        .await;
+    decision.assert_status_ok();
+
+    let response = server
+        .get("/api/v1beta/me/mcp_servers/untrusted/tools")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status_ok();
+    let body: Value = response.json();
+    let hostile = body["tools"]
+        .as_array()
+        .expect("tools array")
+        .iter()
+        .find(|tool| tool["name"] == mock_mcp_server::HOSTILE_NAME_TOOL_NAME)
+        .expect("tool with a hostile name still listed")
+        .clone();
+    assert_eq!(hostile["user_decision"], "denied");
+    assert_eq!(hostile["effective"], "denied");
 }
