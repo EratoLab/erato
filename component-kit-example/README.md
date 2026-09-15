@@ -26,7 +26,11 @@ directly, so kits need no react shims and no provider wrappers.
   components, providers, hooks, and stores that kits may consume. Its types
   come from the same package export.
 - Version handshake: import `ERATO_SHARED_SURFACE_VERSION` from that barrel and
-  warn on mismatch (see `src/index.tsx`).
+  warn on mismatch (see `src/index.tsx`). The registration also states the
+  minor it was built against — `builtAgainstSharedSurfaceMinor`, written as a
+  literal — which is how the host recognises an override that predates a rule
+  an extension point has since grown. Leaving it out reads as the oldest
+  contract, not as "no opinion".
 
 Values may NOT be imported from `@erato/frontend/library` — that path is
 types-only for kits (the flat bundle would be duplicated wholesale into the

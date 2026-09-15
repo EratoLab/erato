@@ -35,6 +35,9 @@ if (ERATO_SHARED_SURFACE_VERSION !== EXPECTED_SHARED_SURFACE_VERSION) {
 
 const componentKit: ComponentKitRegistration = {
   name: "example",
+  // A literal, never the imported constant: the import map resolves that one
+  // to the running host, so it would agree with every host it ever met.
+  builtAgainstSharedSurfaceMinor: 8,
   components: [
     {
       extensionPoint: "AssistantFileSourceSelector",
