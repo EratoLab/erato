@@ -50,7 +50,7 @@ export const mcpToolBadges = (tool: McpServerTool) => {
       toneClassName: NEUTRAL_PILL,
     });
   }
-  if (tool.approval === "ask") {
+  if (tool.policy === "ask") {
     badges.push({
       label: t({
         id: "preferences.dialog.mcpServers.tools.badge.asksBeforeRunning",

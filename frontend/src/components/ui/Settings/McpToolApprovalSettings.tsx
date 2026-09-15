@@ -15,7 +15,10 @@ import { Alert } from "../Feedback/Alert";
 
 import type {
   McpServerTool,
+  McpServerToolPolicy,
+  McpToolEffectiveState,
   UserToolApprovalSetting,
+  UserToolDecision,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ReactNode } from "react";
 
@@ -24,54 +27,69 @@ import type { ReactNode } from "react";
 // short of a listing is retried on the next expand instead of being cached.
 const TOOLS_STALE_TIME_MS = 5 * 60 * 1000;
 
-/** The radio state of one tool; "ask" is the absence of a stored decision. */
-export type McpToolDecision = "ask" | "always" | "never";
+/** The three states a tool row offers; each is one effective state. */
+export type McpToolDecision = "allow" | "ask" | "never";
+
+const decisionOfEffective = (
+  effective: McpToolEffectiveState,
+): McpToolDecision => (effective === "denied" ? "never" : effective);
+
+/** The state the policy puts a tool in when the user has decided nothing. */
+const policyDefault = (policy: McpServerToolPolicy): McpToolDecision =>
+  policy === "ask" ? "ask" : "allow";
+
+/** Which options the deployment lets the user store for one tool. */
+export interface McpToolDecisionAvailability {
+  allowAlways: boolean;
+  askAvailable: boolean;
+}
 
 /**
- * A stored row is a decision, never a grant by itself: the same table holds
- * denials, so presence alone must not read as "always".
+ * The options a row shows. The policy default is always there, as is
+ * "Never allow" (strictly more restrictive, honored regardless of policy).
+ * The remaining option is a stored decision the gate only honors while the
+ * deployment allows it, so it is not offered otherwise.
  */
-export const decisionOfSetting = (
-  setting: UserToolApprovalSetting | undefined,
-): McpToolDecision => {
-  if (setting === undefined) {
-    return "ask";
+export const offeredDecisions = (
+  policy: McpServerToolPolicy,
+  availability: McpToolDecisionAvailability,
+): McpToolDecision[] => {
+  const offered: McpToolDecision[] = [];
+  if (policy === "auto" || availability.allowAlways) {
+    offered.push("allow");
   }
-  return setting.decision === "denied" ? "never" : "always";
+  if (policy === "ask" || availability.askAvailable) {
+    offered.push("ask");
+  }
+  offered.push("never");
+  return offered;
 };
 
-/**
- * What the row shows for a stored decision. A grant is only honored by the
- * gate while the policy allows persistent grants and the tool would ask at
- * all, so outside that a stale grant reads as the default state — the same
- * fold the tool roster applies to `user_decision`.
- */
-export const shownDecision = (
-  stored: McpToolDecision,
-  offersAlways: boolean,
-): McpToolDecision => (stored === "always" && !offersAlways ? "ask" : stored);
+/** The stored decision a non-default option stands for. */
+const storedDecisionOf = (
+  decision: Exclude<McpToolDecision, "never">,
+): UserToolDecision =>
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- API decision value
+  decision === "allow" ? "always_allow" : "ask";
 
 function McpToolRow({
   tool,
-  decision,
-  allowAlways,
+  availability,
   radioGroupName,
   disabled,
   onDecide,
 }: {
   tool: McpServerTool;
-  decision: McpToolDecision;
-  allowAlways: boolean;
+  availability: McpToolDecisionAvailability;
   radioGroupName: string;
   disabled: boolean;
   onDecide: (decision: McpToolDecision) => void;
 }) {
-  const asksBeforeRunning = tool.approval === "ask";
-  // A tool the policy runs unprompted never asks, so a persistent grant would
-  // change nothing for it; and the gate ignores grants while the policy does
-  // not honor them. Either way the option is not offered.
-  const offersAlways = asksBeforeRunning && allowAlways;
-  const shown = shownDecision(decision, offersAlways);
+  // What the row shows is what the backend says will happen; a stored
+  // decision the policy does not honor is folded there, not here.
+  const shown = decisionOfEffective(tool.effective);
+  const isDefault = policyDefault(tool.policy);
+  const offered = offeredDecisions(tool.policy, availability);
 
   return (
     <div
@@ -82,55 +100,71 @@ function McpToolRow({
       data-tool-name={tool.name}
     >
       <McpToolSummary tool={tool} />
-      {/* The default state of a tool that never asks is plain "allowed". */}
-      <RadioCard
-        size="sm"
-        name={radioGroupName}
-        value="ask"
-        checked={shown === "ask"}
-        disabled={disabled}
-        onChange={() => onDecide("ask")}
-        label={
-          asksBeforeRunning
-            ? t({
-                id: "preferences.dialog.mcpServers.approvals.ask.label",
-                message: "Ask each time",
-              })
-            : t({
-                id: "preferences.dialog.mcpServers.approvals.allow.label",
-                message: "Allow",
-              })
-        }
-        helper={
-          asksBeforeRunning
-            ? t({
-                id: "preferences.dialog.mcpServers.approvals.ask.helper",
-                message:
-                  "Shows the in-chat confirmation each time this tool wants to run.",
-              })
-            : t({
-                id: "preferences.dialog.mcpServers.approvals.allow.helper",
-                message:
-                  "Runs without asking; the approval policy does not stop this tool.",
-              })
-        }
-      />
-      {offersAlways ? (
+      {offered.includes("allow") ? (
         <RadioCard
           size="sm"
           name={radioGroupName}
-          value="always"
-          checked={shown === "always"}
+          value="allow"
+          checked={shown === "allow"}
           disabled={disabled}
-          onChange={() => onDecide("always")}
-          label={t({
-            id: "preferences.dialog.mcpServers.approvals.always.label",
-            message: "Always allow",
-          })}
-          helper={t({
-            id: "preferences.dialog.mcpServers.approvals.always.helper",
-            message: "Runs this tool without asking.",
-          })}
+          onChange={() => onDecide("allow")}
+          label={
+            isDefault === "allow"
+              ? t({
+                  id: "preferences.dialog.mcpServers.approvals.allow.defaultLabel",
+                  message: "Allow (policy default)",
+                })
+              : t({
+                  id: "preferences.dialog.mcpServers.approvals.allow.label",
+                  message: "Allow",
+                })
+          }
+          helper={
+            isDefault === "allow"
+              ? t({
+                  id: "preferences.dialog.mcpServers.approvals.allow.helper",
+                  message:
+                    "Runs without asking; the approval policy does not stop this tool.",
+                })
+              : t({
+                  id: "preferences.dialog.mcpServers.approvals.always.helper",
+                  message: "Runs this tool without asking.",
+                })
+          }
+        />
+      ) : null}
+      {offered.includes("ask") ? (
+        <RadioCard
+          size="sm"
+          name={radioGroupName}
+          value="ask"
+          checked={shown === "ask"}
+          disabled={disabled}
+          onChange={() => onDecide("ask")}
+          label={
+            isDefault === "ask"
+              ? t({
+                  id: "preferences.dialog.mcpServers.approvals.ask.defaultLabel",
+                  message: "Ask each time (policy default)",
+                })
+              : t({
+                  id: "preferences.dialog.mcpServers.approvals.ask.label",
+                  message: "Ask each time",
+                })
+          }
+          helper={
+            isDefault === "ask"
+              ? t({
+                  id: "preferences.dialog.mcpServers.approvals.ask.helper",
+                  message:
+                    "Shows the in-chat confirmation each time this tool wants to run.",
+                })
+              : t({
+                  id: "preferences.dialog.mcpServers.approvals.ask.escalationHelper",
+                  message:
+                    "Asks you before every run, even where the policy would not.",
+                })
+          }
         />
       ) : null}
       <RadioCard
@@ -156,12 +190,13 @@ function McpToolRow({
 
 /**
  * One MCP server's tools as the user's generations see them, each with the
- * user's persistent decision for it. The roster comes from the server's
- * enumeration and the decisions from the stored settings, so every tool is
- * listed whether or not it has ever been decided on. Mounted inside the
- * server's entity row, whose details unmount on collapse, so mounting IS the
- * expand and the enumeration happens once per expand — repeat expands inside
- * the stale window come from the query cache.
+ * user's persistent decision for it. The roster carries the policy default,
+ * the stored decision and the effective state per tool, so the rows render
+ * what the backend decided and never derive it; the stored settings are
+ * fetched only to address the row a "policy default" choice deactivates.
+ * Mounted inside the server's entity row, whose details unmount on collapse,
+ * so mounting IS the expand and the enumeration happens once per expand —
+ * repeat expands inside the stale window come from the query cache.
  */
 export function McpToolApprovalSettings({
   serverId,
@@ -178,6 +213,7 @@ export function McpToolApprovalSettings({
     data: toolsResponse,
     error: toolsError,
     isLoading: isToolsLoading,
+    refetch: refetchTools,
   } = useListMcpServerTools(
     isActive ? { pathParams: { serverId } } : skipToken,
     {
@@ -210,14 +246,14 @@ export function McpToolApprovalSettings({
   }, [settingsResponse, serverId]);
 
   const decide = async (tool: McpServerTool, next: McpToolDecision) => {
-    const setting = settingByToolName.get(tool.name);
-    if (decisionOfSetting(setting) === next) {
+    if (decisionOfEffective(tool.effective) === next) {
       return;
     }
     setMutationError(null);
     setPendingTool(tool.name);
     try {
-      if (next === "ask") {
+      if (next === policyDefault(tool.policy)) {
+        const setting = settingByToolName.get(tool.name);
         if (setting !== undefined) {
           await deactivateSetting({ pathParams: { settingId: setting.id } });
         }
@@ -226,12 +262,13 @@ export function McpToolApprovalSettings({
           body: {
             mcp_server_id: serverId,
             tool_name: tool.name,
-            // eslint-disable-next-line lingui/no-unlocalized-strings -- API decision value
-            decision: next === "always" ? "always_allow" : "denied",
+            decision: next === "never" ? "denied" : storedDecisionOf(next),
           },
         });
       }
-      await refetchSettings();
+      // The effective state is the backend's to say, so the roster is read
+      // back rather than patched locally.
+      await Promise.all([refetchSettings(), refetchTools()]);
     } catch {
       setMutationError(
         t({
@@ -292,14 +329,17 @@ export function McpToolApprovalSettings({
       </p>
     );
   } else {
+    const availability: McpToolDecisionAvailability = {
+      allowAlways: toolsResponse.allow_always,
+      askAvailable: toolsResponse.ask_available,
+    };
     body = (
       <div className="space-y-4">
         {toolsResponse.tools.map((tool) => (
           <McpToolRow
             key={tool.name}
             tool={tool}
-            decision={decisionOfSetting(settingByToolName.get(tool.name))}
-            allowAlways={toolsResponse.allow_always}
+            availability={availability}
             radioGroupName={`${radioGroupName}-${tool.name}`}
             disabled={pendingTool !== null}
             onDecide={(next) => void decide(tool, next)}
