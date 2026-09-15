@@ -334,46 +334,6 @@ const emptyComponentRegistry = (): ComponentRegistry => ({
 
 const UNDECLARED_SURFACE_MINOR = 0;
 
-const declaredMinor = (
-  componentKit: ComponentKitRegistration,
-  registration?: ComponentKitComponentRegistration,
-): number | undefined =>
-  registration?.builtAgainstSharedSurfaceMinor ??
-  componentKit.builtAgainstSharedSurfaceMinor;
-
-const declaredSurfaceMinor = (
-  componentKit: ComponentKitRegistration,
-  registration?: ComponentKitComponentRegistration,
-): number =>
-  declaredMinor(componentKit, registration) ?? UNDECLARED_SURFACE_MINOR;
-
-/**
- * The minor this point's contract needs, when the registration is behind it;
- * null when it is current or the point has never required one.
- */
-const behindRequiredMinor = (
-  componentKit: ComponentKitRegistration,
-  registration: ComponentKitComponentRegistration,
-): number | null => {
-  const required =
-    EXTENSION_POINT_REQUIRED_SURFACE_MINOR[registration.extensionPoint];
-
-  return required !== undefined &&
-    declaredSurfaceMinor(componentKit, registration) < required
-    ? required
-    : null;
-};
-
-const declaredMinorText = (
-  componentKit: ComponentKitRegistration,
-  registration: ComponentKitComponentRegistration,
-): string => {
-  const minor = declaredMinor(componentKit, registration);
-  return minor === undefined
-    ? "declares none, which counts as the oldest contract"
-    : `declares 1.${minor}`;
-};
-
 const buildComponentRegistry = (
   componentKits: ComponentKitRegistration[] | undefined,
 ): ComponentRegistry => {
@@ -385,18 +345,33 @@ const buildComponentRegistry = (
   for (const componentKit of componentKits ?? []) {
     // Advisory only: the per-point requirements below cannot describe a
     // contract this host has never seen, so there is nothing to decide.
-    if (declaredSurfaceMinor(componentKit) > ERATO_SHARED_SURFACE_MINOR) {
+    if (
+      (componentKit.builtAgainstSharedSurfaceMinor ??
+        UNDECLARED_SURFACE_MINOR) > ERATO_SHARED_SURFACE_MINOR
+    ) {
       console.error(
         `component kit "${componentKit.name}" was built against shared surface 1.${componentKit.builtAgainstSharedSurfaceMinor}, but this host ships 1.${ERATO_SHARED_SURFACE_MINOR}: the host is older than the kit.`,
       );
     }
 
     for (const registration of componentKit.components) {
-      const requiredMinor = behindRequiredMinor(componentKit, registration);
+      const declared =
+        registration.builtAgainstSharedSurfaceMinor ??
+        componentKit.builtAgainstSharedSurfaceMinor;
+      const required =
+        EXTENSION_POINT_REQUIRED_SURFACE_MINOR[registration.extensionPoint];
 
-      if (requiredMinor !== null) {
+      if (
+        required !== undefined &&
+        (declared ?? UNDECLARED_SURFACE_MINOR) < required
+      ) {
+        const declaredText =
+          declared === undefined
+            ? "declares none, which counts as the oldest contract"
+            : `declares 1.${declared}`;
+
         console.error(
-          `component kit "${componentKit.name}" overrides ${registration.extensionPoint}, whose contract needs shared surface 1.${requiredMinor}, and ${declaredMinorText(componentKit, registration)}. Rebuild the kit against this host and set builtAgainstSharedSurfaceMinor: ${ERATO_SHARED_SURFACE_MINOR}. ` +
+          `component kit "${componentKit.name}" overrides ${registration.extensionPoint}, whose contract needs shared surface 1.${required}, and ${declaredText}. Rebuild the kit against this host and set builtAgainstSharedSurfaceMinor: ${ERATO_SHARED_SURFACE_MINOR}. ` +
             (stance === "enforce"
               ? `Rendering the host's own ${registration.extensionPoint} instead.`
               : `Installing the override anyway: this deployment's stance is "warn". Set window.ERATO_COMPONENT_KIT_VERSION_STANCE = "enforce" to render the host's own component instead.`),
