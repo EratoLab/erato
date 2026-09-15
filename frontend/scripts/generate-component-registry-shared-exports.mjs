@@ -280,12 +280,26 @@ const withheldExports = [
     modulePath: path.join(componentsDir, "ui", "Chat", "ChatHistoryList.tsx"),
     names: ["buildChatHistoryRowMenuItems", "ChatHistoryRowMenuState"],
     reason:
-      "the builder takes a hand-assembled row state, which is how a caller drops the run and pending-confirmation gates without noticing; a kit overriding ChatHistoryList holds ChatSessions and uses useChatHistoryRowMenuItems, which resolves that state from the host's stores",
+      "the builder takes a hand-assembled row state, which is how a caller drops the run and pending-confirmation gates without noticing; a kit overriding ChatHistoryList holds ChatSessions and uses useChatHistoryRow, which resolves that state from the host's stores",
+  },
+  {
+    modulePath: path.join(componentsDir, "ui", "Chat", "ChatHistoryList.tsx"),
+    names: ["DEFAULT_PINNED_CHATS_LIMIT", "ChatHistoryRowMenuHandlers"],
+    reason:
+      "byproducts of the row module rather than anything a kit was offered: the limit reaches an override as a prop the host has already defaulted, and the handler half of ChatHistoryRowMenuOptions is what chatHistoryRowMenuOptions builds",
+  },
+  {
+    modulePath: path.join(componentsDir, "providers", "ThemeProvider.tsx"),
+    names: ["__resetThemeAssetProbeCache"],
+    reason:
+      "a test-only reset for a module-global cache; nothing a kit renders has a reason to clear it, and publishing it makes host test scaffolding part of a contract we then owe",
   },
 ];
 
 const withheldNamesFor = (modulePath) =>
-  withheldExports.find((entry) => entry.modulePath === modulePath)?.names ?? [];
+  withheldExports.flatMap((entry) =>
+    entry.modulePath === modulePath ? entry.names : [],
+  );
 
 const collectRegistryComponentModules = () => {
   const configPath = path.join(rootDir, "tsconfig.json");

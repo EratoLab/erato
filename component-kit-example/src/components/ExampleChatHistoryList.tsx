@@ -1,36 +1,37 @@
-import {
-  DropdownMenu,
-  chatHistoryRowMenuOptions,
-  useChatHistoryRowMenuItems,
-  useChatHistoryRowPresentation,
-} from "@erato/frontend/shared";
+import { DropdownMenu, useChatHistoryRow } from "@erato/frontend/shared";
 
 import { kitClassName } from "./utils";
 
-import type { ComponentRegistry } from "@erato/frontend/library";
-import type { ChatHistoryRowMenuOptions } from "@erato/frontend/shared";
+import type {
+  ChatHistoryListProps,
+  ChatSession,
+  ComponentRegistry,
+} from "@erato/frontend/library";
 
 // Badges, subline and menu items arrive already composed and already gated. A
 // kit that rebuilds any of them loses every row rule added after it shipped.
 const ExampleChatHistoryRow = ({
-  menuOptions,
+  listProps,
+  session,
   isCurrent,
   onSelect,
 }: {
-  menuOptions: ChatHistoryRowMenuOptions;
+  listProps: ChatHistoryListProps;
+  session: ChatSession;
   isCurrent: boolean;
   onSelect: () => void;
 }) => {
-  const { session } = menuOptions;
-  const { title, badges, subline, ariaLabel } =
-    useChatHistoryRowPresentation(session);
-  const menuItems = useChatHistoryRowMenuItems(menuOptions);
+  const { title, badges, subline, ariaLabel, menuItems } = useChatHistoryRow(
+    listProps,
+    session,
+  );
 
   return (
-    <li className="erato-component-kit-example-chat-row">
+    // The row element is the one carrying `CHAT_HISTORY_ROW_TEST_ID.row`; the
+    // accessible name may sit on it or, as here, on a descendant.
+    <li className="erato-component-kit-example-chat-row" data-chat-id={session.id}>
       <button
         type="button"
-        data-chat-id={session.id}
         aria-label={ariaLabel}
         aria-current={isCurrent ? "page" : undefined}
         onClick={onSelect}
@@ -54,7 +55,8 @@ export const ExampleChatHistoryList: NonNullable<
     {props.sessions.map((session) => (
       <ExampleChatHistoryRow
         key={session.id}
-        menuOptions={chatHistoryRowMenuOptions(props, session)}
+        listProps={props}
+        session={session}
         isCurrent={session.id === props.currentSessionId}
         onSelect={() => props.onSessionSelect(session.id)}
       />

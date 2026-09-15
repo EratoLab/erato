@@ -99,9 +99,7 @@ ChatItemIcon.displayName = "ChatItemIcon";
  * touching the kit. The trade is deliberate — the host owns the markup of
  * both, so a kit restyles them through CSS rather than by rebuilding them.
  */
-export const useChatHistoryRowPresentation = (
-  session: ChatSession,
-): {
+export interface ChatHistoryRowPresentation {
   title: string;
   status: ChatAttentionStatus | null;
   statusLabel: string | null;
@@ -111,9 +109,15 @@ export const useChatHistoryRowPresentation = (
   badges: ReactNode;
   subline: ReactNode;
   ariaLabel: string;
-} => {
-  const title = useRowTitle(session);
-  const status = useChatRowStatus(session.id, session);
+}
+
+// Takes the two resolved values rather than reading them, so the hook below
+// and `useChatHistoryRow` can share it while each subscribes only once.
+const rowPresentation = (
+  session: ChatSession,
+  title: string,
+  status: ChatAttentionStatus | null,
+): ChatHistoryRowPresentation => {
   const statusLabel = status ? chatAttentionStatusLabel(status) : null;
   const archived = session.archivedAt != null;
   const archivedLabel = archived ? archivedChatLabel() : null;
@@ -146,6 +150,15 @@ export const useChatHistoryRowPresentation = (
       .join(", "),
   };
 };
+
+export const useChatHistoryRowPresentation = (
+  session: ChatSession,
+): ChatHistoryRowPresentation =>
+  rowPresentation(
+    session,
+    useRowTitle(session),
+    useChatRowStatus(session.id, session),
+  );
 
 export interface ChatHistoryRowMenuHandlers {
   pinnedChatsCount: number;
@@ -325,6 +338,35 @@ export const useChatHistoryRowMenuItems = ({
   return buildChatHistoryRowMenuItems(rowMenuState(session, status), handlers);
 };
 
+export interface ChatHistoryRow extends ChatHistoryRowPresentation {
+  menuItems: DropdownMenuItem[];
+}
+
+/**
+ * A whole listed row, and the one call an override needs: the presentation
+ * fields and the gated menu, with the row's status resolved once for both.
+ * The two hooks above stay for kits already built on them, but a row that
+ * calls both subscribes to the status stores twice.
+ *
+ * Whatever a later row rule adds lands in `ChatHistoryRow`, so it reaches an
+ * override through a type it already names rather than through a new import.
+ */
+export const useChatHistoryRow = (
+  props: ChatHistoryListProps,
+  session: ChatSession,
+): ChatHistoryRow => {
+  const title = useRowTitle(session);
+  const status = useChatRowStatus(session.id, session);
+
+  return {
+    ...rowPresentation(session, title, status),
+    menuItems: buildChatHistoryRowMenuItems(
+      rowMenuState(session, status),
+      chatHistoryRowMenuOptions(props, session),
+    ),
+  };
+};
+
 export interface ChatHistoryListProps {
   sessions: ChatSession[];
   currentSessionId: string | null;
@@ -371,36 +413,33 @@ const getFileCountLabel = (count: number) =>
     message: plural(count, { 0: "No files", one: "# file", other: "# files" }),
   });
 
+// The same one call an override makes, so a row rule that reaches kits through
+// `useChatHistoryRow` cannot skip the host's own list.
 const ChatHistoryListItem = memo<{
+  listProps: ChatHistoryListProps;
+  session: ChatSession;
   isActive: boolean;
   layout: "default" | "compact";
   onSelect: () => void;
-  menuOptions: ChatHistoryRowMenuOptions;
   showTimestamps?: boolean;
   disableRowLinks?: boolean;
 }>(
   ({
+    listProps,
+    session,
     isActive,
     layout,
     onSelect,
-    menuOptions,
     showTimestamps = true,
     disableRowLinks = false,
   }) => {
-    const { session, ...menuHandlers } = menuOptions;
     const {
       title: rowTitle,
-      status,
       badges,
       subline,
       ariaLabel: rowAriaLabel,
-    } = useChatHistoryRowPresentation(session);
-    // The gated items, built from the status the line above already resolved:
-    // `useChatHistoryRowMenuItems` would subscribe to the same two stores again.
-    const menuItems = buildChatHistoryRowMenuItems(
-      rowMenuState(session, status),
-      menuHandlers,
-    );
+      menuItems,
+    } = useChatHistoryRow(listProps, session);
     // A stable Date instance: an inline `new Date(...)` would defeat
     // MessageTimestamp's shallow memo on every list render.
     const updatedAtDate = useMemo(
@@ -571,7 +610,8 @@ export const ChatHistoryList = memo<ChatHistoryListProps>((props) => {
             logger.log(`Session item click: ${session.id}`);
             onSessionSelect(session.id);
           }}
-          menuOptions={chatHistoryRowMenuOptions(props, session)}
+          listProps={props}
+          session={session}
         />
       ))}
       {hasMore && (

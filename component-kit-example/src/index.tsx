@@ -37,7 +37,7 @@ const componentKit: ComponentKitRegistration = {
   name: "example",
   // A literal, never the imported constant: the import map resolves that one
   // to the running host, so it would agree with every host it ever met.
-  builtAgainstSharedSurfaceMinor: 8,
+  builtAgainstSharedSurfaceMinor: 9,
   components: [
     {
       extensionPoint: "AssistantFileSourceSelector",

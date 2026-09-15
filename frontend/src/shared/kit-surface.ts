@@ -87,10 +87,15 @@ export { Tooltip } from "@/components/ui/Controls/Tooltip";
 // rather than deciding anything about archiving, runs or pin limits itself.
 export {
   chatHistoryRowMenuOptions,
+  useChatHistoryRow,
   useChatHistoryRowMenuItems,
   useChatHistoryRowPresentation,
 } from "@/components/ui/Chat/ChatHistoryList";
-export type { ChatHistoryRowMenuOptions } from "@/components/ui/Chat/ChatHistoryList";
+export type {
+  ChatHistoryRow,
+  ChatHistoryRowMenuOptions,
+  ChatHistoryRowPresentation,
+} from "@/components/ui/Chat/ChatHistoryList";
 // Stable per-item keys, so a kit restores its own glyphs by mapping over the
 // gated array instead of rebuilding it.
 export { CHAT_HISTORY_ROW_MENU_ID } from "@/components/ui/Chat/chatHistoryRowMenuIds";
@@ -218,8 +223,10 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "CardTone",
   "CardVariant",
   "ChatAttentionStatusDot",
+  "ChatHistoryRow",
   "ChatHistoryRowMenuId",
   "ChatHistoryRowMenuOptions",
+  "ChatHistoryRowPresentation",
   "ChevronDownIcon",
   "ChevronRightIcon",
   "CloseIcon",
@@ -308,6 +315,7 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "chatHistoryRowMenuOptions",
   "messageStyles",
   "resolvePopoverViewportPadding",
+  "useChatHistoryRow",
   "useChatHistoryRowMenuItems",
   "useChatHistoryRowPresentation",
   "useGetFile",
