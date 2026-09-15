@@ -2,12 +2,15 @@
 suite: test helper templates
 minimumVersion: 1.0.1
 templates:
+  - backend-configmaps.yaml
+  - backend-metrics-configmap.yaml
   - backend-deployment.yaml  # We use this template to test the helpers
 chart:
   appVersion: 0.2.99
   version: 0.2.99
 tests:
   - it: should use default chart name
+    template: backend-deployment.yaml
     asserts:
       - matchRegex:
           path: metadata.labels["app.kubernetes.io/name"]
@@ -16,12 +19,14 @@ tests:
   - it: should use nameOverride when specified
     set:
       nameOverride: custom-name
+    template: backend-deployment.yaml
     asserts:
       - equal:
           path: metadata.labels["app.kubernetes.io/name"]
           value: custom-name
 
   - it: should include standard labels
+    template: backend-deployment.yaml
     asserts:
       - isNotEmpty:
           path: metadata.labels["helm.sh/chart"]
@@ -43,6 +48,7 @@ tests:
       commonLabels:
         environment: test
         team: platform
+    template: backend-deployment.yaml
     asserts:
       - equal:
           path: metadata.labels["environment"]
@@ -52,6 +58,7 @@ tests:
           value: platform
 
   - it: should use external postgres connection string by default
+    template: backend-deployment.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -66,6 +73,7 @@ tests:
           secretKeyRef:
             name: postgres-secret
             key: connection-string
+    template: backend-deployment.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -80,6 +88,7 @@ tests:
     set:
       postgresql.enabled: true
       postgresql.auth.database: erato-db
+    template: backend-deployment.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env

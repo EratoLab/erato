@@ -2,12 +2,15 @@
 suite: test backend deployment
 minimumVersion: 1.0.1
 templates:
+  - backend-configmaps.yaml
+  - backend-metrics-configmap.yaml
   - backend-deployment.yaml
 chart:
   appVersion: 0.2.99
   version: 0.2.99
 tests:
   - it: should render a deployment with default values
+    template: backend-deployment.yaml
     asserts:
       - isKind:
           of: Deployment
@@ -39,6 +42,7 @@ tests:
   - it: should honor namespaceOverride
     set:
       namespaceOverride: custom-namespace
+    template: backend-deployment.yaml
     asserts:
       - equal:
           path: metadata.namespace
@@ -47,6 +51,7 @@ tests:
   - it: should set custom replica count
     set:
       backend.replicaCount: 3
+    template: backend-deployment.yaml
     asserts:
       - equal:
           path: spec.replicas
@@ -59,6 +64,7 @@ tests:
         rollingUpdate:
           maxUnavailable: 0
           maxSurge: 1
+    template: backend-deployment.yaml
     asserts:
       - equal:
           path: spec.strategy.type
@@ -74,6 +80,7 @@ tests:
     set:
       backend.image.repository: my-registry/erato
       backend.image.tag: v1.2.3
+    template: backend-deployment.yaml
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
@@ -88,6 +95,7 @@ tests:
       backend.migrations.image.repository: my-registry/erato-migrator
       backend.migrations.image.tag: v4.5.6
       backend.migrations.image.pullPolicy: Always
+    template: backend-deployment.yaml
     asserts:
       - equal:
           path: spec.template.spec.initContainers[0].image
@@ -102,6 +110,7 @@ tests:
       backend.extraEnvVars:
         - name: CUSTOM_VAR
           value: test-value
+    template: backend-deployment.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -115,6 +124,7 @@ tests:
             value: test-value
 
   - it: should pass pod and node identity through the Downward API
+    template: backend-deployment.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -132,6 +142,7 @@ tests:
                 fieldPath: spec.nodeName
 
   - it: should set default logging environment variables
+    template: backend-deployment.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -147,6 +158,7 @@ tests:
   - it: should set custom RUST_LOG when backend.rustLog is configured
     set:
       backend.rustLog: info,erato=debug
+    template: backend-deployment.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -157,6 +169,7 @@ tests:
   - it: should omit RUST_LOG when backend.rustLog is empty
     set:
       backend.rustLog: ""
+    template: backend-deployment.yaml
     asserts:
       - notContains:
           path: spec.template.spec.containers[0].env
@@ -166,6 +179,7 @@ tests:
   - it: should omit JSON logging format when backend.logJson is false
     set:
       backend.logJson: false
+    template: backend-deployment.yaml
     asserts:
       - notContains:
           path: spec.template.spec.containers[0].env
@@ -175,6 +189,7 @@ tests:
   - it: should add envFrom when extraEnvVarsCM is set
     set:
       backend.extraEnvVarsCM: erato-config-cm
+    template: backend-deployment.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].envFrom
@@ -185,6 +200,7 @@ tests:
   - it: should add envFrom when extraEnvVarsSecret is set
     set:
       backend.extraEnvVarsSecret: erato-secret
+    template: backend-deployment.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].envFrom
@@ -196,6 +212,7 @@ tests:
     set:
       backend.configFile.secretName: erato-config
       backend.configFile.secretKey: erato.toml
+    template: backend-deployment.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].volumeMounts
@@ -223,6 +240,7 @@ tests:
         limits:
           cpu: 1000m
           memory: 1Gi
+    template: backend-deployment.yaml
     asserts:
       - equal:
           path: spec.template.spec.containers[0].resources.requests.cpu
@@ -238,6 +256,7 @@ tests:
           value: 1Gi
 
   - it: should have init container for migrations
+    template: backend-deployment.yaml
     asserts:
       - equal:
           path: spec.template.spec.initContainers[0].name
@@ -250,6 +269,7 @@ tests:
           content: "-c"
 
   - it: should include liveness and readiness probes
+    template: backend-deployment.yaml
     asserts:
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.httpGet.path
@@ -265,6 +285,7 @@ tests:
           value: http
 
   - it: should not expose metrics port or env vars by default
+    template: backend-deployment.yaml
     asserts:
       - lengthEqual:
           path: spec.template.spec.containers[0].ports
@@ -279,6 +300,7 @@ tests:
       backend.metrics.enabled: true
       backend.metrics.host: 0.0.0.0
       backend.metrics.port: 3131
+    template: backend-deployment.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].ports
@@ -317,6 +339,7 @@ tests:
         - name: secret-volume
           mountPath: /etc/secrets
           readOnly: true
+    template: backend-deployment.yaml
     asserts:
       - contains:
           path: spec.template.spec.volumes
@@ -361,6 +384,7 @@ tests:
         - name: component-kit-trilux
           mountPath: /app/component-kits/trilux
           readOnly: true
+    template: backend-deployment.yaml
     asserts:
       - equal:
           path: spec.template.spec.initContainers[0].name
@@ -395,6 +419,7 @@ tests:
       backend.extraVolumeMounts:
         - name: existing-volume
           mountPath: /mnt/existing
+    template: backend-deployment.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].volumeMounts
@@ -408,6 +433,7 @@ tests:
         - name: unused-volume
           configMap:
             name: my-config
+    template: backend-deployment.yaml
     asserts:
       - contains:
           path: spec.template.spec.volumes
@@ -422,6 +448,7 @@ tests:
       backend.configFile.secretKey: ""
       backend.extraVolumes: []
       backend.extraVolumeMounts: []
+    template: backend-deployment.yaml
     asserts:
       - notExists:
           path: spec.template.spec.volumes
@@ -438,6 +465,7 @@ tests:
       backend.extraVolumeMounts:
         - name: additional-volume
           mountPath: /tmp/additional
+    template: backend-deployment.yaml
     asserts:
       - contains:
           path: spec.template.spec.volumes
@@ -470,6 +498,7 @@ tests:
     set:
       backend.configFile.configMapName: erato-config-cm
       backend.configFile.configMapKey: erato.toml
+    template: backend-deployment.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].volumeMounts
@@ -494,6 +523,7 @@ tests:
         [database]
         host = "localhost"
         port = 5432
+    template: backend-deployment.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].volumeMounts
@@ -521,6 +551,7 @@ tests:
         - name: additional-config
           secretName: additional-secret
           secretKey: additional.toml
+    template: backend-deployment.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].volumeMounts
@@ -561,6 +592,7 @@ tests:
         - name: mcp-config
           configMapName: mcp-config-cm
           configMapKey: mcp.toml
+    template: backend-deployment.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].volumeMounts
@@ -586,6 +618,7 @@ tests:
           inlineContent: |
             [mcp_servers.example]
             command = "example-server"
+    template: backend-deployment.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].volumeMounts
@@ -616,6 +649,7 @@ tests:
         - name: additional-config
           configMapName: additional-cm
           configMapKey: additional.toml
+    template: backend-deployment.yaml
     asserts:
       - contains:
           path: spec.template.spec.containers[0].volumeMounts
@@ -641,6 +675,7 @@ tests:
 
   # Annotation tests
   - it: should not include deployment annotations when none are set
+    template: backend-deployment.yaml
     asserts:
       - notExists:
           path: metadata.annotations
@@ -650,6 +685,7 @@ tests:
       backend.deploymentAnnotations:
         deployment.kubernetes.io/revision: "1"
         custom/annotation: "value"
+    template: backend-deployment.yaml
     asserts:
       - equal:
           path: metadata.annotations["deployment.kubernetes.io/revision"]
@@ -663,6 +699,7 @@ tests:
       commonAnnotations:
         common/annotation: "common-value"
         environment: "test"
+    template: backend-deployment.yaml
     asserts:
       - equal:
           path: metadata.annotations["common/annotation"]
@@ -679,6 +716,7 @@ tests:
       backend.deploymentAnnotations:
         deployment.kubernetes.io/revision: "1"
         backend/specific: "backend-value"
+    template: backend-deployment.yaml
     asserts:
       - equal:
           path: metadata.annotations["common/annotation"]
@@ -701,6 +739,7 @@ tests:
       backend.deploymentAnnotations:
         environment: "backend-environment"
         backend/specific: "backend-value"
+    template: backend-deployment.yaml
     asserts:
       - equal:
           path: metadata.annotations["environment"]
@@ -712,16 +751,22 @@ tests:
           path: metadata.annotations["backend/specific"]
           value: "backend-value"
 
-  - it: should not include pod annotations when none are set
+  - it: should include config checksums without custom pod annotations
+    template: backend-deployment.yaml
     asserts:
-      - notExists:
-          path: spec.template.metadata.annotations
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/config"]
+          pattern: '^[a-f0-9]{64}$'
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/metrics-config"]
+          pattern: '^[a-f0-9]{64}$'
 
   - it: should include pod annotations when backend.podAnnotations is set
     set:
       backend.podAnnotations:
         pod/annotation: "pod-value"
         prometheus.io/scrape: "true"
+    template: backend-deployment.yaml
     asserts:
       - equal:
           path: spec.template.metadata.annotations["pod/annotation"]
@@ -735,6 +780,7 @@ tests:
       commonAnnotations:
         common/annotation: "common-value"
         prometheus.io/port: "8080"
+    template: backend-deployment.yaml
     asserts:
       - equal:
           path: spec.template.metadata.annotations["common/annotation"]
@@ -751,6 +797,7 @@ tests:
       backend.podAnnotations:
         pod/annotation: "pod-value"
         prometheus.io/scrape: "true"
+    template: backend-deployment.yaml
     asserts:
       - equal:
           path: spec.template.metadata.annotations["common/annotation"]
@@ -773,6 +820,7 @@ tests:
       backend.podAnnotations:
         prometheus.io/scrape: "true"
         pod/specific: "pod-value"
+    template: backend-deployment.yaml
     asserts:
       - equal:
           path: spec.template.metadata.annotations["prometheus.io/scrape"]
@@ -792,6 +840,7 @@ tests:
       backend.podAnnotations:
         chart.version: "{{ .Chart.Version }}"
         namespace: "{{ .Release.Namespace }}"
+    template: backend-deployment.yaml
     asserts:
       - equal:
           path: metadata.annotations["app.version"]
@@ -805,3 +854,15 @@ tests:
       - equal:
           path: spec.template.metadata.annotations["namespace"]
           value: "NAMESPACE"
+
+  - it: should preserve generated checksums when custom annotations use the same key
+    template: backend-deployment.yaml
+    set:
+      commonAnnotations:
+        checksum/config: common-override
+      backend.podAnnotations:
+        checksum/config: pod-override
+    asserts:
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/config"]
+          pattern: '^[a-f0-9]{64}$'
