@@ -1,4 +1,8 @@
 /* This file is generated. Do not edit. */
+export type { IndexingResetV1Result } from "./indexing-reset-v1-result.js";
+export type { IndexingResetV1Params } from "./indexing-reset-v1-params.js";
+export type { IndexingStatusV1Result } from "./indexing-status-v1-result.js";
+export type { IndexingStatusV1Params } from "./indexing-status-v1-params.js";
 export type { JsonRpcEnvelope } from "./json-rpc-envelope.js";
 export type { DiscoverParams } from "./discover-params.js";
 export type { DiscoverResult } from "./discover-result.js";

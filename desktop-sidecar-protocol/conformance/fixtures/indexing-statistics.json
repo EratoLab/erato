@@ -1,0 +1,998 @@
+{
+  "sampledAt": "2026-09-15T12:00:00Z",
+  "sessionId": "session-example",
+  "uptimeSeconds": 600,
+  "state": "running",
+  "effectiveConfiguration": {
+    "parallelism": 1,
+    "documentsPerMinute": 40
+  },
+  "resources": {
+    "sampledAt": "2026-09-15T12:00:00Z",
+    "observationSeconds": 5,
+    "sidecar": {
+      "processCount": 1,
+      "cpuCoresUsed": 0.5,
+      "memoryResidentBytes": 104857600,
+      "memoryResidentPeakBytes": 125829120,
+      "diskReadBytesPerSecond": 4096,
+      "diskWriteBytesPerSecond": 2048,
+      "unavailableMetrics": []
+    },
+    "extractionWorkers": {
+      "processCount": 1,
+      "cpuCoresUsed": 0.5,
+      "memoryResidentBytes": 104857600,
+      "memoryResidentPeakBytes": 125829120,
+      "diskReadBytesPerSecond": 4096,
+      "diskWriteBytesPerSecond": 2048,
+      "unavailableMetrics": []
+    },
+    "disk": {
+      "sampledAt": "2026-09-15T12:00:00Z",
+      "allocatedBytes": 28672,
+      "logicalBytes": 21000,
+      "availableBytes": 1073741824,
+      "breakdown": {
+        "control": {
+          "allocatedBytes": 4096,
+          "logicalBytes": 3000
+        },
+        "catalog": {
+          "allocatedBytes": 4096,
+          "logicalBytes": 3000
+        },
+        "activeIndex": {
+          "allocatedBytes": 4096,
+          "logicalBytes": 3000
+        },
+        "buildingIndex": {
+          "allocatedBytes": 4096,
+          "logicalBytes": 3000
+        },
+        "retiredIndexes": {
+          "allocatedBytes": 4096,
+          "logicalBytes": 3000
+        },
+        "wal": {
+          "allocatedBytes": 4096,
+          "logicalBytes": 3000
+        },
+        "temporary": {
+          "allocatedBytes": 4096,
+          "logicalBytes": 3000
+        }
+      },
+      "unavailableMetrics": []
+    },
+    "liveExtractionWorkers": [
+      {
+        "processId": 12345,
+        "sampledAt": "2026-09-15T12:00:00Z",
+        "resources": {
+          "processCount": 1,
+          "cpuCoresUsed": 0.5,
+          "memoryResidentBytes": 104857600,
+          "memoryResidentPeakBytes": 125829120,
+          "diskReadBytesPerSecond": 4096,
+          "diskWriteBytesPerSecond": 2048,
+          "unavailableMetrics": []
+        }
+      }
+    ]
+  },
+  "generations": [
+    {
+      "instanceId": "active-example",
+      "role": "active",
+      "sampledAt": "2026-09-15T12:00:00Z",
+      "segments": [
+        {
+          "kind": "email",
+          "sourceId": null,
+          "mailboxId": null,
+          "fileType": null,
+          "throughput": [
+            {
+              "targetWindowSeconds": 60,
+              "observationSeconds": 60,
+              "sampleCount": 20,
+              "indexedPerMinute": 18,
+              "emptyPerMinute": 1,
+              "unindexablePerMinute": 1,
+              "completedPerMinute": 20,
+              "attemptsPerMinute": 22,
+              "retriesPerMinute": 2,
+              "deletionsPerMinute": 0,
+              "extractedTextBytesPerSecond": 1024,
+              "unavailableReason": null
+            },
+            {
+              "targetWindowSeconds": 300,
+              "observationSeconds": 300,
+              "sampleCount": 100,
+              "indexedPerMinute": 18,
+              "emptyPerMinute": 1,
+              "unindexablePerMinute": 1,
+              "completedPerMinute": 20,
+              "attemptsPerMinute": 22,
+              "retriesPerMinute": 2,
+              "deletionsPerMinute": 0,
+              "extractedTextBytesPerSecond": 1024,
+              "unavailableReason": null
+            }
+          ],
+          "backlog": {
+            "sampledAt": "2026-09-15T12:00:00Z",
+            "discoveryComplete": true,
+            "remaining": 100,
+            "ready": 97,
+            "inProgress": 1,
+            "retryDeferred": 2,
+            "blocked": 0,
+            "firstTime": 90,
+            "updates": 10,
+            "unavailableReason": null
+          },
+          "eta": {
+            "state": "available",
+            "estimatedRemainingSeconds": 300,
+            "estimatedCompletionAt": "2026-09-15T12:05:00Z",
+            "basis": "knownBacklog",
+            "rateWindowSeconds": 300,
+            "observationSeconds": 300,
+            "sampleCount": 100,
+            "unavailableReason": null
+          },
+          "coverage": {
+            "sampledAt": "2026-09-15T12:00:00Z",
+            "knownEligible": 1000,
+            "indexedCurrent": 880,
+            "emptyCurrent": 10,
+            "unindexableCurrent": 10,
+            "stale": 10,
+            "neverProcessed": 90,
+            "pendingDeletions": 0,
+            "unavailableReason": null
+          },
+          "depth": {
+            "state": "applicable",
+            "dateBasis": "emailReceivedAtThenSentAt",
+            "sourceDateField": null,
+            "discoveryComplete": true,
+            "oldestIndexedDocumentAt": "2020-01-01T00:00:00Z",
+            "fullyIndexedSince": {
+              "at": "2025-01-01T00:00:00Z",
+              "inclusive": false
+            },
+            "processedSince": {
+              "at": "2024-01-01T00:00:00Z",
+              "inclusive": false
+            },
+            "pendingDocuments": 100,
+            "unindexableDocuments": 10,
+            "undatedDocuments": 0,
+            "unavailableReason": null
+          },
+          "freshness": {
+            "observationSeconds": 300,
+            "sampleCount": 90,
+            "p50Seconds": 3,
+            "p95Seconds": 12,
+            "unavailableReason": null
+          },
+          "errors": {
+            "observationSeconds": 300,
+            "attemptFailures": 15,
+            "terminalFailures": 5,
+            "byCode": [
+              {
+                "code": "extraction_timeout",
+                "count": 15,
+                "lastOccurredAt": "2026-09-15T12:00:00Z"
+              }
+            ],
+            "truncated": false
+          }
+        },
+        {
+          "kind": "file",
+          "sourceId": null,
+          "mailboxId": null,
+          "fileType": null,
+          "throughput": [
+            {
+              "targetWindowSeconds": 60,
+              "observationSeconds": 60,
+              "sampleCount": 20,
+              "indexedPerMinute": 18,
+              "emptyPerMinute": 1,
+              "unindexablePerMinute": 1,
+              "completedPerMinute": 20,
+              "attemptsPerMinute": 22,
+              "retriesPerMinute": 2,
+              "deletionsPerMinute": 0,
+              "extractedTextBytesPerSecond": 1024,
+              "unavailableReason": null
+            },
+            {
+              "targetWindowSeconds": 300,
+              "observationSeconds": 300,
+              "sampleCount": 100,
+              "indexedPerMinute": 18,
+              "emptyPerMinute": 1,
+              "unindexablePerMinute": 1,
+              "completedPerMinute": 20,
+              "attemptsPerMinute": 22,
+              "retriesPerMinute": 2,
+              "deletionsPerMinute": 0,
+              "extractedTextBytesPerSecond": 1024,
+              "unavailableReason": null
+            }
+          ],
+          "backlog": {
+            "sampledAt": "2026-09-15T12:00:00Z",
+            "discoveryComplete": true,
+            "remaining": 100,
+            "ready": 97,
+            "inProgress": 1,
+            "retryDeferred": 2,
+            "blocked": 0,
+            "firstTime": 90,
+            "updates": 10,
+            "unavailableReason": null
+          },
+          "eta": {
+            "state": "available",
+            "estimatedRemainingSeconds": 300,
+            "estimatedCompletionAt": "2026-09-15T12:05:00Z",
+            "basis": "knownBacklog",
+            "rateWindowSeconds": 300,
+            "observationSeconds": 300,
+            "sampleCount": 100,
+            "unavailableReason": null
+          },
+          "coverage": {
+            "sampledAt": "2026-09-15T12:00:00Z",
+            "knownEligible": 1000,
+            "indexedCurrent": 880,
+            "emptyCurrent": 10,
+            "unindexableCurrent": 10,
+            "stale": 10,
+            "neverProcessed": 90,
+            "pendingDeletions": 0,
+            "unavailableReason": null
+          },
+          "depth": {
+            "state": "applicable",
+            "dateBasis": "parentEmailReceivedAtThenSentAt",
+            "sourceDateField": null,
+            "discoveryComplete": true,
+            "oldestIndexedDocumentAt": "2020-01-01T00:00:00Z",
+            "fullyIndexedSince": {
+              "at": "2025-01-01T00:00:00Z",
+              "inclusive": false
+            },
+            "processedSince": {
+              "at": "2024-01-01T00:00:00Z",
+              "inclusive": false
+            },
+            "pendingDocuments": 100,
+            "unindexableDocuments": 10,
+            "undatedDocuments": 0,
+            "unavailableReason": null
+          },
+          "freshness": {
+            "observationSeconds": 300,
+            "sampleCount": 90,
+            "p50Seconds": 3,
+            "p95Seconds": 12,
+            "unavailableReason": null
+          },
+          "errors": {
+            "observationSeconds": 300,
+            "attemptFailures": 15,
+            "terminalFailures": 5,
+            "byCode": [
+              {
+                "code": "extraction_timeout",
+                "count": 15,
+                "lastOccurredAt": "2026-09-15T12:00:00Z"
+              }
+            ],
+            "truncated": false
+          }
+        },
+        {
+          "kind": "email",
+          "sourceId": "source-example",
+          "mailboxId": "mailbox-example",
+          "fileType": null,
+          "throughput": [
+            {
+              "targetWindowSeconds": 60,
+              "observationSeconds": 60,
+              "sampleCount": 20,
+              "indexedPerMinute": 18,
+              "emptyPerMinute": 1,
+              "unindexablePerMinute": 1,
+              "completedPerMinute": 20,
+              "attemptsPerMinute": 22,
+              "retriesPerMinute": 2,
+              "deletionsPerMinute": 0,
+              "extractedTextBytesPerSecond": 1024,
+              "unavailableReason": null
+            },
+            {
+              "targetWindowSeconds": 300,
+              "observationSeconds": 300,
+              "sampleCount": 100,
+              "indexedPerMinute": 18,
+              "emptyPerMinute": 1,
+              "unindexablePerMinute": 1,
+              "completedPerMinute": 20,
+              "attemptsPerMinute": 22,
+              "retriesPerMinute": 2,
+              "deletionsPerMinute": 0,
+              "extractedTextBytesPerSecond": 1024,
+              "unavailableReason": null
+            }
+          ],
+          "backlog": {
+            "sampledAt": "2026-09-15T12:00:00Z",
+            "discoveryComplete": true,
+            "remaining": 100,
+            "ready": 97,
+            "inProgress": 1,
+            "retryDeferred": 2,
+            "blocked": 0,
+            "firstTime": 90,
+            "updates": 10,
+            "unavailableReason": null
+          },
+          "eta": {
+            "state": "available",
+            "estimatedRemainingSeconds": 300,
+            "estimatedCompletionAt": "2026-09-15T12:05:00Z",
+            "basis": "knownBacklog",
+            "rateWindowSeconds": 300,
+            "observationSeconds": 300,
+            "sampleCount": 100,
+            "unavailableReason": null
+          },
+          "coverage": {
+            "sampledAt": "2026-09-15T12:00:00Z",
+            "knownEligible": 1000,
+            "indexedCurrent": 880,
+            "emptyCurrent": 10,
+            "unindexableCurrent": 10,
+            "stale": 10,
+            "neverProcessed": 90,
+            "pendingDeletions": 0,
+            "unavailableReason": null
+          },
+          "depth": {
+            "state": "applicable",
+            "dateBasis": "emailReceivedAtThenSentAt",
+            "sourceDateField": null,
+            "discoveryComplete": true,
+            "oldestIndexedDocumentAt": "2020-01-01T00:00:00Z",
+            "fullyIndexedSince": {
+              "at": "2025-01-01T00:00:00Z",
+              "inclusive": false
+            },
+            "processedSince": {
+              "at": "2024-01-01T00:00:00Z",
+              "inclusive": false
+            },
+            "pendingDocuments": 100,
+            "unindexableDocuments": 10,
+            "undatedDocuments": 0,
+            "unavailableReason": null
+          },
+          "freshness": {
+            "observationSeconds": 300,
+            "sampleCount": 90,
+            "p50Seconds": 3,
+            "p95Seconds": 12,
+            "unavailableReason": null
+          },
+          "errors": {
+            "observationSeconds": 300,
+            "attemptFailures": 15,
+            "terminalFailures": 5,
+            "byCode": [
+              {
+                "code": "extraction_timeout",
+                "count": 15,
+                "lastOccurredAt": "2026-09-15T12:00:00Z"
+              }
+            ],
+            "truncated": false
+          }
+        },
+        {
+          "kind": "file",
+          "sourceId": null,
+          "mailboxId": null,
+          "fileType": "pdf",
+          "throughput": [
+            {
+              "targetWindowSeconds": 60,
+              "observationSeconds": 60,
+              "sampleCount": 20,
+              "indexedPerMinute": 18,
+              "emptyPerMinute": 1,
+              "unindexablePerMinute": 1,
+              "completedPerMinute": 20,
+              "attemptsPerMinute": 22,
+              "retriesPerMinute": 2,
+              "deletionsPerMinute": 0,
+              "extractedTextBytesPerSecond": 1024,
+              "unavailableReason": null
+            },
+            {
+              "targetWindowSeconds": 300,
+              "observationSeconds": 300,
+              "sampleCount": 100,
+              "indexedPerMinute": 18,
+              "emptyPerMinute": 1,
+              "unindexablePerMinute": 1,
+              "completedPerMinute": 20,
+              "attemptsPerMinute": 22,
+              "retriesPerMinute": 2,
+              "deletionsPerMinute": 0,
+              "extractedTextBytesPerSecond": 1024,
+              "unavailableReason": null
+            }
+          ],
+          "backlog": {
+            "sampledAt": "2026-09-15T12:00:00Z",
+            "discoveryComplete": true,
+            "remaining": 100,
+            "ready": 97,
+            "inProgress": 1,
+            "retryDeferred": 2,
+            "blocked": 0,
+            "firstTime": 90,
+            "updates": 10,
+            "unavailableReason": null
+          },
+          "eta": {
+            "state": "available",
+            "estimatedRemainingSeconds": 300,
+            "estimatedCompletionAt": "2026-09-15T12:05:00Z",
+            "basis": "knownBacklog",
+            "rateWindowSeconds": 300,
+            "observationSeconds": 300,
+            "sampleCount": 100,
+            "unavailableReason": null
+          },
+          "coverage": {
+            "sampledAt": "2026-09-15T12:00:00Z",
+            "knownEligible": 1000,
+            "indexedCurrent": 880,
+            "emptyCurrent": 10,
+            "unindexableCurrent": 10,
+            "stale": 10,
+            "neverProcessed": 90,
+            "pendingDeletions": 0,
+            "unavailableReason": null
+          },
+          "depth": {
+            "state": "applicable",
+            "dateBasis": "parentEmailReceivedAtThenSentAt",
+            "sourceDateField": null,
+            "discoveryComplete": true,
+            "oldestIndexedDocumentAt": "2020-01-01T00:00:00Z",
+            "fullyIndexedSince": {
+              "at": "2025-01-01T00:00:00Z",
+              "inclusive": false
+            },
+            "processedSince": {
+              "at": "2024-01-01T00:00:00Z",
+              "inclusive": false
+            },
+            "pendingDocuments": 100,
+            "unindexableDocuments": 10,
+            "undatedDocuments": 0,
+            "unavailableReason": null
+          },
+          "freshness": {
+            "observationSeconds": 300,
+            "sampleCount": 90,
+            "p50Seconds": 3,
+            "p95Seconds": 12,
+            "unavailableReason": null
+          },
+          "errors": {
+            "observationSeconds": 300,
+            "attemptFailures": 15,
+            "terminalFailures": 5,
+            "byCode": [
+              {
+                "code": "extraction_timeout",
+                "count": 15,
+                "lastOccurredAt": "2026-09-15T12:00:00Z"
+              }
+            ],
+            "truncated": false
+          }
+        }
+      ],
+      "chunks": 3000,
+      "terms": 5000,
+      "indexedAvgdl": 256,
+      "observedAvgdl": 240,
+      "unavailableReason": null
+    },
+    {
+      "instanceId": "building-example",
+      "role": "building",
+      "sampledAt": "2026-09-15T12:00:00Z",
+      "segments": [
+        {
+          "kind": "email",
+          "sourceId": null,
+          "mailboxId": null,
+          "fileType": null,
+          "throughput": [
+            {
+              "targetWindowSeconds": 60,
+              "observationSeconds": 60,
+              "sampleCount": 20,
+              "indexedPerMinute": 18,
+              "emptyPerMinute": 1,
+              "unindexablePerMinute": 1,
+              "completedPerMinute": 20,
+              "attemptsPerMinute": 22,
+              "retriesPerMinute": 2,
+              "deletionsPerMinute": 0,
+              "extractedTextBytesPerSecond": 1024,
+              "unavailableReason": null
+            },
+            {
+              "targetWindowSeconds": 300,
+              "observationSeconds": 300,
+              "sampleCount": 100,
+              "indexedPerMinute": 18,
+              "emptyPerMinute": 1,
+              "unindexablePerMinute": 1,
+              "completedPerMinute": 20,
+              "attemptsPerMinute": 22,
+              "retriesPerMinute": 2,
+              "deletionsPerMinute": 0,
+              "extractedTextBytesPerSecond": 1024,
+              "unavailableReason": null
+            }
+          ],
+          "backlog": {
+            "sampledAt": "2026-09-15T12:00:00Z",
+            "discoveryComplete": true,
+            "remaining": 100,
+            "ready": 97,
+            "inProgress": 1,
+            "retryDeferred": 2,
+            "blocked": 0,
+            "firstTime": 90,
+            "updates": 10,
+            "unavailableReason": null
+          },
+          "eta": {
+            "state": "available",
+            "estimatedRemainingSeconds": 300,
+            "estimatedCompletionAt": "2026-09-15T12:05:00Z",
+            "basis": "knownBacklog",
+            "rateWindowSeconds": 300,
+            "observationSeconds": 300,
+            "sampleCount": 100,
+            "unavailableReason": null
+          },
+          "coverage": {
+            "sampledAt": "2026-09-15T12:00:00Z",
+            "knownEligible": 1000,
+            "indexedCurrent": 880,
+            "emptyCurrent": 10,
+            "unindexableCurrent": 10,
+            "stale": 10,
+            "neverProcessed": 90,
+            "pendingDeletions": 0,
+            "unavailableReason": null
+          },
+          "depth": {
+            "state": "applicable",
+            "dateBasis": "emailReceivedAtThenSentAt",
+            "sourceDateField": null,
+            "discoveryComplete": true,
+            "oldestIndexedDocumentAt": "2020-01-01T00:00:00Z",
+            "fullyIndexedSince": {
+              "at": "2025-01-01T00:00:00Z",
+              "inclusive": false
+            },
+            "processedSince": {
+              "at": "2024-01-01T00:00:00Z",
+              "inclusive": false
+            },
+            "pendingDocuments": 100,
+            "unindexableDocuments": 10,
+            "undatedDocuments": 0,
+            "unavailableReason": null
+          },
+          "freshness": {
+            "observationSeconds": 300,
+            "sampleCount": 0,
+            "p50Seconds": null,
+            "p95Seconds": null,
+            "unavailableReason": "not_active"
+          },
+          "errors": {
+            "observationSeconds": 300,
+            "attemptFailures": 15,
+            "terminalFailures": 5,
+            "byCode": [
+              {
+                "code": "extraction_timeout",
+                "count": 15,
+                "lastOccurredAt": "2026-09-15T12:00:00Z"
+              }
+            ],
+            "truncated": false
+          }
+        },
+        {
+          "kind": "file",
+          "sourceId": null,
+          "mailboxId": null,
+          "fileType": null,
+          "throughput": [
+            {
+              "targetWindowSeconds": 60,
+              "observationSeconds": 60,
+              "sampleCount": 20,
+              "indexedPerMinute": 18,
+              "emptyPerMinute": 1,
+              "unindexablePerMinute": 1,
+              "completedPerMinute": 20,
+              "attemptsPerMinute": 22,
+              "retriesPerMinute": 2,
+              "deletionsPerMinute": 0,
+              "extractedTextBytesPerSecond": 1024,
+              "unavailableReason": null
+            },
+            {
+              "targetWindowSeconds": 300,
+              "observationSeconds": 300,
+              "sampleCount": 100,
+              "indexedPerMinute": 18,
+              "emptyPerMinute": 1,
+              "unindexablePerMinute": 1,
+              "completedPerMinute": 20,
+              "attemptsPerMinute": 22,
+              "retriesPerMinute": 2,
+              "deletionsPerMinute": 0,
+              "extractedTextBytesPerSecond": 1024,
+              "unavailableReason": null
+            }
+          ],
+          "backlog": {
+            "sampledAt": "2026-09-15T12:00:00Z",
+            "discoveryComplete": true,
+            "remaining": 100,
+            "ready": 97,
+            "inProgress": 1,
+            "retryDeferred": 2,
+            "blocked": 0,
+            "firstTime": 90,
+            "updates": 10,
+            "unavailableReason": null
+          },
+          "eta": {
+            "state": "available",
+            "estimatedRemainingSeconds": 300,
+            "estimatedCompletionAt": "2026-09-15T12:05:00Z",
+            "basis": "knownBacklog",
+            "rateWindowSeconds": 300,
+            "observationSeconds": 300,
+            "sampleCount": 100,
+            "unavailableReason": null
+          },
+          "coverage": {
+            "sampledAt": "2026-09-15T12:00:00Z",
+            "knownEligible": 1000,
+            "indexedCurrent": 880,
+            "emptyCurrent": 10,
+            "unindexableCurrent": 10,
+            "stale": 10,
+            "neverProcessed": 90,
+            "pendingDeletions": 0,
+            "unavailableReason": null
+          },
+          "depth": {
+            "state": "applicable",
+            "dateBasis": "parentEmailReceivedAtThenSentAt",
+            "sourceDateField": null,
+            "discoveryComplete": true,
+            "oldestIndexedDocumentAt": "2020-01-01T00:00:00Z",
+            "fullyIndexedSince": {
+              "at": "2025-01-01T00:00:00Z",
+              "inclusive": false
+            },
+            "processedSince": {
+              "at": "2024-01-01T00:00:00Z",
+              "inclusive": false
+            },
+            "pendingDocuments": 100,
+            "unindexableDocuments": 10,
+            "undatedDocuments": 0,
+            "unavailableReason": null
+          },
+          "freshness": {
+            "observationSeconds": 300,
+            "sampleCount": 0,
+            "p50Seconds": null,
+            "p95Seconds": null,
+            "unavailableReason": "not_active"
+          },
+          "errors": {
+            "observationSeconds": 300,
+            "attemptFailures": 15,
+            "terminalFailures": 5,
+            "byCode": [
+              {
+                "code": "extraction_timeout",
+                "count": 15,
+                "lastOccurredAt": "2026-09-15T12:00:00Z"
+              }
+            ],
+            "truncated": false
+          }
+        },
+        {
+          "kind": "email",
+          "sourceId": "source-example",
+          "mailboxId": "mailbox-example",
+          "fileType": null,
+          "throughput": [
+            {
+              "targetWindowSeconds": 60,
+              "observationSeconds": 60,
+              "sampleCount": 20,
+              "indexedPerMinute": 18,
+              "emptyPerMinute": 1,
+              "unindexablePerMinute": 1,
+              "completedPerMinute": 20,
+              "attemptsPerMinute": 22,
+              "retriesPerMinute": 2,
+              "deletionsPerMinute": 0,
+              "extractedTextBytesPerSecond": 1024,
+              "unavailableReason": null
+            },
+            {
+              "targetWindowSeconds": 300,
+              "observationSeconds": 300,
+              "sampleCount": 100,
+              "indexedPerMinute": 18,
+              "emptyPerMinute": 1,
+              "unindexablePerMinute": 1,
+              "completedPerMinute": 20,
+              "attemptsPerMinute": 22,
+              "retriesPerMinute": 2,
+              "deletionsPerMinute": 0,
+              "extractedTextBytesPerSecond": 1024,
+              "unavailableReason": null
+            }
+          ],
+          "backlog": {
+            "sampledAt": "2026-09-15T12:00:00Z",
+            "discoveryComplete": true,
+            "remaining": 100,
+            "ready": 97,
+            "inProgress": 1,
+            "retryDeferred": 2,
+            "blocked": 0,
+            "firstTime": 90,
+            "updates": 10,
+            "unavailableReason": null
+          },
+          "eta": {
+            "state": "available",
+            "estimatedRemainingSeconds": 300,
+            "estimatedCompletionAt": "2026-09-15T12:05:00Z",
+            "basis": "knownBacklog",
+            "rateWindowSeconds": 300,
+            "observationSeconds": 300,
+            "sampleCount": 100,
+            "unavailableReason": null
+          },
+          "coverage": {
+            "sampledAt": "2026-09-15T12:00:00Z",
+            "knownEligible": 1000,
+            "indexedCurrent": 880,
+            "emptyCurrent": 10,
+            "unindexableCurrent": 10,
+            "stale": 10,
+            "neverProcessed": 90,
+            "pendingDeletions": 0,
+            "unavailableReason": null
+          },
+          "depth": {
+            "state": "applicable",
+            "dateBasis": "emailReceivedAtThenSentAt",
+            "sourceDateField": null,
+            "discoveryComplete": true,
+            "oldestIndexedDocumentAt": "2020-01-01T00:00:00Z",
+            "fullyIndexedSince": {
+              "at": "2025-01-01T00:00:00Z",
+              "inclusive": false
+            },
+            "processedSince": {
+              "at": "2024-01-01T00:00:00Z",
+              "inclusive": false
+            },
+            "pendingDocuments": 100,
+            "unindexableDocuments": 10,
+            "undatedDocuments": 0,
+            "unavailableReason": null
+          },
+          "freshness": {
+            "observationSeconds": 300,
+            "sampleCount": 0,
+            "p50Seconds": null,
+            "p95Seconds": null,
+            "unavailableReason": "not_active"
+          },
+          "errors": {
+            "observationSeconds": 300,
+            "attemptFailures": 15,
+            "terminalFailures": 5,
+            "byCode": [
+              {
+                "code": "extraction_timeout",
+                "count": 15,
+                "lastOccurredAt": "2026-09-15T12:00:00Z"
+              }
+            ],
+            "truncated": false
+          }
+        },
+        {
+          "kind": "file",
+          "sourceId": null,
+          "mailboxId": null,
+          "fileType": "pdf",
+          "throughput": [
+            {
+              "targetWindowSeconds": 60,
+              "observationSeconds": 60,
+              "sampleCount": 20,
+              "indexedPerMinute": 18,
+              "emptyPerMinute": 1,
+              "unindexablePerMinute": 1,
+              "completedPerMinute": 20,
+              "attemptsPerMinute": 22,
+              "retriesPerMinute": 2,
+              "deletionsPerMinute": 0,
+              "extractedTextBytesPerSecond": 1024,
+              "unavailableReason": null
+            },
+            {
+              "targetWindowSeconds": 300,
+              "observationSeconds": 300,
+              "sampleCount": 100,
+              "indexedPerMinute": 18,
+              "emptyPerMinute": 1,
+              "unindexablePerMinute": 1,
+              "completedPerMinute": 20,
+              "attemptsPerMinute": 22,
+              "retriesPerMinute": 2,
+              "deletionsPerMinute": 0,
+              "extractedTextBytesPerSecond": 1024,
+              "unavailableReason": null
+            }
+          ],
+          "backlog": {
+            "sampledAt": "2026-09-15T12:00:00Z",
+            "discoveryComplete": true,
+            "remaining": 100,
+            "ready": 97,
+            "inProgress": 1,
+            "retryDeferred": 2,
+            "blocked": 0,
+            "firstTime": 90,
+            "updates": 10,
+            "unavailableReason": null
+          },
+          "eta": {
+            "state": "available",
+            "estimatedRemainingSeconds": 300,
+            "estimatedCompletionAt": "2026-09-15T12:05:00Z",
+            "basis": "knownBacklog",
+            "rateWindowSeconds": 300,
+            "observationSeconds": 300,
+            "sampleCount": 100,
+            "unavailableReason": null
+          },
+          "coverage": {
+            "sampledAt": "2026-09-15T12:00:00Z",
+            "knownEligible": 1000,
+            "indexedCurrent": 880,
+            "emptyCurrent": 10,
+            "unindexableCurrent": 10,
+            "stale": 10,
+            "neverProcessed": 90,
+            "pendingDeletions": 0,
+            "unavailableReason": null
+          },
+          "depth": {
+            "state": "applicable",
+            "dateBasis": "parentEmailReceivedAtThenSentAt",
+            "sourceDateField": null,
+            "discoveryComplete": true,
+            "oldestIndexedDocumentAt": "2020-01-01T00:00:00Z",
+            "fullyIndexedSince": {
+              "at": "2025-01-01T00:00:00Z",
+              "inclusive": false
+            },
+            "processedSince": {
+              "at": "2024-01-01T00:00:00Z",
+              "inclusive": false
+            },
+            "pendingDocuments": 100,
+            "unindexableDocuments": 10,
+            "undatedDocuments": 0,
+            "unavailableReason": null
+          },
+          "freshness": {
+            "observationSeconds": 300,
+            "sampleCount": 0,
+            "p50Seconds": null,
+            "p95Seconds": null,
+            "unavailableReason": "not_active"
+          },
+          "errors": {
+            "observationSeconds": 300,
+            "attemptFailures": 15,
+            "terminalFailures": 5,
+            "byCode": [
+              {
+                "code": "extraction_timeout",
+                "count": 15,
+                "lastOccurredAt": "2026-09-15T12:00:00Z"
+              }
+            ],
+            "truncated": false
+          }
+        }
+      ],
+      "chunks": 3000,
+      "terms": 5000,
+      "indexedAvgdl": 256,
+      "observedAvgdl": 240,
+      "unavailableReason": null
+    }
+  ],
+  "discovery": [
+    {
+      "sourceId": "source-example",
+      "mailboxId": "mailbox-example",
+      "state": "complete",
+      "discoveryComplete": true,
+      "scanStartedAt": "2026-09-15T11:55:00Z",
+      "lastSuccessfulScanAt": "2026-09-15T12:00:00Z",
+      "discoveredDocuments": 2000,
+      "accessible": true,
+      "lastErrorCode": null
+    }
+  ],
+  "search": {
+    "sampledAt": "2026-09-15T12:00:00Z",
+    "observationSeconds": 300,
+    "queryCount": 100,
+    "errorCount": 0,
+    "inFlight": 0,
+    "p50LatencyMilliseconds": 12,
+    "p95LatencyMilliseconds": 45,
+    "unavailableReason": null
+  },
+  "indexingDirectory": "/Users/example/Library/Application Support/Erato/index"
+}

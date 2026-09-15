@@ -223,6 +223,36 @@ platform-default configuration directory and restored on process startup.
 Applying a changed effective `show_tray_icon` value MUST update the running
 sidecar without requiring a restart.
 
+### Indexing configuration
+
+Both existing configuration layers accept nullable positive safe integers:
+
+| Property                        | Default | Meaning                                                                                                     |
+| ------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------- |
+| `indexing_parallelism`          | `1`     | Maximum documents concurrently processed across all kinds and generations, including extraction and commit. |
+| `indexing_documents_per_minute` | `40`    | Global document-processing start budget per minute, shared by all workers and document kinds.               |
+
+For each setting independently, use the non-null user value, then the non-null
+organization value, then the default. Null is inheritance, not a pause command.
+Zero, negative numbers, fractions and values above `9007199254740991` are invalid.
+These fields follow the existing whole-layer replacement and persistence rules;
+omitting a previously set property removes that override. Invalid requests MUST
+fail atomically with `invalid_params` without changing either persisted layer.
+
+Changes MUST apply without a restart. Reducing parallelism lets in-flight work
+finish; new documents MUST NOT start until the count falls below the new limit.
+No active extraction is killed merely to apply a lower limit. Starts MUST be
+paced globally, with at least `60 / indexing_documents_per_minute` seconds between
+starts under an unchanged effective setting. Changing the speed resets future
+spacing using the last start time, without banking idle time for a later burst.
+Parallelism MUST NOT multiply the configured rate. Retries consume the start
+budget. Deletion-only cleanup does not, but still consumes a concurrency slot.
+One extraction reused by active and building generations consumes one start
+and one slot; independent extraction/reweighting work consumes its own.
+
+`indexing.status.v1.effectiveConfiguration` reports the resolved values. Existing
+`sidecar.configure.v1` retains its empty success result for compatibility.
+
 ## 12. Sidecar restart
 
 The `sidecar.restart.v1` capability requests a process restart for development
@@ -316,3 +346,238 @@ For testing without a long-running application capability,
 ms; sidecars MAY cap it lower) and reports the pause as a `delay` step, so
 the poll pair and both rollout directions can be exercised against a delayed
 echo alone.
+
+## 15. Indexing statistics
+
+`indexing.status.v1` returns a read-only statistics snapshot. It is separate
+from per-request `sidecar.progress.v1`. Clients discover support before invoking
+it; old sidecars may preserve the new configuration keys without applying them.
+Servers advertising `indexing.status.v1` MUST implement both indexing controls
+above. This is an additive capability; the protocol version remains `1.0`.
+
+The request can set `includeSourceBreakdowns` and `includeFileTypeBreakdowns`
+to false to reduce payload size; each defaults to true. These only omit extra
+segment rows. Global resource measurements, discovery and aggregate rows are
+unchanged. The server MUST include aggregate `email` and `file` rows for each
+reported generation, even when a kind has zero documents. Source rows include
+mailbox IDs when known. File type groups are mutually exclusive: PDF, Office,
+text, image, embedded email, archive and other; `fileType: null` means all types.
+An embedded `.eml` attachment is a `file` with `fileType: "email"`. A standalone
+file and an attachment are both `file`; attachment age derives from its parent.
+Clients MUST NOT sum aggregate rows together with their breakdowns.
+
+### Local indexing directory
+
+Updated implementations MUST include `indexingDirectory`: the absolute local
+filesystem path of the managed indexing root on the sidecar machine. This is
+an OS-native path, not a `file://` URI or a client-relative path. Preserve native
+separators and spaces. Report the resolved root even before initialization,
+while stopped, and after reset; reporting it MUST NOT create the directory or
+any indexing files. The path identifies the root, not an individual generation;
+indexing-owned temporary files may also exist outside that root.
+
+The field is optional in the v1 wire schema so updated clients can still read
+status from earlier sidecars. Its absence means an older server did not report
+the path; it does not mean no indexing directory is configured. The path is
+local to the sidecar machine and is informational; clients MUST NOT interpret
+it as a browser URL or interpolate it into shell commands.
+
+### Sampling and availability
+
+The top-level `sampledAt` is snapshot assembly time. Nested timestamps identify
+when independently sampled data was collected; clients can calculate its age.
+Each rate/latency section specifies its actual observation duration and sample
+count. Monotonic clocks MUST determine elapsed durations; UTC date-time strings
+are for display. Samples are volatile and restart with `sessionId`; no historical
+series is persisted or returned in v1. Durable inventory/receipt counts survive
+restarts. Clients may retain their own history, separating process sessions and
+index generation IDs.
+
+Unknown or unsupported measurements MUST be null, with the associated reason;
+zero MUST represent an observed zero. Common reasons include `warming_up`,
+`not_supported`, `not_observed`, `paused`, `blocked`, `discovery_incomplete`, and
+`no_observed_throughput`. Reason strings are extensible. A section containing
+some available metrics may also explain unavailable fields. On OSes without a
+particular resource measurement, the rest of the snapshot remains available.
+Resource sections enumerate unavailable metric paths explicitly.
+
+Polling MUST read cached/background-maintained aggregates rather than initiate
+full mailbox scans or extraction. Implementations SHOULD refresh process
+resources about every five seconds and inventory aggregates about every ten
+seconds. Each section's timestamp exposes delays. Historical throughput windows
+MUST NOT be erased by polling, configuration changes, or stop/start indexing
+within a process session. Fresh samples after changes gradually replace old
+ones, so an ETA may temporarily reflect the previous scheduling allocation.
+
+### Resources
+
+CPU usage is CPU seconds divided by wall-clock seconds: `1.0` is one busy core;
+values above one are valid. Sidecar CPU includes indexing, search and discovery,
+and MUST NOT be presented as precisely attributable indexing CPU. Extraction
+worker aggregates include short-lived children that exit between samples.
+`liveExtractionWorkers` also exposes per-worker measurements for currently live
+children (each has processCount = 1); process IDs can be reused, so clients MUST
+NOT treat them as durable identities. Resident memory sums can double-count shared pages. Aggregate peak resident
+memory is the largest simultaneously sampled sum, not the sum of individual
+process peaks. Peaks are session-scoped; processCount counts currently live
+processes. Disk I/O rates are process I/O where the platform supports them.
+
+Allocated disk bytes describe filesystem allocation; logical bytes describe
+file lengths. Control, catalog, active index, building index, retired indexes,
+WAL and temporary-file buckets MUST be disjoint. Totals equal their sums when
+all buckets are known. Account for known temporary storage outside the index
+folder too. Available bytes describe free space on the index volume. Resource
+usage is process-wide, even when only selected segment breakdowns are returned.
+
+### Throughput, backlog and ETA
+
+Each segment has exactly one 60-second and one 300-second trailing window.
+During warm-up, observationSeconds is the shorter actual duration since process
+startup. Zero-duration windows report null rates. `sampleCount` counts committed
+non-deletion revision completions; `completedPerMinute` is indexed + empty +
+unindexable. Failed retry attempts are attempts, not completions. Rate denominators
+include waiting, throttling and paused time. Rates count revision work, not unique
+lifetime document IDs. Deletion throughput is separate. Text bytes count UTF-8
+bytes actually analyzed, not source attachment bytes. Reweighting from stored
+counts does not add extracted bytes or a new search-freshness sample.
+
+A backlog compares known eligible current catalog revisions against committed
+receipts. Only enabled source documents are eligible. Missing sources make
+inventory completeness uncertain; disabled sources are excluded. Remaining work
+is partitioned into ready (including work outside the bounded queue), inProgress,
+retryDeferred and blocked. It is independently partitioned into firstTime
+(no previous receipt) and updates (a stale receipt exists). Both partitions MUST
+sum to remaining. Completed terminal failures and deletion-only cleanup are not
+remaining work. When inventory cannot be read, counts are null; an incomplete
+scan can still report exact counts for already discovered documents.
+
+ETA uses remaining divided by the observed completed rate, normally the 300-second
+window, reflecting that kind's actual scheduler share. Report the selected window,
+actual duration and sample count. It estimates only the known backlog under
+unchanged conditions and no future arrivals, not an undiscovered mailbox total.
+`discoveryComplete: false` does not invalidate that narrower estimate. A zero
+backlog has zero remaining seconds, including while paused. A nonzero backlog
+with paused processing, blocked work, missing counts or no positive observed rate
+has an unavailable ETA with a reason. Retry delays and a changing scheduler share
+can make an estimate inaccurate; do not label it a completion guarantee. Absolute
+completion time is snapshot time plus estimated seconds. ETA to complete processing
+includes terminal failures and is not ETA to make every document searchable.
+
+### Coverage, depth and health
+
+Coverage partitions knownEligible into indexedCurrent, emptyCurrent,
+unindexableCurrent, stale and neverProcessed; each document occurs in one state.
+An older failed receipt is stale if its revision no longer matches. Pending
+deletions are separate. Failed documents never increase searchable coverage.
+
+Depth applies only when the scheduler prioritizes the relevant kind by source
+age. Email ordering uses received-at with sent-at as fallback; attachments inherit
+that date. Other chronological sources name their field through sourceDefined.
+Other kinds report notApplicable. Depth considers current revisions, not an older
+successful receipt. oldestIndexedDocumentAt reports reach without a continuity
+claim. fullyIndexedSince requires indexed/empty current receipts throughout the
+interval; processedSince also accepts terminal failures. Boundaries have explicit
+inclusivity so timestamp ties and pending records do not overstate coverage.
+Return null if no nonempty covered interval can be established. Undated documents
+are counted and excluded; discoveryComplete and gap counts accompany the boundary.
+Aggregate depth is unknown when contributing sources have incompatible date
+bases. Aggregate boundaries MUST honor gaps in every contributing source; incomplete
+source discovery MUST NOT be described as complete mailbox coverage.
+
+Freshness measures discovery-to-first-searchable-commit latency (p50/p95 in
+seconds), excluding failed/empty/deleted work. Building generations report null
+freshness percentiles with `not_active`; a building commit does not make data
+searchable. Search statistics measure wall-clock
+query latency in milliseconds (p50/p95), query/error counts and current in-flight
+queries. Query counts include all completed queries, including failures; latency
+percentiles cover successful queries only. An empty latency sample reports null
+percentiles and a reason. Discovery reports accessibility, scan progress and last
+successful scan. Recent bounded error histograms expose codes and counts without
+message content, attachment names or local paths; truncation is explicit.
+
+Active and building generations have separate segments and receipts. Clients
+MUST NOT sum them as distinct mailbox documents. The same extraction committed
+to both generations may count as progress in both; process resources are counted
+once. `chunks`, `terms`, indexedAvgdl and observedAvgdl expose index shape and BM25
+normalization drift. Retired generations contribute disk usage but not current
+indexing progress. At most one active and one building generation are reported.
+
+The conformance fixture `indexing-statistics.json` is synthetic sample data,
+including a rebuild; the mock server returns it deterministically with effective
+settings resolved from the most recent configure call. It does not simulate
+resource consumption, scheduling or persisted configuration across mock restarts.
+
+## 16. Full indexing reset
+
+`indexing.reset.v1` takes `{}` and deletes all indexing storage managed by this
+sidecar for the current OS user on the machine, across every mailbox/source and
+index generation. It does not accept a caller-selected path or generation scope.
+Source Outlook stores, original emails and attachments, application configuration,
+TLS/bootstrap material and unrelated application files MUST NOT be deleted.
+Other operating-system users' data is outside this sidecar's scope.
+
+The reset MUST include control/catalog databases, all active/building/retired/failed
+index generations (including embedding indexes when present), WAL/journal files,
+checkpoints, extraction caches, and indexing-owned temporary files. Unregistered
+leftover generations and indexing-owned temporary files outside the main index
+directory MUST also be removed. Merely creating a new concurrent generation,
+clearing database rows, renaming files, or moving them to trash is not a reset.
+Deleting the files is required; forensic secure erasure is not promised.
+
+Before deletion, implementations MUST:
+
+1. Exclude other indexing processes operating on the same storage and block new
+   discovery, extraction, retries, maintenance and generation activation.
+2. Stop/cancel and join all indexing workers and extraction children; drain or
+   cancel searches holding index references, including generation-pinned readers.
+3. Close all database/file handles and invalidate caches, queues, retry state,
+   discovery cursors and generation pointers so no stale worker can recreate or
+   serve the deleted index.
+4. Remove every managed indexing artifact and verify cleanup succeeded before
+   responding. Do not instantiate replacement databases as part of reset.
+
+A success result is `{ "completed": true, "completedAt": <UTC timestamp>,
+"state": "stopped" }`. It is a completion acknowledgement, not an accepted/job
+response. Missing indexing files are already reset; repeated calls succeed.
+Concurrent reset calls MUST be serialized or coalesced so they cannot race with
+creation, indexing or activation. No separate confirmation RPC is required.
+
+While resetting, status reports `state: "stopping"` and
+`resetInProgress: true`; clients compiled before this optional field was added
+still understand stopping. Index-dependent searches MUST fail with
+`capability_unavailable` and `reasonCode: "index_reset_in_progress"` until
+cleanup completes; they MUST NOT return stale or partially cleared results.
+After success, status reports stopped, no generations, no discovered inventory,
+no extraction workers and zero indexing disk usage. Reading status or searching
+MUST NOT recreate the databases. Index-dependent searches fail with
+`reasonCode: "index_not_initialized"` until indexing is initialized again.
+Live Outlook actions that directly read source data may continue to work.
+
+Reset discards indexing-progress samples tied to the removed generations. Process
+identity/uptime, process resource peaks and process-wide query statistics remain
+session-scoped. Effective configuration, including speed and parallelism, remains
+unchanged. Configure MUST NOT implicitly resume indexing after reset. Indexing
+stays stopped for the current process until an explicit resume action; an explicit
+sidecar restart may apply normal startup indexing policy and build from scratch.
+
+If deletion or handle shutdown fails, return the existing `sidecar_internal`
+error with `reasonCode: "index_reset_incomplete"`, keep indexing stopped, and do
+not report completed. Deleted files cannot be rolled back. A subsequent reset
+retries cleanup. This error MAY set the additive error-data field
+`resetIncomplete: true`. Avoid disclosing source paths in errors. Known
+permission denials before any mutation may return `permission_denied`.
+
+Cancellation/deadline expiry before quiescing or deletion begins may return the
+usual request_cancelled/timeout response without changes. Once the destructive
+reset has begun, cancellation or a disconnected/timed-out caller MUST NOT allow
+old work to restart; cleanup proceeds to completion or a stopped incomplete state.
+Client timeout alone does not establish whether reset completed. Clients can
+query status or retry reset. Implementations MUST durably record an in-progress
+reset outside the index files being removed and finish/verify cleanup on process
+recovery before allowing indexing or search to resume. Remove this operational
+marker once cleanup is complete; it contains no indexed document data. A recovery
+that finishes an interrupted reset leaves indexing stopped for that process.
+
+The reference mock models the post-reset status and configuration preservation
+in memory. It does not delete files or implement process coordination; production
+implementations must test those lifecycle and filesystem guarantees separately.

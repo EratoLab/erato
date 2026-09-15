@@ -13,5 +13,13 @@ export interface SidecarConfiguration {
    * Whether the sidecar should show its system tray icon. Null leaves the decision to the other configuration layer or the sidecar default.
    */
   show_tray_icon?: boolean | null;
+  /**
+   * Maximum documents concurrently processed across all kinds and generations, including extraction and commit. Lowering it lets in-flight documents finish and prevents excess new starts. Null or absence inherits the other layer; the sidecar default is 1. Zero is invalid and does not pause indexing.
+   */
+  indexing_parallelism?: number | null;
+  /**
+   * Global maximum document-processing starts per rolling 60 seconds, shared by all workers, kinds and generations. Retry attempts consume this budget; one extraction shared by generations consumes it once. Deletion-only cleanup does not consume it. Null or absence inherits the other layer; the sidecar default is 40. Zero is invalid and does not pause indexing.
+   */
+  indexing_documents_per_minute?: number | null;
   [k: string]: unknown;
 }

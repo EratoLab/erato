@@ -10,10 +10,15 @@ import {
   MAX_BODY_BYTES,
   type CapabilityDescriptor,
   type DiscoverParams,
+  type IndexingStatusV1Result,
+  type IndexingStatusV1Params,
+  type SidecarConfigureV1Params,
   type DiscoveryDocument,
 } from "../../typescript/src/index.js";
 import {
   validateCancelParams,
+  validateIndexingResetV1Params,
+  validateIndexingStatusV1Params,
   validateDiagnosticsEchoV1Params,
   validateDiscoverParams,
   validateOutlookGetConversationV1Params,
@@ -130,6 +135,13 @@ const canonicalOpenRpc = JSON.parse(
   readFileSync(openRpcUrl, "utf8"),
 ) as DiscoveryDocument;
 
+const mockIndexingStatistics = JSON.parse(
+  readFileSync(
+    new URL("./conformance/fixtures/indexing-statistics.json", openRpcUrl),
+    "utf8",
+  ),
+) as IndexingStatusV1Result;
+
 export class MockSidecar {
   readonly #options: Required<
     Pick<
@@ -159,8 +171,9 @@ export class MockSidecar {
   #catalogueRevision = 1;
   #capabilityAvailability: "enabled" | "disabled";
   #capabilityReasonCode: string | undefined;
-  #configuration: unknown;
+  #configuration: SidecarConfigureV1Params | undefined;
   #restartRequests = 0;
+  #indexingResetCompletedAt: string | undefined;
 
   constructor(options: MockSidecarOptions) {
     if (options.allowedOrigins.length === 0) {
@@ -434,11 +447,86 @@ export class MockSidecar {
       return rpcResult(message.id, { accepted: true });
     }
 
+    if (message.method === "indexing.reset.v1") {
+      if (!validateIndexingResetV1Params(message.params))
+        return rpcError(message.id, -32602, "Invalid method parameters.");
+      this.#indexingResetCompletedAt ??= new Date().toISOString();
+      return rpcResult(message.id, {
+        completed: true,
+        completedAt: this.#indexingResetCompletedAt,
+        state: "stopped",
+      });
+    }
+
+    if (message.method === "indexing.status.v1") {
+      if (!validateIndexingStatusV1Params(message.params))
+        return rpcError(message.id, -32602, "Invalid method parameters.");
+      const params = message.params as IndexingStatusV1Params;
+      const result = structuredClone(mockIndexingStatistics);
+      const user = this.#configuration?.user_configuration;
+      const organization = this.#configuration?.organization_configuration;
+      result.effectiveConfiguration = {
+        parallelism:
+          user?.indexing_parallelism ?? organization?.indexing_parallelism ?? 1,
+        documentsPerMinute:
+          user?.indexing_documents_per_minute ??
+          organization?.indexing_documents_per_minute ??
+          40,
+      };
+      if (this.#indexingResetCompletedAt) {
+        const sampledAt = new Date().toISOString();
+        result.sampledAt = sampledAt;
+        result.state = "stopped";
+        result.resetInProgress = false;
+        result.generations = [];
+        result.discovery = [];
+        result.resources.sampledAt = sampledAt;
+        result.resources.disk.sampledAt = sampledAt;
+        result.resources.disk.allocatedBytes = 0;
+        result.resources.disk.logicalBytes = 0;
+        for (const key of [
+          "control",
+          "catalog",
+          "activeIndex",
+          "buildingIndex",
+          "retiredIndexes",
+          "wal",
+          "temporary",
+        ] as const) {
+          result.resources.disk.breakdown[key] = {
+            allocatedBytes: 0,
+            logicalBytes: 0,
+          };
+        }
+        result.resources.liveExtractionWorkers = [];
+        result.resources.extractionWorkers = {
+          ...result.resources.extractionWorkers,
+          processCount: 0,
+          cpuCoresUsed: 0,
+          memoryResidentBytes: 0,
+          diskReadBytesPerSecond: 0,
+          diskWriteBytesPerSecond: 0,
+        };
+      }
+      for (const generation of result.generations) {
+        generation.segments = generation.segments.filter(
+          (segment) =>
+            (params.includeSourceBreakdowns !== false ||
+              (segment.sourceId === null && segment.mailboxId === null)) &&
+            (params.includeFileTypeBreakdowns !== false ||
+              segment.fileType === null),
+        );
+      }
+      return rpcResult(message.id, result);
+    }
+
     if (message.method === "sidecar.configure.v1") {
       if (!validateSidecarConfigureV1Params(message.params)) {
         return rpcError(message.id, -32602, "Invalid method parameters.");
       }
-      this.#configuration = structuredClone(message.params);
+      this.#configuration = structuredClone(
+        message.params,
+      ) as SidecarConfigureV1Params;
       return rpcResult(message.id, {});
     }
 

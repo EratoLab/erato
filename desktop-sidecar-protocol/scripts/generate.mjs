@@ -18,6 +18,26 @@ const outputDirectory =
 
 const typeTargets = [
   [
+    "schemas/methods/indexing-reset-v1-result.schema.json",
+    "indexing-reset-v1-result.ts",
+    "IndexingResetV1Result",
+  ],
+  [
+    "schemas/methods/indexing-reset-v1-params.schema.json",
+    "indexing-reset-v1-params.ts",
+    "IndexingResetV1Params",
+  ],
+  [
+    "schemas/methods/indexing-status-v1-result.schema.json",
+    "indexing-status-v1-result.ts",
+    "IndexingStatusV1Result",
+  ],
+  [
+    "schemas/methods/indexing-status-v1-params.schema.json",
+    "indexing-status-v1-params.ts",
+    "IndexingStatusV1Params",
+  ],
+  [
     "schemas/bootstrap/json-rpc-envelope.schema.json",
     "json-rpc-envelope.ts",
     "JsonRpcEnvelope",
@@ -200,6 +220,14 @@ const typeTargets = [
 ];
 
 const validatorTargets = {
+  validateIndexingResetV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-reset-v1-result.schema.json",
+  validateIndexingResetV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-reset-v1-params.schema.json",
+  validateIndexingStatusV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-status-v1-result.schema.json",
+  validateIndexingStatusV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-status-v1-params.schema.json",
   validateJsonRpcEnvelope:
     "https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/json-rpc-envelope.schema.json",
   validateDiscoverParams:

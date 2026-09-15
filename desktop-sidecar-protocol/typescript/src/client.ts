@@ -1,6 +1,10 @@
 import { SidecarClientError, SidecarRpcError } from "./errors.js";
 import {
   validateCancelResult,
+  validateIndexingResetV1Result,
+  validateIndexingResetV1Params,
+  validateIndexingStatusV1Result,
+  validateIndexingStatusV1Params,
   validateDiagnosticsEchoV1Params,
   validateDiagnosticsEchoV1Result,
   validateDiscoverResult,
@@ -24,6 +28,10 @@ import {
 
 import type {
   CapabilityDescriptor,
+  IndexingResetV1Result,
+  IndexingResetV1Params,
+  IndexingStatusV1Result,
+  IndexingStatusV1Params,
   DiagnosticsEchoV1Params,
   DiagnosticsEchoV1Result,
   DiscoverParams,
@@ -173,6 +181,14 @@ const builtInContracts: Readonly<Record<string, SidecarMethodContract>> = {
     validateParams: validateSidecarRestartV1Params,
     validateResult: validateSidecarRestartV1Result,
   },
+  "indexing.reset.v1": {
+    validateParams: validateIndexingResetV1Params,
+    validateResult: validateIndexingResetV1Result,
+  },
+  "indexing.status.v1": {
+    validateParams: validateIndexingStatusV1Params,
+    validateResult: validateIndexingStatusV1Result,
+  },
   "sidecar.configure.v1": {
     validateParams: validateSidecarConfigureV1Params,
     validateResult: validateSidecarConfigureV1Result,
@@ -276,6 +292,16 @@ export class DesktopSidecarClient {
     params: SidecarProgressV1Params,
     options?: InvokeOptions,
   ): Promise<SidecarProgressV1Result>;
+  async invoke(
+    method: "indexing.reset.v1",
+    params: IndexingResetV1Params,
+    options?: InvokeOptions,
+  ): Promise<IndexingResetV1Result>;
+  async invoke(
+    method: "indexing.status.v1",
+    params: IndexingStatusV1Params,
+    options?: InvokeOptions,
+  ): Promise<IndexingStatusV1Result>;
   async invoke(
     method: "sidecar.configure.v1",
     params: SidecarConfigureV1Params,
