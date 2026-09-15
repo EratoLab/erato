@@ -325,6 +325,9 @@ The bootstrap document is UTF-8 JSON with this versioned, extensible shape:
   "organization_configuration": {
     "allowed_origins": ["https://app.example.test"]
   },
+  "port": 23124,
+  "directory_suffix": "-staging",
+  "display_name": "Erato Staging",
   "tls": {
     "certificate_pem": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n",
     "private_key_pem": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
@@ -344,6 +347,33 @@ The bootstrap policy takes precedence over every user-writable configuration
 file. In particular, `sidecar.configure.v1` and files in a user's platform
 configuration directory MUST NOT add or replace production allowed origins.
 Development origins remain an explicit local development-mode option.
+
+The optional root installation fields are:
+
+| Field              | Contract                                                                                    | Default               |
+| ------------------ | ------------------------------------------------------------------------------------------- | --------------------- |
+| `port`             | Integer from 1 to 65535                                                                     | 23123                 |
+| `directory_suffix` | At most 64 ASCII letters, digits, hyphens or underscores; appended literally                | Empty                 |
+| `display_name`     | Nonempty string, at most 128 UTF-8 bytes, no control characters                             | Erato Desktop Sidecar |
+| `icon`             | Standard base64 PNG (no data URL prefix), 1–256 pixels per dimension, at most 1 MiB encoded | Bundled tray icon     |
+
+Present invalid fields MUST be rejected before registering desktop integration or
+opening a listener. User configuration MUST NOT override these fields. Explicit
+local development `--port` and `ERATO_DESKTOP_SIDECAR_ADDRESS` overrides remain
+supported (CLI takes precedence, then environment, then bootstrap).
+
+Set the corresponding `[desktop_sidecar]` backend keys to personalize downloads.
+The same port and TLS configuration generate the web and Office add-in runtime
+`DESKTOP_SIDECAR_URL`; an explicit port overrides the legacy additional-environment
+URL. The complete Windows executable bootstrap, including icon and TLS, MUST fit
+the existing 4070-byte payload capacity; distribution loading rejects overflow.
+MSI and macOS bootstrap files do not have this executable-slot limit.
+
+The suffix scopes the Windows `%APPDATA%/Erato Labs/Erato Desktop Sidecar`, macOS
+`~/Library/Application Support/com.eratolabs.erato-desktop-sidecar`, and Linux
+`$XDG_CONFIG_HOME/erato-desktop-sidecar` directories. It also scopes Windows Run
+values, macOS LaunchAgent filenames and labels, and Linux desktop/autostart files.
+The shared Outlook data directories remain owned by Outlook.
 
 The optional root `tls` object contains two required, nonempty strings:
 `certificate_pem` is a PEM certificate chain, leaf first; `private_key_pem` is

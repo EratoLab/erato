@@ -644,6 +644,38 @@ fragment. An empty list is valid and refuses all production browser origins.
 allowed_origins = ["https://app.example.com"]
 ```
 
+#### Desktop sidecar installation identity
+
+{/* erato_toml_config_key: desktop_sidecar.port */}
+{/* erato_toml_config_key: desktop_sidecar.directory_suffix */}
+{/* erato_toml_config_key: desktop_sidecar.icon */}
+{/* erato_toml_config_key: desktop_sidecar.display_name */}
+
+Configure a distinct port and directory suffix for each installation:
+
+```toml
+[desktop_sidecar]
+port = 23124
+directory_suffix = "-staging"
+display_name = "Erato Staging"
+# icon = "<base64 PNG bytes, without a data URL prefix>"
+```
+
+These immutable fields are injected into personalized downloads. The port must
+be 1–65535 (default 23123). It also sets `DESKTOP_SIDECAR_URL` for both web and
+Office add-in frontends, with HTTPS when bootstrap TLS is configured. An explicit
+port takes precedence over `frontend.additional_environment.DESKTOP_SIDECAR_URL`;
+local `VITE_DESKTOP_SIDECAR_URL` remains a development override.
+
+The suffix is appended literally to sidecar configuration directories and autorun
+identities, with no separator added. It allows up to 64 ASCII letters, digits,
+hyphens and underscores. Omitted or empty suffixes retain existing paths.
+The display name defaults to `Erato Desktop Sidecar` and allows up to 128 bytes,
+without control characters. The optional tray icon is a base64 PNG with dimensions
+between 1 and 256 pixels. Omit it to use the bundled icon. Windows executable
+bootstrap data, including TLS and icon, must fit the 4070-byte payload slot;
+use a small, optimized PNG or an installer when more space is needed.
+
 #### `desktop_sidecar.tls`
 
 {/* erato_toml_config_key: desktop_sidecar.tls.certificate_pem */}

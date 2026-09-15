@@ -7,6 +7,7 @@ edition = "2024"
 
 [dependencies]
 base64 = "0.22.1"
+png = "0.18.0"
 config = "0.15.6"
 eyre = "0.6.12"
 facet = "0.44.3"

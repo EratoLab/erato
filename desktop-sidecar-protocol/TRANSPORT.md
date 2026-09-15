@@ -39,6 +39,11 @@ not invalidate otherwise valid ready data.
 | Discovery timeout     | 5 seconds                                             |
 | Idle policy           | none; there is no persistent protocol connection      |
 
+Port 23123 is the default. A distribution may configure a different port through
+immutable bootstrap `port` (see [DISTRIBUTION.md](DISTRIBUTION.md)); the backend
+supplies the matching endpoint to web and Office add-in clients. The path remains
+`/erato/sidecar/rpc`, and bootstrap TLS selects HTTPS on that configured port.
+
 Each `POST` body contains exactly one JSON-RPC 2.0 request or notification.
 Batch arrays remain disabled. A request with an `id` receives exactly one
 JSON-RPC response with the same `id`, including when the result is an error. A

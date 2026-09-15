@@ -17,7 +17,7 @@ mod macos;
 #[path = "desktop_sidecar_tls.rs"]
 mod tls;
 
-use erato_config::config::DesktopSidecarTlsConfig;
+use erato_config::config::{DesktopSidecarConfig, DesktopSidecarTlsConfig};
 use tls::BootstrapTls;
 
 const MANIFEST_FILE_NAME: &str = "manifest.json";
@@ -93,6 +93,34 @@ struct ManifestArtifact {
 }
 
 impl DesktopSidecarDistribution {
+    pub fn load_with_config(root: impl AsRef<Path>, config: &DesktopSidecarConfig) -> Result<Self> {
+        let fields = config.bootstrap_fields()?;
+        let mut distribution =
+            Self::load_with_bootstrap(root, &config.allowed_origins, &config.tls)?;
+        let mut document: serde_json::Value = serde_json::from_slice(&distribution.bootstrap)?;
+        document
+            .as_object_mut()
+            .expect("bootstrap object")
+            .extend(fields);
+        distribution.bootstrap = serde_json::to_vec(&document)?.into();
+        // Check the final document including TLS and icon before exposing downloads.
+        let bootstrap = distribution.bootstrap_for_download()?;
+        if distribution
+            .targets
+            .iter()
+            .flat_map(|target| &target.files)
+            .any(|file| {
+                matches!(
+                    file.bootstrap_transport,
+                    BootstrapTransport::WindowsExecutable { .. }
+                )
+            })
+        {
+            encode_executable_bootstrap_slot(&bootstrap)?;
+        }
+        Ok(distribution)
+    }
+
     pub fn load(root: impl AsRef<Path>) -> Result<Self> {
         Self::load_with_allowed_origins(root, &[])
     }
@@ -731,6 +759,33 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    #[test]
+    fn installation_fields_are_injected_and_executable_capacity_is_checked() {
+        let directory = tempdir().unwrap();
+        write_distribution(directory.path(), valid_manifest());
+        let mut config = DesktopSidecarConfig {
+            port: Some(23124),
+            directory_suffix: Some("-staging".into()),
+            display_name: Some("Erato Staging".into()),
+            ..Default::default()
+        };
+        let distribution =
+            DesktopSidecarDistribution::load_with_config(directory.path(), &config).unwrap();
+        let bytes = distribution.bootstrap_for_download().unwrap();
+        let document: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(document["port"], 23124);
+        assert_eq!(document["directory_suffix"], "-staging");
+        assert_eq!(document["display_name"], "Erato Staging");
+        assert!(encode_executable_bootstrap_slot(&bytes).is_ok());
+        config.allowed_origins = (0..100)
+            .map(|i| format!("https://very-long-installation-name-{i}.example.com"))
+            .collect();
+        assert!(DesktopSidecarDistribution::load_with_config(directory.path(), &config).is_err());
+        config.allowed_origins.clear();
+        config.port = Some(0);
+        assert!(DesktopSidecarDistribution::load_with_config(directory.path(), &config).is_err());
+    }
 
     fn write_distribution(root: &Path, manifest: serde_json::Value) {
         fs::create_dir_all(root.join("targets/windows-x86_64")).unwrap();
