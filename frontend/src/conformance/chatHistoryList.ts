@@ -86,65 +86,139 @@ const text = (container: HTMLElement, testId: string) =>
   null;
 
 const menuIds = (items: DropdownMenuItem[]) =>
-  items.map((item) => item.id ?? "<no id>").join(", ");
+  items.map((item) => item.id ?? "<no id>");
 
-const disabledById = (items: DropdownMenuItem[], id: string) =>
-  items.find((item) => item.id === id)?.disabled ?? false;
+/**
+ * One item the host's gates have to produce. Both flags default to `false`,
+ * which is what an absent flag means on a `DropdownMenuItem`, so a case states
+ * only what it turns on and an item that is wrongly disabled or wrongly silent
+ * still fails.
+ */
+interface RequiredMenuItem {
+  id: string;
+  disabled?: boolean;
+  confirmAction?: boolean;
+}
 
 interface ConformanceCase {
   name: string;
   props: ChatHistoryListProps;
-  check: (container: HTMLElement, items: DropdownMenuItem[]) => string[];
+  /** Ids that must be present, in the relative order they must keep. */
+  menu: readonly RequiredMenuItem[];
+  /** Ids the gates drop for this row, which must not come back. */
+  menuMustNotContain: readonly string[];
+  check?: (container: HTMLElement) => string[];
 }
 
-const expectedIds = (
+/**
+ * A required subset in relative order, not the exact array: the stable ids
+ * exist so a kit can add entries of its own and place them where it likes, and
+ * a suite that goes red for that is a suite the kit stops running. A required
+ * id missing, a pair out of order, a wrong gate, or an id the host drops for
+ * this row rendered anyway all still fail — a visible inert action is worse
+ * than a missing one.
+ */
+const menuFailures = (
   items: DropdownMenuItem[],
-  expected: readonly string[],
-): string[] =>
-  menuIds(items) === expected.join(", ")
-    ? []
-    : [`menu items are [${menuIds(items)}], expected [${expected.join(", ")}]`];
+  { menu, menuMustNotContain }: ConformanceCase,
+): string[] => {
+  const ids = menuIds(items);
+  const rendered = `the menu is [${ids.join(", ")}]`;
+  const failures = menuMustNotContain
+    .filter((id) => ids.includes(id))
+    .map((id) => `"${id}" is rendered where the gates drop it; ${rendered}`);
+
+  let cursor = -1;
+  for (const { id, disabled = false, confirmAction = false } of menu) {
+    const inOrder = ids.indexOf(id, cursor + 1);
+    const anywhere = inOrder === -1 ? ids.indexOf(id) : inOrder;
+    if (anywhere === -1) {
+      failures.push(`"${id}" is missing; ${rendered}`);
+      continue;
+    }
+    if (inOrder === -1) {
+      failures.push(
+        `"${id}" comes before an item it has to follow; ${rendered}`,
+      );
+    } else {
+      cursor = inOrder;
+    }
+
+    const item = items[anywhere];
+    if ((item.disabled ?? false) !== disabled) {
+      failures.push(
+        disabled
+          ? `"${id}" stays enabled where the gate disables it`
+          : `"${id}" is disabled where the gate leaves it enabled`,
+      );
+    }
+    if ((item.confirmAction ?? false) !== confirmAction) {
+      failures.push(
+        confirmAction
+          ? `"${id}" acts without asking first`
+          : `"${id}" asks first where nothing is at stake`,
+      );
+    }
+  }
+
+  return failures;
+};
 
 const CASES: ConformanceCase[] = [
   {
     name: "an active row",
     props: listProps(ACTIVE_SESSION),
-    check: (container, items) => [
+    menu: [
+      { id: CHAT_HISTORY_ROW_MENU_ID.pin },
+      { id: CHAT_HISTORY_ROW_MENU_ID.share },
+      { id: CHAT_HISTORY_ROW_MENU_ID.rename },
+      { id: CHAT_HISTORY_ROW_MENU_ID.archive },
+    ],
+    menuMustNotContain: [CHAT_HISTORY_ROW_MENU_ID.unarchive],
+    check: (container) => [
       ...(text(container, "chat-history-item-archived") === null
         ? []
         : ["an unarchived row renders the archived pill"]),
       ...(text(container, "chat-history-item-run-origin") === null
         ? []
         : ["an ordinary chat renders a delegated-run origin"]),
-      ...expectedIds(items, [
-        CHAT_HISTORY_ROW_MENU_ID.pin,
-        CHAT_HISTORY_ROW_MENU_ID.share,
-        CHAT_HISTORY_ROW_MENU_ID.rename,
-        CHAT_HISTORY_ROW_MENU_ID.archive,
-      ]),
     ],
   },
   {
     name: "an archived row",
     props: listProps(ARCHIVED_SESSION),
-    check: (container, items) => {
+    menu: [
+      { id: CHAT_HISTORY_ROW_MENU_ID.rename },
+      { id: CHAT_HISTORY_ROW_MENU_ID.unarchive },
+    ],
+    menuMustNotContain: [
+      CHAT_HISTORY_ROW_MENU_ID.pin,
+      CHAT_HISTORY_ROW_MENU_ID.share,
+      CHAT_HISTORY_ROW_MENU_ID.archive,
+    ],
+    check: (container) => {
       const pill = text(container, "chat-history-item-archived");
       return [
         ...(pill === null ? ["no archived pill on an archived row"] : []),
         ...(pill !== null && !rowLabel(container).includes(pill)
           ? ["the accessible name omits the archived marker"]
           : []),
-        ...expectedIds(items, [
-          CHAT_HISTORY_ROW_MENU_ID.rename,
-          CHAT_HISTORY_ROW_MENU_ID.unarchive,
-        ]),
       ];
     },
   },
   {
     name: "a delegated run",
     props: listProps(RUN_SESSION),
-    check: (container, items) => {
+    menu: [
+      { id: CHAT_HISTORY_ROW_MENU_ID.pin },
+      { id: CHAT_HISTORY_ROW_MENU_ID.share },
+      { id: CHAT_HISTORY_ROW_MENU_ID.rename },
+    ],
+    menuMustNotContain: [
+      CHAT_HISTORY_ROW_MENU_ID.archive,
+      CHAT_HISTORY_ROW_MENU_ID.unarchive,
+    ],
+    check: (container) => {
       const origin = text(container, "chat-history-item-run-origin");
       return [
         ...(origin ? [] : ["no origin line on a delegated run"]),
@@ -154,11 +228,6 @@ const CASES: ConformanceCase[] = [
         ...(container.querySelector('[data-testid="chat-generation-status"]')
           ? []
           : ["no status dot for a run with a recorded outcome"]),
-        ...expectedIds(items, [
-          CHAT_HISTORY_ROW_MENU_ID.pin,
-          CHAT_HISTORY_ROW_MENU_ID.share,
-          CHAT_HISTORY_ROW_MENU_ID.rename,
-        ]),
       ];
     },
   },
@@ -168,29 +237,20 @@ const CASES: ConformanceCase[] = [
       pinnedChatsCount: 3,
       pinnedChatsLimit: 3,
     }),
-    check: (_container, items) =>
-      disabledById(items, CHAT_HISTORY_ROW_MENU_ID.pin)
-        ? []
-        : ["pinning stays enabled at the pin limit"],
+    menu: [{ id: CHAT_HISTORY_ROW_MENU_ID.pin, disabled: true }],
+    menuMustNotContain: [],
   },
   {
     name: "a row without edit rights",
     props: listProps({ ...ACTIVE_SESSION, canEdit: false }),
-    check: (_container, items) => [
-      ...expectedIds(items, [
-        CHAT_HISTORY_ROW_MENU_ID.pin,
-        CHAT_HISTORY_ROW_MENU_ID.share,
-        CHAT_HISTORY_ROW_MENU_ID.rename,
-        CHAT_HISTORY_ROW_MENU_ID.archive,
-      ]),
-      ...[
-        CHAT_HISTORY_ROW_MENU_ID.pin,
-        CHAT_HISTORY_ROW_MENU_ID.share,
-        CHAT_HISTORY_ROW_MENU_ID.rename,
-      ]
-        .filter((id) => !disabledById(items, id))
-        .map((id) => `"${id}" stays enabled without edit rights`),
+    menu: [
+      { id: CHAT_HISTORY_ROW_MENU_ID.pin, disabled: true },
+      { id: CHAT_HISTORY_ROW_MENU_ID.share, disabled: true },
+      { id: CHAT_HISTORY_ROW_MENU_ID.rename, disabled: true },
+      // Archiving is not an edit of the chat, so it stays open.
+      { id: CHAT_HISTORY_ROW_MENU_ID.archive },
     ],
+    menuMustNotContain: [CHAT_HISTORY_ROW_MENU_ID.unarchive],
   },
   {
     // Omission has to drop the item, not render it inert: a dead entry is
@@ -201,7 +261,8 @@ const CASES: ConformanceCase[] = [
       currentSessionId: null,
       onSessionSelect: noop,
     },
-    check: (_container, items) => expectedIds(items, []),
+    menu: [],
+    menuMustNotContain: Object.values(CHAT_HISTORY_ROW_MENU_ID),
   },
 ];
 
@@ -220,10 +281,11 @@ export const chatHistoryListConformanceFailures = (
         failures.push(`${conformanceCase.name}: renders no row at all`);
         continue;
       }
-      for (const failure of conformanceCase.check(
-        container,
-        harness.openRowMenu(container),
-      )) {
+      const items = harness.openRowMenu(container);
+      for (const failure of [
+        ...menuFailures(items, conformanceCase),
+        ...(conformanceCase.check?.(container) ?? []),
+      ]) {
         failures.push(`${conformanceCase.name}: ${failure}`);
       }
     } finally {

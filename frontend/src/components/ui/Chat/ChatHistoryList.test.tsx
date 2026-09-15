@@ -14,6 +14,7 @@ import {
   useChatHistoryRowMenuItems,
   useChatHistoryRowPresentation,
 } from "./ChatHistoryList";
+import { CHAT_HISTORY_ROW_MENU_ID } from "./chatHistoryRowMenuIds";
 
 import type { ChatHistoryRowMenuOptions } from "./ChatHistoryList";
 import type { DropdownMenuItem } from "../Controls/DropdownMenu";
@@ -621,17 +622,88 @@ describe("ChatHistoryList", () => {
   // The host runs its own contract suite so the cases cannot describe only
   // what this list happens to do; each kit runs the same export against its
   // override.
-  it("satisfies the row conformance suite it publishes to kits", async () => {
-    const { i18n } = await import("@lingui/core");
+  describe("row conformance suite", () => {
+    // Stands in for an override that renders the gated array its own way: the
+    // host's items arrive as they always do and this is what the kit did to
+    // them before drawing them.
+    const failuresForOverride = async (
+      asRenderedByAKit: (items: DropdownMenuItem[]) => DropdownMenuItem[] = (
+        items,
+      ) => items,
+    ) => {
+      const { i18n } = await import("@lingui/core");
 
-    expect(
-      chatHistoryListConformanceFailures(ChatHistoryList, {
+      return chatHistoryListConformanceFailures(ChatHistoryList, {
         render: (element) =>
           render(<I18nProvider i18n={i18n}>{element}</I18nProvider>),
         openRowMenu: () =>
-          (dropdownItemsLog.at(-1) ?? []) as DropdownMenuItem[],
-      }),
-    ).toEqual([]);
+          asRenderedByAKit(
+            (dropdownItemsLog.at(-1) ?? []) as DropdownMenuItem[],
+          ),
+      });
+    };
+
+    it("passes against the host's own list", async () => {
+      expect(await failuresForOverride()).toEqual([]);
+    });
+
+    it("passes a kit that adds items of its own around the host's", async () => {
+      const own = (id: string): DropdownMenuItem => ({
+        id,
+        label: id,
+        onClick: vi.fn(),
+      });
+
+      expect(
+        await failuresForOverride((items) => [
+          own("kit-export"),
+          ...items.flatMap((item) => [item, own(`kit-after-${item.id}`)]),
+        ]),
+      ).toEqual([]);
+    });
+
+    it("fails a kit that drops a required item", async () => {
+      const failures = await failuresForOverride((items) =>
+        items.filter((item) => item.id !== CHAT_HISTORY_ROW_MENU_ID.archive),
+      );
+
+      expect(failures.join("\n")).toContain('"archive" is missing');
+    });
+
+    it("fails a kit that reorders the host's own items", async () => {
+      const failures = await failuresForOverride((items) =>
+        [...items].reverse(),
+      );
+
+      expect(failures.join("\n")).toContain(
+        "comes before an item it has to follow",
+      );
+    });
+
+    it("fails a kit that re-enables a gated item", async () => {
+      const failures = await failuresForOverride((items) =>
+        items.map((item) => ({ ...item, disabled: false })),
+      );
+
+      expect(failures.join("\n")).toContain(
+        '"pin" stays enabled where the gate disables it',
+      );
+    });
+
+    it("fails a kit that renders an item the gates dropped", async () => {
+      const failures = await failuresForOverride((items) => [
+        ...items,
+        {
+          id: CHAT_HISTORY_ROW_MENU_ID.unarchive,
+          label: "Unarchive",
+          onClick: vi.fn(),
+        },
+      ]);
+
+      expect(failures.join("\n")).toContain(
+        '"unarchive" is rendered where the gates drop it',
+      );
+    });
   });
 
   describe("archive confirmation", () => {
