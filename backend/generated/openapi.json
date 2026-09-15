@@ -2125,7 +2125,7 @@
       },
       "post": {
         "tags": [],
-        "summary": "Store a persistent decision for a tool from the settings surface. The\nin-stream ApproveAlways decision remains the other writer of the same rows;\nthis endpoint exists so a grant flipped back to ask-per-use in settings can\nbe re-granted without waiting for the next in-chat approval stop, and so a\ntool can be denied outright. The `allow_always` policy only guards grants:\nit exists to keep the product from becoming more permissive, and a denial\nis strictly more restrictive, so it works in deployments that never enable\napprovals at all.",
+        "summary": "Store a persistent decision for a tool from the settings surface. The\nin-stream ApproveAlways decision remains the other writer of the same rows;\nthis endpoint exists so a grant flipped back to the policy default in\nsettings can be re-granted without waiting for the next in-chat approval\nstop, and so a tool can be put on ask or denied outright. The\n`allow_always` policy only guards grants: it exists to keep the product\nfrom becoming more permissive, and a denial is strictly more restrictive,\nso it works in deployments that never enable approvals at all. An ask\nneeds the approval gate to have any effect, so it is refused without one.",
         "operationId": "create_user_tool_approval_setting",
         "requestBody": {
           "content": {
@@ -2149,7 +2149,50 @@
             }
           },
           "400": {
-            "description": "Persistent approvals are disabled by policy or the MCP server is unknown"
+            "description": "The decision is unavailable under the MCP approval policy or the MCP server is unknown"
+          },
+          "403": {
+            "description": "The user is not authorized to access the MCP server"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/me/mcp-tool-approval-settings/batch": {
+      "put": {
+        "tags": [],
+        "summary": "Apply several decisions for one server at once, e.g. a whole group of\ntools set to one decision. Every entry is validated before anything is\nwritten and the writes share one transaction, so a rejected entry leaves\nthe stored decisions untouched.",
+        "operationId": "apply_user_tool_approval_settings_batch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyUserToolApprovalSettingsBatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The server's active decisions after the batch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserToolApprovalSettingsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "An entry is invalid or unavailable under the MCP approval policy, or the MCP server is unknown"
+          },
+          "403": {
+            "description": "The user is not authorized to access the MCP server"
           }
         },
         "security": [
@@ -3936,6 +3979,24 @@
               "$ref": "#/components/schemas/Drive"
             },
             "description": "List of drives accessible to the user"
+          }
+        }
+      },
+      "ApplyUserToolApprovalSettingsBatchRequest": {
+        "type": "object",
+        "required": [
+          "mcp_server_id",
+          "decisions"
+        ],
+        "properties": {
+          "decisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserToolApprovalDecisionEntry"
+            }
+          },
+          "mcp_server_id": {
+            "type": "string"
           }
         }
       },
@@ -6974,12 +7035,17 @@
           "server_id",
           "status",
           "allow_always",
+          "ask_available",
           "tools"
         ],
         "properties": {
           "allow_always": {
             "type": "boolean",
             "description": "Whether the approval policy honors persistent \"always allow\" grants;\na settings surface offers that decision only when this is set, the\nsame way the in-chat approval card does."
+          },
+          "ask_available": {
+            "type": "boolean",
+            "description": "Whether a stored \"ask\" decision is honored: it needs the approval\ngate, so with approvals disabled the decision is stored but inert."
           },
           "server_id": {
             "type": "string"
@@ -7055,20 +7121,20 @@
       },
       "McpServerTool": {
         "type": "object",
+        "description": "One tool as the server declares it. `title` and `description` are vendor\ntext passed through `sanitize_display_text`; a client shows them as plain\ntext and never interprets them. `name` is the tool's identity, not display\ntext: a client sends it back unchanged when it stores a decision or\nswitches the tool off for a chat, and every gate compares it byte for byte\nwith the name the server declares.",
         "required": [
           "name",
           "title",
+          "description_truncated",
           "annotations",
-          "approval",
+          "policy",
           "user_decision",
+          "effective",
           "is_wait_tool"
         ],
         "properties": {
           "annotations": {
             "$ref": "#/components/schemas/McpServerToolAnnotations"
-          },
-          "approval": {
-            "$ref": "#/components/schemas/McpServerToolApproval"
           },
           "description": {
             "type": [
@@ -7076,14 +7142,28 @@
               "null"
             ]
           },
+          "description_truncated": {
+            "type": "boolean",
+            "description": "Whether the description was cut at the display cap."
+          },
+          "effective": {
+            "$ref": "#/components/schemas/McpToolEffectiveState",
+            "description": "What happens on the next call; a client renders this rather than\nre-deriving it from the other two."
+          },
           "is_wait_tool": {
             "type": "boolean"
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "The name the server declares, verbatim; the key a client echoes back."
+          },
+          "policy": {
+            "$ref": "#/components/schemas/McpServerToolPolicy",
+            "description": "The policy's own verdict, before any user decision."
           },
           "title": {
-            "type": "string"
+            "type": "string",
+            "description": "Display text: the server's title, else its annotation title, else the\nname, each cleaned; the first that survives cleaning."
           },
           "user_decision": {
             "$ref": "#/components/schemas/McpServerToolUserDecision"
@@ -7119,7 +7199,7 @@
           }
         }
       },
-      "McpServerToolApproval": {
+      "McpServerToolPolicy": {
         "type": "string",
         "description": "What the configured approval policy does before running the tool.",
         "enum": [
@@ -7129,10 +7209,20 @@
       },
       "McpServerToolUserDecision": {
         "type": "string",
-        "description": "The requesting user's persistent decision for the tool.",
+        "description": "The requesting user's stored decision for the tool, whether or not the\npolicy currently honors it.",
         "enum": [
+          "none",
+          "always_allow",
           "ask",
-          "always",
+          "denied"
+        ]
+      },
+      "McpToolEffectiveState": {
+        "type": "string",
+        "description": "What actually happens when the tool is called, once the user's stored\ndecision is laid over the policy verdict.",
+        "enum": [
+          "allow",
+          "ask",
           "denied"
         ]
       },
@@ -9483,6 +9573,28 @@
           }
         }
       },
+      "UserToolApprovalDecisionEntry": {
+        "type": "object",
+        "required": [
+          "tool_name"
+        ],
+        "properties": {
+          "decision": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserToolDecision",
+                "description": "`null` deactivates the tool's decision, back to the policy default."
+              }
+            ]
+          },
+          "tool_name": {
+            "type": "string"
+          }
+        }
+      },
       "UserToolApprovalSetting": {
         "type": "object",
         "required": [
@@ -9523,9 +9635,10 @@
       },
       "UserToolDecision": {
         "type": "string",
-        "description": "A user's persistent decision for one MCP tool. Rows exist only while a\ndecision is active; \"ask each time\" is the absence of a row.",
+        "description": "A user's persistent decision for one MCP tool. Rows exist only while a\ndecision is active; the absence of a row means the policy default applies.",
         "enum": [
           "always_allow",
+          "ask",
           "denied"
         ]
       },

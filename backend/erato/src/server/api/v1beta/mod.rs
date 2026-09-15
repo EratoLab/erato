@@ -64,7 +64,7 @@ use crate::server::api::v1beta::assistants::{
 use crate::server::api::v1beta::mcp_servers::{
     CompleteMcpServerOauthResponse, DisconnectMcpServerOauthResponse, ListMcpServerToolsResponse,
     ListMcpServersResponse, McpServerStatus, McpServerStatusValue, McpServerTool,
-    McpServerToolAnnotations, McpServerToolApproval, McpServerToolUserDecision,
+    McpServerToolAnnotations, McpServerToolPolicy, McpServerToolUserDecision,
     StartMcpServerOauthResponse, complete_mcp_server_oauth, disconnect_mcp_server_oauth,
     list_mcp_server_tools, list_mcp_servers, start_mcp_server_oauth,
 };
@@ -89,8 +89,9 @@ use crate::server::api::v1beta::share_links::{
     set_share_link,
 };
 use crate::server::api::v1beta::user_tool_approval_settings::{
-    __path_create_user_tool_approval_setting, __path_deactivate_user_tool_approval_setting,
-    __path_list_user_tool_approval_settings, create_user_tool_approval_setting,
+    __path_apply_user_tool_approval_settings_batch, __path_create_user_tool_approval_setting,
+    __path_deactivate_user_tool_approval_setting, __path_list_user_tool_approval_settings,
+    apply_user_tool_approval_settings_batch, create_user_tool_approval_setting,
     deactivate_user_tool_approval_setting, list_user_tool_approval_settings,
 };
 use crate::services::file_storage::{
@@ -160,6 +161,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route(
             "/mcp-tool-approval-settings",
             get(list_user_tool_approval_settings).post(create_user_tool_approval_setting),
+        )
+        .route(
+            "/mcp-tool-approval-settings/batch",
+            axum::routing::put(apply_user_tool_approval_settings_batch),
         )
         .route(
             "/mcp-tool-approval-settings/{setting_id}",
@@ -409,6 +414,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         client_tool_result,
         list_user_tool_approval_settings,
         create_user_tool_approval_setting,
+        apply_user_tool_approval_settings_batch,
         deactivate_user_tool_approval_setting,
         create_chat,
         chat_detail,
@@ -514,8 +520,9 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         McpServerStatus,
         ListMcpServersResponse,
         McpServerToolAnnotations,
-        McpServerToolApproval,
+        McpServerToolPolicy,
         McpServerToolUserDecision,
+        crate::services::mcp_tool_approval::McpToolEffectiveState,
         McpServerTool,
         ListMcpServerToolsResponse,
         StartMcpServerOauthResponse,

@@ -60,6 +60,8 @@ import {
   OpenNewWindow,
   Pin,
   PinSlash,
+  OpenSelectHandGesture,
+  Prohibition,
 } from "iconoir-react";
 
 // Define our own IconProps interface based on common SVG props
@@ -393,6 +395,14 @@ export const PinIcon = ({ className, ...props }: IconProps) => (
 
 export const PinSlashIcon = ({ className, ...props }: IconProps) => (
   <PinSlash className={className} {...props} />
+);
+
+export const HandIcon = ({ className, ...props }: IconProps) => (
+  <OpenSelectHandGesture className={className} {...props} />
+);
+
+export const ProhibitionIcon = ({ className, ...props }: IconProps) => (
+  <Prohibition className={className} {...props} />
 );
 
 export const AtSignIcon = ({ className, ...props }: IconProps) => (

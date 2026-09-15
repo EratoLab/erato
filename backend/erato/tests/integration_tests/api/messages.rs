@@ -4832,7 +4832,7 @@ async fn test_denied_mcp_tool_is_not_offered_to_the_model(pool: Pool<Postgres>) 
         .collect();
     assert_eq!(
         decisions,
-        vec![("list_files", "ask"), ("read_file", "denied")]
+        vec![("list_files", "none"), ("read_file", "denied")]
     );
 }
 
@@ -7428,6 +7428,453 @@ async fn test_continuestream_refuses_a_tool_disabled_after_the_park(pool: Pool<P
             .unwrap()
             .generation_state
             .as_deref(),
+        Some("completed")
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Per-user "ask" and "always allow" decisions at the approval gate.
+// ---------------------------------------------------------------------------
+
+async fn approval_policy_app_config(
+    mocks: MockSet,
+    approval: erato::config::McpToolApprovalConfig,
+) -> (erato::config::AppConfig, MockServer) {
+    let (mut app_config, llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.mcp_servers.insert(
+        "mock_mcp_approval".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url(),
+            "/mcp/approval-policy",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_server_permissions.rules.insert(
+        "allow-mock-mcp".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["mock_mcp_approval".to_string()],
+        },
+    );
+    app_config.mcp_servers_global.approval = approval;
+    (app_config, llm)
+}
+
+/// Mocks for a turn that calls `tool` once and then answers `answer` after
+/// the tool's result reached the model.
+fn one_tool_call_then_answer(
+    tool: &'static str,
+    tool_result: &'static str,
+    answer: &'static str,
+) -> MockSet {
+    let mut mocks = MockSet::new();
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[tool_result], &[]));
+        mock_llm_sse_response(then, build_openai_text_streaming_response(&[answer]));
+    });
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &[tool_result]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[("call_probe", tool, json!({}))]),
+        );
+    });
+    mocks
+}
+
+fn content_types(message: &erato::db::entity::messages::Model) -> Vec<String> {
+    message.raw_message["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|part| part["content_type"].as_str().unwrap().to_string())
+        .collect()
+}
+
+async fn generation_state(db: &sea_orm::DatabaseConnection, chat_id: Uuid) -> Option<String> {
+    chats::Entity::find_by_id(chat_id)
+        .one(db)
+        .await
+        .unwrap()
+        .unwrap()
+        .generation_state
+}
+
+/// A user's "ask" decision escalates a tool the policy would run unasked:
+/// the read-only, closed-world fixture tool is auto under the permissive
+/// preset, yet the turn parks on the approval card, and `continuestream`
+/// with an approval runs it.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_ask_decision_parks_a_policy_auto_tool(pool: Pool<Postgres>) {
+    const TOOL_RESULT: &str = "closed-world approval fixture read";
+    let (app_config, _llm) = approval_policy_app_config(
+        one_tool_call_then_answer("read_approval_fixture", TOOL_RESULT, "ASK-CONTINUED-ANSWER"),
+        erato::config::McpToolApprovalConfig {
+            enabled: true,
+            preset: erato::config::McpToolApprovalPreset::Permissive,
+            allow_always: false,
+        },
+    )
+    .await;
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let db = app_state.db.clone();
+    let server = app_server(app_state);
+
+    let ask = server
+        .post("/api/v1beta/me/mcp-tool-approval-settings")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "mcp_server_id": "mock_mcp_approval",
+            "tool_name": "read_approval_fixture",
+            "decision": "ask",
+        }))
+        .await;
+    ask.assert_status_ok();
+
+    let tools = server
+        .get("/api/v1beta/me/mcp_servers/mock_mcp_approval/tools")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    let tools: Value = tools.json();
+    assert_eq!(tools["ask_available"], true);
+    let fixture = tools["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["name"] == "read_approval_fixture")
+        .expect("fixture tool listed");
+    assert_eq!(fixture["policy"], "auto");
+    assert_eq!(fixture["user_decision"], "ask");
+    assert_eq!(fixture["effective"], "ask");
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "read the fixture" }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let chat_id = Uuid::parse_str(&extract_chat_id(&events).expect("Expected chat_id")).unwrap();
+    let assistant_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    assert_eq!(extract_full_text(&events), "");
+
+    let parked = erato::db::entity::messages::Entity::find_by_id(assistant_message_id)
+        .one(&db)
+        .await
+        .unwrap()
+        .expect("Expected the parked assistant message");
+    assert_eq!(content_types(&parked), vec!["tool_approval_request"]);
+    let approval_request = parked.raw_message["content"][0].clone();
+    assert_eq!(approval_request["tool_name"], "read_approval_fixture");
+    assert_eq!(approval_request["mcp_server_id"], "mock_mcp_approval");
+    assert_eq!(
+        generation_state(&db, chat_id).await.as_deref(),
+        Some("awaiting_approval")
+    );
+
+    let continued = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": assistant_message_id,
+            "decision": "approve",
+        }))
+        .await;
+    continued.assert_status_ok();
+    let continued_events = parse_sse_events(&continued);
+    assert_eq!(extract_full_text(&continued_events), "ASK-CONTINUED-ANSWER");
+
+    let resumed = erato::db::entity::messages::Entity::find_by_id(assistant_message_id)
+        .one(&db)
+        .await
+        .unwrap()
+        .expect("Expected the resumed assistant message");
+    assert_eq!(
+        content_types(&resumed),
+        vec!["tool_approval_request", "tool_approval", "tool_use", "text"]
+    );
+    let resumed_content = resumed.raw_message["content"].as_array().unwrap();
+    assert_eq!(resumed_content[1]["always_allow"], false);
+    assert_eq!(resumed_content[2]["status"], "success");
+    assert!(
+        serde_json::to_string(&resumed_content[2]["output"])
+            .unwrap()
+            .contains(TOOL_RESULT)
+    );
+    assert_eq!(
+        generation_state(&db, chat_id).await.as_deref(),
+        Some("completed")
+    );
+    // A plain approval keeps the ask decision for the next call.
+    let settings = server
+        .get("/api/v1beta/me/mcp-tool-approval-settings")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    let settings: Value = settings.json();
+    assert_eq!(settings["settings"][0]["decision"], "ask");
+}
+
+/// "Always allow" on the card of a tool the user had put on ask replaces the
+/// ask: the user chose the wider decision there.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_approve_always_replaces_an_ask_decision(pool: Pool<Postgres>) {
+    const TOOL_RESULT: &str = "closed-world approval fixture read";
+    let (app_config, _llm) = approval_policy_app_config(
+        one_tool_call_then_answer(
+            "read_approval_fixture",
+            TOOL_RESULT,
+            "ALWAYS-CONTINUED-ANSWER",
+        ),
+        erato::config::McpToolApprovalConfig {
+            enabled: true,
+            preset: erato::config::McpToolApprovalPreset::Permissive,
+            allow_always: true,
+        },
+    )
+    .await;
+    let app_state = test_app_state(app_config, pool).await;
+    let user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let db = app_state.db.clone();
+    erato::models::user_tool_approval_setting::upsert_active(
+        &db,
+        user.id,
+        "mock_mcp_approval",
+        "read_approval_fixture",
+        erato::models::user_tool_approval_setting::UserToolDecision::Ask,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state);
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "read the fixture" }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let assistant_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    assert_eq!(extract_full_text(&events), "");
+
+    let continued = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": assistant_message_id,
+            "decision": "approve_always",
+        }))
+        .await;
+    continued.assert_status_ok();
+    let continued_events = parse_sse_events(&continued);
+    assert_eq!(
+        extract_full_text(&continued_events),
+        "ALWAYS-CONTINUED-ANSWER"
+    );
+
+    let resumed = erato::db::entity::messages::Entity::find_by_id(assistant_message_id)
+        .one(&db)
+        .await
+        .unwrap()
+        .expect("Expected the resumed assistant message");
+    assert_eq!(
+        content_types(&resumed),
+        vec!["tool_approval_request", "tool_approval", "tool_use", "text"]
+    );
+    assert_eq!(resumed.raw_message["content"][1]["always_allow"], true);
+    assert_eq!(
+        erato::models::user_tool_approval_setting::find_active_decision(
+            &db,
+            user.id,
+            "mock_mcp_approval",
+            "read_approval_fixture"
+        )
+        .await
+        .unwrap(),
+        Some(erato::models::user_tool_approval_setting::UserToolDecision::AlwaysAllow)
+    );
+}
+
+/// Without the approval gate an "ask" decision has nothing to park on: the
+/// row stays stored but the tool runs unasked, and the enumeration reports
+/// the decision as stored, ineffective and unavailable.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_ask_decision_is_inert_while_approvals_are_disabled(pool: Pool<Postgres>) {
+    const TOOL_RESULT: &str = "closed-world approval fixture read";
+    let (app_config, _llm) = approval_policy_app_config(
+        one_tool_call_then_answer("read_approval_fixture", TOOL_RESULT, "INERT-ASK-ANSWER"),
+        erato::config::McpToolApprovalConfig {
+            enabled: false,
+            allow_always: false,
+            ..Default::default()
+        },
+    )
+    .await;
+    let app_state = test_app_state(app_config, pool).await;
+    let user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let db = app_state.db.clone();
+    // The endpoint refuses an ask here, so the row is seeded as if the gate
+    // had been on when it was stored.
+    erato::models::user_tool_approval_setting::upsert_active(
+        &db,
+        user.id,
+        "mock_mcp_approval",
+        "read_approval_fixture",
+        erato::models::user_tool_approval_setting::UserToolDecision::Ask,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state);
+
+    let tools = server
+        .get("/api/v1beta/me/mcp_servers/mock_mcp_approval/tools")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    let tools: Value = tools.json();
+    assert_eq!(tools["ask_available"], false);
+    let fixture = tools["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["name"] == "read_approval_fixture")
+        .expect("fixture tool listed");
+    assert_eq!(fixture["policy"], "auto");
+    assert_eq!(fixture["user_decision"], "ask");
+    assert_eq!(fixture["effective"], "allow");
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "read the fixture" }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let chat_id = Uuid::parse_str(&extract_chat_id(&events).expect("Expected chat_id")).unwrap();
+    let assistant_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    assert_eq!(extract_full_text(&events), "INERT-ASK-ANSWER");
+
+    let completed = erato::db::entity::messages::Entity::find_by_id(assistant_message_id)
+        .one(&db)
+        .await
+        .unwrap()
+        .expect("Expected the assistant message");
+    assert_eq!(content_types(&completed), vec!["tool_use", "text"]);
+    assert_eq!(completed.raw_message["content"][0]["status"], "success");
+    assert_eq!(
+        generation_state(&db, chat_id).await.as_deref(),
+        Some("completed")
+    );
+}
+
+/// A stored grant bypasses the card for a tool the policy would ask about:
+/// under the restrictive preset the open-world probe asks, but the user's
+/// "always allow" runs it straight away.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_always_allow_bypasses_a_policy_ask_tool(pool: Pool<Postgres>) {
+    const TOOL_RESULT: &str = "approval probe published";
+    let (app_config, _llm) = approval_policy_app_config(
+        one_tool_call_then_answer("publish_approval_probe", TOOL_RESULT, "GRANTED-ANSWER"),
+        erato::config::McpToolApprovalConfig {
+            enabled: true,
+            preset: erato::config::McpToolApprovalPreset::Restrictive,
+            allow_always: true,
+        },
+    )
+    .await;
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let db = app_state.db.clone();
+    let server = app_server(app_state);
+
+    let grant = server
+        .post("/api/v1beta/me/mcp-tool-approval-settings")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "mcp_server_id": "mock_mcp_approval",
+            "tool_name": "publish_approval_probe",
+            "decision": "always_allow",
+        }))
+        .await;
+    grant.assert_status_ok();
+
+    let tools = server
+        .get("/api/v1beta/me/mcp_servers/mock_mcp_approval/tools")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    let tools: Value = tools.json();
+    let probe = tools["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["name"] == "publish_approval_probe")
+        .expect("probe tool listed");
+    assert_eq!(probe["policy"], "ask");
+    assert_eq!(probe["user_decision"], "always_allow");
+    assert_eq!(probe["effective"], "allow");
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "publish the approval probe" }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let chat_id = Uuid::parse_str(&extract_chat_id(&events).expect("Expected chat_id")).unwrap();
+    let assistant_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    assert_eq!(extract_full_text(&events), "GRANTED-ANSWER");
+
+    let completed = erato::db::entity::messages::Entity::find_by_id(assistant_message_id)
+        .one(&db)
+        .await
+        .unwrap()
+        .expect("Expected the assistant message");
+    assert_eq!(content_types(&completed), vec!["tool_use", "text"]);
+    assert!(
+        serde_json::to_string(&completed.raw_message["content"][0]["output"])
+            .unwrap()
+            .contains(TOOL_RESULT)
+    );
+    assert_eq!(
+        generation_state(&db, chat_id).await.as_deref(),
         Some("completed")
     );
 }

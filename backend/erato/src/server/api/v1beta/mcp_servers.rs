@@ -3,20 +3,25 @@ use crate::distribution::runtime::McpAppState;
 use crate::models::user_tool_approval_setting::{UserToolDecision, decision_of};
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
+use crate::services::display_text::{
+    MAX_DISPLAY_DESCRIPTION_CHARS, MAX_DISPLAY_NAME_CHARS, sanitize_display_text,
+};
 use crate::services::mcp_manager::McpRequestAuthContext;
 use crate::services::mcp_oauth::{
     CompleteOauthAuthorizationParams, complete_oauth_authorization, disconnect_oauth_authorization,
     start_oauth_authorization,
 };
 use crate::services::mcp_session_manager::{McpServerConnectionStatus, is_tool_allowed_to_wait};
-use crate::services::mcp_tool_approval::evaluate_mcp_tool_approval;
+use crate::services::mcp_tool_approval::{
+    McpToolEffectiveState, effective_mcp_tool_state, evaluate_mcp_tool_approval,
+};
 use crate::state::AppState;
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::{Extension, Json};
 use sea_orm::prelude::Uuid;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::HashMap;
 use utoipa::ToSchema;
 
 #[derive(Debug, Clone, Copy, Serialize, ToSchema)]
@@ -69,29 +74,57 @@ pub struct McpServerToolAnnotations {
 /// What the configured approval policy does before running the tool.
 #[derive(Debug, Clone, Copy, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum McpServerToolApproval {
+pub enum McpServerToolPolicy {
     Auto,
     Ask,
 }
 
-/// The requesting user's persistent decision for the tool.
+/// The requesting user's stored decision for the tool, whether or not the
+/// policy currently honors it.
 #[derive(Debug, Clone, Copy, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum McpServerToolUserDecision {
+    None,
+    AlwaysAllow,
     Ask,
-    Always,
     Denied,
 }
 
+impl From<Option<UserToolDecision>> for McpServerToolUserDecision {
+    fn from(decision: Option<UserToolDecision>) -> Self {
+        match decision {
+            None => McpServerToolUserDecision::None,
+            Some(UserToolDecision::AlwaysAllow) => McpServerToolUserDecision::AlwaysAllow,
+            Some(UserToolDecision::Ask) => McpServerToolUserDecision::Ask,
+            Some(UserToolDecision::Denied) => McpServerToolUserDecision::Denied,
+        }
+    }
+}
+
+/// One tool as the server declares it. `title` and `description` are vendor
+/// text passed through `sanitize_display_text`; a client shows them as plain
+/// text and never interprets them. `name` is the tool's identity, not display
+/// text: a client sends it back unchanged when it stores a decision or
+/// switches the tool off for a chat, and every gate compares it byte for byte
+/// with the name the server declares.
 #[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct McpServerTool {
+    /// The name the server declares, verbatim; the key a client echoes back.
     pub name: String,
+    /// Display text: the server's title, else its annotation title, else the
+    /// name, each cleaned; the first that survives cleaning.
     pub title: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// Whether the description was cut at the display cap.
+    pub description_truncated: bool,
     pub annotations: McpServerToolAnnotations,
-    pub approval: McpServerToolApproval,
+    /// The policy's own verdict, before any user decision.
+    pub policy: McpServerToolPolicy,
     pub user_decision: McpServerToolUserDecision,
+    /// What happens on the next call; a client renders this rather than
+    /// re-deriving it from the other two.
+    pub effective: McpToolEffectiveState,
     pub is_wait_tool: bool,
 }
 
@@ -103,6 +136,9 @@ pub struct ListMcpServerToolsResponse {
     /// a settings surface offers that decision only when this is set, the
     /// same way the in-chat approval card does.
     pub allow_always: bool,
+    /// Whether a stored "ask" decision is honored: it needs the approval
+    /// gate, so with approvals disabled the decision is stored but inert.
+    pub ask_available: bool,
     /// Empty unless `status` is `SUCCESS`; sorted by title.
     pub tools: Vec<McpServerTool>,
 }
@@ -184,68 +220,29 @@ pub async fn list_mcp_server_tools(
     let enumeration = mcp.servers.enumerate_tools(&server_id, &auth_context).await;
 
     let global = &mcp.config.mcp_servers_global;
-    // The gate only honors persistent grants while `allow_always` is on, so a
-    // stored grant must not read as "always" when it would still ask. A denial
-    // is enforced regardless of the approval policy.
-    let mut always_allowed_tools: HashSet<String> = HashSet::new();
-    let mut denied_tools: HashSet<String> = HashSet::new();
-    for setting in crate::models::user_tool_approval_setting::list_active(&app_state.db, user_id)
+    let user_decisions: HashMap<String, UserToolDecision> =
+        crate::models::user_tool_approval_setting::list_active_for_server(
+            &app_state.db,
+            user_id,
+            &server_id,
+        )
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    {
-        if setting.mcp_server_id != server_id {
-            continue;
-        }
-        match decision_of(&setting) {
-            UserToolDecision::Denied => {
-                denied_tools.insert(setting.tool_name);
-            }
-            UserToolDecision::AlwaysAllow if global.approval.allow_always => {
-                always_allowed_tools.insert(setting.tool_name);
-            }
-            UserToolDecision::AlwaysAllow => {}
-        }
-    }
+        .iter()
+        .map(|setting| (setting.tool_name.clone(), decision_of(setting)))
+        .collect();
 
     let mut tools: Vec<McpServerTool> = enumeration
         .tools
         .iter()
         .map(|tool| {
-            let verdict = evaluate_mcp_tool_approval(&global.approval, tool);
-            let name = tool.name.to_string();
-            McpServerTool {
-                title: tool
-                    .title
-                    .clone()
-                    .or_else(|| {
-                        tool.annotations
-                            .as_ref()
-                            .and_then(|annotations| annotations.title.clone())
-                    })
-                    .unwrap_or_else(|| name.clone()),
-                description: tool.description.as_ref().map(|value| value.to_string()),
-                annotations: McpServerToolAnnotations {
-                    read_only_hint: verdict.annotations.read_only_hint,
-                    destructive_hint: verdict.annotations.destructive_hint,
-                    idempotent_hint: verdict.annotations.idempotent_hint,
-                    open_world_hint: verdict.annotations.open_world_hint,
-                    annotated: verdict.annotated,
-                },
-                approval: if verdict.requires_approval {
-                    McpServerToolApproval::Ask
-                } else {
-                    McpServerToolApproval::Auto
-                },
-                user_decision: if denied_tools.contains(&name) {
-                    McpServerToolUserDecision::Denied
-                } else if always_allowed_tools.contains(&name) {
-                    McpServerToolUserDecision::Always
-                } else {
-                    McpServerToolUserDecision::Ask
-                },
-                is_wait_tool: global.enable_wait || is_tool_allowed_to_wait(&name, &config),
-                name,
-            }
+            let name = tool.name.as_ref();
+            project_mcp_server_tool(
+                &global.approval,
+                tool,
+                user_decisions.get(name).copied(),
+                global.enable_wait || is_tool_allowed_to_wait(name, &config),
+            )
         })
         .collect();
     sort_tools_by_title(&mut tools);
@@ -254,8 +251,59 @@ pub async fn list_mcp_server_tools(
         server_id,
         status: map_status(enumeration.status),
         allow_always: global.approval.allow_always,
+        ask_available: global.approval.enabled,
         tools,
     }))
+}
+
+/// Project one declared tool for a client. Decisions, the wait list and the
+/// call gates are all keyed by the name the server uses, so `name` leaves
+/// here untouched and only the display text is cleaned.
+fn project_mcp_server_tool(
+    approval: &crate::config::McpToolApprovalConfig,
+    tool: &rmcp::model::Tool,
+    user_decision: Option<UserToolDecision>,
+    is_wait_tool: bool,
+) -> McpServerTool {
+    let verdict = evaluate_mcp_tool_approval(approval, tool);
+    let name = tool.name.to_string();
+    let title = [
+        tool.title.as_deref(),
+        tool.annotations
+            .as_ref()
+            .and_then(|annotations| annotations.title.as_deref()),
+    ]
+    .into_iter()
+    .flatten()
+    .map(|candidate| sanitize_display_text(candidate, MAX_DISPLAY_NAME_CHARS).text)
+    .find(|candidate| !candidate.is_empty())
+    .unwrap_or_else(|| sanitize_display_text(&name, MAX_DISPLAY_NAME_CHARS).text);
+    let description = tool
+        .description
+        .as_deref()
+        .map(|value| sanitize_display_text(value, MAX_DISPLAY_DESCRIPTION_CHARS))
+        .filter(|value| !value.text.is_empty());
+    McpServerTool {
+        title,
+        description_truncated: description.as_ref().is_some_and(|value| value.truncated),
+        description: description.map(|value| value.text),
+        annotations: McpServerToolAnnotations {
+            read_only_hint: verdict.annotations.read_only_hint,
+            destructive_hint: verdict.annotations.destructive_hint,
+            idempotent_hint: verdict.annotations.idempotent_hint,
+            open_world_hint: verdict.annotations.open_world_hint,
+            annotated: verdict.annotated,
+        },
+        policy: if verdict.requires_approval {
+            McpServerToolPolicy::Ask
+        } else {
+            McpServerToolPolicy::Auto
+        },
+        user_decision: user_decision.into(),
+        effective: effective_mcp_tool_state(approval, &verdict, user_decision),
+        is_wait_tool,
+        name,
+    }
 }
 
 fn sort_tools_by_title(tools: &mut [McpServerTool]) {
@@ -443,7 +491,7 @@ fn parse_user_id(me_user: &MeProfile) -> Result<Uuid, StatusCode> {
     Uuid::parse_str(&me_user.id).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
-async fn authorized_server_ids(
+pub(crate) async fn authorized_server_ids(
     mcp: &McpAppState,
     me_user: &MeProfile,
     policy: &PolicyEngine,
@@ -547,6 +595,7 @@ mod tests {
             name: name.to_string(),
             title: title.to_string(),
             description: None,
+            description_truncated: false,
             annotations: McpServerToolAnnotations {
                 read_only_hint: false,
                 destructive_hint: true,
@@ -554,8 +603,9 @@ mod tests {
                 open_world_hint: true,
                 annotated: false,
             },
-            approval: McpServerToolApproval::Auto,
-            user_decision: McpServerToolUserDecision::Ask,
+            policy: McpServerToolPolicy::Auto,
+            user_decision: McpServerToolUserDecision::None,
+            effective: McpToolEffectiveState::Allow,
             is_wait_tool: false,
         }
     }
@@ -570,6 +620,48 @@ mod tests {
         sort_tools_by_title(&mut tools);
         let order: Vec<&str> = tools.iter().map(|tool| tool.name.as_str()).collect();
         assert_eq!(order, vec!["m_tool", "z_tool", "a_tool"]);
+    }
+
+    fn projected(name: &str, title: Option<&str>) -> McpServerTool {
+        let mut tool = rmcp::model::Tool::new(
+            name.to_string(),
+            "reads a fixture",
+            rmcp::model::JsonObject::new(),
+        );
+        tool.title = title.map(str::to_string);
+        let approval = crate::config::McpToolApprovalConfig {
+            enabled: true,
+            preset: crate::config::McpToolApprovalPreset::Restrictive,
+            allow_always: true,
+        };
+        project_mcp_server_tool(&approval, &tool, Some(UserToolDecision::Denied), false)
+    }
+
+    #[test]
+    fn projection_keeps_the_declared_name_as_the_key() {
+        let hostile = "read\u{200E}file";
+        let tool = projected(hostile, None);
+        assert_eq!(tool.name, hostile);
+        assert_eq!(tool.title, "readfile");
+        assert!(matches!(
+            tool.user_decision,
+            McpServerToolUserDecision::Denied
+        ));
+
+        let long_name = "x".repeat(MAX_DISPLAY_NAME_CHARS + 1);
+        let tool = projected(&long_name, None);
+        assert_eq!(tool.name, long_name);
+        assert_eq!(tool.title.chars().count(), MAX_DISPLAY_NAME_CHARS);
+    }
+
+    #[test]
+    fn projection_falls_back_to_the_name_when_the_title_cleans_to_nothing() {
+        assert_eq!(projected("read_file", Some("\u{202E}")).title, "read_file");
+        assert_eq!(projected("read_file", Some("")).title, "read_file");
+        assert_eq!(
+            projected("read_file", Some(" Read file ")).title,
+            "Read file"
+        );
     }
 
     #[test]

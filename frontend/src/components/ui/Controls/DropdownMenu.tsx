@@ -63,6 +63,12 @@ export interface DropdownMenuProps {
   /** Geometry of the trigger button; "icon" yields a square, centered control. */
   triggerButtonGeometry?: ButtonGeometry;
   triggerButtonClassName?: string;
+  /**
+   * Accessible name of the trigger. A trigger that shows a value (a group's
+   * common decision) names itself after that value; the default names the
+   * bare kebab.
+   */
+  triggerAriaLabel?: string;
   id?: string;
   preferredOrientation?: {
     vertical: "top" | "bottom";
@@ -161,6 +167,7 @@ export const DropdownMenu = memo(
     triggerButtonVariant = "ghost",
     triggerButtonGeometry,
     triggerButtonClassName,
+    triggerAriaLabel,
     id,
     preferredOrientation,
     matchContentWidth = false,
@@ -317,7 +324,7 @@ export const DropdownMenu = memo(
                 "flex min-w-fit items-center justify-center",
                 triggerButtonClassName,
               )}
-              aria-label={t`Open menu`}
+              aria-label={triggerAriaLabel ?? t`Open menu`}
               aria-expanded={triggerProps["aria-expanded"]}
               aria-haspopup={triggerProps["aria-haspopup"]}
               aria-controls={triggerProps["aria-controls"]}

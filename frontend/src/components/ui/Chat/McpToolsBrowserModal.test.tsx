@@ -52,9 +52,11 @@ const tool = (overrides: Partial<McpServerTool>): McpServerTool => ({
     open_world_hint: false,
     annotated: true,
   },
-  approval: "auto",
-  user_decision: "ask",
+  policy: "auto",
+  effective: "allow",
+  user_decision: "none",
   is_wait_tool: false,
+  description_truncated: false,
   ...overrides,
 });
 
@@ -65,6 +67,7 @@ const roster = (
   server_id: serverId,
   status: "SUCCESS",
   allow_always: true,
+  ask_available: true,
   tools,
 });
 
@@ -164,7 +167,8 @@ describe("McpToolsBrowserModal", () => {
           name: "create_issue",
           title: "Create issue",
           description: "Files a new issue",
-          approval: "ask",
+          policy: "ask",
+          effective: "ask",
           annotations: {
             read_only_hint: false,
             destructive_hint: false,
@@ -209,6 +213,13 @@ describe("McpToolsBrowserModal", () => {
     expect(
       within(tools[1]).getByText("Asks before running"),
     ).toBeInTheDocument();
+    // The description waits behind the row's chevron.
+    expect(within(tools[1]).queryByText("Files a new issue")).toBeNull();
+    fireEvent.click(
+      within(tools[1]).getByRole("button", {
+        name: "Description of Create issue",
+      }),
+    );
     expect(within(tools[1]).getByText("Files a new issue")).toBeInTheDocument();
     expect(
       within(tools[2]).getByText("Not declared by the server"),
@@ -222,6 +233,94 @@ describe("McpToolsBrowserModal", () => {
         "The tools each connected server offers in your chats. Decide what may run in Settings.",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("groups the tools under the same read-only and write headers as the settings roster", async () => {
+    stubToolsFetch({
+      linear: roster("linear", [
+        tool({
+          name: "create_issue",
+          title: "Create issue",
+          annotations: {
+            read_only_hint: false,
+            destructive_hint: false,
+            idempotent_hint: false,
+            open_world_hint: true,
+            annotated: true,
+          },
+        }),
+        tool({ name: "get_issue", title: "Get issue" }),
+        tool({ name: "list_teams", title: "List teams" }),
+      ]),
+    });
+    renderModal([server("linear")]);
+    expand(serverRow("linear"));
+
+    await screen.findAllByTestId("mcp-tools-browser-tool");
+    const groups = screen.getAllByTestId("mcp-tools-browser-group");
+    expect(groups.map((group) => group.dataset.toolGroup)).toEqual([
+      "readOnly",
+      "write",
+    ]);
+    const readOnlyToggle = within(groups[0]).getByRole("button", {
+      name: "Read-only tools 2",
+    });
+    expect(readOnlyToggle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      within(groups[0])
+        .getAllByTestId("mcp-tools-browser-tool")
+        .map((row) => row.dataset.toolName),
+    ).toEqual(["get_issue", "list_teams"]);
+    expect(
+      within(groups[1]).getByRole("button", { name: "Write/delete tools 1" }),
+    ).toBeInTheDocument();
+    // The headers come without the settings roster's decision menus.
+    expect(screen.queryByRole("button", { name: /:/ })).toBeNull();
+    expect(screen.queryByRole("radiogroup")).toBeNull();
+
+    fireEvent.click(readOnlyToggle);
+    expect(
+      screen
+        .getAllByTestId("mcp-tools-browser-tool")
+        .map((row) => row.dataset.toolName),
+    ).toEqual(["create_issue"]);
+  });
+
+  it("badges a tool as asking by what will happen, not by the policy verdict", async () => {
+    // With no radios here the badge is the only indicator, so it must follow
+    // the user's stored decision where the gate honors it.
+    stubToolsFetch({
+      linear: roster("linear", [
+        tool({
+          name: "list_teams",
+          title: "List teams",
+          policy: "auto",
+          user_decision: "ask",
+          effective: "ask",
+        }),
+        tool({
+          name: "get_issue",
+          title: "Get issue",
+          policy: "ask",
+          user_decision: "always_allow",
+          effective: "allow",
+        }),
+      ]),
+    });
+    renderModal([server("linear")]);
+    expand(serverRow("linear"));
+
+    const tools = await screen.findAllByTestId("mcp-tools-browser-tool");
+    expect(tools.map((item) => item.dataset.toolName)).toEqual([
+      "list_teams",
+      "get_issue",
+    ]);
+    expect(
+      within(tools[0]).getByText("Asks before running"),
+    ).toBeInTheDocument();
+    expect(
+      within(tools[1]).queryByText("Asks before running"),
+    ).not.toBeInTheDocument();
   });
 
   describe("per-chat tool switches", () => {

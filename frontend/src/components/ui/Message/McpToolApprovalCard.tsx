@@ -1,4 +1,5 @@
 import { t } from "@lingui/core/macro";
+import { useQueryClient } from "@tanstack/react-query";
 import { useContext, useEffect, useState } from "react";
 
 import { getIdToken } from "@/auth/tokenStore";
@@ -7,6 +8,10 @@ import { ToolCallInput } from "@/components/ui/ToolCall";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useChatArchived } from "@/hooks/chat/useChatArchived";
+import {
+  listMcpServerToolsQuery,
+  listUserToolApprovalSettingsQuery,
+} from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { ChatContext } from "@/providers/ChatProvider";
 
 import { ResolvedIcon } from "../icons";
@@ -51,6 +56,7 @@ export const McpToolApprovalCard = ({
   // This component is also rendered in isolated stories/tests, where the chat
   // provider is deliberately absent. The in-app path always has it.
   const chatContext = useContext(ChatContext);
+  const queryClient = useQueryClient();
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [localResolution, setLocalResolution] =
@@ -125,6 +131,20 @@ export const McpToolApprovalCard = ({
         // Tombstone the durable indicator: the server marker is already
         // cleared, but a stale list row or in-flight poll may still carry it.
         useGenerationStatusStore.getState().markApprovalDecided(chatId);
+      }
+      if (decision === "approve_always") {
+        // The grant is account-wide, and the settings roster and the tool
+        // browser would otherwise keep serving it from their cached listing.
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: listMcpServerToolsQuery({
+              pathParams: { serverId: request.mcp_server_id },
+            }).queryKey,
+          }),
+          queryClient.invalidateQueries({
+            queryKey: listUserToolApprovalSettingsQuery({}).queryKey,
+          }),
+        ]);
       }
       // Keep the user in the current chat. This refreshes the persisted
       // decision and the resumed assistant output without a document reload.

@@ -13,11 +13,13 @@ import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
 import { ModalBase } from "../Modal/ModalBase";
 import { EntityRow } from "../Settings/EntityRow";
-import { McpToolSummary } from "../Settings/McpToolSummary";
+import { McpToolGroup } from "../Settings/McpToolGroup";
+import { McpToolRow } from "../Settings/McpToolRow";
 import {
   mcpServerDescription,
   mcpServerStatus,
 } from "../Settings/mcpServerStatus";
+import { groupMcpTools } from "../Settings/mcpToolGroups";
 import { LinkIcon, ResolvedIcon } from "../icons";
 
 import type {
@@ -39,7 +41,7 @@ interface McpToolSwitch {
   locked: boolean;
 }
 
-function McpToolRow({
+function McpToolBrowserRow({
   serverId,
   tool,
   toolSwitch,
@@ -65,46 +67,45 @@ function McpToolRow({
         );
 
   return (
-    <li
+    <McpToolRow
+      as="li"
+      tool={tool}
+      muted={!isOn}
       data-testid="mcp-tools-browser-tool"
-      data-tool-name={tool.name}
-      className="flex items-start justify-between gap-3"
-    >
-      <div className={isOn ? undefined : "opacity-60"}>
-        <McpToolSummary tool={tool} />
-      </div>
-      {toolSwitch ? (
-        <label
-          htmlFor={switchId}
-          className="flex shrink-0 cursor-pointer items-center gap-2 text-xs text-theme-fg-secondary"
-        >
-          <input
-            id={switchId}
-            type="checkbox"
-            checked={isOn}
-            disabled={toolSwitch.locked || coveringPattern !== null}
-            onChange={() => toolSwitch.onToggleTool(serverId, tool.name)}
-            aria-label={t({
-              id: "chatInput.connectors.tool.switchLabel",
-              message: `Use ${toolTitle} in this chat`,
-            })}
-            data-testid="mcp-tools-browser-tool-switch"
-            className="size-4 accent-[var(--theme-fg-accent)] focus:ring-theme-fg-accent focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50"
-          />
-          <span aria-hidden="true">
-            {coveringPattern !== null
-              ? t({
-                  id: "chatInput.connectors.tool.switchedOffByRule",
-                  message: `Switched off for this chat by the rule ${coveringPattern}`,
-                })
-              : t({
-                  id: "chatInput.connectors.tool.switchCaption",
-                  message: "In this chat",
-                })}
-          </span>
-        </label>
-      ) : null}
-    </li>
+      control={
+        toolSwitch ? (
+          <label
+            htmlFor={switchId}
+            className="flex cursor-pointer items-center gap-2 text-xs text-theme-fg-secondary"
+          >
+            <input
+              id={switchId}
+              type="checkbox"
+              checked={isOn}
+              disabled={toolSwitch.locked || coveringPattern !== null}
+              onChange={() => toolSwitch.onToggleTool(serverId, tool.name)}
+              aria-label={t({
+                id: "chatInput.connectors.tool.switchLabel",
+                message: `Use ${toolTitle} in this chat`,
+              })}
+              data-testid="mcp-tools-browser-tool-switch"
+              className="size-4 accent-[var(--theme-fg-accent)] focus:ring-theme-fg-accent focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50"
+            />
+            <span aria-hidden="true">
+              {coveringPattern !== null
+                ? t({
+                    id: "chatInput.connectors.tool.switchedOffByRule",
+                    message: `Switched off for this chat by the rule ${coveringPattern}`,
+                  })
+                : t({
+                    id: "chatInput.connectors.tool.switchCaption",
+                    message: "In this chat",
+                  })}
+            </span>
+          </label>
+        ) : undefined
+      }
+    />
   );
 }
 
@@ -185,16 +186,25 @@ function McpServerToolsList({
     );
   } else {
     body = (
-      <ul className="space-y-3">
-        {toolsResponse.tools.map((tool) => (
-          <McpToolRow
-            key={tool.name}
-            serverId={serverId}
-            tool={tool}
-            toolSwitch={toolSwitch}
-          />
+      <div className="space-y-4">
+        {groupMcpTools(toolsResponse.tools).map(({ key, tools }) => (
+          <McpToolGroup
+            key={key}
+            group={key}
+            count={tools.length}
+            data-testid="mcp-tools-browser-group"
+          >
+            {tools.map((tool) => (
+              <McpToolBrowserRow
+                key={tool.name}
+                serverId={serverId}
+                tool={tool}
+                toolSwitch={toolSwitch}
+              />
+            ))}
+          </McpToolGroup>
         ))}
-      </ul>
+      </div>
     );
   }
 

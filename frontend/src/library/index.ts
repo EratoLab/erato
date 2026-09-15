@@ -92,9 +92,46 @@ export {
 } from "@/components/ui/Settings/EntityRow";
 export { McpToolApprovalSettings } from "@/components/ui/Settings/McpToolApprovalSettings";
 export {
-  McpToolSummary,
+  McpToolPermissionsRoster,
+  type McpToolPermissionsRosterProps,
+} from "@/components/ui/Settings/McpToolPermissionsRoster";
+export {
+  McpToolDecisionControl,
+  mcpToolDecisionLabel,
+  mcpToolDecisionUnavailableReason,
+  mcpToolDecisionUnavailableText,
+  type McpToolDecisionControlProps,
+} from "@/components/ui/Settings/McpToolDecisionControl";
+export {
+  McpToolGroup,
+  type McpToolGroupProps,
+} from "@/components/ui/Settings/McpToolGroup";
+export {
+  groupMcpTools,
+  mcpToolGroupLabel,
+  MCP_TOOL_GROUP_KEYS,
+  type McpToolGroupKey,
+} from "@/components/ui/Settings/mcpToolGroups";
+export {
+  MCP_TOOL_DECISIONS,
+  decisionOfEffective,
+  groupChoiceChanges,
+  groupCommonDecision,
+  offeredDecisions,
+  planDecisionChanges,
+  policyDefault,
+  storedDecisionFor,
+  type McpToolDecision,
+  type McpToolDecisionAvailability,
+  type McpToolDecisionChange,
+  type McpToolDecisionPlan,
+  type McpToolGroupChoice,
+} from "@/components/ui/Settings/mcpToolDecisions";
+export {
+  McpToolRow,
   mcpToolBadges,
-} from "@/components/ui/Settings/McpToolSummary";
+  type McpToolRowProps,
+} from "@/components/ui/Settings/McpToolRow";
 export {
   mcpServerDescription,
   mcpServerStatus,

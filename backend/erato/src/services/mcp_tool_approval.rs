@@ -1,6 +1,9 @@
 use crate::config::{McpToolApprovalConfig, McpToolApprovalPreset};
 use crate::models::message::ToolApprovalAnnotations;
+use crate::models::user_tool_approval_setting::UserToolDecision;
 use rmcp::model::Tool;
+use serde::Serialize;
+use utoipa::ToSchema;
 
 /// The effective approval reading of one MCP tool under the configured policy.
 ///
@@ -50,10 +53,42 @@ pub fn evaluate_mcp_tool_approval(
     }
 }
 
+/// What actually happens when the tool is called, once the user's stored
+/// decision is laid over the policy verdict.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum McpToolEffectiveState {
+    Allow,
+    Ask,
+    Denied,
+}
+
+/// Combine the policy verdict with the user's decision. A denial always
+/// holds. A grant counts only while `allow_always` is on, and an ask only
+/// while the approval gate is on, because the park-and-continue machinery
+/// is what an ask needs; an inert row falls back to the policy verdict.
+pub fn effective_mcp_tool_state(
+    config: &McpToolApprovalConfig,
+    verdict: &McpToolApprovalVerdict,
+    decision: Option<UserToolDecision>,
+) -> McpToolEffectiveState {
+    match decision {
+        Some(UserToolDecision::Denied) => McpToolEffectiveState::Denied,
+        Some(UserToolDecision::AlwaysAllow) if config.allow_always => McpToolEffectiveState::Allow,
+        Some(UserToolDecision::Ask) if config.enabled => McpToolEffectiveState::Ask,
+        _ if verdict.requires_approval => McpToolEffectiveState::Ask,
+        _ => McpToolEffectiveState::Allow,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{evaluate_mcp_tool_approval, normalize_tool_annotations};
+    use super::{
+        McpToolEffectiveState, effective_mcp_tool_state, evaluate_mcp_tool_approval,
+        normalize_tool_annotations,
+    };
     use crate::config::{McpToolApprovalConfig, McpToolApprovalPreset};
+    use crate::models::user_tool_approval_setting::UserToolDecision;
     use rmcp::model::{Tool, ToolAnnotations};
     use serde_json::Map;
 
@@ -125,5 +160,53 @@ mod tests {
         );
         assert!(evaluate_mcp_tool_approval(&permissive, &unannotated).requires_approval);
         assert!(evaluate_mcp_tool_approval(&restrictive, &unannotated).requires_approval);
+    }
+
+    #[test]
+    fn user_decisions_layer_over_the_policy_verdict() {
+        use McpToolEffectiveState as State;
+        use UserToolDecision as Decision;
+        let auto = Tool::new("read", "read", Map::new()).with_annotations(
+            ToolAnnotations::from_raw(None, Some(true), Some(false), Some(true), Some(false)),
+        );
+        let asks = Tool::new("unknown", "unknown", Map::new());
+        let full = McpToolApprovalConfig {
+            enabled: true,
+            preset: McpToolApprovalPreset::Permissive,
+            allow_always: true,
+        };
+        let no_grants = McpToolApprovalConfig {
+            allow_always: false,
+            ..full.clone()
+        };
+        let disabled = McpToolApprovalConfig {
+            enabled: false,
+            ..no_grants.clone()
+        };
+
+        let cases = [
+            (&full, &auto, None, State::Allow),
+            (&full, &asks, None, State::Ask),
+            (&full, &auto, Some(Decision::Ask), State::Ask),
+            (&full, &asks, Some(Decision::AlwaysAllow), State::Allow),
+            (&full, &auto, Some(Decision::Denied), State::Denied),
+            // Inert rows fall back to the policy.
+            (&no_grants, &asks, Some(Decision::AlwaysAllow), State::Ask),
+            (&disabled, &auto, Some(Decision::Ask), State::Allow),
+            (&disabled, &asks, Some(Decision::Ask), State::Allow),
+            // A denial needs no policy at all.
+            (&disabled, &auto, Some(Decision::Denied), State::Denied),
+        ];
+        for (config, tool, decision, expected) in cases {
+            let verdict = evaluate_mcp_tool_approval(config, tool);
+            assert_eq!(
+                effective_mcp_tool_state(config, &verdict, decision),
+                expected,
+                "{:?} {} {:?}",
+                config,
+                tool.name,
+                decision
+            );
+        }
     }
 }

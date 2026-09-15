@@ -1013,6 +1013,78 @@ impl ServerHandler for ApprovalPolicyServer {
     }
 }
 
+/// Name of the tool whose text is deliberately hostile to a user interface.
+pub const UNTRUSTED_TEXT_TOOL_NAME: &str = "render_untrusted_text";
+/// Name of the plainly described tool on the same server.
+pub const PLAIN_TEXT_TOOL_NAME: &str = "read_plain_text";
+/// Name that carries an invisible bidi mark, so display cleaning would
+/// change it: a client must still address the tool by this exact string.
+pub const HOSTILE_NAME_TOOL_NAME: &str = "read\u{200E}file";
+/// Markup that must reach the client verbatim, as inert text.
+pub const UNTRUSTED_TEXT_MARKUP: &str = "<b>bold</b> [x](y) <script>alert(1)</script>";
+/// Characters the length cap must count, not the bytes.
+pub const UNTRUSTED_TEXT_BODY_CHARS: usize = 6_000;
+
+fn untrusted_text_tool() -> rmcp::model::Tool {
+    let description = format!(
+        "{UNTRUSTED_TEXT_MARKUP} \u{202E}reversed\u{202C}\n\n\n\nbody follows\n{}",
+        "ä".repeat(UNTRUSTED_TEXT_BODY_CHARS)
+    );
+    let mut tool = rmcp::model::Tool::new(
+        UNTRUSTED_TEXT_TOOL_NAME,
+        description,
+        rmcp::model::JsonObject::new(),
+    );
+    tool.title = Some(format!("{UNTRUSTED_TEXT_MARKUP} \u{202E}eltit\u{7}"));
+    tool
+}
+
+/// Tools whose vendor text carries markup, bidi overrides, control
+/// characters and an oversized body, so a client's display hardening can be
+/// exercised end to end.
+#[derive(Clone)]
+struct UntrustedTextServer;
+
+impl ServerHandler for UntrustedTextServer {
+    fn call_tool(
+        &self,
+        _request: CallToolRequestParams,
+        _context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<CallToolResponse, McpError>> + Send + '_ {
+        std::future::ready(Ok(CallToolResult::success(vec![ContentBlock::text(
+            "untrusted text tool called",
+        )])
+        .into()))
+    }
+
+    fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
+        std::future::ready(Ok(ListToolsResult {
+            tools: vec![
+                untrusted_text_tool(),
+                rmcp::model::Tool::new(
+                    PLAIN_TEXT_TOOL_NAME,
+                    "Reads a plainly described fixture",
+                    rmcp::model::JsonObject::new(),
+                ),
+                rmcp::model::Tool::new(
+                    HOSTILE_NAME_TOOL_NAME,
+                    "Reads a fixture under a name display cleaning would alter",
+                    rmcp::model::JsonObject::new(),
+                ),
+            ],
+            ..Default::default()
+        }))
+    }
+
+    fn get_info(&self) -> ServerInfo {
+        server_info("Mock MCP untrusted text server")
+    }
+}
+
 #[derive(Clone)]
 struct EmptyToolServer;
 
@@ -1294,6 +1366,16 @@ fn builtin_mechanisms() -> Vec<MechanismSummary> {
             tools: &["read_approval_fixture", "publish_approval_probe"],
         },
         MechanismSummary {
+            name: "Untrusted text server",
+            description: "Tool text with markup, bidi overrides, control characters and an oversized body",
+            endpoint: "Streamable HTTP /mcp/untrusted-text",
+            tools: &[
+                UNTRUSTED_TEXT_TOOL_NAME,
+                PLAIN_TEXT_TOOL_NAME,
+                HOSTILE_NAME_TOOL_NAME,
+            ],
+        },
+        MechanismSummary {
             name: "500 simulation endpoint",
             description: "Always returns HTTP 500 to simulate an unavailable MCP server",
             endpoint: "HTTP /mcp/list-tools-500",
@@ -1435,6 +1517,7 @@ pub fn app() -> Router {
     });
     let approval_policy_service =
         create_streamable_http_service(|| Ok(ApprovalPolicyServer::new()));
+    let untrusted_text_service = create_streamable_http_service(|| Ok(UntrustedTextServer));
 
     let none_auth_service = create_streamable_http_service(|| Ok(NoneAuthProbeServer::new()));
     let fixed_auth_service = create_streamable_http_service(|| Ok(FixedApiKeyProbeServer::new()));
@@ -1461,6 +1544,7 @@ pub fn app() -> Router {
         .nest_service("/mcp/image-generation", image_generation_service)
         .nest_service("/mcp/deep-research", deep_research_service)
         .nest_service("/mcp/approval-policy", approval_policy_service)
+        .nest_service("/mcp/untrusted-text", untrusted_text_service)
         .route(
             "/mcp/auth-none",
             any(move |request| {

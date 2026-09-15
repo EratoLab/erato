@@ -698,9 +698,11 @@ describe("UserPreferencesDialog", () => {
                         open_world_hint: false,
                         annotated: true,
                       },
-                      approval: "auto",
-                      user_decision: "ask",
+                      policy: "auto",
+                      effective: "allow",
+                      user_decision: "none",
                       is_wait_tool: false,
+                      description_truncated: false,
                     },
                   ],
                 }
