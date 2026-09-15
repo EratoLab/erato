@@ -172,14 +172,9 @@ export interface ChatHistoryRowMenuState {
 
 /**
  * The row's dropdown items, already gated. A caller renders the array as it
- * comes; nothing it leaves out can drop a rule.
- *
- * Every item carries a stable `id`, so a kit can swap icons or reorder by
- * mapping over the result without reproducing a gate. An id it does not
- * recognise keeps the host's own icon.
- *
- * Pure, so a row the caller resolved some other way — the search page lists
- * chats it fetched differently — runs the same gates without a session.
+ * comes; nothing it leaves out can drop a rule. Every item carries a stable
+ * `id`, so a kit can swap icons or reorder by mapping over the result without
+ * reproducing a gate; an id it does not recognise keeps the host's own icon.
  *
  * Host-only, and withheld from the kit surface by name in the generator:
  * assembling the state by hand is how a caller loses the run and pending-

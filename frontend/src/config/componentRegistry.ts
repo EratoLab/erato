@@ -281,13 +281,9 @@ export interface ComponentKitRegistration {
   /**
    * The `ERATO_SHARED_SURFACE_MINOR` the kit was built against, written as a
    * literal: the import map resolves the constant itself to the *running*
-   * host, so reading it at runtime would only ever agree with itself.
-   *
-   * The one fact a kit can state honestly, and the host draws both conclusions
-   * from it — too old for an extension point's contract
-   * (`EXTENSION_POINT_REQUIRED_SURFACE_MINOR`), or newer than the host it
-   * landed on. Absent is not "fine": it is read as the oldest contract, because
-   * an override built before a rule existed cannot be carrying it.
+   * host, so reading it at runtime would only ever agree with itself. Absent
+   * is read as the oldest contract, not as consent — an override built before
+   * a rule existed cannot be carrying it.
    */
   builtAgainstSharedSurfaceMinor?: number;
 }
@@ -356,10 +352,8 @@ const buildComponentRegistry = (
     {};
 
   for (const componentKit of componentKits ?? []) {
-    // The other direction, and advisory only: a kit built against a newer host
-    // than this one is a deployment to fix, but the requirements below cannot
-    // describe a contract this host has never seen, so there is nothing to
-    // decide per point.
+    // Advisory only: the per-point requirements below cannot describe a
+    // contract this host has never seen, so there is nothing to decide.
     if (declaredSurfaceMinor(componentKit) > ERATO_SHARED_SURFACE_MINOR) {
       console.error(
         `component kit "${componentKit.name}" was built against shared surface 1.${componentKit.builtAgainstSharedSurfaceMinor}, but this host ships 1.${ERATO_SHARED_SURFACE_MINOR}: the host is older than the kit.`,
@@ -424,9 +418,7 @@ export const componentRegistry: ComponentRegistry = buildComponentRegistry(
  * entry-point-specific registry assignments).
  *
  * The version guard runs here rather than over `window.ERATO_COMPONENT_KITS`
- * separately, so what it reports and what it installs cannot disagree. It only
- * reaches a kit whose module linked: one that named a value this host does not
- * export never evaluates, so nothing of it is here to check.
+ * separately, so what it reports and what it installs cannot disagree.
  */
 export const applyComponentKitRegistrations = (
   stance: ComponentKitVersionStance = COMPONENT_KIT_VERSION_STANCE,

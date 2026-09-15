@@ -14,18 +14,10 @@ export const ERATO_SHARED_SURFACE_MINOR = 8;
 
 /**
  * Per extension point, the minor at which that point's contract last grew a
- * rule an override has to carry. A kit built before that minor cannot be
- * carrying the rule, whatever it renders — which is the failure this guards:
- * a kit that replaced the whole chat-history list and dropped a shipped
- * feature with no error and no failing test.
- *
- * Per point rather than one global floor because the points evolve
- * independently: a kit stale for the row list is usually current for the five
- * other things it overrides, and a single floor would retire all six.
- *
- * Add an entry only when an override that predates the bump is genuinely
- * wrong, not for every additive surface name — every entry is a kit rebuild
- * the customer has to do.
+ * rule an override has to carry: a kit built before it cannot be carrying the
+ * rule, whatever it renders. Per point, not one global floor, so a kit stale
+ * for one point keeps its other overrides. Each entry costs the customer a kit
+ * rebuild, so add one only when a pre-bump override is genuinely wrong.
  *
  * Lives here, not in `componentRegistry.ts`: forks keep their own copy of that
  * file (`checkout --ours`), so a requirement recorded there would never reach
@@ -42,13 +34,9 @@ export const EXTENSION_POINT_REQUIRED_SURFACE_MINOR: Partial<
 export type ComponentKitVersionStance = "warn" | "enforce";
 
 /**
- * THE SWITCH for the requirements above. `"warn"` logs a stale override and
- * installs it anyway; `"enforce"` drops that one registration so the host
- * renders its own component for that point, leaving the kit's other overrides
- * in place.
- *
- * Ships as `"warn"` because every kit deployed today declares nothing and so
- * counts as the oldest contract: enforcing before customers have rebuilt would
- * revert real UI. Flip this line once they have.
+ * `"warn"` logs a stale override and installs it anyway; `"enforce"` drops that
+ * one registration, so the host renders its own component for that point and
+ * the kit's other overrides stay. Ships as `"warn"` because every kit deployed
+ * today declares nothing, so enforcing now would revert real customer UI.
  */
 export const COMPONENT_KIT_VERSION_STANCE: ComponentKitVersionStance = "warn";
