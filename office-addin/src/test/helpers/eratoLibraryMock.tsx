@@ -118,6 +118,7 @@ export const DEFAULT_STUBS = {
   // The declared kit surface. Covered wholesale so a name pinned by
   // `kit-surface.ts` can never be the one missing entry that breaks linking.
   Alert: StubNothing,
+  ArchivedChatPill: StubNothing,
   ArchiveIcon: StubNothing,
   AttachmentNotice: StubNothing,
   AttachmentTile: StubNothing,
@@ -125,7 +126,23 @@ export const DEFAULT_STUBS = {
   Avatar: StubNothing,
   Button: StubButton,
   Card: StubPassthrough,
+  // Mirrored rather than left neutral: a consumer reads an id off these to
+  // find a row or an action, so a blank record is a crash, not an inert stub.
+  CHAT_HISTORY_ROW_MENU_ID: {
+    pin: "pin",
+    share: "share",
+    rename: "rename",
+    archive: "archive",
+    unarchive: "unarchive",
+  },
+  CHAT_HISTORY_ROW_TEST_ID: {
+    row: "data-chat-id",
+    archived: "chat-history-item-archived",
+    runOrigin: "chat-history-item-run-origin",
+    status: "chat-generation-status",
+  },
   ChatAttentionStatusDot: StubNothing,
+  ChatHistoryListSkeleton: StubNothing,
   ChevronDownIcon: StubNothing,
   ChevronRightIcon: StubNothing,
   CloseIcon: StubNothing,
@@ -182,6 +199,7 @@ export const DEFAULT_STUBS = {
     avatar: { user: "", assistant: "" },
     hover: "",
   },
+  chatHistoryRowMenuOptions: () => ({}),
   resolvePopoverViewportPadding: () => 0,
   useChatHistoryRowPresentation: () => ({}),
   useGetFile: () => ({ data: undefined, isLoading: false, error: null }),
@@ -276,6 +294,7 @@ export const DEFAULT_STUBS = {
   useBudgetStatus: () => undefined,
   useChatCanEdit: () => false,
   useChatHeader: () => ({ header: null, composerLocked: false }),
+  useChatHistoryRow: () => ({ menuItems: [] }),
   useChatHistoryRowMenuItems: () => [],
   useChatHistoryFilterFoldback: () => undefined,
   useConversationDropzone: () => ({

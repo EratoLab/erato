@@ -23,6 +23,7 @@ import { CHAT_HISTORY_ROW_MENU_ID } from "./chatHistoryRowMenuIds";
 
 import type { ChatHistoryRowMenuOptions } from "./ChatHistoryList";
 import type { DropdownMenuItem } from "../Controls/DropdownMenu";
+import type { ChatHistoryConformanceOptions } from "@/conformance/chatHistoryList";
 import type { ChatSession } from "@/types/chat";
 import type { Messages } from "@lingui/core";
 import type { ReactNode } from "react";
@@ -635,21 +636,26 @@ describe("ChatHistoryList", () => {
       asRenderedByAKit: (items: DropdownMenuItem[]) => DropdownMenuItem[] = (
         items,
       ) => items,
+      options?: ChatHistoryConformanceOptions,
     ) => {
       const { i18n } = await import("@lingui/core");
 
-      return chatHistoryListConformanceFailures(ChatHistoryList, {
-        render: (element) => {
-          // Cleared per case, so a row that stops rendering a menu at all
-          // reads as empty rather than as the previous case's.
-          dropdownItemsLog.length = 0;
-          return render(<I18nProvider i18n={i18n}>{element}</I18nProvider>);
+      return chatHistoryListConformanceFailures(
+        ChatHistoryList,
+        {
+          render: (element) => {
+            // Cleared per case, so a row that stops rendering a menu at all
+            // reads as empty rather than as the previous case's.
+            dropdownItemsLog.length = 0;
+            return render(<I18nProvider i18n={i18n}>{element}</I18nProvider>);
+          },
+          openRowMenu: () =>
+            asRenderedByAKit(
+              (dropdownItemsLog.at(-1) ?? []) as DropdownMenuItem[],
+            ),
         },
-        openRowMenu: () =>
-          asRenderedByAKit(
-            (dropdownItemsLog.at(-1) ?? []) as DropdownMenuItem[],
-          ),
-      });
+        options,
+      );
     };
 
     it("passes against the host's own list", async () => {
@@ -683,6 +689,26 @@ describe("ChatHistoryList", () => {
       expect(
         await failuresForOverride((items) => [...items].reverse()),
       ).toEqual([]);
+    });
+
+    it("passes a kit whose policy removed an omitted action", async () => {
+      expect(
+        await failuresForOverride(
+          (items) =>
+            items.filter((item) => item.id !== CHAT_HISTORY_ROW_MENU_ID.share),
+          { omit: [CHAT_HISTORY_ROW_MENU_ID.share] },
+        ),
+      ).toEqual([]);
+    });
+
+    it("fails an omission no case would have required", async () => {
+      const failures = await failuresForOverride(undefined, {
+        omit: ["not-an-item"],
+      });
+
+      expect(failures.join("\n")).toContain(
+        'omitted "not-an-item" is required by no case',
+      );
     });
 
     it("fails a kit that re-enables a gated item", async () => {
@@ -756,7 +782,7 @@ describe("ChatHistoryList", () => {
           menuIds: Object.values(CHAT_HISTORY_ROW_MENU_ID),
           contractIds: [...CHAT_HISTORY_ROW_CONTRACT_IDS],
         },
-        "The chat history row contract changed. Cover it with a conformance case, bump ERATO_SHARED_SURFACE_MINOR, raise EXTENSION_POINT_REQUIRED_SURFACE_MINOR.ChatHistoryList to match, then update this expectation.",
+        "The chat history row contract changed. Cover it with a conformance case, bump ERATO_SHARED_SURFACE_MINOR, raise EXTENSION_POINT_REQUIRED_SURFACE_MINOR.ChatHistoryList only if an override built before this change would now be wrong, then update this expectation.",
       ).toEqual({
         requiredMinor: 8,
         rowKeys: [

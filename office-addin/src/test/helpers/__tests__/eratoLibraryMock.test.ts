@@ -64,6 +64,17 @@ describe("createEratoLibraryMock", () => {
     }
   });
 
+  it("gives the row id records the host's own values", () => {
+    // Values, not just keys: the add-in looks a row or an action up by these
+    // strings, so a stub that drifts finds nothing and says nothing.
+    for (const name of [
+      "CHAT_HISTORY_ROW_MENU_ID",
+      "CHAT_HISTORY_ROW_TEST_ID",
+    ] as const) {
+      expect(DEFAULT_STUBS[name]).toEqual(library[name]);
+    }
+  });
+
   it("tracks the surface major, which kits compare with a strict inequality", () => {
     expect(DEFAULT_STUBS.ERATO_SHARED_SURFACE_VERSION).toBe(
       realShared.ERATO_SHARED_SURFACE_VERSION,
