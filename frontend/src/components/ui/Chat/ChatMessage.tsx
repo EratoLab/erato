@@ -14,9 +14,7 @@ import {
 } from "@/types/chat";
 import { hasToolCalls as messageHasToolCalls } from "@/utils/adapters/toolCallAdapter";
 
-import { McpDisabledServersNotice } from "./McpDisabledServersNotice";
-import { McpDisabledToolsNotice } from "./McpDisabledToolsNotice";
-import { McpNeedsAuthNotice } from "./McpNeedsAuthNotice";
+import { McpNotices } from "./McpNotices";
 import { MessageAttachments } from "./MessageAttachments";
 import { Alert } from "../Feedback/Alert";
 import { Avatar } from "../Feedback/Avatar";
@@ -50,11 +48,15 @@ import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
 export interface ChatMessageHostComponents {
   MessageContent: typeof MessageContent;
   LoadingIndicator: typeof LoadingIndicator;
+  McpNotices: typeof McpNotices;
+  ActionFacetContext: typeof ActionFacetContext;
 }
 
 export const CHAT_MESSAGE_HOST_COMPONENTS: ChatMessageHostComponents = {
   MessageContent,
   LoadingIndicator,
+  McpNotices,
+  ActionFacetContext,
 };
 
 export interface ChatMessageProps {
@@ -149,12 +151,6 @@ export const ChatMessage = memo(function ChatMessage({
   const siblingFiles = useMemo(
     () => Object.values(allFilesById),
     [allFilesById],
-  );
-
-  const mcpServersDisabledByUser = message.mcp_servers_disabled_by_user ?? [];
-  const mcpToolsDisabledByUser = message.mcp_tools_disabled_by_user ?? [];
-  const mcpServersNeedingAuth = (message.mcp_servers_needing_auth ?? []).filter(
-    (serverId) => !mcpServersDisabledByUser.includes(serverId),
   );
 
   // Content validation
@@ -310,34 +306,10 @@ export const ChatMessage = memo(function ChatMessage({
             }
           />
 
-          {/* Only the assistant message of the affected generation carries
-              this metadata, so absence costs nothing here. Deliberately keyed
-              off needing-auth alone: unavailable servers have no user-side
-              remedy, so they must not raise a connect affordance.
-
-              The text renders on every surface — like the error alert above,
-              it is part of the record of the response — but the Connect button
-              needs the settings-dialog chrome that watches the preferences
-              query params, which share-link pages do not mount, hence this
-              flag. Routerless hosts (component-kit / add-in) are handled by
-              the notice itself, which drops the button when its settings
-              hook reports no Router.
-
-              A server the user switched off is still probed before it is
-              withheld, so it can sit in both lists; the switch-off is the
-              reason the user chose, so it is the one reported. */}
-          {mcpServersDisabledByUser.length > 0 && (
-            <McpDisabledServersNotice serverIds={mcpServersDisabledByUser} />
-          )}
-          {mcpToolsDisabledByUser.length > 0 && (
-            <McpDisabledToolsNotice toolNames={mcpToolsDisabledByUser} />
-          )}
-          {mcpServersNeedingAuth.length > 0 && (
-            <McpNeedsAuthNotice
-              serverIds={mcpServersNeedingAuth}
-              showConnect={!controlsContext.isSharedDialog}
-            />
-          )}
+          <McpNotices
+            message={message}
+            showConnect={!controlsContext.isSharedDialog}
+          />
 
           {/* Display attached files if any — user messages render these
               above the body instead, see the hoisted slot. */}

@@ -5,7 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { messages as enMessages } from "@/locales/en/messages.json";
 
-import { ChatMessage } from "./ChatMessage";
+import { CHAT_MESSAGE_HOST_COMPONENTS, ChatMessage } from "./ChatMessage";
+import { McpNotices } from "./McpNotices";
+import { ActionFacetContext } from "../Message/ActionFacetContext";
 
 import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
 import type { Messages } from "@lingui/core";
@@ -838,6 +840,18 @@ describe("ChatMessage", () => {
 
       expect(messageContentMock).toHaveBeenCalledWith(
         expect.objectContaining({ mentionedAssistants: undefined }),
+      );
+    });
+  });
+
+  // A kit renders in its own bundle and can only receive these by reference,
+  // so a placeholder in the bag is indistinguishable from the real thing at
+  // the call site — it has to be caught here.
+  describe("host components handed to a renderer override", () => {
+    it("carries the host's own message chrome, not stand-ins", () => {
+      expect(CHAT_MESSAGE_HOST_COMPONENTS.McpNotices).toBe(McpNotices);
+      expect(CHAT_MESSAGE_HOST_COMPONENTS.ActionFacetContext).toBe(
+        ActionFacetContext,
       );
     });
   });
