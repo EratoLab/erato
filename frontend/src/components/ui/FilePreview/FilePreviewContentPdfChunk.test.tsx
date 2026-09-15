@@ -16,7 +16,7 @@ describe("FilePreviewContent with an unreachable PDF chunk", () => {
     // Nothing renders an error boundary above this in either host, so an
     // uncaught rejection here would unmount the whole React root.
     render(
-      <ThemeProvider>
+      <ThemeProvider enableCustomTheme={false}>
         <FilePreviewContent
           filename="report.pdf"
           url="https://files.example.com/download/report.pdf"

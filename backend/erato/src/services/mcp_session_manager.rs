@@ -562,6 +562,7 @@ impl McpSessionManager {
         let mut all_tools = Vec::new();
         let mut unavailable_server_ids = Vec::new();
         let mut needing_auth_server_ids = Vec::new();
+        let mut missing_credential_server_ids = Vec::new();
         let server_ids: Vec<String> = self
             .configuration
             .read()
@@ -597,6 +598,7 @@ impl McpSessionManager {
                             error = %e,
                             "Skipping MCP server because the required forwarded credential is unavailable"
                         );
+                        missing_credential_server_ids.push(server_id);
                         continue;
                     }
                     if Self::is_oauth_authorization_required_error(&e) {
@@ -621,6 +623,7 @@ impl McpSessionManager {
                             error = %e,
                             "Skipping MCP server during tool discovery because authentication failed"
                         );
+                        missing_credential_server_ids.push(server_id);
                         continue;
                     }
                     warn!(
@@ -651,11 +654,13 @@ impl McpSessionManager {
 
         unavailable_server_ids.sort();
         needing_auth_server_ids.sort();
+        missing_credential_server_ids.sort();
 
         ToolDiscoveryResult {
             tools: all_tools,
             unavailable_server_ids,
             needing_auth_server_ids,
+            missing_credential_server_ids,
         }
     }
 

@@ -16,7 +16,7 @@ vi.mock("./PdfPreview", () => ({
 }));
 
 const renderEml = (ui: React.ReactElement) =>
-  render(<ThemeProvider>{ui}</ThemeProvider>);
+  render(<ThemeProvider enableCustomTheme={false}>{ui}</ThemeProvider>);
 
 const FILE = {
   filename: "message.eml",

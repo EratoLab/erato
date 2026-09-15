@@ -48,6 +48,12 @@ pub struct ToolDiscoveryResult {
     /// Kept apart from `unavailable_server_ids` so surfaces can offer the
     /// connect action instead of reporting an outage.
     pub needing_auth_server_ids: Vec<String>,
+    /// Servers skipped because this request carried no usable credential for
+    /// them: the forwarded token was absent, or the server rejected it. That
+    /// is transient from the caller's point of view — the next request may
+    /// carry a fresh token — so it is neither an outage nor a connect prompt,
+    /// and stays out of the user-facing metadata.
+    pub missing_credential_server_ids: Vec<String>,
 }
 
 impl Default for McpServers {

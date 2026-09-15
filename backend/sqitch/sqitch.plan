@@ -42,3 +42,4 @@
 0039_add_starting_assistant_to_user_preferences 2026-08-31T00:00:00Z bdart <dfiebig@bdart.de> # Add starting assistant to user preferences
 0040_add_assistant_usage_indexes 2026-09-07T00:00:00Z Codex <codex@openai.com> # Index assistant usage aggregation
 0041_notify_policy_fact_changes 2026-09-12T00:00:00Z Codex <codex@openai.com> # Post-commit notifications for authorization fact invalidation
+0042_add_decision_to_user_tool_approval_settings 2026-09-13T00:00:00Z bdart <dfiebig@bdart.de> # Add per-user MCP tool decision to approval settings

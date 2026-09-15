@@ -3588,6 +3588,16 @@ msgstr "Wie soll dich der Assistent nennen? z. B. Max Mustermann"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.allow.helper"
+msgstr "Wird ohne Nachfrage ausgeführt; die Genehmigungsrichtlinie hält dieses Tool nicht an."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.allow.label"
+msgstr "Erlauben"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.approvals.always.helper"
 msgstr "Führt dieses Tool ohne Nachfrage aus."
 
@@ -3604,27 +3614,37 @@ msgstr "Zeigt jedes Mal die Bestätigung im Chat, wenn dieses Tool ausgeführt w
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.approvals.ask.label"
-msgstr "Vor der Ausführung fragen"
+msgstr "Jedes Mal fragen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.description"
-msgstr "Ihre Entscheidungen aus der Bestätigung im Chat werden hier gespeichert und können jederzeit geändert werden. Sie gelten für Ihr Konto auf allen Geräten."
+#~ msgid "preferences.dialog.mcpServers.approvals.description"
+#~ msgstr "Ihre Entscheidungen aus der Bestätigung im Chat werden hier gespeichert und können jederzeit geändert werden. Sie gelten für Ihr Konto auf allen Geräten."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.empty"
-msgstr "Noch keine Entscheidungen. Wenn Sie im Chat „Immer erlauben“ wählen, erscheint das Tool hier."
+#~ msgid "preferences.dialog.mcpServers.approvals.empty"
+#~ msgstr "Noch keine Entscheidungen. Wenn Sie im Chat „Immer erlauben“ wählen, erscheint das Tool hier."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.heading"
-msgstr "Tool-Genehmigungen"
+#~ msgid "preferences.dialog.mcpServers.approvals.heading"
+#~ msgstr "Tool-Genehmigungen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.approvals.loadError"
-msgstr "Tool-Genehmigungen konnten nicht geladen werden. Bitte versuchen Sie es erneut."
+msgstr "Ihre Tool-Entscheidungen konnten nicht geladen werden. Bitte versuchen Sie es erneut."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.never.helper"
+msgstr "Hält dieses Tool vom Assistenten fern und blockiert es auch dann, wenn bereits eine Bestätigung wartet."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.never.label"
+msgstr "Nie erlauben"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
@@ -3777,57 +3797,62 @@ msgid "preferences.dialog.mcpServers.status.success.label"
 msgstr "Verbunden"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpServerToolList.tsx
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.asksBeforeRunning"
 msgstr "Fragt vor der Ausführung"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpServerToolList.tsx
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.canModify"
 msgstr "Kann ändern"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpServerToolList.tsx
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.notDeclared"
 msgstr "Vom Server nicht deklariert"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpServerToolList.tsx
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.reachesOtherSystems"
 msgstr "Erreicht andere Systeme"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpServerToolList.tsx
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.readsOnly"
 msgstr "Liest nur"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpServerToolList.tsx
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.tools.description"
+msgstr "Legen Sie für jedes Tool dieses Servers fest, ob es für Sie ausgeführt werden darf. Entscheidungen gelten für Ihr Konto auf allen Geräten; auch „Immer erlauben“ aus einem Chat wird hier gespeichert."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.empty"
 msgstr "Dieser Server stellt Ihnen keine Tools bereit."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpServerToolList.tsx
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.failure"
 msgstr "Die Tools konnten nicht aufgelistet werden, weil der Server nicht erreichbar ist."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpServerToolList.tsx
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.heading"
 msgstr "Tools"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpServerToolList.tsx
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.loadError"
 msgstr "Die Tools dieses Servers konnten nicht geladen werden. Bitte versuchen Sie es erneut."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpServerToolList.tsx
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.loading"
 msgstr "Tools werden geladen..."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpServerToolList.tsx
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.needsAuthentication"
 msgstr "Verbinden Sie sich, um die Tools zu sehen."
 

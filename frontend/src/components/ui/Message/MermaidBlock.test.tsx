@@ -40,7 +40,7 @@ const renderBlock = (
 ) =>
   render(
     <I18nProvider i18n={i18n}>
-      <ThemeProvider>
+      <ThemeProvider enableCustomTheme={false}>
         <MermaidBlock
           content="flowchart TD\n  A --> B"
           isStreaming={false}

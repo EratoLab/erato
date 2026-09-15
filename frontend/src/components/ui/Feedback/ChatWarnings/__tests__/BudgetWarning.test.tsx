@@ -13,7 +13,7 @@ import type { ReactElement } from "react";
 
 // Helper to wrap component with ThemeProvider
 const renderWithTheme = (ui: ReactElement) => {
-  return render(<ThemeProvider>{ui}</ThemeProvider>);
+  return render(<ThemeProvider enableCustomTheme={false}>{ui}</ThemeProvider>);
 };
 
 // Mock the hooks
