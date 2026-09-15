@@ -536,8 +536,17 @@ fn build_frontend_environment(
         }),
     );
 
+    if let Some(endpoint) = config.desktop_sidecar.endpoint() {
+        env.additional_environment
+            .insert("DESKTOP_SIDECAR_URL".to_owned(), Value::String(endpoint));
+    }
+
     // Inject pairs from frontend.additional_environment
     for (key, value) in &config.additional_frontend_environment() {
+        // An explicit sidecar port is the shared source of truth for downloads and clients.
+        if key == "DESKTOP_SIDECAR_URL" && config.desktop_sidecar.port.is_some() {
+            continue;
+        }
         env.additional_environment
             .insert(key.clone(), value.clone());
     }
@@ -1075,6 +1084,36 @@ pub mod axum {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn desktop_sidecar_endpoint_matches_bootstrap_for_both_frontends() {
+        let mut config = AppConfig::default();
+        config.desktop_sidecar.port = Some(23124);
+        config.frontend.additional_environment.insert(
+            "DESKTOP_SIDECAR_URL".into(),
+            Value::String("http://127.0.0.1:23123/erato/sidecar/rpc".into()),
+        );
+        for tls in [false, true] {
+            config.desktop_sidecar.tls.certificate_pem =
+                tls.then(|| "configured certificate".into());
+            let scheme = if tls { "https" } else { "http" };
+            for kind in [FrontendKind::Web, FrontendKind::OfficeAddin] {
+                let environment = build_frontend_environment(&config, kind);
+                let values: Vec<_> = environment
+                    .additional_environment
+                    .iter()
+                    .filter(|(key, _)| key.as_str() == "DESKTOP_SIDECAR_URL")
+                    .map(|(_, value)| value.clone())
+                    .collect();
+                assert_eq!(
+                    values,
+                    vec![Value::String(format!(
+                        "{scheme}://127.0.0.1:23124/erato/sidecar/rpc"
+                    ))]
+                );
+            }
+        }
+    }
 
     fn served_frontend(mount_path: &str, enabled: bool) -> ServedFrontend {
         ServedFrontend {

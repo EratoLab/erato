@@ -634,6 +634,21 @@ pub struct AppConfig {
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct DesktopSidecarConfig {
+    /// Loopback listener port injected into downloads and the browser endpoint.
+    /// Defaults to 23123 when omitted; must be between 1 and 65535.
+    pub port: Option<u16>,
+
+    /// Appended literally to sidecar-owned directories and autorun identities.
+    /// At most 64 ASCII letters, digits, hyphens or underscores; empty by default.
+    pub directory_suffix: Option<String>,
+
+    /// Base64-encoded PNG tray icon, up to 256x256 pixels (no data URL prefix).
+    /// The complete bootstrap must fit the artifact's embedded capacity.
+    pub icon: Option<String>,
+
+    /// Tray display name, at most 128 bytes without control characters.
+    pub display_name: Option<String>,
+
     /// Show the desktop sidecar connection-status tab in the web frontend's
     /// preferences dialog.
     #[serde(default)]
@@ -665,6 +680,73 @@ pub struct DesktopSidecarConfig {
     /// logged-in frontend session is initialized.
     #[serde(default)]
     pub organization_configuration: DesktopSidecarOrganizationConfiguration,
+}
+
+impl DesktopSidecarConfig {
+    /// Public loopback endpoint matching the personalized artifact.
+    pub fn endpoint(&self) -> Option<String> {
+        if self.port.is_none() && !self.distribution.enabled {
+            return None;
+        }
+        let tls =
+            self.tls.certificate_pem.is_some() || self.tls.intermediate_certificate_pem.is_some();
+        let scheme = if tls { "https" } else { "http" };
+        Some(format!(
+            "{scheme}://127.0.0.1:{}/erato/sidecar/rpc",
+            self.port.unwrap_or(23123)
+        ))
+    }
+
+    pub fn bootstrap_fields(&self) -> eyre::Result<serde_json::Map<String, serde_json::Value>> {
+        let mut fields = serde_json::Map::new();
+        if let Some(port) = self.port {
+            eyre::ensure!(
+                port != 0,
+                "desktop_sidecar.port must be between 1 and 65535"
+            );
+            fields.insert("port".into(), port.into());
+        }
+        if let Some(suffix) = &self.directory_suffix {
+            eyre::ensure!(
+                suffix.len() <= 64
+                    && suffix
+                        .bytes()
+                        .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_'),
+                "Invalid desktop_sidecar.directory_suffix"
+            );
+            fields.insert("directory_suffix".into(), suffix.clone().into());
+        }
+        if let Some(name) = &self.display_name {
+            eyre::ensure!(
+                !name.trim().is_empty() && name.len() <= 128 && !name.chars().any(char::is_control),
+                "Invalid desktop_sidecar.display_name"
+            );
+            fields.insert("display_name".into(), name.clone().into());
+        }
+        if let Some(icon) = &self.icon {
+            eyre::ensure!(
+                icon.len() <= 1024 * 1024,
+                "desktop_sidecar.icon exceeds 1 MiB"
+            );
+            let bytes = STANDARD.decode(icon)?;
+            let decoder = png::Decoder::new(std::io::Cursor::new(bytes));
+            let mut reader = decoder.read_info()?;
+            let info = reader.info();
+            eyre::ensure!(
+                (1..=256).contains(&info.width) && (1..=256).contains(&info.height),
+                "desktop_sidecar.icon dimensions must be between 1 and 256 pixels"
+            );
+            let mut pixels = vec![
+                0;
+                reader
+                    .output_buffer_size()
+                    .ok_or_else(|| eyre!("icon too large"))?
+            ];
+            reader.next_frame(&mut pixels)?;
+            fields.insert("icon".into(), icon.clone().into());
+        }
+        Ok(fields)
+    }
 }
 
 /// Configure either a fixed server identity or an intermediate CA used to issue
@@ -839,6 +921,10 @@ impl AppConfig {
         // You can deserialize (and thus freeze) the entire configuration as
         let mut config: Self = schema.try_deserialize()?;
         config = config.migrate();
+        config
+            .desktop_sidecar
+            .bootstrap_fields()
+            .map_err(|error| ConfigError::Message(error.to_string()))?;
         Ok(config)
     }
 
@@ -849,6 +935,7 @@ impl AppConfig {
         let schema =
             Self::config_schema_builder_for_resolved_paths(&config_files_to_load)?.build()?;
         let config: Self = schema.try_deserialize::<Self>()?.migrate();
+        config.desktop_sidecar.bootstrap_fields()?;
 
         let source_files = if config.runtime_configuration.enabled {
             config_files_to_load
@@ -5250,5 +5337,48 @@ impl FacetPermissionRule {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod desktop_sidecar_installation_tests {
+    use super::*;
+
+    #[test]
+    fn installation_defaults_and_endpoint() {
+        let mut config = DesktopSidecarConfig::default();
+        assert!(config.bootstrap_fields().unwrap().is_empty());
+        assert_eq!(config.endpoint(), None);
+        config.port = Some(23124);
+        config.directory_suffix = Some("-staging".into());
+        config.display_name = Some("Erato Staging".into());
+        let fields = config.bootstrap_fields().unwrap();
+        assert_eq!(fields["port"], 23124);
+        assert_eq!(fields["directory_suffix"], "-staging");
+        assert_eq!(fields["display_name"], "Erato Staging");
+        assert_eq!(
+            config.endpoint().unwrap(),
+            "http://127.0.0.1:23124/erato/sidecar/rpc"
+        );
+        config.tls.intermediate_certificate_pem = Some("configured CA".into());
+        assert_eq!(
+            config.endpoint().unwrap(),
+            "https://127.0.0.1:23124/erato/sidecar/rpc"
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_installation_configuration() {
+        for value in [
+            serde_json::json!({"port": 0}),
+            serde_json::json!({"directory_suffix": "../other"}),
+            serde_json::json!({"directory_suffix": "a".repeat(65)}),
+            serde_json::json!({"display_name": "  "}),
+            serde_json::json!({"display_name": "bad\nname"}),
+            serde_json::json!({"icon": "not base64"}),
+        ] {
+            let config: DesktopSidecarConfig = serde_json::from_value(value).unwrap();
+            assert!(config.bootstrap_fields().is_err());
+        }
     }
 }
