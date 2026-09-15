@@ -304,6 +304,21 @@ export const chatHistoryRowMenuOptions = (
     : undefined,
 });
 
+// One mapping from session to gate state, so the row below and the kit-facing
+// hook stay identical while each resolves the status only once.
+const rowMenuState = (
+  session: ChatSession,
+  status: ChatAttentionStatus | null,
+): ChatHistoryRowMenuState => ({
+  archived: session.archivedAt != null,
+  isPinned: session.isPinned ?? false,
+  canEdit: session.canEdit ?? true,
+  // Keyed on provenance, not on the origin label: `delegatedRunOrigin` is
+  // null for a run that records no origin at all, and that is still a run.
+  isRun: session.provenanceKind === DELEGATION_PROVENANCE_KIND,
+  status,
+});
+
 /** The gated items for a listed `ChatSession`, status resolved from the stores. */
 export const useChatHistoryRowMenuItems = ({
   session,
@@ -311,18 +326,7 @@ export const useChatHistoryRowMenuItems = ({
 }: ChatHistoryRowMenuOptions): DropdownMenuItem[] => {
   const status = useChatRowStatus(session.id, session);
 
-  return buildChatHistoryRowMenuItems(
-    {
-      archived: session.archivedAt != null,
-      isPinned: session.isPinned ?? false,
-      canEdit: session.canEdit ?? true,
-      // Keyed on provenance, not on the origin label: `delegatedRunOrigin` is
-      // null for a run that records no origin at all, and that is still a run.
-      isRun: session.provenanceKind === DELEGATION_PROVENANCE_KIND,
-      status,
-    },
-    handlers,
-  );
+  return buildChatHistoryRowMenuItems(rowMenuState(session, status), handlers);
 };
 
 export interface ChatHistoryListProps {
@@ -387,14 +391,20 @@ const ChatHistoryListItem = memo<{
     showTimestamps = true,
     disableRowLinks = false,
   }) => {
-    const { session } = menuOptions;
+    const { session, ...menuHandlers } = menuOptions;
     const {
       title: rowTitle,
+      status,
       badges,
       subline,
       ariaLabel: rowAriaLabel,
     } = useChatHistoryRowPresentation(session);
-    const menuItems = useChatHistoryRowMenuItems(menuOptions);
+    // The gated items, built from the status the line above already resolved:
+    // `useChatHistoryRowMenuItems` would subscribe to the same two stores again.
+    const menuItems = buildChatHistoryRowMenuItems(
+      rowMenuState(session, status),
+      menuHandlers,
+    );
     // A stable Date instance: an inline `new Date(...)` would defeat
     // MessageTimestamp's shallow memo on every list render.
     const updatedAtDate = useMemo(
