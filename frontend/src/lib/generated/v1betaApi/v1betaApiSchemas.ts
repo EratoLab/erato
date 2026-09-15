@@ -2673,6 +2673,16 @@ export type ToolUse = {
 };
 
 /**
+ * Response from the unarchive chat endpoint
+ */
+export type UnarchiveChatResponse = {
+  /**
+   * The ID of the unarchived chat
+   */
+  chat_id: string;
+};
+
+/**
  * Request to update an existing assistant
  */
 export type UpdateAssistantRequest = {

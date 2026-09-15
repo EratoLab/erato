@@ -1068,10 +1068,10 @@
             "description": "Invalid chat ID format"
           },
           "401": {
-            "description": "User not authorized to archive this chat"
+            "description": "When no valid JWT token is provided"
           },
           "404": {
-            "description": "Chat not found"
+            "description": "When the chat does not exist or is not accessible"
           },
           "500": {
             "description": "Server error"
@@ -1141,6 +1141,54 @@
           },
           "500": {
             "description": "Server error while retrieving messages"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/chats/{chat_id}/unarchive": {
+      "post": {
+        "tags": [],
+        "summary": "Unarchive a chat",
+        "description": "Clears the chat's archived_at timestamp so it reappears in the default\nlisting. Delegated runs archived along with it stay archived, and\nunarchiving a chat that is not archived changes nothing.",
+        "operationId": "unarchive_chat_endpoint",
+        "parameters": [
+          {
+            "name": "chat_id",
+            "in": "path",
+            "description": "The ID of the chat to unarchive",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully unarchived the chat",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnarchiveChatResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid chat ID format"
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "404": {
+            "description": "When the chat does not exist or is not accessible"
+          },
+          "500": {
+            "description": "Server error"
           }
         },
         "security": [
@@ -1756,10 +1804,13 @@
             "description": "Invalid chat ID format"
           },
           "401": {
-            "description": "User not authorized to update this chat"
+            "description": "When no valid JWT token is provided"
           },
           "404": {
-            "description": "Chat not found"
+            "description": "When the chat does not exist or is not accessible"
+          },
+          "409": {
+            "description": "When pinning an archived chat"
           },
           "500": {
             "description": "Server error"
@@ -2449,6 +2500,15 @@
           },
           "401": {
             "description": "When no valid JWT token is provided"
+          },
+          "404": {
+            "description": "When the chat does not exist or is not accessible"
+          },
+          "409": {
+            "description": "When the chat is archived"
+          },
+          "500": {
+            "description": "When an internal server error occurs"
           }
         },
         "security": [
@@ -8837,6 +8897,19 @@
             "type": "number",
             "format": "double",
             "default": null
+          }
+        }
+      },
+      "UnarchiveChatResponse": {
+        "type": "object",
+        "description": "Response from the unarchive chat endpoint",
+        "required": [
+          "chat_id"
+        ],
+        "properties": {
+          "chat_id": {
+            "type": "string",
+            "description": "The ID of the unarchived chat"
           }
         }
       },

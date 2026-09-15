@@ -349,6 +349,23 @@ impl TestRequestAuthExt for axum_test::TestRequest {
     }
 }
 
+pub async fn archive_chat_via_api(server: &TestServer, chat_id: &str) {
+    server
+        .post(&format!("/api/v1beta/chats/{chat_id}/archive"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({}))
+        .await
+        .assert_status_ok();
+}
+
+pub async fn unarchive_chat_via_api(server: &TestServer, chat_id: &str) {
+    server
+        .post(&format!("/api/v1beta/chats/{chat_id}/unarchive"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .assert_status_ok();
+}
+
 // ============================================================================
 // SSE (Server-Sent Events) Helpers
 // ============================================================================

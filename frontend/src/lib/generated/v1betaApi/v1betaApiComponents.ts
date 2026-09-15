@@ -1972,6 +1972,69 @@ export const useChatMessages = <TData = Schemas.ChatMessagesResponse,>(
   });
 };
 
+export type UnarchiveChatEndpointPathParams = {
+  /**
+   * The ID of the chat to unarchive
+   */
+  chatId: string;
+};
+
+export type UnarchiveChatEndpointError = Fetcher.ErrorWrapper<undefined>;
+
+export type UnarchiveChatEndpointVariables = {
+  pathParams: UnarchiveChatEndpointPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+/**
+ * Clears the chat's archived_at timestamp so it reappears in the default
+ * listing. Delegated runs archived along with it stay archived, and
+ * unarchiving a chat that is not archived changes nothing.
+ */
+export const fetchUnarchiveChatEndpoint = (
+  variables: UnarchiveChatEndpointVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.UnarchiveChatResponse,
+    UnarchiveChatEndpointError,
+    undefined,
+    {},
+    {},
+    UnarchiveChatEndpointPathParams
+  >({
+    url: "/api/v1beta/chats/{chatId}/unarchive",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+/**
+ * Clears the chat's archived_at timestamp so it reappears in the default
+ * listing. Delegated runs archived along with it stay archived, and
+ * unarchiving a chat that is not archived changes nothing.
+ */
+export const useUnarchiveChatEndpoint = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.UnarchiveChatResponse,
+      UnarchiveChatEndpointError,
+      UnarchiveChatEndpointVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.UnarchiveChatResponse,
+    UnarchiveChatEndpointError,
+    UnarchiveChatEndpointVariables
+  >({
+    mutationFn: (variables: UnarchiveChatEndpointVariables) =>
+      fetchUnarchiveChatEndpoint(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type DistributionError = Fetcher.ErrorWrapper<undefined>;
 
 export type DistributionVariables = V1betaApiContext["fetcherOptions"];
