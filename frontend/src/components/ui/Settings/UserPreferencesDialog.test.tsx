@@ -702,6 +702,7 @@ describe("UserPreferencesDialog", () => {
                       effective: "allow",
                       user_decision: "none",
                       is_wait_tool: false,
+                      description_truncated: false,
                     },
                   ],
                 }

@@ -92,9 +92,10 @@ export {
 } from "@/components/ui/Settings/EntityRow";
 export { McpToolApprovalSettings } from "@/components/ui/Settings/McpToolApprovalSettings";
 export {
-  McpToolSummary,
+  McpToolRow,
   mcpToolBadges,
-} from "@/components/ui/Settings/McpToolSummary";
+  type McpToolRowProps,
+} from "@/components/ui/Settings/McpToolRow";
 export {
   mcpServerDescription,
   mcpServerStatus,

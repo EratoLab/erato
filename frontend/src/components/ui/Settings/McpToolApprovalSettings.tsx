@@ -9,7 +9,7 @@ import {
   useListUserToolApprovalSettings,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
-import { McpToolSummary } from "./McpToolSummary";
+import { McpToolRow } from "./McpToolRow";
 import { RadioCard } from "../Controls/RadioCard";
 import { Alert } from "../Feedback/Alert";
 
@@ -72,7 +72,7 @@ const storedDecisionOf = (
   // eslint-disable-next-line lingui/no-unlocalized-strings -- API decision value
   decision === "allow" ? "always_allow" : "ask";
 
-function McpToolRow({
+function McpToolDecisionRow({
   tool,
   availability,
   radioGroupName,
@@ -92,99 +92,102 @@ function McpToolRow({
   const offered = offeredDecisions(tool.policy, availability);
 
   return (
-    <div
-      role="radiogroup"
-      aria-label={tool.title}
-      className="space-y-2"
+    <McpToolRow
+      tool={tool}
       data-testid="mcp-tool-approval-row"
-      data-tool-name={tool.name}
-    >
-      <McpToolSummary tool={tool} />
-      {offered.includes("allow") ? (
-        <RadioCard
-          size="sm"
-          name={radioGroupName}
-          value="allow"
-          checked={shown === "allow"}
-          disabled={disabled}
-          onChange={() => onDecide("allow")}
-          label={
-            isDefault === "allow"
-              ? t({
-                  id: "preferences.dialog.mcpServers.approvals.allow.defaultLabel",
-                  message: "Allow (policy default)",
-                })
-              : t({
-                  id: "preferences.dialog.mcpServers.approvals.allow.label",
-                  message: "Allow",
-                })
-          }
-          helper={
-            isDefault === "allow"
-              ? t({
-                  id: "preferences.dialog.mcpServers.approvals.allow.helper",
-                  message:
-                    "Runs without asking; the approval policy does not stop this tool.",
-                })
-              : t({
-                  id: "preferences.dialog.mcpServers.approvals.always.helper",
-                  message: "Runs this tool without asking.",
-                })
-          }
-        />
-      ) : null}
-      {offered.includes("ask") ? (
-        <RadioCard
-          size="sm"
-          name={radioGroupName}
-          value="ask"
-          checked={shown === "ask"}
-          disabled={disabled}
-          onChange={() => onDecide("ask")}
-          label={
-            isDefault === "ask"
-              ? t({
-                  id: "preferences.dialog.mcpServers.approvals.ask.defaultLabel",
-                  message: "Ask each time (policy default)",
-                })
-              : t({
-                  id: "preferences.dialog.mcpServers.approvals.ask.label",
-                  message: "Ask each time",
-                })
-          }
-          helper={
-            isDefault === "ask"
-              ? t({
-                  id: "preferences.dialog.mcpServers.approvals.ask.helper",
-                  message:
-                    "Shows the in-chat confirmation each time this tool wants to run.",
-                })
-              : t({
-                  id: "preferences.dialog.mcpServers.approvals.ask.escalationHelper",
-                  message:
-                    "Asks you before every run, even where the policy would not.",
-                })
-          }
-        />
-      ) : null}
-      <RadioCard
-        size="sm"
-        name={radioGroupName}
-        value="never"
-        checked={shown === "never"}
-        disabled={disabled}
-        onChange={() => onDecide("never")}
-        label={t({
-          id: "preferences.dialog.mcpServers.approvals.never.label",
-          message: "Never allow",
-        })}
-        helper={t({
-          id: "preferences.dialog.mcpServers.approvals.never.helper",
-          message:
-            "Keeps this tool away from the assistant and blocks it even when a confirmation is already waiting.",
-        })}
-      />
-    </div>
+      control={
+        <div
+          role="radiogroup"
+          aria-label={tool.title}
+          className="w-72 max-w-full space-y-2"
+        >
+          {offered.includes("allow") ? (
+            <RadioCard
+              size="sm"
+              name={radioGroupName}
+              value="allow"
+              checked={shown === "allow"}
+              disabled={disabled}
+              onChange={() => onDecide("allow")}
+              label={
+                isDefault === "allow"
+                  ? t({
+                      id: "preferences.dialog.mcpServers.approvals.allow.defaultLabel",
+                      message: "Allow (policy default)",
+                    })
+                  : t({
+                      id: "preferences.dialog.mcpServers.approvals.allow.label",
+                      message: "Allow",
+                    })
+              }
+              helper={
+                isDefault === "allow"
+                  ? t({
+                      id: "preferences.dialog.mcpServers.approvals.allow.helper",
+                      message:
+                        "Runs without asking; the approval policy does not stop this tool.",
+                    })
+                  : t({
+                      id: "preferences.dialog.mcpServers.approvals.always.helper",
+                      message: "Runs this tool without asking.",
+                    })
+              }
+            />
+          ) : null}
+          {offered.includes("ask") ? (
+            <RadioCard
+              size="sm"
+              name={radioGroupName}
+              value="ask"
+              checked={shown === "ask"}
+              disabled={disabled}
+              onChange={() => onDecide("ask")}
+              label={
+                isDefault === "ask"
+                  ? t({
+                      id: "preferences.dialog.mcpServers.approvals.ask.defaultLabel",
+                      message: "Ask each time (policy default)",
+                    })
+                  : t({
+                      id: "preferences.dialog.mcpServers.approvals.ask.label",
+                      message: "Ask each time",
+                    })
+              }
+              helper={
+                isDefault === "ask"
+                  ? t({
+                      id: "preferences.dialog.mcpServers.approvals.ask.helper",
+                      message:
+                        "Shows the in-chat confirmation each time this tool wants to run.",
+                    })
+                  : t({
+                      id: "preferences.dialog.mcpServers.approvals.ask.escalationHelper",
+                      message:
+                        "Asks you before every run, even where the policy would not.",
+                    })
+              }
+            />
+          ) : null}
+          <RadioCard
+            size="sm"
+            name={radioGroupName}
+            value="never"
+            checked={shown === "never"}
+            disabled={disabled}
+            onChange={() => onDecide("never")}
+            label={t({
+              id: "preferences.dialog.mcpServers.approvals.never.label",
+              message: "Never allow",
+            })}
+            helper={t({
+              id: "preferences.dialog.mcpServers.approvals.never.helper",
+              message:
+                "Keeps this tool away from the assistant and blocks it even when a confirmation is already waiting.",
+            })}
+          />
+        </div>
+      }
+    />
   );
 }
 
@@ -336,7 +339,7 @@ export function McpToolApprovalSettings({
     body = (
       <div className="space-y-4">
         {toolsResponse.tools.map((tool) => (
-          <McpToolRow
+          <McpToolDecisionRow
             key={tool.name}
             tool={tool}
             availability={availability}

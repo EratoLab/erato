@@ -56,6 +56,7 @@ const tool = (overrides: Partial<McpServerTool>): McpServerTool => ({
   effective: "allow",
   user_decision: "none",
   is_wait_tool: false,
+  description_truncated: false,
   ...overrides,
 });
 
@@ -212,6 +213,13 @@ describe("McpToolsBrowserModal", () => {
     expect(
       within(tools[1]).getByText("Asks before running"),
     ).toBeInTheDocument();
+    // The description waits behind the row's chevron.
+    expect(within(tools[1]).queryByText("Files a new issue")).toBeNull();
+    fireEvent.click(
+      within(tools[1]).getByRole("button", {
+        name: "Description of Create issue",
+      }),
+    );
     expect(within(tools[1]).getByText("Files a new issue")).toBeInTheDocument();
     expect(
       within(tools[2]).getByText("Not declared by the server"),

@@ -50,6 +50,7 @@ const tool = (overrides: Partial<McpServerTool>): McpServerTool => ({
   user_decision: "none",
   effective: "ask",
   is_wait_tool: false,
+  description_truncated: false,
   ...overrides,
 });
 
@@ -350,6 +351,13 @@ describe("McpToolApprovalSettings", () => {
     const [getIssue, updateIssue] = rows;
     expect(getIssue).toHaveTextContent("Get issue");
     expect(getIssue).toHaveTextContent("get_issue");
+    // The description waits behind the row's chevron.
+    expect(getIssue).not.toHaveTextContent("Fetch one issue by id.");
+    fireEvent.click(
+      within(getIssue).getByRole("button", {
+        name: "Description of Get issue",
+      }),
+    );
     expect(getIssue).toHaveTextContent("Fetch one issue by id.");
     const getIssueBadges = within(getIssue).getByRole("list", {
       name: "Get issue",
