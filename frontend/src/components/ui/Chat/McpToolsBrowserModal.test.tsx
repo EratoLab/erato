@@ -227,6 +227,43 @@ describe("McpToolsBrowserModal", () => {
     ).toBeInTheDocument();
   });
 
+  it("badges a tool as asking by what will happen, not by the policy verdict", async () => {
+    // With no radios here the badge is the only indicator, so it must follow
+    // the user's stored decision where the gate honors it.
+    stubToolsFetch({
+      linear: roster("linear", [
+        tool({
+          name: "list_teams",
+          title: "List teams",
+          policy: "auto",
+          user_decision: "ask",
+          effective: "ask",
+        }),
+        tool({
+          name: "get_issue",
+          title: "Get issue",
+          policy: "ask",
+          user_decision: "always_allow",
+          effective: "allow",
+        }),
+      ]),
+    });
+    renderModal([server("linear")]);
+    expand(serverRow("linear"));
+
+    const tools = await screen.findAllByTestId("mcp-tools-browser-tool");
+    expect(tools.map((item) => item.dataset.toolName)).toEqual([
+      "list_teams",
+      "get_issue",
+    ]);
+    expect(
+      within(tools[0]).getByText("Asks before running"),
+    ).toBeInTheDocument();
+    expect(
+      within(tools[1]).queryByText("Asks before running"),
+    ).not.toBeInTheDocument();
+  });
+
   describe("per-chat tool switches", () => {
     const linearRoster = () =>
       roster("linear", [
