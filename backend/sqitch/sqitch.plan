@@ -46,3 +46,4 @@
 0043_add_mcp_write_tools_enabled_to_chats 2026-09-13T00:00:00Z bdart <dfiebig@bdart.de> # Add per-chat MCP write tools toggle
 0044_add_disabled_mcp_server_ids_to_chats 2026-09-14T00:00:00Z bdart <dfiebig@bdart.de> # Add per-chat disabled MCP server list
 0045_add_disabled_mcp_tools_to_chats 2026-09-14T00:00:00Z bdart <dfiebig@bdart.de> # Add per-chat disabled MCP tool list
+0046_widen_user_tool_approval_decisions 2026-09-14T00:00:00Z bdart <dfiebig@bdart.de> # Allow a per-user ask decision for MCP tools
