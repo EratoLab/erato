@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
 import {
   MCP_TOOL_DECISIONS,
@@ -15,7 +15,7 @@ import type {
   McpToolDecisionAvailability,
 } from "./mcpToolDecisions";
 import type { McpServerToolPolicy } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
-import type { KeyboardEvent, ReactNode } from "react";
+import type { FocusEvent, KeyboardEvent, ReactNode } from "react";
 
 const ICONS: Record<McpToolDecision, ReactNode> = {
   allow: <CheckIcon className="size-4" />,
@@ -96,9 +96,12 @@ export interface McpToolDecisionControlProps {
 /**
  * The three-state segmented control of a tool row: check = Allow, hand =
  * Ask, ban = Never. A radio group with a roving tab stop: arrows walk the
- * options and check the one they land on, Home/End jump to the ends. An
- * option the deployment does not honor stays in the walk but is
- * `aria-disabled` rather than `disabled`, so its explanatory tooltip is
+ * options and Home/End jump to the ends, and the tab stop follows the walk.
+ * Landing on an option does not check it — every check is a stored
+ * decision and a locked roster until the backend answers, so the walk
+ * commits only on Space or Enter, which the buttons turn into a click on
+ * their own. An option the deployment does not honor stays in the walk but
+ * is `aria-disabled` rather than `disabled`, so its explanatory tooltip is
  * reachable by keyboard as well as by pointer; it is never checked. The
  * option the policy applies on its own carries a small marker and says so
  * in its name.
@@ -113,6 +116,9 @@ export function McpToolDecisionControl({
   "data-testid": dataTestId,
 }: McpToolDecisionControlProps) {
   const refs = useRef(new Map<McpToolDecision, HTMLButtonElement>());
+  // The option the walk is on while focus is inside the group; the tab stop
+  // sits there so leaving and coming back lands where the walk was.
+  const [focused, setFocused] = useState<McpToolDecision | null>(null);
   const isDefault = policyDefault(policy);
 
   const select = (decision: McpToolDecision) => {
@@ -152,9 +158,13 @@ export function McpToolDecisionControl({
         return;
     }
     event.preventDefault();
-    const next = MCP_TOOL_DECISIONS[nextIndex];
-    refs.current.get(next)?.focus();
-    select(next);
+    refs.current.get(MCP_TOOL_DECISIONS[nextIndex])?.focus();
+  };
+
+  const handleBlur = (event: FocusEvent<HTMLDivElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget)) {
+      setFocused(null);
+    }
   };
 
   return (
@@ -164,6 +174,7 @@ export function McpToolDecisionControl({
       aria-busy={disabled || undefined}
       data-ui="segmented-radio"
       data-testid={dataTestId}
+      onBlur={handleBlur}
       className="tab-rail-geometry tab-rail-track-geometry inline-flex border-theme-border bg-theme-bg-secondary"
     >
       {MCP_TOOL_DECISIONS.map((decision, index) => {
@@ -192,9 +203,10 @@ export function McpToolDecisionControl({
               aria-checked={isChecked}
               aria-disabled={disabled || unavailable !== null || undefined}
               aria-label={label}
-              tabIndex={isChecked ? 0 : -1}
+              tabIndex={(focused ?? value) === decision ? 0 : -1}
               data-decision={decision}
               data-policy-default={isPolicyDefault || undefined}
+              onFocus={() => setFocused(decision)}
               onClick={() => select(decision)}
               onKeyDown={(event) => handleKeyDown(event, index)}
               className={clsx(

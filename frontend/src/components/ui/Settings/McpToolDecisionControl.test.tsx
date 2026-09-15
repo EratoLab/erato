@@ -70,29 +70,49 @@ describe("McpToolDecisionControl", () => {
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 
-  it("walks the options with the arrow keys, wrapping, and Home/End", () => {
+  it("walks the options with the arrow keys, wrapping, and Home/End without selecting", () => {
     const { onChange } = renderControl();
 
     radio("ask").focus();
     fireEvent.keyDown(radio("ask"), { key: "ArrowRight" });
     expect(radio("never")).toHaveFocus();
-    expect(onChange).toHaveBeenLastCalledWith("never");
+    // The tab stop follows the walk; the checked state does not.
+    expect(radio("never")).toHaveAttribute("tabindex", "0");
+    expect(radio("ask")).toHaveAttribute("tabindex", "-1");
+    expect(radio("ask")).toHaveAttribute("aria-checked", "true");
 
     fireEvent.keyDown(radio("never"), { key: "ArrowRight" });
     expect(radio("allow")).toHaveFocus();
-    expect(onChange).toHaveBeenLastCalledWith("allow");
-
     fireEvent.keyDown(radio("allow"), { key: "ArrowLeft" });
     expect(radio("never")).toHaveFocus();
-
     fireEvent.keyDown(radio("never"), { key: "Home" });
     expect(radio("allow")).toHaveFocus();
     fireEvent.keyDown(radio("allow"), { key: "End" });
     expect(radio("never")).toHaveFocus();
     fireEvent.keyDown(radio("never"), { key: "ArrowUp" });
     expect(radio("ask")).toHaveFocus();
-    // Landing back on the checked option reports nothing.
-    expect(onChange).toHaveBeenCalledTimes(5);
+    fireEvent.keyDown(radio("ask"), { key: "ArrowDown" });
+    expect(radio("never")).toHaveFocus();
+    expect(onChange).not.toHaveBeenCalled();
+
+    // Space and Enter are the buttons' own activation, which jsdom does not
+    // run from a key event; the click is what they produce.
+    fireEvent.click(radio("never"));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith("never");
+  });
+
+  it("puts the tab stop back on the checked radio once focus leaves the group", () => {
+    renderControl();
+    render(<button type="button">Elsewhere</button>);
+    const elsewhere = screen.getByRole("button", { name: "Elsewhere" });
+
+    radio("ask").focus();
+    fireEvent.keyDown(radio("ask"), { key: "ArrowLeft" });
+    expect(radio("allow")).toHaveAttribute("tabindex", "0");
+
+    fireEvent.blur(radio("allow"), { relatedTarget: elsewhere });
+    expect(radio("ask")).toHaveAttribute("tabindex", "0");
+    expect(radio("allow")).toHaveAttribute("tabindex", "-1");
   });
 
   it("marks a state the deployment does not store as disabled, focusable and never selected", async () => {
