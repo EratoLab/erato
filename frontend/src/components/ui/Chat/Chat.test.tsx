@@ -251,6 +251,7 @@ const chatDetail = (overrides: Partial<ChatDetail> = {}): ChatDetail => ({
   title_resolved: "Origin",
   is_pinned: false,
   can_edit: true,
+  mcp_write_tools_enabled: true,
   ...overrides,
 });
 
