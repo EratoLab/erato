@@ -23,6 +23,12 @@
  * ```
  */
 
+import {
+  DEFAULT_COMPONENT_KIT_VERSION_STANCE,
+  ERATO_SHARED_SURFACE_MINOR,
+  EXTENSION_POINT_REQUIRED_SURFACE_MINOR,
+} from "@/shared/surfaceVersion";
+
 import type { AssistantWelcomeScreenProps } from "@/components/ui/Assistant/AssistantWelcomeScreen";
 import type { ChatHistoryListProps } from "@/components/ui/Chat/ChatHistoryList";
 import type { ChatMessageProps } from "@/components/ui/Chat/ChatMessage";
@@ -33,6 +39,7 @@ import type { FileSourceSelectorProps } from "@/components/ui/FileUpload/FileSou
 import type { GroupedFileAttachmentsPreviewProps } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 import type { TeamsConversationViewProps } from "@/components/ui/Teams/TeamsConversationView";
 import type { WelcomeScreenProps } from "@/components/ui/WelcomeScreen";
+import type { ComponentKitVersionStance } from "@/shared/surfaceVersion";
 import type { MessageControlsProps } from "@/types/message-controls";
 import type { ComponentType } from "react";
 
@@ -265,19 +272,41 @@ export type ComponentKitComponentRegistration = {
     extensionPoint: TKey;
     component: ComponentRegistryComponent<TKey>;
     priority: number;
+    /**
+     * Overrides the kit-level claim for this point alone.
+     */
+    builtAgainstSharedSurfaceMinor?: number;
   };
 }[keyof ComponentRegistry];
 
 export interface ComponentKitRegistration {
   name: string;
   components: ComponentKitComponentRegistration[];
+  /**
+   * The `ERATO_SHARED_SURFACE_MINOR` the kit was built against, written as a
+   * literal: the import map resolves the constant itself to the *running*
+   * host, so reading it at runtime would only ever agree with itself.
+   */
+  builtAgainstSharedSurfaceMinor?: number;
 }
 
 declare global {
   interface Window {
     ERATO_COMPONENT_KITS?: ComponentKitRegistration[];
+    /**
+     * What this deployment does about a kit that is behind an extension
+     * point's contract. Set alongside the kit bundles, before the app entry
+     * runs; anything but `"enforce"` leaves the built-in default in place.
+     */
+    ERATO_COMPONENT_KIT_VERSION_STANCE?: ComponentKitVersionStance;
   }
 }
+
+const resolveComponentKitVersionStance = (): ComponentKitVersionStance =>
+  typeof window !== "undefined" &&
+  window.ERATO_COMPONENT_KIT_VERSION_STANCE === "enforce"
+    ? "enforce"
+    : DEFAULT_COMPONENT_KIT_VERSION_STANCE;
 
 export const resolveComponentOverride = <TProps>(
   override: ComponentType<TProps> | null,
@@ -303,15 +332,56 @@ const emptyComponentRegistry = (): ComponentRegistry => ({
   AddinStartView: null,
 });
 
+const UNDECLARED_SURFACE_MINOR = 0;
+
 const buildComponentRegistry = (
   componentKits: ComponentKitRegistration[] | undefined,
 ): ComponentRegistry => {
+  const stance = resolveComponentKitVersionStance();
   const registry = emptyComponentRegistry();
   const selectedPriorities: Partial<Record<keyof ComponentRegistry, number>> =
     {};
 
   for (const componentKit of componentKits ?? []) {
+    // Advisory only: the per-point requirements below cannot describe a
+    // contract this host has never seen, so there is nothing to decide.
+    if (
+      (componentKit.builtAgainstSharedSurfaceMinor ??
+        UNDECLARED_SURFACE_MINOR) > ERATO_SHARED_SURFACE_MINOR
+    ) {
+      console.error(
+        `component kit "${componentKit.name}" was built against shared surface 1.${componentKit.builtAgainstSharedSurfaceMinor}, but this host ships 1.${ERATO_SHARED_SURFACE_MINOR}: the host is older than the kit.`,
+      );
+    }
+
     for (const registration of componentKit.components) {
+      const declared =
+        registration.builtAgainstSharedSurfaceMinor ??
+        componentKit.builtAgainstSharedSurfaceMinor;
+      const required =
+        EXTENSION_POINT_REQUIRED_SURFACE_MINOR[registration.extensionPoint];
+
+      if (
+        required !== undefined &&
+        (declared ?? UNDECLARED_SURFACE_MINOR) < required
+      ) {
+        const declaredText =
+          declared === undefined
+            ? "declares none, which counts as the oldest contract"
+            : `declares 1.${declared}`;
+
+        console.error(
+          `component kit "${componentKit.name}" overrides ${registration.extensionPoint}, whose contract needs shared surface 1.${required}, and ${declaredText}. Rebuild the kit against this host and set builtAgainstSharedSurfaceMinor: ${ERATO_SHARED_SURFACE_MINOR}. ` +
+            (stance === "enforce"
+              ? `Rendering the host's own ${registration.extensionPoint} instead.`
+              : `Installing the override anyway: this deployment's stance is "warn". Set window.ERATO_COMPONENT_KIT_VERSION_STANCE = "enforce" to render the host's own component instead.`),
+        );
+
+        if (stance === "enforce") {
+          continue;
+        }
+      }
+
       const currentPriority = selectedPriorities[registration.extensionPoint];
 
       if (

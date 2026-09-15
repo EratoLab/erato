@@ -5,12 +5,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDebounce } from "use-debounce";
 
+import { buildChatHistoryRowMenuItems } from "@/components/ui/Chat/ChatHistoryList";
 import { ChatShareDialog } from "@/components/ui/Chat/ChatShareDialog";
 import { EditChatTitleDialog } from "@/components/ui/Chat/EditChatTitleDialog";
 import {
   ArchivedChatPill,
   archivedChatLabel,
-  buildArchiveMenuItems,
 } from "@/components/ui/Chat/chatArchiveActions";
 import { notifyUnarchiveFailed } from "@/components/ui/Chat/unarchiveFeedback";
 import { Card } from "@/components/ui/Container/Card";
@@ -20,14 +20,7 @@ import { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
 import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { Input } from "@/components/ui/Input/Input";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
-import {
-  SearchIcon,
-  CloseIcon,
-  EditIcon,
-  PinIcon,
-  PinSlashIcon,
-  ShareIcon,
-} from "@/components/ui/icons";
+import { SearchIcon, CloseIcon } from "@/components/ui/icons";
 import { useChatHistoryFilterStore } from "@/hooks/chat/store/chatHistoryFilterStore";
 import { useChatRowStatus } from "@/hooks/chat/useChatRowStatus";
 import { buildRecentChatsFilterParams } from "@/hooks/chat/useInfiniteRecentChats";
@@ -93,8 +86,6 @@ const SearchResultRow = ({
   // by chat id, so the row reads the same status the sidebar does.
   const status = useChatRowStatus(result.chatId);
   const archivedLabel = result.isArchived ? archivedChatLabel() : null;
-  const isPinLimitReached =
-    !result.isPinned && pinnedChatsCount >= pinnedChatsLimit;
 
   return (
     <Card
@@ -134,63 +125,27 @@ const SearchResultRow = ({
         }}
       >
         <DropdownMenu
-          items={[
-            ...(pinnedChatsEnabled && !result.isArchived
-              ? [
-                  {
-                    label: result.isPinned
-                      ? t({
-                          id: "chat.history.menu.unpin",
-                          message: "Unpin",
-                        })
-                      : isPinLimitReached
-                        ? t({
-                            id: "chat.history.menu.pinLimitReached",
-                            message: "Pin limit reached",
-                          })
-                        : t({
-                            id: "chat.history.menu.pin",
-                            message: "Pin",
-                          }),
-                    icon: result.isPinned ? (
-                      <PinSlashIcon className="size-4" />
-                    ) : (
-                      <PinIcon className="size-4" />
-                    ),
-                    onClick: onPin,
-                    disabled: !result.canEdit || isPinLimitReached,
-                  },
-                ]
-              : []),
-            ...(chatSharingEnabled && !result.isArchived
-              ? [
-                  {
-                    label: t({
-                      id: "chat.share.button",
-                      message: "Share",
-                    }),
-                    icon: <ShareIcon className="size-4" />,
-                    onClick: onShare,
-                    disabled: !result.canEdit,
-                  },
-                ]
-              : []),
+          items={buildChatHistoryRowMenuItems(
             {
-              label: t({
-                id: "chat.history.menu.rename",
-                message: "Rename",
-              }),
-              icon: <EditIcon className="size-4" />,
-              onClick: onRename,
-              disabled: !result.canEdit,
-            },
-            ...buildArchiveMenuItems({
               archived: result.isArchived,
+              isPinned: result.isPinned,
+              canEdit: result.canEdit,
+              // Asserted rather than resolved: the search payload carries no
+              // provenance, so a delegated run listed here is still offered
+              // the archive actions the sidebar withholds from it.
+              isRun: false,
               status,
+            },
+            {
+              pinnedChatsCount,
+              pinnedChatsLimit,
+              onPin: pinnedChatsEnabled ? onPin : undefined,
+              onShare: chatSharingEnabled ? onShare : undefined,
+              onEditTitle: onRename,
               onArchive,
               onUnarchive,
-            }),
-          ]}
+            },
+          )}
         />
       </div>
     </Card>

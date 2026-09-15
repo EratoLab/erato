@@ -270,6 +270,34 @@ const pinnedComponentModules = [
   path.join(componentsDir, "ui", "FileUpload", "FilePreviewLoading.tsx"),
 ];
 
+// Exports of a registry-reachable module the kit surface withholds on purpose;
+// everything else a reachable module exports reaches kits as an import-graph byproduct.
+const withheldExports = [
+  {
+    modulePath: path.join(componentsDir, "ui", "Chat", "ChatHistoryList.tsx"),
+    names: ["buildChatHistoryRowMenuItems", "ChatHistoryRowMenuState"],
+    reason:
+      "the builder takes a hand-assembled row state, which is how a caller drops the run and pending-confirmation gates without noticing; a kit overriding ChatHistoryList holds ChatSessions and uses useChatHistoryRow, which resolves that state from the host's stores",
+  },
+  {
+    modulePath: path.join(componentsDir, "ui", "Chat", "ChatHistoryList.tsx"),
+    names: ["DEFAULT_PINNED_CHATS_LIMIT", "ChatHistoryRowMenuHandlers"],
+    reason:
+      "byproducts of the row module rather than anything a kit was offered: the limit reaches an override as a prop the host has already defaulted, and the handler half of ChatHistoryRowMenuOptions is what the host assembles per row",
+  },
+  {
+    modulePath: path.join(componentsDir, "providers", "ThemeProvider.tsx"),
+    names: ["__resetThemeAssetProbeCache"],
+    reason:
+      "a test-only reset for a module-global cache; nothing a kit renders has a reason to clear it, and publishing it makes host test scaffolding part of a contract we then owe",
+  },
+];
+
+const withheldNamesFor = (modulePath) =>
+  withheldExports.flatMap((entry) =>
+    entry.modulePath === modulePath ? entry.names : [],
+  );
+
 const collectRegistryComponentModules = () => {
   const configPath = path.join(rootDir, "tsconfig.json");
   const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
@@ -319,9 +347,17 @@ const moduleSpecifierFor = (filePath) => {
 
 const generatedSource = () => {
   const exportsByName = new Map();
+  const withheld = new Set();
 
   for (const modulePath of collectRegistryComponentModules()) {
+    const withheldNames = withheldNamesFor(modulePath);
+
     for (const moduleExport of ownExports(modulePath)) {
+      if (withheldNames.includes(moduleExport.name)) {
+        withheld.add(`${modulePath}::${moduleExport.name}`);
+        continue;
+      }
+
       const candidate = { ...moduleExport, modulePath };
       const existing = exportsByName.get(moduleExport.name);
 
@@ -336,6 +372,16 @@ const generatedSource = () => {
       ) {
         throw new Error(
           `Conflicting export ${moduleExport.name}:\n- ${path.relative(rootDir, existing.modulePath)}\n- ${path.relative(rootDir, candidate.modulePath)}`,
+        );
+      }
+    }
+  }
+
+  for (const entry of withheldExports) {
+    for (const name of entry.names) {
+      if (!withheld.has(`${entry.modulePath}::${name}`)) {
+        throw new Error(
+          `Withheld export ${name} was not found in ${path.relative(rootDir, entry.modulePath)}. It withholds nothing now: re-decide whether it belongs on the kit surface and drop or repoint the entry.\n  withheld because: ${entry.reason}`,
         );
       }
     }

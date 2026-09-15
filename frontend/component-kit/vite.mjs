@@ -27,3 +27,23 @@ if (!manifest.imports || typeof manifest.imports !== "object") {
 export const eratoComponentKitExternals = Object.freeze(
   Object.keys(manifest.imports),
 );
+
+const packageName = (specifier) =>
+  specifier.startsWith("@")
+    ? specifier.split("/").slice(0, 2).join("/")
+    : specifier.split("/")[0];
+
+/**
+ * The packages a kit's test build has to resolve to one copy. Derived from the
+ * host import map, which is what guarantees the same thing in the browser: a
+ * second copy of any of these and the kit's hooks read module instances the
+ * host never wrote — "Invalid hook call", or a status store that is not the one
+ * the conformance suite writes.
+ */
+export const eratoComponentKitTestDedupe = Object.freeze([
+  ...new Set(
+    eratoComponentKitExternals
+      .filter((specifier) => !specifier.startsWith("@erato/"))
+      .map(packageName),
+  ),
+]);

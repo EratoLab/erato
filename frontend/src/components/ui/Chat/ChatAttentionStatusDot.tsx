@@ -6,6 +6,8 @@ import {
   chatAttentionStatusToneClass,
 } from "@/utils/chatHistoryGrouping";
 
+import { CHAT_HISTORY_ROW_TEST_ID } from "./chatHistoryRowTestIds";
+
 import type { ChatAttentionStatus } from "@/utils/chatHistoryGrouping";
 
 /**
@@ -21,7 +23,7 @@ export const ChatAttentionStatusDot = memo<{ status: ChatAttentionStatus }>(
       )}
       title={chatAttentionStatusLabel(status)}
       data-ui="chat-history-generation-status"
-      data-testid="chat-generation-status"
+      data-testid={CHAT_HISTORY_ROW_TEST_ID.status}
       data-status={status}
     >
       <span

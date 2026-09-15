@@ -67,6 +67,7 @@ export default defineConfig(({ mode }) => {
           // or writes the format does not pull the component barrel in to get
           // at a constant.
           teams: path.resolve(__dirname, "./src/utils/teams/index.ts"),
+          conformance: path.resolve(__dirname, "./src/conformance/index.ts"),
         },
         formats: ["es"],
         fileName: (_format, entryName) =>

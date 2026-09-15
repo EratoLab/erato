@@ -35,6 +35,7 @@ if (ERATO_SHARED_SURFACE_VERSION !== EXPECTED_SHARED_SURFACE_VERSION) {
 
 const componentKit: ComponentKitRegistration = {
   name: "example",
+  builtAgainstSharedSurfaceMinor: 9,
   components: [
     {
       extensionPoint: "AssistantFileSourceSelector",

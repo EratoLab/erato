@@ -54,8 +54,6 @@ export const Default: Story = {
       console.log("Selected session:", sessionId),
     onSessionArchive: (sessionId: string) =>
       console.log("Delete session:", sessionId),
-    onShowDetails: (sessionId: string) =>
-      console.log("Show details for session:", sessionId),
   },
 };
 

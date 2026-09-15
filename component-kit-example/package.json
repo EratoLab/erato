@@ -14,6 +14,8 @@
     "i18n:compile": "lingui compile",
     "storybook:built": "pnpm build && STORYBOOK_COMPONENT_KIT_MODE=built storybook dev -p 6008",
     "storybook:live": "pnpm i18n:compile && storybook dev -p 6007",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -27,15 +29,20 @@
     "@storybook/react": "10.4.6",
     "@storybook/react-vite": "10.4.6",
     "@tanstack/react-query": "5.100.10",
+    "@testing-library/react": "16.2.0",
     "@types/node": "^20",
     "@types/react": "^19",
+    "@types/react-dom": "19.2.3",
+    "jsdom": "26.0.0",
     "prettier": "3.5.0",
+    "react": "19.2.7",
     "react-dom": "19.2.7",
     "react-router": "6.30.3",
     "react-router-dom": "6.30.3",
     "storybook": "10.4.6",
     "typescript": "^5",
-    "vite": "^6.4.2"
+    "vite": "^6.4.2",
+    "vitest": "4.1.7"
   },
   "peerDependencies": {
     "react": "^19.0.0"

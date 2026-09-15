@@ -87,11 +87,19 @@ const chatHistoryProps = {
       id: "chat-2",
       title: "Launch notes",
       updated_at: new Date().toISOString(),
+      archivedAt: new Date().toISOString(),
     },
   ],
   currentSessionId: "chat-1",
   onSessionSelect: (sessionId: string) =>
     logAction("session selected", sessionId),
+  // The row menu is gated on these: omit one and its action is not rendered
+  // inert, it is not rendered at all.
+  onSessionArchive: (sessionId: string) => logAction("archive", sessionId),
+  onSessionUnarchive: (sessionId: string) => logAction("unarchive", sessionId),
+  onSessionEditTitle: (sessionId: string) => logAction("rename", sessionId),
+  onSessionShare: (sessionId: string) => logAction("share", sessionId),
+  onSessionPin: (sessionId: string) => logAction("pin", sessionId),
   className: "storybook-example-class",
 } as unknown as PropsOf<"ChatHistoryList">;
 

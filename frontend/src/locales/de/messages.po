@@ -1774,14 +1774,12 @@ msgstr "Diesen Chat archivieren?"
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
 msgid "chat.history.menu.pin"
 msgstr "Anheften"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
 msgid "chat.history.menu.pinLimitReached"
 msgstr "Anheftlimit erreicht"
 
@@ -1792,7 +1790,6 @@ msgstr "Archivieren"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
 msgid "chat.history.menu.rename"
 msgstr "Umbenennen"
 
@@ -1804,7 +1801,6 @@ msgstr "Archivierung aufheben"
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
 msgid "chat.history.menu.unpin"
 msgstr "Lösen"
 
@@ -2157,7 +2153,6 @@ msgstr "Dieser Entwurf ist zu lang, damit die KI ihn verarbeiten kann ({actualKb
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
 msgid "chat.share.button"
 msgstr "Teilen"
 

@@ -2,25 +2,34 @@ import { I18nProvider } from "@lingui/react";
 import { render, renderHook, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  CHAT_HISTORY_ROW_CONTRACT_IDS,
+  chatHistoryListConformanceFailures,
+} from "@/conformance/chatHistoryList";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
 import { messages as enMessages } from "@/locales/en/messages.json";
+import { EXTENSION_POINT_REQUIRED_SURFACE_MINOR } from "@/shared/surfaceVersion";
 
 import {
   ChatHistoryList,
   ChatHistoryListSkeleton,
+  useChatHistoryRow,
   useChatHistoryRowMenuItems,
   useChatHistoryRowPresentation,
 } from "./ChatHistoryList";
+import { CHAT_HISTORY_ROW_MENU_ID } from "./chatHistoryRowMenuIds";
 
 import type { ChatHistoryRowMenuOptions } from "./ChatHistoryList";
 import type { DropdownMenuItem } from "../Controls/DropdownMenu";
+import type { ChatHistoryConformanceOptions } from "@/conformance/chatHistoryList";
 import type { ChatSession } from "@/types/chat";
 import type { Messages } from "@lingui/core";
 import type { ReactNode } from "react";
 
 const timestampCreatedAtLog = vi.hoisted(() => [] as Date[]);
+const dropdownItemsLog = vi.hoisted(() => [] as unknown[][]);
 
 vi.mock("@/components/ui", () => ({
   MessageTimestamp: ({ createdAt }: { createdAt: Date }) => {
@@ -45,20 +54,23 @@ vi.mock("../Controls/DropdownMenu", () => ({
       confirmMessage?: string;
     }>;
   }) => (
-    <div data-testid="row-menu">
-      {items.map((item) => (
-        <button
-          key={String(item.label)}
-          disabled={item.disabled}
-          type="button"
-          data-confirms={item.confirmAction ? "" : undefined}
-          data-confirm-message={item.confirmMessage}
-        >
-          {item.icon}
-          {item.label}
-        </button>
-      ))}
-    </div>
+    dropdownItemsLog.push(items),
+    (
+      <div data-testid="row-menu">
+        {items.map((item) => (
+          <button
+            key={String(item.label)}
+            disabled={item.disabled}
+            type="button"
+            data-confirms={item.confirmAction ? "" : undefined}
+            data-confirm-message={item.confirmMessage}
+          >
+            {item.icon}
+            {item.label}
+          </button>
+        ))}
+      </div>
+    )
   ),
 }));
 
@@ -326,13 +338,13 @@ describe("ChatHistoryList", () => {
 
       const { result } = renderHook(
         () =>
-          useChatHistoryRowPresentation(
-            {
-              ...sessions[0],
-              archivedAt: new Date("2024-01-05").toISOString(),
-            },
-            ["From Q3 planning"],
-          ),
+          useChatHistoryRowPresentation({
+            ...sessions[0],
+            archivedAt: new Date("2024-01-05").toISOString(),
+            provenanceKind: "delegation",
+            originChatId: "origin-1",
+            originChatTitle: "Q3 planning",
+          }),
         {
           wrapper: ({ children }) => (
             <I18nProvider i18n={i18n}>{children}</I18nProvider>
@@ -401,6 +413,31 @@ describe("ChatHistoryList", () => {
         ).not.toBeInTheDocument();
       });
 
+      it("keeps the pill ahead of the title so a long title cannot push it out", async () => {
+        const { i18n } = await import("@lingui/core");
+        render(
+          <I18nProvider i18n={i18n}>
+            <ChatHistoryList
+              sessions={[
+                {
+                  ...sessions[0],
+                  archivedAt: new Date("2024-01-05").toISOString(),
+                },
+              ]}
+              currentSessionId={null}
+              onSessionSelect={vi.fn()}
+            />
+          </I18nProvider>,
+        );
+
+        const pill = screen.getByTestId("chat-history-item-archived");
+        const title = screen.getByTitle("First chat");
+        expect(
+          pill.compareDocumentPosition(title) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+      });
+
       it("carries the attention status dot", async () => {
         useGenerationStatusStore.setState({
           statusByChatId: {
@@ -419,6 +456,42 @@ describe("ChatHistoryList", () => {
           "data-status",
           "running",
         );
+      });
+    });
+
+    describe("subline", () => {
+      const renderSubline = async (session: ChatSession) => {
+        const { i18n } = await import("@lingui/core");
+        const { result } = renderHook(
+          () => useChatHistoryRowPresentation(session),
+          {
+            wrapper: ({ children }) => (
+              <I18nProvider i18n={i18n}>{children}</I18nProvider>
+            ),
+          },
+        );
+        render(<div>{result.current.subline}</div>);
+      };
+
+      it("carries the delegated run's origin", async () => {
+        await renderSubline({
+          ...sessions[0],
+          provenanceKind: "delegation",
+          originChatId: "origin-1",
+          originChatTitle: "Q3 planning",
+        });
+
+        expect(
+          screen.getByTestId("chat-history-item-run-origin"),
+        ).toHaveTextContent("From Q3 planning");
+      });
+
+      it("is empty for an ordinary chat", async () => {
+        await renderSubline(sessions[0]);
+
+        expect(
+          screen.queryByTestId("chat-history-item-run-origin"),
+        ).not.toBeInTheDocument();
       });
     });
   });
@@ -458,12 +531,6 @@ describe("ChatHistoryList", () => {
       ...sessions[0],
       archivedAt: new Date("2024-01-05").toISOString(),
     };
-    const run: ChatSession = {
-      ...sessions[0],
-      provenanceKind: "delegation",
-      originChatId: "origin-1",
-      originChatTitle: "Q3 planning",
-    };
 
     it("offers Unarchive in place of Archive, Pin and Share when archived", async () => {
       expect(labels(await renderMenu(archivedSession))).toEqual([
@@ -481,52 +548,11 @@ describe("ChatHistoryList", () => {
       ]);
     });
 
-    it("withholds both archive actions from a delegated run", async () => {
-      expect(labels(await renderMenu(run))).not.toContain("Archive");
-      expect(
-        labels(await renderMenu({ ...run, ...archivedSession })),
-      ).not.toContain("Unarchive");
-    });
-
-    it("confirms archiving only while the chat is still working", async () => {
-      const idle = await renderMenu(sessions[0]);
-      expect(idle.at(-1)?.confirmAction).toBe(false);
-
-      useGenerationStatusStore.setState({
-        statusByChatId: {
-          "chat-1": {
-            kind: "running",
-            startedAt: new Date().toISOString(),
-            localSeenAt: Date.now(),
-          },
-        },
-        currentChatId: null,
-      });
-      const running = await renderMenu(sessions[0]);
-      expect(running.at(-1)?.confirmAction).toBe(true);
-      expect(running.at(-1)?.confirmMessage).toContain("still generating");
-
-      useGenerationStatusStore.setState({
-        statusByChatId: {},
-        currentChatId: null,
-      });
-      useConfirmationRegistryStore.setState({
-        pendingIdsByChatId: { "chat-1": ["approval-1"] },
-      });
-      const actionRequired = await renderMenu(sessions[0]);
-      expect(actionRequired.at(-1)?.confirmAction).toBe(true);
-      expect(actionRequired.at(-1)?.confirmMessage).toContain("tool approval");
-    });
-
-    it("disables pinning at the limit and everything without edit rights", async () => {
-      const atLimit = await renderMenu(sessions[0], {
-        pinnedChatsCount: 5,
-        pinnedChatsLimit: 5,
-      });
-      expect(labels(atLimit)[0]).toBe("Pin limit reached");
-      expect(atLimit[0].disabled).toBe(true);
-
+    it("disables everything without edit rights", async () => {
       const readOnly = await renderMenu({ ...sessions[0], canEdit: false });
+      // The array first: `every` on an empty one passes, so hiding the items
+      // instead of disabling them would slip through the flag check alone.
+      expect(labels(readOnly)).toEqual(["Pin", "Share", "Rename", "Archive"]);
       expect(
         readOnly
           .filter((item) => item.label !== "Archive")
@@ -544,6 +570,171 @@ describe("ChatHistoryList", () => {
           }),
         ),
       ).toEqual(["Archive"]);
+    });
+  });
+
+  describe("row conformance suite", () => {
+    const failuresForOverride = async (
+      asRenderedByAKit: (items: DropdownMenuItem[]) => DropdownMenuItem[] = (
+        items,
+      ) => items,
+      options?: ChatHistoryConformanceOptions,
+    ) => {
+      const { i18n } = await import("@lingui/core");
+
+      return chatHistoryListConformanceFailures(
+        ChatHistoryList,
+        {
+          render: (element) => {
+            dropdownItemsLog.length = 0;
+            return render(<I18nProvider i18n={i18n}>{element}</I18nProvider>);
+          },
+          openRowMenu: () =>
+            asRenderedByAKit(
+              (dropdownItemsLog.at(-1) ?? []) as DropdownMenuItem[],
+            ),
+        },
+        options,
+      );
+    };
+
+    it("passes against the host's own list", async () => {
+      expect(await failuresForOverride()).toEqual([]);
+    });
+
+    it("passes a kit that adds items of its own around the host's", async () => {
+      const own = (id: string): DropdownMenuItem => ({
+        id,
+        label: id,
+        onClick: vi.fn(),
+      });
+
+      expect(
+        await failuresForOverride((items) => [
+          own("kit-export"),
+          ...items.flatMap((item) => [item, own(`kit-after-${item.id}`)]),
+        ]),
+      ).toEqual([]);
+    });
+
+    it("fails a kit that drops a required item", async () => {
+      const failures = await failuresForOverride((items) =>
+        items.filter((item) => item.id !== CHAT_HISTORY_ROW_MENU_ID.archive),
+      );
+
+      expect(failures.join("\n")).toContain('"archive" is missing');
+    });
+
+    it("passes a kit that reorders the host's own items", async () => {
+      expect(
+        await failuresForOverride((items) => [...items].reverse()),
+      ).toEqual([]);
+    });
+
+    it("passes a kit whose policy removed an omitted action", async () => {
+      expect(
+        await failuresForOverride(
+          (items) =>
+            items.filter((item) => item.id !== CHAT_HISTORY_ROW_MENU_ID.share),
+          { omit: [CHAT_HISTORY_ROW_MENU_ID.share] },
+        ),
+      ).toEqual([]);
+    });
+
+    it("fails an omission no case would have required", async () => {
+      const failures = await failuresForOverride(undefined, {
+        omit: ["not-an-item"],
+      });
+
+      expect(failures.join("\n")).toContain(
+        'omitted "not-an-item" is required by no case',
+      );
+    });
+
+    it("fails a kit that re-enables a gated item", async () => {
+      const failures = await failuresForOverride((items) =>
+        items.map((item) => ({ ...item, disabled: false })),
+      );
+
+      expect(failures.join("\n")).toContain(
+        '"pin" stays enabled where the gate disables it',
+      );
+    });
+
+    it("fails a kit that silences the archive confirmation", async () => {
+      const failures = await failuresForOverride((items) =>
+        items.map((item) => ({ ...item, confirmAction: false })),
+      );
+
+      expect(failures.join("\n")).toContain(
+        '"archive" acts without asking first',
+      );
+    });
+
+    it("fails a kit that renders an item the gates dropped", async () => {
+      const failures = await failuresForOverride((items) => [
+        ...items,
+        {
+          id: CHAT_HISTORY_ROW_MENU_ID.unarchive,
+          label: "Unarchive",
+          onClick: vi.fn(),
+        },
+      ]);
+
+      expect(failures.join("\n")).toContain(
+        '"unarchive" is rendered where the gates drop it',
+      );
+    });
+  });
+
+  describe("row contract shape", () => {
+    const rowKeys = async () => {
+      const { i18n } = await import("@lingui/core");
+      const { result } = renderHook(
+        () =>
+          useChatHistoryRow(
+            {
+              sessions,
+              currentSessionId: null,
+              onSessionSelect: vi.fn(),
+            },
+            sessions[0],
+          ),
+        {
+          wrapper: ({ children }: { children: ReactNode }) => (
+            <I18nProvider i18n={i18n}>{children}</I18nProvider>
+          ),
+        },
+      );
+      return Object.keys(result.current).sort();
+    };
+
+    it("pins the row contract to the minor that records it", async () => {
+      expect(
+        {
+          requiredMinor: EXTENSION_POINT_REQUIRED_SURFACE_MINOR.ChatHistoryList,
+          rowKeys: await rowKeys(),
+          menuIds: Object.values(CHAT_HISTORY_ROW_MENU_ID),
+          contractIds: [...CHAT_HISTORY_ROW_CONTRACT_IDS],
+        },
+        "The chat history row contract changed. Cover it with a conformance case, bump ERATO_SHARED_SURFACE_MINOR, raise EXTENSION_POINT_REQUIRED_SURFACE_MINOR.ChatHistoryList only if an override built before this change would now be wrong, then update this expectation.",
+      ).toEqual({
+        requiredMinor: 8,
+        rowKeys: [
+          "archived",
+          "archivedLabel",
+          "ariaLabel",
+          "badges",
+          "menuItems",
+          "runOrigin",
+          "status",
+          "statusLabel",
+          "subline",
+          "title",
+        ],
+        menuIds: ["pin", "share", "rename", "archive", "unarchive"],
+        contractIds: ["archive", "pin", "rename", "share", "unarchive"],
+      });
     });
   });
 

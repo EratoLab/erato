@@ -26,7 +26,11 @@ directly, so kits need no react shims and no provider wrappers.
   components, providers, hooks, and stores that kits may consume. Its types
   come from the same package export.
 - Version handshake: import `ERATO_SHARED_SURFACE_VERSION` from that barrel and
-  warn on mismatch (see `src/index.tsx`).
+  warn on mismatch (see `src/index.tsx`). The registration also states the
+  minor it was built against — `builtAgainstSharedSurfaceMinor`, written as a
+  literal — which is how the host recognises an override that predates a rule
+  an extension point has since grown. Leaving it out reads as the oldest
+  contract, not as "no opinion".
 
 Values may NOT be imported from `@erato/frontend/library` — that path is
 types-only for kits (the flat bundle would be duplicated wholesale into the
@@ -65,6 +69,34 @@ i18n:extract` updates the `.po` files, `pnpm run i18n:compile` generates
 `dist/locales/`. The main frontend loads them from
 `/public/component-kits/example/locales/<locale>/messages.json` based on the
 registered component kit name.
+
+## Contract tests
+
+```sh
+pnpm run test
+```
+
+`ExampleChatHistoryList` replaces the whole chat-history list, which is the
+kind of override that can silently drop a shipped feature. It takes the row's
+badges, subline, accessible name and gated menu items from one host hook,
+`useChatHistoryRow`, and hands the menu array on unchanged — the array it is
+given is already gated, and a kit that rebuilds it loses every rule added after
+the kit shipped.
+
+The cases cover the row contract and the loading state. They cannot see the
+rest of `ChatHistoryListProps`, so an override still has to handle those
+itself: `hasMore`/`onLoadMore`/`isLoadingMore` (this example draws a sentinel
+and calls back on intersection), `layout`, `showTimestamps` and
+`disableRowLinks` — the last of which means a host with no chat routes, the
+add-in pane, needs every activation to go through `onSessionSelect` and no
+`href` on the row.
+
+`ExampleChatHistoryList.test.tsx` runs the host's own cases
+(`@erato/frontend/conformance`) against that override, so the same suite the
+host holds itself to decides whether this kit still carries the contract. The
+suite needs the frontend library built first (`pnpm run build:lib` in
+`../frontend`); the harness it asks for is the two things only the kit knows —
+how to render its component, and how to reach its trailing menu.
 
 ## Frontend Dev Server
 
