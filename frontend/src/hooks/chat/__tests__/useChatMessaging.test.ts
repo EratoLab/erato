@@ -123,6 +123,14 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   fetchChatMessages: vi.fn(),
   fetchRecentChats: vi.fn(),
   generatingChatsQuery: vi.fn(() => ({ queryKey: ["generatingChats"] })),
+  listMcpServerToolsQuery: vi.fn(
+    (variables: { pathParams: { serverId: string } }) => ({
+      queryKey: ["mcpServerTools", variables.pathParams.serverId],
+    }),
+  ),
+  listUserToolApprovalSettingsQuery: vi.fn(() => ({
+    queryKey: ["userToolApprovalSettings"],
+  })),
   recentChatsQuery: vi.fn(() => ({
     queryKey: ["recentChats"],
   })),
@@ -2772,6 +2780,7 @@ describe("useChatMessaging", () => {
             toolCallId: "call_probe",
             toolName: "publish_approval_probe",
             toolInput: { channel: "release" },
+            mcpServerId: "mock_mcp_approval",
           })
           .then(() => {
             resolved = true;
@@ -2811,6 +2820,7 @@ describe("useChatMessaging", () => {
           toolCallId: "call_probe",
           toolName: "publish_approval_probe",
           toolInput: { channel: "release" },
+          mcpServerId: "mock_mcp_approval",
         });
         sseCallbacks.onOpen?.();
         await pending;
@@ -2825,6 +2835,14 @@ describe("useChatMessaging", () => {
         "tool_approval",
         "tool_use",
       ]);
+      // The buffer, not the persisted copy, is what the transcript renders
+      // for this id — so the consent card sees its decision at once.
+      expect(
+        result.current.messages[parkedMessage.id].content.map(
+          (part) => part.content_type,
+        ),
+      ).toEqual(["text", "tool_approval_request", "tool_approval", "tool_use"]);
+      expect(result.current.isPendingResponse).toBe(true);
 
       // The backend numbers the answer at persisted length + 2 — verified
       // against the live wire in the backend integration tests.
@@ -2846,6 +2864,32 @@ describe("useChatMessaging", () => {
         content_type: "text",
         text: "ANSWER",
       });
+
+      // The server's terminal update for the gated call finds the seeded
+      // part by id and settles it in place — no insertion, no drift.
+      await act(async () => {
+        sseCallbacks.onMessage?.({
+          data: JSON.stringify({
+            message_type: "tool_call_update",
+            message_id: parkedMessage.id,
+            content_index: 3,
+            tool_call_id: "call_probe",
+            tool_name: "publish_approval_probe",
+            status: "success",
+            output: { published: true },
+          }),
+          type: "message",
+        });
+      });
+      const settled = useMessagingStore.getState().getStreaming("chat1");
+      expect(settled.content).toHaveLength(5);
+      expect(settled.content[3]).toEqual(
+        expect.objectContaining({
+          content_type: "tool_use",
+          status: "success",
+          output: { published: true },
+        }),
+      );
     });
 
     it("marks a denial's gated call as failed rather than leaving it spinning", async () => {
@@ -2860,6 +2904,7 @@ describe("useChatMessaging", () => {
           decision: "reject",
           toolCallId: "call_probe",
           toolName: "publish_approval_probe",
+          mcpServerId: "mock_mcp_approval",
         });
         sseCallbacks.onOpen?.();
         await pending;
@@ -2892,6 +2937,7 @@ describe("useChatMessaging", () => {
           decision: "approve",
           toolCallId: "call_probe",
           toolName: "publish_approval_probe",
+          mcpServerId: "mock_mcp_approval",
         });
         sseCallbacks.onOpen?.();
         await pending;
@@ -2916,6 +2962,7 @@ describe("useChatMessaging", () => {
             decision: "approve",
             toolCallId: "call_probe",
             toolName: "publish_approval_probe",
+            mcpServerId: "mock_mcp_approval",
           })
           .catch((cause: unknown) => {
             rejection = cause;
@@ -2930,6 +2977,153 @@ describe("useChatMessaging", () => {
       const rolledBack = useMessagingStore.getState().getStreaming("chat1");
       expect(rolledBack.isStreaming).toBe(false);
       expect(rolledBack.currentMessageId).toBeNull();
+      // The park is the truth again: a running entry would outrank every
+      // later re-seed of the (older) park marker and stick until reload.
+      expect(
+        useGenerationStatusStore.getState().statusByChatId["chat1"],
+      ).toEqual(
+        expect.objectContaining({
+          kind: "action_required",
+          startedAt: "2026-02-18T12:00:01.000Z",
+        }),
+      );
+    });
+
+    it("refuses a decision while the previous turn is still settling", async () => {
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      seedParkedChat();
+      // A send holds the submitting flag until its completion refetch lands.
+      await act(async () => {
+        await result.current.sendMessage("hello");
+      });
+
+      await expect(
+        result.current.continueToolApproval({
+          messageId: parkedMessage.id,
+          decision: "approve",
+          toolCallId: "call_probe",
+          toolName: "publish_approval_probe",
+          mcpServerId: "mock_mcp_approval",
+        }),
+      ).rejects.toThrow(/still settling/);
+    });
+
+    it("refuses a decision for a message it has no local copy of", async () => {
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+
+      await expect(
+        result.current.continueToolApproval({
+          messageId: "not-loaded",
+          decision: "approve",
+          toolCallId: "call_probe",
+          toolName: "publish_approval_probe",
+          mcpServerId: "mock_mcp_approval",
+        }),
+      ).rejects.toThrow(/not loaded/);
+      expect(getContinueCall()).toBeUndefined();
+      expect(
+        useMessagingStore.getState().getStreaming("chat1").isStreaming,
+      ).toBe(false);
+    });
+
+    it("rejects and rolls back when the connection is aborted before the server answered", async () => {
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      seedParkedChat();
+
+      let rejection: unknown;
+      await act(async () => {
+        const pending = result.current
+          .continueToolApproval({
+            messageId: parkedMessage.id,
+            decision: "approve",
+            toolCallId: "call_probe",
+            toolName: "publish_approval_probe",
+            mcpServerId: "mock_mcp_approval",
+          })
+          .catch((cause: unknown) => {
+            rejection = cause;
+          });
+        // An abort closes the connection without an error event.
+        sseCallbacks.onClose?.();
+        await pending;
+      });
+
+      expect((rejection as Error).message).toContain("cancelled");
+      expect(
+        useMessagingStore.getState().getStreaming("chat1").isStreaming,
+      ).toBe(false);
+    });
+
+    it("rewinds to the seed before a resume replays the continuation's history", async () => {
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      seedParkedChat();
+
+      await act(async () => {
+        const pending = result.current.continueToolApproval({
+          messageId: parkedMessage.id,
+          decision: "approve",
+          toolCallId: "call_probe",
+          toolName: "publish_approval_probe",
+          mcpServerId: "mock_mcp_approval",
+        });
+        sseCallbacks.onOpen?.();
+        await pending;
+      });
+      await act(async () => {
+        sseCallbacks.onMessage?.({
+          data: JSON.stringify({
+            message_type: "text_delta",
+            message_id: parkedMessage.id,
+            content_index: 4,
+            new_text: "CONTINUED-",
+          }),
+          type: "message",
+        });
+      });
+      expect(
+        useMessagingStore.getState().getStreaming("chat1").content,
+      ).toHaveLength(5);
+
+      // The socket drops mid-answer; the hook hands off to resumestream.
+      await act(async () => {
+        sseCallbacks.onError?.(new Error("socket dropped"));
+      });
+      expect(
+        mockCreateSSEConnection.mock.calls.some((call: unknown[]) =>
+          (call[0] as string).includes("/resumestream"),
+        ),
+      ).toBe(true);
+      expect(
+        useMessagingStore.getState().getStreaming("chat1").content,
+      ).toHaveLength(4);
+
+      // The replay starts from the continuation's first event: the text
+      // lands once, not appended to the copy that was already shown.
+      await act(async () => {
+        sseCallbacks.onMessage?.({
+          data: JSON.stringify({
+            message_type: "text_delta",
+            message_id: parkedMessage.id,
+            content_index: 4,
+            new_text: "CONTINUED-",
+          }),
+          type: "message",
+        });
+      });
+      const replayed = useMessagingStore.getState().getStreaming("chat1");
+      expect(replayed.content).toHaveLength(5);
+      expect(replayed.content[4]).toEqual({
+        content_type: "text",
+        text: "CONTINUED-",
+      });
     });
   });
 });

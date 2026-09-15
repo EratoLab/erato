@@ -4682,6 +4682,43 @@ async fn test_continuestream_numbers_deltas_after_the_decision_and_call_parts(
             parked_len + 2
         );
 
+        // The gated call's outcome is announced at its own index, ahead of
+        // the answer, so a client that seeded the call as running can settle
+        // it in place (and a resume can rebuild it) while the answer streams.
+        let tool_updates: Vec<serde_json::Value> = continued_events
+            .iter()
+            .filter(|event| event.event_type == "tool_call_update")
+            .map(|event| serde_json::from_str(&event.data).unwrap())
+            .collect();
+        assert_eq!(
+            tool_updates.len(),
+            1,
+            "{decision}: expected one terminal update for the gated call, got {tool_updates:?}"
+        );
+        assert_eq!(tool_updates[0]["tool_call_id"], "call_probe");
+        assert_eq!(tool_updates[0]["content_index"], parked_len + 1);
+        assert_eq!(
+            tool_updates[0]["status"],
+            if decision == "reject" {
+                "error"
+            } else {
+                "success"
+            },
+            "{decision}: the announced status must match the persisted call"
+        );
+        let first_update_at = continued_events
+            .iter()
+            .position(|event| event.event_type == "tool_call_update")
+            .unwrap();
+        let first_delta_at = continued_events
+            .iter()
+            .position(|event| event.event_type == "text_delta")
+            .unwrap();
+        assert!(
+            first_update_at < first_delta_at,
+            "{decision}: the call's outcome must precede the answer"
+        );
+
         // The two parts the client seeds, in the order it seeds them.
         let resumed = erato::db::entity::messages::Entity::find_by_id(assistant_message_id)
             .one(&db)

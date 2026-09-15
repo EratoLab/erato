@@ -25,6 +25,8 @@ import { BUDGET_QUERY_KEY } from "@/hooks/budget/useBudgetStatus";
 import {
   chatMessagesQuery as buildChatMessagesQuery,
   fetchChatMessages,
+  listMcpServerToolsQuery,
+  listUserToolApprovalSettingsQuery,
   recentChatsQuery,
   useChatMessages,
   useUpdateChat,
@@ -90,6 +92,8 @@ export interface ContinueToolApprovalInput {
   toolCallId: string;
   toolName: string;
   toolInput?: unknown;
+  /** Names the roster to drop after an `approve_always` grant is written. */
+  mcpServerId: string;
 }
 
 const getSSEConnectionError = (
@@ -2174,7 +2178,8 @@ export function useChatMessaging(
    * tool call it gates. That keeps the first delta's index aligned, shows the
    * gated call running while it runs, and makes the decision visible at once:
    * a consent card reads its own resolution off the `tool_approval` /
-   * `tool_rejection` part.
+   * `tool_rejection` part, so it hides here and comes back by itself should
+   * the server later refuse the decision and the refetch find the row parked.
    *
    * Resolves once the server ACCEPTED the decision (the stream opened), not
    * when the continuation ends — the caller releases its consent UI on that,
@@ -2187,37 +2192,54 @@ export function useChatMessaging(
       toolCallId,
       toolName,
       toolInput,
+      mcpServerId,
     }: ContinueToolApprovalInput): Promise<void> => {
+      // A park settles through the same completion refetch as any turn, and
+      // that refetch resets the streaming buffer when it lands. A decision
+      // taken inside that window would seed a buffer the refetch then wipes,
+      // leaving the continuation to stream invisibly with the composer open.
+      if (isSubmittingForKey(streamKey)) {
+        return Promise.reject(
+          new Error(
+            "The previous turn is still settling. Try again in a moment.",
+          ),
+        );
+      }
+      const parkedMessage = useMessagingStore
+        .getState()
+        .getRenderableMessages(streamKey)[messageId];
+      // Without the parked parts the buffer cannot be numbered like the
+      // server's stream: the earlier content would vanish and the answer
+      // fragment. Refusing keeps the consent card up with the reason.
+      if (!parkedMessage) {
+        return Promise.reject(
+          new Error("The parked message is not loaded in this chat."),
+        );
+      }
+
       const existingCleanup = getSSECleanupForKey(streamKey);
       if (existingCleanup) {
         existingCleanup();
         setSSECleanupForKey(streamKey, null);
       }
 
-      const parkedMessage = useMessagingStore
-        .getState()
-        .getRenderableMessages(streamKey)[messageId];
-      if (!parkedMessage) {
-        logger.warn(
-          `[DEBUG_STREAMING] continueToolApproval: no local copy of parked message ${messageId}; delta indices drift until the completion refetch.`,
-        );
-      }
       const now = new Date().toISOString();
       const isApproved = decision !== "reject";
-      const decisionPart = (
-        isApproved
-          ? {
-              content_type: "tool_approval",
-              tool_call_id: toolCallId,
-              always_allow: decision === "approve_always",
-              approved_at: now,
-            }
-          : {
-              content_type: "tool_rejection",
-              tool_call_id: toolCallId,
-              rejected_at: now,
-            }
-      ) as ContentPart;
+      const decisionPart: ContentPart = isApproved
+        ? {
+            content_type: "tool_approval",
+            tool_call_id: toolCallId,
+            always_allow: decision === "approve_always",
+            approved_at: now,
+          }
+        : {
+            content_type: "tool_rejection",
+            tool_call_id: toolCallId,
+            rejected_at: now,
+          };
+      // The generated schema collapses `serde_json::Value` to `void`, which
+      // makes a typed literal impossible for `input`; the shape is the
+      // `tool_use` part the server persists.
       const toolUsePart = {
         content_type: "tool_use",
         tool_call_id: toolCallId,
@@ -2230,18 +2252,24 @@ export function useChatMessaging(
         // ever resolve to an error.
         status: isApproved ? "in_progress" : "error",
       } as ContentPart;
+      const seededContent: ContentPart[] = [
+        ...parkedMessage.content,
+        decisionPart,
+        toolUsePart,
+      ];
+      const requestedAt = parkedMessage.content.find(
+        (part): part is ContentPart & { requested_at: string } =>
+          part.content_type === "tool_approval_request" &&
+          part.tool_call_id === toolCallId,
+      )?.requested_at;
 
       useMessagingStore.getState().setStreaming(
         {
           isStreaming: true,
           isFinalizing: false,
           currentMessageId: messageId,
-          content: [
-            ...(parkedMessage?.content ?? []),
-            decisionPart,
-            toolUsePart,
-          ],
-          createdAt: parkedMessage?.createdAt ?? now,
+          content: seededContent,
+          createdAt: parkedMessage.createdAt,
         },
         streamKey,
       );
@@ -2252,6 +2280,50 @@ export function useChatMessaging(
         // in-flight poll carrying the park marker cannot win against it.
         useGenerationStatusStore.getState().seedRunningLocal(streamKey, now);
       }
+
+      // An account-wide grant is written by the continuation's worker, after
+      // it has rebuilt the tool set — so the rosters are dropped again once
+      // the stream is over, not only when the decision was accepted.
+      const dropGrantedRosters = () => {
+        if (decision !== "approve_always") {
+          return;
+        }
+        void queryClient.invalidateQueries({
+          queryKey: listMcpServerToolsQuery({
+            pathParams: { serverId: mcpServerId },
+          }).queryKey,
+        });
+        void queryClient.invalidateQueries({
+          queryKey: listUserToolApprovalSettingsQuery({}).queryKey,
+        });
+      };
+      dropGrantedRosters();
+
+      // The decision never took: put the transcript back the way it was and
+      // let the park be the truth again. A seed never outranks an entry
+      // stamped later than the park, so the running entry is dropped rather
+      // than left for the card's effect and the poll to lose against.
+      const rollBackUnaccepted = (activeStreamKey: string) => {
+        setSSECleanupForKey(activeStreamKey, null);
+        setSSEAbortCallback(null, activeStreamKey);
+        resetStreaming(activeStreamKey);
+        setSubmittingForKey(activeStreamKey, false);
+        if (activeStreamKey !== NEW_CHAT_STREAM_KEY) {
+          const status = useGenerationStatusStore.getState();
+          status.clearStatus(activeStreamKey);
+          if (requestedAt) {
+            status.seedActionRequired(activeStreamKey, requestedAt);
+          }
+        }
+      };
+      // A resume replays the continuation's history from its first event, and
+      // a continuation never announces a fresh message — nothing else would
+      // clear the deltas already appended, so they would be appended twice.
+      const rewindToSeed = (activeStreamKey: string) => {
+        useMessagingStore
+          .getState()
+          .setStreaming({ content: seededContent }, activeStreamKey);
+      };
 
       return new Promise<void>((resolve, reject) => {
         const connectionStreamKeyRef = { current: streamKey };
@@ -2275,15 +2347,11 @@ export function useChatMessaging(
               );
               const activeStreamKey = connectionStreamKeyRef.current;
               if (!settled) {
-                // The decision was refused before any of it took effect (a
-                // stale park, an archived chat). Put the transcript back and
-                // hand the reason to the caller, which still has its consent
-                // UI on screen to show it.
+                // Refused before any of it took effect (a stale park, an
+                // archived chat): the caller still has its consent UI on
+                // screen to show the reason.
                 settled = true;
-                setSSECleanupForKey(activeStreamKey, null);
-                setSSEAbortCallback(null, activeStreamKey);
-                resetStreaming(activeStreamKey);
-                setSubmittingForKey(activeStreamKey, false);
+                rollBackUnaccepted(activeStreamKey);
                 reject(connectionError);
                 return;
               }
@@ -2291,12 +2359,14 @@ export function useChatMessaging(
                 "[DEBUG_STREAMING] SSE error in continueToolApproval:",
                 connectionError,
               );
+              dropGrantedRosters();
               if (
                 useMessagingStore.getState().getStreaming(activeStreamKey)
                   .isStreaming
               ) {
                 setSSECleanupForKey(activeStreamKey, null);
                 setSSEAbortCallback(null, activeStreamKey);
+                rewindToSeed(activeStreamKey);
                 const resumed = attemptResumeStream({
                   reason: "continuestream-onError",
                   streamKeyHint: activeStreamKey,
@@ -2314,6 +2384,17 @@ export function useChatMessaging(
             },
             onClose: () => {
               const activeStreamKey = connectionStreamKeyRef.current;
+              if (!settled) {
+                // Aborted before the server answered (a new chat, the host
+                // navigating away): an abort closes without erroring.
+                settled = true;
+                rollBackUnaccepted(activeStreamKey);
+                reject(
+                  new Error("The decision was cancelled before it was sent."),
+                );
+                return;
+              }
+              dropGrantedRosters();
               const currentlyStreaming =
                 isStreamCurrentlyActive(activeStreamKey);
               setSubmittingForKey(activeStreamKey, false);
@@ -2325,6 +2406,7 @@ export function useChatMessaging(
               }
               setSSECleanupForKey(activeStreamKey, null);
               setSSEAbortCallback(null, activeStreamKey);
+              rewindToSeed(activeStreamKey);
               const resumed = attemptResumeStream({
                 reason: "continuestream-onClose-unexpected",
                 streamKeyHint: activeStreamKey,
@@ -2345,7 +2427,6 @@ export function useChatMessaging(
             },
             method: "POST",
             headers: {
-              "Content-Type": "application/json",
               [X_ERATO_PLATFORM_HEADER]: platform,
               ...getAuthHeaders(),
             },
@@ -2362,8 +2443,10 @@ export function useChatMessaging(
       getSSECleanupForKey,
       handleRefetchAndClear,
       isStreamCurrentlyActive,
+      isSubmittingForKey,
       platform,
       processStreamEvent,
+      queryClient,
       resetStreaming,
       setError,
       setSSEAbortCallback,

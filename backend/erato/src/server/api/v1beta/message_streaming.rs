@@ -10867,6 +10867,53 @@ async fn run_continue_message_task(
         }
     };
     let tool_response = serde_json::to_string(&tool_use.output)?;
+
+    // Announce the gated call's outcome before contacting the model: a client
+    // that seeded the call as running (or a resume replaying this history)
+    // sees its status and output while the answer streams. Mirrors the
+    // terminal update the main loop emits after every tool it runs.
+    {
+        let succeeded = matches!(tool_use.status, MessageToolCallStatus::Success);
+        let update = MessageSubmitStreamingResponseToolCallUpdate {
+            message_id: message.id,
+            content_index: parsed.content.len(),
+            tool_call_id: tool_use.tool_call_id.clone(),
+            tool_name: tool_use.tool_name.clone(),
+            input: tool_use.input.clone(),
+            status: if succeeded {
+                ToolCallStatus::Success
+            } else {
+                ToolCallStatus::Error
+            },
+            progress_message: None,
+            progress: None,
+            total: None,
+            output: tool_use.output.clone(),
+        };
+        send_background_event(
+            task,
+            StreamingEvent::ToolCallUpdate {
+                message_id: message.id,
+                content_index: parsed.content.len(),
+                tool_call_id: tool_use.tool_call_id.clone(),
+                tool_name: tool_use.tool_name.clone(),
+                input: tool_use.input.clone(),
+                status: if succeeded {
+                    BgToolCallStatus::Success
+                } else {
+                    BgToolCallStatus::Error
+                },
+                progress_message: None,
+                progress: None,
+                total: None,
+                output: tool_use.output.clone(),
+            },
+            "broadcast continued MCP tool call",
+        )
+        .await;
+        let event: MessageSubmitStreamingResponseMessage = update.into();
+        send_generation_event(&event, tx.clone()).await?;
+    }
     parsed.content.push(ContentPart::ToolUse(tool_use.clone()));
 
     // Persist the decision and tool outcome before contacting the model. This

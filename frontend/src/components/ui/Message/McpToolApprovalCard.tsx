@@ -33,10 +33,12 @@ export type McpToolApprovalRequestPart = Omit<
 };
 
 /**
- * Message-scoped UI for a durable MCP approval request. The continuation is
- * an SSE response; consuming it to completion before refetching the current
- * chat lets the regular message query render the rehydrated transcript
- * without duplicating the chat streaming state machine here.
+ * Message-scoped UI for a durable MCP approval request. The decision is
+ * handed to the chat's streaming machinery (`continueToolApproval`), which
+ * seeds the transcript with the decision at once — this card then reads its
+ * resolution off that part and hides — and streams the continuation like any
+ * other turn. A host that has not wired the action falls back to consuming
+ * the continuation here, which keeps the card up until the answer is done.
  *
  * Layout follows the add-in's client-action grammar — the thing being
  * approved above, the consent card attached below: the pending tool call is
@@ -125,7 +127,12 @@ export const McpToolApprovalCard = ({
         toolCallId: request.tool_call_id,
         toolName: request.tool_name,
         toolInput: request.input,
+        mcpServerId: request.mcp_server_id,
       });
+      // Deliberately no local resolution: the seeded decision part is what
+      // hides this card, and it is rolled back if the server refuses the
+      // decision — a latch here would keep the card hidden over a row that
+      // is still parked, with no way left to decide it.
       return;
     }
     const token = getIdToken();
@@ -156,10 +163,14 @@ export const McpToolApprovalCard = ({
     setError(null);
     try {
       await submitDecision(decision);
+      if (chatContext?.continueToolApproval) {
+        return;
+      }
       setLocalResolution(decision === "reject" ? "denied" : "approved");
       if (decision === "approve_always") {
         // The grant is account-wide, and the settings roster and the tool
         // browser would otherwise keep serving it from their cached listing.
+        // (The streamed path drops them itself, once the grant is written.)
         await Promise.all([
           queryClient.invalidateQueries({
             queryKey: listMcpServerToolsQuery({
@@ -236,7 +247,10 @@ export const McpToolApprovalCard = ({
         onDeny={() => void decide("reject")}
         status={isArchived ? "dismissed" : "pending"}
         resolvedLabel={isArchived ? archivedNoticeText() : undefined}
-        isBusy={isBusy}
+        // Held while the chat is still settling the park's own completion
+        // (its refetch resets the buffer a decision would seed), and while the
+        // decision is in flight.
+        isBusy={isBusy || (chatContext?.isPendingResponse ?? false)}
         scrollIntoViewOnMount
         data-testid="mcp-tool-approval-card"
       />
