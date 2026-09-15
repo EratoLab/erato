@@ -125,6 +125,7 @@ moka = { version = "0.12.13", features = ["future"] }
 # unification from sqlx/sea-orm.
 chrono = { version = "0.4", features = ["serde"] }
 url = "2.5.8"
+unicode-normalization = "0.1.25"
 
 # Dependencies: Optional feature: tokio-console / profiling
 # Tokio console for async debugging
@@ -148,6 +149,7 @@ axum-test = { version = "17.0.0", features = ["ws"] }
 tempfile = "3.14.0"
 mocktail = { git = "https://github.com/EratoLab/mocktail.git", rev = "4a99543bcfe0511db6eea524a037a670b96a6faf" }
 insta = "1.47.2"
+mock-mcp-server = { path = "../mock-mcp-server" }
 #env_logger = "0.11.2"
 #pretty_assertions = "1.4.0"
 

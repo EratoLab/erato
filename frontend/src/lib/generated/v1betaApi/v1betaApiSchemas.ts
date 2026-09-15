@@ -1693,13 +1693,32 @@ export type McpServerStatusValue =
   | "FAILURE"
   | "NEEDS_AUTHENTICATION";
 
+/**
+ * One tool as the server declares it. `title` and `description` are vendor
+ * text passed through `sanitize_display_text`; a client shows them as plain
+ * text and never interprets them. `name` is the tool's identity, not display
+ * text: a client sends it back unchanged when it stores a decision or
+ * switches the tool off for a chat, and every gate compares it byte for byte
+ * with the name the server declares.
+ */
 export type McpServerTool = {
   annotations: McpServerToolAnnotations;
   description?: string | null | undefined;
+  /**
+   * Whether the description was cut at the display cap.
+   */
+  description_truncated: boolean;
   effective: McpToolEffectiveState;
   is_wait_tool: boolean;
+  /**
+   * The name the server declares, verbatim; the key a client echoes back.
+   */
   name: string;
   policy: McpServerToolPolicy;
+  /**
+   * Display text: the server's title, else its annotation title, else the
+   * name, each cleaned; the first that survives cleaning.
+   */
   title: string;
   user_decision: McpServerToolUserDecision;
 };

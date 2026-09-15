@@ -491,3 +491,261 @@ async fn test_list_mcp_server_tools_separates_policy_decision_and_effect(pool: P
         row("ask", "denied", "denied")
     );
 }
+
+/// Vendor text reaches the client as inert, bounded plain text: markup stays
+/// literal, bidi and control characters are gone, and an oversized
+/// description is cut at the cap and flagged.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_list_mcp_server_tools_sanitizes_vendor_text(pool: Pool<Postgres>) {
+    // The in-process mock keeps the fixture next to the assertion instead of
+    // depending on the shared mock server's build.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind mock MCP listener");
+    let mock_mcp_base_url = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(axum::serve(listener, mock_mcp_server::app()).into_future());
+
+    let (mut app_config, _llm_server) = setup_mock_llm_server(None).await;
+    app_config.mcp_servers.insert(
+        "untrusted".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url,
+            "/mcp/untrusted-text",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let server = create_test_server(app_state);
+
+    let response = server
+        .get("/api/v1beta/me/mcp_servers/untrusted/tools")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status_ok();
+    let body: Value = response.json();
+    assert_eq!(body["status"], "SUCCESS");
+    let tools = body["tools"].as_array().expect("tools array");
+    assert_eq!(tools.len(), 3);
+    let untrusted = tools
+        .iter()
+        .find(|tool| tool["name"] == mock_mcp_server::UNTRUSTED_TEXT_TOOL_NAME)
+        .expect("untrusted tool listed");
+    let plain = tools
+        .iter()
+        .find(|tool| tool["name"] == mock_mcp_server::PLAIN_TEXT_TOOL_NAME)
+        .expect("plain tool listed");
+
+    let title = untrusted["title"].as_str().unwrap();
+    assert_eq!(
+        title,
+        format!("{} eltit", mock_mcp_server::UNTRUSTED_TEXT_MARKUP)
+    );
+
+    let description = untrusted["description"].as_str().unwrap();
+    assert!(
+        description.starts_with(&format!(
+            "{} reversed\n\nbody follows\n",
+            mock_mcp_server::UNTRUSTED_TEXT_MARKUP
+        )),
+        "{description:?}"
+    );
+    assert!(!description.contains(['\u{202E}', '\u{202C}', '\u{7}']));
+    assert_eq!(description.chars().count(), 4_000);
+    assert!(description.ends_with('ä'));
+    assert_eq!(untrusted["description_truncated"], true);
+
+    assert_eq!(plain["description"], "Reads a plainly described fixture");
+    assert_eq!(plain["description_truncated"], false);
+
+    // The name is the key a client posts back, so it leaves verbatim even
+    // where cleaning would change it; only the title is the cleaned form.
+    let hostile = tools
+        .iter()
+        .find(|tool| tool["name"] == mock_mcp_server::HOSTILE_NAME_TOOL_NAME)
+        .expect("tool with a hostile name listed under its declared name");
+    assert_eq!(hostile["title"], "readfile");
+    assert_eq!(hostile["user_decision"], "none");
+
+    let decision = server
+        .post("/api/v1beta/me/mcp-tool-approval-settings")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "mcp_server_id": "untrusted",
+            "tool_name": mock_mcp_server::HOSTILE_NAME_TOOL_NAME,
+            "decision": "denied",
+        }))
+        .await;
+    decision.assert_status_ok();
+
+    let response = server
+        .get("/api/v1beta/me/mcp_servers/untrusted/tools")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status_ok();
+    let body: Value = response.json();
+    let hostile = body["tools"]
+        .as_array()
+        .expect("tools array")
+        .iter()
+        .find(|tool| tool["name"] == mock_mcp_server::HOSTILE_NAME_TOOL_NAME)
+        .expect("tool with a hostile name still listed")
+        .clone();
+    assert_eq!(hostile["user_decision"], "denied");
+    assert_eq!(hostile["effective"], "denied");
+}
+
+/// A group decision is the batch endpoint applied to every tool of one
+/// annotation class taken from the roster itself. The roster then reports
+/// the new effective state per tool while the policy verdict stays put, and
+/// clearing the group returns only that group to the policy default.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_group_decisions_round_trip_through_the_roster(pool: Pool<Postgres>) {
+    let mock_mcp_base_url = mock_mcp_base_url();
+    let (mut app_config, _llm_server) = setup_mock_llm_server(None).await;
+    app_config.mcp_servers.insert(
+        "approval".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url,
+            "/mcp/approval-policy",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_servers_global.approval = McpToolApprovalConfig {
+        enabled: true,
+        preset: McpToolApprovalPreset::Restrictive,
+        allow_always: true,
+    };
+
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let server = create_test_server(app_state);
+    let server = &server;
+
+    let roster = || async {
+        let body: Value = server
+            .get("/api/v1beta/me/mcp_servers/approval/tools")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .await
+            .json();
+        body["tools"].as_array().unwrap().clone()
+    };
+    let group = |tools: &[Value], read_only: bool| -> Vec<String> {
+        tools
+            .iter()
+            .filter(|tool| tool["annotations"]["read_only_hint"] == read_only)
+            .map(|tool| tool["name"].as_str().unwrap().to_string())
+            .collect()
+    };
+    let projection = |tools: &[Value], name: &str| -> (String, String, String) {
+        let tool = tools
+            .iter()
+            .find(|tool| tool["name"] == name)
+            .unwrap_or_else(|| panic!("{name} listed"));
+        (
+            tool["policy"].as_str().unwrap().to_string(),
+            tool["user_decision"].as_str().unwrap().to_string(),
+            tool["effective"].as_str().unwrap().to_string(),
+        )
+    };
+    let row = |policy: &str, decision: &str, effective: &str| {
+        (
+            policy.to_string(),
+            decision.to_string(),
+            effective.to_string(),
+        )
+    };
+    let apply_group = |names: Vec<String>, decision: Value| async move {
+        let decisions: Vec<Value> = names
+            .iter()
+            .map(|name| json!({ "tool_name": name, "decision": decision }))
+            .collect();
+        server
+            .put("/api/v1beta/me/mcp-tool-approval-settings/batch")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&json!({ "mcp_server_id": "approval", "decisions": decisions }))
+            .await
+    };
+
+    let tools = roster().await;
+    let read_only = group(&tools, true);
+    let writing = group(&tools, false);
+    assert_eq!(read_only, vec!["read_approval_fixture"]);
+    assert_eq!(writing, vec!["publish_approval_probe"]);
+    assert_eq!(
+        projection(&tools, "read_approval_fixture"),
+        row("auto", "none", "allow")
+    );
+    assert_eq!(
+        projection(&tools, "publish_approval_probe"),
+        row("ask", "none", "ask")
+    );
+
+    // Never for the write group, Ask for the read-only group: each group's
+    // rows change, the policy verdicts do not.
+    let applied = apply_group(writing.clone(), json!("denied")).await;
+    applied.assert_status_ok();
+    let applied = apply_group(read_only.clone(), json!("ask")).await;
+    applied.assert_status_ok();
+    let applied: Value = applied.json();
+    let stored: Vec<(&str, &str)> = applied["settings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|setting| {
+            (
+                setting["tool_name"].as_str().unwrap(),
+                setting["decision"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        stored,
+        vec![
+            ("publish_approval_probe", "denied"),
+            ("read_approval_fixture", "ask"),
+        ]
+    );
+    let tools = roster().await;
+    assert_eq!(
+        projection(&tools, "read_approval_fixture"),
+        row("auto", "ask", "ask")
+    );
+    assert_eq!(
+        projection(&tools, "publish_approval_probe"),
+        row("ask", "denied", "denied")
+    );
+
+    // Always allow for the write group overrides the policy's ask.
+    let applied = apply_group(writing.clone(), json!("always_allow")).await;
+    applied.assert_status_ok();
+    let tools = roster().await;
+    assert_eq!(
+        projection(&tools, "publish_approval_probe"),
+        row("ask", "always_allow", "allow")
+    );
+
+    // The policy default for the read-only group clears its rows and leaves
+    // the other group's decisions alone.
+    let cleared = apply_group(read_only.clone(), Value::Null).await;
+    cleared.assert_status_ok();
+    let cleared: Value = cleared.json();
+    assert_eq!(cleared["settings"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        cleared["settings"][0]["tool_name"],
+        "publish_approval_probe"
+    );
+    let tools = roster().await;
+    assert_eq!(
+        projection(&tools, "read_approval_fixture"),
+        row("auto", "none", "allow")
+    );
+    assert_eq!(
+        projection(&tools, "publish_approval_probe"),
+        row("ask", "always_allow", "allow")
+    );
+}

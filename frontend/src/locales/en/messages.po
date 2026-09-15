@@ -3677,24 +3677,29 @@ msgid "preferences.dialog.fields.nickname.placeholder"
 msgstr "What should the assistant call you? e.g. Max Mustermann"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+#: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.allow.defaultLabel"
 msgstr "Allow (policy default)"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.allow.helper"
-msgstr "Runs without asking; the approval policy does not stop this tool."
+#~ msgid "preferences.dialog.mcpServers.approvals.allow.helper"
+#~ msgstr "Runs without asking; the approval policy does not stop this tool."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+#: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.allow.label"
 msgstr "Allow"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolDecisionControl.tsx
+msgid "preferences.dialog.mcpServers.approvals.allow.unavailable"
+msgstr "Always allow is switched off by the approval policy."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.always.helper"
-msgstr "Runs this tool without asking."
+#~ msgid "preferences.dialog.mcpServers.approvals.always.helper"
+#~ msgstr "Runs this tool without asking."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
@@ -3702,24 +3707,29 @@ msgstr "Runs this tool without asking."
 #~ msgstr "Always allow"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+#: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.ask.defaultLabel"
 msgstr "Ask each time (policy default)"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.ask.escalationHelper"
-msgstr "Asks you before every run, even where the policy would not."
+#~ msgid "preferences.dialog.mcpServers.approvals.ask.escalationHelper"
+#~ msgstr "Asks you before every run, even where the policy would not."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.ask.helper"
-msgstr "Shows the in-chat confirmation each time this tool wants to run."
+#~ msgid "preferences.dialog.mcpServers.approvals.ask.helper"
+#~ msgstr "Shows the in-chat confirmation each time this tool wants to run."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+#: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.ask.label"
 msgstr "Ask each time"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolDecisionControl.tsx
+msgid "preferences.dialog.mcpServers.approvals.ask.unavailable"
+msgstr "Asking before a run is switched off by the approval policy."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
@@ -3732,22 +3742,67 @@ msgstr "Ask each time"
 #~ msgstr "No decisions yet. When you choose \"Always allow\" in a chat, the tool appears here."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.allow.description"
+msgstr "Runs every tool in this group without asking."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.ask.description"
+msgstr "Asks you before each run of these tools."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.default.description"
+msgstr "Forgets your decisions for these tools."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.default.label"
+msgstr "Policy default"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.mixed"
+msgstr "Mixed"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.never.description"
+msgstr "Keeps these tools away from the assistant."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.skipped.allow"
+msgstr "{count, plural, one {# tool skipped: Always allow is switched off by the approval policy.} other {# tools skipped: Always allow is switched off by the approval policy.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.skipped.ask"
+msgstr "{count, plural, one {# tool skipped: asking before a run is switched off by the approval policy.} other {# tools skipped: asking before a run is switched off by the approval policy.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.triggerLabel"
+msgstr "{groupLabel}: {stateLabel}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 #~ msgid "preferences.dialog.mcpServers.approvals.heading"
 #~ msgstr "Tool approvals"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.loadError"
-msgstr "Could not load your tool decisions. Please try again."
+#~ msgid "preferences.dialog.mcpServers.approvals.loadError"
+#~ msgstr "Could not load your tool decisions. Please try again."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.never.helper"
-msgstr "Keeps this tool away from the assistant and blocks it even when a confirmation is already waiting."
+#~ msgid "preferences.dialog.mcpServers.approvals.never.helper"
+#~ msgstr "Keeps this tool away from the assistant and blocks it even when a confirmation is already waiting."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+#: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.never.label"
 msgstr "Never allow"
 
@@ -3904,34 +3959,34 @@ msgid "preferences.dialog.mcpServers.status.success.label"
 msgstr "Connected"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolSummary.tsx
+#: src/components/ui/Settings/McpToolRow.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.asksBeforeRunning"
 msgstr "Asks before running"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolSummary.tsx
+#: src/components/ui/Settings/McpToolRow.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.canModify"
 msgstr "Can modify"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolSummary.tsx
+#: src/components/ui/Settings/McpToolRow.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.notDeclared"
 msgstr "Not declared by the server"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolSummary.tsx
+#: src/components/ui/Settings/McpToolRow.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.reachesOtherSystems"
 msgstr "Reaches other systems"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolSummary.tsx
+#: src/components/ui/Settings/McpToolRow.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.readsOnly"
 msgstr "Reads only"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.tools.description"
-msgstr "Decide for each tool of this server whether it may run for you. Decisions apply to your account on every device; choosing \"Always allow\" in a chat is stored here too."
+#~ msgid "preferences.dialog.mcpServers.tools.description"
+#~ msgstr "Decide for each tool of this server whether it may run for you. Decisions apply to your account on every device; choosing \"Always allow\" in a chat is stored here too."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
@@ -3946,9 +4001,19 @@ msgid "preferences.dialog.mcpServers.tools.failure"
 msgstr "The tools could not be listed because the server is unreachable."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/mcpToolGroups.ts
+msgid "preferences.dialog.mcpServers.tools.group.readOnly"
+msgstr "Read-only tools"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/mcpToolGroups.ts
+msgid "preferences.dialog.mcpServers.tools.group.write"
+msgstr "Write/delete tools"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.tools.heading"
-msgstr "Tools"
+#~ msgid "preferences.dialog.mcpServers.tools.heading"
+#~ msgstr "Tools"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
@@ -3967,6 +4032,16 @@ msgstr "Loading tools..."
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.needsAuthentication"
 msgstr "Connect to see tools."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.tools.permissions.description"
+msgstr "Choose when the assistant may use these tools."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.tools.permissions.heading"
+msgstr "Tool permissions"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -4097,6 +4172,16 @@ msgstr "MCP & Apps"
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.title"
 msgstr "Preferences"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolRow.tsx
+msgid "preferences.dialog.tools.descriptionShortened"
+msgstr "Description shortened by Erato"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolRow.tsx
+msgid "preferences.dialog.tools.descriptionToggle"
+msgstr "Description of {toolTitle}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Controls/UserProfileDropdown.tsx

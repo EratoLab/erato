@@ -3677,24 +3677,29 @@ msgid "preferences.dialog.fields.nickname.placeholder"
 msgstr "Jak asystent powinien się do Ciebie zwracać? np. Max Mustermann"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+#: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.allow.defaultLabel"
 msgstr "Zezwól (domyślnie wg zasad)"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.allow.helper"
-msgstr "Uruchamia się bez pytania; zasady zatwierdzania nie zatrzymują tego narzędzia."
+#~ msgid "preferences.dialog.mcpServers.approvals.allow.helper"
+#~ msgstr "Uruchamia się bez pytania; zasady zatwierdzania nie zatrzymują tego narzędzia."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+#: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.allow.label"
 msgstr "Zezwól"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolDecisionControl.tsx
+msgid "preferences.dialog.mcpServers.approvals.allow.unavailable"
+msgstr "Opcja „Zawsze zezwalaj” jest wyłączona przez politykę zatwierdzania."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.always.helper"
-msgstr "Uruchamia to narzędzie bez pytania."
+#~ msgid "preferences.dialog.mcpServers.approvals.always.helper"
+#~ msgstr "Uruchamia to narzędzie bez pytania."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
@@ -3702,24 +3707,29 @@ msgstr "Uruchamia to narzędzie bez pytania."
 #~ msgstr "Zawsze zezwalaj"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+#: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.ask.defaultLabel"
 msgstr "Pytaj za każdym razem (domyślnie wg zasad)"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.ask.escalationHelper"
-msgstr "Pyta Cię przed każdym uruchomieniem, nawet tam, gdzie zasady by nie pytały."
+#~ msgid "preferences.dialog.mcpServers.approvals.ask.escalationHelper"
+#~ msgstr "Pyta Cię przed każdym uruchomieniem, nawet tam, gdzie zasady by nie pytały."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.ask.helper"
-msgstr "Pokazuje potwierdzenie w czacie za każdym razem, gdy to narzędzie chce zostać uruchomione."
+#~ msgid "preferences.dialog.mcpServers.approvals.ask.helper"
+#~ msgstr "Pokazuje potwierdzenie w czacie za każdym razem, gdy to narzędzie chce zostać uruchomione."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+#: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.ask.label"
 msgstr "Pytaj za każdym razem"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolDecisionControl.tsx
+msgid "preferences.dialog.mcpServers.approvals.ask.unavailable"
+msgstr "Pytanie przed każdym uruchomieniem jest wyłączone przez politykę zatwierdzania."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
@@ -3732,22 +3742,67 @@ msgstr "Pytaj za każdym razem"
 #~ msgstr "Brak decyzji. Gdy wybierzesz „Zawsze zezwalaj” w czacie, narzędzie pojawi się tutaj."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.allow.description"
+msgstr "Uruchamia każde narzędzie z tej grupy bez pytania."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.ask.description"
+msgstr "Pyta przed każdym uruchomieniem tych narzędzi."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.default.description"
+msgstr "Zapomina Twoje decyzje dotyczące tych narzędzi."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.default.label"
+msgstr "Domyślne ustawienie polityki"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.mixed"
+msgstr "Mieszane"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.never.description"
+msgstr "Trzyma te narzędzia z dala od asystenta."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.skipped.allow"
+msgstr "{count, plural, one {Pominięto # narzędzie: opcja „Zawsze zezwalaj” jest wyłączona przez politykę zatwierdzania.} few {Pominięto # narzędzia: opcja „Zawsze zezwalaj” jest wyłączona przez politykę zatwierdzania.} other {Pominięto # narzędzi: opcja „Zawsze zezwalaj” jest wyłączona przez politykę zatwierdzania.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.skipped.ask"
+msgstr "{count, plural, one {Pominięto # narzędzie: pytanie przed każdym uruchomieniem jest wyłączone przez politykę zatwierdzania.} few {Pominięto # narzędzia: pytanie przed każdym uruchomieniem jest wyłączone przez politykę zatwierdzania.} other {Pominięto # narzędzi: pytanie przed każdym uruchomieniem jest wyłączone przez politykę zatwierdzania.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.triggerLabel"
+msgstr "{groupLabel}: {stateLabel}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 #~ msgid "preferences.dialog.mcpServers.approvals.heading"
 #~ msgstr "Zatwierdzenia narzędzi"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.loadError"
-msgstr "Nie udało się załadować Twoich decyzji dotyczących narzędzi. Spróbuj ponownie."
+#~ msgid "preferences.dialog.mcpServers.approvals.loadError"
+#~ msgstr "Nie udało się załadować Twoich decyzji dotyczących narzędzi. Spróbuj ponownie."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.never.helper"
-msgstr "Trzyma to narzędzie z dala od asystenta i blokuje je nawet wtedy, gdy potwierdzenie już czeka."
+#~ msgid "preferences.dialog.mcpServers.approvals.never.helper"
+#~ msgstr "Trzyma to narzędzie z dala od asystenta i blokuje je nawet wtedy, gdy potwierdzenie już czeka."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+#: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.never.label"
 msgstr "Nigdy nie zezwalaj"
 
@@ -3904,34 +3959,34 @@ msgid "preferences.dialog.mcpServers.status.success.label"
 msgstr "Połączono"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolSummary.tsx
+#: src/components/ui/Settings/McpToolRow.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.asksBeforeRunning"
 msgstr "Pyta przed uruchomieniem"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolSummary.tsx
+#: src/components/ui/Settings/McpToolRow.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.canModify"
 msgstr "Może modyfikować"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolSummary.tsx
+#: src/components/ui/Settings/McpToolRow.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.notDeclared"
 msgstr "Niezadeklarowane przez serwer"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolSummary.tsx
+#: src/components/ui/Settings/McpToolRow.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.reachesOtherSystems"
 msgstr "Sięga do innych systemów"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolSummary.tsx
+#: src/components/ui/Settings/McpToolRow.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.readsOnly"
 msgstr "Tylko odczyt"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.tools.description"
-msgstr "Zdecyduj dla każdego narzędzia tego serwera, czy może być uruchamiane w Twoim imieniu. Decyzje obowiązują dla Twojego konta na wszystkich urządzeniach; wybór „Zawsze zezwalaj” w czacie również jest tu zapisywany."
+#~ msgid "preferences.dialog.mcpServers.tools.description"
+#~ msgstr "Zdecyduj dla każdego narzędzia tego serwera, czy może być uruchamiane w Twoim imieniu. Decyzje obowiązują dla Twojego konta na wszystkich urządzeniach; wybór „Zawsze zezwalaj” w czacie również jest tu zapisywany."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
@@ -3946,9 +4001,19 @@ msgid "preferences.dialog.mcpServers.tools.failure"
 msgstr "Nie udało się wyświetlić narzędzi, ponieważ serwer jest nieosiągalny."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/mcpToolGroups.ts
+msgid "preferences.dialog.mcpServers.tools.group.readOnly"
+msgstr "Narzędzia tylko do odczytu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/mcpToolGroups.ts
+msgid "preferences.dialog.mcpServers.tools.group.write"
+msgstr "Narzędzia zapisu/usuwania"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.tools.heading"
-msgstr "Narzędzia"
+#~ msgid "preferences.dialog.mcpServers.tools.heading"
+#~ msgstr "Narzędzia"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
@@ -3967,6 +4032,16 @@ msgstr "Ładowanie narzędzi..."
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.needsAuthentication"
 msgstr "Połącz się, aby zobaczyć narzędzia."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.tools.permissions.description"
+msgstr "Wybierz, kiedy asystent może używać tych narzędzi."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.tools.permissions.heading"
+msgstr "Uprawnienia narzędzi"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -4097,6 +4172,16 @@ msgstr "MCP & Apps"
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.title"
 msgstr "Preferencje"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolRow.tsx
+msgid "preferences.dialog.tools.descriptionShortened"
+msgstr "Opis skrócony przez Erato"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolRow.tsx
+msgid "preferences.dialog.tools.descriptionToggle"
+msgstr "Opis narzędzia {toolTitle}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Controls/UserProfileDropdown.tsx

@@ -36,6 +36,7 @@ use crate::services::background_tasks::{
     ToolCallStatus as BgToolCallStatus,
 };
 use crate::services::client_tools::{ClientToolDelivery, ClientToolOutcome};
+use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
 use crate::services::genai::{build_chat_options_for_completion, build_chat_options_for_summary};
 use crate::services::genai_langfuse::{
     TracedGenerationBuilder, create_otel_error_generation_from_chat, create_otel_tool_call_span,
@@ -140,6 +141,10 @@ enum McpToolCallGate {
 /// Decide whether a tool call runs, parks on a durable approval request or
 /// is refused outright. A denial is refused here rather than parked: the
 /// user already answered, so a card would only ask them again.
+///
+/// The parked request's `tool_name` is both what the card shows and the key
+/// the continuation runs the tool by, so it must survive display cleaning
+/// unchanged; a name that would not is refused instead of parked.
 fn gate_mcp_tool_call(
     config: &McpToolApprovalConfig,
     server_id: &str,
@@ -154,20 +159,29 @@ fn gate_mcp_tool_call(
             "The user has disabled the tool '{}' in their settings; the call was not executed.",
             tool_call.fn_name
         )),
-        McpToolEffectiveState::Ask => McpToolCallGate::Ask(ContentPartToolApprovalRequest {
-            tool_call_id: tool_call.call_id.clone(),
-            tool_name: tool_call.fn_name.clone(),
-            mcp_server_id: server_id.to_string(),
-            input: tool_call.fn_arguments.clone(),
-            annotations: verdict.annotations,
-            preset: match config.preset {
-                McpToolApprovalPreset::Permissive => "permissive",
-                McpToolApprovalPreset::Restrictive => "restrictive",
+        McpToolEffectiveState::Ask => {
+            let display_name = sanitize_display_text(&tool_call.fn_name, MAX_DISPLAY_NAME_CHARS);
+            if display_name.truncated || display_name.text != tool_call.fn_name {
+                return McpToolCallGate::Refuse(format!(
+                    "The tool '{}' has a name that cannot be shown for approval; the call was not executed.",
+                    display_name.text
+                ));
             }
-            .to_string(),
-            allow_always: config.allow_always,
-            requested_at: now_timestamp(),
-        }),
+            McpToolCallGate::Ask(ContentPartToolApprovalRequest {
+                tool_call_id: tool_call.call_id.clone(),
+                tool_name: display_name.text,
+                mcp_server_id: server_id.to_string(),
+                input: tool_call.fn_arguments.clone(),
+                annotations: verdict.annotations,
+                preset: match config.preset {
+                    McpToolApprovalPreset::Permissive => "permissive",
+                    McpToolApprovalPreset::Restrictive => "restrictive",
+                }
+                .to_string(),
+                allow_always: config.allow_always,
+                requested_at: now_timestamp(),
+            })
+        }
     }
 }
 
@@ -6808,10 +6822,10 @@ fn merge_action_facet_into_mcp_allowlist(
 #[cfg(test)]
 mod tests {
     use super::{
-        McpToolCallGate, apply_assistant_server_filter, derive_requested_server_ids_from_allowlist,
-        effective_client_tool_allowlist, expand_tool_patterns_with_discovered_tools,
-        filter_mcp_tools_by_disabled_patterns, filter_mcp_tools_by_disabled_servers,
-        filter_mcp_tools_by_write_access, gate_mcp_tool_call,
+        MAX_DISPLAY_NAME_CHARS, McpToolCallGate, apply_assistant_server_filter,
+        derive_requested_server_ids_from_allowlist, effective_client_tool_allowlist,
+        expand_tool_patterns_with_discovered_tools, filter_mcp_tools_by_disabled_patterns,
+        filter_mcp_tools_by_disabled_servers, filter_mcp_tools_by_write_access, gate_mcp_tool_call,
         merge_action_facet_into_mcp_allowlist,
     };
     use crate::config::{McpToolApprovalConfig, McpToolApprovalPreset};
@@ -7051,6 +7065,44 @@ mod tests {
             ),
             vec!["client/*".to_string()]
         );
+    }
+
+    #[test]
+    fn approval_request_refuses_a_name_that_display_cleaning_would_change() {
+        let restrictive = McpToolApprovalConfig {
+            enabled: true,
+            preset: McpToolApprovalPreset::Restrictive,
+            allow_always: false,
+        };
+        let call = |fn_name: &str| ToolCall {
+            call_id: "call-1".to_string(),
+            fn_name: fn_name.to_string(),
+            fn_arguments: json!({}),
+            thought_signatures: None,
+        };
+
+        let plain = Tool::new("publish", "publish", Map::new());
+        match gate_mcp_tool_call(&restrictive, "server", &plain, &call("publish"), None) {
+            McpToolCallGate::Ask(request) => assert_eq!(request.tool_name, "publish"),
+            other => panic!("expected an approval request, got {other:?}"),
+        }
+
+        let overridden = "publish\u{202E}hsilbup";
+        let tool = Tool::new(overridden.to_string(), "publish", Map::new());
+        match gate_mcp_tool_call(&restrictive, "server", &tool, &call(overridden), None) {
+            McpToolCallGate::Refuse(message) => {
+                assert!(!message.contains('\u{202E}'), "{message}");
+                assert!(message.contains("publishhsilbup"), "{message}");
+            }
+            other => panic!("expected a refusal, got {other:?}"),
+        }
+
+        let long_name = "x".repeat(MAX_DISPLAY_NAME_CHARS + 1);
+        let tool = Tool::new(long_name.clone(), "long", Map::new());
+        assert!(matches!(
+            gate_mcp_tool_call(&restrictive, "server", &tool, &call(&long_name), None),
+            McpToolCallGate::Refuse(_)
+        ));
     }
 
     #[test]
