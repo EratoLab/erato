@@ -97,6 +97,7 @@ async fn test_list_mcp_server_tools_projects_effective_values(pool: Pool<Postgre
     assert_eq!(body["server_id"], "research");
     assert_eq!(body["status"], "SUCCESS");
     assert_eq!(body["allow_always"], true);
+    assert_eq!(body["ask_available"], true);
     let tools = body["tools"].as_array().expect("tools array");
     let names: Vec<&str> = tools
         .iter()
@@ -122,15 +123,17 @@ async fn test_list_mcp_server_tools_projects_effective_values(pool: Pool<Postgre
             "annotated": true
         })
     );
-    assert_eq!(dispatch["approval"], "ask");
+    assert_eq!(dispatch["policy"], "ask");
     assert_eq!(dispatch["user_decision"], "denied");
+    assert_eq!(dispatch["effective"], "denied");
     assert_eq!(dispatch["is_wait_tool"], false);
 
     let poll = &tools[1];
     assert_eq!(poll["annotations"]["read_only_hint"], true);
     assert_eq!(poll["annotations"]["annotated"], true);
-    assert_eq!(poll["approval"], "auto");
-    assert_eq!(poll["user_decision"], "always");
+    assert_eq!(poll["policy"], "auto");
+    assert_eq!(poll["user_decision"], "always_allow");
+    assert_eq!(poll["effective"], "allow");
     assert_eq!(poll["is_wait_tool"], true);
 
     let missing = server
@@ -252,8 +255,9 @@ async fn test_list_mcp_server_tools_reports_unconnected_oauth_server(pool: Pool<
     response.assert_status_ok();
     let body: Value = response.json();
     assert_eq!(body["status"], "NEEDS_AUTHENTICATION");
-    // The default policy honors no persistent grants.
+    // The default policy honors no persistent grants and cannot ask.
     assert_eq!(body["allow_always"], false);
+    assert_eq!(body["ask_available"], false);
     assert_eq!(body["tools"], json!([]));
 }
 
@@ -303,4 +307,187 @@ async fn test_list_mcp_server_tools_reuses_the_enumeration_session(pool: Pool<Po
     let first_body: Value = first.json();
     let second_body: Value = second.json();
     assert_eq!(first_body["tools"], second_body["tools"]);
+}
+
+/// The enumeration carries the policy verdict, the stored decision and the
+/// effective state as three separate facts, so a client never re-derives
+/// one from the others: a stored decision the policy does not honor is still
+/// reported as stored, while `effective` says what will actually happen.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_list_mcp_server_tools_separates_policy_decision_and_effect(pool: Pool<Postgres>) {
+    let mock_mcp_base_url = mock_mcp_base_url();
+    let approval_server = || {
+        mcp_server_config(
+            &mock_mcp_base_url,
+            "/mcp/approval-policy",
+            McpServerAuthenticationConfig::None,
+        )
+    };
+    let app_state_with = |approval: McpToolApprovalConfig, pool: Pool<Postgres>| async move {
+        let (mut app_config, llm_server) = setup_mock_llm_server(None).await;
+        app_config
+            .mcp_servers
+            .insert("approval".to_string(), approval_server());
+        app_config.mcp_servers_global.approval = approval;
+        (test_app_state(app_config, pool).await, llm_server)
+    };
+    let projection = |body: &Value, name: &str| -> (String, String, String) {
+        let tool = body["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["name"] == name)
+            .unwrap_or_else(|| panic!("{name} listed"));
+        (
+            tool["policy"].as_str().unwrap().to_string(),
+            tool["user_decision"].as_str().unwrap().to_string(),
+            tool["effective"].as_str().unwrap().to_string(),
+        )
+    };
+    let row = |policy: &str, decision: &str, effective: &str| {
+        (
+            policy.to_string(),
+            decision.to_string(),
+            effective.to_string(),
+        )
+    };
+
+    // The fixture is read-only and closed-world (auto under both presets);
+    // the probe is open-world (asks under the restrictive preset).
+    let (app_state, _llm_server) = app_state_with(
+        McpToolApprovalConfig {
+            enabled: true,
+            preset: McpToolApprovalPreset::Restrictive,
+            allow_always: true,
+        },
+        pool.clone(),
+    )
+    .await;
+    let user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let db = app_state.db.clone();
+    let server = create_test_server(app_state);
+
+    let body: Value = server
+        .get("/api/v1beta/me/mcp_servers/approval/tools")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .json();
+    assert_eq!(body["allow_always"], true);
+    assert_eq!(body["ask_available"], true);
+    assert_eq!(
+        projection(&body, "read_approval_fixture"),
+        row("auto", "none", "allow")
+    );
+    assert_eq!(
+        projection(&body, "publish_approval_probe"),
+        row("ask", "none", "ask")
+    );
+
+    upsert_active(
+        &db,
+        user.id,
+        "approval",
+        "read_approval_fixture",
+        UserToolDecision::Ask,
+    )
+    .await
+    .unwrap();
+    upsert_active(
+        &db,
+        user.id,
+        "approval",
+        "publish_approval_probe",
+        UserToolDecision::AlwaysAllow,
+    )
+    .await
+    .unwrap();
+    let body: Value = server
+        .get("/api/v1beta/me/mcp_servers/approval/tools")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .json();
+    assert_eq!(
+        projection(&body, "read_approval_fixture"),
+        row("auto", "ask", "ask")
+    );
+    assert_eq!(
+        projection(&body, "publish_approval_probe"),
+        row("ask", "always_allow", "allow")
+    );
+
+    // Grants are inert without `allow_always`, but still reported as stored.
+    let (app_state, _llm_server) = app_state_with(
+        McpToolApprovalConfig {
+            enabled: true,
+            preset: McpToolApprovalPreset::Restrictive,
+            allow_always: false,
+        },
+        pool.clone(),
+    )
+    .await;
+    let no_grants = create_test_server(app_state);
+    let body: Value = no_grants
+        .get("/api/v1beta/me/mcp_servers/approval/tools")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .json();
+    assert_eq!(body["allow_always"], false);
+    assert_eq!(body["ask_available"], true);
+    assert_eq!(
+        projection(&body, "read_approval_fixture"),
+        row("auto", "ask", "ask")
+    );
+    assert_eq!(
+        projection(&body, "publish_approval_probe"),
+        row("ask", "always_allow", "ask")
+    );
+
+    // With the gate off nothing asks and an ask is inert; a denial holds.
+    upsert_active(
+        &db,
+        user.id,
+        "approval",
+        "publish_approval_probe",
+        UserToolDecision::Denied,
+    )
+    .await
+    .unwrap();
+    let (app_state, _llm_server) = app_state_with(
+        McpToolApprovalConfig {
+            enabled: false,
+            preset: McpToolApprovalPreset::Restrictive,
+            allow_always: false,
+        },
+        pool,
+    )
+    .await;
+    let disabled = create_test_server(app_state);
+    let body: Value = disabled
+        .get("/api/v1beta/me/mcp_servers/approval/tools")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .json();
+    assert_eq!(body["allow_always"], false);
+    assert_eq!(body["ask_available"], false);
+    assert_eq!(
+        projection(&body, "read_approval_fixture"),
+        row("auto", "ask", "allow")
+    );
+    assert_eq!(
+        projection(&body, "publish_approval_probe"),
+        row("auto", "denied", "denied")
+    );
+
+    // Back on the gated server the denial holds as well.
+    let body: Value = server
+        .get("/api/v1beta/me/mcp_servers/approval/tools")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .json();
+    assert_eq!(
+        projection(&body, "publish_approval_probe"),
+        row("ask", "denied", "denied")
+    );
 }
