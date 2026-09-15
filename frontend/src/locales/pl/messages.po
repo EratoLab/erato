@@ -1974,17 +1974,17 @@ msgid "chat.message.error.details"
 msgstr "Szczegóły"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.title"
 msgstr "Błąd asystenta"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter"
 msgstr "Odpowiedź została odfiltrowana, ponieważ wiadomość uruchomiła politykę zarządzania treścią."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter.cta"
 msgstr "Spróbuj ponownie z inną wiadomością, która unika przefiltrowanych kategorii."
 
@@ -1994,62 +1994,62 @@ msgid "chat.message.error.variant.content_filter.filtered_categories"
 msgstr "Odfiltrowane kategorie"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter.hate"
 msgstr "Nienawiść"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter.high_severity"
 msgstr "wysoki poziom"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter.low_severity"
 msgstr "niski poziom"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter.medium_severity"
 msgstr "średni poziom"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter.safe_severity"
 msgstr "bezpieczne"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter.self_harm"
 msgstr "Samookaleczenie"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter.sexual"
 msgstr "Seksualne"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter.violence"
 msgstr "Przemoc"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.default"
 msgstr "Asystent nie mógł odpowiedzieć."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.hallucination_loop"
 msgstr "Generowanie przerwane. Wykryto pętlę halucynacji. Wygeneruj wiadomość ponownie."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.prompt_injection"
 msgstr "Żądanie zostało zablokowane, ponieważ pasowało do reguły ochrony przed wstrzykiwaniem promptów."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.prompt_injection.cta"
 msgstr "Edytuj poprzednią wiadomość, aby usunąć problematyczny tekst, zanim przejdziesz dalej."
 
@@ -2059,12 +2059,12 @@ msgid "chat.message.error.variant.prompt_injection.offending_text"
 msgstr "Problematyczny tekst"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.rate_limit"
 msgstr "Przekroczono limit zapytań lub przydział. Może się to też zdarzyć, gdy wejście jest zbyt duże."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.rate_limit.cta"
 msgstr "Spróbuj ponownie za minutę i ogranicz długość lub liczbę załączników."
 

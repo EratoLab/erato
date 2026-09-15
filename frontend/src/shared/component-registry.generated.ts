@@ -283,6 +283,11 @@ export type { McpToolApprovalRequestPart } from "@/components/ui/Message/McpTool
 export { MermaidBlock } from "@/components/ui/Message/MermaidBlock";
 export { MessageContent } from "@/components/ui/Message/MessageContent";
 export { useOutlookArtifact } from "@/components/ui/Message/MessageContent";
+export { getContentFilterCategoryLabel } from "@/components/ui/Message/messageErrorCopy";
+export { getContentFilterSeverityLabel } from "@/components/ui/Message/messageErrorCopy";
+export { getErrorCta } from "@/components/ui/Message/messageErrorCopy";
+export { getErrorDescription } from "@/components/ui/Message/messageErrorCopy";
+export { getErrorTitle } from "@/components/ui/Message/messageErrorCopy";
 export { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 export { SyntaxHighlightedCode } from "@/components/ui/Message/SyntaxHighlightedCode";
 export { useCodeBlockSurfaceStyle } from "@/components/ui/Message/SyntaxHighlightedCode";
