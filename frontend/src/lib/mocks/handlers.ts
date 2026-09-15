@@ -98,6 +98,7 @@ export const handlers = [
           is_pinned: false,
           mcp_write_tools_enabled: true,
           disabled_mcp_server_ids: [],
+          disabled_mcp_tools: [],
           file_uploads: [],
           can_edit: true,
         },

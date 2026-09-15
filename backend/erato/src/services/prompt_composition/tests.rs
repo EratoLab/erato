@@ -313,6 +313,7 @@ mod test_cases {
             generation_ended_at: None,
             mcp_write_tools_enabled: true,
             disabled_mcp_server_ids: Vec::new(),
+            disabled_mcp_tools: Vec::new(),
         }
     }
 

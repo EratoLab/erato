@@ -1023,6 +1023,7 @@ pub(crate) async fn dispatch_delegate_tool_call(
         delegated_chat_title(&args.task),
         context.origin_chat.mcp_write_tools_enabled,
         context.origin_chat.disabled_mcp_server_ids.clone(),
+        context.origin_chat.disabled_mcp_tools.clone(),
     )
     .await
     .map_err(|error| {

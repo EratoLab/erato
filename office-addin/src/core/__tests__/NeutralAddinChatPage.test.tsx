@@ -44,6 +44,7 @@ const spies = vi.hoisted(() => ({
         delegationRunMode?: "wait" | "background",
         mcpWriteToolsEnabled?: boolean,
         disabledMcpServerIds?: string[],
+        disabledMcpTools?: string[],
       ) => void;
     },
   },
@@ -469,6 +470,7 @@ describe("NeutralAddinChatPage host boundary", () => {
       "background",
       undefined,
       undefined,
+      undefined,
     );
   });
 
@@ -498,6 +500,7 @@ describe("NeutralAddinChatPage host boundary", () => {
       undefined,
       undefined,
       false,
+      undefined,
       undefined,
     );
   });
@@ -529,6 +532,39 @@ describe("NeutralAddinChatPage host boundary", () => {
       undefined,
       undefined,
       ["linear"],
+      undefined,
+    );
+  });
+
+  it("carries a new chat's switched-off tools seed through to the send", () => {
+    renderPage();
+
+    // The single-tool seed is the last of the three first-send seeds; a hop
+    // that stops one slot short creates the row with every tool on.
+    spies.inputProps.current?.onSendMessage(
+      "without issue creation",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      ["linear/create_issue"],
+    );
+
+    expect(spies.sendMessage).toHaveBeenCalledWith(
+      "without issue creation",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      ["linear/create_issue"],
     );
   });
 

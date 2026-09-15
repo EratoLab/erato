@@ -75,6 +75,7 @@ const listedChat = (id: string): RecentChat => ({
   is_pinned: false,
   mcp_write_tools_enabled: true,
   disabled_mcp_server_ids: [],
+  disabled_mcp_tools: [],
   last_selected_facets: ["listed-facet"],
 });
 

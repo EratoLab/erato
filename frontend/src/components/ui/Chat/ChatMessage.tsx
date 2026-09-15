@@ -15,6 +15,7 @@ import {
 import { hasToolCalls as messageHasToolCalls } from "@/utils/adapters/toolCallAdapter";
 
 import { McpDisabledServersNotice } from "./McpDisabledServersNotice";
+import { McpDisabledToolsNotice } from "./McpDisabledToolsNotice";
 import { McpNeedsAuthNotice } from "./McpNeedsAuthNotice";
 import { MessageAttachments } from "./MessageAttachments";
 import { Alert } from "../Feedback/Alert";
@@ -151,6 +152,7 @@ export const ChatMessage = memo(function ChatMessage({
   );
 
   const mcpServersDisabledByUser = message.mcp_servers_disabled_by_user ?? [];
+  const mcpToolsDisabledByUser = message.mcp_tools_disabled_by_user ?? [];
   const mcpServersNeedingAuth = (message.mcp_servers_needing_auth ?? []).filter(
     (serverId) => !mcpServersDisabledByUser.includes(serverId),
   );
@@ -326,6 +328,9 @@ export const ChatMessage = memo(function ChatMessage({
               reason the user chose, so it is the one reported. */}
           {mcpServersDisabledByUser.length > 0 && (
             <McpDisabledServersNotice serverIds={mcpServersDisabledByUser} />
+          )}
+          {mcpToolsDisabledByUser.length > 0 && (
+            <McpDisabledToolsNotice toolNames={mcpToolsDisabledByUser} />
           )}
           {mcpServersNeedingAuth.length > 0 && (
             <McpNeedsAuthNotice

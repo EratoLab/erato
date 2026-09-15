@@ -24,6 +24,7 @@ interface UseChatActionsProps {
     delegationRunMode?: DelegationRunMode,
     mcpWriteToolsEnabled?: boolean,
     disabledMcpServerIds?: string[],
+    disabledMcpTools?: string[],
   ) => Promise<string | undefined>;
   onMessageAction?: (action: MessageAction) => Promise<boolean>;
 }
@@ -71,6 +72,7 @@ export function useChatActions({
       delegationRunMode?: DelegationRunMode,
       mcpWriteToolsEnabled?: boolean,
       disabledMcpServerIds?: string[],
+      disabledMcpTools?: string[],
     ) => {
       if (message.trim() || (inputFileIds && inputFileIds.length > 0)) {
         return sendMessage(
@@ -84,6 +86,7 @@ export function useChatActions({
           delegationRunMode,
           mcpWriteToolsEnabled,
           disabledMcpServerIds,
+          disabledMcpTools,
         );
       }
       return Promise.resolve(undefined);

@@ -1766,7 +1766,7 @@
       "put": {
         "tags": [],
         "summary": "Update mutable fields on a chat.",
-        "description": "Supports updating the user-provided title, pin state, the MCP write\ntools toggle and the disabled MCP server list.",
+        "description": "Supports updating the user-provided title, pin state, the MCP write\ntools toggle and the disabled MCP server and tool lists.",
         "operationId": "update_chat",
         "parameters": [
           {
@@ -4936,6 +4936,7 @@
           "is_pinned",
           "mcp_write_tools_enabled",
           "disabled_mcp_server_ids",
+          "disabled_mcp_tools",
           "can_edit"
         ],
         "properties": {
@@ -4971,6 +4972,13 @@
               "type": "string"
             },
             "description": "MCP servers the user switched off for this chat; their tools are not\noffered to the model."
+          },
+          "disabled_mcp_tools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "`server/tool` patterns of MCP tools the user switched off for this\nchat; matching tools are not offered to the model."
           },
           "expected_output": {
             "type": "string",
@@ -5120,6 +5128,13 @@
               "type": "string"
             },
             "description": "MCP server IDs that were unavailable while preparing this generation"
+          },
+          "mcp_tools_disabled_by_user": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "`server/tool` names of MCP tools withheld from this generation because\nthe user switched the tool off for the chat"
           },
           "mentioned_assistants": {
             "type": "array",
@@ -7246,6 +7261,13 @@
             },
             "description": "MCP servers a newly created chat starts with switched off; their tools\nare withheld from the model. Ignored when existing_chat_id is\nprovided; `PUT /me/chats/{chat_id}` changes the list on an existing\nchat."
           },
+          "disabled_mcp_tools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "`server/tool` patterns of MCP tools a newly created chat starts with\nswitched off; matching tools are withheld from the model. Ignored when\nexisting_chat_id is provided; `PUT /me/chats/{chat_id}` changes the\nlist on an existing chat."
+          },
           "existing_chat_id": {
             "type": [
               "string",
@@ -7939,6 +7961,7 @@
           "is_pinned",
           "mcp_write_tools_enabled",
           "disabled_mcp_server_ids",
+          "disabled_mcp_tools",
           "can_edit"
         ],
         "properties": {
@@ -7975,6 +7998,13 @@
               "type": "string"
             },
             "description": "MCP servers the user switched off for this chat; their tools are not\noffered to the model."
+          },
+          "disabled_mcp_tools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "`server/tool` patterns of MCP tools the user switched off for this\nchat; matching tools are not offered to the model."
           },
           "file_uploads": {
             "type": "array",
@@ -9208,6 +9238,13 @@
             },
             "description": "MCP servers to switch off for this chat; replaces the stored list.\nTheir tools are withheld from the model. Only ever narrows the set the\npolicy, assistant and facets allow."
           },
+          "disabled_mcp_tools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "`server/tool` patterns of MCP tools to switch off for this chat;\nreplaces the stored list. Matching tools are withheld from the model.\nOnly ever narrows the set the policy, assistant, facets and the\nserver list allow; a pattern naming a tool the server no longer\nexposes does nothing."
+          },
           "is_pinned": {
             "type": [
               "boolean",
@@ -9236,7 +9273,8 @@
           "title_resolved",
           "is_pinned",
           "mcp_write_tools_enabled",
-          "disabled_mcp_server_ids"
+          "disabled_mcp_server_ids",
+          "disabled_mcp_tools"
         ],
         "properties": {
           "chat_id": {
@@ -9249,6 +9287,13 @@
               "type": "string"
             },
             "description": "MCP servers the user switched off for this chat."
+          },
+          "disabled_mcp_tools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "`server/tool` patterns of MCP tools the user switched off for this chat."
           },
           "is_pinned": {
             "type": "boolean",

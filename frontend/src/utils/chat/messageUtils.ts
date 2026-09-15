@@ -120,6 +120,7 @@ export function mergeDisplayMessages(
 export interface SubmitStreamRequestBody {
   mcp_write_tools_enabled?: boolean;
   disabled_mcp_server_ids?: string[];
+  disabled_mcp_tools?: string[];
   user_message: string;
   previous_message_id?: string;
   existing_chat_id?: string;
@@ -147,6 +148,8 @@ export interface SubmitStreamRequestBody {
  *   the server default.
  * @param disabledMcpServerIds Seeds a new chat's switched-off servers; left
  *   out when empty.
+ * @param disabledMcpTools Seeds a new chat's switched-off `server/tool`
+ *   patterns; left out when empty.
  * @returns The request body object.
  */
 export function constructSubmitStreamRequestBody(
@@ -162,6 +165,7 @@ export function constructSubmitStreamRequestBody(
   delegationRunMode?: DelegationRunMode,
   mcpWriteToolsEnabled?: boolean,
   disabledMcpServerIds?: string[],
+  disabledMcpTools?: string[],
 ): SubmitStreamRequestBody {
   const body: SubmitStreamRequestBody = {
     user_message: userMessageContent,
@@ -199,6 +203,9 @@ export function constructSubmitStreamRequestBody(
   }
   if (disabledMcpServerIds && disabledMcpServerIds.length > 0) {
     body.disabled_mcp_server_ids = disabledMcpServerIds;
+  }
+  if (disabledMcpTools && disabledMcpTools.length > 0) {
+    body.disabled_mcp_tools = disabledMcpTools;
   }
 
   return body;

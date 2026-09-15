@@ -179,6 +179,12 @@ export interface Message {
    * server: the generation still probed it, so it may be reported there too.
    */
   mcp_servers_disabled_by_user?: string[];
+  /**
+   * `server/tool` names of single MCP tools withheld because the user
+   * switched the tool off for this chat. A tool whose whole server is off
+   * is reported under the server only.
+   */
+  mcp_tools_disabled_by_user?: string[];
   previous_message_id?: string;
   // Whether this message is in the active thread per backend lineage logic
   is_message_in_active_thread?: boolean;

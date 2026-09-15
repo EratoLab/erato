@@ -217,6 +217,77 @@ describe("buildMcpToolsSection", () => {
       ).toBe(true);
     });
 
+    // The count is the trail into the browser, where the tools are switched;
+    // it only means something on a server that is on and healthy.
+    it("says how many of a server's tools are switched off, on a healthy server that is on", () => {
+      const section = build({
+        servers: [
+          server("linear"),
+          server("github"),
+          server("wiki", "FAILURE"),
+        ],
+        disabledServerIds: ["github"],
+        disabledToolPatterns: [
+          "linear/create_issue",
+          "linear/delete_issue",
+          "github/create_issue",
+          "wiki/edit_page",
+        ],
+        onToggleServer: vi.fn(),
+      });
+
+      const linear = itemOf(section, "linear");
+      const github = itemOf(section, "github");
+      const wiki = itemOf(section, "wiki");
+      expect(isAddMenuToolItem(linear) && linear.description).toBe(
+        "2 tools switched off",
+      );
+      expect(isAddMenuToolItem(github) && github.description).toBeUndefined();
+      expect(isAddMenuToolItem(wiki) && wiki.description).toBe(
+        "The server is configured, but the backend could not connect to it.",
+      );
+
+      const one = itemOf(
+        build({
+          servers: [server("linear")],
+          disabledToolPatterns: ["linear/create_issue"],
+          onToggleServer: vi.fn(),
+        }),
+        "linear",
+      );
+      expect(isAddMenuToolItem(one) && one.description).toBe(
+        "1 tool switched off",
+      );
+    });
+
+    // A wildcard entry has no number without the roster; the row says how
+    // far it reaches instead of counting the entry as one tool.
+    it("says all or some tools are off for a server a wildcard entry covers", () => {
+      const section = build({
+        servers: [server("linear"), server("files"), server("github")],
+        disabledToolPatterns: [
+          "linear/*",
+          "files/read/*",
+          "files/write_file",
+          "github/create_issue",
+        ],
+        onToggleServer: vi.fn(),
+      });
+
+      const linear = itemOf(section, "linear");
+      const files = itemOf(section, "files");
+      const github = itemOf(section, "github");
+      expect(isAddMenuToolItem(linear) && linear.description).toBe(
+        "All tools switched off",
+      );
+      expect(isAddMenuToolItem(files) && files.description).toBe(
+        "Some tools switched off",
+      );
+      expect(isAddMenuToolItem(github) && github.description).toBe(
+        "1 tool switched off",
+      );
+    });
+
     it("locks the server rows with the rest of the group", () => {
       const section = build({
         servers: [server("linear"), server("jira", "NEEDS_AUTHENTICATION")],

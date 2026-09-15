@@ -2533,6 +2533,153 @@ describe("useChatMessaging", () => {
       expect(bodies[0]).not.toHaveProperty("mcp_write_tools_enabled");
     });
 
+    it("seeds a new chat with the switched-off tools through the submitstream body", async () => {
+      mockCreateSSEConnection.mockClear();
+      const updateChat = vi.fn().mockResolvedValue({});
+      (useUpdateChat as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        mutateAsync: updateChat,
+      });
+
+      const { result } = renderHook(() => useChatMessaging(null), {
+        wrapper: TestWrapper,
+      });
+
+      await act(async () => {
+        await result.current.sendMessage(
+          "no issue creation please",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          ["linear/create_issue"],
+        );
+      });
+
+      const bodies = getSubmitStreamBodies();
+      expect(bodies.length).toBe(1);
+      expect(bodies[0]).toMatchObject({
+        disabled_mcp_tools: ["linear/create_issue"],
+      });
+      expect(bodies[0]).not.toHaveProperty("disabled_mcp_server_ids");
+      expect(bodies[0]).not.toHaveProperty("mcp_write_tools_enabled");
+      expect(bodies[0]).not.toHaveProperty("existing_chat_id");
+      expect(updateChat).not.toHaveBeenCalled();
+    });
+
+    // All three seeds land on the silent chat's row in one update.
+    it("writes the tool seed onto a silent chat together with the other seeds", async () => {
+      mockCreateSSEConnection.mockClear();
+      const updateChat = vi.fn().mockResolvedValue({});
+      (useUpdateChat as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        mutateAsync: updateChat,
+      });
+      const { result } = renderHook(
+        () => useChatMessaging({ chatId: null, silentChatId: "silent-1" }),
+        { wrapper: TestWrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage(
+          "no issue creation please",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          false,
+          ["github"],
+          ["linear/create_issue"],
+        );
+      });
+
+      expect(updateChat).toHaveBeenCalledTimes(1);
+      expect(updateChat).toHaveBeenCalledWith({
+        pathParams: { chatId: "silent-1" },
+        body: {
+          mcp_write_tools_enabled: false,
+          disabled_mcp_server_ids: ["github"],
+          disabled_mcp_tools: ["linear/create_issue"],
+        },
+      });
+      const bodies = getSubmitStreamBodies();
+      expect(bodies.length).toBe(1);
+      expect(bodies[0]).toMatchObject({ existing_chat_id: "silent-1" });
+      expect(bodies[0]).not.toHaveProperty("disabled_mcp_tools");
+    });
+
+    it("writes the tool seed alone onto a silent chat when it is the only seed", async () => {
+      mockCreateSSEConnection.mockClear();
+      const updateChat = vi.fn().mockResolvedValue({});
+      (useUpdateChat as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        mutateAsync: updateChat,
+      });
+      const { result } = renderHook(
+        () => useChatMessaging({ chatId: null, silentChatId: "silent-1" }),
+        { wrapper: TestWrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage(
+          "no issue creation please",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          ["linear/create_issue"],
+        );
+      });
+
+      expect(updateChat).toHaveBeenCalledWith({
+        pathParams: { chatId: "silent-1" },
+        body: { disabled_mcp_tools: ["linear/create_issue"] },
+      });
+    });
+
+    it("never seeds an existing chat with switched-off tools", async () => {
+      mockCreateSSEConnection.mockClear();
+      const updateChat = vi.fn().mockResolvedValue({});
+      (useUpdateChat as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        mutateAsync: updateChat,
+      });
+
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+
+      await act(async () => {
+        await result.current.sendMessage(
+          "no issue creation please",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          ["linear/create_issue"],
+        );
+      });
+
+      const bodies = getSubmitStreamBodies();
+      expect(bodies.length).toBe(1);
+      expect(bodies[0]).not.toHaveProperty("disabled_mcp_tools");
+      expect(updateChat).not.toHaveBeenCalled();
+    });
+
     it("never seeds an existing chat with switched-off servers", async () => {
       mockCreateSSEConnection.mockClear();
       const updateChat = vi.fn().mockResolvedValue({});

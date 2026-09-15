@@ -6842,3 +6842,592 @@ async fn test_continuestream_refuses_a_tool_of_a_server_disabled_after_the_park(
         Some("completed")
     );
 }
+
+// ---------------------------------------------------------------------------
+// Per-chat tool disable: a `server/tool` pattern the user stored for the chat
+// removes just that tool, the generation records the tools it withheld, a
+// pattern for a tool the server no longer exposes is a silent no-op, and a
+// parked tool disabled meanwhile is refused on continuation.
+// ---------------------------------------------------------------------------
+
+/// Replaces the chat's disabled tool list through `PUT /me/chats/{chat_id}`.
+async fn put_chat_disabled_tools(server: &TestServer, chat_id: &str, patterns: &[&str]) {
+    let response = server
+        .put(&format!("/api/v1beta/me/chats/{chat_id}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "disabled_mcp_tools": patterns }))
+        .await;
+    response.assert_status_ok();
+    let body: Value = response.json();
+    assert_eq!(body["disabled_mcp_tools"], json!(patterns));
+}
+
+/// Reads the chat's disabled tool list back from `GET /me/chats/{chat_id}`.
+async fn chat_disabled_tools(server: &TestServer, chat_id: &str) -> Value {
+    let response = server
+        .get(&format!("/api/v1beta/me/chats/{chat_id}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status_ok();
+    let body: Value = response.json();
+    body["disabled_mcp_tools"].clone()
+}
+
+/// Switching one tool off for the chat drops that tool alone while its server
+/// keeps its other tools; the withheld tool is recorded on the completed
+/// message, in the persisted metadata and on the message listing; a pattern
+/// for a tool the server does not expose changes nothing and is not
+/// reported; a tool of a server switched off as a whole is reported under the
+/// server, not again as a tool; clearing the list restores the full set.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_disabled_mcp_tool_is_withheld_and_reported(pool: Pool<Postgres>) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post().path("/v1/chat/completions").matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                build_openai_text_streaming_response(&["TOOL-DISABLE-ANSWER"]),
+            );
+        });
+    }
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.mcp_servers.insert(
+        "mock_mcp_approval".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url(),
+            "/mcp/approval-policy",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_servers.insert(
+        "files".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url(),
+            "/mcp/file",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_server_permissions.rules.insert(
+        "allow-both".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["mock_mcp_approval".to_string(), "files".to_string()],
+        },
+    );
+    app_config.mcp_servers_global.approval = erato::config::McpToolApprovalConfig {
+        enabled: false,
+        allow_always: false,
+        ..Default::default()
+    };
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let db = app_state.db.clone();
+    let server = app_server(app_state);
+
+    let chat = server
+        .post("/api/v1beta/me/chats")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({}))
+        .await;
+    chat.assert_status_ok();
+    let chat_id = chat.json::<Value>()["chat_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_eq!(chat_disabled_tools(&server, &chat_id).await, json!([]));
+
+    let submit = |message: &'static str| {
+        let server = &server;
+        let chat_id = chat_id.clone();
+        async move {
+            let response = server
+                .post("/api/v1beta/me/messages/submitstream")
+                .with_bearer_token(TEST_JWT_TOKEN)
+                .json(&json!({ "existing_chat_id": chat_id, "user_message": message }))
+                .await;
+            response.assert_status_ok();
+            let events = parse_sse_events(&response);
+            assert_eq!(extract_full_text(&events), "TOOL-DISABLE-ANSWER");
+            assistant_completed_event(&events)
+        }
+    };
+
+    let all_on = submit("with every tool on").await;
+    put_chat_disabled_tools(&server, &chat_id, &["files/read_file"]).await;
+    let tool_off = submit("with read_file off").await;
+    put_chat_disabled_tools(&server, &chat_id, &["files/no_such_tool"]).await;
+    let drifted = submit("with a tool the server no longer exposes off").await;
+    put_chat_disabled_tools(&server, &chat_id, &["files/read_file"]).await;
+    put_chat_disabled_servers(&server, &chat_id, &["files"]).await;
+    let server_off_too = submit("with the whole files server off as well").await;
+    put_chat_disabled_servers(&server, &chat_id, &[]).await;
+    put_chat_disabled_tools(&server, &chat_id, &[]).await;
+    let back_on = submit("with everything back on").await;
+
+    let mut offers = recorded_tool_offers(&recorder.bodies());
+    assert_eq!(offers.len(), 5, "{offers:?}");
+    for offered in offers.iter_mut() {
+        offered.sort();
+    }
+    let full_set = vec![
+        "list_files",
+        "publish_approval_probe",
+        "read_approval_fixture",
+        "read_file",
+    ];
+    assert_eq!(offers[0], full_set, "every tool on offers every tool");
+    assert_eq!(
+        offers[1],
+        vec![
+            "list_files",
+            "publish_approval_probe",
+            "read_approval_fixture"
+        ],
+        "the disabled tool goes and its server keeps its other tool"
+    );
+    assert_eq!(
+        offers[2], full_set,
+        "a pattern for a tool the server does not expose is a no-op"
+    );
+    assert_eq!(
+        offers[3],
+        vec!["publish_approval_probe", "read_approval_fixture"],
+        "the server-level disable takes the whole server"
+    );
+    assert_eq!(
+        offers[4], full_set,
+        "clearing both lists restores the full set"
+    );
+
+    assert_eq!(all_on["message"]["mcp_tools_disabled_by_user"], Value::Null);
+    assert_eq!(
+        tool_off["message"]["mcp_tools_disabled_by_user"],
+        json!(["files/read_file"])
+    );
+    assert_eq!(
+        tool_off["message"]["mcp_servers_disabled_by_user"],
+        Value::Null
+    );
+    assert_eq!(
+        drifted["message"]["mcp_tools_disabled_by_user"],
+        Value::Null,
+        "only tools actually withheld are reported"
+    );
+    assert_eq!(
+        server_off_too["message"]["mcp_servers_disabled_by_user"],
+        json!(["files"])
+    );
+    assert_eq!(
+        server_off_too["message"]["mcp_tools_disabled_by_user"],
+        Value::Null,
+        "a tool of a server switched off is reported under the server only"
+    );
+    assert_eq!(
+        back_on["message"]["mcp_tools_disabled_by_user"],
+        Value::Null
+    );
+
+    let tool_off_message_id = Uuid::parse_str(tool_off["message_id"].as_str().unwrap()).unwrap();
+    let saved = erato::db::entity::messages::Entity::find_by_id(tool_off_message_id)
+        .one(&db)
+        .await
+        .unwrap()
+        .expect("Expected the saved assistant message");
+    assert_eq!(
+        saved
+            .generation_metadata
+            .expect("Expected generation metadata")["mcp_tools_disabled_by_user"],
+        json!(["files/read_file"])
+    );
+
+    let listing = server
+        .get(&format!("/api/v1beta/chats/{chat_id}/messages"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    listing.assert_status_ok();
+    let listing: Value = listing.json();
+    let listed = listing["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["id"] == tool_off_message_id.to_string())
+        .expect("Expected the assistant message in the listing");
+    assert_eq!(
+        listed["mcp_tools_disabled_by_user"],
+        json!(["files/read_file"])
+    );
+}
+
+/// MCP wins a name clash with a client tool. Switching the MCP tool off for
+/// the chat removes it from the offer without promoting the same-named client
+/// tool it shadowed, while the server's other tool stays offered.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_disabled_mcp_tool_does_not_promote_a_same_named_client_tool(pool: Pool<Postgres>) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post().path("/v1/chat/completions").matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                build_openai_text_streaming_response(&["TOOL-COLLISION-ANSWER"]),
+            );
+        });
+    }
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.mcp_servers.insert(
+        "files".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url(),
+            "/mcp/file",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_server_permissions.rules.insert(
+        "allow-files".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["files".to_string()],
+        },
+    );
+    // A client tool with the MCP tool's model-facing name, globally
+    // allowlisted; no facets, so the MCP side stays unfiltered.
+    app_config.client_tools.tools.insert(
+        "outlook_read_file".to_string(),
+        ClientToolConfig {
+            name: "read_file".to_string(),
+            namespace: Some("outlook".to_string()),
+            description: "Reads a file from the mailbox".to_string(),
+            parameters: r#"{"type":"object","properties":{}}"#.to_string(),
+            timeout_ms: None,
+        },
+    );
+    app_config.experimental_facets.tool_call_allowlist = vec!["outlook/read_file".to_string()];
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let server = app_server(app_state);
+
+    let before = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "read the file" }))
+        .await;
+    before.assert_status_ok();
+    let chat_id = extract_chat_id(&parse_sse_events(&before)).expect("chat_id");
+    let before_offers = recorded_tool_offers(&recorder.bodies());
+    assert_eq!(before_offers.len(), 1);
+    let before_offered = &before_offers[0];
+    assert_eq!(
+        before_offered
+            .iter()
+            .filter(|name| *name == "read_file")
+            .count(),
+        1,
+        "the MCP tool shadows the client tool: {before_offered:?}"
+    );
+    assert!(before_offered.iter().any(|name| name == "list_files"));
+
+    put_chat_disabled_tools(&server, &chat_id, &["files/read_file"]).await;
+
+    let after = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "existing_chat_id": chat_id, "user_message": "read the file again" }))
+        .await;
+    after.assert_status_ok();
+    let offers = recorded_tool_offers(&recorder.bodies());
+    assert_eq!(offers.len(), 2, "{offers:?}");
+    let mut after_offered = offers[1].clone();
+    after_offered.sort();
+    assert_eq!(
+        after_offered,
+        vec!["list_files"],
+        "switching the MCP tool off must not promote the client tool it shadowed"
+    );
+}
+
+/// The submit request seeds the disabled tool list of the chat it creates
+/// and is ignored for an existing chat, whose list belongs to `PUT`.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_submitstream_seeds_disabled_tools_only_for_a_new_chat(pool: Pool<Postgres>) {
+    let (app_config, _llm) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let server = app_server(app_state);
+
+    let seeded = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "user_message": "start picky",
+            "disabled_mcp_tools": ["files/read_file", "files/read_file", "crm/*"],
+        }))
+        .await;
+    seeded.assert_status_ok();
+    let seeded_chat_id = extract_chat_id(&parse_sse_events(&seeded)).expect("chat_id");
+    assert_eq!(
+        chat_disabled_tools(&server, &seeded_chat_id).await,
+        json!(["files/read_file", "crm/*"]),
+        "a new chat takes the list from the submit request, without repeats"
+    );
+
+    let unseeded = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "start default" }))
+        .await;
+    unseeded.assert_status_ok();
+    let unseeded_chat_id = extract_chat_id(&parse_sse_events(&unseeded)).expect("chat_id");
+    assert_eq!(
+        chat_disabled_tools(&server, &unseeded_chat_id).await,
+        json!([]),
+        "an omitted list leaves every tool on"
+    );
+
+    let ignored = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "existing_chat_id": unseeded_chat_id,
+            "user_message": "try to switch a tool off on the way in",
+            "disabled_mcp_tools": ["files/read_file"],
+        }))
+        .await;
+    ignored.assert_status_ok();
+    assert_eq!(
+        chat_disabled_tools(&server, &unseeded_chat_id).await,
+        json!([]),
+        "the submit request never changes an existing chat's list"
+    );
+
+    let recent = server
+        .get("/api/v1beta/me/recent_chats")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    recent.assert_status_ok();
+    let recent: Value = recent.json();
+    let list_of = |chat_id: &str| {
+        recent["chats"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|chat| chat["id"] == chat_id)
+            .expect("chat listed")["disabled_mcp_tools"]
+            .clone()
+    };
+    assert_eq!(
+        list_of(&seeded_chat_id),
+        json!(["files/read_file", "crm/*"])
+    );
+    assert_eq!(list_of(&unseeded_chat_id), json!([]));
+}
+
+/// A chat that switches a tool off while an approval card is waiting refuses
+/// that approved tool: the continued turn does not execute it, records a
+/// refusal in its place, still offers the server's other tool, and completes
+/// cleanly.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_continuestream_refuses_a_tool_disabled_after_the_park(pool: Pool<Postgres>) {
+    const TOOL_RESULT: &str = "approval probe published";
+    const REFUSAL: &str = "The user has turned off the tool 'publish_approval_probe' for this chat";
+    let continuation_recorder = RequestBodyRecorder::new();
+
+    let mut mocks = MockSet::new();
+    {
+        let recorder = continuation_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[REFUSAL], &[]))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                build_openai_text_streaming_response(&["TOOL-OFF-AFTER-PARK-ANSWER"]),
+            );
+        });
+    }
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &[REFUSAL]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[(
+                "call_probe",
+                "publish_approval_probe",
+                json!({}),
+            )]),
+        );
+    });
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.mcp_servers.insert(
+        "mock_mcp_approval".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url(),
+            "/mcp/approval-policy",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_servers.insert(
+        "files".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url(),
+            "/mcp/file",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_server_permissions.rules.insert(
+        "allow-both".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["mock_mcp_approval".to_string(), "files".to_string()],
+        },
+    );
+    app_config.mcp_servers_global.approval = erato::config::McpToolApprovalConfig {
+        enabled: true,
+        preset: erato::config::McpToolApprovalPreset::Restrictive,
+        allow_always: false,
+    };
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let db = app_state.db.clone();
+    let server = app_server(app_state);
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "publish the approval probe" }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let chat_id = extract_chat_id(&events).expect("Expected chat_id");
+    let assistant_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    assert_eq!(
+        chats::Entity::find_by_id(Uuid::parse_str(&chat_id).unwrap())
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap()
+            .generation_state
+            .as_deref(),
+        Some("awaiting_approval")
+    );
+
+    // The tool goes off while the card is still waiting.
+    put_chat_disabled_tools(
+        &server,
+        &chat_id,
+        &["mock_mcp_approval/publish_approval_probe"],
+    )
+    .await;
+
+    let continued = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": assistant_message_id,
+            "decision": "approve",
+        }))
+        .await;
+    continued.assert_status_ok();
+    let continued_events = parse_sse_events(&continued);
+    assert_eq!(
+        extract_full_text(&continued_events),
+        "TOOL-OFF-AFTER-PARK-ANSWER"
+    );
+
+    let continuation_bodies = continuation_recorder.bodies();
+    assert_eq!(continuation_bodies.len(), 1);
+    assert!(
+        !continuation_bodies[0].contains(TOOL_RESULT),
+        "a tool switched off meanwhile must not be executed"
+    );
+    let mut offers = recorded_tool_offers(&continuation_bodies);
+    assert_eq!(offers.len(), 1);
+    offers[0].sort();
+    assert_eq!(
+        offers[0],
+        vec!["list_files", "read_approval_fixture", "read_file"],
+        "the continued turn keeps every tool but the one switched off"
+    );
+
+    let resumed = erato::db::entity::messages::Entity::find_by_id(assistant_message_id)
+        .one(&db)
+        .await
+        .unwrap()
+        .expect("Expected the resumed assistant message");
+    assert_eq!(
+        resumed
+            .generation_metadata
+            .as_ref()
+            .expect("Expected generation metadata")["mcp_tools_disabled_by_user"],
+        json!(["mock_mcp_approval/publish_approval_probe"]),
+        "the continued turn records the tool it withheld"
+    );
+    let resumed_content = resumed.raw_message["content"].as_array().unwrap().clone();
+    let content_types: Vec<&str> = resumed_content
+        .iter()
+        .map(|part| part["content_type"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        content_types,
+        vec!["tool_approval_request", "tool_approval", "tool_use", "text"]
+    );
+    assert_eq!(resumed_content[2]["status"], "error");
+    assert_eq!(resumed_content[2]["output"]["status"], "rejected");
+    assert!(
+        resumed_content[2]["output"]["error"]
+            .as_str()
+            .unwrap()
+            .contains(REFUSAL)
+    );
+    assert_eq!(
+        chats::Entity::find_by_id(Uuid::parse_str(&chat_id).unwrap())
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap()
+            .generation_state
+            .as_deref(),
+        Some("completed")
+    );
+}

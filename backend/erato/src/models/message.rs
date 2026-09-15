@@ -188,6 +188,10 @@ pub struct GenerationMetadata {
     /// server off for this chat. Lets the UI explain why a server was not used.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mcp_servers_disabled_by_user: Option<Vec<String>>,
+    /// `server/tool` names of MCP tools withheld because the user switched the
+    /// tool off for this chat. Lets the UI explain why a tool was not used.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mcp_tools_disabled_by_user: Option<Vec<String>>,
 }
 
 /// Role of the message author (as defined by the LLM providers)

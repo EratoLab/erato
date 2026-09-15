@@ -352,6 +352,7 @@ export function useChatHistory({
       // seed turned off before the first send is never read from here.
       mcp_write_tools_enabled: true,
       disabled_mcp_server_ids: [],
+      disabled_mcp_tools: [],
       assistant_id: pendingChat.assistantId,
       assistant_name: undefined,
       archived_at: undefined,

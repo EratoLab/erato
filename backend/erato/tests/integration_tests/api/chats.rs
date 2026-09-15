@@ -1621,6 +1621,170 @@ async fn test_update_chat_disabled_mcp_server_ids(pool: Pool<Postgres>) {
     );
 }
 
+/// The disabled tool list round-trips through `PUT /me/chats/{chat_id}`
+/// with repeats collapsed, is read back on the chat detail and the listing,
+/// leaves the title and the server list alone when it is the only field
+/// named, and is owner-only.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `authorization`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_update_chat_disabled_mcp_tools(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+    erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .expect("Failed to create user");
+    let other_subject = "other-user-tool-disable";
+    erato::models::user::get_or_create_user(&app_state.db, TEST_USER_ISSUER, other_subject, None)
+        .await
+        .expect("Failed to create the other user");
+    let other_token = JwtTokenBuilder::new()
+        .issuer(TEST_USER_ISSUER)
+        .subject(other_subject)
+        .build();
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let create_response = server
+        .post("/api/v1beta/me/chats")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "title_by_user_provided": "Picky chat" }))
+        .await;
+    create_response.assert_status_ok();
+    let chat_id = create_response.json::<Value>()["chat_id"]
+        .as_str()
+        .expect("Expected chat_id in create response")
+        .to_string();
+
+    async fn detail(server: &TestServer, chat_id: &str) -> Value {
+        let response = server
+            .get(&format!("/api/v1beta/me/chats/{chat_id}"))
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .await;
+        response.assert_status_ok();
+        response.json::<Value>()
+    }
+    assert_eq!(
+        detail(&server, &chat_id).await["disabled_mcp_tools"],
+        json!([])
+    );
+
+    // List-only update: repeats collapse, the title is untouched.
+    let disabled = server
+        .put(&format!("/api/v1beta/me/chats/{chat_id}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "disabled_mcp_tools": ["files/read_file", "crm/*", "files/read_file"],
+        }))
+        .await;
+    disabled.assert_status_ok();
+    let disabled = disabled.json::<Value>();
+    assert_eq!(
+        disabled["disabled_mcp_tools"],
+        json!(["files/read_file", "crm/*"])
+    );
+    assert_eq!(disabled["title_by_user_provided"], "Picky chat");
+    let after = detail(&server, &chat_id).await;
+    assert_eq!(
+        after["disabled_mcp_tools"],
+        json!(["files/read_file", "crm/*"])
+    );
+    assert_eq!(after["title_by_user_provided"], "Picky chat");
+
+    // Title-only update: the list is untouched.
+    let renamed = server
+        .put(&format!("/api/v1beta/me/chats/{chat_id}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "title_by_user_provided": "Still picky" }))
+        .await;
+    renamed.assert_status_ok();
+    let renamed = renamed.json::<Value>();
+    assert_eq!(
+        renamed["disabled_mcp_tools"],
+        json!(["files/read_file", "crm/*"])
+    );
+    assert_eq!(renamed["title_by_user_provided"], "Still picky");
+
+    // The list replaces rather than merges, and the server list is separate.
+    let narrowed = server
+        .put(&format!("/api/v1beta/me/chats/{chat_id}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "disabled_mcp_tools": ["crm/*"],
+            "disabled_mcp_server_ids": ["files"],
+        }))
+        .await;
+    narrowed.assert_status_ok();
+    let narrowed = narrowed.json::<Value>();
+    assert_eq!(narrowed["disabled_mcp_tools"], json!(["crm/*"]));
+    assert_eq!(narrowed["disabled_mcp_server_ids"], json!(["files"]));
+    assert_eq!(narrowed["title_by_user_provided"], "Still picky");
+
+    // A server-list-only update leaves the tool list alone.
+    let servers_cleared = server
+        .put(&format!("/api/v1beta/me/chats/{chat_id}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "disabled_mcp_server_ids": [] }))
+        .await;
+    servers_cleared.assert_status_ok();
+    let servers_cleared = servers_cleared.json::<Value>();
+    assert_eq!(servers_cleared["disabled_mcp_tools"], json!(["crm/*"]));
+    assert_eq!(servers_cleared["disabled_mcp_server_ids"], json!([]));
+
+    // Another user cannot change it, and learns nothing about the chat.
+    let foreign = server
+        .put(&format!("/api/v1beta/me/chats/{chat_id}"))
+        .with_bearer_token(&other_token)
+        .json(&json!({ "disabled_mcp_tools": [] }))
+        .await;
+    foreign.assert_status(http::StatusCode::NOT_FOUND);
+    assert_eq!(
+        detail(&server, &chat_id).await["disabled_mcp_tools"],
+        json!(["crm/*"])
+    );
+
+    // The listing reads the stored value back.
+    server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "existing_chat_id": chat_id, "user_message": "hello" }))
+        .await
+        .assert_status_ok();
+    let recent = server
+        .get("/api/v1beta/me/recent_chats")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    recent.assert_status_ok();
+    let recent = recent.json::<Value>();
+    let listed = recent["chats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|chat| chat["id"] == chat_id.as_str())
+        .expect("chat listed");
+    assert_eq!(listed["disabled_mcp_tools"], json!(["crm/*"]));
+
+    let cleared = server
+        .put(&format!("/api/v1beta/me/chats/{chat_id}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "disabled_mcp_tools": [] }))
+        .await;
+    cleared.assert_status_ok();
+    assert_eq!(cleared.json::<Value>()["disabled_mcp_tools"], json!([]));
+}
+
 /// Test retrieving all messages from a specific chat.
 ///
 /// # Test Categories

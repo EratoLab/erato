@@ -161,6 +161,45 @@ describe("constructSubmitStreamRequestBody", () => {
     ).not.toHaveProperty("disabled_mcp_server_ids");
   });
 
+  it("seeds the switched-off tools into a new chat's body only when there are any", () => {
+    const body = constructSubmitStreamRequestBody(
+      "hello",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      ["linear/create_issue"],
+    );
+
+    expect(body.disabled_mcp_tools).toEqual(["linear/create_issue"]);
+    expect(body).not.toHaveProperty("disabled_mcp_server_ids");
+    expect(body).not.toHaveProperty("mcp_write_tools_enabled");
+    expect(
+      constructSubmitStreamRequestBody(
+        "hello",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        [],
+      ),
+    ).not.toHaveProperty("disabled_mcp_tools");
+  });
+
   it("carries the delegation run mode when one was chosen", () => {
     const body = constructSubmitStreamRequestBody(
       "ask @Researcher",

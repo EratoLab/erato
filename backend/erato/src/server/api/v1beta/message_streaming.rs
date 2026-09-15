@@ -743,6 +743,12 @@ pub struct MessageSubmitRequest {
     /// chat.
     #[schema(nullable = false)]
     disabled_mcp_server_ids: Option<Vec<String>>,
+    /// `server/tool` patterns of MCP tools a newly created chat starts with
+    /// switched off; matching tools are withheld from the model. Ignored when
+    /// existing_chat_id is provided; `PUT /me/chats/{chat_id}` changes the
+    /// list on an existing chat.
+    #[schema(nullable = false)]
+    disabled_mcp_tools: Option<Vec<String>>,
     /// IDs of facets selected by the user for this generation.
     #[serde(default)]
     selected_facet_ids: Vec<String>,
@@ -1738,6 +1744,9 @@ pub struct PreparedChatRequest {
     // MCP servers in scope for this request whose tools were withheld because
     // the user switched them off for the chat.
     mcp_servers_disabled_by_user: Vec<String>,
+    // `server/tool` names of MCP tools withheld because the user switched the
+    // tool off for the chat.
+    mcp_tools_disabled_by_user: Vec<String>,
     // Filtered MCP tools available to this request, including server routing info.
     available_mcp_tools: Vec<crate::services::mcp_session_manager::ManagedTool>,
     // Park budgets of the client tools OFFERED to this request, keyed by the
@@ -1897,6 +1906,7 @@ impl MessageSubmitRequest {
             title_by_user_provided: None,
             mcp_write_tools_enabled: None,
             disabled_mcp_server_ids: None,
+            disabled_mcp_tools: None,
             selected_facet_ids: Vec::new(),
             action_facet: None,
             mentioned_assistant_ids: None,
@@ -2391,6 +2401,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         denied: _,
         write_suppressed: _,
         disabled_server_ids: mcp_servers_disabled_by_user,
+        disabled_tools: mcp_tools_disabled_by_user,
         unavailable_server_ids: mcp_servers_unavailable,
         needing_auth_server_ids: mcp_servers_needing_auth,
         missing_credential_server_ids: _,
@@ -2408,6 +2419,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
             user_id: me_profile_input.user_id,
             write_tools_enabled: chat.mcp_write_tools_enabled,
             disabled_server_ids: &chat.disabled_mcp_server_ids,
+            disabled_tool_patterns: &chat.disabled_mcp_tools,
         },
         &mcp_auth_context,
     )
@@ -2733,6 +2745,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         mcp_servers_unavailable,
         mcp_servers_needing_auth,
         mcp_servers_disabled_by_user,
+        mcp_tools_disabled_by_user,
         available_mcp_tools: generation_mcp_tools.clone(),
         offered_client_tool_timeouts,
         chat_request,
@@ -2986,6 +2999,7 @@ async fn stream_generate_chat_completion<
     mcp_servers_unavailable: Vec<String>,
     mcp_servers_needing_auth: Vec<String>,
     mcp_servers_disabled_by_user: Vec<String>,
+    mcp_tools_disabled_by_user: Vec<String>,
     allowed_tool_names: HashSet<String>,
     available_mcp_tools: Vec<crate::services::mcp_session_manager::ManagedTool>,
     offered_client_tool_timeouts: HashMap<String, Option<u64>>,
@@ -3153,6 +3167,7 @@ async fn stream_generate_chat_completion<
                 || !mcp_servers_unavailable.is_empty()
                 || !mcp_servers_needing_auth.is_empty()
                 || !mcp_servers_disabled_by_user.is_empty()
+                || !mcp_tools_disabled_by_user.is_empty()
             {
                 Some(GenerationMetadata {
                     used_prompt_tokens: if total_prompt_tokens > 0 {
@@ -3187,6 +3202,8 @@ async fn stream_generate_chat_completion<
                         .then(|| mcp_servers_needing_auth.clone()),
                     mcp_servers_disabled_by_user: (!mcp_servers_disabled_by_user.is_empty())
                         .then(|| mcp_servers_disabled_by_user.clone()),
+                    mcp_tools_disabled_by_user: (!mcp_tools_disabled_by_user.is_empty())
+                        .then(|| mcp_tools_disabled_by_user.clone()),
                 })
             } else {
                 None
@@ -6218,6 +6235,9 @@ pub(crate) struct GenerationMcpToolInputs<'a> {
     pub write_tools_enabled: bool,
     /// Servers the user switched off for the chat; their tools are dropped.
     pub disabled_server_ids: &'a [String],
+    /// `server/tool` patterns of tools the user switched off for the chat;
+    /// matching tools are dropped.
+    pub disabled_tool_patterns: &'a [String],
 }
 
 pub(crate) struct GenerationMcpToolSet {
@@ -6237,6 +6257,10 @@ pub(crate) struct GenerationMcpToolSet {
     /// Servers in scope for this generation that the user switched off for
     /// the chat, sorted; every tool of theirs was dropped.
     pub disabled_server_ids: Vec<String>,
+    /// `server/tool` names of discovered tools dropped because the user
+    /// switched them off for the chat, sorted. A pattern that matched
+    /// nothing leaves no trace here.
+    pub disabled_tools: Vec<String>,
     pub unavailable_server_ids: Vec<String>,
     pub needing_auth_server_ids: Vec<String>,
     pub missing_credential_server_ids: Vec<String>,
@@ -6245,7 +6269,7 @@ pub(crate) struct GenerationMcpToolSet {
 /// Resolve the MCP tool set of one generation: facet and action-facet
 /// allowlists, the assistant's server restriction, the policy engine's
 /// server authorization, the user's own denials, the chat's write toggle,
-/// and the servers the user switched off for the chat.
+/// and the servers and tools the user switched off for the chat.
 ///
 /// This is the only place that chain lives. A continued turn (after a tool
 /// approval) rebuilds the set through here from the persisted generation
@@ -6368,6 +6392,8 @@ async fn resolve_generation_mcp_tools(
     disabled_server_ids.sort();
     disabled_server_ids.dedup();
     let tools = filter_mcp_tools_by_disabled_servers(tools, &disabled_server_ids);
+    let (tools, disabled_tools) =
+        filter_mcp_tools_by_disabled_patterns(tools, inputs.disabled_tool_patterns);
 
     Ok(GenerationMcpToolSet {
         tools,
@@ -6375,6 +6401,7 @@ async fn resolve_generation_mcp_tools(
         denied,
         write_suppressed,
         disabled_server_ids,
+        disabled_tools,
         unavailable_server_ids: tool_discovery.unavailable_server_ids,
         needing_auth_server_ids: tool_discovery.needing_auth_server_ids,
         missing_credential_server_ids: tool_discovery.missing_credential_server_ids,
@@ -6425,6 +6452,53 @@ fn filter_mcp_tools_by_disabled_servers(
         .into_iter()
         .filter(|tool| !disabled_server_ids.contains(&tool.server_id))
         .collect()
+}
+
+/// Drop every tool one of the chat's disabled `server/tool` patterns names,
+/// in the facet allowlist grammar. Strictly subtractive, and tolerant of a
+/// server changing its tool set: a pattern for a tool that no longer exists
+/// matches nothing, and a tool added since stays offered unless a pattern
+/// covers it. The dropped tools' qualified names are returned, sorted, so a
+/// generation can say what it withheld.
+fn filter_mcp_tools_by_disabled_patterns(
+    tools: Vec<crate::services::mcp_session_manager::ManagedTool>,
+    disabled_tool_patterns: &[String],
+) -> (
+    Vec<crate::services::mcp_session_manager::ManagedTool>,
+    Vec<String>,
+) {
+    if disabled_tool_patterns.is_empty() {
+        return (tools, Vec::new());
+    }
+    let mut disabled_tools = Vec::new();
+    let tools = tools
+        .into_iter()
+        .filter(|tool| {
+            let disabled = mcp_tool_matches_disabled_patterns(
+                &tool.server_id,
+                &tool.tool.name,
+                disabled_tool_patterns,
+            );
+            if disabled {
+                disabled_tools.push(format!("{}/{}", tool.server_id, tool.tool.name));
+            }
+            !disabled
+        })
+        .collect();
+    disabled_tools.sort();
+    disabled_tools.dedup();
+    (tools, disabled_tools)
+}
+
+/// Whether a chat's disabled-tool patterns name this tool. Read directly by
+/// a continuation as well, so a parked tool stays refused even when its
+/// server cannot be reached to rediscover it.
+fn mcp_tool_matches_disabled_patterns(
+    server_id: &str,
+    tool_name: &str,
+    disabled_tool_patterns: &[String],
+) -> bool {
+    is_qualified_tool_allowed(server_id, tool_name, disabled_tool_patterns)
 }
 
 /// Filter MCP tools based on assistant configuration
@@ -6715,8 +6789,9 @@ mod tests {
     use super::{
         apply_assistant_server_filter, derive_requested_server_ids_from_allowlist,
         effective_client_tool_allowlist, expand_tool_patterns_with_discovered_tools,
-        filter_mcp_tools_by_disabled_servers, filter_mcp_tools_by_write_access,
-        mcp_tool_approval_request, merge_action_facet_into_mcp_allowlist,
+        filter_mcp_tools_by_disabled_patterns, filter_mcp_tools_by_disabled_servers,
+        filter_mcp_tools_by_write_access, mcp_tool_approval_request,
+        merge_action_facet_into_mcp_allowlist,
     };
     use crate::config::{McpToolApprovalConfig, McpToolApprovalPreset};
     use crate::services::mcp_tool_approval::evaluate_mcp_tool_approval;
@@ -6785,6 +6860,56 @@ mod tests {
             kept,
             vec![("other", "read_file")],
             "a same-named tool on another server is untouched"
+        );
+    }
+
+    #[test]
+    fn disabled_tool_patterns_drop_only_the_named_tools_and_report_them() {
+        let tools = vec![
+            managed_tool("files", Tool::new("read_file", "reads", Map::new())),
+            managed_tool("files", Tool::new("list_files", "lists", Map::new())),
+            managed_tool("other", Tool::new("read_file", "reads too", Map::new())),
+        ];
+        let names = |tools: &[crate::services::mcp_session_manager::ManagedTool]| {
+            tools
+                .iter()
+                .map(|tool| format!("{}/{}", tool.server_id, tool.tool.name))
+                .collect::<Vec<_>>()
+        };
+
+        let (kept, dropped) = filter_mcp_tools_by_disabled_patterns(tools.clone(), &[]);
+        assert_eq!(kept.len(), 3);
+        assert!(dropped.is_empty());
+
+        let (kept, dropped) =
+            filter_mcp_tools_by_disabled_patterns(tools.clone(), &["files/read_file".to_string()]);
+        assert_eq!(
+            names(&kept),
+            vec!["files/list_files", "other/read_file"],
+            "an exact pattern drops one tool and spares the same name elsewhere"
+        );
+        assert_eq!(dropped, vec!["files/read_file"]);
+
+        let (kept, dropped) = filter_mcp_tools_by_disabled_patterns(
+            tools.clone(),
+            &["files/no_such_tool".to_string(), "gone/*".to_string()],
+        );
+        assert_eq!(
+            kept.len(),
+            3,
+            "a pattern for a tool that vanished is a no-op"
+        );
+        assert!(dropped.is_empty(), "nothing withheld, nothing reported");
+
+        let (kept, dropped) = filter_mcp_tools_by_disabled_patterns(
+            tools,
+            &["files/*".to_string(), "files/read_file".to_string()],
+        );
+        assert_eq!(names(&kept), vec!["other/read_file"]);
+        assert_eq!(
+            dropped,
+            vec!["files/list_files", "files/read_file"],
+            "reported once each, sorted, whichever patterns matched"
         );
     }
 
@@ -7717,6 +7842,7 @@ pub async fn message_submit_sse(
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .map_err(|e| {
@@ -7756,6 +7882,7 @@ pub async fn message_submit_sse(
                 request.title_by_user_provided.clone(),
                 request.mcp_write_tools_enabled,
                 request.disabled_mcp_server_ids.clone(),
+                request.disabled_mcp_tools.clone(),
             )
             .await
             .map_err(|e| {
@@ -7945,6 +8072,7 @@ mod reasoning_replay_tests {
             mcp_servers_unavailable: None,
             mcp_servers_needing_auth: None,
             mcp_servers_disabled_by_user: None,
+            mcp_tools_disabled_by_user: None,
         }
     }
 
@@ -8598,6 +8726,7 @@ fn generation_metadata_for_error(error: GenerationErrorType) -> GenerationMetada
         mcp_servers_unavailable: None,
         mcp_servers_needing_auth: None,
         mcp_servers_disabled_by_user: None,
+        mcp_tools_disabled_by_user: None,
     }
 }
 
@@ -8733,6 +8862,7 @@ pub(crate) async fn run_message_submit_task(
         None,
         None,
         None,
+        None,
     )
     .await
     .wrap_err("Failed to get chat")?
@@ -8819,6 +8949,7 @@ pub(crate) async fn run_message_submit_task(
         mcp_servers_unavailable,
         mcp_servers_needing_auth,
         mcp_servers_disabled_by_user,
+        mcp_tools_disabled_by_user,
         available_mcp_tools,
         offered_client_tool_timeouts,
         delegation_targets,
@@ -8968,6 +9099,7 @@ pub(crate) async fn run_message_submit_task(
         mcp_servers_unavailable,
         mcp_servers_needing_auth,
         mcp_servers_disabled_by_user,
+        mcp_tools_disabled_by_user,
         allowed_tool_names,
         available_mcp_tools,
         offered_client_tool_timeouts,
@@ -9292,6 +9424,7 @@ pub async fn regenerate_message_sse(
                 mcp_servers_unavailable,
                 mcp_servers_needing_auth,
                 mcp_servers_disabled_by_user,
+                mcp_tools_disabled_by_user,
                 available_mcp_tools,
                 offered_client_tool_timeouts,
                 delegation_targets,
@@ -9393,6 +9526,7 @@ pub async fn regenerate_message_sse(
                     mcp_servers_unavailable,
                     mcp_servers_needing_auth,
                     mcp_servers_disabled_by_user,
+                    mcp_tools_disabled_by_user,
                     allowed_tool_names,
                     available_mcp_tools,
                     offered_client_tool_timeouts,
@@ -9798,6 +9932,7 @@ pub async fn edit_message_sse(
                 mcp_servers_unavailable,
                 mcp_servers_needing_auth,
                 mcp_servers_disabled_by_user,
+                mcp_tools_disabled_by_user,
                 available_mcp_tools,
                 offered_client_tool_timeouts,
                 delegation_targets,
@@ -9899,6 +10034,7 @@ pub async fn edit_message_sse(
                     mcp_servers_unavailable,
                     mcp_servers_needing_auth,
                     mcp_servers_disabled_by_user,
+                    mcp_tools_disabled_by_user,
                     allowed_tool_names,
                     available_mcp_tools,
                     offered_client_tool_timeouts,
@@ -10030,6 +10166,7 @@ pub async fn abort_message_stream(
         None,
         None,
         None,
+        None,
     )
     .await
     .map_err(|e| {
@@ -10098,6 +10235,7 @@ pub async fn client_tool_result(
         &me_user.to_subject(),
         Some(&request.chat_id),
         &me_user.id,
+        None,
         None,
         None,
         None,
@@ -10334,6 +10472,7 @@ async fn run_continue_message_task(
         None,
         None,
         None,
+        None,
     )
     .await?
     .0;
@@ -10382,6 +10521,7 @@ async fn run_continue_message_task(
         denied: denied_mcp_tools,
         write_suppressed: write_suppressed_mcp_tools,
         disabled_server_ids: mcp_servers_disabled_by_user,
+        disabled_tools: mcp_tools_disabled_by_user,
         unavailable_server_ids: mcp_servers_unavailable,
         needing_auth_server_ids: mcp_servers_needing_auth,
         missing_credential_server_ids: mcp_servers_missing_credential,
@@ -10399,6 +10539,7 @@ async fn run_continue_message_task(
             user_id: Some(user_id),
             write_tools_enabled: chat.mcp_write_tools_enabled,
             disabled_server_ids: &chat.disabled_mcp_server_ids,
+            disabled_tool_patterns: &chat.disabled_mcp_tools,
         },
         &mcp_auth_context,
     )
@@ -10513,9 +10654,9 @@ async fn run_continue_message_task(
         }
     } else {
         // A denial is final whatever the server's state, and so are the chat's
-        // write toggle and a server the user switched off. Otherwise a server
-        // that was merely unreachable, or that this request carried no
-        // credential for, keeps the park retryable; only a tool the rebuilt
+        // write toggle and a server or tool the user switched off. Otherwise
+        // a server that was merely unreachable, or that this request carried
+        // no credential for, keeps the park retryable; only a tool the rebuilt
         // set excludes is answered with a refusal the model can work around.
         let server_id = &approval_request.mcp_server_id;
         let excluded_pair = (server_id.clone(), approval_request.tool_name.clone());
@@ -10533,6 +10674,15 @@ async fn run_continue_message_task(
             format!(
                 "The user has turned off the server '{}' for this chat, so the tool '{}' is not available; the call was not executed.",
                 server_id, approval_request.tool_name
+            )
+        } else if mcp_tool_matches_disabled_patterns(
+            server_id,
+            &approval_request.tool_name,
+            &chat.disabled_mcp_tools,
+        ) {
+            format!(
+                "The user has turned off the tool '{}' for this chat; the call was not executed.",
+                approval_request.tool_name
             )
         } else if mcp_servers_unavailable.contains(server_id)
             || mcp_servers_needing_auth.contains(server_id)
@@ -10663,6 +10813,7 @@ async fn run_continue_message_task(
             mcp_servers_unavailable,
             mcp_servers_needing_auth,
             mcp_servers_disabled_by_user,
+            mcp_tools_disabled_by_user,
             allowed_tool_names,
             available_mcp_tools,
             HashMap::new(),
@@ -10723,6 +10874,7 @@ pub async fn resume_message_sse(
         &me_user.to_subject(),
         Some(&request.chat_id),
         &me_user.id,
+        None,
         None,
         None,
         None,

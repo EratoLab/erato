@@ -29,6 +29,7 @@ pub struct Model {
     pub generation_ended_at: Option<DateTimeWithTimeZone>,
     pub mcp_write_tools_enabled: bool,
     pub disabled_mcp_server_ids: Vec<String>,
+    pub disabled_mcp_tools: Vec<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

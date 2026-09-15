@@ -1,9 +1,16 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { McpToolsBrowserModal } from "./McpToolsBrowserModal";
 
+import type { McpToolsBrowserModalProps } from "./McpToolsBrowserModal";
 import type {
   ListMcpServerToolsResponse,
   McpServerStatus,
@@ -86,7 +93,19 @@ const stubToolsFetch = (
   return fetchMock;
 };
 
-const renderModal = (servers: McpServerStatus[], onClose = vi.fn()) => {
+const renderModal = (
+  servers: McpServerStatus[],
+  onClose = vi.fn(),
+  switches: Partial<
+    Pick<
+      McpToolsBrowserModalProps,
+      | "disabledToolPatterns"
+      | "onToggleTool"
+      | "toolSwitchesLocked"
+      | "disabledServerIds"
+    >
+  > = {},
+) => {
   render(
     <QueryClientProvider
       client={
@@ -97,7 +116,12 @@ const renderModal = (servers: McpServerStatus[], onClose = vi.fn()) => {
         })
       }
     >
-      <McpToolsBrowserModal isOpen onClose={onClose} servers={servers} />
+      <McpToolsBrowserModal
+        isOpen
+        onClose={onClose}
+        servers={servers}
+        {...switches}
+      />
     </QueryClientProvider>,
   );
   return { onClose };
@@ -189,8 +213,174 @@ describe("McpToolsBrowserModal", () => {
     expect(
       within(tools[2]).getByText("Not declared by the server"),
     ).toBeInTheDocument();
-    // Read-only: no decision controls travel with the rows here.
+    // Read-only: no decision controls travel with the rows here, and
+    // without a switch handed in there is no per-chat switch either.
     expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "The tools each connected server offers in your chats. Decide what may run in Settings.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  describe("per-chat tool switches", () => {
+    const linearRoster = () =>
+      roster("linear", [
+        tool({ name: "get_issue", title: "Get issue" }),
+        tool({ name: "create_issue", title: "Create issue" }),
+      ]);
+
+    const toolSwitch = (toolName: string) => {
+      const row = screen
+        .getAllByTestId("mcp-tools-browser-tool")
+        .find((candidate) => candidate.dataset.toolName === toolName);
+      if (!row) {
+        throw new Error(`no row for ${toolName}`);
+      }
+      return within(row).getByRole("checkbox");
+    };
+
+    it("puts a switch on every tool row, unticked for a switched-off tool, and flips that one tool", async () => {
+      stubToolsFetch({ linear: linearRoster() });
+      const onToggleTool = vi.fn();
+      renderModal([server("linear")], vi.fn(), {
+        disabledToolPatterns: ["linear/create_issue"],
+        onToggleTool,
+      });
+
+      expect(
+        screen.getByText(
+          "The tools each connected server offers in this chat. Switch a tool off to keep it out of this chat; decide what may run for you at all in Settings.",
+        ),
+      ).toBeInTheDocument();
+      expand(serverRow("linear"));
+      await screen.findAllByTestId("mcp-tools-browser-tool");
+
+      expect(toolSwitch("get_issue")).toBeChecked();
+      expect(toolSwitch("get_issue")).toHaveAccessibleName(
+        "Use Get issue in this chat",
+      );
+      expect(toolSwitch("create_issue")).not.toBeChecked();
+      // Still a checkbox, never the settings radios: the two decisions
+      // must not look alike.
+      expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+
+      fireEvent.click(toolSwitch("create_issue"));
+      expect(onToggleTool).toHaveBeenCalledWith("linear", "create_issue");
+      fireEvent.click(toolSwitch("get_issue"));
+      expect(onToggleTool).toHaveBeenCalledWith("linear", "get_issue");
+    });
+
+    it("keeps a same-named tool of another server on", async () => {
+      stubToolsFetch({
+        linear: linearRoster(),
+        github: roster("github", [
+          tool({ name: "create_issue", title: "Create issue" }),
+        ]),
+      });
+      renderModal([server("linear"), server("github")], vi.fn(), {
+        disabledToolPatterns: ["github/create_issue"],
+        onToggleTool: vi.fn(),
+      });
+
+      expand(serverRow("linear"));
+      await screen.findAllByTestId("mcp-tools-browser-tool");
+
+      expect(toolSwitch("create_issue")).toBeChecked();
+    });
+
+    // The list's grammar is wider than what the switches write: a wildcard
+    // entry keeps a tool off whatever the switch does, so the row shows it
+    // off and says why instead of offering a flip that would not help.
+    it("shows a tool covered by a wildcard entry as off and locked, with the entry named", async () => {
+      stubToolsFetch({ linear: linearRoster() });
+      const onToggleTool = vi.fn();
+      renderModal([server("linear")], vi.fn(), {
+        disabledToolPatterns: ["linear/*"],
+        onToggleTool,
+      });
+
+      expand(serverRow("linear"));
+      await screen.findAllByTestId("mcp-tools-browser-tool");
+
+      expect(toolSwitch("get_issue")).not.toBeChecked();
+      expect(toolSwitch("get_issue")).toBeDisabled();
+      expect(toolSwitch("create_issue")).not.toBeChecked();
+      expect(toolSwitch("create_issue")).toBeDisabled();
+      expect(
+        screen.getAllByText("Switched off for this chat by the rule linear/*"),
+      ).toHaveLength(2);
+      expect(screen.queryByText("In this chat")).not.toBeInTheDocument();
+    });
+
+    it("locks a tool the wildcard covers even when its exact entry is present too", async () => {
+      stubToolsFetch({ linear: linearRoster() });
+      renderModal([server("linear")], vi.fn(), {
+        disabledToolPatterns: ["linear/create_issue", "linear"],
+        onToggleTool: vi.fn(),
+      });
+
+      expand(serverRow("linear"));
+      await screen.findAllByTestId("mcp-tools-browser-tool");
+
+      expect(toolSwitch("create_issue")).not.toBeChecked();
+      expect(toolSwitch("create_issue")).toBeDisabled();
+      expect(toolSwitch("get_issue")).toBeDisabled();
+    });
+
+    it("locks the switches while the chat's list is not read yet", async () => {
+      stubToolsFetch({ linear: linearRoster() });
+      renderModal([server("linear")], vi.fn(), {
+        disabledToolPatterns: [],
+        onToggleTool: vi.fn(),
+        toolSwitchesLocked: true,
+      });
+
+      expand(serverRow("linear"));
+      await screen.findAllByTestId("mcp-tools-browser-tool");
+
+      expect(toolSwitch("get_issue")).toBeDisabled();
+      expect(toolSwitch("create_issue")).toBeDisabled();
+    });
+
+    // The server switch lives in the composer; here the row only says the
+    // server is off and keeps the per-tool switches from pretending.
+    it("says a switched-off server is off for the chat and locks its tool switches", async () => {
+      stubToolsFetch({
+        linear: linearRoster(),
+        github: roster("github", [
+          tool({ name: "create_issue", title: "Create issue" }),
+        ]),
+      });
+      renderModal([server("linear"), server("github")], vi.fn(), {
+        disabledToolPatterns: [],
+        onToggleTool: vi.fn(),
+        disabledServerIds: ["linear"],
+      });
+
+      const linear = serverRow("linear");
+      expect(
+        within(linear).getByText("Switched off for this chat"),
+      ).toBeInTheDocument();
+      expect(
+        within(serverRow("github")).queryByText("Switched off for this chat"),
+      ).not.toBeInTheDocument();
+
+      expand(linear);
+      await screen.findAllByTestId("mcp-tools-browser-tool");
+      expect(toolSwitch("get_issue")).toBeDisabled();
+      expect(toolSwitch("get_issue")).toBeChecked();
+
+      expand(serverRow("github"));
+      await waitFor(() =>
+        expect(
+          screen.getAllByTestId("mcp-tools-browser-tool-switch"),
+        ).toHaveLength(3),
+      );
+      const githubSwitch = within(serverRow("github")).getByRole("checkbox");
+      expect(githubSwitch).toBeEnabled();
+    });
   });
 
   it("offers Authorize instead of tools for a server awaiting the user's connection", () => {

@@ -494,4 +494,38 @@ describe("AddinChatInput", () => {
     expect(onSendMessage.mock.calls[0]?.[9]).toEqual(["linear"]);
     expect(onSendMessage.mock.calls[0]?.[8]).toBeUndefined();
   });
+
+  it("carries a new chat's switched-off tools seed through to the host send", async () => {
+    h.fetchUploadFile.mockResolvedValueOnce({ files: [{ id: "u1" }] });
+    const { onSendMessage } = renderInput();
+
+    (
+      h.chatInput.props.onSendMessage as (
+        message: string,
+        inputFileIds?: string[],
+        modelId?: string,
+        selectedFacetIds?: string[],
+        mentionedAssistants?: { id: string; name: string }[],
+        delegationRunMode?: "wait" | "background",
+        mcpWriteToolsEnabled?: boolean,
+        disabledMcpServerIds?: string[],
+        disabledMcpTools?: string[],
+      ) => void
+    )(
+      "without issue creation",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      ["linear/create_issue"],
+    );
+
+    // Eleventh slot: right after the servers seed.
+    await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+    expect(onSendMessage.mock.calls[0]?.[10]).toEqual(["linear/create_issue"]);
+    expect(onSendMessage.mock.calls[0]?.[9]).toBeUndefined();
+  });
 });
