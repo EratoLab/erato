@@ -84,6 +84,40 @@ the kit's other overrides stay installed. Whether the host actually falls back
 or only logs is one constant, `COMPONENT_KIT_VERSION_STANCE`, which ships as
 `"warn"` while deployed kits are still undeclared.
 
+### Running the host's contract suite
+
+Declaring a minor says which contract a kit knows about; the suite says whether
+its override actually carries it. `@erato/frontend/conformance` exports
+host-authored cases that render an override and check the row behaviours a kit
+is required to keep — the archived marker, the delegated-run origin line, the
+status dot, and every gate on the action menu including the confirmation an
+archive has to ask for while a chat is still generating or waiting on a tool
+approval.
+
+It is a separate package export rather than part of `@erato/frontend/shared`
+because everything on the shared surface is downloaded by every end user, and
+this is test infrastructure. Import it only from test files; the kit manifest
+check rejects it anywhere else.
+
+```ts
+import { chatHistoryListConformanceFailures } from "@erato/frontend/conformance";
+
+it("keeps the row contract", () => {
+  expect(
+    chatHistoryListConformanceFailures(MyChatHistoryList, {
+      render: (element) => render(element),
+      openRowMenu: (container) => openMyTrailingMenu(container),
+    }),
+  ).toEqual([]);
+});
+```
+
+The suite checks that the required menu ids are present, in their required
+relative order, with the required disabled and confirmation flags. A kit is
+free to insert its own items anywhere and to give any item its own icon or
+label — those are not what the cases read. Ids the host gates OUT for a row
+must stay out: an item rendered inert is worse than one that is missing.
+
 The main frontend loads a small runtime entrypoint first, then component kit
 entrypoints, then the main app entrypoint. Component kits can assume
 `window.ERATO_REACT` and `window.ERATO_LINGUI_REACT` are set when their

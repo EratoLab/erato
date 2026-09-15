@@ -690,6 +690,16 @@ describe("ChatHistoryList", () => {
       );
     });
 
+    it("fails a kit that silences the archive confirmation", async () => {
+      const failures = await failuresForOverride((items) =>
+        items.map((item) => ({ ...item, confirmAction: false })),
+      );
+
+      expect(failures.join("\n")).toContain(
+        '"archive" acts without asking first',
+      );
+    });
+
     it("fails a kit that renders an item the gates dropped", async () => {
       const failures = await failuresForOverride((items) => [
         ...items,

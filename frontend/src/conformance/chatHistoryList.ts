@@ -5,8 +5,9 @@
  *
  * Deliberately framework-free: the caller supplies rendering and menu opening,
  * because a kit's trailing menu mounts on hover while the host's does not, and
- * the shared surface must not carry a test runner. It reports failures rather
- * than asserting, so each side ends with one `expect(failures).toEqual([])`.
+ * this module must not drag a test runner in behind it. It reports failures
+ * rather than asserting, so each side ends with one
+ * `expect(failures).toEqual([])`.
  *
  * Assertions read ids, test ids and relations — never label text: a kit's test
  * harness activates its own catalog, so host copy is unreadable there.
@@ -15,11 +16,13 @@
 import { createElement } from "react";
 
 import { CHAT_HISTORY_ROW_MENU_ID } from "@/components/ui/Chat/chatHistoryRowMenuIds";
+import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { DELEGATION_PROVENANCE_KIND } from "@/utils/chat/recentChatSession";
 
 import type { ChatHistoryListProps } from "@/components/ui/Chat/ChatHistoryList";
 import type { DropdownMenuItem } from "@/components/ui/Controls/DropdownMenu";
 import type { ChatSession } from "@/types/chat";
+import type { ChatAttentionStatus } from "@/utils/chatHistoryGrouping";
 import type { ComponentType, ReactElement } from "react";
 
 export interface ChatHistoryConformanceHarness {
@@ -85,6 +88,57 @@ const text = (container: HTMLElement, testId: string) =>
   container.querySelector(`[data-testid="${testId}"]`)?.textContent?.trim() ??
   null;
 
+/**
+ * The statuses that change what the row's menu does. They live in a host store
+ * rather than on the session, so a fixture cannot state one as data; the runner
+ * writes the store instead. This module is built as a sibling entry of the
+ * shared surface, so that store is the same instance as the one behind the
+ * hooks a kit imports from `@erato/frontend/shared`.
+ */
+type ConformanceRowStatus = "running" | "action_required";
+
+const STATUS_STARTED_AT = new Date("2024-01-03T00:00:00.000Z").toISOString();
+
+const applyRowStatus = (
+  chatId: string,
+  status: ConformanceRowStatus | undefined,
+) => {
+  if (!status) {
+    return;
+  }
+  useGenerationStatusStore.setState({
+    statusByChatId: {
+      [chatId]: {
+        kind: status,
+        startedAt: STATUS_STARTED_AT,
+        localSeenAt: Date.now(),
+      },
+    },
+    currentChatId: null,
+  });
+};
+
+const statusDotFailures = (
+  container: HTMLElement,
+  status: ChatAttentionStatus,
+): string[] => {
+  const dot = container.querySelector('[data-testid="chat-generation-status"]');
+  if (!dot) {
+    return [`no status dot on a "${status}" row`];
+  }
+
+  const shown = dot.getAttribute("data-status");
+  const label = dot.getAttribute("title") ?? "";
+  return [
+    ...(shown === status
+      ? []
+      : [`the status dot reads "${shown}", expected "${status}"`]),
+    ...(label !== "" && rowLabel(container).includes(label)
+      ? []
+      : ["the accessible name omits the row's status"]),
+  ];
+};
+
 const menuIds = (items: DropdownMenuItem[]) =>
   items.map((item) => item.id ?? "<no id>");
 
@@ -103,6 +157,8 @@ interface RequiredMenuItem {
 interface ConformanceCase {
   name: string;
   props: ChatHistoryListProps;
+  /** Status to put the listed chat in first; the row then has to show it. */
+  status?: ConformanceRowStatus;
   /** Ids that must be present, in the relative order they must keep. */
   menu: readonly RequiredMenuItem[];
   /** Ids the gates drop for this row, which must not come back. */
@@ -182,6 +238,9 @@ const CASES: ConformanceCase[] = [
       ...(text(container, "chat-history-item-run-origin") === null
         ? []
         : ["an ordinary chat renders a delegated-run origin"]),
+      ...(container.querySelector('[data-testid="chat-generation-status"]')
+        ? ["an idle row renders a status dot"]
+        : []),
     ],
   },
   {
@@ -225,11 +284,35 @@ const CASES: ConformanceCase[] = [
         ...(origin && !rowLabel(container).includes(origin)
           ? ["the accessible name omits where the run came from"]
           : []),
-        ...(container.querySelector('[data-testid="chat-generation-status"]')
-          ? []
-          : ["no status dot for a run with a recorded outcome"]),
+        ...statusDotFailures(container, "error"),
       ];
     },
+  },
+  {
+    // The pair the whole contract exists for: archiving is reversible, so it
+    // asks first only where unarchiving cannot put the work back.
+    name: "a row that is still generating",
+    props: listProps(ACTIVE_SESSION),
+    status: "running",
+    menu: [
+      { id: CHAT_HISTORY_ROW_MENU_ID.pin },
+      { id: CHAT_HISTORY_ROW_MENU_ID.share },
+      { id: CHAT_HISTORY_ROW_MENU_ID.rename },
+      { id: CHAT_HISTORY_ROW_MENU_ID.archive, confirmAction: true },
+    ],
+    menuMustNotContain: [CHAT_HISTORY_ROW_MENU_ID.unarchive],
+  },
+  {
+    name: "a row waiting on a tool approval",
+    props: listProps(ACTIVE_SESSION),
+    status: "action_required",
+    menu: [
+      { id: CHAT_HISTORY_ROW_MENU_ID.pin },
+      { id: CHAT_HISTORY_ROW_MENU_ID.share },
+      { id: CHAT_HISTORY_ROW_MENU_ID.rename },
+      { id: CHAT_HISTORY_ROW_MENU_ID.archive, confirmAction: true },
+    ],
+    menuMustNotContain: [CHAT_HISTORY_ROW_MENU_ID.unarchive],
   },
   {
     name: "a row at the pin limit",
@@ -266,30 +349,50 @@ const CASES: ConformanceCase[] = [
   },
 ];
 
+const caseFailures = (
+  List: ComponentType<ChatHistoryListProps>,
+  harness: ChatHistoryConformanceHarness,
+  conformanceCase: ConformanceCase,
+): string[] => {
+  const { container, unmount } = harness.render(
+    createElement(List, conformanceCase.props),
+  );
+  try {
+    if (!row(container)) {
+      return ["renders no row at all"];
+    }
+    return [
+      ...menuFailures(harness.openRowMenu(container), conformanceCase),
+      ...(conformanceCase.status
+        ? statusDotFailures(container, conformanceCase.status)
+        : []),
+      ...(conformanceCase.check?.(container) ?? []),
+    ];
+  } finally {
+    unmount();
+  }
+};
+
 export const chatHistoryListConformanceFailures = (
   List: ComponentType<ChatHistoryListProps>,
   harness: ChatHistoryConformanceHarness,
 ): string[] => {
   const failures: string[] = [];
+  const generationStatus = useGenerationStatusStore.getState();
 
   for (const conformanceCase of CASES) {
-    const { container, unmount } = harness.render(
-      createElement(List, conformanceCase.props),
+    applyRowStatus(
+      conformanceCase.props.sessions[0].id,
+      conformanceCase.status,
     );
     try {
-      if (!row(container)) {
-        failures.push(`${conformanceCase.name}: renders no row at all`);
-        continue;
-      }
-      const items = harness.openRowMenu(container);
-      for (const failure of [
-        ...menuFailures(items, conformanceCase),
-        ...(conformanceCase.check?.(container) ?? []),
-      ]) {
+      for (const failure of caseFailures(List, harness, conformanceCase)) {
         failures.push(`${conformanceCase.name}: ${failure}`);
       }
     } finally {
-      unmount();
+      // Restored after every case, not just the ones that set it: a status
+      // left behind would silently change what the next case is testing.
+      useGenerationStatusStore.setState(generationStatus, true);
     }
   }
 
