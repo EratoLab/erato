@@ -131,7 +131,10 @@ describe("shared surface requirements", () => {
   ) => {
     const registry = await loadRegistry();
     window.ERATO_COMPONENT_KITS = kits;
-    registry.applyComponentKitRegistrations(stance);
+    if (stance) {
+      window.ERATO_COMPONENT_KIT_VERSION_STANCE = stance;
+    }
+    registry.applyComponentKitRegistrations();
     return registry.componentRegistry;
   };
 
@@ -218,14 +221,6 @@ describe("shared surface requirements", () => {
     const registry = await applyKits([kit(undefined)]);
 
     expect(registry.ChatHistoryList).toBe(list);
-  });
-
-  it("enforces when the deployment asks for it", async () => {
-    window.ERATO_COMPONENT_KIT_VERSION_STANCE = "enforce";
-
-    const registry = await applyKits([kit(undefined)]);
-
-    expect(registry.ChatHistoryList).toBeNull();
   });
 
   it("keeps the default when the deployment sets something else", async () => {

@@ -376,8 +376,8 @@ const declaredMinorText = (
 
 const buildComponentRegistry = (
   componentKits: ComponentKitRegistration[] | undefined,
-  stance: ComponentKitVersionStance = resolveComponentKitVersionStance(),
 ): ComponentRegistry => {
+  const stance = resolveComponentKitVersionStance();
   const registry = emptyComponentRegistry();
   const selectedPriorities: Partial<Record<keyof ComponentRegistry, number>> =
     {};
@@ -445,14 +445,12 @@ export const componentRegistry: ComponentRegistry = buildComponentRegistry(
  * after kit scripts have executed and before the first render (and before any
  * entry-point-specific registry assignments).
  */
-export const applyComponentKitRegistrations = (
-  stance: ComponentKitVersionStance = resolveComponentKitVersionStance(),
-): void => {
+export const applyComponentKitRegistrations = (): void => {
   if (typeof window === "undefined") {
     return;
   }
   Object.assign(
     componentRegistry,
-    buildComponentRegistry(window.ERATO_COMPONENT_KITS, stance),
+    buildComponentRegistry(window.ERATO_COMPONENT_KITS),
   );
 };
