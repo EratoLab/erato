@@ -30,6 +30,7 @@ const spies = vi.hoisted(() => ({
   createEntraNaaAuthSource: vi.fn(),
   sessionAuthSource: vi.fn(),
   usePersistedState: vi.fn(),
+  unarchiveChat: vi.fn(async () => undefined),
   updateChatTitle: vi.fn(async () => undefined),
   messagingStore: {
     abortActiveSSE: vi.fn(),
@@ -174,6 +175,7 @@ vi.mock("@erato/frontend/library", async () => {
       spies.usePersistedState(key);
       return useState(initialValue);
     },
+    useUnarchiveChat: () => spies.unarchiveChat,
     useUpdateChatTitle: () => spies.updateChatTitle,
 
     MessageList: () => <div data-testid="teams-message-list" />,

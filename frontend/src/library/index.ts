@@ -376,6 +376,7 @@ export {
   buildRecentChatsFilterParams,
   removeArchivedChatFromLists,
   useInfiniteRecentChats,
+  useUnarchiveChat,
   useUpdateChatTitle,
   type RecentChatsListFilters,
 } from "@/hooks/chat/useInfiniteRecentChats";

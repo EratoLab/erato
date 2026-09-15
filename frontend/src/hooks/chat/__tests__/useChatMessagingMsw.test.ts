@@ -32,6 +32,7 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   useMessageSubmitSse: vi.fn(),
   useRecentChats: vi.fn(),
   useArchiveChatEndpoint: vi.fn(),
+  useUnarchiveChatEndpoint: vi.fn(() => ({ mutateAsync: vi.fn() })),
   useUpdateChat: vi.fn(),
 }));
 

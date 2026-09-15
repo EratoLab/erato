@@ -804,7 +804,12 @@ describe("UserPreferencesDialog", () => {
           method: "POST",
         }),
       );
-      expect(invalidateQueries).toHaveBeenCalled();
+      expect(invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ["api", "v1beta", "me", "recent_chats"],
+      });
+      expect(invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ["api", "v1beta", "me", "chats"],
+      });
       expect(refetchQueries).toHaveBeenCalled();
       expect(onClose).toHaveBeenCalled();
       expect(mockNavigate).toHaveBeenCalledWith("/chat/new", { replace: true });

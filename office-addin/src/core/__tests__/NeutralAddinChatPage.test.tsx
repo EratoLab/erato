@@ -28,6 +28,7 @@ const spies = vi.hoisted(() => ({
     AddinStartView: null as (() => ReactNode) | null,
   },
   setGenerationCurrentChatId: vi.fn(),
+  unarchiveChat: vi.fn(async () => undefined),
   updateChatTitle: vi.fn(async () => undefined),
   runOpenHandler: { current: null as ((chatId: string) => void) | null },
   chatContextValue: { current: null as ChatContextValue | null },
@@ -114,6 +115,7 @@ vi.mock("@erato/frontend/library", async () => {
       return context;
     },
 
+    useUnarchiveChat: () => spies.unarchiveChat,
     useChatMessaging: spies.useChatMessaging,
     useGenerationStatusStore: Object.assign(vi.fn(), {
       getState: () => ({
@@ -391,6 +393,22 @@ describe("NeutralAddinChatPage host boundary", () => {
     expect(spies.messagingStore.clearUserMessages).toHaveBeenCalled();
     expect(spies.messagingStore.resetStreaming).toHaveBeenCalled();
     expect(spies.clearNewlyCreatedChatId).toHaveBeenCalled();
+  });
+
+  it("refreshes the archived chat's detail after archiving", async () => {
+    const invalidateQueries = vi.spyOn(
+      QueryClient.prototype,
+      "invalidateQueries",
+    );
+    renderPage();
+
+    await act(async () => {
+      await spies.chatContextValue.current?.archiveChat("chat-1");
+    });
+
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["chat-detail"],
+    });
   });
 
   it("hands the session's chat to the delegated-runs bar and opens a run in-pane", () => {

@@ -409,17 +409,22 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
  * The generating poll is gated on the store, so a surface that lists chats
  * has to push what the rows already say — otherwise the poll never starts
  * and the indicators never observe a transition. The compared seed path
- * keeps stale rows from resurrecting anything newer.
+ * keeps stale rows from resurrecting anything newer. An archived row seeds
+ * nothing: archiving cleared its marker, and the poll would only clear it again.
  */
 export function seedGenerationStatusFromListing(
   chats: readonly Pick<
     RecentChat,
-    "id" | "active_generation_started_at" | "pending_tool_approval_at"
+    | "id"
+    | "archived_at"
+    | "active_generation_started_at"
+    | "pending_tool_approval_at"
   >[],
 ): void {
   const { seedRunning, seedActionRequired } =
     useGenerationStatusStore.getState();
   for (const chat of chats) {
+    if (chat.archived_at) continue;
     if (chat.active_generation_started_at) {
       seedRunning(chat.id, chat.active_generation_started_at);
     }

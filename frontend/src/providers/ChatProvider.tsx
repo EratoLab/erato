@@ -57,6 +57,7 @@ export interface ChatContextValue {
   historyError: ChatsError | null;
   createNewChat: () => Promise<string>;
   archiveChat: (chatId: string) => Promise<void>;
+  unarchiveChat: (chatId: string) => Promise<void>;
   updateChatTitle: (
     chatId: string,
     titleByUserProvided?: string,
@@ -168,6 +169,7 @@ export function ChatProvider({
     error: historyError,
     createNewChat: createNewChatFromHistory,
     archiveChat,
+    unarchiveChat,
     updateChatTitle,
     navigateToChat,
     refetch: refetchHistory,
@@ -338,6 +340,7 @@ export function ChatProvider({
       historyError,
       createNewChat,
       archiveChat,
+      unarchiveChat,
       updateChatTitle,
       pinChat,
       navigateToChat,
@@ -391,6 +394,7 @@ export function ChatProvider({
     historyError,
     createNewChat,
     archiveChat,
+    unarchiveChat,
     updateChatTitle,
     pinChat,
     navigateToChat,

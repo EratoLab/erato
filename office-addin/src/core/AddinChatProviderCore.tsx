@@ -1,5 +1,6 @@
 import {
   ChatContext,
+  chatDetailQuery,
   getSupportedFileTypes,
   mapMessageToUiMessage,
   recentChatsQuery,
@@ -18,6 +19,7 @@ import {
   useMessagingStore,
   useModelHistory,
   usePersistedState,
+  useUnarchiveChat,
   useUpdateChatTitle,
   type ChatContextValue,
   type Message,
@@ -249,10 +251,11 @@ function AddinChatDataProvider({
           throw error;
         }
       }
-      // An archived chat has no row, so its status must not keep counting.
-      // Cleared only once the mutation succeeded: there is no restore API,
-      // so clearing earlier would drop the marker of a chat whose row a
-      // failed archive puts back.
+      void queryClient.invalidateQueries({
+        queryKey: chatDetailQuery({ pathParams: { chatId } }).queryKey,
+      });
+      // An archived chat carries no marker; cleared only on success so a
+      // failed archive keeps the row's marker.
       useGenerationStatusStore.getState().clearStatus(chatId);
       if (session.currentChatId === chatId) {
         session.beginNewChat();
@@ -268,6 +271,7 @@ function AddinChatDataProvider({
     ],
   );
 
+  const unarchiveChat = useUnarchiveChat();
   const updateChatTitle = useUpdateChatTitle();
 
   // Seed the status store from the backend's running and pending-approval
@@ -385,6 +389,7 @@ function AddinChatDataProvider({
       historyError,
       createNewChat,
       archiveChat,
+      unarchiveChat,
       updateChatTitle,
       pinChat: async () => {},
       navigateToChat,
@@ -449,6 +454,7 @@ function AddinChatDataProvider({
     session.newChatCounter,
     silentChatId,
     streamingContent,
+    unarchiveChat,
     updateChatTitle,
     uploadError,
     uploadFiles,

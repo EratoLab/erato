@@ -215,6 +215,7 @@ export interface ChatSession {
   canEdit?: boolean;
   isPinned?: boolean;
   updatedAt: string;
+  archivedAt?: string;
   messages: Message[];
   metadata?: ChatSessionMetadata;
   assistantId?: string | null;

@@ -239,6 +239,7 @@ export const DEFAULT_STUBS = {
 
   // Pure helpers: the real implementations are exercised by the frontend's own
   // tests, so the add-in only needs the identity or empty result.
+  chatDetailQuery: () => ({ queryKey: ["chat-detail"] }),
   chatMessagesQuery: () => ({ queryKey: ["chat-messages"] }),
   componentRegistry: {},
   createBrowserClientInfo: (info: unknown) => info,
@@ -333,6 +334,7 @@ export const DEFAULT_STUBS = {
     useState(initialValue),
   useProfile: () => ({ profile: undefined }),
   useStandardMessageActions: () => noop,
+  useUnarchiveChat: () => async () => undefined,
   useUploadFeature: () => ({
     enabled: true,
     maxSizeBytes: 20 * 1024 * 1024,

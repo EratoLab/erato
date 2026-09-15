@@ -15,6 +15,7 @@ import {
   useArchiveChatEndpoint,
   useUpdateChat,
   recentChatsQuery,
+  chatDetailQuery,
   chatMessagesQuery,
   type RecentChatsError,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
@@ -31,6 +32,7 @@ import { getStreamKey, useMessagingStore } from "./store/messagingStore";
 import {
   removeArchivedChatFromLists,
   useInfiniteRecentChats,
+  useUnarchiveChat,
   useUpdateChatTitle,
   type RecentChatsListFilters,
 } from "./useInfiniteRecentChats";
@@ -496,6 +498,9 @@ export function useChatHistory({
         void queryClient.invalidateQueries({
           queryKey: recentChatsQuery({}).queryKey,
         });
+        void queryClient.invalidateQueries({
+          queryKey: chatDetailQuery({ pathParams: { chatId } }).queryKey,
+        });
         return;
       }
 
@@ -504,10 +509,6 @@ export function useChatHistory({
       // The archived row may be the pending-chat placeholder, which lives
       // outside the cache and no list edit can take away; drop it too.
       clearPendingChat(chatId);
-
-      // An archived chat has no row, so its status must not keep counting.
-      useGenerationStatusStore.getState().clearStatus(chatId);
-      useChatHistoryStore.getState().clearTitleHint(chatId);
 
       const rollbackListRemoval = await removeArchivedChatFromLists(
         queryClient,
@@ -519,6 +520,15 @@ export function useChatHistory({
         await archiveChatMutation({
           pathParams: { chatId },
           body: {}, // Send empty object as body
+        });
+
+        // An archived chat carries no marker; cleared only on success so a
+        // failed archive keeps the row's marker.
+        useGenerationStatusStore.getState().clearStatus(chatId);
+        useChatHistoryStore.getState().clearTitleHint(chatId);
+
+        void queryClient.invalidateQueries({
+          queryKey: chatDetailQuery({ pathParams: { chatId } }).queryKey,
         });
 
         // If the archived chat was the current one, navigate to the new chat page
@@ -538,6 +548,8 @@ export function useChatHistory({
     },
     [archiveChatMutation, queryClient, currentChatId, navigate, statusFilter],
   );
+
+  const unarchiveChat = useUnarchiveChat();
 
   // Update chat title_by_user_provided
   const updateChatTitle = useUpdateChatTitle();
@@ -576,6 +588,7 @@ export function useChatHistory({
     navigateToChat,
     createNewChat,
     archiveChat,
+    unarchiveChat,
     updateChatTitle,
     pinChat,
     isNewChatPending,

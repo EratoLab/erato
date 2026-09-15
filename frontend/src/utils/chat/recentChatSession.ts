@@ -63,6 +63,7 @@ export function mapRecentChatToSession(chat: RecentChat): ChatSession {
     canEdit: chat.can_edit,
     isPinned: chat.is_pinned,
     updatedAt: chat.last_message_at || new Date().toISOString(),
+    archivedAt: chat.archived_at,
     messages: [],
     metadata: {
       lastMessage: {

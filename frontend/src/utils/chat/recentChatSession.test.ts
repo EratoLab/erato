@@ -64,6 +64,7 @@ describe("mapRecentChatToSession", () => {
       ...recentChat("c1"),
       title_by_summary: "Summary title",
       is_pinned: true,
+      archived_at: "2026-08-15T09:00:00.000Z",
     });
 
     expect(session).toMatchObject({
@@ -75,8 +76,13 @@ describe("mapRecentChatToSession", () => {
       canEdit: true,
       isPinned: true,
       updatedAt: "2026-08-14T10:00:00.000Z",
+      archivedAt: "2026-08-15T09:00:00.000Z",
     });
     expect(session.metadata?.fileCount).toBe(0);
+  });
+
+  it("leaves the archived timestamp unset for a chat that is not archived", () => {
+    expect(mapRecentChatToSession(recentChat("c1")).archivedAt).toBeUndefined();
   });
 
   it("carries the provenance envelope onto the session row model", () => {

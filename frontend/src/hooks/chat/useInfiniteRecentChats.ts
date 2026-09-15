@@ -11,8 +11,11 @@ import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 
 import {
+  chatDetailQuery,
   fetchRecentChats,
+  generatingChatsQuery,
   recentChatsQuery,
+  useUnarchiveChatEndpoint,
   useUpdateChat,
   type RecentChatsError,
   type RecentChatsQueryParams,
@@ -24,6 +27,7 @@ import {
   CHAT_HISTORY_FILTER_DEFAULTS,
   type ChatHistoryFilterValues,
 } from "./store/chatHistoryFilterStore";
+import { useGenerationStatusStore } from "./store/generationStatusStore";
 
 import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { InfiniteData, QueryClient } from "@tanstack/react-query";
@@ -252,6 +256,51 @@ export function useInfiniteRecentChats({
     isFetchingNextPage,
     queryKey,
   };
+}
+
+/**
+ * A plain refetch is safe here where archiving needs cache surgery: it
+ * re-derives each page offset from the pages it just fetched.
+ */
+export function useUnarchiveChat() {
+  const queryClient = useQueryClient();
+  const { mutateAsync: unarchiveChatMutation } = useUnarchiveChatEndpoint();
+
+  return useCallback(
+    async (chatId: string) => {
+      try {
+        await unarchiveChatMutation({ pathParams: { chatId } });
+      } catch (error) {
+        logger.log(`Failed to unarchive chat ${chatId}:`, error);
+        throw error;
+      }
+
+      // Deleted rather than tombstoned: a tombstone keeps the old startedAt,
+      // which the returning generation's own seed would then lose against.
+      useGenerationStatusStore.getState().clearStatus(chatId);
+
+      // Settle in-flight list fetches: a variant disabled mid-fetch is marked
+      // stale but never refetched, and its late resolve clears that flag.
+      await queryClient.cancelQueries({
+        queryKey: recentChatsQuery({}).queryKey,
+      });
+
+      // Awaited where archiving is not: no optimistic insert puts the row
+      // back, so it only returns once the lists have refetched.
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: recentChatsQuery({}).queryKey,
+        }),
+        queryClient.invalidateQueries({
+          queryKey: chatDetailQuery({ pathParams: { chatId } }).queryKey,
+        }),
+        queryClient.invalidateQueries({
+          queryKey: generatingChatsQuery({}).queryKey,
+        }),
+      ]);
+    },
+    [queryClient, unarchiveChatMutation],
+  );
 }
 
 /**
