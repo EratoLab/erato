@@ -96,6 +96,7 @@ vi.mock("@/utils/sse/sseClient", () => {
       if (options.onMessage) sseCallbacks.onMessage = options.onMessage;
       if (options.onError) sseCallbacks.onError = options.onError;
       if (options.onClose) sseCallbacks.onClose = options.onClose;
+      if (options.onOpen) sseCallbacks.onOpen = options.onOpen;
 
       // Return a cleanup function
       return vi.fn();
@@ -204,6 +205,7 @@ let sseCallbacks: {
   onMessage?: (event: SSEEvent) => void;
   onError?: (event: Error | Event) => void;
   onClose?: () => void;
+  onOpen?: () => void;
 } = {};
 
 // Add mockMutateAsync function for all tests that is consistent
@@ -2710,6 +2712,224 @@ describe("useChatMessaging", () => {
       expect(bodies.length).toBe(1);
       expect(bodies[0]).not.toHaveProperty("disabled_mcp_server_ids");
       expect(updateChat).not.toHaveBeenCalled();
+    });
+  });
+  describe("continueToolApproval", () => {
+    const parkedMessage = {
+      id: "assistant-parked-1",
+      role: "assistant" as const,
+      createdAt: "2026-02-18T12:00:00.000Z",
+      status: "complete" as const,
+      // A real park carries whatever the turn produced before it stopped, so
+      // the approval request is NOT at index 0.
+      content: [
+        { content_type: "text" as const, text: "Let me publish that. " },
+        {
+          content_type: "tool_approval_request" as const,
+          tool_call_id: "call_probe",
+          tool_name: "publish_approval_probe",
+          mcp_server_id: "mock_mcp_approval",
+          input: { channel: "release" },
+          annotations: {},
+          preset: "restrictive",
+          allow_always: false,
+          requested_at: "2026-02-18T12:00:01.000Z",
+        },
+      ],
+    };
+
+    const seedParkedChat = () => {
+      act(() => {
+        useMessagingStore
+          .getState()
+          .setApiMessages([parkedMessage as never], "chat1");
+      });
+    };
+
+    const getContinueCall = () =>
+      mockCreateSSEConnection.mock.calls.find((call: unknown[]) =>
+        (call[0] as string).includes("/continuestream"),
+      );
+
+    beforeEach(() => {
+      mockCreateSSEConnection.mockClear();
+      sseCallbacks = {};
+    });
+
+    it("releases the decision as soon as the server accepts it, not when the continuation ends", async () => {
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      seedParkedChat();
+
+      let resolved = false;
+      let pending!: Promise<void>;
+      act(() => {
+        pending = result.current
+          .continueToolApproval({
+            messageId: parkedMessage.id,
+            decision: "approve",
+            toolCallId: "call_probe",
+            toolName: "publish_approval_probe",
+            toolInput: { channel: "release" },
+          })
+          .then(() => {
+            resolved = true;
+          });
+      });
+
+      // The stream is open-ended; nothing has closed it.
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(resolved).toBe(false);
+
+      await act(async () => {
+        sseCallbacks.onOpen?.();
+        await pending;
+      });
+      expect(resolved).toBe(true);
+
+      const call = getContinueCall();
+      expect(call).toBeDefined();
+      expect(JSON.parse((call![1] as { body: string }).body)).toEqual({
+        message_id: parkedMessage.id,
+        decision: "approve",
+      });
+    });
+
+    it("seeds the parked parts plus the decision and the gated call, so the server's delta indices line up", async () => {
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      seedParkedChat();
+
+      await act(async () => {
+        const pending = result.current.continueToolApproval({
+          messageId: parkedMessage.id,
+          decision: "approve",
+          toolCallId: "call_probe",
+          toolName: "publish_approval_probe",
+          toolInput: { channel: "release" },
+        });
+        sseCallbacks.onOpen?.();
+        await pending;
+      });
+
+      const seeded = useMessagingStore.getState().getStreaming("chat1");
+      expect(seeded.isStreaming).toBe(true);
+      expect(seeded.currentMessageId).toBe(parkedMessage.id);
+      expect(seeded.content.map((part) => part.content_type)).toEqual([
+        "text",
+        "tool_approval_request",
+        "tool_approval",
+        "tool_use",
+      ]);
+
+      // The backend numbers the answer at persisted length + 2 — verified
+      // against the live wire in the backend integration tests.
+      await act(async () => {
+        sseCallbacks.onMessage?.({
+          data: JSON.stringify({
+            message_type: "text_delta",
+            message_id: parkedMessage.id,
+            content_index: 4,
+            new_text: "ANSWER",
+          }),
+          type: "message",
+        });
+      });
+
+      const streamed = useMessagingStore.getState().getStreaming("chat1");
+      expect(streamed.content).toHaveLength(5);
+      expect(streamed.content[4]).toEqual({
+        content_type: "text",
+        text: "ANSWER",
+      });
+    });
+
+    it("marks a denial's gated call as failed rather than leaving it spinning", async () => {
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      seedParkedChat();
+
+      await act(async () => {
+        const pending = result.current.continueToolApproval({
+          messageId: parkedMessage.id,
+          decision: "reject",
+          toolCallId: "call_probe",
+          toolName: "publish_approval_probe",
+        });
+        sseCallbacks.onOpen?.();
+        await pending;
+      });
+
+      const seeded = useMessagingStore.getState().getStreaming("chat1");
+      expect(seeded.content.map((part) => part.content_type)).toEqual([
+        "text",
+        "tool_approval_request",
+        "tool_rejection",
+        "tool_use",
+      ]);
+      expect((seeded.content[3] as { status?: string }).status).toBe("error");
+    });
+
+    it("clears the park indicator so a stale poll cannot resurrect it", async () => {
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      seedParkedChat();
+      act(() => {
+        useGenerationStatusStore
+          .getState()
+          .seedActionRequired("chat1", "2026-02-18T12:00:01.000Z");
+      });
+
+      await act(async () => {
+        const pending = result.current.continueToolApproval({
+          messageId: parkedMessage.id,
+          decision: "approve",
+          toolCallId: "call_probe",
+          toolName: "publish_approval_probe",
+        });
+        sseCallbacks.onOpen?.();
+        await pending;
+      });
+
+      expect(
+        useGenerationStatusStore.getState().statusByChatId["chat1"]?.kind,
+      ).toBe("running");
+    });
+
+    it("rolls the transcript back when the server refuses the decision", async () => {
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      seedParkedChat();
+
+      let rejection: unknown;
+      await act(async () => {
+        const pending = result.current
+          .continueToolApproval({
+            messageId: parkedMessage.id,
+            decision: "approve",
+            toolCallId: "call_probe",
+            toolName: "publish_approval_probe",
+          })
+          .catch((cause: unknown) => {
+            rejection = cause;
+          });
+        sseCallbacks.onError?.(
+          new Error("SSE request failed: Message generation is not awaiting"),
+        );
+        await pending;
+      });
+
+      expect((rejection as Error).message).toContain("not awaiting");
+      const rolledBack = useMessagingStore.getState().getStreaming("chat1");
+      expect(rolledBack.isStreaming).toBe(false);
+      expect(rolledBack.currentMessageId).toBeNull();
     });
   });
 });

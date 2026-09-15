@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
@@ -40,12 +46,17 @@ const approvalRequest = {
   requested_at: "2026-08-06T00:00:00Z",
 };
 
-const withChatContext = (ui: ReactNode, chatId = "chat-1") => (
+const withChatContext = (
+  ui: ReactNode,
+  chatId = "chat-1",
+  overrides: Partial<ChatContextValue> = {},
+) => (
   <ChatContext.Provider
     value={
       {
         currentChatId: chatId,
         refetchMessages: async () => undefined,
+        ...overrides,
       } as unknown as ChatContextValue
     }
   >
@@ -336,5 +347,81 @@ describe("McpToolApprovalCard", () => {
     expect(useConfirmationRegistryStore.getState().hasPending("chat-1")).toBe(
       false,
     );
+  });
+  const renderWiredCard = (continueToolApproval: () => Promise<void>) =>
+    renderCard(
+      withChatContext(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={approvalRequest}
+          resolution={null}
+        />,
+        "chat-1",
+        { continueToolApproval },
+      ),
+    );
+
+  it("hands the decision to the chat's streamed continuation instead of consuming it here", async () => {
+    const continueToolApproval = vi.fn().mockResolvedValue(undefined);
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWiredCard(continueToolApproval);
+    fireEvent.click(screen.getByText("Allow once"));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("mcp-tool-approval")).not.toBeInTheDocument();
+    });
+    expect(continueToolApproval).toHaveBeenCalledWith({
+      messageId: "message-1",
+      decision: "approve",
+      toolCallId: approvalRequest.tool_call_id,
+      toolName: approvalRequest.tool_name,
+      toolInput: approvalRequest.input,
+    });
+    // The card no longer buffers the continuation itself.
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("stays up only until the decision is accepted, which is not when the answer is done", async () => {
+    // Stands in for a decision the server has not accepted yet. Once it
+    // resolves the card goes, however long the answer then takes to stream.
+    let accept!: () => void;
+    const continueToolApproval = vi.fn().mockReturnValue(
+      new Promise<void>((resolve) => {
+        accept = resolve;
+      }),
+    );
+    vi.stubGlobal("fetch", vi.fn());
+
+    renderWiredCard(continueToolApproval);
+    fireEvent.click(screen.getByText("Allow once"));
+
+    await waitFor(() => expect(continueToolApproval).toHaveBeenCalled());
+    expect(screen.getByTestId("mcp-tool-approval")).toBeInTheDocument();
+
+    await act(async () => {
+      accept();
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId("mcp-tool-approval")).not.toBeInTheDocument();
+    });
+  });
+
+  it("keeps the card up with the reason when the decision is refused", async () => {
+    const continueToolApproval = vi
+      .fn()
+      .mockRejectedValue(new Error("Message generation is not awaiting"));
+    vi.stubGlobal("fetch", vi.fn());
+
+    renderWiredCard(continueToolApproval);
+    fireEvent.click(screen.getByText("Allow once"));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Message generation is not awaiting/),
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("mcp-tool-approval")).toBeInTheDocument();
   });
 });

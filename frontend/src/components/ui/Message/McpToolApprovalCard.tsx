@@ -107,31 +107,56 @@ export const McpToolApprovalCard = ({
     useGenerationStatusStore.getState().seedActionRequired(chatId, requestedAt);
   }, [chatId, isArchived, isPending, requestedAt]);
 
+  /**
+   * Hand the decision to the chat's own streaming machinery when the host
+   * wired it: that resolves as soon as the server ACCEPTS the decision, and
+   * the continuation then streams into the transcript like any other turn.
+   *
+   * The fallback consumes the continuation here instead, which cannot release
+   * this card until the whole answer has been generated.
+   */
+  const submitDecision = async (
+    decision: "approve" | "reject" | "approve_always",
+  ) => {
+    if (chatContext?.continueToolApproval) {
+      await chatContext.continueToolApproval({
+        messageId,
+        decision,
+        toolCallId: request.tool_call_id,
+        toolName: request.tool_name,
+        toolInput: request.input,
+      });
+      return;
+    }
+    const token = getIdToken();
+    // eslint-disable-next-line lingui/no-unlocalized-strings -- API route
+    const response = await fetch("/api/v1beta/me/messages/continuestream", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        // eslint-disable-next-line lingui/no-unlocalized-strings -- HTTP auth header
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ message_id: messageId, decision }),
+    });
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    await response.text();
+    if (chatId) {
+      // Tombstone the durable indicator: the server marker is already
+      // cleared, but a stale list row or in-flight poll may still carry it.
+      useGenerationStatusStore.getState().markApprovalDecided(chatId);
+    }
+    await chatContext?.refetchMessages();
+  };
+
   const decide = async (decision: "approve" | "reject" | "approve_always") => {
     setIsBusy(true);
     setError(null);
     try {
-      const token = getIdToken();
-      // eslint-disable-next-line lingui/no-unlocalized-strings -- API route
-      const response = await fetch("/api/v1beta/me/messages/continuestream", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          // eslint-disable-next-line lingui/no-unlocalized-strings -- HTTP auth header
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ message_id: messageId, decision }),
-      });
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-      await response.text();
+      await submitDecision(decision);
       setLocalResolution(decision === "reject" ? "denied" : "approved");
-      if (chatId) {
-        // Tombstone the durable indicator: the server marker is already
-        // cleared, but a stale list row or in-flight poll may still carry it.
-        useGenerationStatusStore.getState().markApprovalDecided(chatId);
-      }
       if (decision === "approve_always") {
         // The grant is account-wide, and the settings roster and the tool
         // browser would otherwise keep serving it from their cached listing.
@@ -146,9 +171,6 @@ export const McpToolApprovalCard = ({
           }),
         ]);
       }
-      // Keep the user in the current chat. This refreshes the persisted
-      // decision and the resumed assistant output without a document reload.
-      await chatContext?.refetchMessages();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
