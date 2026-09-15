@@ -581,3 +581,39 @@ that finishes an interrupted reset leaves indexing stopped for that process.
 The reference mock models the post-reset status and configuration preservation
 in memory. It does not delete files or implement process coordination; production
 implementations must test those lifecycle and filesystem guarantees separately.
+
+## 17. Index lifecycle and lexical search
+
+`indexing.start.v1` starts or resumes indexing. Empty params use the effective
+`sidecar.configure.v1` settings (parallelism 1 and 40 documents/minute by default).
+It does not overwrite configuration. An optional `rebuild` object starts a shadow
+rebuild; omitted fields use the implementation's current index settings. The
+active generation remains searchable until verified atomic activation. Only one
+rebuild may run; conflicting rebuild requests return `capability_unavailable`.
+Repeated starts without a rebuild are idempotent. Start is the explicit opt-in
+that may recreate indexing files after a completed reset. During reset it fails
+with `capability_unavailable` and reason `index_reset_in_progress`.
+
+`indexing.stop.v1` stops admitting work and drains current work before returning.
+It is idempotent, preserves all index files, and leaves search available. Both
+start and stop return the same complete statistics shape as `indexing.status.v1`.
+Stop does not change persistent configuration. Configure alone does not resume a
+stopped index. A successful stop returns state `stopped`.
+
+`search.query.v1` searches individual indexed emails and files across sources.
+It complements `outlook.search_emails.v1`; attachments are independent results,
+and conversationKey associates results without indexing grouped conversations.
+Filters are combined with AND: sender is a case-insensitive exact address or name,
+mailboxId identifies a mailbox, kind selects email/file, fileType matches MIME type
+or filename extension, and dateFrom/dateTo are Unix seconds with an inclusive lower bound and exclusive upper bound. Reversed
+date bounds are invalid params. Files inherit available sender/mailbox/date/thread
+metadata from their parent email. Missing metadata does not satisfy a filter.
+Empty text performs a filtered listing. Text searches use exact BM25, one result
+per document using its highest scoring chunk, descending score then documentId
+for deterministic ties. limit defaults to 20 and is capped at 100. Scores are
+relative ranking values, not probabilities. The response contains result metadata
+and execution counters; it does not contain extracted document contents.
+Search uses a consistent active generation and never creates an index. With no
+active index it returns `capability_unavailable`, reason `index_not_initialized`;
+during reset the reason is `index_reset_in_progress`. The mock returns an empty
+synthetic search result and models lifecycle state, not actual BM25 or rebuilding.

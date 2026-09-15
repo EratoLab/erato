@@ -17,6 +17,9 @@ import {
 } from "../../typescript/src/index.js";
 import {
   validateCancelParams,
+  validateIndexingStartV1Params,
+  validateIndexingStopV1Params,
+  validateSearchQueryV1Params,
   validateIndexingResetV1Params,
   validateIndexingStatusV1Params,
   validateDiagnosticsEchoV1Params,
@@ -173,6 +176,7 @@ export class MockSidecar {
   #capabilityReasonCode: string | undefined;
   #configuration: SidecarConfigureV1Params | undefined;
   #restartRequests = 0;
+  #indexingStopped = false;
   #indexingResetCompletedAt: string | undefined;
 
   constructor(options: MockSidecarOptions) {
@@ -447,6 +451,34 @@ export class MockSidecar {
       return rpcResult(message.id, { accepted: true });
     }
 
+    if (message.method === "search.query.v1") {
+      if (!validateSearchQueryV1Params(message.params))
+        return rpcError(message.id, -32602, "Invalid method parameters.");
+      if (this.#indexingResetCompletedAt)
+        return rpcError(message.id, -32011, "Index not initialized.", {
+          kind: "capability_unavailable",
+          reason: "index_not_initialized",
+        });
+      return rpcResult(message.id, {
+        hits: [],
+        elapsedMs: 0,
+        blocksRead: 0,
+        candidatesScored: 0,
+      });
+    }
+    if (
+      message.method === "indexing.start.v1" ||
+      message.method === "indexing.stop.v1"
+    ) {
+      const start = message.method === "indexing.start.v1";
+      const validate = start
+        ? validateIndexingStartV1Params
+        : validateIndexingStopV1Params;
+      if (!validate(message.params))
+        return rpcError(message.id, -32602, "Invalid method parameters.");
+      this.#indexingStopped = !start;
+      if (start) this.#indexingResetCompletedAt = undefined;
+    }
     if (message.method === "indexing.reset.v1") {
       if (!validateIndexingResetV1Params(message.params))
         return rpcError(message.id, -32602, "Invalid method parameters.");
@@ -458,11 +490,16 @@ export class MockSidecar {
       });
     }
 
-    if (message.method === "indexing.status.v1") {
+    if (
+      ["indexing.status.v1", "indexing.start.v1", "indexing.stop.v1"].includes(
+        message.method,
+      )
+    ) {
       if (!validateIndexingStatusV1Params(message.params))
         return rpcError(message.id, -32602, "Invalid method parameters.");
       const params = message.params as IndexingStatusV1Params;
       const result = structuredClone(mockIndexingStatistics);
+      if (this.#indexingStopped) result.state = "stopped";
       const user = this.#configuration?.user_configuration;
       const organization = this.#configuration?.organization_configuration;
       result.effectiveConfiguration = {

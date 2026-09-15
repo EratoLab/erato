@@ -18,6 +18,37 @@ const outputDirectory =
 
 const typeTargets = [
   [
+    "schemas/methods/indexing-start-v1-params.schema.json",
+    "indexing-start-v1-params.ts",
+    "IndexingStartV1Params",
+  ],
+  [
+    "schemas/methods/indexing-start-v1-result.schema.json",
+    "indexing-start-v1-result.ts",
+    "IndexingStartV1Result",
+  ],
+  [
+    "schemas/methods/indexing-stop-v1-params.schema.json",
+    "indexing-stop-v1-params.ts",
+    "IndexingStopV1Params",
+  ],
+  [
+    "schemas/methods/indexing-stop-v1-result.schema.json",
+    "indexing-stop-v1-result.ts",
+    "IndexingStopV1Result",
+  ],
+  [
+    "schemas/methods/search-query-v1-params.schema.json",
+    "search-query-v1-params.ts",
+    "SearchQueryV1Params",
+  ],
+  [
+    "schemas/methods/search-query-v1-result.schema.json",
+    "search-query-v1-result.ts",
+    "SearchQueryV1Result",
+  ],
+
+  [
     "schemas/methods/indexing-reset-v1-result.schema.json",
     "indexing-reset-v1-result.ts",
     "IndexingResetV1Result",
@@ -220,6 +251,18 @@ const typeTargets = [
 ];
 
 const validatorTargets = {
+  validateIndexingStartV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-start-v1-params.schema.json",
+  validateIndexingStartV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-start-v1-result.schema.json",
+  validateIndexingStopV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-stop-v1-params.schema.json",
+  validateIndexingStopV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-stop-v1-result.schema.json",
+  validateSearchQueryV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/search-query-v1-params.schema.json",
+  validateSearchQueryV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/search-query-v1-result.schema.json",
   validateIndexingResetV1Result:
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-reset-v1-result.schema.json",
   validateIndexingResetV1Params:

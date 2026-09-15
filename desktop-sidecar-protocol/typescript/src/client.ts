@@ -1,6 +1,12 @@
 import { SidecarClientError, SidecarRpcError } from "./errors.js";
 import {
   validateCancelResult,
+  validateIndexingStartV1Params,
+  validateIndexingStartV1Result,
+  validateIndexingStopV1Params,
+  validateIndexingStopV1Result,
+  validateSearchQueryV1Params,
+  validateSearchQueryV1Result,
   validateIndexingResetV1Result,
   validateIndexingResetV1Params,
   validateIndexingStatusV1Result,
@@ -28,6 +34,12 @@ import {
 
 import type {
   CapabilityDescriptor,
+  IndexingStartV1Params,
+  IndexingStartV1Result,
+  IndexingStopV1Params,
+  IndexingStopV1Result,
+  SearchQueryV1Params,
+  SearchQueryV1Result,
   IndexingResetV1Result,
   IndexingResetV1Params,
   IndexingStatusV1Result,
@@ -181,6 +193,18 @@ const builtInContracts: Readonly<Record<string, SidecarMethodContract>> = {
     validateParams: validateSidecarRestartV1Params,
     validateResult: validateSidecarRestartV1Result,
   },
+  "indexing.start.v1": {
+    validateParams: validateIndexingStartV1Params,
+    validateResult: validateIndexingStartV1Result,
+  },
+  "indexing.stop.v1": {
+    validateParams: validateIndexingStopV1Params,
+    validateResult: validateIndexingStopV1Result,
+  },
+  "search.query.v1": {
+    validateParams: validateSearchQueryV1Params,
+    validateResult: validateSearchQueryV1Result,
+  },
   "indexing.reset.v1": {
     validateParams: validateIndexingResetV1Params,
     validateResult: validateIndexingResetV1Result,
@@ -292,6 +316,21 @@ export class DesktopSidecarClient {
     params: SidecarProgressV1Params,
     options?: InvokeOptions,
   ): Promise<SidecarProgressV1Result>;
+  async invoke(
+    method: "indexing.start.v1",
+    params: IndexingStartV1Params,
+    options?: InvokeOptions,
+  ): Promise<IndexingStartV1Result>;
+  async invoke(
+    method: "indexing.stop.v1",
+    params: IndexingStopV1Params,
+    options?: InvokeOptions,
+  ): Promise<IndexingStopV1Result>;
+  async invoke(
+    method: "search.query.v1",
+    params: SearchQueryV1Params,
+    options?: InvokeOptions,
+  ): Promise<SearchQueryV1Result>;
   async invoke(
     method: "indexing.reset.v1",
     params: IndexingResetV1Params,

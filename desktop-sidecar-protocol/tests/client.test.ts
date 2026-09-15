@@ -609,3 +609,52 @@ describe("DesktopSidecarClient", () => {
     ).resolves.toEqual({ state: "unknown" });
   });
 });
+
+describe("index lifecycle and lexical search", () => {
+  it("discovers the commands, preserves configuration across stop/start and explicitly resumes after reset", async () => {
+    const { client } = await setup();
+    await client.discover();
+    for (const method of [
+      "indexing.start.v1",
+      "indexing.stop.v1",
+      "search.query.v1",
+    ])
+      expect(client.supports(method)).toBe(true);
+    await client.invoke("sidecar.configure.v1", {
+      user_configuration: { indexing_documents_per_minute: 57 },
+      organization_configuration: {},
+    });
+    const stopped = await client.invoke("indexing.stop.v1", {});
+    expect(stopped.state).toBe("stopped");
+    expect(stopped.generations.length).toBeGreaterThan(0);
+    expect(
+      (
+        await client.invoke("search.query.v1", {
+          text: "invoice",
+          filters: { kind: "file" },
+        })
+      ).hits,
+    ).toEqual([]);
+    const started = await client.invoke("indexing.start.v1", {});
+    expect(started.state).toBe("running");
+    expect(started.effectiveConfiguration.documentsPerMinute).toBe(57);
+    await client.invoke("indexing.reset.v1", {});
+    await expect(client.invoke("search.query.v1", {})).rejects.toMatchObject({
+      code: -32011,
+    });
+    expect((await client.invoke("indexing.start.v1", {})).state).toBe(
+      "running",
+    );
+    expect((await client.invoke("search.query.v1", {})).hits).toEqual([]);
+  });
+  it("does not advertise added methods on older sidecars", async () => {
+    const { client } = await setup({
+      omitMethods: ["indexing.start.v1", "indexing.stop.v1", "search.query.v1"],
+    });
+    await client.discover();
+    expect(client.supports("search.query.v1")).toBe(false);
+    await expect(client.invoke("indexing.start.v1", {})).rejects.toBeInstanceOf(
+      SidecarClientError,
+    );
+  });
+});

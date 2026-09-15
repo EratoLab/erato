@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/search-query-v1-result.schema.json",
+  "title": "SearchQueryV1Result",
+  "type": "object",
+  "properties": {
+    "hits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "documentId": {
+            "type": "string"
+          },
+          "chunkId": {
+            "type": ["string", "null"]
+          },
+          "score": {
+            "type": "number"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "title": {
+            "type": ["string", "null"]
+          },
+          "sender": {
+            "type": ["string", "null"]
+          },
+          "mailboxId": {
+            "type": ["string", "null"]
+          },
+          "date": {
+            "type": ["integer", "null"]
+          },
+          "mimeType": {
+            "type": ["string", "null"]
+          },
+          "conversationKey": {
+            "type": ["string", "null"]
+          }
+        },
+        "required": [
+          "documentId",
+          "chunkId",
+          "score",
+          "kind",
+          "title",
+          "sender",
+          "mailboxId",
+          "date",
+          "mimeType",
+          "conversationKey"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "elapsedMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "blocksRead": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "candidatesScored": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": ["hits", "elapsedMs", "blocksRead", "candidatesScored"],
+  "additionalProperties": false
+}
