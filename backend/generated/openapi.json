@@ -1766,7 +1766,7 @@
       "put": {
         "tags": [],
         "summary": "Update mutable fields on a chat.",
-        "description": "Supports updating the user-provided title, pin state and the MCP write\ntools toggle.",
+        "description": "Supports updating the user-provided title, pin state, the MCP write\ntools toggle and the disabled MCP server list.",
         "operationId": "update_chat",
         "parameters": [
           {
@@ -4935,6 +4935,7 @@
           "title_resolved",
           "is_pinned",
           "mcp_write_tools_enabled",
+          "disabled_mcp_server_ids",
           "can_edit"
         ],
         "properties": {
@@ -4963,6 +4964,13 @@
           "constraints": {
             "type": "string",
             "description": "Delegated runs only: the limits the delegate was told to work within."
+          },
+          "disabled_mcp_server_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "MCP servers the user switched off for this chat; their tools are not\noffered to the model."
           },
           "expected_output": {
             "type": "string",
@@ -5091,6 +5099,13 @@
           "is_message_in_active_thread": {
             "type": "boolean",
             "description": "Whether this message is in the active thread"
+          },
+          "mcp_servers_disabled_by_user": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "MCP server IDs whose tools were withheld from this generation because\nthe user switched the server off for the chat"
           },
           "mcp_servers_needing_auth": {
             "type": "array",
@@ -7224,6 +7239,13 @@
             "$ref": "#/components/schemas/DelegationRunMode",
             "description": "How delegated runs spawned by this message are awaited. Defaults to\n`wait`; `background` requires `assistants.delegation.allow_background`\nand is downgraded to `wait` server-side when the gate is off."
           },
+          "disabled_mcp_server_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "MCP servers a newly created chat starts with switched off; their tools\nare withheld from the model. Ignored when existing_chat_id is\nprovided; `PUT /me/chats/{chat_id}` changes the list on an existing\nchat."
+          },
           "existing_chat_id": {
             "type": [
               "string",
@@ -7916,6 +7938,7 @@
           "file_uploads",
           "is_pinned",
           "mcp_write_tools_enabled",
+          "disabled_mcp_server_ids",
           "can_edit"
         ],
         "properties": {
@@ -7945,6 +7968,13 @@
             "type": "string",
             "description": "Terminal outcome of a delegated run: `completed` when the run landed a\nclean assistant answer, `failed` when it did not (unanswered, errored,\nor killed). Absent while the run is live and for chats that are not\ndelegated runs. Derived from the chat's own content, so it stays\naccurate long after the live generation status expires — a fresh\nclient sees the terminal state without ever having observed the run.",
             "example": "completed"
+          },
+          "disabled_mcp_server_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "MCP servers the user switched off for this chat; their tools are not\noffered to the model."
           },
           "file_uploads": {
             "type": "array",
@@ -9171,6 +9201,13 @@
         "type": "object",
         "description": "Request to update mutable chat fields.",
         "properties": {
+          "disabled_mcp_server_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "MCP servers to switch off for this chat; replaces the stored list.\nTheir tools are withheld from the model. Only ever narrows the set the\npolicy, assistant and facets allow."
+          },
           "is_pinned": {
             "type": [
               "boolean",
@@ -9198,12 +9235,20 @@
           "chat_id",
           "title_resolved",
           "is_pinned",
-          "mcp_write_tools_enabled"
+          "mcp_write_tools_enabled",
+          "disabled_mcp_server_ids"
         ],
         "properties": {
           "chat_id": {
             "type": "string",
             "description": "The ID of the updated chat"
+          },
+          "disabled_mcp_server_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "MCP servers the user switched off for this chat."
           },
           "is_pinned": {
             "type": "boolean",

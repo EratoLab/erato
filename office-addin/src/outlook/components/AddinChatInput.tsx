@@ -102,6 +102,7 @@ interface AddinChatInputProps {
     mentionedAssistants?: AssistantMention[],
     delegationRunMode?: DelegationRunMode,
     mcpWriteToolsEnabled?: boolean,
+    disabledMcpServerIds?: string[],
   ) => void;
   handleFileAttachments?: (files: FileUploadItem[]) => void;
   isLoading?: boolean;
@@ -849,6 +850,7 @@ export const AddinChatInput = forwardRef<
       mentionedAssistants?: AssistantMention[],
       delegationRunMode?: DelegationRunMode,
       mcpWriteToolsEnabled?: boolean,
+      disabledMcpServerIds?: string[],
     ) => {
       // Capture the item identity BEFORE any await: the uploads below can
       // take long enough for the user to switch emails, and the wrong-item
@@ -1003,6 +1005,7 @@ export const AddinChatInput = forwardRef<
           mentionedAssistants,
           delegationRunMode,
           mcpWriteToolsEnabled,
+          disabledMcpServerIds,
         );
         return;
       }
@@ -1036,6 +1039,7 @@ export const AddinChatInput = forwardRef<
             mentionedAssistants,
             delegationRunMode,
             mcpWriteToolsEnabled,
+            disabledMcpServerIds,
           );
           // No upload was attempted (e.g. only dismissed drops remain) and
           // nothing failed, so the staged drops are safe to clear.
@@ -1125,6 +1129,7 @@ export const AddinChatInput = forwardRef<
         mentionedAssistants,
         delegationRunMode,
         mcpWriteToolsEnabled,
+        disabledMcpServerIds,
       );
 
       clearSentDrops();
@@ -1288,6 +1293,7 @@ export const AddinChatInput = forwardRef<
           mentionedAssistants,
           delegationRunMode,
           mcpWriteToolsEnabled,
+          disabledMcpServerIds,
         ) => {
           void wrappedOnSendMessage(
             message,
@@ -1297,6 +1303,7 @@ export const AddinChatInput = forwardRef<
             mentionedAssistants,
             delegationRunMode,
             mcpWriteToolsEnabled,
+            disabledMcpServerIds,
           );
         }}
         disabled={

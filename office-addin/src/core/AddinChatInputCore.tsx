@@ -24,6 +24,8 @@ export interface AddinChatInputCoreProps {
      * created with writes on while the switch shows off.
      */
     mcpWriteToolsEnabled?: boolean,
+    /** Likewise for the servers switched off before the chat existed. */
+    disabledMcpServerIds?: string[],
   ) => void;
   handleFileAttachments?: (files: FileUploadItem[]) => void;
   isLoading?: boolean;

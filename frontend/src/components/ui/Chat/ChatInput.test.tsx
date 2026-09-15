@@ -5731,5 +5731,139 @@ describe("ChatInput", () => {
         "Off, only tools the server marks read-only are offered. Also pauses Outlook actions like Reply and Send.",
       );
     });
+
+    const serverRow = (serverId: string) => {
+      const item = latestConnectorsSection()?.items.find(
+        (candidate) => candidate.id === `server-${serverId}`,
+      );
+      if (!item) {
+        throw new Error(`row for ${serverId} not offered`);
+      }
+      return item;
+    };
+
+    const serverSwitch = (serverId: string) => {
+      const item = serverRow(serverId);
+      if (!("onToggle" in item)) {
+        throw new Error(`row for ${serverId} is not a switch`);
+      }
+      return item;
+    };
+
+    it("lists every server ahead of the write switch, connected ones as switches", async () => {
+      enableConnectors([CONNECTED, UNCONNECTED]);
+      await renderComposer("chat-1");
+
+      expect(latestConnectorsSection()?.items.map((item) => item.id)).toEqual([
+        "server-linear",
+        "server-jira",
+        "allow-write-operations",
+        "browse-tools",
+      ]);
+      expect(serverSwitch("linear").checked).toBe(true);
+      expect("onToggle" in serverRow("jira")).toBe(false);
+    });
+
+    it("switches a server off on an existing chat through the update endpoint", async () => {
+      enableConnectors();
+      const mutateAsync = vi.fn().mockResolvedValue({});
+      mockUseUpdateChat.mockReturnValue({ mutateAsync, isPending: false });
+      mockUseChatDetail.mockReturnValue({
+        data: {
+          id: "chat-1",
+          mcp_write_tools_enabled: true,
+          disabled_mcp_server_ids: [],
+        },
+      });
+      const onSendMessage = vi.fn();
+      const textarea = await renderComposer("chat-1", onSendMessage);
+
+      await act(async () => {
+        serverSwitch("linear").onToggle();
+      });
+
+      expect(mutateAsync).toHaveBeenCalledWith({
+        pathParams: { chatId: "chat-1" },
+        body: { disabled_mcp_server_ids: ["linear"] },
+      });
+      expect(serverSwitch("linear").checked).toBe(false);
+
+      // The row is the writer for an existing chat: nothing rides on the send.
+      fireEvent.change(textarea, { target: { value: "without linear" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "without linear",
+        undefined,
+        undefined,
+        [],
+        [],
+      );
+    });
+
+    it("locks the server switches on an existing chat until its row is read", async () => {
+      enableConnectors();
+      const mutateAsync = vi.fn().mockResolvedValue({});
+      mockUseUpdateChat.mockReturnValue({ mutateAsync, isPending: false });
+      await renderComposer("chat-1");
+
+      // The update replaces the whole list, so a flip without the row as its
+      // base would re-enable whatever the row holds; the write switch and the
+      // browser row do not depend on the list and stay live.
+      expect(serverSwitch("linear").disabled).toBe(true);
+      expect(writeToggle().disabled).toBe(false);
+      await act(async () => {
+        serverSwitch("linear").onToggle();
+      });
+      expect(mutateAsync).not.toHaveBeenCalled();
+      expect(serverSwitch("linear").checked).toBe(true);
+    });
+
+    it("carries the switched-off servers into the first send of a new chat", async () => {
+      enableConnectors();
+      const mutateAsync = vi.fn().mockResolvedValue({});
+      mockUseUpdateChat.mockReturnValue({ mutateAsync, isPending: false });
+      const onSendMessage = vi.fn();
+      const textarea = await renderComposer(null, onSendMessage);
+
+      await act(async () => {
+        serverSwitch("linear").onToggle();
+      });
+      expect(serverSwitch("linear").checked).toBe(false);
+      expect(mutateAsync).not.toHaveBeenCalled();
+
+      fireEvent.change(textarea, { target: { value: "first message" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      expect(onSendMessage).toHaveBeenCalledWith(
+        "first message",
+        undefined,
+        undefined,
+        [],
+        [],
+        undefined,
+        undefined,
+        ["linear"],
+      );
+    });
+
+    // No Router here, so no settings dialog answers; the browser is where
+    // the Authorize affordance and the status live instead.
+    it("opens the tool browser from an unauthorized server's row where no settings dialog answers", async () => {
+      enableConnectors([UNCONNECTED, CONNECTED]);
+      await renderComposer("chat-1");
+
+      const jira = serverRow("jira");
+      if ("onToggle" in jira) {
+        throw new Error("connect row is a switch");
+      }
+      await act(async () => {
+        jira.onSelect();
+      });
+
+      expect(screen.getByTestId("mcp-tools-browser-modal")).toHaveAttribute(
+        "data-open",
+        "true",
+      );
+    });
   });
 });

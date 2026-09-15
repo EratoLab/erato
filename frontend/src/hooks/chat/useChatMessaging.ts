@@ -1430,6 +1430,7 @@ export function useChatMessaging(
       mentionedAssistants?: AssistantMention[],
       delegationRunMode?: DelegationRunMode,
       mcpWriteToolsEnabled?: boolean,
+      disabledMcpServerIds?: string[],
     ): Promise<string | undefined> => {
       // Prevent duplicate submissions
       if (isSubmittingForKey(streamKey)) {
@@ -1543,11 +1544,24 @@ export function useChatMessaging(
         const effectiveChatIdForRequest = chatId ?? silentChatId ?? undefined;
         // A silent chat (created for an upload before the first send) already
         // has a row, and the seed is ignored once existing_chat_id is set —
-        // so the setting is written onto that row instead.
-        if (!chatId && silentChatId && mcpWriteToolsEnabled !== undefined) {
+        // so the settings are written onto that row instead, in one call.
+        const seedsDisabledServers =
+          disabledMcpServerIds !== undefined && disabledMcpServerIds.length > 0;
+        if (
+          !chatId &&
+          silentChatId &&
+          (mcpWriteToolsEnabled !== undefined || seedsDisabledServers)
+        ) {
           await updateChatForSeed({
             pathParams: { chatId: silentChatId },
-            body: { mcp_write_tools_enabled: mcpWriteToolsEnabled },
+            body: {
+              ...(mcpWriteToolsEnabled !== undefined
+                ? { mcp_write_tools_enabled: mcpWriteToolsEnabled }
+                : {}),
+              ...(seedsDisabledServers
+                ? { disabled_mcp_server_ids: disabledMcpServerIds }
+                : {}),
+            },
           });
         }
         const requestBody = constructSubmitStreamRequestBody(
@@ -1562,6 +1576,7 @@ export function useChatMessaging(
           mentionedAssistants?.map((mention) => mention.id),
           delegationRunMode,
           effectiveChatIdForRequest ? undefined : mcpWriteToolsEnabled,
+          effectiveChatIdForRequest ? undefined : disabledMcpServerIds,
         );
 
         logger.log("[DEBUG_STREAMING] sendMessage: Sending requestBody:", {

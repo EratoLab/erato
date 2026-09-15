@@ -5,7 +5,10 @@ import { FacetSelector } from "../FacetSelector";
 import { buildAssistantMentionSection } from "../assistantMentionSection";
 import { buildMcpToolsSection } from "../mcpToolsSection";
 
-import type { FacetInfo } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  FacetInfo,
+  McpServerStatus,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 const WEB_SEARCH: FacetInfo = {
   id: "facet-1",
@@ -25,6 +28,9 @@ function renderSelector({
   withConnectors = false,
   writeToolsEnabled = true,
   onToggleWriteTools = vi.fn(),
+  servers = [] as McpServerStatus[],
+  disabledServerIds = [] as string[],
+  onToggleServer = vi.fn(),
 } = {}) {
   render(
     <FacetSelector
@@ -49,12 +55,21 @@ function renderSelector({
               writeToolsEnabled,
               onToggleWriteTools,
               onBrowse: vi.fn(),
+              servers,
+              disabledServerIds,
+              onToggleServer,
             })
           : undefined
       }
     />,
   );
-  return { onSelect, onBrowse, onSelectionChange, onToggleWriteTools };
+  return {
+    onSelect,
+    onBrowse,
+    onSelectionChange,
+    onToggleWriteTools,
+    onToggleServer,
+  };
 }
 
 describe("FacetSelector", () => {
@@ -219,5 +234,59 @@ describe("FacetSelector", () => {
       await screen.findByRole("menuitem", { name: /Allow write operations/ }),
     );
     expect(onToggleWriteTools).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders a switched-off server as an unticked row above the write switch and flips it", async () => {
+    const { onToggleServer } = renderSelector({
+      facets: [WEB_SEARCH],
+      withAssistants: false,
+      withConnectors: true,
+      servers: [
+        {
+          id: "linear",
+          connection_status: "SUCCESS",
+          authentication_mode: "oauth2",
+        },
+      ],
+      disabledServerIds: ["linear"],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+
+    expect(await screen.findByText("Connectors")).toBeInTheDocument();
+    const items = screen
+      .getAllByRole("menuitem")
+      .map((item) => item.textContent ?? "");
+    expect(items.findIndex((text) => text.startsWith("linear"))).toBeLessThan(
+      items.findIndex((text) => text.includes("Allow write operations")),
+    );
+
+    const row = screen.getByRole("menuitem", { name: /^linear/ });
+    // The tick is the only SVG in a section row, so its absence is the
+    // switched-off state itself.
+    expect(row.querySelector("svg")).toBeNull();
+    fireEvent.click(row);
+    expect(onToggleServer).toHaveBeenCalledWith("linear");
+  });
+
+  it("renders a server that is on as a ticked row", async () => {
+    renderSelector({
+      facets: [WEB_SEARCH],
+      withAssistants: false,
+      withConnectors: true,
+      servers: [
+        {
+          id: "linear",
+          connection_status: "SUCCESS",
+          authentication_mode: "oauth2",
+        },
+      ],
+      disabledServerIds: [],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+
+    const row = await screen.findByRole("menuitem", { name: /^linear/ });
+    expect(row.querySelector("svg")).not.toBeNull();
   });
 });

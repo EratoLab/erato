@@ -12,6 +12,7 @@ import {
 } from "../../components/ui/icons";
 
 import type { AddMenuToolItem } from "../../components/ui/Chat/ChatInputAddMenu";
+import type { McpServerStatus } from "../../lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Meta, StoryObj } from "@storybook/react";
 
 const meta: Meta<typeof ChatInputAddMenu> = {
@@ -177,11 +178,24 @@ export const WithEmailSection: Story = {
   ),
 };
 
+const CONNECTOR_SERVERS: McpServerStatus[] = [
+  { id: "linear", connection_status: "SUCCESS", authentication_mode: "oauth2" },
+  { id: "github", connection_status: "SUCCESS", authentication_mode: "oauth2" },
+  {
+    id: "jira",
+    connection_status: "NEEDS_AUTHENTICATION",
+    authentication_mode: "oauth2",
+  },
+  { id: "wiki", connection_status: "FAILURE", authentication_mode: "none" },
+];
+
 /**
- * The "Connectors" group below the tools: the per-chat write switch (a
- * checkbox row that keeps the menu open) and the row into the tool browser.
- * The description credits the server's read-only marking on purpose — an
- * unannotated tool is not read-only and disappears with writes off too.
+ * The "Connectors" group below the tools: one switch per server (a server
+ * awaiting authorization gets a connect row instead), the per-chat write
+ * switch (a checkbox row that keeps the menu open) and the row into the tool
+ * browser. The write description credits the server's read-only marking on
+ * purpose — an unannotated tool is not read-only and disappears with writes
+ * off too.
  */
 function ConnectorsMenu({
   pausesHostActions = false,
@@ -189,6 +203,9 @@ function ConnectorsMenu({
   pausesHostActions?: boolean;
 }) {
   const [writeToolsEnabled, setWriteToolsEnabled] = useState(true);
+  const [disabledServerIds, setDisabledServerIds] = useState<string[]>([
+    "github",
+  ]);
   return (
     <InteractiveMenu
       extraSections={[
@@ -199,6 +216,17 @@ function ConnectorsMenu({
             setWriteToolsEnabled((previous) => !previous);
           },
           onBrowse: action("browse tools"),
+          servers: CONNECTOR_SERVERS,
+          disabledServerIds,
+          onToggleServer: (serverId) => {
+            action("toggle: server")(serverId);
+            setDisabledServerIds((previous) =>
+              previous.includes(serverId)
+                ? previous.filter((id) => id !== serverId)
+                : [...previous, serverId],
+            );
+          },
+          onConnect: action("connect server"),
           pausesHostActions,
         }),
       ]}
@@ -207,7 +235,7 @@ function ConnectorsMenu({
 }
 
 export const WithConnectorsSection: Story = {
-  name: "With connectors section (write switch + browse)",
+  name: "With connectors section (server switches + write switch + browse)",
   render: () => <ConnectorsMenu />,
 };
 

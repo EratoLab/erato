@@ -252,6 +252,7 @@ const chatDetail = (overrides: Partial<ChatDetail> = {}): ChatDetail => ({
   is_pinned: false,
   can_edit: true,
   mcp_write_tools_enabled: true,
+  disabled_mcp_server_ids: [],
   ...overrides,
 });
 
@@ -263,6 +264,7 @@ const backgroundRun = (id: string) =>
     file_uploads: [],
     is_pinned: false,
     mcp_write_tools_enabled: true,
+    disabled_mcp_server_ids: [],
     last_message_at: "2026-08-19T12:00:00.000Z",
     assistant_id: "assistant-1",
     assistant_name: "Research Assistant",

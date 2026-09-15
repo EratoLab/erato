@@ -3366,8 +3366,8 @@ export type UpdateChatVariables = {
 } & V1betaApiContext["fetcherOptions"];
 
 /**
- * Supports updating the user-provided title, pin state and the MCP write
- * tools toggle.
+ * Supports updating the user-provided title, pin state, the MCP write
+ * tools toggle and the disabled MCP server list.
  */
 export const fetchUpdateChat = (
   variables: UpdateChatVariables,
@@ -3388,8 +3388,8 @@ export const fetchUpdateChat = (
   });
 
 /**
- * Supports updating the user-provided title, pin state and the MCP write
- * tools toggle.
+ * Supports updating the user-provided title, pin state, the MCP write
+ * tools toggle and the disabled MCP server list.
  */
 export const useUpdateChat = (
   options?: Omit<

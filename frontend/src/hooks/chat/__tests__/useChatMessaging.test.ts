@@ -2456,5 +2456,113 @@ describe("useChatMessaging", () => {
       expect(bodies[0]).not.toHaveProperty("mcp_write_tools_enabled");
       expect(updateChat).not.toHaveBeenCalled();
     });
+
+    it("seeds a new chat with the switched-off servers through the submitstream body", async () => {
+      mockCreateSSEConnection.mockClear();
+      const updateChat = vi.fn().mockResolvedValue({});
+      (useUpdateChat as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        mutateAsync: updateChat,
+      });
+
+      const { result } = renderHook(() => useChatMessaging(null), {
+        wrapper: TestWrapper,
+      });
+
+      await act(async () => {
+        await result.current.sendMessage(
+          "without linear please",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          ["linear"],
+        );
+      });
+
+      const bodies = getSubmitStreamBodies();
+      expect(bodies.length).toBe(1);
+      expect(bodies[0]).toMatchObject({ disabled_mcp_server_ids: ["linear"] });
+      expect(bodies[0]).not.toHaveProperty("mcp_write_tools_enabled");
+      expect(bodies[0]).not.toHaveProperty("existing_chat_id");
+      expect(updateChat).not.toHaveBeenCalled();
+    });
+
+    // Both seeds land on the silent chat's row in one update.
+    it("writes both seeds onto a silent chat in a single update", async () => {
+      mockCreateSSEConnection.mockClear();
+      const updateChat = vi.fn().mockResolvedValue({});
+      (useUpdateChat as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        mutateAsync: updateChat,
+      });
+      const { result } = renderHook(
+        () => useChatMessaging({ chatId: null, silentChatId: "silent-1" }),
+        { wrapper: TestWrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage(
+          "without linear please",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          false,
+          ["linear"],
+        );
+      });
+
+      expect(updateChat).toHaveBeenCalledTimes(1);
+      expect(updateChat).toHaveBeenCalledWith({
+        pathParams: { chatId: "silent-1" },
+        body: {
+          mcp_write_tools_enabled: false,
+          disabled_mcp_server_ids: ["linear"],
+        },
+      });
+      const bodies = getSubmitStreamBodies();
+      expect(bodies.length).toBe(1);
+      expect(bodies[0]).toMatchObject({ existing_chat_id: "silent-1" });
+      expect(bodies[0]).not.toHaveProperty("disabled_mcp_server_ids");
+      expect(bodies[0]).not.toHaveProperty("mcp_write_tools_enabled");
+    });
+
+    it("never seeds an existing chat with switched-off servers", async () => {
+      mockCreateSSEConnection.mockClear();
+      const updateChat = vi.fn().mockResolvedValue({});
+      (useUpdateChat as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        mutateAsync: updateChat,
+      });
+
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+
+      await act(async () => {
+        await result.current.sendMessage(
+          "without linear please",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          ["linear"],
+        );
+      });
+
+      const bodies = getSubmitStreamBodies();
+      expect(bodies.length).toBe(1);
+      expect(bodies[0]).not.toHaveProperty("disabled_mcp_server_ids");
+      expect(updateChat).not.toHaveBeenCalled();
+    });
   });
 });

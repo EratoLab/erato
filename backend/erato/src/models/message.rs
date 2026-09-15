@@ -184,6 +184,10 @@ pub struct GenerationMetadata {
     /// servers work, the user just needs to connect them.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mcp_servers_needing_auth: Option<Vec<String>>,
+    /// MCP server IDs whose tools were withheld because the user switched the
+    /// server off for this chat. Lets the UI explain why a server was not used.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mcp_servers_disabled_by_user: Option<Vec<String>>,
 }
 
 /// Role of the message author (as defined by the LLM providers)

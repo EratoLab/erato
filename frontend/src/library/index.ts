@@ -105,9 +105,11 @@ export {
 } from "@/components/ui/Chat/McpToolsBrowserModal";
 export {
   buildMcpToolsSection,
+  mcpToolsServerItemId,
   MCP_TOOLS_SECTION_ID,
   MCP_TOOLS_WRITE_TOGGLE_ITEM_ID,
   MCP_TOOLS_BROWSE_ITEM_ID,
+  MCP_TOOLS_SERVER_ITEM_ID_PREFIX,
 } from "@/components/ui/Chat/mcpToolsSection";
 export {
   ServersToolsPane,

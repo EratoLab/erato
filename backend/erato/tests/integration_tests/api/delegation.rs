@@ -1511,12 +1511,16 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
     )
     .await;
     let parent_chat = create_chat(&server, Some(&origin_assistant)).await;
-    // Writes off on the parent: delegation is not a write, so the run still
-    // happens, and the child must start with the same toggle.
+    // Writes off and a server switched off on the parent: delegation is not
+    // a write, so the run still happens, and the child must start with the
+    // same toggle and the same disabled servers.
     server
         .put(&format!("/api/v1beta/me/chats/{parent_chat}"))
         .with_bearer_token(TEST_JWT_TOKEN)
-        .json(&json!({ "mcp_write_tools_enabled": false }))
+        .json(&json!({
+            "mcp_write_tools_enabled": false,
+            "disabled_mcp_server_ids": ["files"],
+        }))
         .await
         .assert_status_ok();
 
@@ -1633,6 +1637,11 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
     assert!(
         !child_chat.mcp_write_tools_enabled,
         "the child inherits the parent's write toggle"
+    );
+    assert_eq!(
+        child_chat.disabled_mcp_server_ids,
+        vec!["files".to_string()],
+        "the child inherits the parent's disabled servers"
     );
     let configuration = erato::models::chat::AssistantConfiguration::from_json(
         child_chat.assistant_configuration.as_ref().unwrap(),
@@ -4270,6 +4279,7 @@ async fn spawn_listed_delegated_run(
         },
         title.to_string(),
         true,
+        Vec::new(),
     )
     .await
     .unwrap();
@@ -4352,6 +4362,7 @@ async fn test_listing_hides_delegated_runs_and_exposes_provenance(pool: Pool<Pos
             },
             format!("Delegated run {index}"),
             true,
+            Vec::new(),
         )
         .await
         .unwrap();
@@ -4743,6 +4754,7 @@ fn answer_metadata(
         error,
         mcp_servers_unavailable: None,
         mcp_servers_needing_auth: None,
+        mcp_servers_disabled_by_user: None,
     }
 }
 
@@ -5073,6 +5085,7 @@ async fn test_delegated_run_outcome_reports_failures(pool: Pool<Postgres>) {
         },
         "Seeded only".to_string(),
         true,
+        Vec::new(),
     )
     .await
     .unwrap()
@@ -5174,6 +5187,7 @@ async fn test_parked_delegated_chat_stays_reachable(pool: Pool<Postgres>) {
         },
         "Parked delegated run".to_string(),
         true,
+        Vec::new(),
     )
     .await
     .unwrap();
@@ -5747,6 +5761,7 @@ async fn spawn_delegated_run(
         },
         title.to_string(),
         true,
+        Vec::new(),
     )
     .await
     .expect("create delegated chat");
@@ -5781,6 +5796,7 @@ async fn spawn_handoff_branch(
         },
         "Handoff branch".to_string(),
         true,
+        Vec::new(),
     )
     .await
     .expect("create handoff chat");
@@ -6200,6 +6216,7 @@ async fn test_submit_into_live_delegated_run_conflicts(pool: Pool<Postgres>) {
         },
         "Continuable run".to_string(),
         true,
+        Vec::new(),
     )
     .await
     .unwrap();
@@ -6549,6 +6566,7 @@ async fn test_chat_detail_carries_provenance_and_run_parameters(pool: Pool<Postg
         },
         "Summarize the numbers".to_string(),
         true,
+        Vec::new(),
     )
     .await
     .unwrap();
@@ -6634,6 +6652,7 @@ async fn test_chat_detail_reports_adopted_and_archived_runs(pool: Pool<Postgres>
         },
         "Adoptable run".to_string(),
         true,
+        Vec::new(),
     )
     .await
     .unwrap();
