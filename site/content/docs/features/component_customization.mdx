@@ -63,6 +63,25 @@ window.ERATO_COMPONENT_KITS.push({
 } satisfies ComponentKitRegistration);
 ```
 
+### Two ways an extension point hands work to a kit
+
+An override gets either composed nodes or host components to place, and which
+one a point uses follows from who owns the layout:
+
+- **Composed nodes**, where the information architecture is the host's and the
+  kit owns the skin. The chat history row works this way: one hook,
+  `useChatHistoryRow(props, session)`, returns the row's title, `badges`,
+  `subline`, accessible name and an already-gated `menuItems` array. A rule
+  added to any of them reaches every override without the kit being rebuilt,
+  and the trade is that the host owns that markup — a kit restyles it through
+  CSS rather than rebuilding it.
+- **Host component slots**, where the kit owns the layout. `ChatMessage` works
+  this way: `CHAT_MESSAGE_HOST_COMPONENTS` hands the kit pieces to place
+  wherever it likes, because a message's arrangement is the thing a customer
+  most wants to change.
+
+A new extension point should copy one of these, not invent a third.
+
 ### Declaring the surface a kit was built against
 
 An extension point's contract can grow a rule that an override has to carry —
