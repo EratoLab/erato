@@ -270,6 +270,23 @@ const pinnedComponentModules = [
   path.join(componentsDir, "ui", "FileUpload", "FilePreviewLoading.tsx"),
 ];
 
+// The other half of that decision: exports of a registry-reachable module that
+// the kit surface withholds on purpose. Everything a reachable module exports
+// otherwise reaches kits as a byproduct of the import graph — API nobody chose,
+// undocumented, and free to vanish. Generation fails when an entry stops
+// matching, so a rename cannot quietly re-open one.
+const withheldExports = [
+  {
+    modulePath: path.join(componentsDir, "ui", "Chat", "ChatHistoryList.tsx"),
+    names: ["buildChatHistoryRowMenuItems", "ChatHistoryRowMenuState"],
+    reason:
+      "the builder takes a hand-assembled row state, which is how a caller drops the run and pending-confirmation gates without noticing; a kit overriding ChatHistoryList holds ChatSessions and uses useChatHistoryRowMenuItems, which resolves that state from the host's stores",
+  },
+];
+
+const withheldNamesFor = (modulePath) =>
+  withheldExports.find((entry) => entry.modulePath === modulePath)?.names ?? [];
+
 const collectRegistryComponentModules = () => {
   const configPath = path.join(rootDir, "tsconfig.json");
   const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
@@ -319,9 +336,17 @@ const moduleSpecifierFor = (filePath) => {
 
 const generatedSource = () => {
   const exportsByName = new Map();
+  const withheld = new Set();
 
   for (const modulePath of collectRegistryComponentModules()) {
+    const withheldNames = withheldNamesFor(modulePath);
+
     for (const moduleExport of ownExports(modulePath)) {
+      if (withheldNames.includes(moduleExport.name)) {
+        withheld.add(`${modulePath}::${moduleExport.name}`);
+        continue;
+      }
+
       const candidate = { ...moduleExport, modulePath };
       const existing = exportsByName.get(moduleExport.name);
 
@@ -336,6 +361,16 @@ const generatedSource = () => {
       ) {
         throw new Error(
           `Conflicting export ${moduleExport.name}:\n- ${path.relative(rootDir, existing.modulePath)}\n- ${path.relative(rootDir, candidate.modulePath)}`,
+        );
+      }
+    }
+  }
+
+  for (const entry of withheldExports) {
+    for (const name of entry.names) {
+      if (!withheld.has(`${entry.modulePath}::${name}`)) {
+        throw new Error(
+          `Withheld export ${name} was not found in ${path.relative(rootDir, entry.modulePath)}. It withholds nothing now: re-decide whether it belongs on the kit surface and drop or repoint the entry.\n  withheld because: ${entry.reason}`,
         );
       }
     }

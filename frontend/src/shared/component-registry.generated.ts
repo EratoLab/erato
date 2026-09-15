@@ -26,14 +26,12 @@ export { ChatAttentionStatusDot } from "@/components/ui/Chat/ChatAttentionStatus
 export { ChatHistoryList } from "@/components/ui/Chat/ChatHistoryList";
 export { ChatHistoryListSkeleton } from "@/components/ui/Chat/ChatHistoryList";
 export { DEFAULT_PINNED_CHATS_LIMIT } from "@/components/ui/Chat/ChatHistoryList";
-export { buildChatHistoryRowMenuItems } from "@/components/ui/Chat/ChatHistoryList";
 export { chatHistoryRowMenuOptions } from "@/components/ui/Chat/ChatHistoryList";
 export { useChatHistoryRowMenuItems } from "@/components/ui/Chat/ChatHistoryList";
 export { useChatHistoryRowPresentation } from "@/components/ui/Chat/ChatHistoryList";
 export type { ChatHistoryListProps } from "@/components/ui/Chat/ChatHistoryList";
 export type { ChatHistoryRowMenuHandlers } from "@/components/ui/Chat/ChatHistoryList";
 export type { ChatHistoryRowMenuOptions } from "@/components/ui/Chat/ChatHistoryList";
-export type { ChatHistoryRowMenuState } from "@/components/ui/Chat/ChatHistoryList";
 export { CHAT_HISTORY_ROW_MENU_ID } from "@/components/ui/Chat/chatHistoryRowMenuIds";
 export type { ChatHistoryRowMenuId } from "@/components/ui/Chat/chatHistoryRowMenuIds";
 export { CHAT_MESSAGE_HOST_COMPONENTS } from "@/components/ui/Chat/ChatMessage";
