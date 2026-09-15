@@ -196,6 +196,13 @@ jobs:
         if: success() || failure()
         run: pnpm run format:check
 
+      # The only step that mounts a kit: it runs the host's own row contract
+      # suite against the example override, using the library built above.
+      - name: "Component kit example tests"
+        working-directory: ./component-kit-example
+        if: success() || failure()
+        run: pnpm run test
+
       - name: "Compile i18n messages"
         working-directory: ./frontend
         if: success() || failure()

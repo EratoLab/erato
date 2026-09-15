@@ -70,6 +70,25 @@ i18n:extract` updates the `.po` files, `pnpm run i18n:compile` generates
 `/public/component-kits/example/locales/<locale>/messages.json` based on the
 registered component kit name.
 
+## Contract tests
+
+```sh
+pnpm run test
+```
+
+`ExampleChatHistoryList` replaces the whole chat-history list, which is the
+kind of override that can silently drop a shipped feature. It takes the row's
+badges, subline, accessible name and gated menu items from the host hooks and
+hands the menu array on unchanged — the array it is given is already gated, and
+a kit that rebuilds it loses every rule added after the kit shipped.
+
+`ExampleChatHistoryList.test.tsx` runs the host's own cases
+(`@erato/frontend/conformance`) against that override, so the same suite the
+host holds itself to decides whether this kit still carries the contract. The
+suite needs the frontend library built first (`pnpm run build:lib` in
+`../frontend`); the harness it asks for is the two things only the kit knows —
+how to render its component, and how to reach its trailing menu.
+
 ## Frontend Dev Server
 
 When running the frontend through `just dev`, Vite serves the HTML directly and
