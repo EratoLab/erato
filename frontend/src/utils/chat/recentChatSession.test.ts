@@ -22,6 +22,7 @@ const recentChat = (id: string, assistantId?: string): RecentChat => ({
   file_uploads: [],
   last_message_at: "2026-08-14T10:00:00.000Z",
   is_pinned: false,
+  mcp_write_tools_enabled: true,
   assistant_id: assistantId,
 });
 

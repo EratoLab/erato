@@ -348,6 +348,9 @@ export function useChatHistory({
       file_uploads: [],
       last_message_at: pendingChat.createdAt,
       is_pinned: false,
+      // The server default; the composer reads the chat's own detail, so a
+      // seed turned off before the first send is never read from here.
+      mcp_write_tools_enabled: true,
       assistant_id: pendingChat.assistantId,
       assistant_name: undefined,
       archived_at: undefined,

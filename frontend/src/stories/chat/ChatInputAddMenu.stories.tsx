@@ -2,6 +2,7 @@ import { action } from "@storybook/addon-actions";
 import { useState } from "react";
 
 import { ChatInputAddMenu } from "../../components/ui/Chat/ChatInputAddMenu";
+import { buildMcpToolsSection } from "../../components/ui/Chat/mcpToolsSection";
 import {
   BrainIcon,
   CodeIcon,
@@ -174,6 +175,45 @@ export const WithEmailSection: Story = {
       ]}
     />
   ),
+};
+
+/**
+ * The "Connectors" group below the tools: the per-chat write switch (a
+ * checkbox row that keeps the menu open) and the row into the tool browser.
+ * The description credits the server's read-only marking on purpose — an
+ * unannotated tool is not read-only and disappears with writes off too.
+ */
+function ConnectorsMenu({
+  pausesHostActions = false,
+}: {
+  pausesHostActions?: boolean;
+}) {
+  const [writeToolsEnabled, setWriteToolsEnabled] = useState(true);
+  return (
+    <InteractiveMenu
+      extraSections={[
+        buildMcpToolsSection({
+          writeToolsEnabled,
+          onToggleWriteTools: () => {
+            action("toggle: allow write operations")();
+            setWriteToolsEnabled((previous) => !previous);
+          },
+          onBrowse: action("browse tools"),
+          pausesHostActions,
+        }),
+      ]}
+    />
+  );
+}
+
+export const WithConnectorsSection: Story = {
+  name: "With connectors section (write switch + browse)",
+  render: () => <ConnectorsMenu />,
+};
+
+export const WithConnectorsSectionInOutlook: Story = {
+  name: "With connectors section (Outlook host copy)",
+  render: () => <ConnectorsMenu pausesHostActions />,
 };
 
 export const Processing: Story = {

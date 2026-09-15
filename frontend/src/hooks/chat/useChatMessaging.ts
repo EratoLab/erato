@@ -27,6 +27,7 @@ import {
   fetchChatMessages,
   recentChatsQuery,
   useChatMessages,
+  useUpdateChat,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { mapApiMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 import { seedDispatchedDelegatedRun } from "@/utils/chat/delegatedRunDispatch";
@@ -417,6 +418,7 @@ export function useChatMessaging(
     },
   );
   const { refetch: refetchChatHistory } = useChatHistory();
+  const { mutateAsync: updateChatForSeed } = useUpdateChat();
 
   useEffect(() => {
     if (!chatId || !chatMessagesQuery.data) {
@@ -1427,6 +1429,7 @@ export function useChatMessaging(
       actionFacet?: ActionFacetRequest,
       mentionedAssistants?: AssistantMention[],
       delegationRunMode?: DelegationRunMode,
+      mcpWriteToolsEnabled?: boolean,
     ): Promise<string | undefined> => {
       // Prevent duplicate submissions
       if (isSubmittingForKey(streamKey)) {
@@ -1538,6 +1541,15 @@ export function useChatMessaging(
 
         // Use the new utility to construct the request body
         const effectiveChatIdForRequest = chatId ?? silentChatId ?? undefined;
+        // A silent chat (created for an upload before the first send) already
+        // has a row, and the seed is ignored once existing_chat_id is set —
+        // so the setting is written onto that row instead.
+        if (!chatId && silentChatId && mcpWriteToolsEnabled !== undefined) {
+          await updateChatForSeed({
+            pathParams: { chatId: silentChatId },
+            body: { mcp_write_tools_enabled: mcpWriteToolsEnabled },
+          });
+        }
         const requestBody = constructSubmitStreamRequestBody(
           content,
           inputFileIds,
@@ -1549,6 +1561,7 @@ export function useChatMessaging(
           actionFacet,
           mentionedAssistants?.map((mention) => mention.id),
           delegationRunMode,
+          effectiveChatIdForRequest ? undefined : mcpWriteToolsEnabled,
         );
 
         logger.log("[DEBUG_STREAMING] sendMessage: Sending requestBody:", {
@@ -1777,6 +1790,7 @@ export function useChatMessaging(
       setSSECleanupForKey,
       isSubmittingForKey,
       setSubmittingForKey,
+      updateChatForSeed,
     ],
   );
 

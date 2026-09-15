@@ -2356,5 +2356,105 @@ describe("useChatMessaging", () => {
       expect(bodies.length).toBe(1);
       expect(bodies[0]).not.toHaveProperty("delegation_run_mode");
     });
+
+    it("seeds a new chat with the write switch through the submitstream body", async () => {
+      mockCreateSSEConnection.mockClear();
+      const updateChat = vi.fn().mockResolvedValue({});
+      (useUpdateChat as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        mutateAsync: updateChat,
+      });
+
+      const { result } = renderHook(() => useChatMessaging(null), {
+        wrapper: TestWrapper,
+      });
+
+      await act(async () => {
+        await result.current.sendMessage(
+          "reads only please",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          false,
+        );
+      });
+
+      const bodies = getSubmitStreamBodies();
+      expect(bodies.length).toBe(1);
+      expect(bodies[0]).toMatchObject({ mcp_write_tools_enabled: false });
+      expect(bodies[0]).not.toHaveProperty("existing_chat_id");
+      expect(updateChat).not.toHaveBeenCalled();
+    });
+
+    // A silent chat already has a row and the seed is ignored once
+    // existing_chat_id is set, so the switch is written onto that row.
+    it("writes the switch onto a silent chat instead of seeding the body", async () => {
+      mockCreateSSEConnection.mockClear();
+      const updateChat = vi.fn().mockResolvedValue({});
+      (useUpdateChat as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        mutateAsync: updateChat,
+      });
+      const { result } = renderHook(
+        () => useChatMessaging({ chatId: null, silentChatId: "silent-1" }),
+        { wrapper: TestWrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage(
+          "reads only please",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          false,
+        );
+      });
+
+      expect(updateChat).toHaveBeenCalledWith({
+        pathParams: { chatId: "silent-1" },
+        body: { mcp_write_tools_enabled: false },
+      });
+      const bodies = getSubmitStreamBodies();
+      expect(bodies.length).toBe(1);
+      expect(bodies[0]).toMatchObject({ existing_chat_id: "silent-1" });
+      expect(bodies[0]).not.toHaveProperty("mcp_write_tools_enabled");
+    });
+
+    it("never seeds an existing chat", async () => {
+      mockCreateSSEConnection.mockClear();
+      const updateChat = vi.fn().mockResolvedValue({});
+      (useUpdateChat as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        mutateAsync: updateChat,
+      });
+
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+
+      await act(async () => {
+        await result.current.sendMessage(
+          "reads only please",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          false,
+        );
+      });
+
+      const bodies = getSubmitStreamBodies();
+      expect(bodies.length).toBe(1);
+      expect(bodies[0]).not.toHaveProperty("mcp_write_tools_enabled");
+      expect(updateChat).not.toHaveBeenCalled();
+    });
   });
 });

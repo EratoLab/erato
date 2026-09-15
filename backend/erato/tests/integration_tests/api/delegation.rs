@@ -1511,6 +1511,14 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
     )
     .await;
     let parent_chat = create_chat(&server, Some(&origin_assistant)).await;
+    // Writes off on the parent: delegation is not a write, so the run still
+    // happens, and the child must start with the same toggle.
+    server
+        .put(&format!("/api/v1beta/me/chats/{parent_chat}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "mcp_write_tools_enabled": false }))
+        .await
+        .assert_status_ok();
 
     let response = submit_with_mentions(
         &server,
@@ -1621,6 +1629,10 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
     assert_eq!(
         child_chat.title_by_user_provided.as_deref(),
         Some("CHILD-TASK-BRIEF: summarize the numbers")
+    );
+    assert!(
+        !child_chat.mcp_write_tools_enabled,
+        "the child inherits the parent's write toggle"
     );
     let configuration = erato::models::chat::AssistantConfiguration::from_json(
         child_chat.assistant_configuration.as_ref().unwrap(),
@@ -4257,6 +4269,7 @@ async fn spawn_listed_delegated_run(
             run_mode: None,
         },
         title.to_string(),
+        true,
     )
     .await
     .unwrap();
@@ -4338,6 +4351,7 @@ async fn test_listing_hides_delegated_runs_and_exposes_provenance(pool: Pool<Pos
                     .then_some(erato::models::message::DelegationRunMode::Background),
             },
             format!("Delegated run {index}"),
+            true,
         )
         .await
         .unwrap();
@@ -5058,6 +5072,7 @@ async fn test_delegated_run_outcome_reports_failures(pool: Pool<Postgres>) {
             run_mode: None,
         },
         "Seeded only".to_string(),
+        true,
     )
     .await
     .unwrap()
@@ -5158,6 +5173,7 @@ async fn test_parked_delegated_chat_stays_reachable(pool: Pool<Postgres>) {
             run_mode: None,
         },
         "Parked delegated run".to_string(),
+        true,
     )
     .await
     .unwrap();
@@ -5730,6 +5746,7 @@ async fn spawn_delegated_run(
             run_mode: None,
         },
         title.to_string(),
+        true,
     )
     .await
     .expect("create delegated chat");
@@ -5763,6 +5780,7 @@ async fn spawn_handoff_branch(
             run_mode: None,
         },
         "Handoff branch".to_string(),
+        true,
     )
     .await
     .expect("create handoff chat");
@@ -6181,6 +6199,7 @@ async fn test_submit_into_live_delegated_run_conflicts(pool: Pool<Postgres>) {
             run_mode: None,
         },
         "Continuable run".to_string(),
+        true,
     )
     .await
     .unwrap();
@@ -6529,6 +6548,7 @@ async fn test_chat_detail_carries_provenance_and_run_parameters(pool: Pool<Postg
             run_mode: None,
         },
         "Summarize the numbers".to_string(),
+        true,
     )
     .await
     .unwrap();
@@ -6613,6 +6633,7 @@ async fn test_chat_detail_reports_adopted_and_archived_runs(pool: Pool<Postgres>
             run_mode: None,
         },
         "Adoptable run".to_string(),
+        true,
     )
     .await
     .unwrap();

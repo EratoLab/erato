@@ -146,9 +146,12 @@ impl From<&chats::Model> for Resource {
 /// If the chat is not found, an error is returned.
 /// If `existing_chat_id` is not provided, create a new chat, with `owner_user_id` as the owner.
 /// If `assistant_id` is provided when creating a new chat, the assistant configuration will be stored.
+/// `mcp_write_tools_enabled` seeds the new chat's write toggle; `None` keeps
+/// the column default.
 ///
 /// Returns a tuple of (chat model, creation status) where the status indicates whether
 /// the chat was newly created or already existed.
+#[allow(clippy::too_many_arguments)]
 pub async fn get_or_create_chat(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,
@@ -157,6 +160,7 @@ pub async fn get_or_create_chat(
     owner_user_id: &str,
     assistant_id: Option<&Uuid>,
     title_by_user_provided: Option<String>,
+    mcp_write_tools_enabled: Option<bool>,
 ) -> Result<(chats::Model, ChatCreationStatus), Report> {
     if let Some(existing_chat_id) = existing_chat_id {
         let existing_chat: Option<chats::Model> =
@@ -181,6 +185,9 @@ pub async fn get_or_create_chat(
             owner_user_id: ActiveValue::Set(owner_user_id.to_owned()),
             assistant_configuration: ActiveValue::Set(assistant_configuration),
             title_by_user_provided: ActiveValue::Set(title_by_user_provided),
+            mcp_write_tools_enabled: mcp_write_tools_enabled
+                .map(ActiveValue::Set)
+                .unwrap_or(ActiveValue::NotSet),
             ..Default::default()
         };
         let observation = policy.observe_facts().await?;
@@ -206,6 +213,7 @@ pub async fn get_all_chats(conn: &DatabaseConnection) -> Result<Vec<chats::Model
 ///
 /// Returns a tuple of (chat model, creation status) where the status indicates whether
 /// the chat was newly created or already existed.
+#[allow(clippy::too_many_arguments)]
 pub async fn get_or_create_chat_by_previous_message_id(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,
@@ -214,6 +222,7 @@ pub async fn get_or_create_chat_by_previous_message_id(
     owner_user_id: &str,
     assistant_id: Option<&Uuid>,
     title_by_user_provided: Option<String>,
+    mcp_write_tools_enabled: Option<bool>,
 ) -> Result<(chats::Model, ChatCreationStatus), Report> {
     if let Some(message_id) = previous_message_id {
         // Find the message to get its chat_id
@@ -235,6 +244,7 @@ pub async fn get_or_create_chat_by_previous_message_id(
             owner_user_id,
             None, // assistant_id is ignored when existing_chat_id is provided
             None, // title_by_user_provided is ignored when existing_chat_id is provided
+            None, // mcp_write_tools_enabled is ignored when existing_chat_id is provided
         )
         .await
     } else {
@@ -248,6 +258,7 @@ pub async fn get_or_create_chat_by_previous_message_id(
             owner_user_id,
             assistant_id,
             title_by_user_provided,
+            mcp_write_tools_enabled,
         )
         .await
     }
@@ -267,6 +278,9 @@ pub fn chat_is_delegated_run(chat: &chats::Model) -> bool {
 /// Create a chat owned by `owner_user_id`, bound to `assistant_id`, carrying a
 /// provenance envelope. The caller must have access-checked the assistant (the
 /// `POST /me/chats` pattern) — this function only authorizes chat creation.
+/// The write toggle is copied from the parent row: a run spawned from a chat
+/// with writes off must not regain them.
+#[allow(clippy::too_many_arguments)]
 pub async fn create_delegated_chat(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,
@@ -275,6 +289,7 @@ pub async fn create_delegated_chat(
     assistant_id: Uuid,
     provenance: ChatProvenance,
     title: String,
+    mcp_write_tools_enabled: bool,
 ) -> Result<chats::Model, Report> {
     authorize!(policy, subject, &Resource::ChatSingleton, Action::Create)?;
 
@@ -286,6 +301,7 @@ pub async fn create_delegated_chat(
         owner_user_id: ActiveValue::Set(owner_user_id.to_owned()),
         assistant_configuration: ActiveValue::Set(Some(configuration.to_json()?)),
         title_by_user_provided: ActiveValue::Set(Some(title)),
+        mcp_write_tools_enabled: ActiveValue::Set(mcp_write_tools_enabled),
         ..Default::default()
     };
     Ok(chats::Entity::insert(new_chat)
@@ -419,6 +435,9 @@ pub struct RecentChat {
     pub archived_at: Option<DateTimeWithTimeZone>,
     /// Whether the chat is pinned by its owner.
     pub is_pinned: bool,
+    /// Whether the model may be offered MCP write tools and client actions
+    /// in this chat.
+    pub mcp_write_tools_enabled: bool,
     /// Owner of the chat (for permission checks at the API boundary)
     pub owner_user_id: String,
     /// The chat provider ID used for the most recent message
@@ -491,6 +510,7 @@ struct ChatWithLatestMessage {
     title_by_user_provided: Option<String>,
     archived_at: Option<DateTimeWithTimeZone>,
     is_pinned: bool,
+    mcp_write_tools_enabled: bool,
     assistant_id: Option<Uuid>,
     active_generation_started_at: Option<DateTimeWithTimeZone>,
     pending_tool_approval_at: Option<DateTimeWithTimeZone>,
@@ -637,6 +657,7 @@ pub async fn get_recent_chats(
             "chats"."title_by_user_provided",
             "chats"."archived_at",
             "chats"."is_pinned",
+            "chats"."mcp_write_tools_enabled",
             "chats"."assistant_id",
             CASE
                 WHEN "chats"."archived_at" IS NULL
@@ -952,6 +973,7 @@ pub async fn get_recent_chats(
                 last_message_at: chat_with_msg.latest_message_at,
                 archived_at: chat_with_msg.archived_at,
                 is_pinned: chat_with_msg.is_pinned,
+                mcp_write_tools_enabled: chat_with_msg.mcp_write_tools_enabled,
                 owner_user_id: chat_with_msg.owner_user_id.clone(),
                 last_chat_provider_id,
                 last_selected_facets,
@@ -993,6 +1015,7 @@ pub struct ChatDetail {
     pub title_resolved: String,
     pub archived_at: Option<DateTimeWithTimeZone>,
     pub is_pinned: bool,
+    pub mcp_write_tools_enabled: bool,
     pub owner_user_id: String,
     pub assistant_id: Option<Uuid>,
     pub assistant_name: Option<String>,
@@ -1071,6 +1094,7 @@ pub async fn get_chat_detail(
         title_by_user_provided: chat.title_by_user_provided,
         archived_at: chat.archived_at,
         is_pinned: chat.is_pinned,
+        mcp_write_tools_enabled: chat.mcp_write_tools_enabled,
         owner_user_id: chat.owner_user_id,
         assistant_id: chat.assistant_id,
         assistant_name,
@@ -1381,6 +1405,32 @@ pub async fn update_chat_is_pinned(
 
     let mut chat_active: chats::ActiveModel = chat.into();
     chat_active.is_pinned = ActiveValue::Set(is_pinned);
+    Ok(chat_active.update(conn).await?)
+}
+
+/// Update whether the model may be offered MCP write tools and client
+/// actions in a chat.
+pub async fn update_chat_mcp_write_tools_enabled(
+    conn: &DatabaseConnection,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    chat_id: &Uuid,
+    mcp_write_tools_enabled: bool,
+) -> Result<chats::Model, Report> {
+    let chat = Chats::find_by_id(*chat_id)
+        .one(conn)
+        .await?
+        .ok_or_else(|| eyre!("Chat with ID {} not found", chat_id))?;
+
+    authorize!(
+        policy,
+        subject,
+        &Resource::Chat(chat.id.to_string()),
+        Action::Update
+    )?;
+
+    let mut chat_active: chats::ActiveModel = chat.into();
+    chat_active.mcp_write_tools_enabled = ActiveValue::Set(mcp_write_tools_enabled);
     Ok(chat_active.update(conn).await?)
 }
 

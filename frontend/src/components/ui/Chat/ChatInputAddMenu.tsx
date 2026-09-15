@@ -63,8 +63,17 @@ export interface AddMenuActionItem extends AddMenuItemBase {
  */
 export interface AddMenuToolItem extends AddMenuItemBase {
   checked: boolean;
+  /** Optional secondary line explaining what the toggle changes. */
+  description?: React.ReactNode;
   onToggle: () => void;
 }
+
+/** A row a host-contributed section may carry: a one-shot action or a toggle. */
+export type AddMenuSectionItem = AddMenuActionItem | AddMenuToolItem;
+
+export const isAddMenuToolItem = (
+  item: AddMenuSectionItem,
+): item is AddMenuToolItem => "onToggle" in item;
 
 /**
  * A host-contributed group of action rows — e.g. the Outlook add-in's
@@ -76,7 +85,7 @@ export interface AddMenuSection {
   id: string;
   /** Optional group label rendered above the items. */
   header?: React.ReactNode;
-  items: AddMenuActionItem[];
+  items: AddMenuSectionItem[];
   /** Placement relative to the Tools group. Defaults to "aboveTools". */
   placement?: "aboveTools" | "belowTools";
 }
@@ -246,6 +255,53 @@ export function ChatInputAddMenu({
     </Row>
   );
 
+  const renderToolRow = (tool: AddMenuToolItem, testId: string) => {
+    const toolDisabled = isBusy || tool.disabled;
+    return (
+      <Row
+        key={tool.id}
+        variant="menu"
+        role="menuitemcheckbox"
+        checked={tool.checked}
+        // An unavailable tool still explains itself, so it stays in
+        // the tab order and in the roving walk; only the activation
+        // goes away.
+        disabled={toolDisabled}
+        disabledMode="aria"
+        tabIndex={-1}
+        onClick={toolDisabled ? undefined : tool.onToggle}
+        data-testid={testId}
+        leading={
+          tool.icon && (
+            <span
+              className="flex size-5 shrink-0 items-center justify-center"
+              aria-hidden="true"
+            >
+              {tool.icon}
+            </span>
+          )
+        }
+        trailing={
+          <CheckIcon
+            className={clsx(
+              "size-4 shrink-0 text-theme-fg-primary transition-opacity",
+              tool.checked ? "opacity-100" : "opacity-0",
+            )}
+          />
+        }
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block truncate">{tool.label}</span>
+          {tool.description && (
+            <span className="block text-xs text-theme-fg-muted">
+              {tool.description}
+            </span>
+          )}
+        </span>
+      </Row>
+    );
+  };
+
   const renderExtraSection = (section: AddMenuSection) => {
     // eslint-disable-next-line lingui/no-unlocalized-strings -- internal DOM id suffix
     const headerId = `${baseId}-section-${section.id}`;
@@ -261,7 +317,9 @@ export function ChatInputAddMenu({
           </PopoverSectionHeader>
         )}
         {section.items.map((item) =>
-          renderActionRow(item, `chat-input-add-menu-extra-${item.id}`),
+          isAddMenuToolItem(item)
+            ? renderToolRow(item, `chat-input-add-menu-extra-${item.id}`)
+            : renderActionRow(item, `chat-input-add-menu-extra-${item.id}`),
         )}
       </div>
     );
@@ -317,45 +375,9 @@ export function ChatInputAddMenu({
           <PopoverSectionHeader id={toolsHeaderId}>
             {t({ id: "chatInput.addMenu.toolsHeader", message: "Tools" })}
           </PopoverSectionHeader>
-          {tools.map((tool) => {
-            const toolDisabled = isBusy || tool.disabled;
-            return (
-              <Row
-                key={tool.id}
-                variant="menu"
-                role="menuitemcheckbox"
-                checked={tool.checked}
-                // An unavailable tool still explains itself, so it stays in
-                // the tab order and in the roving walk; only the activation
-                // goes away.
-                disabled={toolDisabled}
-                disabledMode="aria"
-                tabIndex={-1}
-                onClick={toolDisabled ? undefined : tool.onToggle}
-                data-testid={`chat-input-add-menu-tool-${tool.id}`}
-                leading={
-                  tool.icon && (
-                    <span
-                      className="flex size-5 shrink-0 items-center justify-center"
-                      aria-hidden="true"
-                    >
-                      {tool.icon}
-                    </span>
-                  )
-                }
-                trailing={
-                  <CheckIcon
-                    className={clsx(
-                      "size-4 shrink-0 text-theme-fg-primary transition-opacity",
-                      tool.checked ? "opacity-100" : "opacity-0",
-                    )}
-                  />
-                }
-              >
-                <span className="min-w-0 flex-1 truncate">{tool.label}</span>
-              </Row>
-            );
-          })}
+          {tools.map((tool) =>
+            renderToolRow(tool, `chat-input-add-menu-tool-${tool.id}`),
+          )}
         </div>
       ),
     });

@@ -79,6 +79,7 @@ export interface AddinChatInputRenderProps {
     hostContextIdentity?: string | null,
     mentionedAssistants?: AssistantMention[],
     delegationRunMode?: DelegationRunMode,
+    mcpWriteToolsEnabled?: boolean,
   ) => void;
   onFilePreview: (file: FileUploadItem) => void;
   handleFileAttachments: (files: FileUploadItem[]) => void;
@@ -288,6 +289,7 @@ function useAddinChatController({
       hostContextIdentity,
       mentionedAssistants,
       delegationRunMode,
+      mcpWriteToolsEnabled,
     ) => {
       hostCallbacksRef.current.beforeSend?.(hostContextIdentity);
       // No history refetch here: sendMessage resolves at dispatch, before
@@ -302,6 +304,7 @@ function useAddinChatController({
         actionFacet,
         mentionedAssistants,
         delegationRunMode,
+        mcpWriteToolsEnabled,
       );
     },
     [assistantId, chat],
@@ -508,6 +511,7 @@ function NeutralAddinChatHost({ controller }: AddinChatHostProps) {
             selectedFacetIds,
             mentionedAssistants,
             delegationRunMode,
+            mcpWriteToolsEnabled,
           ) =>
             props.onSendMessage(
               message,
@@ -518,6 +522,7 @@ function NeutralAddinChatHost({ controller }: AddinChatHostProps) {
               undefined,
               mentionedAssistants,
               delegationRunMode,
+              mcpWriteToolsEnabled,
             )
           }
         />

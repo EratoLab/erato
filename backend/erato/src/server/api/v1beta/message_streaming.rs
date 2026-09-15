@@ -732,6 +732,11 @@ pub struct MessageSubmitRequest {
     /// Ignored when existing_chat_id is provided.
     #[schema(nullable = false)]
     title_by_user_provided: Option<String>,
+    /// Whether a newly created chat offers the model MCP write tools and
+    /// client actions. Defaults to enabled. Ignored when existing_chat_id is
+    /// provided; `PUT /me/chats/{chat_id}` changes it on an existing chat.
+    #[schema(nullable = false)]
+    mcp_write_tools_enabled: Option<bool>,
     /// IDs of facets selected by the user for this generation.
     #[serde(default)]
     selected_facet_ids: Vec<String>,
@@ -1881,6 +1886,7 @@ impl MessageSubmitRequest {
             chat_provider_id: None,
             assistant_id: None,
             title_by_user_provided: None,
+            mcp_write_tools_enabled: None,
             selected_facet_ids: Vec::new(),
             action_facet: None,
             mentioned_assistant_ids: None,
@@ -2373,6 +2379,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         tools: generation_mcp_tools,
         mcp_claimed_names,
         denied: _,
+        write_suppressed: _,
         unavailable_server_ids: mcp_servers_unavailable,
         needing_auth_server_ids: mcp_servers_needing_auth,
         missing_credential_server_ids: _,
@@ -2388,6 +2395,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
             subject: &me_profile_input.subject,
             user_groups: me_profile_input.user_groups,
             user_id: me_profile_input.user_id,
+            write_tools_enabled: chat.mcp_write_tools_enabled,
         },
         &mcp_auth_context,
     )
@@ -2471,11 +2479,14 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     // chat row, not caller-remembered state.
     let is_delegated_run = crate::models::chat::chat_is_delegated_run(chat);
     // Offer the synthetic client-action tool only when the current request's
-    // action facet declares client actions. The tool is handled in the tool
+    // action facet declares client actions and the chat allows writes: client
+    // actions are the mutation channel, so the write toggle withholds them
+    // together with non-read-only MCP tools. The tool is handled in the tool
     // call loop instead of being dispatched to an MCP server. If an MCP tool
     // already claims the same name, it wins — adding a duplicate tool name
     // would be rejected by providers and ambiguous to dispatch.
     if !is_delegated_run
+        && chat.mcp_write_tools_enabled
         && let Some(action_facet) = user_input.action_facet.as_ref()
         && let Some(facet_config) = app_state.config.action_facets.facets.get(&action_facet.id)
         && !facet_config.client_actions.is_empty()
@@ -6185,6 +6196,9 @@ pub(crate) struct GenerationMcpToolInputs<'a> {
     pub subject: &'a Subject,
     pub user_groups: &'a [String],
     pub user_id: Option<Uuid>,
+    /// The chat's write toggle. Off, only tools whose server marks them
+    /// read-only survive; an unannotated tool is not read-only.
+    pub write_tools_enabled: bool,
 }
 
 pub(crate) struct GenerationMcpToolSet {
@@ -6198,6 +6212,9 @@ pub(crate) struct GenerationMcpToolSet {
     pub mcp_claimed_names: HashSet<String>,
     /// `(server_id, tool_name)` pairs the user has denied for themselves.
     pub denied: HashSet<(String, String)>,
+    /// `(server_id, tool_name)` pairs dropped because the chat has write
+    /// operations turned off.
+    pub write_suppressed: HashSet<(String, String)>,
     pub unavailable_server_ids: Vec<String>,
     pub needing_auth_server_ids: Vec<String>,
     pub missing_credential_server_ids: Vec<String>,
@@ -6205,7 +6222,8 @@ pub(crate) struct GenerationMcpToolSet {
 
 /// Resolve the MCP tool set of one generation: facet and action-facet
 /// allowlists, the assistant's server restriction, the policy engine's
-/// server authorization, and the user's own denials.
+/// server authorization, the user's own denials, and the chat's write
+/// toggle.
 ///
 /// This is the only place that chain lives. A continued turn (after a tool
 /// approval) rebuilds the set through here from the persisted generation
@@ -6310,15 +6328,48 @@ async fn resolve_generation_mcp_tools(
             })
             .collect()
     };
+    let (tools, write_suppressed) =
+        filter_mcp_tools_by_write_access(tools, inputs.write_tools_enabled);
 
     Ok(GenerationMcpToolSet {
         tools,
         mcp_claimed_names,
         denied,
+        write_suppressed,
         unavailable_server_ids: tool_discovery.unavailable_server_ids,
         needing_auth_server_ids: tool_discovery.needing_auth_server_ids,
         missing_credential_server_ids: tool_discovery.missing_credential_server_ids,
     })
+}
+
+/// With writes off, keep only tools whose server marks them read-only. The
+/// hint is normalized the way the approval gate reads it, so a tool without
+/// annotations counts as a write and is dropped; the dropped pairs are
+/// returned so a continuation can name the reason it refuses one.
+fn filter_mcp_tools_by_write_access(
+    tools: Vec<crate::services::mcp_session_manager::ManagedTool>,
+    write_tools_enabled: bool,
+) -> (
+    Vec<crate::services::mcp_session_manager::ManagedTool>,
+    HashSet<(String, String)>,
+) {
+    if write_tools_enabled {
+        return (tools, HashSet::new());
+    }
+    let mut write_suppressed = HashSet::new();
+    let tools = tools
+        .into_iter()
+        .filter(|tool| {
+            let read_only =
+                crate::services::mcp_tool_approval::normalize_tool_annotations(&tool.tool)
+                    .read_only_hint;
+            if !read_only {
+                write_suppressed.insert((tool.server_id.clone(), tool.tool.name.to_string()));
+            }
+            read_only
+        })
+        .collect();
+    (tools, write_suppressed)
 }
 
 /// Filter MCP tools based on assistant configuration
@@ -6609,7 +6660,8 @@ mod tests {
     use super::{
         apply_assistant_server_filter, derive_requested_server_ids_from_allowlist,
         effective_client_tool_allowlist, expand_tool_patterns_with_discovered_tools,
-        mcp_tool_approval_request, merge_action_facet_into_mcp_allowlist,
+        filter_mcp_tools_by_write_access, mcp_tool_approval_request,
+        merge_action_facet_into_mcp_allowlist,
     };
     use crate::config::{McpToolApprovalConfig, McpToolApprovalPreset};
     use crate::services::mcp_tool_approval::evaluate_mcp_tool_approval;
@@ -6617,6 +6669,46 @@ mod tests {
     use rmcp::model::{Tool, ToolAnnotations};
     use serde_json::{Map, json};
     use std::collections::HashSet;
+
+    fn managed_tool(
+        server_id: &str,
+        tool: Tool,
+    ) -> crate::services::mcp_session_manager::ManagedTool {
+        crate::services::mcp_session_manager::ManagedTool {
+            server_id: server_id.to_string(),
+            tool,
+        }
+    }
+
+    #[test]
+    fn writes_off_keeps_only_tools_the_server_marks_read_only() {
+        let read_only = Tool::new("read_one", "reads", Map::new())
+            .with_annotations(ToolAnnotations::new().read_only(true));
+        let write = Tool::new("write_one", "writes", Map::new())
+            .with_annotations(ToolAnnotations::new().read_only(false));
+        let unannotated = Tool::new("unknown_one", "undeclared", Map::new());
+        let tools = vec![
+            managed_tool("files", read_only.clone()),
+            managed_tool("files", write.clone()),
+            managed_tool("other", unannotated.clone()),
+        ];
+
+        let (kept, suppressed) = filter_mcp_tools_by_write_access(tools.clone(), true);
+        assert_eq!(kept.len(), 3);
+        assert!(suppressed.is_empty());
+
+        let (kept, suppressed) = filter_mcp_tools_by_write_access(tools, false);
+        let kept: Vec<&str> = kept.iter().map(|tool| &*tool.tool.name).collect();
+        assert_eq!(kept, vec!["read_one"]);
+        assert_eq!(
+            suppressed,
+            HashSet::from([
+                ("files".to_string(), "write_one".to_string()),
+                ("other".to_string(), "unknown_one".to_string()),
+            ]),
+            "a tool without annotations is not read-only under protocol defaults"
+        );
+    }
 
     #[test]
     fn derives_server_ids_from_allowlist_patterns() {
@@ -7545,6 +7637,7 @@ pub async fn message_submit_sse(
                 &me_user.id,
                 None,
                 None,
+                None,
             )
             .await
             .map_err(|e| {
@@ -7582,6 +7675,7 @@ pub async fn message_submit_sse(
                 &me_user.id,
                 request.assistant_id.as_ref(),
                 request.title_by_user_provided.clone(),
+                request.mcp_write_tools_enabled,
             )
             .await
             .map_err(|e| {
@@ -8553,6 +8647,7 @@ pub(crate) async fn run_message_submit_task(
         &me_user.to_subject(),
         Some(&chat_id),
         &me_user.id,
+        None,
         None,
         None,
     )
@@ -9844,6 +9939,7 @@ pub async fn abort_message_stream(
         &me_user.id,
         None,
         None,
+        None,
     )
     .await
     .map_err(|e| {
@@ -9912,6 +10008,7 @@ pub async fn client_tool_result(
         &me_user.to_subject(),
         Some(&request.chat_id),
         &me_user.id,
+        None,
         None,
         None,
     )
@@ -10144,6 +10241,7 @@ async fn run_continue_message_task(
         &me_user.id,
         None,
         None,
+        None,
     )
     .await?
     .0;
@@ -10190,6 +10288,7 @@ async fn run_continue_message_task(
         tools: available_mcp_tools,
         mcp_claimed_names: _,
         denied: denied_mcp_tools,
+        write_suppressed: write_suppressed_mcp_tools,
         unavailable_server_ids: mcp_servers_unavailable,
         needing_auth_server_ids: mcp_servers_needing_auth,
         missing_credential_server_ids: mcp_servers_missing_credential,
@@ -10205,6 +10304,7 @@ async fn run_continue_message_task(
             subject: &me_profile_input.subject,
             user_groups: me_profile_input.user_groups,
             user_id: Some(user_id),
+            write_tools_enabled: chat.mcp_write_tools_enabled,
         },
         &mcp_auth_context,
     )
@@ -10318,16 +10418,21 @@ async fn run_continue_message_task(
             ended_at: Some(now_timestamp()),
         }
     } else {
-        // A denial is final whatever the server's state. Otherwise a server
-        // that was merely unreachable, or that this request carried no
-        // credential for, keeps the park retryable; only a tool the rebuilt
-        // set excludes is answered with a refusal the model can work around.
+        // A denial is final whatever the server's state, and so is the chat's
+        // write toggle. Otherwise a server that was merely unreachable, or
+        // that this request carried no credential for, keeps the park
+        // retryable; only a tool the rebuilt set excludes is answered with a
+        // refusal the model can work around.
         let server_id = &approval_request.mcp_server_id;
-        let error_message = if denied_mcp_tools
-            .contains(&(server_id.clone(), approval_request.tool_name.clone()))
-        {
+        let excluded_pair = (server_id.clone(), approval_request.tool_name.clone());
+        let error_message = if denied_mcp_tools.contains(&excluded_pair) {
             format!(
                 "The user has disabled the tool '{}' in their settings; the call was not executed.",
+                approval_request.tool_name
+            )
+        } else if write_suppressed_mcp_tools.contains(&excluded_pair) {
+            format!(
+                "Write operations are turned off for this chat, so the tool '{}' is not available; the call was not executed.",
                 approval_request.tool_name
             )
         } else if mcp_servers_unavailable.contains(server_id)
@@ -10518,6 +10623,7 @@ pub async fn resume_message_sse(
         &me_user.to_subject(),
         Some(&request.chat_id),
         &me_user.id,
+        None,
         None,
         None,
     )

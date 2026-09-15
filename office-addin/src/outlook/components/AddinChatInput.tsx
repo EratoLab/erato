@@ -101,6 +101,7 @@ interface AddinChatInputProps {
     sendItemIdentity?: string | null,
     mentionedAssistants?: AssistantMention[],
     delegationRunMode?: DelegationRunMode,
+    mcpWriteToolsEnabled?: boolean,
   ) => void;
   handleFileAttachments?: (files: FileUploadItem[]) => void;
   isLoading?: boolean;
@@ -847,6 +848,7 @@ export const AddinChatInput = forwardRef<
       selectedFacetIds?: string[],
       mentionedAssistants?: AssistantMention[],
       delegationRunMode?: DelegationRunMode,
+      mcpWriteToolsEnabled?: boolean,
     ) => {
       // Capture the item identity BEFORE any await: the uploads below can
       // take long enough for the user to switch emails, and the wrong-item
@@ -1000,6 +1002,7 @@ export const AddinChatInput = forwardRef<
           sendItemIdentity,
           mentionedAssistants,
           delegationRunMode,
+          mcpWriteToolsEnabled,
         );
         return;
       }
@@ -1032,6 +1035,7 @@ export const AddinChatInput = forwardRef<
             sendItemIdentity,
             mentionedAssistants,
             delegationRunMode,
+            mcpWriteToolsEnabled,
           );
           // No upload was attempted (e.g. only dismissed drops remain) and
           // nothing failed, so the staged drops are safe to clear.
@@ -1120,6 +1124,7 @@ export const AddinChatInput = forwardRef<
         sendItemIdentity,
         mentionedAssistants,
         delegationRunMode,
+        mcpWriteToolsEnabled,
       );
 
       clearSentDrops();
@@ -1272,6 +1277,9 @@ export const AddinChatInput = forwardRef<
         handleFileAttachments={handleFileAttachments}
         sizeLimitExceeded={sizeLimitExceeded}
         uploadError={sendFailure?.error ?? ownerUploadError}
+        // The action facet rides along implicitly with every send from
+        // here, so the write switch pauses Reply and Send as well.
+        pausesHostActionsWhenWritesOff
         onSendMessage={(
           message,
           inputFileIds,
@@ -1279,6 +1287,7 @@ export const AddinChatInput = forwardRef<
           selectedFacetIds,
           mentionedAssistants,
           delegationRunMode,
+          mcpWriteToolsEnabled,
         ) => {
           void wrappedOnSendMessage(
             message,
@@ -1287,6 +1296,7 @@ export const AddinChatInput = forwardRef<
             selectedFacetIds,
             mentionedAssistants,
             delegationRunMode,
+            mcpWriteToolsEnabled,
           );
         }}
         disabled={

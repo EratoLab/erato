@@ -1021,6 +1021,7 @@ pub(crate) async fn dispatch_delegate_tool_call(
         assistant_id,
         provenance,
         delegated_chat_title(&args.task),
+        context.origin_chat.mcp_write_tools_enabled,
     )
     .await
     .map_err(|error| {

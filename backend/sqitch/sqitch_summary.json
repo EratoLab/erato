@@ -41,7 +41,8 @@
     "deploy/0039_add_starting_assistant_to_user_preferences.sql",
     "deploy/0040_add_assistant_usage_indexes.sql",
     "deploy/0041_notify_policy_fact_changes.sql",
-    "deploy/0042_add_decision_to_user_tool_approval_settings.sql"
+    "deploy/0042_add_decision_to_user_tool_approval_settings.sql",
+    "deploy/0043_add_mcp_write_tools_enabled_to_chats.sql"
   ],
-  "latest_change": "1f9e2aa2876abcc945b56a7c924bb61adf1ce499"
+  "latest_change": "81dc69a38767e3548b9debdd4a1fbbb3bcf6ca22"
 }

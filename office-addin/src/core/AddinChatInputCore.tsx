@@ -18,6 +18,12 @@ export interface AddinChatInputCoreProps {
     selectedFacetIds?: string[],
     mentionedAssistants?: AssistantMention[],
     delegationRunMode?: DelegationRunMode,
+    /**
+     * Present only on the first send of a new chat whose writes the user
+     * turned off beforehand; every hop must hand it on or the chat row is
+     * created with writes on while the switch shows off.
+     */
+    mcpWriteToolsEnabled?: boolean,
   ) => void;
   handleFileAttachments?: (files: FileUploadItem[]) => void;
   isLoading?: boolean;
@@ -38,6 +44,12 @@ export interface AddinChatInputCoreProps {
   controlledSelectedModel?: ChatModel | null;
   onControlledSelectedModelChange?: (model: ChatModel) => void;
   controlledIsModelSelectionReady?: boolean;
+  /**
+   * Set by a host whose own action proposals the per-chat write switch
+   * pauses too, so the switch's description names them. The neutral
+   * composer leaves it unset: it proposes no actions of its own.
+   */
+  pausesHostActionsWhenWritesOff?: boolean;
 }
 
 /** Generic add-in composer. It has no host context, chips, or action facets. */

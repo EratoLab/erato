@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { FacetSelector } from "../FacetSelector";
 import { buildAssistantMentionSection } from "../assistantMentionSection";
+import { buildMcpToolsSection } from "../mcpToolsSection";
 
 import type { FacetInfo } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
@@ -21,6 +22,9 @@ function renderSelector({
   onBrowse = vi.fn(),
   onSelectionChange = vi.fn(),
   withAssistants = true,
+  withConnectors = false,
+  writeToolsEnabled = true,
+  onToggleWriteTools = vi.fn(),
 } = {}) {
   render(
     <FacetSelector
@@ -39,9 +43,18 @@ function renderSelector({
             })
           : undefined
       }
+      mcpToolsSection={
+        withConnectors
+          ? buildMcpToolsSection({
+              writeToolsEnabled,
+              onToggleWriteTools,
+              onBrowse: vi.fn(),
+            })
+          : undefined
+      }
     />,
   );
-  return { onSelect, onBrowse, onSelectionChange };
+  return { onSelect, onBrowse, onSelectionChange, onToggleWriteTools };
 }
 
 describe("FacetSelector", () => {
@@ -135,5 +148,76 @@ describe("FacetSelector", () => {
 
     const trigger = screen.getByRole("button", { name: "Open menu" });
     expect(trigger.closest(".pointer-events-none")).not.toBeNull();
+  });
+
+  it("renders the connectors write switch as a ticked row below the tools", async () => {
+    const { onToggleWriteTools } = renderSelector({
+      facets: [WEB_SEARCH],
+      withAssistants: false,
+      withConnectors: true,
+      writeToolsEnabled: true,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+
+    expect(await screen.findByText("Connectors")).toBeInTheDocument();
+    const toggle = screen.getByRole("menuitem", {
+      name: /Allow write operations/,
+    });
+    expect(
+      within(toggle).getByText(
+        "Off, only tools the server marks read-only are offered.",
+      ),
+    ).toBeInTheDocument();
+    // Section rows carry no leading icon, so the only SVG in the row is the
+    // tick — present exactly while the switch is on.
+    expect(toggle.querySelector("svg")).not.toBeNull();
+
+    fireEvent.click(toggle);
+    expect(onToggleWriteTools).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the connectors write switch unticked while writes are off", async () => {
+    renderSelector({
+      facets: [WEB_SEARCH],
+      withAssistants: false,
+      withConnectors: true,
+      writeToolsEnabled: false,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+
+    expect(await screen.findByText("Connectors")).toBeInTheDocument();
+    const toggle = screen.getByRole("menuitem", {
+      name: /Allow write operations/,
+    });
+    expect(toggle.querySelector("svg")).toBeNull();
+  });
+
+  // Connectors are tools, so a facet-less deployment with a connector keeps
+  // the Tools trigger rather than the assistants-only one.
+  it("keeps the Tools trigger when only connectors are offered", () => {
+    renderSelector({ withAssistants: false, withConnectors: true });
+
+    expect(screen.getByText("Tools")).toBeInTheDocument();
+    expect(screen.queryByText("Assistants")).not.toBeInTheDocument();
+  });
+
+  it("keeps the connectors live while the facet rows are locked", async () => {
+    const { onToggleWriteTools } = renderSelector({
+      facets: [WEB_SEARCH],
+      toolsDisabled: true,
+      withAssistants: false,
+      withConnectors: true,
+    });
+
+    const trigger = screen.getByRole("button", { name: "Open menu" });
+    expect(trigger.closest(".pointer-events-none")).toBeNull();
+    fireEvent.click(trigger);
+
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: /Allow write operations/ }),
+    );
+    expect(onToggleWriteTools).toHaveBeenCalledTimes(1);
   });
 });

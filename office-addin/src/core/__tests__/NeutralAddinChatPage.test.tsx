@@ -42,6 +42,7 @@ const spies = vi.hoisted(() => ({
         selectedFacetIds?: string[],
         mentionedAssistants?: { id: string; name: string }[],
         delegationRunMode?: "wait" | "background",
+        mcpWriteToolsEnabled?: boolean,
       ) => void;
     },
   },
@@ -465,6 +466,36 @@ describe("NeutralAddinChatPage host boundary", () => {
       undefined,
       [{ id: "assistant-9", name: "Research" }],
       "background",
+      undefined,
+    );
+  });
+
+  it("carries a new chat's writes-off seed through to the send", () => {
+    renderPage();
+
+    // The seed only exists on the first send of a chat that does not exist
+    // yet; a hop that drops it creates the row with writes on while the
+    // composer's switch shows off.
+    spies.inputProps.current?.onSendMessage(
+      "read only please",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      false,
+    );
+
+    expect(spies.sendMessage).toHaveBeenCalledWith(
+      "read only please",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      false,
     );
   });
 

@@ -253,7 +253,8 @@ CREATE TABLE public.chats (
     generation_heartbeat_at timestamp with time zone,
     generation_ended_at timestamp with time zone,
     is_pinned boolean DEFAULT false NOT NULL,
-    origin_chat_id uuid GENERATED ALWAYS AS (((assistant_configuration #>> '{provenance,origin_chat_id}'::text[]))::uuid) STORED
+    origin_chat_id uuid GENERATED ALWAYS AS (((assistant_configuration #>> '{provenance,origin_chat_id}'::text[]))::uuid) STORED,
+    mcp_write_tools_enabled boolean DEFAULT true NOT NULL
 );
 
 

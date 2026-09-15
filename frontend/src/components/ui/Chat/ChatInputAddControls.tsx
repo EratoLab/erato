@@ -34,6 +34,11 @@ export interface ChatInputAddControlsProps {
    * dropdown renders, so both hosts offer identical assistant rows.
    */
   assistantSection?: AddMenuSection;
+  /**
+   * The connectors group (write toggle, tool browser), rendered between the
+   * tools and the assistants exactly as the desktop dropdown orders them.
+   */
+  mcpToolsSection?: AddMenuSection;
 
   /** Disable the whole control (general composer-disabled state). */
   disabled?: boolean;
@@ -56,6 +61,7 @@ export function ChatInputAddControls({
   selectedFacetIds,
   onToggleFacet,
   assistantSection,
+  mcpToolsSection,
   disabled = false,
   uploadDisabled = false,
   toolsDisabled = false,
@@ -81,6 +87,13 @@ export function ChatInputAddControls({
     () => new Set(selectedFacetIds),
     [selectedFacetIds],
   );
+
+  const extraSections = useMemo(() => {
+    const sections = [mcpToolsSection, assistantSection].filter(
+      (section): section is AddMenuSection => section !== undefined,
+    );
+    return sections.length > 0 ? sections : undefined;
+  }, [assistantSection, mcpToolsSection]);
 
   const tools: AddMenuToolItem[] = useMemo(
     () =>
@@ -112,7 +125,7 @@ export function ChatInputAddControls({
       <ChatInputAddMenu
         fileSources={canUpload ? fileSourceItems : []}
         tools={tools}
-        extraSections={assistantSection ? [assistantSection] : undefined}
+        extraSections={extraSections}
         extraContent={
           ExtraContent
             ? ({ close }) => (

@@ -2252,6 +2252,46 @@ msgid "chatInput.addMenu.trigger"
 msgstr "Agregar archivos y herramientas"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+msgid "chatInput.connectors.allowWrites.description"
+msgstr "Desactivado: solo se ofrecen las herramientas que el servidor marca como de solo lectura."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+msgid "chatInput.connectors.allowWrites.descriptionWithHostActions"
+msgstr "Desactivado: solo se ofrecen las herramientas que el servidor marca como de solo lectura. También pausa las acciones de Outlook como Responder y Enviar."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+msgid "chatInput.connectors.allowWrites.label"
+msgstr "Permitir operaciones de escritura"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+msgid "chatInput.connectors.browse"
+msgstr "Explorar herramientas…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.browseDescription"
+msgstr "Las herramientas que cada servidor conectado ofrece en tus chats. Decide qué puede ejecutarse en Configuración."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.browseTitle"
+msgstr "Herramientas conectadas"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.manageInSettings"
+msgstr "Gestionar en Configuración"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+msgid "chatInput.connectors.sectionHeader"
+msgstr "Conectores"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/DelegationRunModePopover.tsx
 msgid "chatInput.delegationRunMode.background.description"
 msgstr "La respuesta no llegará a esta conversación; se queda en un chat aparte."
@@ -3677,6 +3717,7 @@ msgstr "No se pudo actualizar la decisión. Inténtalo de nuevo."
 #~ msgstr "Revisa los servidores MCP disponibles para tu cuenta y completa cualquier autorización necesaria."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
 #: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.empty"
 msgstr "Actualmente no tienes servidores MCP disponibles."
@@ -3697,6 +3738,7 @@ msgid "preferences.dialog.mcpServers.loading"
 msgstr "Cargando el estado de los servidores MCP..."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
 #: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.oauth.authorize"
 msgstr "Autorizar"
@@ -3767,22 +3809,22 @@ msgstr "Autorización completada. El servidor está listo para usarse."
 #~ msgstr "Actualizando..."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/ServersToolsPane.tsx
+#: src/components/ui/Settings/mcpServerStatus.ts
 msgid "preferences.dialog.mcpServers.status.failure.description"
 msgstr "El servidor está configurado, pero el backend no pudo conectarse a él."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/ServersToolsPane.tsx
+#: src/components/ui/Settings/mcpServerStatus.ts
 msgid "preferences.dialog.mcpServers.status.failure.label"
 msgstr "Conexión fallida"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/ServersToolsPane.tsx
+#: src/components/ui/Settings/mcpServerStatus.ts
 msgid "preferences.dialog.mcpServers.status.needsAuthentication.description"
 msgstr "Se requiere autorización antes de poder usar este servidor."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/ServersToolsPane.tsx
+#: src/components/ui/Settings/mcpServerStatus.ts
 msgid "preferences.dialog.mcpServers.status.needsAuthentication.label"
 msgstr "Necesita autenticación"
 
@@ -3792,32 +3834,32 @@ msgstr "Necesita autenticación"
 #~ msgstr "Conectado y listo para usar."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/ServersToolsPane.tsx
+#: src/components/ui/Settings/mcpServerStatus.ts
 msgid "preferences.dialog.mcpServers.status.success.label"
 msgstr "Conectado"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+#: src/components/ui/Settings/McpToolSummary.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.asksBeforeRunning"
 msgstr "Pregunta antes de ejecutar"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+#: src/components/ui/Settings/McpToolSummary.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.canModify"
 msgstr "Puede modificar"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+#: src/components/ui/Settings/McpToolSummary.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.notDeclared"
 msgstr "No declarado por el servidor"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+#: src/components/ui/Settings/McpToolSummary.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.reachesOtherSystems"
 msgstr "Accede a otros sistemas"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+#: src/components/ui/Settings/McpToolSummary.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.readsOnly"
 msgstr "Solo lee"
 
@@ -3827,11 +3869,13 @@ msgid "preferences.dialog.mcpServers.tools.description"
 msgstr "Decide para cada herramienta de este servidor si puede ejecutarse por ti. Las decisiones se aplican a tu cuenta en todos los dispositivos; elegir \"Permitir siempre\" en un chat también se guarda aquí."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.empty"
 msgstr "Este servidor no te expone ninguna herramienta."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.failure"
 msgstr "No se pudieron listar las herramientas porque el servidor no está accesible."
@@ -3842,16 +3886,19 @@ msgid "preferences.dialog.mcpServers.tools.heading"
 msgstr "Herramientas"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.loadError"
 msgstr "No se pudieron cargar las herramientas de este servidor. Inténtalo de nuevo."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.loading"
 msgstr "Cargando herramientas..."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.needsAuthentication"
 msgstr "Conéctate para ver las herramientas."

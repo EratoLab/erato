@@ -423,4 +423,43 @@ describe("AddinChatInput", () => {
 
     await waitFor(() => expect(h.chatInput.props.uploadError).toBe(ownerError));
   });
+
+  it("names the paused Reply and Send on the write switch", () => {
+    renderInput();
+
+    // The action facet rides along implicitly from this composer, so the
+    // Outlook build is the one host whose toggle must name the consequence.
+    expect(h.chatInput.props.pausesHostActionsWhenWritesOff).toBe(true);
+  });
+
+  it("carries a new chat's writes-off seed through to the host send", async () => {
+    h.fetchUploadFile.mockResolvedValueOnce({ files: [{ id: "u1" }] });
+    const { onSendMessage } = renderInput();
+
+    (
+      h.chatInput.props.onSendMessage as (
+        message: string,
+        inputFileIds?: string[],
+        modelId?: string,
+        selectedFacetIds?: string[],
+        mentionedAssistants?: { id: string; name: string }[],
+        delegationRunMode?: "wait" | "background",
+        mcpWriteToolsEnabled?: boolean,
+      ) => void
+    )(
+      "read only please",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      false,
+    );
+
+    // Ninth slot: after the action facet and the item identity the wrapper
+    // inserts, and after the mentions and run mode it hands on unchanged.
+    await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+    expect(onSendMessage.mock.calls[0]?.[8]).toBe(false);
+    expect(onSendMessage.mock.calls[0]?.[5]).toBe("item-1");
+  });
 });

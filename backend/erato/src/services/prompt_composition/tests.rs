@@ -311,6 +311,7 @@ mod test_cases {
             generation_started_at: None,
             generation_heartbeat_at: None,
             generation_ended_at: None,
+            mcp_write_tools_enabled: true,
         }
     }
 

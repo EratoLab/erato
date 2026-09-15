@@ -1,0 +1,99 @@
+import { describe, expect, it, vi } from "vitest";
+
+import { isAddMenuToolItem } from "../ChatInputAddMenu";
+import {
+  buildMcpToolsSection,
+  MCP_TOOLS_BROWSE_ITEM_ID,
+  MCP_TOOLS_SECTION_ID,
+  MCP_TOOLS_WRITE_TOGGLE_ITEM_ID,
+} from "../mcpToolsSection";
+
+const build = (
+  overrides: Partial<Parameters<typeof buildMcpToolsSection>[0]> = {},
+) =>
+  buildMcpToolsSection({
+    writeToolsEnabled: true,
+    onToggleWriteTools: vi.fn(),
+    onBrowse: vi.fn(),
+    ...overrides,
+  });
+
+const toggleOf = (section: ReturnType<typeof build>) => {
+  const item = section.items.find(
+    (candidate) => candidate.id === MCP_TOOLS_WRITE_TOGGLE_ITEM_ID,
+  );
+  if (!item || !isAddMenuToolItem(item)) {
+    throw new Error("write toggle row missing");
+  }
+  return item;
+};
+
+const browseOf = (section: ReturnType<typeof build>) => {
+  const item = section.items.find(
+    (candidate) => candidate.id === MCP_TOOLS_BROWSE_ITEM_ID,
+  );
+  if (!item || isAddMenuToolItem(item)) {
+    throw new Error("browse row missing");
+  }
+  return item;
+};
+
+describe("buildMcpToolsSection", () => {
+  it("groups the write switch and the browse row under Connectors below the tools", () => {
+    const section = build();
+
+    expect(section.id).toBe(MCP_TOOLS_SECTION_ID);
+    expect(section.header).toBe("Connectors");
+    expect(section.placement).toBe("belowTools");
+    expect(section.items.map((item) => item.id)).toEqual([
+      MCP_TOOLS_WRITE_TOGGLE_ITEM_ID,
+      MCP_TOOLS_BROWSE_ITEM_ID,
+    ]);
+  });
+
+  it("shows the chat's write setting as the toggle state and flips it on toggle", () => {
+    const onToggleWriteTools = vi.fn();
+
+    expect(toggleOf(build({ writeToolsEnabled: true })).checked).toBe(true);
+
+    const toggle = toggleOf(
+      build({ writeToolsEnabled: false, onToggleWriteTools }),
+    );
+    expect(toggle.checked).toBe(false);
+    expect(toggle.label).toBe("Allow write operations");
+    toggle.onToggle();
+    expect(onToggleWriteTools).toHaveBeenCalledTimes(1);
+  });
+
+  // An unannotated tool is not read-only under protocol defaults, so the
+  // copy must credit the server's marking rather than promise "read-only".
+  it("describes the off state as tools the server marks read-only", () => {
+    expect(toggleOf(build()).description).toBe(
+      "Off, only tools the server marks read-only are offered.",
+    );
+  });
+
+  it("names the paused host actions where the host proposes them", () => {
+    expect(toggleOf(build({ pausesHostActions: true })).description).toBe(
+      "Off, only tools the server marks read-only are offered. Also pauses Outlook actions like Reply and Send.",
+    );
+  });
+
+  // The row opens a dialog, which must claim focus before the menu returns
+  // it to the trigger.
+  it("opens the browser without the select delay", () => {
+    const onBrowse = vi.fn();
+    const browse = browseOf(build({ onBrowse }));
+
+    expect(browse.label).toBe("Browse tools…");
+    expect(browse.closesImmediately).toBe(true);
+    browse.onSelect();
+    expect(onBrowse).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables every row while the composer is locked", () => {
+    const section = build({ disabled: true });
+
+    expect(section.items.every((item) => item.disabled)).toBe(true);
+  });
+});

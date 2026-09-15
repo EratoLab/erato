@@ -96,6 +96,7 @@ export const handlers = [
           title_resolved: "Recent Chat 1 Title",
           last_message_at: new Date().toISOString(),
           is_pinned: false,
+          mcp_write_tools_enabled: true,
           file_uploads: [],
           can_edit: true,
         },

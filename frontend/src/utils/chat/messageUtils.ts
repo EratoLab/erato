@@ -118,6 +118,7 @@ export function mergeDisplayMessages(
 }
 
 export interface SubmitStreamRequestBody {
+  mcp_write_tools_enabled?: boolean;
   user_message: string;
   previous_message_id?: string;
   existing_chat_id?: string;
@@ -154,6 +155,7 @@ export function constructSubmitStreamRequestBody(
   actionFacet?: ActionFacetRequest,
   mentionedAssistantIds?: string[],
   delegationRunMode?: DelegationRunMode,
+  mcpWriteToolsEnabled?: boolean,
 ): SubmitStreamRequestBody {
   const body: SubmitStreamRequestBody = {
     user_message: userMessageContent,
@@ -185,6 +187,9 @@ export function constructSubmitStreamRequestBody(
   }
   if (delegationRunMode) {
     body.delegation_run_mode = delegationRunMode;
+  }
+  if (mcpWriteToolsEnabled !== undefined) {
+    body.mcp_write_tools_enabled = mcpWriteToolsEnabled;
   }
 
   return body;

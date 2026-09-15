@@ -5813,3 +5813,466 @@ async fn test_failed_generation_broadcasts_a_failure_frame_then_stream_end(pool:
         Some("errored")
     );
 }
+
+// ---------------------------------------------------------------------------
+// Per-chat write toggle: with writes off, only tools the server marks
+// read-only are offered, client actions are withheld, and a parked write
+// tool is refused on continuation.
+// ---------------------------------------------------------------------------
+
+/// Sets the chat's write toggle through `PUT /me/chats/{chat_id}`.
+async fn put_chat_write_tools(server: &TestServer, chat_id: &str, enabled: bool) {
+    let response = server
+        .put(&format!("/api/v1beta/me/chats/{chat_id}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "mcp_write_tools_enabled": enabled }))
+        .await;
+    response.assert_status_ok();
+    let body: Value = response.json();
+    assert_eq!(body["mcp_write_tools_enabled"], enabled);
+}
+
+/// Reads the chat's write toggle back from `GET /me/chats/{chat_id}`.
+async fn chat_write_tools(server: &TestServer, chat_id: &str) -> bool {
+    let response = server
+        .get(&format!("/api/v1beta/me/chats/{chat_id}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status_ok();
+    let body: Value = response.json();
+    body["mcp_write_tools_enabled"]
+        .as_bool()
+        .expect("chat detail carries the write toggle")
+}
+
+/// Turning writes off drops every MCP tool the server does not mark
+/// read-only and keeps the read-only ones; turning them back on restores the
+/// full set.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_writes_off_offers_only_server_declared_read_only_mcp_tools(pool: Pool<Postgres>) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post().path("/v1/chat/completions").matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                build_openai_text_streaming_response(&["WRITE-TOGGLE-ANSWER"]),
+            );
+        });
+    }
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.mcp_servers.insert(
+        "mock_mcp_approval".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url(),
+            "/mcp/approval-policy",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_servers.insert(
+        "files".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url(),
+            "/mcp/file",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_server_permissions.rules.insert(
+        "allow-both".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["mock_mcp_approval".to_string(), "files".to_string()],
+        },
+    );
+    app_config.mcp_servers_global.approval = erato::config::McpToolApprovalConfig {
+        enabled: false,
+        allow_always: false,
+        ..Default::default()
+    };
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let server = app_server(app_state);
+
+    let chat = server
+        .post("/api/v1beta/me/chats")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({}))
+        .await;
+    chat.assert_status_ok();
+    let chat_id = chat.json::<Value>()["chat_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(
+        chat_write_tools(&server, &chat_id).await,
+        "writes default on"
+    );
+
+    let submit = |message: &'static str| {
+        let server = &server;
+        let chat_id = chat_id.clone();
+        async move {
+            let response = server
+                .post("/api/v1beta/me/messages/submitstream")
+                .with_bearer_token(TEST_JWT_TOKEN)
+                .json(&json!({ "existing_chat_id": chat_id, "user_message": message }))
+                .await;
+            response.assert_status_ok();
+            let events = parse_sse_events(&response);
+            assert_eq!(extract_full_text(&events), "WRITE-TOGGLE-ANSWER");
+        }
+    };
+
+    submit("with writes on").await;
+    put_chat_write_tools(&server, &chat_id, false).await;
+    assert!(!chat_write_tools(&server, &chat_id).await);
+    submit("with writes off").await;
+    put_chat_write_tools(&server, &chat_id, true).await;
+    submit("with writes back on").await;
+
+    let mut offers = recorded_tool_offers(&recorder.bodies());
+    assert_eq!(offers.len(), 3, "{offers:?}");
+    for offered in offers.iter_mut() {
+        offered.sort();
+    }
+    let full_set = vec![
+        "list_files",
+        "publish_approval_probe",
+        "read_approval_fixture",
+        "read_file",
+    ];
+    assert_eq!(offers[0], full_set, "writes on offers every tool");
+    assert_eq!(
+        offers[1],
+        vec!["list_files", "read_approval_fixture", "read_file"],
+        "writes off keeps only tools the server marks read-only"
+    );
+    assert_eq!(offers[2], full_set, "writes back on restores the full set");
+}
+
+/// With writes off the client-action tool is withheld even though the action
+/// facet declares client actions, while top-level client tools — read-only by
+/// contract — stay offered.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_writes_off_withholds_client_actions_but_keeps_client_tools(pool: Pool<Postgres>) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post().path("/v1/chat/completions").matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                build_openai_text_streaming_response(&["CLIENT-CHANNELS-ANSWER"]),
+            );
+        });
+    }
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    add_action_facets(&mut app_config);
+    app_config.client_tools.tools.insert(
+        "probe".to_string(),
+        ClientToolConfig {
+            name: "probe_client_tool".to_string(),
+            namespace: None,
+            description: "A probe client tool".to_string(),
+            parameters: r#"{"type":"object","properties":{}}"#.to_string(),
+            timeout_ms: None,
+        },
+    );
+    app_config.experimental_facets.tool_call_allowlist = vec!["client/*".to_string()];
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let server = app_server(app_state);
+
+    let submit_under_reply = |write_tools_enabled: bool| {
+        let server = &server;
+        async move {
+            let response = server
+                .post("/api/v1beta/me/messages/submitstream")
+                .with_bearer_token(TEST_JWT_TOKEN)
+                .json(&json!({
+                    "user_message": "Reply to this email",
+                    "action_facet": { "id": "reply", "args": { "body_format": "text" } },
+                    "mcp_write_tools_enabled": write_tools_enabled,
+                }))
+                .await;
+            response.assert_status_ok();
+            let events = parse_sse_events(&response);
+            assert_eq!(extract_full_text(&events), "CLIENT-CHANNELS-ANSWER");
+        }
+    };
+
+    submit_under_reply(true).await;
+    submit_under_reply(false).await;
+
+    let mut offers = recorded_tool_offers(&recorder.bodies());
+    assert_eq!(offers.len(), 2, "{offers:?}");
+    for offered in offers.iter_mut() {
+        offered.sort();
+    }
+    assert_eq!(
+        offers[0],
+        vec!["probe_client_tool", CLIENT_ACTION_TOOL],
+        "writes on offers the action facet's client actions"
+    );
+    assert_eq!(
+        offers[1],
+        vec!["probe_client_tool"],
+        "writes off withholds the client-action tool but keeps client tools"
+    );
+}
+
+/// The submit request seeds the write toggle of the chat it creates and is
+/// ignored for an existing chat, whose toggle belongs to `PUT`.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_submitstream_seeds_the_write_toggle_only_for_a_new_chat(pool: Pool<Postgres>) {
+    let (app_config, _llm) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let server = app_server(app_state);
+
+    let seeded = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "start quiet", "mcp_write_tools_enabled": false }))
+        .await;
+    seeded.assert_status_ok();
+    let seeded_chat_id = extract_chat_id(&parse_sse_events(&seeded)).expect("chat_id");
+    assert!(
+        !chat_write_tools(&server, &seeded_chat_id).await,
+        "a new chat takes the toggle from the submit request"
+    );
+
+    let unseeded = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "start default" }))
+        .await;
+    unseeded.assert_status_ok();
+    let unseeded_chat_id = extract_chat_id(&parse_sse_events(&unseeded)).expect("chat_id");
+    assert!(
+        chat_write_tools(&server, &unseeded_chat_id).await,
+        "an omitted toggle leaves writes on"
+    );
+
+    let ignored = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "existing_chat_id": unseeded_chat_id,
+            "user_message": "try to turn writes off on the way in",
+            "mcp_write_tools_enabled": false,
+        }))
+        .await;
+    ignored.assert_status_ok();
+    assert!(
+        chat_write_tools(&server, &unseeded_chat_id).await,
+        "the submit request never changes an existing chat's toggle"
+    );
+
+    let recent = server
+        .get("/api/v1beta/me/recent_chats")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    recent.assert_status_ok();
+    let recent: Value = recent.json();
+    let toggle_of = |chat_id: &str| {
+        recent["chats"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|chat| chat["id"] == chat_id)
+            .expect("chat listed")["mcp_write_tools_enabled"]
+            .as_bool()
+            .unwrap()
+    };
+    assert!(!toggle_of(&seeded_chat_id));
+    assert!(toggle_of(&unseeded_chat_id));
+}
+
+/// A chat that turns writes off while an approval card is waiting refuses the
+/// approved write tool: the continued turn does not execute it, records a
+/// refusal in its place, offers only read-only tools, and completes cleanly.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_continuestream_refuses_a_write_tool_after_the_chat_turns_writes_off(
+    pool: Pool<Postgres>,
+) {
+    const TOOL_RESULT: &str = "approval probe published";
+    const REFUSAL: &str = "Write operations are turned off for this chat";
+    let continuation_recorder = RequestBodyRecorder::new();
+
+    let mut mocks = MockSet::new();
+    {
+        let recorder = continuation_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[REFUSAL], &[]))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                build_openai_text_streaming_response(&["WRITES-OFF-AFTER-PARK-ANSWER"]),
+            );
+        });
+    }
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &[REFUSAL]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[(
+                "call_probe",
+                "publish_approval_probe",
+                json!({}),
+            )]),
+        );
+    });
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.mcp_servers.insert(
+        "mock_mcp_approval".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url(),
+            "/mcp/approval-policy",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_server_permissions.rules.insert(
+        "allow-mock-mcp".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["mock_mcp_approval".to_string()],
+        },
+    );
+    app_config.mcp_servers_global.approval = erato::config::McpToolApprovalConfig {
+        enabled: true,
+        preset: erato::config::McpToolApprovalPreset::Restrictive,
+        allow_always: false,
+    };
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let db = app_state.db.clone();
+    let server = app_server(app_state);
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "publish the approval probe" }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let chat_id = extract_chat_id(&events).expect("Expected chat_id");
+    let assistant_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    assert_eq!(
+        chats::Entity::find_by_id(Uuid::parse_str(&chat_id).unwrap())
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap()
+            .generation_state
+            .as_deref(),
+        Some("awaiting_approval")
+    );
+
+    // Writes go off while the card is still waiting.
+    put_chat_write_tools(&server, &chat_id, false).await;
+
+    let continued = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": assistant_message_id,
+            "decision": "approve",
+        }))
+        .await;
+    continued.assert_status_ok();
+    let continued_events = parse_sse_events(&continued);
+    assert_eq!(
+        extract_full_text(&continued_events),
+        "WRITES-OFF-AFTER-PARK-ANSWER"
+    );
+
+    let continuation_bodies = continuation_recorder.bodies();
+    assert_eq!(continuation_bodies.len(), 1);
+    assert!(
+        !continuation_bodies[0].contains(TOOL_RESULT),
+        "a write tool must not be executed once the chat turned writes off"
+    );
+    let offers = recorded_tool_offers(&continuation_bodies);
+    assert_eq!(offers.len(), 1);
+    assert_eq!(
+        offers[0],
+        vec!["read_approval_fixture"],
+        "the continued turn is offered only tools the server marks read-only"
+    );
+
+    let resumed = erato::db::entity::messages::Entity::find_by_id(assistant_message_id)
+        .one(&db)
+        .await
+        .unwrap()
+        .expect("Expected the resumed assistant message");
+    let resumed_content = resumed.raw_message["content"].as_array().unwrap().clone();
+    let content_types: Vec<&str> = resumed_content
+        .iter()
+        .map(|part| part["content_type"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        content_types,
+        vec!["tool_approval_request", "tool_approval", "tool_use", "text"]
+    );
+    assert_eq!(resumed_content[2]["status"], "error");
+    assert_eq!(resumed_content[2]["output"]["status"], "rejected");
+    assert!(
+        resumed_content[2]["output"]["error"]
+            .as_str()
+            .unwrap()
+            .contains(REFUSAL)
+    );
+    assert_eq!(
+        chats::Entity::find_by_id(Uuid::parse_str(&chat_id).unwrap())
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap()
+            .generation_state
+            .as_deref(),
+        Some("completed")
+    );
+}

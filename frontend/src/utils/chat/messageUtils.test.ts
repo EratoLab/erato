@@ -104,6 +104,27 @@ describe("constructSubmitStreamRequestBody", () => {
     ).not.toHaveProperty("mentioned_assistant_ids");
   });
 
+  it("seeds the write switch into a new chat's body only when it was set", () => {
+    const body = constructSubmitStreamRequestBody(
+      "hello",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      false,
+    );
+
+    expect(body.mcp_write_tools_enabled).toBe(false);
+    expect(constructSubmitStreamRequestBody("hello")).not.toHaveProperty(
+      "mcp_write_tools_enabled",
+    );
+  });
+
   it("carries the delegation run mode when one was chosen", () => {
     const body = constructSubmitStreamRequestBody(
       "ask @Researcher",
