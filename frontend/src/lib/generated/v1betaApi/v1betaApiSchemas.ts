@@ -1693,9 +1693,18 @@ export type McpServerStatusValue =
   | "FAILURE"
   | "NEEDS_AUTHENTICATION";
 
+/**
+ * One tool as the server declares it. `name`, `title` and `description`
+ * are vendor text passed through `sanitize_display_text`; a client shows
+ * them as plain text and never interprets them.
+ */
 export type McpServerTool = {
   annotations: McpServerToolAnnotations;
   description?: string | null | undefined;
+  /**
+   * Whether the description was cut at the display cap.
+   */
+  description_truncated: boolean;
   effective: McpToolEffectiveState;
   is_wait_tool: boolean;
   name: string;
