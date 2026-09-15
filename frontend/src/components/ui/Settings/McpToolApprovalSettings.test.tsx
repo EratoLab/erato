@@ -10,9 +10,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EntityRow } from "./EntityRow";
 import {
-  decisionOfSetting,
   McpToolApprovalSettings,
-  shownDecision,
+  offeredDecisions,
 } from "./McpToolApprovalSettings";
 
 import type {
@@ -35,6 +34,7 @@ const SERVER_ID = "linear";
 const TOOLS_URL = `/api/v1beta/me/mcp_servers/${SERVER_ID}/tools`;
 const SETTINGS_URL = "/api/v1beta/me/mcp-tool-approval-settings";
 
+/** A tool as the server lists it, before any stored decision is laid over. */
 const tool = (overrides: Partial<McpServerTool>): McpServerTool => ({
   name: "get_issue",
   title: "Get issue",
@@ -46,20 +46,37 @@ const tool = (overrides: Partial<McpServerTool>): McpServerTool => ({
     open_world_hint: false,
     annotated: true,
   },
-  approval: "ask",
-  user_decision: "ask",
+  policy: "ask",
+  user_decision: "none",
+  effective: "ask",
   is_wait_tool: false,
   ...overrides,
 });
 
 const roster = (
   tools: McpServerTool[],
-  allowAlways = true,
+  {
+    allowAlways = true,
+    askAvailable = true,
+  }: { allowAlways?: boolean; askAvailable?: boolean } = {},
 ): ListMcpServerToolsResponse => ({
   server_id: SERVER_ID,
   status: "SUCCESS",
   allow_always: allowAlways,
+  ask_available: askAvailable,
   tools,
+});
+
+const setting = (
+  toolName: string,
+  decision: UserToolDecision,
+  id = "00000000-0000-4000-8000-000000000001",
+  serverId = SERVER_ID,
+): UserToolApprovalSetting => ({
+  id,
+  mcp_server_id: serverId,
+  tool_name: toolName,
+  decision,
 });
 
 const jsonResponse = (payload: unknown, status = 200) =>
@@ -69,9 +86,10 @@ const jsonResponse = (payload: unknown, status = 200) =>
   });
 
 /**
- * A fetch stand-in that serves the roster and keeps a tiny settings store:
- * POST upserts one row per tool (a decision flip rewrites it in place, as
- * the backend does) and DELETE deactivates it.
+ * A fetch stand-in that keeps a tiny settings store and, like the backend,
+ * projects it onto the roster: every listing carries the stored decision and
+ * the effective state the gate would apply. POST upserts one row per tool
+ * (a decision flip rewrites it in place) and DELETE deactivates it.
  */
 const stubServer = ({
   tools,
@@ -86,12 +104,30 @@ const stubServer = ({
     settings.map((setting) => [setting.tool_name, setting]),
   );
   let nextId = 1;
+  const project = (listed: McpServerTool): McpServerTool => {
+    const stored = store.get(listed.name);
+    const decision =
+      stored?.mcp_server_id === SERVER_ID ? stored.decision : undefined;
+    let effective: McpServerTool["effective"];
+    if (decision === "denied") {
+      effective = "denied";
+    } else if (decision === "always_allow" && tools.allow_always) {
+      effective = "allow";
+    } else if (decision === "ask" && tools.ask_available) {
+      effective = "ask";
+    } else {
+      effective = listed.policy === "ask" ? "ask" : "allow";
+    }
+    return { ...listed, user_decision: decision ?? "none", effective };
+  };
   const fetchMock = vi.fn(
     (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const url = String(input);
       const method = init?.method ?? "GET";
       if (url === TOOLS_URL && method === "GET") {
-        return Promise.resolve(jsonResponse(tools));
+        return Promise.resolve(
+          jsonResponse({ ...tools, tools: tools.tools.map(project) }),
+        );
       }
       if (url === SETTINGS_URL && method === "GET") {
         return Promise.resolve(jsonResponse({ settings: [...store.values()] }));
@@ -110,7 +146,7 @@ const stubServer = ({
           decision: UserToolDecision;
         };
         const existing = store.get(body.tool_name);
-        const setting: UserToolApprovalSetting = {
+        const row: UserToolApprovalSetting = {
           id:
             existing?.id ??
             `00000000-0000-4000-8000-${String(nextId++).padStart(12, "0")}`,
@@ -118,13 +154,13 @@ const stubServer = ({
           tool_name: body.tool_name,
           decision: body.decision,
         };
-        store.set(body.tool_name, setting);
-        return Promise.resolve(jsonResponse(setting));
+        store.set(body.tool_name, row);
+        return Promise.resolve(jsonResponse(row));
       }
       if (url.startsWith(`${SETTINGS_URL}/`) && method === "DELETE") {
         const id = url.slice(SETTINGS_URL.length + 1);
-        for (const [name, setting] of store) {
-          if (setting.id === id) {
+        for (const [name, row] of store) {
+          if (row.id === id) {
             store.delete(name);
           }
         }
@@ -183,49 +219,53 @@ const rowFor = async (name: string) => {
   return row;
 };
 
-/**
- * The roster and the stored decisions load independently; a denied sentinel
- * tool flipping to "Never allow" proves the decisions have been applied.
- */
-const settingsApplied = async (deniedToolName: string) => {
-  const row = await rowFor(deniedToolName);
-  await waitFor(() => {
-    expect(
-      within(row).getByRole("radio", { name: /Never allow/ }),
-    ).toBeChecked();
-  });
-};
-
 const radioLabels = (row: HTMLElement) =>
   within(row)
     .getAllByRole("radio")
     .map((radio) => radio.getAttribute("value"));
 
+/** The radio's accessible name carries its helper too, so pick by value. */
+const radioByValue = (row: HTMLElement, value: string) => {
+  const radio = within(row)
+    .getAllByRole("radio")
+    .find((candidate) => candidate.getAttribute("value") === value);
+  if (!radio) {
+    throw new Error(`No ${value} radio in the row`);
+  }
+  return radio;
+};
+
+const checkedRadio = (row: HTMLElement) =>
+  within(row)
+    .getAllByRole("radio")
+    .find((radio) => (radio as HTMLInputElement).checked)
+    ?.getAttribute("value");
+
+const expectChecked = async (row: HTMLElement, value: string) => {
+  await waitFor(() => {
+    expect(checkedRadio(row)).toBe(value);
+  });
+};
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("decisionOfSetting", () => {
-  it("maps the stored decision, never the row's presence", () => {
-    const base = {
-      id: "00000000-0000-4000-8000-000000000001",
-      mcp_server_id: SERVER_ID,
-      tool_name: "get_issue",
-    };
-    expect(decisionOfSetting(undefined)).toBe("ask");
-    expect(decisionOfSetting({ ...base, decision: "always_allow" })).toBe(
-      "always",
-    );
-    expect(decisionOfSetting({ ...base, decision: "denied" })).toBe("never");
-  });
-});
-
-describe("shownDecision", () => {
-  it("folds a grant the gate would not honor into the default state", () => {
-    expect(shownDecision("always", true)).toBe("always");
-    expect(shownDecision("always", false)).toBe("ask");
-    expect(shownDecision("never", false)).toBe("never");
-    expect(shownDecision("ask", false)).toBe("ask");
+describe("offeredDecisions", () => {
+  it("always offers the policy default and Never, the rest by availability", () => {
+    const all = { allowAlways: true, askAvailable: true };
+    const none = { allowAlways: false, askAvailable: false };
+    expect(offeredDecisions("ask", all)).toEqual(["allow", "ask", "never"]);
+    expect(offeredDecisions("ask", none)).toEqual(["ask", "never"]);
+    expect(offeredDecisions("auto", all)).toEqual(["allow", "ask", "never"]);
+    expect(offeredDecisions("auto", none)).toEqual(["allow", "never"]);
+    // Each flag only unlocks the option it stands for.
+    expect(
+      offeredDecisions("ask", { allowAlways: false, askAvailable: true }),
+    ).toEqual(["ask", "never"]);
+    expect(
+      offeredDecisions("auto", { allowAlways: true, askAvailable: false }),
+    ).toEqual(["allow", "never"]);
   });
 });
 
@@ -267,7 +307,7 @@ describe("McpToolApprovalSettings", () => {
   it("renders every badge straight from the response", async () => {
     // The first row is impossible under protocol defaults (read-only yet
     // unannotated): rendering it as sent is the proof that nothing here
-    // re-derives the annotations or the approval verdict.
+    // re-derives the annotations or the policy verdict.
     stubServer({
       tools: roster([
         tool({
@@ -281,7 +321,7 @@ describe("McpToolApprovalSettings", () => {
             open_world_hint: true,
             annotated: false,
           },
-          approval: "ask",
+          policy: "ask",
         }),
         tool({
           name: "update_issue",
@@ -294,7 +334,7 @@ describe("McpToolApprovalSettings", () => {
             open_world_hint: false,
             annotated: true,
           },
-          approval: "auto",
+          policy: "auto",
         }),
       ]),
     });
@@ -337,107 +377,138 @@ describe("McpToolApprovalSettings", () => {
     expect(within(updateIssue).getAllByText("update_issue")).toHaveLength(1);
   });
 
-  it("offers three states to a tool that asks and two to one that runs unprompted", async () => {
+  it("offers Allow, Ask and Never with the policy default marked as such", async () => {
     stubServer({
       tools: roster([
-        tool({ name: "get_issue", title: "Get issue", approval: "ask" }),
-        tool({ name: "list_teams", title: "List teams", approval: "auto" }),
+        tool({ name: "get_issue", title: "Get issue", policy: "ask" }),
+        tool({ name: "list_teams", title: "List teams", policy: "auto" }),
       ]),
     });
 
     renderSection();
 
     const asking = await rowFor("get_issue");
-    expect(radioLabels(asking)).toEqual(["ask", "always", "never"]);
-    expect(
-      within(asking).getByRole("radio", { name: /Ask each time/ }),
-    ).toBeChecked();
+    expect(radioLabels(asking)).toEqual(["allow", "ask", "never"]);
+    expect(radioByValue(asking, "allow")).toHaveAccessibleName(/^Allow /);
+    expect(radioByValue(asking, "ask")).toHaveAccessibleName(
+      /^Ask each time \(policy default\)/,
+    );
+    expect(radioByValue(asking, "ask")).toBeChecked();
 
-    // A persistent grant changes nothing for a tool the policy never stops,
-    // so it is not offered; the default reads as plain "Allow".
     const unprompted = await rowFor("list_teams");
-    expect(radioLabels(unprompted)).toEqual(["ask", "never"]);
-    expect(
-      within(unprompted).getByRole("radio", { name: /^Allow/ }),
-    ).toBeChecked();
+    expect(radioLabels(unprompted)).toEqual(["allow", "ask", "never"]);
+    expect(radioByValue(unprompted, "allow")).toHaveAccessibleName(
+      /^Allow \(policy default\)/,
+    );
+    expect(radioByValue(unprompted, "allow")).toBeChecked();
+    expect(radioByValue(unprompted, "ask")).toHaveAccessibleName(
+      /^Ask each time Asks you before every run, even where the policy would not\./,
+    );
   });
 
-  it("maps stored decisions to the radio state and lists undecided tools too", async () => {
+  it("hides the options the deployment does not honor", async () => {
     stubServer({
-      tools: roster([
-        tool({ name: "get_issue", title: "Get issue" }),
-        tool({ name: "update_issue", title: "Update issue" }),
-        tool({ name: "list_teams", title: "List teams" }),
-      ]),
+      tools: roster(
+        [
+          tool({ name: "get_issue", title: "Get issue", policy: "ask" }),
+          tool({ name: "list_teams", title: "List teams", policy: "auto" }),
+        ],
+        { allowAlways: false, askAvailable: false },
+      ),
+    });
+
+    renderSection();
+
+    // A persistent grant is not honored, so a tool that asks cannot be
+    // relaxed; an ask is not honored either, so a tool that runs unprompted
+    // cannot be escalated. Denying stays available on both.
+    const asking = await rowFor("get_issue");
+    expect(radioLabels(asking)).toEqual(["ask", "never"]);
+    const unprompted = await rowFor("list_teams");
+    expect(radioLabels(unprompted)).toEqual(["allow", "never"]);
+  });
+
+  it("checks the effective state the backend reports, never the stored row", async () => {
+    stubServer({
+      tools: roster(
+        [
+          tool({ name: "get_issue", title: "Get issue", policy: "ask" }),
+          tool({ name: "update_issue", title: "Update issue", policy: "ask" }),
+          tool({ name: "list_teams", title: "List teams", policy: "auto" }),
+          tool({ name: "list_users", title: "List users", policy: "auto" }),
+        ],
+        { allowAlways: false, askAvailable: true },
+      ),
       settings: [
-        {
-          id: "00000000-0000-4000-8000-000000000001",
-          mcp_server_id: SERVER_ID,
-          tool_name: "get_issue",
-          decision: "always_allow",
-        },
-        {
-          id: "00000000-0000-4000-8000-000000000002",
-          mcp_server_id: SERVER_ID,
-          tool_name: "update_issue",
-          decision: "denied",
-        },
-        // Another server's row and a row for a tool the server no longer
-        // lists: neither may leak into this roster.
-        {
-          id: "00000000-0000-4000-8000-000000000003",
-          mcp_server_id: "notion",
-          tool_name: "list_teams",
-          decision: "denied",
-        },
-        {
-          id: "00000000-0000-4000-8000-000000000004",
-          mcp_server_id: SERVER_ID,
-          tool_name: "retired_tool",
-          decision: "always_allow",
-        },
+        // A grant stored while the policy still honored it: the gate ignores
+        // it now, so the row shows the policy default instead.
+        setting(
+          "get_issue",
+          "always_allow",
+          "00000000-0000-4000-8000-000000000001",
+        ),
+        setting(
+          "update_issue",
+          "denied",
+          "00000000-0000-4000-8000-000000000002",
+        ),
+        // An ask on a tool the policy would run unprompted escalates it.
+        setting("list_teams", "ask", "00000000-0000-4000-8000-000000000003"),
+        // Another server's row must not leak into this roster.
+        setting(
+          "list_users",
+          "denied",
+          "00000000-0000-4000-8000-000000000004",
+          "notion",
+        ),
       ],
     });
 
     renderSection();
 
-    const granted = await rowFor("get_issue");
-    await waitFor(() => {
-      expect(
-        within(granted).getByRole("radio", { name: /Always allow/ }),
-      ).toBeChecked();
-    });
-    // A denied row is a decision of its own, never read as a grant.
-    const denied = await rowFor("update_issue");
-    expect(
-      within(denied).getByRole("radio", { name: /Never allow/ }),
-    ).toBeChecked();
-    expect(
-      within(denied).getByRole("radio", { name: /Always allow/ }),
-    ).not.toBeChecked();
-    // Present without ever having been decided on: the roster, not the
-    // stored decisions, drives what is listed.
-    const undecided = await rowFor("list_teams");
-    expect(
-      within(undecided).getByRole("radio", { name: /Ask each time/ }),
-    ).toBeChecked();
-    expect(screen.queryByText("retired_tool")).not.toBeInTheDocument();
+    await expectChecked(await rowFor("get_issue"), "ask");
+    await expectChecked(await rowFor("update_issue"), "never");
+    await expectChecked(await rowFor("list_teams"), "ask");
+    await expectChecked(await rowFor("list_users"), "allow");
   });
 
-  it("round-trips ask, never and always through the settings endpoints", async () => {
+  it("stores an ask on a tool the policy runs unprompted and reads the roster back", async () => {
     const { fetchMock, store } = stubServer({
-      tools: roster([tool({ name: "get_issue", title: "Get issue" })]),
+      tools: roster([
+        tool({ name: "list_teams", title: "List teams", policy: "auto" }),
+      ]),
+    });
+
+    renderSection();
+    const row = await rowFor("list_teams");
+    expect(callsTo(fetchMock, TOOLS_URL)).toHaveLength(1);
+
+    fireEvent.click(radioByValue(row, "ask"));
+
+    await expectChecked(row, "ask");
+    const [askCall] = callsTo(fetchMock, SETTINGS_URL, "POST");
+    expect(JSON.parse(String(askCall[1]?.body))).toEqual({
+      mcp_server_id: SERVER_ID,
+      tool_name: "list_teams",
+      decision: "ask",
+    });
+    expect(store.get("list_teams")?.decision).toBe("ask");
+    // The checked state came from a fresh listing, not a local guess.
+    expect(callsTo(fetchMock, TOOLS_URL)).toHaveLength(2);
+  });
+
+  it("round-trips never, allow and the policy default through the settings endpoints", async () => {
+    const { fetchMock, store } = stubServer({
+      tools: roster([
+        tool({ name: "get_issue", title: "Get issue", policy: "ask" }),
+      ]),
     });
 
     renderSection();
     const row = await rowFor("get_issue");
 
-    fireEvent.click(within(row).getByRole("radio", { name: /Never allow/ }));
-    await waitFor(() => {
-      expect(
-        within(row).getByRole("radio", { name: /Never allow/ }),
-      ).toBeChecked();
-    });
+    fireEvent.click(radioByValue(row, "never"));
+    await expectChecked(row, "never");
     const [denyCall] = callsTo(fetchMock, SETTINGS_URL, "POST");
     expect(JSON.parse(String(denyCall[1]?.body))).toEqual({
       mcp_server_id: SERVER_ID,
@@ -446,13 +517,9 @@ describe("McpToolApprovalSettings", () => {
     });
     expect(store.get("get_issue")?.decision).toBe("denied");
 
-    // A flip between the two stored decisions rewrites the row in place.
-    fireEvent.click(within(row).getByRole("radio", { name: /Always allow/ }));
-    await waitFor(() => {
-      expect(
-        within(row).getByRole("radio", { name: /Always allow/ }),
-      ).toBeChecked();
-    });
+    // A flip between two stored decisions rewrites the row in place.
+    fireEvent.click(radioByValue(row, "allow"));
+    await expectChecked(row, "allow");
     const [, grantCall] = callsTo(fetchMock, SETTINGS_URL, "POST");
     expect(JSON.parse(String(grantCall[1]?.body))).toEqual({
       mcp_server_id: SERVER_ID,
@@ -462,13 +529,9 @@ describe("McpToolApprovalSettings", () => {
     expect(store.get("get_issue")?.decision).toBe("always_allow");
     const grantId = store.get("get_issue")?.id;
 
-    // Back to asking deactivates the row; the tool stays listed.
-    fireEvent.click(within(row).getByRole("radio", { name: /Ask each time/ }));
-    await waitFor(() => {
-      expect(
-        within(row).getByRole("radio", { name: /Ask each time/ }),
-      ).toBeChecked();
-    });
+    // Back to the policy default deletes the row; the tool stays listed.
+    fireEvent.click(radioByValue(row, "ask"));
+    await expectChecked(row, "ask");
     expect(
       callsTo(fetchMock, `${SETTINGS_URL}/${grantId}`, "DELETE"),
     ).toHaveLength(1);
@@ -476,80 +539,60 @@ describe("McpToolApprovalSettings", () => {
     expect(await rowFor("get_issue")).toBeInTheDocument();
   });
 
-  it("does not offer Always allow when the policy does not honor grants", async () => {
-    const { store } = stubServer({
-      tools: roster(
-        [
-          tool({ name: "get_issue", title: "Get issue" }),
-          tool({ name: "update_issue", title: "Update issue" }),
-        ],
-        false,
-      ),
-      // A grant stored while the policy still honored it: the gate ignores
-      // it now, so the row must not read it as "always" either.
-      settings: [
-        {
-          id: "00000000-0000-4000-8000-000000000001",
-          mcp_server_id: SERVER_ID,
-          tool_name: "get_issue",
-          decision: "always_allow",
-        },
-        {
-          id: "00000000-0000-4000-8000-000000000002",
-          mcp_server_id: SERVER_ID,
-          tool_name: "update_issue",
-          decision: "denied",
-        },
-      ],
-    });
-
-    renderSection();
-    const row = await rowFor("get_issue");
-    await settingsApplied("update_issue");
-
-    expect(radioLabels(row)).toEqual(["ask", "never"]);
-    expect(
-      within(row).getByRole("radio", { name: /Ask each time/ }),
-    ).toBeChecked();
-    // Denying is strictly more restrictive and stays available, and a flip
-    // through it rewrites the stale row instead of stacking a second one.
-    fireEvent.click(within(row).getByRole("radio", { name: /Never allow/ }));
-    await waitFor(() => {
-      expect(store.get("get_issue")?.decision).toBe("denied");
-    });
-    expect(store.get("get_issue")?.id).toBe(
-      "00000000-0000-4000-8000-000000000001",
-    );
-  });
-
-  it("shows a stale grant on a tool that runs unprompted as plain Allow", async () => {
-    stubServer({
+  it("deletes the row when a tool that runs unprompted goes back to Allow", async () => {
+    const { fetchMock, store } = stubServer({
       tools: roster([
-        tool({ name: "list_teams", title: "List teams", approval: "auto" }),
-        tool({ name: "update_issue", title: "Update issue" }),
+        tool({ name: "list_teams", title: "List teams", policy: "auto" }),
       ]),
       settings: [
-        {
-          id: "00000000-0000-4000-8000-000000000001",
-          mcp_server_id: SERVER_ID,
-          tool_name: "list_teams",
-          decision: "always_allow",
-        },
-        {
-          id: "00000000-0000-4000-8000-000000000002",
-          mcp_server_id: SERVER_ID,
-          tool_name: "update_issue",
-          decision: "denied",
-        },
+        setting("list_teams", "ask", "00000000-0000-4000-8000-000000000007"),
       ],
     });
 
     renderSection();
     const row = await rowFor("list_teams");
-    await settingsApplied("update_issue");
+    await expectChecked(row, "ask");
 
+    fireEvent.click(radioByValue(row, "allow"));
+
+    await expectChecked(row, "allow");
+    expect(
+      callsTo(
+        fetchMock,
+        `${SETTINGS_URL}/00000000-0000-4000-8000-000000000007`,
+        "DELETE",
+      ),
+    ).toHaveLength(1);
+    expect(callsTo(fetchMock, SETTINGS_URL, "POST")).toHaveLength(0);
+    expect(store.has("list_teams")).toBe(false);
+  });
+
+  it("denies over a stale grant instead of stacking a second row", async () => {
+    const { store } = stubServer({
+      tools: roster(
+        [tool({ name: "get_issue", title: "Get issue", policy: "ask" })],
+        { allowAlways: false },
+      ),
+      settings: [
+        setting(
+          "get_issue",
+          "always_allow",
+          "00000000-0000-4000-8000-000000000001",
+        ),
+      ],
+    });
+
+    renderSection();
+    const row = await rowFor("get_issue");
     expect(radioLabels(row)).toEqual(["ask", "never"]);
-    expect(within(row).getByRole("radio", { name: /^Allow/ })).toBeChecked();
+
+    fireEvent.click(radioByValue(row, "never"));
+
+    await expectChecked(row, "never");
+    expect(store.get("get_issue")?.decision).toBe("denied");
+    expect(store.get("get_issue")?.id).toBe(
+      "00000000-0000-4000-8000-000000000001",
+    );
   });
 
   it("reports an unreachable server instead of an empty roster", async () => {
@@ -558,6 +601,7 @@ describe("McpToolApprovalSettings", () => {
         server_id: SERVER_ID,
         status: "FAILURE",
         allow_always: true,
+        ask_available: true,
         tools: [],
       },
     });
@@ -576,6 +620,7 @@ describe("McpToolApprovalSettings", () => {
         server_id: SERVER_ID,
         status: "NEEDS_AUTHENTICATION",
         allow_always: true,
+        ask_available: true,
         tools: [],
       },
     });
@@ -590,21 +635,21 @@ describe("McpToolApprovalSettings", () => {
 
   it("surfaces an error when a decision is rejected", async () => {
     stubServer({
-      tools: roster([tool({ name: "get_issue", title: "Get issue" })]),
+      tools: roster([
+        tool({ name: "get_issue", title: "Get issue", policy: "ask" }),
+      ]),
       createStatus: 400,
     });
 
     renderSection();
     const row = await rowFor("get_issue");
 
-    fireEvent.click(within(row).getByRole("radio", { name: /Always allow/ }));
+    fireEvent.click(radioByValue(row, "allow"));
 
     expect(
       await screen.findByText(/Could not update the decision/),
     ).toBeInTheDocument();
-    expect(
-      within(row).getByRole("radio", { name: /Ask each time/ }),
-    ).toBeChecked();
+    expect(checkedRadio(row)).toBe("ask");
   });
 
   it("surfaces a roster load error", async () => {

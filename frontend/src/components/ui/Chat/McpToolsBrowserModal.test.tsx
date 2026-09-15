@@ -52,8 +52,9 @@ const tool = (overrides: Partial<McpServerTool>): McpServerTool => ({
     open_world_hint: false,
     annotated: true,
   },
-  approval: "auto",
-  user_decision: "ask",
+  policy: "auto",
+  effective: "allow",
+  user_decision: "none",
   is_wait_tool: false,
   ...overrides,
 });
@@ -65,6 +66,7 @@ const roster = (
   server_id: serverId,
   status: "SUCCESS",
   allow_always: true,
+  ask_available: true,
   tools,
 });
 
@@ -164,7 +166,8 @@ describe("McpToolsBrowserModal", () => {
           name: "create_issue",
           title: "Create issue",
           description: "Files a new issue",
-          approval: "ask",
+          policy: "ask",
+          effective: "ask",
           annotations: {
             read_only_hint: false,
             destructive_hint: false,
