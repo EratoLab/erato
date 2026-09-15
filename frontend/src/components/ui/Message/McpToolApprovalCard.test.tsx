@@ -246,7 +246,7 @@ describe("McpToolApprovalCard", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
-    render(
+    renderCard(
       withChatContext(
         <McpToolApprovalCard
           messageId="message-1"
@@ -267,7 +267,7 @@ describe("McpToolApprovalCard", () => {
   it("neither holds the registry nor seeds the marker on an archived chat", () => {
     archived.value = true;
 
-    render(
+    renderCard(
       withChatContext(
         <McpToolApprovalCard
           messageId="message-1"
@@ -288,7 +288,7 @@ describe("McpToolApprovalCard", () => {
   it("holds the registry but seeds nothing until the chat is known", () => {
     archived.value = undefined;
 
-    render(
+    renderCard(
       withChatContext(
         <McpToolApprovalCard
           messageId="message-1"
@@ -307,7 +307,7 @@ describe("McpToolApprovalCard", () => {
   });
 
   it("seeds the marker once the chat is known not to be archived", () => {
-    render(
+    renderCard(
       withChatContext(
         <McpToolApprovalCard
           messageId="message-1"
