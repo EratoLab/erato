@@ -3678,6 +3678,11 @@ msgstr "Comment l’assistant doit-il vous appeler ? ex. Max Mustermann"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.allow.defaultLabel"
+msgstr "Autoriser (par défaut selon la politique)"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.approvals.allow.helper"
 msgstr "S'exécute sans demander ; la politique d'approbation n'arrête pas cet outil."
 
@@ -3693,8 +3698,18 @@ msgstr "Exécute cet outil sans demander."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.always.label"
-msgstr "Toujours autoriser"
+#~ msgid "preferences.dialog.mcpServers.approvals.always.label"
+#~ msgstr "Toujours autoriser"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.ask.defaultLabel"
+msgstr "Demander à chaque fois (par défaut selon la politique)"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.approvals.ask.escalationHelper"
+msgstr "Vous demande avant chaque exécution, même là où la politique ne le ferait pas."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
