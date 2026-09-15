@@ -16,12 +16,16 @@ export { AssistantWelcomeUpper } from "@/components/ui/Assistant/AssistantWelcom
 export type { AssistantWelcomeScreenProps } from "@/components/ui/Assistant/AssistantWelcomeScreen";
 export { ArchivedChatPill } from "@/components/ui/Chat/chatArchiveActions";
 export { archivedChatLabel } from "@/components/ui/Chat/chatArchiveActions";
+export { archivedNoticeText } from "@/components/ui/Chat/chatArchiveActions";
 export { buildArchiveMenuItems } from "@/components/ui/Chat/chatArchiveActions";
+export { unarchiveActionLabel } from "@/components/ui/Chat/chatArchiveActions";
 export { ChatAttentionStatusDot } from "@/components/ui/Chat/ChatAttentionStatusDot";
 export { ChatHistoryList } from "@/components/ui/Chat/ChatHistoryList";
 export { ChatHistoryListSkeleton } from "@/components/ui/Chat/ChatHistoryList";
+export { useChatHistoryRowMenuItems } from "@/components/ui/Chat/ChatHistoryList";
 export { useChatHistoryRowPresentation } from "@/components/ui/Chat/ChatHistoryList";
 export type { ChatHistoryListProps } from "@/components/ui/Chat/ChatHistoryList";
+export type { ChatHistoryRowMenuOptions } from "@/components/ui/Chat/ChatHistoryList";
 export { CHAT_MESSAGE_HOST_COMPONENTS } from "@/components/ui/Chat/ChatMessage";
 export { ChatMessage } from "@/components/ui/Chat/ChatMessage";
 export type { ChatMessageHostComponents } from "@/components/ui/Chat/ChatMessage";

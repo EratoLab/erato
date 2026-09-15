@@ -25,9 +25,10 @@ export {
   type DelegatedRunsSectionProps,
 } from "@/components/ui/Chat/DelegatedRunsSection";
 export {
-  useDelegatedRunHeader,
-  type DelegatedRunHeaderState,
-} from "@/hooks/chat/useDelegatedRunHeader";
+  useChatHeader,
+  type ChatHeaderState,
+} from "@/hooks/chat/useChatHeader";
+export { useChatCanEdit } from "@/hooks/chat/useChatCanEdit";
 export {
   seedGenerationStatusFromListing,
   useGenerationStatusStore,

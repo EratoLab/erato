@@ -21,7 +21,10 @@ import { messages as enMessages } from "@/locales/en/messages.json";
 import { Chat } from "./Chat";
 import { DefaultMessageControls } from "../Message/DefaultMessageControls";
 
-import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  ChatDetail,
+  RecentChat,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { MessageControlsContext } from "@/types/message-controls";
 import type { Messages } from "@lingui/core";
 
@@ -41,6 +44,7 @@ vi.mock("./ChatHistorySidebar", () => ({
 const testState = vi.hoisted(
   (): {
     chatContext: Record<string, unknown>;
+    chatDetail: ChatDetail | undefined;
     chatSharingEnabled: boolean;
     emptyStateLayout: "bottom" | "centered";
     showUsageAdvisory: boolean;
@@ -48,6 +52,7 @@ const testState = vi.hoisted(
     sidebar: { isOpen: boolean; collapsedMode: "slim" | "hidden" };
   } => ({
     chatContext: {},
+    chatDetail: undefined,
     chatSharingEnabled: true,
     emptyStateLayout: "bottom",
     showUsageAdvisory: true,
@@ -178,13 +183,17 @@ vi.mock("@/hooks/chat/useMessageFeedback", () => ({
   }),
 }));
 
+const dropzoneCalls = vi.hoisted(() => [] as { disabled?: boolean }[]);
 vi.mock("@/hooks/files/useConversationDropzone", () => ({
-  useConversationDropzone: () => ({
-    getRootProps: () => ({}),
-    getInputProps: () => ({}),
-    isDragActive: false,
-    isDragAccept: false,
-  }),
+  useConversationDropzone: (options: { disabled?: boolean }) => {
+    dropzoneCalls.push(options);
+    return {
+      getRootProps: () => ({}),
+      getInputProps: () => ({}),
+      isDragActive: false,
+      isDragAccept: false,
+    };
+  },
 }));
 
 vi.mock("@/hooks/files/useFileUploadWithTokenCheck", () => ({
@@ -234,7 +243,16 @@ vi.mock("@/providers/FeatureConfigProvider", () => ({
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   chatMessagesQuery: vi.fn(() => ({ queryKey: ["chatMessages"] })),
   useRecentChats: vi.fn(() => ({ data: undefined, isLoading: false })),
+  useChatDetail: vi.fn(() => ({ data: testState.chatDetail })),
 }));
+
+const chatDetail = (overrides: Partial<ChatDetail> = {}): ChatDetail => ({
+  id: "origin-1",
+  title_resolved: "Origin",
+  is_pinned: false,
+  can_edit: true,
+  ...overrides,
+});
 
 const backgroundRun = (id: string) =>
   ({
@@ -319,6 +337,7 @@ describe("Chat surface composition", () => {
     chatLists.chats = [];
     chatLists.pinnedChats = [];
     testState.chatContext = {};
+    testState.chatDetail = undefined;
     testState.chatSharingEnabled = true;
     testState.emptyStateLayout = "bottom";
     testState.showUsageAdvisory = true;
@@ -337,11 +356,11 @@ describe("Chat surface composition", () => {
     (isPinned) => {
       const chat = {
         ...backgroundRun("origin-1"),
-        can_edit: true,
         is_pinned: isPinned,
         last_selected_facets: ["selected-facet"],
       };
       chatLists[isPinned ? "pinnedChats" : "chats"] = [chat];
+      testState.chatDetail = chatDetail();
 
       renderChat({ messageOrder: ["user-1"] });
 
@@ -355,8 +374,20 @@ describe("Chat surface composition", () => {
     },
   );
 
+  it("offers editing and sharing on a finished delegated run", () => {
+    chatLists.chats = [];
+    testState.chatDetail = chatDetail({ provenance_kind: "delegation" });
+
+    renderChat({ messageOrder: ["user-1"] });
+
+    expect(screen.getByLabelText("Edit message")).toBeInTheDocument();
+    expect(screen.getByLabelText("Regenerate response")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Share" })).toBeInTheDocument();
+  });
+
   it("keeps editing and sharing unavailable for a pinned chat without permission", () => {
     chatLists.pinnedChats = [{ ...backgroundRun("origin-1"), is_pinned: true }];
+    testState.chatDetail = chatDetail({ can_edit: false });
 
     renderChat({ messageOrder: ["user-1"] });
 
@@ -367,6 +398,56 @@ describe("Chat surface composition", () => {
     expect(
       screen.queryByRole("button", { name: "Share" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("withdraws editing and sharing from an archived chat the user owns", () => {
+    chatLists.chats = [backgroundRun("origin-1")];
+    testState.chatDetail = chatDetail({
+      archived_at: "2026-09-01T12:00:00.000Z",
+    });
+
+    renderChat({ messageOrder: ["user-1"] });
+
+    expect(screen.queryByLabelText("Edit message")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Regenerate response"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Share" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("withdraws editing and sharing wherever the composer is closed", () => {
+    chatLists.chats = [backgroundRun("origin-1")];
+    testState.chatDetail = chatDetail();
+
+    renderChat({ messageOrder: ["user-1"], composerDisabled: true });
+
+    expect(screen.queryByLabelText("Edit message")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Regenerate response"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Share" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("waits for the chat itself before offering editing and sharing", () => {
+    chatLists.chats = [backgroundRun("origin-1")];
+    testState.chatDetail = undefined;
+
+    const { rerenderChat } = renderChat({ messageOrder: ["user-1"] });
+
+    expect(screen.queryByLabelText("Edit message")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Share" }),
+    ).not.toBeInTheDocument();
+
+    testState.chatDetail = chatDetail();
+    rerenderChat({ messageOrder: ["user-1"] });
+
+    expect(screen.getByLabelText("Edit message")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Share" })).toBeInTheDocument();
   });
 
   it("mounts the delegated-runs bar directly above the composer", () => {
@@ -486,10 +567,12 @@ describe("Chat empty-state shell", () => {
     chatLists.chats = [];
     chatLists.pinnedChats = [];
     testState.chatContext = {};
+    testState.chatDetail = undefined;
     testState.chatSharingEnabled = true;
     testState.emptyStateLayout = "centered";
     testState.showUsageAdvisory = true;
     testState.sidebar = { isOpen: false, collapsedMode: "hidden" };
+    dropzoneCalls.length = 0;
     useGenerationStatusStore.getState().reset();
     mockRuns([]);
     i18n.load("en", enMessages as unknown as Messages);
@@ -515,6 +598,33 @@ describe("Chat empty-state shell", () => {
     expect(shell(container, "chat-empty-state-centered-shell")).toBeNull();
     expect(screen.getByTestId("welcome-stub")).toBeInTheDocument();
     expect(screen.queryByTestId("message-list-stub")).toBeNull();
+  });
+
+  it("closes the drop target with the composer, not only the textarea", () => {
+    const { rerenderChat } = renderChat();
+    expect(dropzoneCalls.at(-1)?.disabled).toBe(false);
+
+    rerenderChat({ composerDisabled: true });
+
+    expect(screen.getByTestId("chat-input-stub")).toHaveAttribute(
+      "data-disabled",
+      "true",
+    );
+    expect(dropzoneCalls.at(-1)?.disabled).toBe(true);
+  });
+
+  it("drops the welcome while the composer is closed, keeping the strip", () => {
+    const { container } = renderChat({
+      emptyStateComponent: welcome,
+      emptyStateBelowComponent: supplementary,
+      topContent: <div data-testid="top-content-stub" />,
+      composerDisabled: true,
+    });
+
+    expect(shell(container, "chat-empty-state-centered-shell")).toBeNull();
+    expect(screen.queryByTestId("welcome-stub")).toBeNull();
+    expect(screen.queryByTestId("below-stub")).toBeNull();
+    expect(screen.getByTestId("top-content-stub")).toBeInTheDocument();
   });
 
   it.each(layoutModes)(
@@ -640,9 +750,10 @@ describe("Chat top bar", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    chatLists.chats = [{ ...backgroundRun("origin-1"), can_edit: true }];
+    chatLists.chats = [backgroundRun("origin-1")];
     chatLists.pinnedChats = [];
     testState.chatContext = {};
+    testState.chatDetail = chatDetail();
     testState.chatSharingEnabled = true;
     testState.emptyStateLayout = "bottom";
     testState.showUsageAdvisory = true;

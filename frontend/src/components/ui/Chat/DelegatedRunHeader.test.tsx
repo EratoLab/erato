@@ -115,17 +115,11 @@ describe("DelegatedRunHeader", () => {
     expect(screen.queryByTestId("delegated-run-state")).not.toBeInTheDocument();
   });
 
-  it("explains the states that refuse a message", () => {
-    const { rerender } = render(
-      <DelegatedRunHeader {...run({ isRunning: true })} />,
-    );
+  it("explains that the delegate still has the run", () => {
+    render(<DelegatedRunHeader {...run({ isRunning: true })} />);
+
     expect(screen.getByTestId("delegated-run-state")).toHaveTextContent(
       "The delegate is still working on this run.",
-    );
-
-    rerender(<DelegatedRunHeader {...run({ isArchived: true })} />);
-    expect(screen.getByTestId("delegated-run-state")).toHaveTextContent(
-      "This run is archived and no longer takes messages.",
     );
   });
 

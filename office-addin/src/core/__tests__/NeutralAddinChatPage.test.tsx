@@ -45,12 +45,10 @@ const spies = vi.hoisted(() => ({
       ) => void;
     },
   },
-  useDelegatedRunHeader: vi.fn(
-    (): { header: ReactNode; composerLocked: boolean } => ({
-      header: null,
-      composerLocked: false,
-    }),
-  ),
+  useChatHeader: vi.fn((): { header: ReactNode; composerLocked: boolean } => ({
+    header: null,
+    composerLocked: false,
+  })),
   refetchHistory: vi.fn(async () => undefined),
   drawerProps: [] as Array<{
     isOpen: boolean;
@@ -170,7 +168,7 @@ vi.mock("@erato/frontend/library", async () => {
         onClick={() => onOpenRun?.({ id: "run-77" })}
       />
     ),
-    useDelegatedRunHeader: spies.useDelegatedRunHeader,
+    useChatHeader: spies.useChatHeader,
     useGenerationIndicatorCount: () => spies.generationIndicatorCount.current,
     MessageList: ({ modelSwitches }: { modelSwitches?: unknown }) => (
       <div
@@ -226,7 +224,7 @@ describe("NeutralAddinChatPage host boundary", () => {
     spies.generationIndicatorCount.current = 0;
     // vi.restoreAllMocks does not reach vi.fn mocks, so a per-test
     // mockReturnValue would otherwise leak into later tests.
-    spies.useDelegatedRunHeader.mockImplementation(() => ({
+    spies.useChatHeader.mockImplementation(() => ({
       header: null,
       composerLocked: false,
     }));
@@ -520,7 +518,7 @@ describe("NeutralAddinChatPage host boundary", () => {
   });
 
   it("locks the composer while a delegate still writes the open run", () => {
-    spies.useDelegatedRunHeader.mockReturnValue({
+    spies.useChatHeader.mockReturnValue({
       header: <div data-testid="neutral-run-banner" />,
       composerLocked: true,
     });
@@ -538,7 +536,7 @@ describe("NeutralAddinChatPage host boundary", () => {
   // the top-left corner; without left clearance it sits on the run header's
   // title whenever nothing renders above the header.
   it("clears the delegated-run header past the floating drawer trigger", () => {
-    spies.useDelegatedRunHeader.mockReturnValue({
+    spies.useChatHeader.mockReturnValue({
       header: <div data-testid="neutral-run-banner" />,
       composerLocked: false,
     });
@@ -551,7 +549,7 @@ describe("NeutralAddinChatPage host boundary", () => {
   });
 
   it("clears the start-view toggle only while the drawer trigger floats", () => {
-    spies.useDelegatedRunHeader.mockReturnValue({
+    spies.useChatHeader.mockReturnValue({
       header: <div data-testid="neutral-run-banner" />,
       composerLocked: false,
     });

@@ -691,4 +691,71 @@ describe("useConversationDropzone", () => {
       });
     });
   });
+
+  describe("disabled", () => {
+    const lastDisabled = () =>
+      vi.mocked(useDropzone).mock.calls.at(-1)?.[0]?.disabled;
+
+    it("stays open by default", () => {
+      renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+        }),
+      );
+
+      expect(lastDisabled()).toBe(false);
+    });
+
+    // react-dropzone withholds every drag handler while disabled, so this
+    // suppresses the caller's overlay as well as the upload.
+    it("refuses drops for a surface that cannot take a message", () => {
+      renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          disabled: true,
+        }),
+      );
+
+      expect(lastDisabled()).toBe(true);
+    });
+
+    it("stays disabled while an upload is in flight", () => {
+      renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          isUploading: true,
+        }),
+      );
+
+      expect(lastDisabled()).toBe(true);
+    });
+
+    it("swallows the drop rather than letting the browser open the file", () => {
+      const { result } = renderHook(() =>
+        useConversationDropzone({
+          uploadFiles: mockUploadFiles,
+          onUploaded: mockOnUploaded,
+          disabled: true,
+        }),
+      );
+
+      const root = result.current.getRootProps() as {
+        onDragEnter: (event: unknown) => void;
+        onDragOver: (event: unknown) => void;
+        onDrop: (event: unknown) => void;
+      };
+      const preventDefault = vi.fn();
+      const dataTransfer = { dropEffect: "copy" };
+      root.onDragEnter({ preventDefault, dataTransfer });
+      root.onDragOver({ preventDefault, dataTransfer });
+      root.onDrop({ preventDefault, dataTransfer });
+
+      expect(preventDefault).toHaveBeenCalledTimes(3);
+      expect(dataTransfer.dropEffect).toBe("none");
+      expect(mockUploadFiles).not.toHaveBeenCalled();
+    });
+  });
 });

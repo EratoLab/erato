@@ -1451,6 +1451,11 @@ msgid "chat.ai_usage_advisory"
 msgstr "You are interacting with an AI chatbot. Generated answers may contain factual errors and should be verified before use."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/chatArchiveActions.tsx
+msgid "chat.archived.notice"
+msgstr "This chat is archived and no longer takes messages."
+
+#. js-lingui-explicit-id
 #: src/utils/teams/teamsUploadName.ts
 msgid "chat.attachment.teamsImage"
 msgstr "Image"
@@ -1511,7 +1516,7 @@ msgid "chat.delegatedRun.expectedOutput"
 msgstr "Expected output"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/DelegatedRunHeader.tsx
+#: src/components/ui/Chat/chatArchiveActions.tsx
 msgid "chat.delegatedRun.state.archived"
 msgstr "This run is archived and no longer takes messages."
 

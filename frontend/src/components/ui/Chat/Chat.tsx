@@ -14,6 +14,7 @@ import {
   useModelSwitches,
   useStandardMessageActions,
 } from "@/hooks/chat";
+import { useChatCanEdit } from "@/hooks/chat/useChatCanEdit";
 import { useMessageFeedback } from "@/hooks/chat/useMessageFeedback";
 import { useConversationDropzone } from "@/hooks/files/useConversationDropzone";
 import { useFileUploadWithTokenCheck } from "@/hooks/files/useFileUploadWithTokenCheck";
@@ -315,7 +316,10 @@ export const Chat = ({
         : undefined),
     [chatHistory, pinnedChatHistory, currentChatId],
   );
-  const canEditForCurrentChat = currentChat?.can_edit ?? false;
+  // Edit, regenerate and Share are writes, so they follow the composer's lock:
+  // a run its delegate is still writing refuses them exactly as it refuses a send.
+  const canEditForCurrentChat =
+    useChatCanEdit(currentChatId) && !composerDisabled;
   const modelSwitches = useModelSwitches(
     messages,
     messageOrder,
@@ -645,6 +649,7 @@ export const Chat = ({
     onUploaded: handleDropUploaded,
     acceptedFileTypes,
     isUploading,
+    disabled: composerDisabled,
     maxSize: maxSizeBytes,
     maxSizeFormatted,
   });
@@ -655,11 +660,14 @@ export const Chat = ({
     );
   }
 
+  // A closed composer drops the welcome: its starter prompts fill a composer
+  // that cannot send, and the centered layout hides `topContent` with it.
   const showEmptyState =
     !!emptyStateComponent &&
     messageOrder.length === 0 &&
     !chatLoading &&
     !isPendingResponse &&
+    !composerDisabled &&
     editingMessageId === null;
   const centeredEmpty =
     (forceCenteredEmptyState || emptyStateLayout === "centered") &&

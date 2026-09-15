@@ -19,9 +19,10 @@ import {
   resolveComponentOverride,
   transformEmailFencesForCopy,
   useActiveModelSelection,
+  useChatCanEdit,
   useChatContext,
+  useChatHeader,
   useConversationDropzone,
-  useDelegatedRunHeader,
   useFileCapabilitiesContext,
   useFilePreviewModal,
   useFileUploadWithTokenCheck,
@@ -154,10 +155,10 @@ export interface AddinChatController {
   setIsSettingsOpen: (isOpen: boolean) => void;
   isHistoryMenuOpen: boolean;
   setIsHistoryMenuOpen: (isOpen: boolean) => void;
-  /** Banner identifying the open chat as a delegated run; null otherwise. */
-  delegatedRunHeader: ReactNode;
-  /** A delegate still writing the run refuses sends with a 409; closing the
-   * composer is how the user learns that instead of by sending into it. */
+  /** Strip explaining a state that refuses messages; null when none does. */
+  chatHeader: ReactNode;
+  /** A run its delegate is still writing, or an archived chat, refuses sends
+   * with a 409; closing the composer is how the user learns that. */
   composerLocked: boolean;
   openDelegatedRun: NonNullable<DelegatedRunsSectionProps["onOpenRun"]>;
   /** Opens any chat in-pane via the session controller; also handed to deep
@@ -231,7 +232,7 @@ function useAddinChatController({
     () => ({ onOpenOrigin: openChatById }),
     [openChatById],
   );
-  const { header: delegatedRunHeader, composerLocked } = useDelegatedRunHeader(
+  const { header: chatHeader, composerLocked } = useChatHeader(
     chat.currentChatId,
     runHeaderOptions,
   );
@@ -261,10 +262,10 @@ function useAddinChatController({
     },
   );
 
-  const canEditForCurrentChat = Array.isArray(chat.chats)
-    ? !!chat.chats.find((item) => item.id === (chat.currentChatId ?? ""))
-        ?.can_edit
-    : false;
+  // Edit, regenerate and Share are writes, so they follow the composer's lock:
+  // a run its delegate is still writing refuses them exactly as it refuses a send.
+  const canEditForCurrentChat =
+    useChatCanEdit(chat.currentChatId) && !composerLocked;
   const currentChatLastSelectedFacets = useMemo(() => {
     if (!Array.isArray(chat.chats)) return undefined;
     return chat.chats.find((item) => item.id === (chat.currentChatId ?? ""))
@@ -471,7 +472,7 @@ function useAddinChatController({
     setIsSettingsOpen,
     isHistoryMenuOpen,
     setIsHistoryMenuOpen,
-    delegatedRunHeader,
+    chatHeader,
     composerLocked,
     openDelegatedRun,
     openChatById,
@@ -487,6 +488,7 @@ function NeutralAddinChatHost({ controller }: AddinChatHostProps) {
     onUploaded: (files) => controller.chatInputControls.addUploadedFiles(files),
     acceptedFileTypes: controller.acceptedFileTypes,
     isUploading: controller.isUploading,
+    disabled: controller.composerLocked,
     maxSize: maxSizeBytes,
     maxSizeFormatted,
   });
@@ -708,14 +710,14 @@ export function AddinChatCoreView({
                 </div>
               ) : null}
               {beforeMessages}
-              {controller.delegatedRunHeader ? (
+              {controller.chatHeader ? (
                 // pl-10 clears the floating drawer trigger, which otherwise
                 // sits on the header's title; with a header row the trigger
                 // is in flow and needs no clearance.
                 <div
                   className={`relative z-10 shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3${TopLeftAccessory ? "" : " pl-10"}${hasStartViewToggle && !TopLeftAccessory ? " pr-10" : ""}`}
                 >
-                  {controller.delegatedRunHeader}
+                  {controller.chatHeader}
                 </div>
               ) : null}
               <MessageEditProvider value={controller.messageEditValue}>

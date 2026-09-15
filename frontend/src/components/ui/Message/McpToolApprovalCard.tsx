@@ -2,9 +2,11 @@ import { t } from "@lingui/core/macro";
 import { useContext, useEffect, useState } from "react";
 
 import { getIdToken } from "@/auth/tokenStore";
+import { archivedNoticeText } from "@/components/ui/Chat/chatArchiveActions";
 import { ToolCallInput } from "@/components/ui/ToolCall";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
+import { useChatArchived } from "@/hooks/chat/useChatArchived";
 import { ChatContext } from "@/providers/ChatProvider";
 
 import { ResolvedIcon } from "../icons";
@@ -59,6 +61,9 @@ export const McpToolApprovalCard = ({
   // add-in's client-action cards (ERMAIN-470).
   const isPending = resolution === null && localResolution === null;
   const chatId = chatContext?.currentChatId ?? null;
+  // The approval is durable, so it outlives an archive. Continuing it is a
+  // write the backend refuses, so the card states that instead of offering it.
+  const isArchived = useChatArchived(chatId);
   const [registrationId] = useState(() => globalThis.crypto.randomUUID());
   const registerConfirmation = useConfirmationRegistryStore(
     (state) => state.registerConfirmation,
@@ -67,13 +72,16 @@ export const McpToolApprovalCard = ({
     (state) => state.unregisterConfirmation,
   );
   useEffect(() => {
-    if (!chatId || !isPending) {
+    // Held while archived is still unknown: releasing it would let a queued
+    // send out ahead of a decision the chat may yet take.
+    if (!chatId || !isPending || isArchived === true) {
       return;
     }
     registerConfirmation(chatId, registrationId);
     return () => unregisterConfirmation(chatId, registrationId);
   }, [
     chatId,
+    isArchived,
     isPending,
     registrationId,
     registerConfirmation,
@@ -86,11 +94,12 @@ export const McpToolApprovalCard = ({
   // server-side awaiting_approval generation state this card renders.
   const requestedAt = request.requested_at;
   useEffect(() => {
-    if (!chatId || !isPending) {
+    // Durable and never cleaned up, so it waits until the chat is known.
+    if (!chatId || !isPending || isArchived !== false) {
       return;
     }
     useGenerationStatusStore.getState().seedActionRequired(chatId, requestedAt);
-  }, [chatId, isPending, requestedAt]);
+  }, [chatId, isArchived, isPending, requestedAt]);
 
   const decide = async (decision: "approve" | "reject" | "approve_always") => {
     setIsBusy(true);
@@ -183,7 +192,8 @@ export const McpToolApprovalCard = ({
               })
         }
         onDeny={() => void decide("reject")}
-        status="pending"
+        status={isArchived ? "dismissed" : "pending"}
+        resolvedLabel={isArchived ? archivedNoticeText() : undefined}
         isBusy={isBusy}
         scrollIntoViewOnMount
         data-testid="mcp-tool-approval-card"

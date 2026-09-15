@@ -10,9 +10,12 @@ import { messages as enMessages } from "@/locales/en/messages.json";
 import {
   ChatHistoryList,
   ChatHistoryListSkeleton,
+  useChatHistoryRowMenuItems,
   useChatHistoryRowPresentation,
 } from "./ChatHistoryList";
 
+import type { ChatHistoryRowMenuOptions } from "./ChatHistoryList";
+import type { DropdownMenuItem } from "../Controls/DropdownMenu";
 import type { ChatSession } from "@/types/chat";
 import type { Messages } from "@lingui/core";
 import type { ReactNode } from "react";
@@ -358,6 +361,189 @@ describe("ChatHistoryList", () => {
       expect(result.current.archived).toBe(false);
       expect(result.current.archivedLabel).toBeNull();
       expect(result.current.ariaLabel).toBe("First chat");
+    });
+
+    // The badges node is the whole point of the seam: a kit renders it and
+    // inherits whatever indicators the row grows later.
+    describe("badges", () => {
+      const renderBadges = async (session: ChatSession) => {
+        const { i18n } = await import("@lingui/core");
+        const { result } = renderHook(
+          () => useChatHistoryRowPresentation(session),
+          {
+            wrapper: ({ children }) => (
+              <I18nProvider i18n={i18n}>{children}</I18nProvider>
+            ),
+          },
+        );
+        render(<div>{result.current.badges}</div>);
+      };
+
+      it("carries the archived pill only for an archived row", async () => {
+        await renderBadges({
+          ...sessions[0],
+          archivedAt: new Date("2024-01-05").toISOString(),
+        });
+
+        expect(
+          screen.getByTestId("chat-history-item-archived"),
+        ).toHaveTextContent("Archived");
+      });
+
+      it("leaves an active row without a pill", async () => {
+        await renderBadges(sessions[0]);
+
+        expect(
+          screen.queryByTestId("chat-history-item-archived"),
+        ).not.toBeInTheDocument();
+        expect(
+          screen.queryByTestId("chat-generation-status"),
+        ).not.toBeInTheDocument();
+      });
+
+      it("carries the attention status dot", async () => {
+        useGenerationStatusStore.setState({
+          statusByChatId: {
+            "chat-1": {
+              kind: "running",
+              startedAt: new Date().toISOString(),
+              localSeenAt: Date.now(),
+            },
+          },
+          currentChatId: null,
+        });
+
+        await renderBadges(sessions[0]);
+
+        expect(screen.getByTestId("chat-generation-status")).toHaveAttribute(
+          "data-status",
+          "running",
+        );
+      });
+    });
+  });
+
+  describe("useChatHistoryRowMenuItems", () => {
+    const renderMenu = async (
+      session: ChatSession,
+      options: Partial<ChatHistoryRowMenuOptions> = {},
+    ) => {
+      const { i18n } = await import("@lingui/core");
+      const { result } = renderHook(
+        () =>
+          useChatHistoryRowMenuItems({
+            session,
+            pinnedChatsCount: 0,
+            pinnedChatsLimit: 5,
+            onArchive: vi.fn(),
+            onUnarchive: vi.fn(),
+            onEditTitle: vi.fn(),
+            onShare: vi.fn(),
+            onPin: vi.fn(),
+            ...options,
+          }),
+        {
+          wrapper: ({ children }) => (
+            <I18nProvider i18n={i18n}>{children}</I18nProvider>
+          ),
+        },
+      );
+      return result.current;
+    };
+
+    const labels = (items: DropdownMenuItem[]) =>
+      items.map((item) => String(item.label));
+
+    const archivedSession: ChatSession = {
+      ...sessions[0],
+      archivedAt: new Date("2024-01-05").toISOString(),
+    };
+    const run: ChatSession = {
+      ...sessions[0],
+      provenanceKind: "delegation",
+      originChatId: "origin-1",
+      originChatTitle: "Q3 planning",
+    };
+
+    it("offers Unarchive in place of Archive, Pin and Share when archived", async () => {
+      expect(labels(await renderMenu(archivedSession))).toEqual([
+        "Rename",
+        "Unarchive",
+      ]);
+    });
+
+    it("keeps Archive, Pin and Share on an active row", async () => {
+      expect(labels(await renderMenu(sessions[0]))).toEqual([
+        "Pin",
+        "Share",
+        "Rename",
+        "Archive",
+      ]);
+    });
+
+    it("withholds both archive actions from a delegated run", async () => {
+      expect(labels(await renderMenu(run))).not.toContain("Archive");
+      expect(
+        labels(await renderMenu({ ...run, ...archivedSession })),
+      ).not.toContain("Unarchive");
+    });
+
+    it("confirms archiving only while the chat is still working", async () => {
+      const idle = await renderMenu(sessions[0]);
+      expect(idle.at(-1)?.confirmAction).toBe(false);
+
+      useGenerationStatusStore.setState({
+        statusByChatId: {
+          "chat-1": {
+            kind: "running",
+            startedAt: new Date().toISOString(),
+            localSeenAt: Date.now(),
+          },
+        },
+        currentChatId: null,
+      });
+      const running = await renderMenu(sessions[0]);
+      expect(running.at(-1)?.confirmAction).toBe(true);
+      expect(running.at(-1)?.confirmMessage).toContain("still generating");
+
+      useGenerationStatusStore.setState({
+        statusByChatId: {},
+        currentChatId: null,
+      });
+      useConfirmationRegistryStore.setState({
+        pendingIdsByChatId: { "chat-1": ["approval-1"] },
+      });
+      const actionRequired = await renderMenu(sessions[0]);
+      expect(actionRequired.at(-1)?.confirmAction).toBe(true);
+      expect(actionRequired.at(-1)?.confirmMessage).toContain("tool approval");
+    });
+
+    it("disables pinning at the limit and everything without edit rights", async () => {
+      const atLimit = await renderMenu(sessions[0], {
+        pinnedChatsCount: 5,
+        pinnedChatsLimit: 5,
+      });
+      expect(labels(atLimit)[0]).toBe("Pin limit reached");
+      expect(atLimit[0].disabled).toBe(true);
+
+      const readOnly = await renderMenu({ ...sessions[0], canEdit: false });
+      expect(
+        readOnly
+          .filter((item) => item.label !== "Archive")
+          .every((item) => item.disabled),
+      ).toBe(true);
+    });
+
+    it("drops the actions the caller supplies no handler for", async () => {
+      expect(
+        labels(
+          await renderMenu(sessions[0], {
+            onPin: undefined,
+            onShare: undefined,
+            onEditTitle: undefined,
+          }),
+        ),
+      ).toEqual(["Archive"]);
     });
   });
 

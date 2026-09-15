@@ -8,7 +8,7 @@ import { ChatEmptyState } from "@/components/ui/Chat/ChatEmptyState";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { seedGenerationStatusFromListing } from "@/hooks/chat/store/generationStatusStore";
-import { useDelegatedRunHeader } from "@/hooks/chat/useDelegatedRunHeader";
+import { useChatHeader } from "@/hooks/chat/useChatHeader";
 import {
   useAvailableModels,
   useGetAssistant,
@@ -200,8 +200,7 @@ export default function AssistantChatSpacePage() {
 
   // This is the route a delegated run opens on: the trace's "open run" link
   // and the assistant space's delegated-runs segment both land here.
-  const { header: delegatedRunHeader, composerLocked } =
-    useDelegatedRunHeader(effectiveChatId);
+  const { header: chatHeader, composerLocked } = useChatHeader(effectiveChatId);
 
   // Loading state
   if (shouldFetchAssistant && isLoadingAssistant) {
@@ -278,7 +277,7 @@ export default function AssistantChatSpacePage() {
         showAvatars={true}
         showTimestamps={true}
         layout="default"
-        topContent={delegatedRunHeader}
+        topContent={chatHeader}
         composerDisabled={composerLocked}
         emptyStateComponent={emptyStateFor("upper")}
         emptyStateBelowComponent={emptyStateFor("lower")}

@@ -274,6 +274,9 @@ export const DEFAULT_STUBS = {
     delegationAllowBackground: false,
   }),
   useBudgetStatus: () => undefined,
+  useChatCanEdit: () => false,
+  useChatHeader: () => ({ header: null, composerLocked: false }),
+  useChatHistoryRowMenuItems: () => [],
   useChatHistoryFilterFoldback: () => undefined,
   useConversationDropzone: () => ({
     getRootProps: () => ({}),
@@ -281,7 +284,6 @@ export const DEFAULT_STUBS = {
     isDragActive: false,
     isDragAccept: false,
   }),
-  useDelegatedRunHeader: () => ({ header: null, composerLocked: false }),
   useDesktopSidecar: () => ({ client: null }),
   useFacets: () => ({ data: { action_facets: [] } }),
   useFileCapabilitiesContext: () => ({ capabilities: [] }),

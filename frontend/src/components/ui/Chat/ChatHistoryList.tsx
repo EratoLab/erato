@@ -34,8 +34,10 @@ import {
   ShareIcon,
 } from "../icons";
 
+import type { DropdownMenuItem } from "../Controls/DropdownMenu";
 import type { ChatSession } from "@/types/chat";
 import type { ChatAttentionStatus } from "@/utils/chatHistoryGrouping";
+import type { ReactNode } from "react";
 
 const logger = createLogger("UI", "ChatHistoryList");
 // Inset ring: the outside-drawn variant gets clipped by the sidebar
@@ -86,6 +88,9 @@ ChatItemIcon.displayName = "ChatItemIcon";
  * `resolveSessionRowStatus` and end up with a dot that disagrees with the
  * session's group.
  *
+ * Render `badges` rather than its ingredients: an indicator added to it later
+ * reaches every list that overrides this one without touching the kit.
+ *
  * `extraLabels` is folded into `ariaLabel`.
  */
 export const useChatHistoryRowPresentation = (
@@ -97,6 +102,7 @@ export const useChatHistoryRowPresentation = (
   statusLabel: string | null;
   archived: boolean;
   archivedLabel: string | null;
+  badges: ReactNode;
   ariaLabel: string;
 } => {
   const title = useRowTitle(session);
@@ -111,10 +117,118 @@ export const useChatHistoryRowPresentation = (
     statusLabel,
     archived,
     archivedLabel,
+    badges: (
+      <>
+        {status && <ChatAttentionStatusDot status={status} />}
+        {archivedLabel && <ArchivedChatPill label={archivedLabel} />}
+      </>
+    ),
     ariaLabel: [title, archivedLabel, ...extraLabels, statusLabel]
       .filter(Boolean)
       .join(", "),
   };
+};
+
+export interface ChatHistoryRowMenuOptions {
+  session: ChatSession;
+  pinnedChatsCount: number;
+  pinnedChatsLimit: number;
+  onArchive?: () => void;
+  onUnarchive?: () => void;
+  onEditTitle?: () => void;
+  onShare?: () => void;
+  onPin?: () => void;
+}
+
+/**
+ * The row's dropdown items, already gated from the session alone. A caller
+ * renders the array as it comes; nothing it leaves out can drop a rule.
+ */
+export const useChatHistoryRowMenuItems = ({
+  session,
+  pinnedChatsCount,
+  pinnedChatsLimit,
+  onArchive,
+  onUnarchive,
+  onEditTitle,
+  onShare,
+  onPin,
+}: ChatHistoryRowMenuOptions): DropdownMenuItem[] => {
+  const status = useChatRowStatus(session.id, session);
+  const archived = session.archivedAt != null;
+  const isPinned = session.isPinned ?? false;
+  const canEdit = session.canEdit ?? true;
+  const isPinLimitReached = !isPinned && pinnedChatsCount >= pinnedChatsLimit;
+  // Keyed on provenance, not on the origin label: `delegatedRunOrigin` is
+  // null for a run that records no origin at all, and that is still a run.
+  const isRun = session.provenanceKind === DELEGATION_PROVENANCE_KIND;
+  const pinMenuLabel = isPinLimitReached
+    ? t({
+        id: "chat.history.menu.pinLimitReached",
+        message: "Pin limit reached",
+      })
+    : isPinned
+      ? t({
+          id: "chat.history.menu.unpin",
+          message: "Unpin",
+        })
+      : t({
+          id: "chat.history.menu.pin",
+          message: "Pin",
+        });
+
+  return [
+    ...(onPin && !archived
+      ? [
+          {
+            label: pinMenuLabel,
+            icon: isPinned ? (
+              <PinSlashIcon className="size-4" />
+            ) : (
+              <PinIcon className="size-4" />
+            ),
+            onClick: onPin,
+            disabled: !canEdit || isPinLimitReached,
+          },
+        ]
+      : []),
+    ...(onShare && !archived
+      ? [
+          {
+            label: t({
+              id: "chat.share.button",
+              message: "Share",
+            }),
+            icon: <ShareIcon className="size-4" />,
+            onClick: onShare,
+            disabled: !canEdit,
+          },
+        ]
+      : []),
+    ...(onEditTitle
+      ? [
+          {
+            label: t({
+              id: "chat.history.menu.rename",
+              message: "Rename",
+            }),
+            icon: <EditIcon className="size-4" />,
+            onClick: onEditTitle,
+            disabled: !canEdit,
+          },
+        ]
+      : []),
+    // Runs get neither: archiving cannot cancel a live generation or free a
+    // parked approval, and cleanup re-archives unadopted runs.
+    ...(isRun
+      ? []
+      : buildArchiveMenuItems({
+          archived,
+          status,
+          onArchive,
+          onUnarchive,
+        })),
+  ];
 };
 
 export interface ChatHistoryListProps {
@@ -174,10 +288,8 @@ const ChatHistoryListItem = memo<{
   onEditTitle?: () => void;
   onShare?: () => void;
   onPin?: () => void;
-  isPinned?: boolean;
   pinnedChatsCount: number;
   pinnedChatsLimit: number;
-  canEdit?: boolean;
   onShowDetails?: () => void;
   showTimestamps?: boolean;
   disableRowLinks?: boolean;
@@ -192,46 +304,34 @@ const ChatHistoryListItem = memo<{
     onEditTitle,
     onShare,
     onPin,
-    isPinned = false,
     pinnedChatsCount,
     pinnedChatsLimit,
-    canEdit = true,
     onShowDetails,
     showTimestamps = true,
     disableRowLinks = false,
   }) => {
-    // Keyed on provenance, not on the origin label: `delegatedRunOrigin` is
-    // null for a run that records no origin at all, and that is still a run.
-    const isRun = session.provenanceKind === DELEGATION_PROVENANCE_KIND;
     const runOrigin = delegatedRunOrigin(session);
     const {
       title: rowTitle,
-      status: generationStatus,
-      archived: isArchived,
-      archivedLabel,
+      badges,
       ariaLabel: rowAriaLabel,
     } = useChatHistoryRowPresentation(session, [runOrigin?.label]);
+    const menuItems = useChatHistoryRowMenuItems({
+      session,
+      pinnedChatsCount,
+      pinnedChatsLimit,
+      onArchive,
+      onUnarchive,
+      onEditTitle,
+      onShare,
+      onPin,
+    });
     // A stable Date instance: an inline `new Date(...)` would defeat
     // MessageTimestamp's shallow memo on every list render.
     const updatedAtDate = useMemo(
       () => (session.updatedAt ? new Date(session.updatedAt) : null),
       [session.updatedAt],
     );
-    const isPinLimitReached = !isPinned && pinnedChatsCount >= pinnedChatsLimit;
-    const pinMenuLabel = isPinLimitReached
-      ? t({
-          id: "chat.history.menu.pinLimitReached",
-          message: "Pin limit reached",
-        })
-      : isPinned
-        ? t({
-            id: "chat.history.menu.unpin",
-            message: "Unpin",
-          })
-        : t({
-            id: "chat.history.menu.pin",
-            message: "Pin",
-          });
     const fileCountLabel = getFileCountLabel(session.metadata?.fileCount ?? 0);
     const rowBody = (
       // Row owns the row geometry, the selected fill and the hover tint; the
@@ -249,14 +349,11 @@ const ChatHistoryListItem = memo<{
       >
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            {generationStatus && (
-              <ChatAttentionStatusDot status={generationStatus} />
-            )}
+            {badges}
             <ChatItemIcon />
             <span className="truncate font-medium" title={rowTitle}>
               {rowTitle}
             </span>
-            {archivedLabel && <ArchivedChatPill label={archivedLabel} />}
           </div>
           {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent bubbling */}
           <div
@@ -267,58 +364,7 @@ const ChatHistoryListItem = memo<{
           >
             <DropdownMenu
               triggerButtonVariant="sidebar-icon"
-              items={[
-                ...(onPin && !isArchived
-                  ? [
-                      {
-                        label: pinMenuLabel,
-                        icon: isPinned ? (
-                          <PinSlashIcon className="size-4" />
-                        ) : (
-                          <PinIcon className="size-4" />
-                        ),
-                        onClick: onPin,
-                        disabled: !canEdit || isPinLimitReached,
-                      },
-                    ]
-                  : []),
-                ...(onShare && !isArchived
-                  ? [
-                      {
-                        label: t({
-                          id: "chat.share.button",
-                          message: "Share",
-                        }),
-                        icon: <ShareIcon className="size-4" />,
-                        onClick: onShare,
-                        disabled: !canEdit,
-                      },
-                    ]
-                  : []),
-                ...(onEditTitle
-                  ? [
-                      {
-                        label: t({
-                          id: "chat.history.menu.rename",
-                          message: "Rename",
-                        }),
-                        icon: <EditIcon className="size-4" />,
-                        onClick: onEditTitle,
-                        disabled: !canEdit,
-                      },
-                    ]
-                  : []),
-                // Runs get neither: archiving cannot cancel a live generation or
-                // free a parked approval, and cleanup re-archives unadopted runs.
-                ...(isRun
-                  ? []
-                  : buildArchiveMenuItems({
-                      archived: isArchived,
-                      status: generationStatus,
-                      onArchive,
-                      onUnarchive,
-                    })),
-              ]}
+              items={menuItems}
             />
           </div>
         </div>
@@ -487,10 +533,8 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
                 ? () => onSessionPin(session.id, !session.isPinned)
                 : undefined
             }
-            isPinned={session.isPinned}
             pinnedChatsCount={pinnedChatsCount}
             pinnedChatsLimit={pinnedChatsLimit}
-            canEdit={session.canEdit}
             onShowDetails={
               onShowDetails ? () => onShowDetails(session.id) : undefined
             }

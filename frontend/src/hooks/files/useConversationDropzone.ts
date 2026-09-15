@@ -30,6 +30,8 @@ interface UseConversationDropzoneOptions {
    */
   extraAcceptMimeTypes?: Record<string, string[]>;
   isUploading?: boolean;
+  /** Also holds `isDragActive` false, so the caller's overlay stays hidden. */
+  disabled?: boolean;
   /** Per-file limit in bytes, from `useUploadFeature()`. */
   maxSize?: number;
   /** Formatted limit for the too-large message. */
@@ -73,6 +75,7 @@ export function useConversationDropzone({
   acceptedFileTypes,
   extraAcceptMimeTypes,
   isUploading = false,
+  disabled = false,
   maxSize,
   maxSizeFormatted,
   onError,
@@ -183,7 +186,7 @@ export function useConversationDropzone({
     onError: handleReadError,
     accept,
     multiple: true,
-    disabled: isUploading,
+    disabled: disabled || isUploading,
     validator: validateSize,
     noClick: true,
     noKeyboard: true,
@@ -206,8 +209,19 @@ export function useConversationDropzone({
     },
     [onReceive],
   );
+  const isClosed = disabled || isUploading;
   const getRootProps = useCallback(
     (props: RootProps = {}) => {
+      if (isClosed) {
+        // react-dropzone drops its handlers while disabled and its document
+        // guard skips the root, so without these the browser opens the file.
+        return {
+          ...getDropzoneRootProps(props),
+          onDragEnter: swallowDrag,
+          onDragOver: swallowDrag,
+          onDrop: swallowDrag,
+        };
+      }
       if (!onReceive) return getDropzoneRootProps(props);
       const consumerOnDrop = props.onDrop;
       return getDropzoneRootProps({
@@ -221,11 +235,18 @@ export function useConversationDropzone({
         },
       });
     },
-    [getDropzoneRootProps, handleReceive, onReceive],
+    [getDropzoneRootProps, handleReceive, isClosed, onReceive],
   );
 
   return { getRootProps, getInputProps, isDragActive, isDragAccept };
 }
+
+// Cancelled with effect "none": no drop fires, no file opens, and the cursor
+// says so. Blink fires only dragenter on the frame a target changes.
+const swallowDrag = (event: DragEvent) => {
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "none";
+};
 
 // Mirrors react-dropzone's own file-drag test so a string-only drag (an
 // Outlook mail-list row) never announces files that will not arrive.

@@ -83,7 +83,13 @@ export {
 export { messageStyles } from "@/components/ui/styles/chatMessageStyles";
 export { Tooltip } from "@/components/ui/Controls/Tooltip";
 // The resolved result, not the stores behind it — kits read status, never write it.
-export { useChatHistoryRowPresentation } from "@/components/ui/Chat/ChatHistoryList";
+// The gating lives in the menu hook, so a kit renders the items it returns
+// rather than deciding anything about archiving, runs or pin limits itself.
+export {
+  useChatHistoryRowMenuItems,
+  useChatHistoryRowPresentation,
+} from "@/components/ui/Chat/ChatHistoryList";
+export type { ChatHistoryRowMenuOptions } from "@/components/ui/Chat/ChatHistoryList";
 // Pinned alongside the hook that feeds it: only two registry-reachable
 // importers keep it on the generated surface, and a kit rendering its own
 // rows needs both halves or neither.
@@ -177,7 +183,7 @@ export const ERATO_SHARED_SURFACE_VERSION = 1;
 
 // Bump on purely additive growth of the surface, so a kit can require a name
 // that exists without demanding a new major.
-export const ERATO_SHARED_SURFACE_MINOR = 6;
+export const ERATO_SHARED_SURFACE_MINOR = 7;
 
 // The string half of the same contract: every value and type this module pins,
 // so tooling on either side of the boundary can diff a kit's declared needs
@@ -199,6 +205,7 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "CardTone",
   "CardVariant",
   "ChatAttentionStatusDot",
+  "ChatHistoryRowMenuOptions",
   "ChevronDownIcon",
   "ChevronRightIcon",
   "CloseIcon",
@@ -286,6 +293,7 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "Tooltip",
   "messageStyles",
   "resolvePopoverViewportPadding",
+  "useChatHistoryRowMenuItems",
   "useChatHistoryRowPresentation",
   "useGetFile",
   "useGetFilePreview",

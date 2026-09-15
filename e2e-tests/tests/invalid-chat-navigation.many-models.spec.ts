@@ -2,9 +2,9 @@ import { test, expect, Page } from "@playwright/test";
 import { TAG_CI } from "./tags";
 import {
   abortActiveStreamingRequest,
-  archiveChatFromRow,
   chatIsReadyToChat,
   ensureOpenSidebar,
+  RECENT_CHATS_URL,
   selectModel,
   sendFirstMessage,
   setupStreamingRequestAbortHook,
@@ -13,9 +13,6 @@ import {
 // These cases need a real streamed turn, so they select the Mock-LLM model,
 // which only exists in the many-models scenario. Model-agnostic cases
 // (invalid-id redirect, cross-user oracle) live in the .basic spec.
-
-const SUBMIT_STREAM = "/api/v1beta/me/messages/submitstream";
-const CHAT_MESSAGES = /\/api\/v1beta\/chats\/[0-9a-fA-F-]+\/messages/;
 
 const textboxOf = (page: Page) =>
   page.getByRole("textbox", { name: "Type a message..." });
@@ -131,10 +128,10 @@ test(
   },
 );
 
-// Archived chat: create a real chat, archive it, navigate back, and assert a
-// send is rejected (409) and surfaces a visible error (B3 + F2).
+// Archived chat: create a real chat, archive it, reopen it and assert the page
+// explains itself, refuses the composer, and comes back through the notice.
 test(
-  "archived chat rejects a send with a visible error",
+  "archived chat closes its composer until it is unarchived",
   { tag: TAG_CI },
   async ({ page }) => {
     const api = trackApi(page);
@@ -149,52 +146,58 @@ test(
     });
     console.log(`[archived] created + completed chat ${chatId}`);
 
-    // Archive it via the sidebar row menu.
+    // Through the API: archiving from the row menu is the sidebar's own case.
+    const archiveResp = await page.request.post(
+      `/api/v1beta/chats/${chatId}/archive`,
+      { data: {} },
+    );
+    expect(archiveResp.status()).toBe(200);
+
+    // The pinned list answers the same path and still carries the id, so skip
+    // it; a failed listing has no ids at all and must not count either.
+    const listWithoutChat = page.waitForResponse(
+      async (r) => {
+        if (
+          !r.url().includes(RECENT_CHATS_URL) ||
+          r.url().includes("pinned=true") ||
+          !r.ok()
+        ) {
+          return false;
+        }
+        // A body the browser already discarded must not reject the wait.
+        const body = await r.text().catch(() => null);
+        return body !== null && !body.includes(chatId);
+      },
+      { timeout: 15000 },
+    );
+    // No readiness wait here: it ends on an enabled composer, which is exactly
+    // what an archived chat must not have.
+    await page.goto(`/chat/${chatId}`);
+    const notice = page.getByTestId("archived-chat-notice");
+    await expect(notice).toBeVisible({ timeout: 15000 });
+    await expect(textboxOf(page)).toBeDisabled();
+    await expect(page.getByTestId("message-user").first()).toBeVisible();
+    await expect(page.getByTestId("message-assistant").first()).toBeVisible();
+
     await ensureOpenSidebar(page);
     const sidebar = page.getByRole("complementary");
-    const row = sidebar.locator(`[data-chat-id="${chatId}"]`).first();
-    // Wait for the archive to actually commit before sending, otherwise the
-    // submit can read archived_at before it is set (a test race, not a bug).
-    const archiveResp = page.waitForResponse(
+    await expect(sidebar).toBeVisible();
+    const row = sidebar.locator(`[data-chat-id="${chatId}"]`);
+    await listWithoutChat;
+    await expect(row).toHaveCount(0);
+
+    const unarchiveResp = page.waitForResponse(
       (r) =>
-        r.url().includes(`/chats/${chatId}/archive`) &&
+        r.url().includes(`/chats/${chatId}/unarchive`) &&
         r.request().method() === "POST",
       { timeout: 15000 },
     );
-    await archiveChatFromRow(page, row);
-    await archiveResp;
-    console.log(`[archived] archived chat ${chatId}`);
+    await notice.getByRole("button", { name: "Unarchive" }).click();
+    expect((await unarchiveResp).status()).toBe(200);
 
-    // Navigate back to the now-archived chat and try to send.
-    const messagesResp = page
-      .waitForResponse((r) => CHAT_MESSAGES.test(r.url()), { timeout: 15000 })
-      .catch(() => null);
-    await page.goto(`/chat/${chatId}`);
-    const textbox = textboxOf(page);
-    await expect(textbox).toBeVisible();
-    const mResp = await messagesResp;
-    console.log(
-      `[archived] after goto: url=${page.url()} messagesGET=${mResp ? mResp.status() : "n/a"}`,
-    );
-
-    const submitResp = page
-      .waitForResponse((r) => r.url().includes(SUBMIT_STREAM), {
-        timeout: 15000,
-      })
-      .catch(() => null);
-    await textbox.fill("can you still hear me in the archive?");
-    await textbox.press("Enter");
-    const sResp = await submitResp;
-    console.log(`[archived] submitstream=${sResp ? sResp.status() : "n/a"}`);
-    // Archived chat stays readable, but a write must be rejected (B3), not accepted.
-    expect(mResp?.status()).toBe(200);
-    expect(sResp?.status()).toBe(409);
-    // F2: the rejected send surfaces a visible error, not a silent failure.
-    await expect(page.getByTestId("chat-send-error")).toBeVisible({
-      timeout: 15000,
-    });
-    await expect(page.getByTestId("chat-input-stop-generation")).toHaveCount(0);
-    console.log("[archived] turnState:", JSON.stringify(await turnState(page)));
+    await expect(notice).toHaveCount(0, { timeout: 15000 });
+    await expect(textboxOf(page)).toBeEnabled({ timeout: 15000 });
+    await expect(row.first()).toBeVisible({ timeout: 15000 });
     console.log(
       "[archived] api>=400:",
       JSON.stringify(api.filter((a) => a.status >= 400)),

@@ -55,14 +55,6 @@ export const StillRunning: Story = {
   },
 };
 
-/** Archived, possibly by the cascade from the chat that dispatched it. */
-export const Archived: Story = {
-  args: {
-    constraints: "Use only the attachments passed with the task.",
-    isArchived: true,
-  },
-};
-
 /** The origin chat was deleted: a label, never a link to a dead chat. */
 export const DeletedOrigin: Story = {
   args: {
