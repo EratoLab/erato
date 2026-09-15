@@ -27,6 +27,12 @@ export {
 } from "./transport.js";
 export type {
   CapabilityDescriptor,
+  IndexingStartV1Params,
+  IndexingStartV1Result,
+  IndexingStopV1Params,
+  IndexingStopV1Result,
+  SearchQueryV1Params,
+  SearchQueryV1Result,
   IndexingResetV1Result,
   IndexingResetV1Params,
   IndexingStatusV1Result,

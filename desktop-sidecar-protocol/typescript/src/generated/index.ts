@@ -1,4 +1,10 @@
 /* This file is generated. Do not edit. */
+export type { IndexingStartV1Params } from "./indexing-start-v1-params.js";
+export type { IndexingStartV1Result } from "./indexing-start-v1-result.js";
+export type { IndexingStopV1Params } from "./indexing-stop-v1-params.js";
+export type { IndexingStopV1Result } from "./indexing-stop-v1-result.js";
+export type { SearchQueryV1Params } from "./search-query-v1-params.js";
+export type { SearchQueryV1Result } from "./search-query-v1-result.js";
 export type { IndexingResetV1Result } from "./indexing-reset-v1-result.js";
 export type { IndexingResetV1Params } from "./indexing-reset-v1-params.js";
 export type { IndexingStatusV1Result } from "./indexing-status-v1-result.js";

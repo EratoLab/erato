@@ -135,3 +135,7 @@ its directory structure.
 Production sidecar implementation and dynamic Origin enrollment are
 intentionally outside this package's scope. Backend artifact discovery and
 deployment are defined in [`DISTRIBUTION.md`](DISTRIBUTION.md).
+
+Index lifecycle: `indexing.start.v1` resumes or requests a shadow rebuild;
+`indexing.stop.v1` drains work and preserves files. Both return indexing statistics.
+`search.query.v1` searches individual indexed emails and files. See SPEC section 17.

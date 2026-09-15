@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  validateIndexingStartV1Params,
+  validateSearchQueryV1Params,
+  validateIndexingStartV1Result,
+  validateIndexingStopV1Result,
   validateIndexingStatusV1Result,
   validateIndexingResetV1Params,
   validateIndexingResetV1Result,
@@ -142,4 +146,29 @@ describe("indexing statistics contract", () => {
       }
     }
   });
+});
+
+it("validates rebuild bounds, search limits, and shared lifecycle statistics", () => {
+  expect(validateIndexingStartV1Params({ rebuild: { b: 0.75, k1: 1.2 } })).toBe(
+    true,
+  );
+  for (const rebuild of [
+    { b: 2 },
+    { k1: 0 },
+    { indexedAvgdl: 0 },
+    { maxTextBytes: 67108865 },
+  ])
+    expect(validateIndexingStartV1Params({ rebuild })).toBe(false);
+  expect(validateIndexingStartV1Params({ documentsPerMinute: 120 })).toBe(
+    false,
+  );
+  expect(validateIndexingStartV1Result(fixture)).toBe(true);
+  expect(validateIndexingStopV1Result({ ...fixture, state: "stopped" })).toBe(
+    true,
+  );
+  for (const limit of [0, 101, 1.5])
+    expect(validateSearchQueryV1Params({ limit })).toBe(false);
+  expect(validateSearchQueryV1Params({ filters: { kind: "thread" } })).toBe(
+    false,
+  );
 });

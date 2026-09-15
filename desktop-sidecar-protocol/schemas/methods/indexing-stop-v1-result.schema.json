@@ -1,0 +1,6 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-stop-v1-result.schema.json",
+  "title": "IndexingStopV1Result",
+  "$ref": "./indexing-status-v1-result.schema.json"
+}

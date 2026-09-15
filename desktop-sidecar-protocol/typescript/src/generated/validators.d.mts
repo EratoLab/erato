@@ -12,6 +12,12 @@ export interface Validator {
   errors?: ValidationError[] | null;
 }
 
+export const validateIndexingStartV1Params: Validator;
+export const validateIndexingStartV1Result: Validator;
+export const validateIndexingStopV1Params: Validator;
+export const validateIndexingStopV1Result: Validator;
+export const validateSearchQueryV1Params: Validator;
+export const validateSearchQueryV1Result: Validator;
 export const validateIndexingResetV1Result: Validator;
 export const validateIndexingResetV1Params: Validator;
 export const validateIndexingStatusV1Result: Validator;
