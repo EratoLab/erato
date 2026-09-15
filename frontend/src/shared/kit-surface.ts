@@ -182,6 +182,34 @@ export {
   useGetFilePreview,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
+// What a Teams-sourced attachment is called and what it belongs to. The picker
+// names an upload after its bytes — `teams-file-<hash>-<slug>` — because that
+// name is the key the backend joins parsed uploads by, so a kit rendering its
+// own attachments shows a content hash, identical-looking across files, and
+// shows the transcript as an unrelated sibling of the files shared inside it.
+export { groupTeamsSentAttachments } from "@/utils/teams/teamsSentAttachmentGroups";
+export type { TeamsSentAttachmentGrouping } from "@/utils/teams/teamsSentAttachmentGroups";
+export { teamsUploadDisplayName } from "@/utils/teams/teamsUploadName";
+
+// A kit drawing its own error bubble has to tell a prompt-injection filter
+// result from any other filter payload before it can word anything about it.
+// Re-declaring the guard kit-side is how the two drift: the host learns a new
+// shape and only one of the two copies hears about it.
+export { isPromptInjectionFilterDetails } from "@/types/chat";
+export type { MessageErrorFilterDetails } from "@/types/chat";
+
+// The running / needs-you indicator over a set of conversations. A kit cannot
+// reproduce it: the status is aggregated out of two stores a kit must never
+// write, so the resolved aggregate is pinned rather than the stores behind it.
+// Its label and tone come along — a kit that re-words either says something
+// different from the host's own rows about the same run.
+export { useSessionsAttentionStatus } from "@/components/ui/Assistant/AssistantWelcomeScreen";
+export {
+  chatAttentionStatusLabel,
+  chatAttentionStatusToneClass,
+} from "@/utils/chatHistoryGrouping";
+export type { ChatAttentionStatus } from "@/utils/chatHistoryGrouping";
+
 // The class channel. Kits and themes address host surfaces by global class
 // name as well as by component, and pasting those names as string literals is
 // how a rename reaches a customer as a rule that silently stops matching.
@@ -218,6 +246,7 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "CardTag",
   "CardTone",
   "CardVariant",
+  "ChatAttentionStatus",
   "ChatAttentionStatusDot",
   "ChatHistoryListSkeleton",
   "ChatHistoryRow",
@@ -264,6 +293,7 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "MailIcon",
   "MediaVideoIcon",
   "MessageContent",
+  "MessageErrorFilterDetails",
   "MessageTimestamp",
   "ModalBase",
   "MoreVertical",
@@ -300,6 +330,7 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "TabRail",
   "TabRailOption",
   "TabRailProps",
+  "TeamsSentAttachmentGrouping",
   "ThemeProvider",
   "ThemeProviderProps",
   "ThreadMessageCard",
@@ -309,12 +340,18 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "ToolCallOutput",
   "ToolCallOutputProps",
   "Tooltip",
+  "chatAttentionStatusLabel",
+  "chatAttentionStatusToneClass",
+  "groupTeamsSentAttachments",
+  "isPromptInjectionFilterDetails",
   "messageStyles",
   "resolvePopoverViewportPadding",
+  "teamsUploadDisplayName",
   "useChatHistoryRow",
   "useChatHistoryRowMenuItems",
   "useChatHistoryRowPresentation",
   "useGetFile",
   "useGetFilePreview",
+  "useSessionsAttentionStatus",
 ] as const;
 /* eslint-enable lingui/no-unlocalized-strings */

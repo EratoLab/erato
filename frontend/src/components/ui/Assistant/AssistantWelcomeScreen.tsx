@@ -74,7 +74,7 @@ const getMoreConversationsLabel = (count: number) =>
 const SEGMENT_SEARCH_PARAM = "segment";
 
 /** The status a single indicator has to stand for across a set of rows. */
-const useSessionsAttentionStatus = (
+export const useSessionsAttentionStatus = (
   sessions: ChatSession[],
 ): ChatAttentionStatus | null => {
   const statusByChatId = useGenerationStatusStore(

@@ -15,6 +15,7 @@ export type { ThemeProviderProps } from "@/components/providers/ThemeProvider";
 export { AssistantWelcomeLower } from "@/components/ui/Assistant/AssistantWelcomeScreen";
 export { AssistantWelcomeScreen } from "@/components/ui/Assistant/AssistantWelcomeScreen";
 export { AssistantWelcomeUpper } from "@/components/ui/Assistant/AssistantWelcomeScreen";
+export { useSessionsAttentionStatus } from "@/components/ui/Assistant/AssistantWelcomeScreen";
 export type { AssistantWelcomeScreenProps } from "@/components/ui/Assistant/AssistantWelcomeScreen";
 export { ArchivedChatPill } from "@/components/ui/Chat/chatArchiveActions";
 export { archivedChatLabel } from "@/components/ui/Chat/chatArchiveActions";
