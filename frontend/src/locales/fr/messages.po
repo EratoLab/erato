@@ -1774,14 +1774,12 @@ msgstr "Archiver ce chat ?"
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
 msgid "chat.history.menu.pin"
 msgstr "Épingler"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
 msgid "chat.history.menu.pinLimitReached"
 msgstr "Limite d’épingles atteinte"
 
@@ -1792,7 +1790,6 @@ msgstr "Archiver"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
 msgid "chat.history.menu.rename"
 msgstr "Renommer"
 
@@ -1804,7 +1801,6 @@ msgstr "Désarchiver"
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
 msgid "chat.history.menu.unpin"
 msgstr "Désépingler"
 
@@ -2157,7 +2153,6 @@ msgstr "Ce brouillon est trop long pour être traité par l'IA ({actualKb} Ko / 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
 msgid "chat.share.button"
 msgstr "Partager"
 

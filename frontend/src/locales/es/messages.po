@@ -1774,14 +1774,12 @@ msgstr "¿Archivar este chat?"
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
 msgid "chat.history.menu.pin"
 msgstr "Fijar"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
 msgid "chat.history.menu.pinLimitReached"
 msgstr "Límite de fijados alcanzado"
 
@@ -1792,7 +1790,6 @@ msgstr "Archivar"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
 msgid "chat.history.menu.rename"
 msgstr "Renombrar"
 
@@ -1804,7 +1801,6 @@ msgstr "Desarchivar"
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
 msgid "chat.history.menu.unpin"
 msgstr "Desfijar"
 
@@ -2157,7 +2153,6 @@ msgstr "Este borrador es demasiado largo para que la IA lo procese ({actualKb} K
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
 msgid "chat.share.button"
 msgstr "Compartir"
 
