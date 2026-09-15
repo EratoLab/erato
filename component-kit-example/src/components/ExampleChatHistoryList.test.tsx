@@ -26,8 +26,6 @@ it("keeps the host's chat history row contract", () => {
   expect(
     chatHistoryListConformanceFailures(ExampleChatHistoryList, {
       render: (element) => {
-        // Cleared per case, so a row that stops rendering a menu at all reads
-        // as empty rather than as the previous row's.
         rowMenu.items = [];
         return render(<I18nProvider i18n={i18n}>{element}</I18nProvider>);
       },

@@ -18,6 +18,7 @@ import type { ChatAttentionStatus } from "@/utils/chatHistoryGrouping";
 import type { ComponentType, ReactElement } from "react";
 
 export interface ChatHistoryConformanceHarness {
+  /** Called once per case; a harness that records menu items resets its record here. */
   render: (element: ReactElement) => {
     container: HTMLElement;
     unmount: () => void;
