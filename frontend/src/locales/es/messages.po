@@ -3904,27 +3904,27 @@ msgid "preferences.dialog.mcpServers.status.success.label"
 msgstr "Conectado"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolSummary.tsx
+#: src/components/ui/Settings/McpToolRow.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.asksBeforeRunning"
 msgstr "Pregunta antes de ejecutar"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolSummary.tsx
+#: src/components/ui/Settings/McpToolRow.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.canModify"
 msgstr "Puede modificar"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolSummary.tsx
+#: src/components/ui/Settings/McpToolRow.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.notDeclared"
 msgstr "No declarado por el servidor"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolSummary.tsx
+#: src/components/ui/Settings/McpToolRow.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.reachesOtherSystems"
 msgstr "Accede a otros sistemas"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolSummary.tsx
+#: src/components/ui/Settings/McpToolRow.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.readsOnly"
 msgstr "Solo lee"
 
@@ -4097,6 +4097,16 @@ msgstr "MCP & Apps"
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.title"
 msgstr "Preferencias"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolRow.tsx
+msgid "preferences.dialog.tools.descriptionShortened"
+msgstr "Descripción acortada por Erato"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolRow.tsx
+msgid "preferences.dialog.tools.descriptionToggle"
+msgstr "Descripción de {toolTitle}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Controls/UserProfileDropdown.tsx
