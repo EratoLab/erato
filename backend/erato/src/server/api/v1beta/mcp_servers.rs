@@ -3,6 +3,9 @@ use crate::distribution::runtime::McpAppState;
 use crate::models::user_tool_approval_setting::{UserToolDecision, decision_of};
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
+use crate::services::display_text::{
+    MAX_DISPLAY_DESCRIPTION_CHARS, MAX_DISPLAY_NAME_CHARS, sanitize_display_text,
+};
 use crate::services::mcp_manager::McpRequestAuthContext;
 use crate::services::mcp_oauth::{
     CompleteOauthAuthorizationParams, complete_oauth_authorization, disconnect_oauth_authorization,
@@ -98,12 +101,17 @@ impl From<Option<UserToolDecision>> for McpServerToolUserDecision {
     }
 }
 
+/// One tool as the server declares it. `name`, `title` and `description`
+/// are vendor text passed through `sanitize_display_text`; a client shows
+/// them as plain text and never interprets them.
 #[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct McpServerTool {
     pub name: String,
     pub title: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// Whether the description was cut at the display cap.
+    pub description_truncated: bool,
     pub annotations: McpServerToolAnnotations,
     /// The policy's own verdict, before any user decision.
     pub policy: McpServerToolPolicy,
@@ -223,19 +231,29 @@ pub async fn list_mcp_server_tools(
         .iter()
         .map(|tool| {
             let verdict = evaluate_mcp_tool_approval(&global.approval, tool);
+            // Decisions and the wait list are keyed by the name the server
+            // uses; only the projected text is cleaned.
             let name = tool.name.to_string();
             let user_decision = user_decisions.get(&name).copied();
+            let is_wait_tool = global.enable_wait || is_tool_allowed_to_wait(&name, &config);
+            let title = tool
+                .title
+                .as_deref()
+                .or_else(|| {
+                    tool.annotations
+                        .as_ref()
+                        .and_then(|annotations| annotations.title.as_deref())
+                })
+                .unwrap_or(&name);
+            let description = tool
+                .description
+                .as_deref()
+                .map(|value| sanitize_display_text(value, MAX_DISPLAY_DESCRIPTION_CHARS))
+                .filter(|value| !value.text.is_empty());
             McpServerTool {
-                title: tool
-                    .title
-                    .clone()
-                    .or_else(|| {
-                        tool.annotations
-                            .as_ref()
-                            .and_then(|annotations| annotations.title.clone())
-                    })
-                    .unwrap_or_else(|| name.clone()),
-                description: tool.description.as_ref().map(|value| value.to_string()),
+                title: sanitize_display_text(title, MAX_DISPLAY_NAME_CHARS).text,
+                description_truncated: description.as_ref().is_some_and(|value| value.truncated),
+                description: description.map(|value| value.text),
                 annotations: McpServerToolAnnotations {
                     read_only_hint: verdict.annotations.read_only_hint,
                     destructive_hint: verdict.annotations.destructive_hint,
@@ -250,8 +268,8 @@ pub async fn list_mcp_server_tools(
                 },
                 user_decision: user_decision.into(),
                 effective: effective_mcp_tool_state(&global.approval, &verdict, user_decision),
-                is_wait_tool: global.enable_wait || is_tool_allowed_to_wait(&name, &config),
-                name,
+                is_wait_tool,
+                name: sanitize_display_text(&name, MAX_DISPLAY_NAME_CHARS).text,
             }
         })
         .collect();
@@ -555,6 +573,7 @@ mod tests {
             name: name.to_string(),
             title: title.to_string(),
             description: None,
+            description_truncated: false,
             annotations: McpServerToolAnnotations {
                 read_only_hint: false,
                 destructive_hint: true,
