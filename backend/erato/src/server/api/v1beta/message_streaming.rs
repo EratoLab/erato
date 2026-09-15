@@ -128,18 +128,33 @@ fn now_timestamp() -> String {
     Utc::now().to_rfc3339()
 }
 
-/// Build the durable approval request when the shared evaluation of the
-/// policy and the user's own decision says the tool must ask before running.
-fn mcp_tool_approval_request(
+/// What the approval gate does with one MCP tool call once the policy and
+/// the user's own decision are combined.
+#[derive(Debug, PartialEq)]
+enum McpToolCallGate {
+    Run,
+    Ask(ContentPartToolApprovalRequest),
+    Refuse(String),
+}
+
+/// Decide whether a tool call runs, parks on a durable approval request or
+/// is refused outright. A denial is refused here rather than parked: the
+/// user already answered, so a card would only ask them again.
+fn gate_mcp_tool_call(
     config: &McpToolApprovalConfig,
     server_id: &str,
     tool: &rmcp::model::Tool,
     tool_call: &genai::chat::ToolCall,
     user_decision: Option<UserToolDecision>,
-) -> Option<ContentPartToolApprovalRequest> {
+) -> McpToolCallGate {
     let verdict = evaluate_mcp_tool_approval(config, tool);
-    (effective_mcp_tool_state(config, &verdict, user_decision) == McpToolEffectiveState::Ask).then(
-        || ContentPartToolApprovalRequest {
+    match effective_mcp_tool_state(config, &verdict, user_decision) {
+        McpToolEffectiveState::Allow => McpToolCallGate::Run,
+        McpToolEffectiveState::Denied => McpToolCallGate::Refuse(format!(
+            "The user has disabled the tool '{}' in their settings; the call was not executed.",
+            tool_call.fn_name
+        )),
+        McpToolEffectiveState::Ask => McpToolCallGate::Ask(ContentPartToolApprovalRequest {
             tool_call_id: tool_call.call_id.clone(),
             tool_name: tool_call.fn_name.clone(),
             mcp_server_id: server_id.to_string(),
@@ -152,8 +167,8 @@ fn mcp_tool_approval_request(
             .to_string(),
             allow_always: config.allow_always,
             requested_at: now_timestamp(),
-        },
-    )
+        }),
+    }
 }
 
 fn build_openai_responses_reasoning_replay_parts(
@@ -3977,75 +3992,79 @@ async fn stream_generate_chat_completion<
             // the request in the assistant message and let `continuestream`
             // rehydrate this point after a user decision.
             let approval_config = &mcp.config.mcp_servers_global.approval;
-            // With the gate off every stored decision but a denial is inert,
-            // and denials never make it into the prepared tool set.
-            let user_decision = if approval_config.enabled {
-                match Uuid::parse_str(&user_id) {
-                    Ok(user_id) => {
-                        crate::models::user_tool_approval_setting::find_active_decision(
-                            &app_state.db,
-                            user_id,
-                            &managed_tool_call.server_id,
-                            &managed_tool_call.tool.name,
-                        )
-                        .await?
-                    }
-                    Err(_) => None,
+            // The prepared tool set drops denials only as of prepare time; a
+            // denial stored during the generation must still hold here, so
+            // the row is read on every call whatever the gate's state.
+            let user_decision = match Uuid::parse_str(&user_id) {
+                Ok(user_id) => {
+                    crate::models::user_tool_approval_setting::find_active_decision(
+                        &app_state.db,
+                        user_id,
+                        &managed_tool_call.server_id,
+                        &managed_tool_call.tool.name,
+                    )
+                    .await?
                 }
-            } else {
-                None
+                Err(_) => None,
             };
-            if let Some(approval_request) = mcp_tool_approval_request(
+            let refusal = match gate_mcp_tool_call(
                 approval_config,
                 &managed_tool_call.server_id,
                 &managed_tool_call.tool,
                 &unfinished_tool_call,
                 user_decision,
             ) {
-                if is_delegated_run {
+                McpToolCallGate::Run => None,
+                McpToolCallGate::Refuse(error_message) => Some(error_message),
+                McpToolCallGate::Ask(_) if is_delegated_run => {
                     // A delegated child run must never park on approval — the
                     // parent awaits it, and the durable stop would surface a
                     // half-done ToolApprovalRequest tail as the delegate's
                     // result. Refuse the CALL so the child completes in prose.
-                    let error_message = format!(
+                    Some(format!(
                         "The tool '{}' requires user approval, which is unavailable in a delegated run; the call was not executed.",
                         unfinished_tool_call.fn_name
-                    );
-                    let tool_call_started = tool_call_started_at
-                        .remove(&unfinished_tool_call.call_id)
-                        .unwrap_or_else(now_timestamp);
-                    current_message_content.push(ContentPart::ToolUse(ToolUse {
-                        tool_call_id: unfinished_tool_call.call_id.clone(),
-                        status: MessageToolCallStatus::Error,
-                        tool_name: unfinished_tool_call.fn_name.clone(),
-                        input: Some(unfinished_tool_call.fn_arguments.clone()),
-                        progress_message: None,
-                        progress: None,
-                        total: None,
-                        output: Some(json!({ "status": "rejected", "error": error_message })),
-                        started_at: Some(tool_call_started),
-                        ended_at: Some(now_timestamp()),
-                    }));
-                    current_turn_tool_responses.push(genai::chat::ToolResponse {
-                        call_id: unfinished_tool_call.call_id.clone(),
-                        content: error_message,
-                    });
-                    continue;
+                    ))
                 }
-                current_message_content.push(ContentPart::ToolApprovalRequest(approval_request));
-                let generation_metadata = build_generation_metadata(
-                    total_prompt_tokens,
-                    total_completion_tokens,
-                    total_total_tokens,
-                    total_reasoning_tokens,
-                    langfuse_trace_id.clone(),
-                    false,
-                    None,
-                    non_empty_string(&captured_reasoning_summary),
-                    non_empty_vec(&captured_reasoning_items),
-                    non_empty_vec(&captured_reasoning_item_encrypted_content),
-                );
-                break 'loop_call_turns Ok((current_message_content, generation_metadata));
+                McpToolCallGate::Ask(approval_request) => {
+                    current_message_content
+                        .push(ContentPart::ToolApprovalRequest(approval_request));
+                    let generation_metadata = build_generation_metadata(
+                        total_prompt_tokens,
+                        total_completion_tokens,
+                        total_total_tokens,
+                        total_reasoning_tokens,
+                        langfuse_trace_id.clone(),
+                        false,
+                        None,
+                        non_empty_string(&captured_reasoning_summary),
+                        non_empty_vec(&captured_reasoning_items),
+                        non_empty_vec(&captured_reasoning_item_encrypted_content),
+                    );
+                    break 'loop_call_turns Ok((current_message_content, generation_metadata));
+                }
+            };
+            if let Some(error_message) = refusal {
+                let tool_call_started = tool_call_started_at
+                    .remove(&unfinished_tool_call.call_id)
+                    .unwrap_or_else(now_timestamp);
+                current_message_content.push(ContentPart::ToolUse(ToolUse {
+                    tool_call_id: unfinished_tool_call.call_id.clone(),
+                    status: MessageToolCallStatus::Error,
+                    tool_name: unfinished_tool_call.fn_name.clone(),
+                    input: Some(unfinished_tool_call.fn_arguments.clone()),
+                    progress_message: None,
+                    progress: None,
+                    total: None,
+                    output: Some(json!({ "status": "rejected", "error": error_message })),
+                    started_at: Some(tool_call_started),
+                    ended_at: Some(now_timestamp()),
+                }));
+                current_turn_tool_responses.push(genai::chat::ToolResponse {
+                    call_id: unfinished_tool_call.call_id.clone(),
+                    content: error_message,
+                });
+                continue;
             }
             let output_schema = managed_tool_call.tool.output_schema.clone();
             let tool_call_span_start_time = if langfuse_enabled {
@@ -6789,10 +6808,10 @@ fn merge_action_facet_into_mcp_allowlist(
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_assistant_server_filter, derive_requested_server_ids_from_allowlist,
+        McpToolCallGate, apply_assistant_server_filter, derive_requested_server_ids_from_allowlist,
         effective_client_tool_allowlist, expand_tool_patterns_with_discovered_tools,
         filter_mcp_tools_by_disabled_patterns, filter_mcp_tools_by_disabled_servers,
-        filter_mcp_tools_by_write_access, mcp_tool_approval_request,
+        filter_mcp_tools_by_write_access, gate_mcp_tool_call,
         merge_action_facet_into_mcp_allowlist,
     };
     use crate::config::{McpToolApprovalConfig, McpToolApprovalPreset};
@@ -7071,12 +7090,16 @@ mod tests {
             (&disabled, &unannotated, false),
         ];
         for (config, tool, expected) in cases {
-            let request = mcp_tool_approval_request(config, "server", tool, &call, None);
+            let gate = gate_mcp_tool_call(config, "server", tool, &call, None);
             let verdict = evaluate_mcp_tool_approval(config, tool);
-            assert_eq!(request.is_some(), expected, "{:?} {}", config, tool.name);
-            assert_eq!(verdict.requires_approval, request.is_some());
-            if let Some(request) = request {
-                assert_eq!(request.annotations, verdict.annotations);
+            let asks = matches!(gate, McpToolCallGate::Ask(_));
+            assert_eq!(asks, expected, "{:?} {}", config, tool.name);
+            assert_eq!(verdict.requires_approval, asks);
+            match gate {
+                McpToolCallGate::Ask(request) => {
+                    assert_eq!(request.annotations, verdict.annotations)
+                }
+                other => assert_eq!(other, McpToolCallGate::Run),
             }
         }
 
@@ -7086,24 +7109,79 @@ mod tests {
             ToolAnnotations::from_raw(None, Some(true), Some(false), Some(true), Some(false)),
         );
         let ask = Some(UserToolDecision::Ask);
-        assert!(
-            mcp_tool_approval_request(&permissive, "server", &read_only_closed, &call, ask)
-                .is_some()
-        );
-        assert!(
-            mcp_tool_approval_request(&disabled, "server", &read_only_closed, &call, ask).is_none()
+        assert!(matches!(
+            gate_mcp_tool_call(&permissive, "server", &read_only_closed, &call, ask),
+            McpToolCallGate::Ask(_)
+        ));
+        assert_eq!(
+            gate_mcp_tool_call(&disabled, "server", &read_only_closed, &call, ask),
+            McpToolCallGate::Run
         );
         let granting = McpToolApprovalConfig {
             allow_always: true,
             ..restrictive.clone()
         };
         let grant = Some(UserToolDecision::AlwaysAllow);
-        assert!(
-            mcp_tool_approval_request(&granting, "server", &unannotated, &call, grant).is_none()
+        assert_eq!(
+            gate_mcp_tool_call(&granting, "server", &unannotated, &call, grant),
+            McpToolCallGate::Run
         );
-        assert!(
-            mcp_tool_approval_request(&restrictive, "server", &unannotated, &call, grant).is_some()
+        assert!(matches!(
+            gate_mcp_tool_call(&restrictive, "server", &unannotated, &call, grant),
+            McpToolCallGate::Ask(_)
+        ));
+    }
+
+    #[test]
+    fn a_denial_is_refused_at_the_gate_under_every_policy() {
+        let call = ToolCall {
+            call_id: "call-1".to_string(),
+            fn_name: "publish".to_string(),
+            fn_arguments: json!({}),
+            thought_signatures: None,
+        };
+        let read_only_closed = Tool::new("read", "read", Map::new()).with_annotations(
+            ToolAnnotations::from_raw(None, Some(true), Some(false), Some(true), Some(false)),
         );
+        let unannotated = Tool::new("unknown", "unknown", Map::new());
+        let permissive = McpToolApprovalConfig {
+            enabled: true,
+            preset: McpToolApprovalPreset::Permissive,
+            allow_always: false,
+        };
+        let restrictive = McpToolApprovalConfig {
+            preset: McpToolApprovalPreset::Restrictive,
+            ..permissive.clone()
+        };
+        let granting = McpToolApprovalConfig {
+            allow_always: true,
+            ..restrictive.clone()
+        };
+        let disabled = McpToolApprovalConfig {
+            enabled: false,
+            ..permissive.clone()
+        };
+
+        // A denial stored after the tool set was prepared reaches the gate
+        // as a live row; it must never read as "run without asking", nor
+        // park on a card the user has already answered.
+        let denied = Some(UserToolDecision::Denied);
+        for config in [&permissive, &restrictive, &granting, &disabled] {
+            for tool in [&read_only_closed, &unannotated] {
+                match gate_mcp_tool_call(config, "server", tool, &call, denied) {
+                    McpToolCallGate::Refuse(message) => {
+                        assert!(message.contains("'publish'"), "{:?} {}", config, tool.name);
+                        assert!(
+                            message.contains("was not executed"),
+                            "{:?} {}",
+                            config,
+                            tool.name
+                        );
+                    }
+                    other => panic!("{:?} {} gated as {:?}", config, tool.name, other),
+                }
+            }
+        }
     }
 
     #[test]
