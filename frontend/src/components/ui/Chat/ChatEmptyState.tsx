@@ -13,7 +13,13 @@ import type { ChatSession } from "@/types/chat";
 
 type BaseEmptyStateProps = {
   className?: string;
-  /** A registry override is a whole welcome: it renders once in "upper", "lower" stays empty. */
+  /**
+   * `ChatWelcomeScreen` and `AssistantWelcomeScreen` overrides are a whole
+   * welcome: they render once in "upper" and "lower" stays empty. An
+   * `AssistantWelcomeUpper` override is the hero alone, so the host keeps
+   * rendering its conversation list in "lower". Registering both assistant
+   * points is a kit bug; `AssistantWelcomeUpper` wins.
+   */
   part?: "upper" | "lower";
 };
 
@@ -48,6 +54,16 @@ export function ChatEmptyState(props: ChatEmptyStateProps) {
       pinnedChatsLimit: props.pinnedChatsLimit,
       className: props.className,
     };
+
+    const AssistantWelcomeUpperOverride =
+      componentRegistry.AssistantWelcomeUpper;
+    if (AssistantWelcomeUpperOverride) {
+      return part === "lower" ? (
+        <AssistantWelcomeLower {...assistantProps} />
+      ) : (
+        <AssistantWelcomeUpperOverride {...assistantProps} />
+      );
+    }
 
     const AssistantWelcomeOverride = componentRegistry.AssistantWelcomeScreen;
     if (AssistantWelcomeOverride) {

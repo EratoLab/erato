@@ -66,10 +66,14 @@ In a customer fork:
 | `ChatFileSourceSelector`      | Chat input     | File source selector for chat uploads                      |
 | `ChatWelcomeScreen`           | Chat           | Default chat empty state component                         |
 | `StarterPrompts`              | Chat           | Prompt suggestions in the chat welcome, under the composer |
+| `AssistantWelcomeUpper`       | Assistant chat | Assistant welcome hero only, above the composer            |
 | `AssistantWelcomeScreen`      | Assistant chat | Assistant chat empty state component                       |
 
 `ChatWelcomeScreen` and `AssistantWelcomeScreen` overrides render whole, above
 the composer, and suppress the default content beneath it (subtitle,
-description, starter prompts, past conversations). A `StarterPrompts` override
-only applies to the built-in welcome, where it renders beneath the composer in
-the centered layout and above it in the bottom-aligned layout.
+description, starter prompts, past conversations). An `AssistantWelcomeUpper`
+override replaces only the hero above the composer and keeps the host's past
+conversations below it; registering it together with `AssistantWelcomeScreen` is
+a kit bug, and `AssistantWelcomeUpper` wins. A `StarterPrompts` override only
+applies to the built-in welcome, where it renders beneath the composer in the
+centered layout and above it in the bottom-aligned layout.

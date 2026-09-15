@@ -61,16 +61,19 @@ describe("ChatEmptyState", () => {
   const previous = {
     chat: componentRegistry.ChatWelcomeScreen,
     assistant: componentRegistry.AssistantWelcomeScreen,
+    assistantUpper: componentRegistry.AssistantWelcomeUpper,
   };
 
   beforeEach(() => {
     componentRegistry.ChatWelcomeScreen = null;
     componentRegistry.AssistantWelcomeScreen = null;
+    componentRegistry.AssistantWelcomeUpper = null;
   });
 
   afterEach(() => {
     componentRegistry.ChatWelcomeScreen = previous.chat;
     componentRegistry.AssistantWelcomeScreen = previous.assistant;
+    componentRegistry.AssistantWelcomeUpper = previous.assistantUpper;
   });
 
   describe("chat variant", () => {
@@ -160,6 +163,75 @@ describe("ChatEmptyState", () => {
         className: "mt-2",
       });
       expect(container.querySelectorAll("[data-testid]")).toHaveLength(1);
+    });
+
+    it("keeps the built-in lower part when only the upper half is overridden", () => {
+      const onChatPin = vi.fn();
+      const UpperOverride = vi.fn(({ className }: { className?: string }) => (
+        <div data-testid="assistant-upper-override" className={className} />
+      ));
+      componentRegistry.AssistantWelcomeUpper = UpperOverride;
+
+      render(
+        <>
+          <ChatEmptyState {...props} part="upper" onChatPin={onChatPin} />
+          <ChatEmptyState {...props} part="lower" onChatPin={onChatPin} />
+        </>,
+      );
+
+      expect(UpperOverride).toHaveBeenCalledTimes(1);
+      expect(UpperOverride.mock.calls[0][0]).toEqual({
+        assistant,
+        pastChats,
+        delegatedRuns: undefined,
+        delegationEnabled: true,
+        isLoadingChats: undefined,
+        onChatPin,
+        pinnedChatsCount: 1,
+        pinnedChatsLimit: 5,
+        className: "mt-2",
+      });
+      expect(screen.getByTestId("assistant-upper-override")).toHaveClass(
+        "mt-2",
+      );
+      expect(screen.getByTestId("assistant-lower")).toHaveTextContent("1");
+      expect(screen.queryByTestId("assistant-upper")).toBeNull();
+    });
+
+    it("leaves the lower part empty for a whole-welcome override", () => {
+      componentRegistry.AssistantWelcomeScreen = vi.fn(() => (
+        <div data-testid="assistant-override" />
+      ));
+
+      const { container } = render(<ChatEmptyState {...props} part="lower" />);
+
+      expect(container.firstChild).toBeNull();
+      expect(screen.queryByTestId("assistant-lower")).toBeNull();
+    });
+
+    it("prefers the upper-half override when both are registered", () => {
+      const WholeOverride = vi.fn(() => (
+        <div data-testid="assistant-override" />
+      ));
+      const UpperOverride = vi.fn(() => (
+        <div data-testid="assistant-upper-override" />
+      ));
+      componentRegistry.AssistantWelcomeScreen = WholeOverride;
+      componentRegistry.AssistantWelcomeUpper = UpperOverride;
+
+      render(
+        <>
+          <ChatEmptyState {...props} part="upper" />
+          <ChatEmptyState {...props} part="lower" />
+        </>,
+      );
+
+      expect(WholeOverride).not.toHaveBeenCalled();
+      expect(UpperOverride).toHaveBeenCalledTimes(1);
+      expect(
+        screen.getByTestId("assistant-upper-override"),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("assistant-lower")).toHaveTextContent("1");
     });
   });
 });

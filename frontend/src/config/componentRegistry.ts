@@ -189,6 +189,15 @@ export interface ComponentRegistry {
   StarterPrompts: ComponentType<StarterPromptsRendererProps> | null;
 
   /**
+   * Override for the hero half of the assistant welcome only: the part rendered
+   * above the composer. The host keeps its own conversation list below it, so
+   * the split layout stays intact and the list keeps growing under its own
+   * scroll. Where `AssistantWelcomeScreen` replaces the whole welcome and leaves
+   * the lower row empty, this replaces the upper row and nothing else.
+   */
+  AssistantWelcomeUpper: ComponentType<AssistantWelcomeScreenProps> | null;
+
+  /**
    * Override for the assistant chat welcome/empty state component.
    * Used when opening an assistant chat with no messages.
    */
@@ -323,6 +332,7 @@ const emptyComponentRegistry = (): ComponentRegistry => ({
   ChatHistoryList: null,
   ChatWelcomeScreen: null,
   StarterPrompts: null,
+  AssistantWelcomeUpper: null,
   AssistantWelcomeScreen: null,
   MessageControls: null,
   ChatMessageRenderer: null,
