@@ -4266,6 +4266,55 @@ export const useCreateUserToolApprovalSetting = (
   });
 };
 
+export type ApplyUserToolApprovalSettingsBatchError =
+  Fetcher.ErrorWrapper<undefined>;
+
+export type ApplyUserToolApprovalSettingsBatchVariables = {
+  body: Schemas.ApplyUserToolApprovalSettingsBatchRequest;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchApplyUserToolApprovalSettingsBatch = (
+  variables: ApplyUserToolApprovalSettingsBatchVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.UserToolApprovalSettingsResponse,
+    ApplyUserToolApprovalSettingsBatchError,
+    Schemas.ApplyUserToolApprovalSettingsBatchRequest,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/mcp-tool-approval-settings/batch",
+    method: "put",
+    ...variables,
+    signal,
+  });
+
+export const useApplyUserToolApprovalSettingsBatch = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.UserToolApprovalSettingsResponse,
+      ApplyUserToolApprovalSettingsBatchError,
+      ApplyUserToolApprovalSettingsBatchVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.UserToolApprovalSettingsResponse,
+    ApplyUserToolApprovalSettingsBatchError,
+    ApplyUserToolApprovalSettingsBatchVariables
+  >({
+    mutationFn: (variables: ApplyUserToolApprovalSettingsBatchVariables) =>
+      fetchApplyUserToolApprovalSettingsBatch(
+        deepMerge(fetcherOptions, variables),
+      ),
+    ...options,
+  });
+};
+
 export type DeactivateUserToolApprovalSettingPathParams = {
   /**
    * Approval setting ID

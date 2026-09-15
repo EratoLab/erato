@@ -73,6 +73,11 @@ export type AllDrivesResponse = {
   drives: Drive[];
 };
 
+export type ApplyUserToolApprovalSettingsBatchRequest = {
+  decisions: UserToolApprovalDecisionEntry[];
+  mcp_server_id: string;
+};
+
 /**
  * Response from the archive all chats endpoint
  */
@@ -1650,6 +1655,11 @@ export type ListMcpServerToolsResponse = {
    * same way the in-chat approval card does.
    */
   allow_always: boolean;
+  /**
+   * Whether a stored "ask" decision is honored: it needs the approval
+   * gate, so with approvals disabled the decision is stored but inert.
+   */
+  ask_available: boolean;
   server_id: string;
   status: McpServerStatusValue;
   /**
@@ -1685,10 +1695,11 @@ export type McpServerStatusValue =
 
 export type McpServerTool = {
   annotations: McpServerToolAnnotations;
-  approval: McpServerToolApproval;
   description?: string | null | undefined;
+  effective: McpToolEffectiveState;
   is_wait_tool: boolean;
   name: string;
+  policy: McpServerToolPolicy;
   title: string;
   user_decision: McpServerToolUserDecision;
 };
@@ -1711,12 +1722,23 @@ export type McpServerToolAnnotations = {
 /**
  * What the configured approval policy does before running the tool.
  */
-export type McpServerToolApproval = "auto" | "ask";
+export type McpServerToolPolicy = "auto" | "ask";
 
 /**
- * The requesting user's persistent decision for the tool.
+ * The requesting user's stored decision for the tool, whether or not the
+ * policy currently honors it.
  */
-export type McpServerToolUserDecision = "ask" | "always" | "denied";
+export type McpServerToolUserDecision =
+  | "none"
+  | "always_allow"
+  | "ask"
+  | "denied";
+
+/**
+ * What actually happens when the tool is called, once the user's stored
+ * decision is laid over the policy verdict.
+ */
+export type McpToolEffectiveState = "allow" | "ask" | "denied";
 
 /**
  * An assistant the user @-mentioned in a message, resolved for display.
@@ -3058,6 +3080,11 @@ export type UserProfile = {
   preferred_language: string;
 };
 
+export type UserToolApprovalDecisionEntry = {
+  decision?: null | UserToolDecision;
+  tool_name: string;
+};
+
 export type UserToolApprovalSetting = {
   decision: UserToolDecision;
   /**
@@ -3074,8 +3101,8 @@ export type UserToolApprovalSettingsResponse = {
 
 /**
  * A user's persistent decision for one MCP tool. Rows exist only while a
- * decision is active; "ask each time" is the absence of a row.
+ * decision is active; the absence of a row means the policy default applies.
  */
-export type UserToolDecision = "always_allow" | "denied";
+export type UserToolDecision = "always_allow" | "ask" | "denied";
 
 export type Value = void;
