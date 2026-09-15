@@ -7121,7 +7121,7 @@
       },
       "McpServerTool": {
         "type": "object",
-        "description": "One tool as the server declares it. `name`, `title` and `description`\nare vendor text passed through `sanitize_display_text`; a client shows\nthem as plain text and never interprets them.",
+        "description": "One tool as the server declares it. `title` and `description` are vendor\ntext passed through `sanitize_display_text`; a client shows them as plain\ntext and never interprets them. `name` is the tool's identity, not display\ntext: a client sends it back unchanged when it stores a decision or\nswitches the tool off for a chat, and every gate compares it byte for byte\nwith the name the server declares.",
         "required": [
           "name",
           "title",
@@ -7154,14 +7154,16 @@
             "type": "boolean"
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "The name the server declares, verbatim; the key a client echoes back."
           },
           "policy": {
             "$ref": "#/components/schemas/McpServerToolPolicy",
             "description": "The policy's own verdict, before any user decision."
           },
           "title": {
-            "type": "string"
+            "type": "string",
+            "description": "Display text: the server's title, else its annotation title, else the\nname, each cleaned; the first that survives cleaning."
           },
           "user_decision": {
             "$ref": "#/components/schemas/McpServerToolUserDecision"
