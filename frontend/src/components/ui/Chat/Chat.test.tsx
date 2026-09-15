@@ -253,6 +253,7 @@ const chatDetail = (overrides: Partial<ChatDetail> = {}): ChatDetail => ({
   can_edit: true,
   mcp_write_tools_enabled: true,
   disabled_mcp_server_ids: [],
+  disabled_mcp_tools: [],
   ...overrides,
 });
 
