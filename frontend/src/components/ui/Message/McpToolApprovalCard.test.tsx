@@ -1,8 +1,13 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
+import {
+  listMcpServerToolsQuery,
+  listUserToolApprovalSettingsQuery,
+} from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { ChatContext } from "@/providers/ChatProvider";
 
 import { McpToolApprovalCard } from "./McpToolApprovalCard";
@@ -48,6 +53,16 @@ const withChatContext = (ui: ReactNode, chatId = "chat-1") => (
   </ChatContext.Provider>
 );
 
+const renderCard = (ui: ReactNode) => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const result = render(
+    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
+  );
+  return { ...result, queryClient };
+};
+
 afterEach(() => {
   vi.unstubAllGlobals();
   archived.value = false;
@@ -57,7 +72,7 @@ afterEach(() => {
 
 describe("McpToolApprovalCard", () => {
   it("shows the pending tool call as a visible referent above the consent card", () => {
-    render(
+    renderCard(
       <McpToolApprovalCard
         messageId="message-1"
         request={approvalRequest}
@@ -85,7 +100,7 @@ describe("McpToolApprovalCard", () => {
       );
     vi.stubGlobal("fetch", fetchMock);
 
-    render(
+    renderCard(
       <McpToolApprovalCard
         messageId="message-1"
         request={approvalRequest}
@@ -106,8 +121,60 @@ describe("McpToolApprovalCard", () => {
     });
   });
 
+  it("drops the cached tool rosters after an Always allow, not after a one-off", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(() =>
+        Promise.resolve(new Response("", { status: 200 })),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { queryClient, unmount } = renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={approvalRequest}
+        resolution={null}
+      />,
+    );
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+
+    fireEvent.click(screen.getByText("Always allow"));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("mcp-tool-approval")).not.toBeInTheDocument();
+    });
+    // The grant lands on the server's roster and the account-wide settings
+    // list; both are addressed by the same keys their consumers subscribe
+    // with, so a stale 5-minute listing cannot outlive the decision.
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: listMcpServerToolsQuery({
+        pathParams: { serverId: "mock_mcp_approval" },
+      }).queryKey,
+    });
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: listUserToolApprovalSettingsQuery({}).queryKey,
+    });
+    unmount();
+
+    const { queryClient: onceClient } = renderCard(
+      <McpToolApprovalCard
+        messageId="message-2"
+        request={approvalRequest}
+        resolution={null}
+      />,
+    );
+    const onceInvalidate = vi.spyOn(onceClient, "invalidateQueries");
+
+    fireEvent.click(screen.getByText("Allow once"));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("mcp-tool-approval")).not.toBeInTheDocument();
+    });
+    expect(onceInvalidate).not.toHaveBeenCalled();
+  });
+
   it("holds the chat's confirmation registry while the decision is pending", () => {
-    const { unmount } = render(
+    const { unmount } = renderCard(
       withChatContext(
         <McpToolApprovalCard
           messageId="message-1"
@@ -133,7 +200,7 @@ describe("McpToolApprovalCard", () => {
       .mockResolvedValue(new Response("", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    render(
+    renderCard(
       withChatContext(
         <McpToolApprovalCard
           messageId="message-1"
@@ -156,7 +223,7 @@ describe("McpToolApprovalCard", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
-    render(
+    renderCard(
       <McpToolApprovalCard
         messageId="message-1"
         request={{ ...approvalRequest, allow_always: false }}
@@ -256,7 +323,7 @@ describe("McpToolApprovalCard", () => {
   });
 
   it("does not register an already-resolved request", () => {
-    render(
+    renderCard(
       withChatContext(
         <McpToolApprovalCard
           messageId="message-1"
