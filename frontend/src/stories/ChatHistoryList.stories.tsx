@@ -98,6 +98,7 @@ const meta: Meta<typeof ChatHistoryList> = {
     currentSessionId: "chat-plain",
     onSessionSelect: action("select"),
     onSessionArchive: action("archive"),
+    onSessionUnarchive: action("unarchive"),
     onSessionEditTitle: action("edit title"),
     onSessionShare: action("share"),
   },
@@ -117,6 +118,28 @@ export const NoStatuses: Story = {
       description: {
         story:
           "Without store entries every row renders exactly as before the feature — no dot, no reserved space.",
+      },
+    },
+  },
+};
+
+export const ArchivedRow: Story = {
+  name: "Archived row",
+  args: {
+    sessions: [
+      {
+        ...session("chat-archived", "Vendor contract review", 2880),
+        archivedAt: minutesAgo(2880),
+      },
+      session("chat-plain", "Weekend trip packing list", 45),
+    ],
+    currentSessionId: null,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "An archived row carries the marker in its label and swaps Archive for Unarchive; Share drops out with it.",
       },
     },
   },

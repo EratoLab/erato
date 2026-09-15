@@ -327,4 +327,19 @@ describe("DropdownMenu", () => {
     expect(trigger.className).not.toMatch(/\bshadow-sm\b/);
     expect(trigger.className).not.toMatch(/\bpx-3\b|\bpy-2\b/);
   });
+
+  it("puts an item's test id on the row itself", async () => {
+    render(
+      <DropdownMenu
+        items={[{ label: "Rename", onClick: vi.fn(), testId: "row-rename" }]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+
+    expect(await screen.findByTestId("row-rename")).toHaveAttribute(
+      "role",
+      "menuitem",
+    );
+  });
 });

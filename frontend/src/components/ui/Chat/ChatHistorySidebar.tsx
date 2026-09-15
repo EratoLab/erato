@@ -140,6 +140,7 @@ export interface ChatHistorySidebarProps {
   currentSessionId: string | null;
   onSessionSelect: (sessionId: string) => void;
   onSessionArchive: (sessionId: string) => void;
+  onSessionUnarchive: (sessionId: string) => void;
   onSessionEditTitle?: (sessionId: string) => void;
   onSessionShare?: (sessionId: string) => void;
   pinnedSessions?: ChatSession[];
@@ -407,6 +408,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     currentSessionId,
     onSessionSelect,
     onSessionArchive,
+    onSessionUnarchive,
     onSessionEditTitle,
     onSessionShare,
     pinnedSessions = [],
@@ -826,6 +828,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                           currentSessionId={currentSessionId}
                           onSessionSelect={onSessionSelect}
                           onSessionArchive={onSessionArchive}
+                          onSessionUnarchive={onSessionUnarchive}
                           onSessionEditTitle={onSessionEditTitle}
                           onSessionShare={onSessionShare}
                           onSessionPin={onSessionPin}
@@ -860,6 +863,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                             currentSessionId={currentSessionId}
                             onSessionSelect={onSessionSelect}
                             onSessionArchive={onSessionArchive}
+                            onSessionUnarchive={onSessionUnarchive}
                             onSessionEditTitle={onSessionEditTitle}
                             onSessionShare={onSessionShare}
                             onSessionPin={onSessionPin}
@@ -920,6 +924,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                                 currentSessionId={currentSessionId}
                                 onSessionSelect={onSessionSelect}
                                 onSessionArchive={onSessionArchive}
+                                onSessionUnarchive={onSessionUnarchive}
                                 onSessionEditTitle={onSessionEditTitle}
                                 onSessionShare={onSessionShare}
                                 onSessionPin={onSessionPin}

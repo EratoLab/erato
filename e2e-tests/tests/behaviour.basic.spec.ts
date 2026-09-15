@@ -3,7 +3,11 @@ import path from "path";
 
 import { test, expect, type Page } from "@playwright/test";
 import { TAG_CI } from "./tags";
-import { chatIsReadyToChat, ensureOpenSidebar } from "./shared";
+import {
+  archiveChatFromRow,
+  chatIsReadyToChat,
+  ensureOpenSidebar,
+} from "./shared";
 
 const dispatchFileDragEvent = async (
   page: Page,
@@ -124,14 +128,7 @@ test(
       `[data-chat-id="${firstChatId}"]`,
     );
     await expect(firstChatSidebarItem).toBeVisible();
-    // Open the menu for the first chat
-    await firstChatSidebarItem
-      .getByRole("button", { name: "Open menu" })
-      .click();
-    // Click 'Remove' in the menu
-    await page.getByRole("menuitem", { name: "Remove" }).click();
-    // Confirm in the dialog
-    await page.getByRole("button", { name: "Confirm action" }).click();
+    await archiveChatFromRow(page, firstChatSidebarItem);
     // The first chat should no longer be in the sidebar
     await expect(
       sidebar.locator(`[data-chat-id="${firstChatId}"]`),

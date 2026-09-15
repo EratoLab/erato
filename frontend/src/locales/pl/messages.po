@@ -1741,22 +1741,30 @@ msgid "chat.history.group.unread"
 msgstr "Nieprzeczytane"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/chatArchiveActions.tsx
+msgid "chat.history.item.archived"
+msgstr "Zarchiwizowany"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.loading_more"
 msgstr "Ładowanie..."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
-msgid "chat.history.menu.confirm_remove.message"
-msgstr "Czy na pewno chcesz usunąć ten czat?"
+#: src/components/ui/Chat/chatArchiveActions.tsx
+msgid "chat.history.menu.confirm_archive.action_required"
+msgstr "Ten czat czeka na zatwierdzenie narzędzia. Zarchiwizowanie go przerywa oczekiwanie, a cofnięcie archiwizacji nie wznowi odpowiedzi."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
+#: src/components/ui/Chat/chatArchiveActions.tsx
+msgid "chat.history.menu.confirm_archive.running"
+msgstr "Ten czat nadal generuje odpowiedź. Zarchiwizowanie go jej nie przerwie."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/chatArchiveActions.tsx
 msgid "chat.history.menu.confirm_remove.title"
-msgstr "Potwierdź usunięcie"
+msgstr "Zarchiwizować ten czat?"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
@@ -1773,16 +1781,20 @@ msgid "chat.history.menu.pinLimitReached"
 msgstr "Osiągnięto limit przypięć"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
+#: src/components/ui/Chat/chatArchiveActions.tsx
 msgid "chat.history.menu.remove"
-msgstr "Usuń"
+msgstr "Archiwizuj"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.rename"
 msgstr "Zmień nazwę"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/chatArchiveActions.tsx
+msgid "chat.history.menu.unarchive"
+msgstr "Cofnij archiwizację"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
@@ -1837,6 +1849,11 @@ msgstr "Tytuł niestandardowy"
 #: src/components/ui/Chat/EditChatTitleDialog.tsx
 msgid "chat.history.rename.userProvided.placeholder"
 msgstr "Pozostaw puste, aby użyć wygenerowanego tytułu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/unarchiveFeedback.ts
+msgid "chat.history.unarchiveFailed"
+msgstr "Nie udało się cofnąć archiwizacji czatu"
 
 #. js-lingui-explicit-id
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
@@ -3432,7 +3449,7 @@ msgstr "Archiwizuj wszystkie czaty"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.dataTab.archiveAll.confirmMessage"
-msgstr "Spowoduje to zarchiwizowanie wszystkich niezarchiwizowanych czatów na Twoim koncie."
+msgstr "Spowoduje to zarchiwizowanie wszystkich niezarchiwizowanych czatów na Twoim koncie. Archiwizację poszczególnych czatów możesz później cofnąć."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

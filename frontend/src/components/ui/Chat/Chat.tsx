@@ -45,6 +45,7 @@ import { ChatShareDialog } from "./ChatShareDialog";
 import { ChatUsageAdvisory } from "./ChatUsageAdvisory";
 import { DelegatedRunsSection } from "./DelegatedRunsSection";
 import { EditChatTitleDialog } from "./EditChatTitleDialog";
+import { notifyUnarchiveFailed } from "./unarchiveFeedback";
 import { Button } from "../Controls/Button";
 import { ChatErrorBoundary } from "../Feedback/ChatErrorBoundary";
 import { FeedbackCommentDialog } from "../Feedback/FeedbackCommentDialog";
@@ -252,6 +253,7 @@ export const Chat = ({
     currentChatId,
     navigateToChat: switchSession,
     archiveChat,
+    unarchiveChat,
     updateChatTitle,
     pinChat,
     pinnedChats: pinnedChatHistory,
@@ -483,6 +485,10 @@ export const Chat = ({
   const handleArchiveSession = (sessionId: string) => {
     // Use void to explicitly ignore the promise returned by archiveChat
     void archiveChat(sessionId);
+  };
+
+  const handleUnarchiveSession = (sessionId: string) => {
+    void unarchiveChat(sessionId).catch(notifyUnarchiveFailed);
   };
 
   const [titleDialogChatId, setTitleDialogChatId] = useState<string | null>(
@@ -792,6 +798,7 @@ export const Chat = ({
           currentSessionId={currentChatId ?? ""}
           onSessionSelect={handleSessionSelectWrapper}
           onSessionArchive={handleArchiveSession}
+          onSessionUnarchive={handleUnarchiveSession}
           onSessionEditTitle={handleEditTitleSession}
           pinnedSessions={pinnedSessions}
           pinnedChatsLimit={pinnedChatsLimit}

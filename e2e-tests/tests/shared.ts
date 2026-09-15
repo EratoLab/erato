@@ -1,4 +1,4 @@
-import { expect, Page, Browser, test } from "@playwright/test";
+import { expect, Locator, Page, Browser, test } from "@playwright/test";
 import { execSync } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -192,6 +192,23 @@ export const ensureOpenSidebar = async (page: Page) => {
   const expandButton = page.getByLabel("expand sidebar");
   if (await expandButton.isVisible()) {
     await expandButton.click();
+  }
+};
+
+/**
+ * Only a generating or approval-parked row confirms, and `confirm` has to be
+ * told rather than probed: an absent dialog and one still mounting look alike.
+ */
+export const archiveChatFromRow = async (
+  page: Page,
+  row: Locator,
+  { confirm = false }: { confirm?: boolean } = {},
+) => {
+  await row.hover();
+  await row.getByRole("button", { name: "Open menu" }).click();
+  await page.getByTestId("chat-history-menu-archive").click();
+  if (confirm) {
+    await page.getByRole("button", { name: "Confirm action" }).click();
   }
 };
 

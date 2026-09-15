@@ -5,6 +5,7 @@ import { useLocation } from "react-router-dom";
 import { ChatHistorySidebar } from "@/components/ui/Chat/ChatHistorySidebar";
 import { ChatShareDialog } from "@/components/ui/Chat/ChatShareDialog";
 import { EditChatTitleDialog } from "@/components/ui/Chat/EditChatTitleDialog";
+import { notifyUnarchiveFailed } from "@/components/ui/Chat/unarchiveFeedback";
 import { useSidebar } from "@/hooks/ui";
 import { useProfile } from "@/hooks/useProfile";
 import { useChatContext } from "@/providers/ChatProvider";
@@ -30,6 +31,7 @@ export default function AssistantsPageStructure({
     currentChatId,
     navigateToChat: switchSession,
     archiveChat,
+    unarchiveChat,
     createNewChat: createChat,
     updateChatTitle,
     pinChat,
@@ -87,6 +89,10 @@ export default function AssistantsPageStructure({
   // Handle archiving a session
   const handleArchiveSession = (sessionId: string) => {
     void archiveChat(sessionId);
+  };
+
+  const handleUnarchiveSession = (sessionId: string) => {
+    void unarchiveChat(sessionId).catch(notifyUnarchiveFailed);
   };
 
   const handlePinSession = useCallback(
@@ -170,6 +176,7 @@ export default function AssistantsPageStructure({
         currentSessionId={currentChatId ?? ""}
         onSessionSelect={handleSessionSelect}
         onSessionArchive={handleArchiveSession}
+        onSessionUnarchive={handleUnarchiveSession}
         onSessionEditTitle={handleEditTitleSession}
         onSessionShare={chatSharingEnabled ? handleOpenShareDialog : undefined}
         pinnedSessions={pinnedSessions}

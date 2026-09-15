@@ -1741,22 +1741,30 @@ msgid "chat.history.group.unread"
 msgstr "Non lus"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/chatArchiveActions.tsx
+msgid "chat.history.item.archived"
+msgstr "Archivé"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.loading_more"
 msgstr "Chargement..."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
-msgid "chat.history.menu.confirm_remove.message"
-msgstr "Êtes-vous sûr de vouloir supprimer ce chat ?"
+#: src/components/ui/Chat/chatArchiveActions.tsx
+msgid "chat.history.menu.confirm_archive.action_required"
+msgstr "Ce chat attend l'autorisation d'un outil. L'archiver abandonne cette demande, et le désarchiver ne reprendra pas la réponse."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
+#: src/components/ui/Chat/chatArchiveActions.tsx
+msgid "chat.history.menu.confirm_archive.running"
+msgstr "Ce chat est encore en cours de génération. L'archiver n'interrompt pas la réponse."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/chatArchiveActions.tsx
 msgid "chat.history.menu.confirm_remove.title"
-msgstr "Confirmer la suppression"
+msgstr "Archiver ce chat ?"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
@@ -1773,16 +1781,20 @@ msgid "chat.history.menu.pinLimitReached"
 msgstr "Limite d’épingles atteinte"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
+#: src/components/ui/Chat/chatArchiveActions.tsx
 msgid "chat.history.menu.remove"
-msgstr "Supprimer"
+msgstr "Archiver"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/pages/SearchPage.tsx
 msgid "chat.history.menu.rename"
 msgstr "Renommer"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/chatArchiveActions.tsx
+msgid "chat.history.menu.unarchive"
+msgstr "Désarchiver"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
@@ -1837,6 +1849,11 @@ msgstr "Titre personnalisé"
 #: src/components/ui/Chat/EditChatTitleDialog.tsx
 msgid "chat.history.rename.userProvided.placeholder"
 msgstr "Laissez vide pour utiliser le titre généré"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/unarchiveFeedback.ts
+msgid "chat.history.unarchiveFailed"
+msgstr "Impossible de désarchiver la discussion"
 
 #. js-lingui-explicit-id
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
@@ -3432,7 +3449,7 @@ msgstr "Archiver toutes les discussions"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.dataTab.archiveAll.confirmMessage"
-msgstr "Cela archivera toutes les discussions non archivées de votre compte."
+msgstr "Cela archivera toutes les discussions non archivées de votre compte. Vous pourrez désarchiver des discussions individuellement par la suite."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

@@ -41,6 +41,7 @@ export interface DropdownMenuItem {
   confirmMessage?: string;
   confirmButtonVariant?: ButtonVariant;
   checked?: boolean;
+  testId?: string;
   /**
    * Skip the close delay. Required of any row that opens a dialog: the delayed
    * close returns focus to the trigger *after* the dialog has focused itself,
@@ -100,6 +101,7 @@ const MenuItem = memo(
       disabled={item.disabled}
       role="menuitem"
       tabIndex={-1}
+      data-testid={item.testId}
       leading={
         item.icon && (
           <span className="size-4 shrink-0" aria-hidden="true">

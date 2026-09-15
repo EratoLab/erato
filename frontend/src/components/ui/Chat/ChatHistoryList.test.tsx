@@ -1,5 +1,5 @@
 import { I18nProvider } from "@lingui/react";
-import { render, screen } from "@testing-library/react";
+import { render, renderHook, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
@@ -7,7 +7,11 @@ import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusSto
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
-import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
+import {
+  ChatHistoryList,
+  ChatHistoryListSkeleton,
+  useChatHistoryRowPresentation,
+} from "./ChatHistoryList";
 
 import type { ChatSession } from "@/types/chat";
 import type { Messages } from "@lingui/core";
@@ -34,11 +38,19 @@ vi.mock("../Controls/DropdownMenu", () => ({
       label: ReactNode;
       icon?: ReactNode;
       disabled?: boolean;
+      confirmAction?: boolean;
+      confirmMessage?: string;
     }>;
   }) => (
     <div data-testid="row-menu">
       {items.map((item) => (
-        <button key={String(item.label)} disabled={item.disabled} type="button">
+        <button
+          key={String(item.label)}
+          disabled={item.disabled}
+          type="button"
+          data-confirms={item.confirmAction ? "" : undefined}
+          data-confirm-message={item.confirmMessage}
+        >
           {item.icon}
           {item.label}
         </button>
@@ -151,9 +163,7 @@ describe("ChatHistoryList", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("withholds Remove from a run but keeps it on ordinary chats", async () => {
-      // Archiving a run neither checks nor cancels an in-flight generation,
-      // strands one parked on a tool approval, and cannot be undone.
+    it("withholds Archive from a run but keeps it on ordinary chats", async () => {
       const { i18n } = await import("@lingui/core");
       const ui = (session: ChatSession) => (
         <I18nProvider i18n={i18n}>
@@ -168,12 +178,12 @@ describe("ChatHistoryList", () => {
 
       const { rerender } = render(ui(run));
       expect(
-        screen.queryByRole("button", { name: "Remove" }),
+        screen.queryByRole("button", { name: "Archive" }),
       ).not.toBeInTheDocument();
 
       rerender(ui(sessions[0]));
       expect(
-        screen.getByRole("button", { name: "Remove" }),
+        screen.getByRole("button", { name: "Archive" }),
       ).toBeInTheDocument();
     });
 
@@ -189,6 +199,219 @@ describe("ChatHistoryList", () => {
       expect(
         screen.getByRole("link", { name: /Draft the summary/ }),
       ).toHaveAccessibleName(/action required/i);
+    });
+  });
+
+  describe("archived rows", () => {
+    const archivedSession: ChatSession = {
+      ...sessions[0],
+      archivedAt: new Date("2024-01-05").toISOString(),
+    };
+
+    const renderRow = async (session: ChatSession) => {
+      const { i18n } = await import("@lingui/core");
+      render(
+        <I18nProvider i18n={i18n}>
+          <ChatHistoryList
+            sessions={[session]}
+            currentSessionId={null}
+            onSessionSelect={vi.fn()}
+            onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
+            onSessionEditTitle={vi.fn()}
+            onSessionShare={vi.fn()}
+            onSessionPin={vi.fn()}
+          />
+        </I18nProvider>,
+      );
+    };
+
+    it("marks the row and carries the marker in its accessible name", async () => {
+      await renderRow(archivedSession);
+
+      expect(
+        screen.getByTestId("chat-history-item-archived"),
+      ).toHaveTextContent("Archived");
+      expect(
+        screen.getByRole("link", { name: "First chat, Archived" }),
+      ).toBeInTheDocument();
+    });
+
+    it("offers Unarchive and Rename in place of Archive, Pin and Share", async () => {
+      await renderRow(archivedSession);
+
+      expect(
+        screen.getByRole("button", { name: "Unarchive" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Rename" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Archive" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Pin" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Share" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("withholds Unarchive as well as Archive from an archived run", async () => {
+      await renderRow({
+        ...archivedSession,
+        provenanceKind: "delegation",
+        originChatId: "origin-1",
+        originChatTitle: "Q3 planning",
+      });
+
+      expect(
+        screen.getByRole("button", { name: "Rename" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Unarchive" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Archive" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("withholds them from a run whose origin no longer resolves", async () => {
+      await renderRow({ ...archivedSession, provenanceKind: "delegation" });
+
+      expect(
+        screen.queryByRole("button", { name: "Unarchive" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Archive" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("leaves an active row unmarked with its full menu", async () => {
+      await renderRow(sessions[0]);
+
+      expect(
+        screen.queryByTestId("chat-history-item-archived"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: "First chat" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Archive" }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Pin" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Share" })).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Unarchive" }),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  describe("useChatHistoryRowPresentation", () => {
+    it("returns the archived marker and folds it into the accessible name", async () => {
+      const { i18n } = await import("@lingui/core");
+      useGenerationStatusStore.setState({
+        statusByChatId: {
+          "chat-1": {
+            kind: "running",
+            startedAt: new Date().toISOString(),
+            localSeenAt: Date.now(),
+          },
+        },
+        currentChatId: null,
+      });
+
+      const { result } = renderHook(
+        () =>
+          useChatHistoryRowPresentation(
+            {
+              ...sessions[0],
+              archivedAt: new Date("2024-01-05").toISOString(),
+            },
+            ["From Q3 planning"],
+          ),
+        {
+          wrapper: ({ children }) => (
+            <I18nProvider i18n={i18n}>{children}</I18nProvider>
+          ),
+        },
+      );
+
+      expect(result.current.archived).toBe(true);
+      expect(result.current.archivedLabel).toBe("Archived");
+      expect(result.current.ariaLabel).toBe(
+        "First chat, Archived, From Q3 planning, Running",
+      );
+    });
+
+    it("returns no marker for an active chat", async () => {
+      const { i18n } = await import("@lingui/core");
+      const { result } = renderHook(
+        () => useChatHistoryRowPresentation(sessions[0]),
+        {
+          wrapper: ({ children }) => (
+            <I18nProvider i18n={i18n}>{children}</I18nProvider>
+          ),
+        },
+      );
+
+      expect(result.current.archived).toBe(false);
+      expect(result.current.archivedLabel).toBeNull();
+      expect(result.current.ariaLabel).toBe("First chat");
+    });
+  });
+
+  describe("archive confirmation", () => {
+    const renderArchiveItem = async () => {
+      const { i18n } = await import("@lingui/core");
+      render(
+        <I18nProvider i18n={i18n}>
+          <ChatHistoryList
+            sessions={[sessions[0]]}
+            currentSessionId={null}
+            onSessionSelect={vi.fn()}
+            onSessionArchive={vi.fn()}
+          />
+        </I18nProvider>,
+      );
+      return screen.getByRole("button", { name: "Archive" });
+    };
+
+    it("asks nothing of an idle row", async () => {
+      expect(await renderArchiveItem()).not.toHaveAttribute("data-confirms");
+    });
+
+    it("warns that a running generation carries on", async () => {
+      useGenerationStatusStore.setState({
+        statusByChatId: {
+          "chat-1": {
+            kind: "running",
+            startedAt: new Date().toISOString(),
+            localSeenAt: Date.now(),
+          },
+        },
+        currentChatId: null,
+      });
+
+      const item = await renderArchiveItem();
+
+      expect(item).toHaveAttribute("data-confirms");
+      expect(item.getAttribute("data-confirm-message")).toContain(
+        "still generating",
+      );
+    });
+
+    it("warns that a parked approval cannot be resumed", async () => {
+      useConfirmationRegistryStore.setState({
+        pendingIdsByChatId: { "chat-1": ["approval-1"] },
+      });
+
+      const item = await renderArchiveItem();
+
+      expect(item).toHaveAttribute("data-confirms");
+      expect(item.getAttribute("data-confirm-message")).toContain(
+        "tool approval",
+      );
     });
   });
 

@@ -59,12 +59,18 @@ vi.mock("@/utils/themeUtils", () => ({
 }));
 
 const historyListProps = vi.hoisted(
-  () => [] as { sessions: { id: string }[]; hasMore?: boolean }[],
+  () =>
+    [] as {
+      sessions: { id: string }[];
+      hasMore?: boolean;
+      onSessionUnarchive?: (sessionId: string) => void;
+    }[],
 );
 vi.mock("./ChatHistoryList", () => ({
   ChatHistoryList: (props: {
     sessions: { id: string }[];
     hasMore?: boolean;
+    onSessionUnarchive?: (sessionId: string) => void;
   }) => {
     historyListProps.push(props);
     return <div data-testid="history-list" />;
@@ -121,6 +127,7 @@ describe("ChatHistorySidebar", () => {
             currentSessionId="chat-1"
             onSessionSelect={vi.fn()}
             onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
             isLoading={false}
           />
         </I18nProvider>
@@ -157,6 +164,7 @@ describe("ChatHistorySidebar", () => {
             currentSessionId="chat-1"
             onSessionSelect={vi.fn()}
             onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
             isLoading={false}
           />
         </I18nProvider>
@@ -187,6 +195,7 @@ describe("ChatHistorySidebar", () => {
             currentSessionId="chat-1"
             onSessionSelect={vi.fn()}
             onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
             isLoading={false}
             collapsed={true}
           />
@@ -225,6 +234,7 @@ describe("ChatHistorySidebar", () => {
             currentSessionId="chat-1"
             onSessionSelect={vi.fn()}
             onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
             isLoading={false}
           />
         </I18nProvider>
@@ -262,6 +272,7 @@ describe("ChatHistorySidebar", () => {
             currentSessionId="chat-1"
             onSessionSelect={vi.fn()}
             onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
             isLoading={false}
             collapsed={true}
           />
@@ -314,6 +325,7 @@ describe("ChatHistorySidebar", () => {
             currentSessionId="chat-1"
             onSessionSelect={vi.fn()}
             onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
             isLoading={false}
             collapsed={true}
           />
@@ -368,6 +380,7 @@ describe("ChatHistorySidebar", () => {
             currentSessionId="chat-1"
             onSessionSelect={vi.fn()}
             onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
             isLoading={false}
             collapsed={true}
           />
@@ -408,6 +421,7 @@ describe("ChatHistorySidebar", () => {
       currentSessionId: "chat-1",
       onSessionSelect: vi.fn(),
       onSessionArchive: vi.fn(),
+      onSessionUnarchive: vi.fn(),
       isLoading: false,
     };
 
@@ -486,6 +500,7 @@ describe("ChatHistorySidebar", () => {
               currentSessionId="chat-1"
               onSessionSelect={vi.fn()}
               onSessionArchive={vi.fn()}
+              onSessionUnarchive={vi.fn()}
               isLoading={false}
             />
           </I18nProvider>
@@ -521,6 +536,7 @@ describe("ChatHistorySidebar", () => {
             currentSessionId="chat-1"
             onSessionSelect={vi.fn()}
             onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
             isLoading={false}
           />
         </I18nProvider>
@@ -560,6 +576,7 @@ describe("ChatHistorySidebar", () => {
             currentSessionId="chat-today"
             onSessionSelect={vi.fn()}
             onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
             isLoading={false}
           />
         </I18nProvider>
@@ -579,6 +596,50 @@ describe("ChatHistorySidebar", () => {
     // A sibling of the first group's collapse toggle, never nested inside it.
     expect(firstToggle).not.toContainElement(triggers[0]);
     expect(firstToggle.parentElement).toContainElement(triggers[0]);
+  });
+
+  it("forwards the unarchive handler to the pinned, ungrouped and grouped lists", async () => {
+    const { useChatHistoryFilterStore } = await import(
+      "@/hooks/chat/store/chatHistoryFilterStore"
+    );
+    const { i18n } = await import("@lingui/core");
+    const onSessionUnarchive = vi.fn();
+    const sidebarProps = {
+      sessions,
+      pinnedSessions: sessions,
+      currentSessionId: "chat-1",
+      onSessionSelect: vi.fn(),
+      onSessionArchive: vi.fn(),
+      onSessionUnarchive,
+      onSessionPin: vi.fn(),
+      isLoading: false,
+    };
+
+    useChatHistoryFilterStore.setState({ groupBy: "none" });
+    const { unmount } = render(
+      <MemoryRouter>
+        <I18nProvider i18n={i18n}>
+          <ChatHistorySidebar {...sidebarProps} />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+
+    expect(historyListProps).toHaveLength(2);
+    unmount();
+
+    useChatHistoryFilterStore.setState({ groupBy: "date" });
+    render(
+      <MemoryRouter>
+        <I18nProvider i18n={i18n}>
+          <ChatHistorySidebar {...sidebarProps} />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+
+    expect(historyListProps).toHaveLength(4);
+    for (const captured of historyListProps) {
+      expect(captured.onSessionUnarchive).toBe(onSessionUnarchive);
+    }
   });
 
   it("replaces the Recent section with per-group collapsible sections in grouped mode", async () => {
@@ -601,6 +662,7 @@ describe("ChatHistorySidebar", () => {
             currentSessionId="chat-today"
             onSessionSelect={vi.fn()}
             onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
             isLoading={false}
             hasMoreSessions={true}
             onLoadMoreSessions={vi.fn()}
@@ -658,6 +720,7 @@ describe("ChatHistorySidebar", () => {
             currentSessionId="chat-today"
             onSessionSelect={vi.fn()}
             onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
             isLoading={false}
             hasMoreSessions={true}
             onLoadMoreSessions={vi.fn()}
@@ -714,6 +777,7 @@ describe("ChatHistorySidebar", () => {
             currentSessionId="chat-1"
             onSessionSelect={vi.fn()}
             onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
             isLoading={false}
           />
         </I18nProvider>
@@ -743,6 +807,7 @@ describe("ChatHistorySidebar", () => {
             currentSessionId={null}
             onSessionSelect={vi.fn()}
             onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
             isLoading={false}
           />
         </I18nProvider>
@@ -778,6 +843,7 @@ describe("ChatHistorySidebar", () => {
             currentSessionId={null}
             onSessionSelect={vi.fn()}
             onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
             isLoading={false}
           />
         </I18nProvider>
@@ -808,6 +874,7 @@ describe("ChatHistorySidebar", () => {
             currentSessionId={null}
             onSessionSelect={vi.fn()}
             onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
             isLoading={false}
           />
         </I18nProvider>

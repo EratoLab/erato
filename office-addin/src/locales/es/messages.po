@@ -679,6 +679,11 @@ msgid "officeAddin.historyDrawer.title"
 msgstr "Menú"
 
 #. js-lingui-explicit-id
+#: src/core/AddinHistoryDrawerCore.tsx
+msgid "officeAddin.historyDrawer.unarchiveFailed"
+msgstr "No se pudo desarchivar el chat"
+
+#. js-lingui-explicit-id
 #: src/providers/OfficeProvider.tsx
 msgid "officeAddin.office.loading"
 msgstr "Cargando complemento de Office..."

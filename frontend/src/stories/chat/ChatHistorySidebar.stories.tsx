@@ -117,6 +117,7 @@ const InteractiveTemplate = (args: Story["args"]) => {
       currentSessionId="1"
       onSessionSelect={(id) => action("Session selected")(id)}
       onSessionArchive={(id) => action("Session deleted")(id)}
+      onSessionUnarchive={(id) => action("Session unarchived")(id)}
       isLoading={false}
     />
   );
@@ -129,6 +130,7 @@ export const Interactive: Story = {
     currentSessionId: "1",
     onSessionSelect: action("Session selected"),
     onSessionArchive: action("Session archived"),
+    onSessionUnarchive: action("Session unarchived"),
     isLoading: false,
     showTitle: false,
   },
@@ -149,6 +151,7 @@ export const Default: Story = {
     currentSessionId: "1",
     onSessionSelect: action("Session selected"),
     onSessionArchive: action("Session archived"),
+    onSessionUnarchive: action("Session unarchived"),
     isLoading: false,
     showTitle: false,
   },
@@ -164,6 +167,7 @@ export const Collapsed: Story = {
     currentSessionId: "1",
     onSessionSelect: action("Session selected"),
     onSessionArchive: action("Session archived"),
+    onSessionUnarchive: action("Session unarchived"),
     isLoading: false,
   },
   parameters: {
@@ -185,6 +189,7 @@ export const WithTitle: Story = {
     currentSessionId: "1",
     onSessionSelect: action("Session selected"),
     onSessionArchive: action("Session archived"),
+    onSessionUnarchive: action("Session unarchived"),
     isLoading: false,
   },
 };
@@ -197,6 +202,7 @@ export const Loading: Story = {
     currentSessionId: null,
     onSessionSelect: action("Session selected"),
     onSessionArchive: action("Session archived"),
+    onSessionUnarchive: action("Session unarchived"),
     isLoading: true,
   },
 };
@@ -207,6 +213,7 @@ export const Empty: Story = {
     currentSessionId: null,
     onSessionSelect: action("Session selected"),
     onSessionArchive: action("Session archived"),
+    onSessionUnarchive: action("Session unarchived"),
     isLoading: false,
     showTitle: false,
   },
@@ -230,6 +237,7 @@ export const SlimModeWithoutLogo: Story = {
     currentSessionId: "1",
     onSessionSelect: action("Session selected"),
     onSessionArchive: action("Session archived"),
+    onSessionUnarchive: action("Session unarchived"),
     isLoading: false,
   },
   decorators: [withSidebarConfig({ collapsedMode: "slim" })],
@@ -253,6 +261,7 @@ export const SlimModeWithLogo: Story = {
     currentSessionId: "1",
     onSessionSelect: action("Session selected"),
     onSessionArchive: action("Session archived"),
+    onSessionUnarchive: action("Session unarchived"),
     isLoading: false,
   },
   decorators: [
