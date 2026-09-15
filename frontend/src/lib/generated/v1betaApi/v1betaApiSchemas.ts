@@ -1617,6 +1617,15 @@ export type LinkFileRequest = {
   source: string;
 };
 
+export type ListMcpServerToolsResponse = {
+  server_id: string;
+  status: McpServerStatusValue;
+  /**
+   * Empty unless `status` is `SUCCESS`; sorted by title.
+   */
+  tools: McpServerTool[];
+};
+
 export type ListMcpServersResponse = {
   servers: McpServerStatus[];
 };
@@ -1641,6 +1650,41 @@ export type McpServerStatusValue =
   | "SUCCESS"
   | "FAILURE"
   | "NEEDS_AUTHENTICATION";
+
+export type McpServerTool = {
+  annotations: McpServerToolAnnotations;
+  approval: McpServerToolApproval;
+  description?: string | null | undefined;
+  is_wait_tool: boolean;
+  name: string;
+  title: string;
+  user_decision: McpServerToolUserDecision;
+};
+
+/**
+ * MCP tool hints with absent values normalized to the protocol defaults.
+ */
+export type McpServerToolAnnotations = {
+  /**
+   * Whether the server declared any hints at all. Defaults are the
+   * pessimistic reading, so an unannotated tool is not read-only.
+   */
+  annotated: boolean;
+  destructive_hint: boolean;
+  idempotent_hint: boolean;
+  open_world_hint: boolean;
+  read_only_hint: boolean;
+};
+
+/**
+ * What the configured approval policy does before running the tool.
+ */
+export type McpServerToolApproval = "auto" | "ask";
+
+/**
+ * The requesting user's persistent decision for the tool.
+ */
+export type McpServerToolUserDecision = "ask" | "always";
 
 /**
  * An assistant the user @-mentioned in a message, resolved for display.

@@ -195,6 +195,22 @@ fn wildcard_matches(pattern: &str, value: &str) -> bool {
 type SessionAuthKey = Option<String>;
 type SessionKey = (Uuid, String, SessionAuthKey);
 
+/// Chat id under which user-facing tool enumeration keeps its sessions. It is
+/// deliberately distinct from the nil id the connection probe uses and
+/// invalidates on every call, so a settings pane listing servers cannot churn
+/// the session a tool listing was just served from. Idle eviction reclaims it.
+pub const ENUMERATION_CHAT_ID: Uuid = Uuid::from_u128(0x0e5e_ba4f_7a0b_4c0e_9c0e_5e0e_5e0e_5e0e);
+
+/// The outcome of listing one server's tools on behalf of a user.
+#[derive(Debug, Clone)]
+pub struct McpServerToolEnumeration {
+    pub status: McpServerConnectionStatus,
+    /// Already filtered by the server's `allow_tools` / `exclude_tools`, so
+    /// these rows are exactly what a generation can see. Empty unless
+    /// `status` is `Success`.
+    pub tools: Vec<Tool>,
+}
+
 /// Manages MCP sessions on a per-chat basis
 #[derive(Debug)]
 pub struct McpSessionManager {
@@ -954,6 +970,52 @@ impl McpSessionManager {
                 .await;
         }
 
+        Self::connection_status_from_session_result(result)
+    }
+
+    /// List one server's tools for a user, keeping the session cached under
+    /// `ENUMERATION_CHAT_ID` so a repeat listing inside the idle window is
+    /// served without reconnecting.
+    pub async fn enumerate_tools(
+        &self,
+        server_id: &str,
+        auth_context: &McpRequestAuthContext<'_>,
+    ) -> McpServerToolEnumeration {
+        let result = self
+            .get_or_create_session(ENUMERATION_CHAT_ID, server_id, auth_context)
+            .await;
+        let tools = match &result {
+            Ok(key) => {
+                let mut sessions_guard = self.sessions.write().await;
+                match sessions_guard.get_mut(key) {
+                    Some(session) => {
+                        session.touch();
+                        session.tools.clone()
+                    }
+                    None => Vec::new(),
+                }
+            }
+            Err(_) => Vec::new(),
+        };
+        McpServerToolEnumeration {
+            status: Self::connection_status_from_session_result(result),
+            tools,
+        }
+    }
+
+    /// Number of cached sessions for a server across all chats and identities.
+    pub async fn active_session_count(&self, server_id: &str) -> usize {
+        self.sessions
+            .read()
+            .await
+            .keys()
+            .filter(|(_, existing_server_id, _)| existing_server_id == server_id)
+            .count()
+    }
+
+    fn connection_status_from_session_result(
+        result: Result<SessionKey, Report>,
+    ) -> McpServerConnectionStatus {
         match result {
             Ok(_) => McpServerConnectionStatus::Success,
             Err(error) if Self::is_missing_forwarded_credential_error(&error) => {
@@ -980,8 +1042,8 @@ pub struct ManagedTool {
 #[cfg(test)]
 mod tests {
     use super::{
-        McpSessionManager, filter_tools_by_server_config, is_tool_allowed_by_server_config,
-        is_tool_allowed_to_wait, wildcard_matches,
+        ENUMERATION_CHAT_ID, McpSessionManager, filter_tools_by_server_config,
+        is_tool_allowed_by_server_config, is_tool_allowed_to_wait, wildcard_matches,
     };
     use crate::config::{
         AppConfig, McpRuntimeConfig, McpServerAuthenticationConfig, McpServerConfig,
@@ -1003,6 +1065,11 @@ mod tests {
             authentication: McpServerAuthenticationConfig::None,
             max_session_idle_seconds: None,
         }
+    }
+
+    #[test]
+    fn enumeration_sessions_never_share_the_probe_key() {
+        assert_ne!(ENUMERATION_CHAT_ID, sea_orm::prelude::Uuid::nil());
     }
 
     #[test]

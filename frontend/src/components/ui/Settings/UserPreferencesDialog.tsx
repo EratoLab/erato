@@ -7,6 +7,7 @@ import {
   chatDetailQuery,
   fetchCompleteMcpServerOauth,
   fetchUpdateProfilePreferences,
+  listMcpServerToolsQuery,
   profileQuery,
   recentChatsQuery,
   startingAssistantQuery,
@@ -582,6 +583,12 @@ export function UserPreferencesDialog({
     try {
       await disconnectMcpServerOauthMutation({
         pathParams: { serverId },
+      });
+      // The row is expanded (Disconnect lives in its details), so its cached
+      // roster would otherwise outlive the session it was listed through.
+      await queryClient.invalidateQueries({
+        queryKey: listMcpServerToolsQuery({ pathParams: { serverId } })
+          .queryKey,
       });
       await refetchMcpServers();
       setMcpSuccess(

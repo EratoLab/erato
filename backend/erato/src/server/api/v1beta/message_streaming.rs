@@ -15,9 +15,8 @@ use crate::models::message::{
     ContentPart, ContentPartImage, ContentPartReasoning, ContentPartText, ContentPartToolApproval,
     ContentPartToolApprovalRequest, ContentPartToolRejection, DelegationRunMode,
     GenerationErrorType, GenerationInputMessages, GenerationMetadata, GenerationParameters,
-    GenerationRequestContext, MessageRole, MessageSchema, ToolApprovalAnnotations,
-    ToolCallStatus as MessageToolCallStatus, ToolUse,
-    get_generation_chat_provider_id_for_replaced_user_message,
+    GenerationRequestContext, MessageRole, MessageSchema, ToolCallStatus as MessageToolCallStatus,
+    ToolUse, get_generation_chat_provider_id_for_replaced_user_message,
     get_generation_chat_provider_id_from_message, get_message_by_id, submit_message,
     update_message_content, update_message_generation_metadata,
 };
@@ -46,6 +45,7 @@ use crate::services::genai_langfuse::{
 use crate::services::langfuse::TracingLangfuseClient;
 use crate::services::mcp_manager::{McpRequestAuthContext, convert_mcp_tools_to_genai_tools};
 use crate::services::mcp_session_manager::is_tool_allowed_to_wait;
+use crate::services::mcp_tool_approval::evaluate_mcp_tool_approval;
 use crate::services::prompt_composition::traits::{
     FileResolver, MessageRepository, PromptProvider,
 };
@@ -125,47 +125,31 @@ fn now_timestamp() -> String {
     Utc::now().to_rfc3339()
 }
 
-/// Normalize optional MCP annotation hints to their protocol defaults and
-/// determine whether the configured policy requires a user approval.
+/// Build the durable approval request when the shared policy evaluation says
+/// the tool must ask before running.
 fn mcp_tool_approval_request(
     config: &McpToolApprovalConfig,
     server_id: &str,
     tool: &rmcp::model::Tool,
     tool_call: &genai::chat::ToolCall,
 ) -> Option<ContentPartToolApprovalRequest> {
-    if !config.enabled {
-        return None;
-    }
-
-    let hints = tool.annotations.as_ref();
-    let annotations = ToolApprovalAnnotations {
-        read_only_hint: hints.and_then(|hint| hint.read_only_hint).unwrap_or(false),
-        destructive_hint: hints.and_then(|hint| hint.destructive_hint).unwrap_or(true),
-        idempotent_hint: hints.and_then(|hint| hint.idempotent_hint).unwrap_or(false),
-        open_world_hint: hints.and_then(|hint| hint.open_world_hint).unwrap_or(true),
-    };
-    let requires_approval = match config.preset {
-        McpToolApprovalPreset::Permissive => annotations.destructive_hint,
-        McpToolApprovalPreset::Restrictive => {
-            !annotations.read_only_hint
-                || annotations.destructive_hint
-                || annotations.open_world_hint
-        }
-    };
-    requires_approval.then(|| ContentPartToolApprovalRequest {
-        tool_call_id: tool_call.call_id.clone(),
-        tool_name: tool_call.fn_name.clone(),
-        mcp_server_id: server_id.to_string(),
-        input: tool_call.fn_arguments.clone(),
-        annotations,
-        preset: match config.preset {
-            McpToolApprovalPreset::Permissive => "permissive",
-            McpToolApprovalPreset::Restrictive => "restrictive",
-        }
-        .to_string(),
-        allow_always: config.allow_always,
-        requested_at: now_timestamp(),
-    })
+    let verdict = evaluate_mcp_tool_approval(config, tool);
+    verdict
+        .requires_approval
+        .then(|| ContentPartToolApprovalRequest {
+            tool_call_id: tool_call.call_id.clone(),
+            tool_name: tool_call.fn_name.clone(),
+            mcp_server_id: server_id.to_string(),
+            input: tool_call.fn_arguments.clone(),
+            annotations: verdict.annotations,
+            preset: match config.preset {
+                McpToolApprovalPreset::Permissive => "permissive",
+                McpToolApprovalPreset::Restrictive => "restrictive",
+            }
+            .to_string(),
+            allow_always: config.allow_always,
+            requested_at: now_timestamp(),
+        })
 }
 
 fn build_openai_responses_reasoning_replay_parts(
@@ -6523,6 +6507,7 @@ mod tests {
         mcp_tool_approval_request, merge_action_facet_into_mcp_allowlist,
     };
     use crate::config::{McpToolApprovalConfig, McpToolApprovalPreset};
+    use crate::services::mcp_tool_approval::evaluate_mcp_tool_approval;
     use genai::chat::ToolCall;
     use rmcp::model::{Tool, ToolAnnotations};
     use serde_json::{Map, json};
@@ -6669,16 +6654,28 @@ mod tests {
             ..permissive.clone()
         };
 
-        assert!(
-            mcp_tool_approval_request(&permissive, "server", &open_world_non_destructive, &call,)
-                .is_none()
-        );
-        assert!(
-            mcp_tool_approval_request(&restrictive, "server", &open_world_non_destructive, &call,)
-                .is_some()
-        );
-        assert!(mcp_tool_approval_request(&permissive, "server", &unannotated, &call).is_some());
-        assert!(mcp_tool_approval_request(&restrictive, "server", &unannotated, &call).is_some());
+        let disabled = McpToolApprovalConfig {
+            enabled: false,
+            ..restrictive.clone()
+        };
+
+        // The gate and the enumeration projection must read the same verdict.
+        let cases = [
+            (&permissive, &open_world_non_destructive, false),
+            (&restrictive, &open_world_non_destructive, true),
+            (&permissive, &unannotated, true),
+            (&restrictive, &unannotated, true),
+            (&disabled, &unannotated, false),
+        ];
+        for (config, tool, expected) in cases {
+            let request = mcp_tool_approval_request(config, "server", tool, &call);
+            let verdict = evaluate_mcp_tool_approval(config, tool);
+            assert_eq!(request.is_some(), expected, "{:?} {}", config, tool.name);
+            assert_eq!(verdict.requires_approval, request.is_some());
+            if let Some(request) = request {
+                assert_eq!(request.annotations, verdict.annotations);
+            }
+        }
     }
 
     #[test]

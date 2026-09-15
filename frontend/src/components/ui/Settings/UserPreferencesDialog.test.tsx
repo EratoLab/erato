@@ -656,6 +656,7 @@ describe("UserPreferencesDialog", () => {
   });
 
   it("disconnects an OAuth-backed MCP server", async () => {
+    let connected = true;
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation(async (input, init) => {
@@ -668,16 +669,54 @@ describe("UserPreferencesDialog", () => {
               {
                 id: "notion",
                 authentication_mode: "oauth2",
-                connection_status: "SUCCESS",
+                connection_status: connected
+                  ? "SUCCESS"
+                  : "NEEDS_AUTHENTICATION",
               },
             ],
           });
         }
 
         if (
+          url === "/api/v1beta/me/mcp_servers/notion/tools" &&
+          method === "GET"
+        ) {
+          return createJsonResponse(
+            connected
+              ? {
+                  server_id: "notion",
+                  status: "SUCCESS",
+                  tools: [
+                    {
+                      name: "search_pages",
+                      title: "Search pages",
+                      description: null,
+                      annotations: {
+                        read_only_hint: true,
+                        destructive_hint: false,
+                        idempotent_hint: true,
+                        open_world_hint: false,
+                        annotated: true,
+                      },
+                      approval: "auto",
+                      user_decision: "ask",
+                      is_wait_tool: false,
+                    },
+                  ],
+                }
+              : {
+                  server_id: "notion",
+                  status: "NEEDS_AUTHENTICATION",
+                  tools: [],
+                },
+          );
+        }
+
+        if (
           url === "/api/v1beta/me/mcp_servers/notion/oauth" &&
           method === "DELETE"
         ) {
+          connected = false;
           return createJsonResponse({
             connection_status: "NEEDS_AUTHENTICATION",
           });
@@ -692,6 +731,8 @@ describe("UserPreferencesDialog", () => {
     // Disconnect lives in the row's details, which a closed row does not hold.
     fireEvent.click(await screen.findByRole("button", { name: /notion/ }));
     await screen.findByRole("button", { name: "Disconnect" });
+    // The expanded row lists the roster the session served before disconnect.
+    expect(await screen.findByText("Search pages")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
 
@@ -707,6 +748,11 @@ describe("UserPreferencesDialog", () => {
     expect(
       await screen.findByText("Disconnected successfully."),
     ).toBeInTheDocument();
+    // The stale roster must not outlive the session it was listed through.
+    expect(
+      await screen.findByText("Connect to see tools."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Search pages")).not.toBeInTheDocument();
   });
 
   it.each([undefined, "https://issuer.example.com"])(

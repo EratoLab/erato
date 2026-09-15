@@ -3777,6 +3777,61 @@ msgid "preferences.dialog.mcpServers.status.success.label"
 msgstr "Verbunden"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.badge.asksBeforeRunning"
+msgstr "Fragt vor der Ausführung"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.badge.canModify"
+msgstr "Kann ändern"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.badge.notDeclared"
+msgstr "Vom Server nicht deklariert"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.badge.reachesOtherSystems"
+msgstr "Erreicht andere Systeme"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.badge.readsOnly"
+msgstr "Liest nur"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.empty"
+msgstr "Dieser Server stellt Ihnen keine Tools bereit."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.failure"
+msgstr "Die Tools konnten nicht aufgelistet werden, weil der Server nicht erreichbar ist."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.heading"
+msgstr "Tools"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.loadError"
+msgstr "Die Tools dieses Servers konnten nicht geladen werden. Bitte versuchen Sie es erneut."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.loading"
+msgstr "Tools werden geladen..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpServerToolList.tsx
+msgid "preferences.dialog.mcpServers.tools.needsAuthentication"
+msgstr "Verbinden Sie sich, um die Tools zu sehen."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.save.error"
 msgstr "Einstellungen konnten nicht gespeichert werden. Bitte versuche es erneut."
