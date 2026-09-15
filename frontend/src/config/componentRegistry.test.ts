@@ -243,6 +243,58 @@ describe("shared surface requirements", () => {
     expect(registry.ChatHistoryList).toBe(list);
   });
 
+  // The claim has to be as fine-grained as the check, or a customer who
+  // rebuilt one override raises the kit-level number and thereby vouches for
+  // every override they never reread.
+  it("lets a registration declare its own minor without the kit's", async () => {
+    const registry = await applyKits(
+      [
+        {
+          name: "acme",
+          components: [
+            {
+              extensionPoint: "ChatHistoryList",
+              component: list,
+              priority: 50,
+              builtAgainstSharedSurfaceMinor: REQUIRED,
+            },
+            {
+              extensionPoint: "MessageControls",
+              component: controls,
+              priority: 50,
+            },
+          ],
+        },
+      ],
+      "enforce",
+    );
+
+    expect(registry.ChatHistoryList).toBe(list);
+    expect(registry.MessageControls).toBe(controls);
+  });
+
+  it("lets a registration fall behind a kit that declares currency", async () => {
+    const registry = await applyKits(
+      [
+        {
+          name: "acme",
+          builtAgainstSharedSurfaceMinor: ERATO_SHARED_SURFACE_MINOR,
+          components: [
+            {
+              extensionPoint: "ChatHistoryList",
+              component: list,
+              priority: 50,
+              builtAgainstSharedSurfaceMinor: REQUIRED - 1,
+            },
+          ],
+        },
+      ],
+      "enforce",
+    );
+
+    expect(registry.ChatHistoryList).toBeNull();
+  });
+
   it("lets a current kit take a point a stale kit is barred from", async () => {
     // Same priority, stale kit last: without the guard it would win on load
     // order, which is how the incident's silent revert happened.

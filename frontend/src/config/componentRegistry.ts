@@ -272,6 +272,12 @@ export type ComponentKitComponentRegistration = {
     extensionPoint: TKey;
     component: ComponentRegistryComponent<TKey>;
     priority: number;
+    /**
+     * Overrides the kit-level claim for this point alone. A kit that rebuilt
+     * one override attests to it here rather than raising the kit-level value,
+     * which would vouch for every other override it did not reread.
+     */
+    builtAgainstSharedSurfaceMinor?: number;
   };
 }[keyof ComponentRegistry];
 
@@ -332,28 +338,44 @@ const emptyComponentRegistry = (): ComponentRegistry => ({
 
 const UNDECLARED_SURFACE_MINOR = 0;
 
-const declaredSurfaceMinor = (componentKit: ComponentKitRegistration): number =>
-  componentKit.builtAgainstSharedSurfaceMinor ?? UNDECLARED_SURFACE_MINOR;
+const declaredMinor = (
+  componentKit: ComponentKitRegistration,
+  registration?: ComponentKitComponentRegistration,
+): number | undefined =>
+  registration?.builtAgainstSharedSurfaceMinor ??
+  componentKit.builtAgainstSharedSurfaceMinor;
+
+const declaredSurfaceMinor = (
+  componentKit: ComponentKitRegistration,
+  registration?: ComponentKitComponentRegistration,
+): number => declaredMinor(componentKit, registration) ?? UNDECLARED_SURFACE_MINOR;
 
 /**
- * The minor this point's contract needs, when the kit is behind it; null when
- * the kit is current or the point has never required one.
+ * The minor this point's contract needs, when the registration is behind it;
+ * null when it is current or the point has never required one.
  */
 const behindRequiredMinor = (
   componentKit: ComponentKitRegistration,
-  extensionPoint: keyof ComponentRegistry,
+  registration: ComponentKitComponentRegistration,
 ): number | null => {
-  const required = EXTENSION_POINT_REQUIRED_SURFACE_MINOR[extensionPoint];
+  const required =
+    EXTENSION_POINT_REQUIRED_SURFACE_MINOR[registration.extensionPoint];
 
-  return required !== undefined && declaredSurfaceMinor(componentKit) < required
+  return required !== undefined &&
+    declaredSurfaceMinor(componentKit, registration) < required
     ? required
     : null;
 };
 
-const declaredMinorText = (componentKit: ComponentKitRegistration): string =>
-  componentKit.builtAgainstSharedSurfaceMinor === undefined
+const declaredMinorText = (
+  componentKit: ComponentKitRegistration,
+  registration: ComponentKitComponentRegistration,
+): string => {
+  const minor = declaredMinor(componentKit, registration);
+  return minor === undefined
     ? "declares none, which counts as the oldest contract"
-    : `declares 1.${componentKit.builtAgainstSharedSurfaceMinor}`;
+    : `declares 1.${minor}`;
+};
 
 const buildComponentRegistry = (
   componentKits: ComponentKitRegistration[] | undefined,
@@ -373,14 +395,11 @@ const buildComponentRegistry = (
     }
 
     for (const registration of componentKit.components) {
-      const requiredMinor = behindRequiredMinor(
-        componentKit,
-        registration.extensionPoint,
-      );
+      const requiredMinor = behindRequiredMinor(componentKit, registration);
 
       if (requiredMinor !== null) {
         console.error(
-          `component kit "${componentKit.name}" overrides ${registration.extensionPoint}, whose contract needs shared surface 1.${requiredMinor}, and ${declaredMinorText(componentKit)}. Rebuild the kit against this host and set builtAgainstSharedSurfaceMinor: ${ERATO_SHARED_SURFACE_MINOR}. ` +
+          `component kit "${componentKit.name}" overrides ${registration.extensionPoint}, whose contract needs shared surface 1.${requiredMinor}, and ${declaredMinorText(componentKit, registration)}. Rebuild the kit against this host and set builtAgainstSharedSurfaceMinor: ${ERATO_SHARED_SURFACE_MINOR}. ` +
             (stance === "enforce"
               ? `Rendering the host's own ${registration.extensionPoint} instead.`
               : `Installing the override anyway: this deployment's stance is "warn". Set window.ERATO_COMPONENT_KIT_VERSION_STANCE = "enforce" to render the host's own component instead.`),

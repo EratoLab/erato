@@ -77,6 +77,10 @@ would only ever agree with itself, because the import map resolves it to the
 running host. Leaving it out is read as the oldest possible contract, not as
 "no opinion".
 
+The same key is accepted on an individual entry of `components`, where it
+overrides the kit-level value for that point alone. That is how you attest to
+the one override you actually rebuilt without vouching for the others.
+
 The host records a required minor per extension point and compares the two. A
 kit that is behind for one point is reported by name, with the point and the
 value to declare. What happens next is one switch the deployment owns:
@@ -129,6 +133,20 @@ disabled and confirmation flags. Order is not read at all: a kit is free to
 reorder the host's items, insert its own anywhere, and give any item its own
 icon or label. Ids the host gates OUT for a row must stay out: an item rendered
 inert is worse than one that is missing.
+
+If a deployment policy removes an action outright — no sharing, say — name its
+id in a third argument so the cases stop requiring it:
+
+```ts
+chatHistoryListConformanceFailures(MyChatHistoryList, harness, {
+  omit: [CHAT_HISTORY_ROW_MENU_ID.share],
+});
+```
+
+The call site is the record of what was dropped, and an id no case requires is
+reported as a failure rather than quietly ignored. Reach for it instead of
+deleting the test: one case a kit considers correct should not cost it every
+other case.
 
 The cases find a row by `CHAT_HISTORY_ROW_TEST_ID.row` and read the badges
 through the other ids on that record, so an override has to satisfy two

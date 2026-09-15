@@ -2,15 +2,20 @@ import { I18nProvider } from "@lingui/react";
 import { render, renderHook, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { chatHistoryListConformanceFailures } from "@/conformance/chatHistoryList";
+import {
+  CHAT_HISTORY_ROW_CONTRACT_IDS,
+  chatHistoryListConformanceFailures,
+} from "@/conformance/chatHistoryList";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
+import { EXTENSION_POINT_REQUIRED_SURFACE_MINOR } from "@/shared/surfaceVersion";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
 import {
   ChatHistoryList,
   ChatHistoryListSkeleton,
+  useChatHistoryRow,
   useChatHistoryRowMenuItems,
   useChatHistoryRowPresentation,
 } from "./ChatHistoryList";
@@ -713,6 +718,62 @@ describe("ChatHistoryList", () => {
       expect(failures.join("\n")).toContain(
         '"unarchive" is rendered where the gates drop it',
       );
+    });
+  });
+
+  // Adding a row rule means adding a conformance case, bumping
+  // ERATO_SHARED_SURFACE_MINOR and raising this point's requirement. Skipping
+  // the last two is invisible — the suite still passes and the requirement
+  // still looks satisfied — so the three sets that make up the contract are
+  // pinned here against the minor that records them.
+  describe("row contract shape", () => {
+    const rowKeys = async () => {
+      const { i18n } = await import("@lingui/core");
+      const { result } = renderHook(
+        () =>
+          useChatHistoryRow(
+            {
+              sessions,
+              currentSessionId: null,
+              onSessionSelect: vi.fn(),
+            },
+            sessions[0],
+          ),
+        {
+          wrapper: ({ children }: { children: ReactNode }) => (
+            <I18nProvider i18n={i18n}>{children}</I18nProvider>
+          ),
+        },
+      );
+      return Object.keys(result.current).sort();
+    };
+
+    it("pins the row contract to the minor that records it", async () => {
+      expect(
+        {
+          requiredMinor: EXTENSION_POINT_REQUIRED_SURFACE_MINOR.ChatHistoryList,
+          rowKeys: await rowKeys(),
+          menuIds: Object.values(CHAT_HISTORY_ROW_MENU_ID),
+          contractIds: [...CHAT_HISTORY_ROW_CONTRACT_IDS],
+        },
+        "The chat history row contract changed. Cover it with a conformance case, bump ERATO_SHARED_SURFACE_MINOR, raise EXTENSION_POINT_REQUIRED_SURFACE_MINOR.ChatHistoryList to match, then update this expectation.",
+      ).toEqual({
+        requiredMinor: 8,
+        rowKeys: [
+          "archived",
+          "archivedLabel",
+          "ariaLabel",
+          "badges",
+          "menuItems",
+          "runOrigin",
+          "status",
+          "statusLabel",
+          "subline",
+          "title",
+        ],
+        menuIds: ["pin", "share", "rename", "archive", "unarchive"],
+        contractIds: ["archive", "pin", "rename", "share", "unarchive"],
+      });
     });
   });
 

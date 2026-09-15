@@ -130,9 +130,11 @@ const SearchResultRow = ({
               archived: result.isArchived,
               isPinned: result.isPinned,
               canEdit: result.canEdit,
-              // The search payload carries no provenance, so a delegated run
-              // listed here is still offered the archive actions the sidebar
-              // withholds from it.
+              // Asserted rather than resolved: the search payload carries no
+              // provenance, so a delegated run listed here is still offered
+              // the archive actions the sidebar withholds from it. A known
+              // divergence waiting on provenance in the payload, not a fact
+              // about search results.
               isRun: false,
               status,
             },

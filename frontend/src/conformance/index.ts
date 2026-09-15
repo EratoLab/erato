@@ -8,4 +8,5 @@
 export {
   chatHistoryListConformanceFailures,
   type ChatHistoryConformanceHarness,
+  type ChatHistoryConformanceOptions,
 } from "./chatHistoryList";

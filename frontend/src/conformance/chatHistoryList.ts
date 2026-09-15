@@ -382,11 +382,40 @@ const caseFailures = (
   }
 };
 
+export interface ChatHistoryConformanceOptions {
+  /**
+   * Menu ids this deployment's policy removes, so the cases stop requiring
+   * them. The escape hatch for a policy that forbids sharing, say: without it
+   * one case a customer considers correct goes red forever, and the whole
+   * suite is what gets deleted. The call site is the record of the omission —
+   * an id no case requires is reported as a failure rather than ignored.
+   */
+  omit?: readonly string[];
+}
+
+/**
+ * Every id the cases name, required or forbidden. Exported for the host's own
+ * shape test and deliberately not re-exported from `./index.ts`: what a kit
+ * runs is the suite.
+ */
+export const CHAT_HISTORY_ROW_CONTRACT_IDS: readonly string[] = [
+  ...new Set(
+    CASES.flatMap((conformanceCase) => [
+      ...conformanceCase.menu.map((item) => item.id),
+      ...conformanceCase.menuMustNotContain,
+    ]),
+  ),
+].sort();
+
 export const chatHistoryListConformanceFailures = (
   List: ComponentType<ChatHistoryListProps>,
   harness: ChatHistoryConformanceHarness,
+  { omit = [] }: ChatHistoryConformanceOptions = {},
 ): string[] => {
-  const failures: string[] = [];
+  const required = new Set(CASES.flatMap(({ menu }) => menu.map(({ id }) => id)));
+  const failures: string[] = omit
+    .filter((id) => !required.has(id))
+    .map((id) => `omitted "${id}" is required by no case; drop it`);
   const generationStatus = useGenerationStatusStore.getState();
 
   for (const conformanceCase of CASES) {
@@ -395,7 +424,11 @@ export const chatHistoryListConformanceFailures = (
       conformanceCase.status,
     );
     try {
-      for (const failure of caseFailures(List, harness, conformanceCase)) {
+      const applied = {
+        ...conformanceCase,
+        menu: conformanceCase.menu.filter(({ id }) => !omit.includes(id)),
+      };
+      for (const failure of caseFailures(List, harness, applied)) {
         failures.push(`${conformanceCase.name}: ${failure}`);
       }
     } finally {
