@@ -95,10 +95,8 @@ export type { ChatHistoryRowMenuOptions } from "@/components/ui/Chat/ChatHistory
 // gated array instead of rebuilding it.
 export { CHAT_HISTORY_ROW_MENU_ID } from "@/components/ui/Chat/chatHistoryRowMenuIds";
 export type { ChatHistoryRowMenuId } from "@/components/ui/Chat/chatHistoryRowMenuIds";
-// Host-authored contract test. A kit runs it against its own override and goes
-// red the day the host adds a row behaviour the kit has never heard of.
-export { chatHistoryListConformanceFailures } from "./chatHistoryConformance";
-export type { ChatHistoryConformanceHarness } from "./chatHistoryConformance";
+// The contract test for these rows is NOT here: it is test infrastructure and
+// everything on this surface ships to end users. It lives in "@erato/frontend/conformance".
 // Pinned alongside the hook that feeds it: only two registry-reachable
 // importers keep it on the generated surface, and a kit rendering its own
 // rows needs both halves or neither. The pill is in the same position and
@@ -215,7 +213,6 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "CardTone",
   "CardVariant",
   "ChatAttentionStatusDot",
-  "ChatHistoryConformanceHarness",
   "ChatHistoryRowMenuId",
   "ChatHistoryRowMenuOptions",
   "ChevronDownIcon",
@@ -303,7 +300,6 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "ToolCallOutput",
   "ToolCallOutputProps",
   "Tooltip",
-  "chatHistoryListConformanceFailures",
   "chatHistoryRowMenuOptions",
   "messageStyles",
   "resolvePopoverViewportPadding",

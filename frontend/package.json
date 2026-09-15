@@ -22,6 +22,10 @@
       "types": "./dist-library/utils/teams/index.d.ts",
       "import": "./dist-library/teams.mjs"
     },
+    "./conformance": {
+      "types": "./dist-library/conformance/index.d.ts",
+      "import": "./dist-library/conformance.mjs"
+    },
     "./shared-runtime/*": {
       "import": "./dist-library/component-kit-host/shared-*.mjs"
     },

@@ -12,6 +12,15 @@
 // `@erato/frontend/library` by design — it bundles the library instead of
 // borrowing the host's, so the rule below is simply not its contract.
 //
+// Test files are skipped whole. Nothing in them is deployed, so neither the
+// duplicate-instance defect nor the surface contract applies there, and a kit's
+// contract test has to import host test infrastructure to run at all.
+//
+// `@erato/frontend/conformance` is that test infrastructure. It is deliberately
+// NOT on the host's import map — it would otherwise ship to every end user — so
+// importing it outside a test file bundles a second copy of the host modules
+// into the kit: the same defect as the library specifier, by another door.
+//
 // The second, advisory half checks names against ERATO_KIT_SURFACE_EXPORTS.
 // That list is only the subset of the surface the host pins by hand; the rest
 // arrives through star re-exports, which are legitimate API but have nothing
@@ -29,6 +38,7 @@ import { fileURLToPath } from "node:url";
 
 const SHARED_SPECIFIER = "@erato/frontend/shared";
 const LIBRARY_SPECIFIER = "@erato/frontend/library";
+const CONFORMANCE_SPECIFIER = "@erato/frontend/conformance";
 
 const SCANNED_EXTENSIONS = new Set([
   ".ts",
@@ -42,11 +52,14 @@ const SCANNED_EXTENSIONS = new Set([
 ]);
 const SKIPPED_DIRECTORIES = new Set([
   ".git",
+  "__mocks__",
+  "__tests__",
   "coverage",
   "dist",
   "node_modules",
   "storybook-static",
 ]);
+const TEST_FILE_PATTERN = /\.(?:test|spec)\.[cm]?[jt]sx?$/;
 
 const packageRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -149,7 +162,7 @@ const escapeForRegExp = (literal) =>
 // match, so the wrong keyword decides whether the statement is type-only and
 // the wrong brace group is read as its specifier list.
 const STATEMENT_PATTERN = new RegExp(
-  `\\b(?:import|export)\\b(?:(?!\\b(?:import|export)\\b)[^;"'\`])*?["'](${escapeForRegExp(LIBRARY_SPECIFIER)}|${escapeForRegExp(SHARED_SPECIFIER)})["']\\)?`,
+  `\\b(?:import|export)\\b(?:(?!\\b(?:import|export)\\b)[^;"'\`])*?["'](${escapeForRegExp(LIBRARY_SPECIFIER)}|${escapeForRegExp(CONFORMANCE_SPECIFIER)}|${escapeForRegExp(SHARED_SPECIFIER)})["']\\)?`,
   "g",
 );
 
@@ -196,10 +209,15 @@ const runtimeBindings = (statement) => {
   return /\{[^}]*\}/.test(statement) ? null : [];
 };
 
+const isTestFile = (filePath) =>
+  TEST_FILE_PATTERN.test(path.basename(filePath));
+
 const collectSourceFiles = (target, collected) => {
   const stats = fs.statSync(target);
   if (stats.isFile()) {
-    collected.push(target);
+    if (!isTestFile(target)) {
+      collected.push(target);
+    }
     return;
   }
 
@@ -213,6 +231,7 @@ const collectSourceFiles = (target, collected) => {
     if (
       entry.isFile() &&
       !entry.name.endsWith(".d.ts") &&
+      !isTestFile(entry.name) &&
       SCANNED_EXTENSIONS.has(path.extname(entry.name))
     ) {
       collected.push(path.join(target, entry.name));
@@ -256,6 +275,16 @@ const scanFile = (filePath, pinnedNames) => {
           reason: `${what} "${LIBRARY_SPECIFIER}"; that specifier is types-only for kits. Write "import type {" / "export type {" or prefix the specifier with "type", or take the value from "${SHARED_SPECIFIER}".`,
         });
       }
+    } else if (match[1] === CONFORMANCE_SPECIFIER) {
+      if (runtimeBindings(statement) !== null) {
+        findings.push({
+          level: "error",
+          filePath,
+          line,
+          text,
+          reason: `takes a runtime value from "${CONFORMANCE_SPECIFIER}" outside a test file. That specifier is the host's contract suite: it is kept off the import map so it never reaches an end user, so a shipped module importing it bundles its own copy of the host. Move the import into a "*.test.*"/"*.spec.*" file or a "__tests__" directory.`,
+        });
+      }
     } else if (pinnedNames !== null) {
       const unpinned = namedValueSpecifiers(statement).filter(
         (name) => !pinnedNames.has(name),
@@ -280,8 +309,10 @@ const scanFile = (filePath, pinnedNames) => {
 const USAGE = `Usage: check-kit-manifest [path...]   (default: src)
 
 Checks a COMPONENT KIT source tree: runtime values may only come from
-"${SHARED_SPECIFIER}", "${LIBRARY_SPECIFIER}" is types-only. Not for a
-host shell such as office-addin, which bundles the library on purpose.`;
+"${SHARED_SPECIFIER}", "${LIBRARY_SPECIFIER}" is types-only, and
+"${CONFORMANCE_SPECIFIER}" is test-only. Test files are not scanned.
+Not for a host shell such as office-addin, which bundles the library on
+purpose.`;
 
 export const main = (argv = []) => {
   if (argv.includes("--help") || argv.includes("-h")) {

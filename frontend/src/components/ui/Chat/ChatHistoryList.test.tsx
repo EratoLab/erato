@@ -2,11 +2,11 @@ import { I18nProvider } from "@lingui/react";
 import { render, renderHook, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { chatHistoryListConformanceFailures } from "@/conformance/chatHistoryList";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
 import { messages as enMessages } from "@/locales/en/messages.json";
-import { chatHistoryListConformanceFailures } from "@/shared/chatHistoryConformance";
 
 import {
   ChatHistoryList,

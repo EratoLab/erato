@@ -67,6 +67,12 @@ export default defineConfig(({ mode }) => {
           // or writes the format does not pull the component barrel in to get
           // at a constant.
           teams: path.resolve(__dirname, "./src/utils/teams/index.ts"),
+          // `conformance` is the host-authored contract suite
+          // (@erato/frontend/conformance): test infrastructure, kept off the
+          // shared surface so it never reaches an end user's bundle, and a
+          // sibling entry so a kit's test writes the same store instances the
+          // hooks it imports from `shared` read.
+          conformance: path.resolve(__dirname, "./src/conformance/index.ts"),
         },
         formats: ["es"],
         fileName: (_format, entryName) =>
