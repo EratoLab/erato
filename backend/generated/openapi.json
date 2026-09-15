@@ -7121,9 +7121,11 @@
       },
       "McpServerTool": {
         "type": "object",
+        "description": "One tool as the server declares it. `name`, `title` and `description`\nare vendor text passed through `sanitize_display_text`; a client shows\nthem as plain text and never interprets them.",
         "required": [
           "name",
           "title",
+          "description_truncated",
           "annotations",
           "policy",
           "user_decision",
@@ -7139,6 +7141,10 @@
               "string",
               "null"
             ]
+          },
+          "description_truncated": {
+            "type": "boolean",
+            "description": "Whether the description was cut at the display cap."
           },
           "effective": {
             "$ref": "#/components/schemas/McpToolEffectiveState",
