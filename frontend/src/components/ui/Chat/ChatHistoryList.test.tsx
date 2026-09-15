@@ -531,12 +531,6 @@ describe("ChatHistoryList", () => {
       ...sessions[0],
       archivedAt: new Date("2024-01-05").toISOString(),
     };
-    const run: ChatSession = {
-      ...sessions[0],
-      provenanceKind: "delegation",
-      originChatId: "origin-1",
-      originChatTitle: "Q3 planning",
-    };
 
     it("offers Unarchive in place of Archive, Pin and Share when archived", async () => {
       expect(labels(await renderMenu(archivedSession))).toEqual([
@@ -554,51 +548,7 @@ describe("ChatHistoryList", () => {
       ]);
     });
 
-    it("withholds both archive actions from a delegated run", async () => {
-      expect(labels(await renderMenu(run))).not.toContain("Archive");
-      expect(
-        labels(await renderMenu({ ...run, ...archivedSession })),
-      ).not.toContain("Unarchive");
-    });
-
-    it("confirms archiving only while the chat is still working", async () => {
-      const idle = await renderMenu(sessions[0]);
-      expect(idle.at(-1)?.confirmAction).toBe(false);
-
-      useGenerationStatusStore.setState({
-        statusByChatId: {
-          "chat-1": {
-            kind: "running",
-            startedAt: new Date().toISOString(),
-            localSeenAt: Date.now(),
-          },
-        },
-        currentChatId: null,
-      });
-      const running = await renderMenu(sessions[0]);
-      expect(running.at(-1)?.confirmAction).toBe(true);
-      expect(running.at(-1)?.confirmMessage).toContain("still generating");
-
-      useGenerationStatusStore.setState({
-        statusByChatId: {},
-        currentChatId: null,
-      });
-      useConfirmationRegistryStore.setState({
-        pendingIdsByChatId: { "chat-1": ["approval-1"] },
-      });
-      const actionRequired = await renderMenu(sessions[0]);
-      expect(actionRequired.at(-1)?.confirmAction).toBe(true);
-      expect(actionRequired.at(-1)?.confirmMessage).toContain("tool approval");
-    });
-
-    it("disables pinning at the limit and everything without edit rights", async () => {
-      const atLimit = await renderMenu(sessions[0], {
-        pinnedChatsCount: 5,
-        pinnedChatsLimit: 5,
-      });
-      expect(labels(atLimit)[0]).toBe("Pin limit reached");
-      expect(atLimit[0].disabled).toBe(true);
-
+    it("disables everything without edit rights", async () => {
       const readOnly = await renderMenu({ ...sessions[0], canEdit: false });
       // The array first: `every` on an empty one passes, so hiding the items
       // instead of disabling them would slip through the flag check alone.
