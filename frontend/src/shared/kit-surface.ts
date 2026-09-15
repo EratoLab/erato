@@ -198,6 +198,19 @@ export { teamsUploadDisplayName } from "@/utils/teams/teamsUploadName";
 export { isPromptInjectionFilterDetails } from "@/types/chat";
 export type { MessageErrorFilterDetails } from "@/types/chat";
 
+// The wording of that bubble. A kit only restyles the alert, so it copies the
+// host's branches to get at the markup — and then stops hearing about every
+// branch added since, which is why an aborted hallucination loop reads as the
+// generic "unable to respond" kit-side. Pure `t()` lookups, no markup, so the
+// kit can keep its own alert and still say what the host says.
+export {
+  getContentFilterCategoryLabel,
+  getContentFilterSeverityLabel,
+  getErrorCta,
+  getErrorDescription,
+  getErrorTitle,
+} from "@/components/ui/Message/messageErrorCopy";
+
 // The running / needs-you indicator over a set of conversations. A kit cannot
 // reproduce it: the status is aggregated out of two stores a kit must never
 // write, so the resolved aggregate is pinned rather than the stores behind it.
@@ -342,6 +355,11 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "Tooltip",
   "chatAttentionStatusLabel",
   "chatAttentionStatusToneClass",
+  "getContentFilterCategoryLabel",
+  "getContentFilterSeverityLabel",
+  "getErrorCta",
+  "getErrorDescription",
+  "getErrorTitle",
   "groupTeamsSentAttachments",
   "isPromptInjectionFilterDetails",
   "messageStyles",
