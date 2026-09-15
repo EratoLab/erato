@@ -169,10 +169,10 @@ async fn test_app_state_internal(
         Some(db.clone()),
         app_config.generation_status.clone(),
         app_config
-            .assistants
             .delegation
+            .assistants
             .enabled
-            .then_some(app_config.assistants.delegation.run_timeout_seconds),
+            .then_some(app_config.delegation.run_timeout_seconds),
     );
     let distribution = Arc::new(erato::distribution::Distribution::load(&app_config));
     let mcp_servers = McpServers::new(&app_config);

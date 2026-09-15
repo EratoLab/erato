@@ -1327,7 +1327,7 @@ export type EditMessageRequest = {
   delegation_run_mode?: DelegationRunMode;
   /**
    * Assistants the user @-mentioned in this message as delegation targets.
-   * Validated server-side; requires `assistants.delegation.enabled`.
+   * Validated server-side; requires `delegation.assistants.enabled`.
    */
   mentioned_assistant_ids?: string[];
   /**
@@ -1869,7 +1869,7 @@ export type MessageSubmitRequest = {
   mcp_write_tools_enabled?: boolean;
   /**
    * Assistants the user @-mentioned in this message as delegation targets.
-   * Validated server-side; requires `assistants.delegation.enabled`.
+   * Validated server-side; requires `delegation.assistants.enabled`.
    */
   mentioned_assistant_ids?: string[];
   /**
@@ -2338,7 +2338,7 @@ export type RegenerateMessageRequest = {
   delegation_run_mode?: DelegationRunMode;
   /**
    * Assistants the user @-mentioned in this message as delegation targets.
-   * Validated server-side; requires `assistants.delegation.enabled`.
+   * Validated server-side; requires `delegation.assistants.enabled`.
    */
   mentioned_assistant_ids?: string[];
   /**
