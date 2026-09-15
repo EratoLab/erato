@@ -199,7 +199,6 @@ export const DEFAULT_STUBS = {
     avatar: { user: "", assistant: "" },
     hover: "",
   },
-  chatHistoryRowMenuOptions: () => ({}),
   resolvePopoverViewportPadding: () => 0,
   useChatHistoryRowPresentation: () => ({}),
   useGetFile: () => ({ data: undefined, isLoading: false, error: null }),

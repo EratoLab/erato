@@ -86,7 +86,6 @@ export { Tooltip } from "@/components/ui/Controls/Tooltip";
 // The gating lives in the menu hook, so a kit renders the items it returns
 // rather than deciding anything about archiving, runs or pin limits itself.
 export {
-  chatHistoryRowMenuOptions,
   useChatHistoryRow,
   useChatHistoryRowMenuItems,
   useChatHistoryRowPresentation,
@@ -310,7 +309,6 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "ToolCallOutput",
   "ToolCallOutputProps",
   "Tooltip",
-  "chatHistoryRowMenuOptions",
   "messageStyles",
   "resolvePopoverViewportPadding",
   "useChatHistoryRow",

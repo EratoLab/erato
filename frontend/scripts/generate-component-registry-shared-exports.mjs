@@ -283,7 +283,7 @@ const withheldExports = [
     modulePath: path.join(componentsDir, "ui", "Chat", "ChatHistoryList.tsx"),
     names: ["DEFAULT_PINNED_CHATS_LIMIT", "ChatHistoryRowMenuHandlers"],
     reason:
-      "byproducts of the row module rather than anything a kit was offered: the limit reaches an override as a prop the host has already defaulted, and the handler half of ChatHistoryRowMenuOptions is what chatHistoryRowMenuOptions builds",
+      "byproducts of the row module rather than anything a kit was offered: the limit reaches an override as a prop the host has already defaulted, and the handler half of ChatHistoryRowMenuOptions is what the host assembles per row",
   },
   {
     modulePath: path.join(componentsDir, "providers", "ThemeProvider.tsx"),

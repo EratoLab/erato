@@ -24,7 +24,6 @@ export { unarchiveActionLabel } from "@/components/ui/Chat/chatArchiveActions";
 export { ChatAttentionStatusDot } from "@/components/ui/Chat/ChatAttentionStatusDot";
 export { ChatHistoryList } from "@/components/ui/Chat/ChatHistoryList";
 export { ChatHistoryListSkeleton } from "@/components/ui/Chat/ChatHistoryList";
-export { chatHistoryRowMenuOptions } from "@/components/ui/Chat/ChatHistoryList";
 export { useChatHistoryRow } from "@/components/ui/Chat/ChatHistoryList";
 export { useChatHistoryRowMenuItems } from "@/components/ui/Chat/ChatHistoryList";
 export { useChatHistoryRowPresentation } from "@/components/ui/Chat/ChatHistoryList";

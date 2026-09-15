@@ -267,7 +267,7 @@ export const buildChatHistoryRowMenuItems = (
   ];
 };
 
-export const chatHistoryRowMenuOptions = (
+const chatHistoryRowMenuOptions = (
   {
     onSessionArchive,
     onSessionUnarchive,
