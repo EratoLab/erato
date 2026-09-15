@@ -101,12 +101,18 @@ impl From<Option<UserToolDecision>> for McpServerToolUserDecision {
     }
 }
 
-/// One tool as the server declares it. `name`, `title` and `description`
-/// are vendor text passed through `sanitize_display_text`; a client shows
-/// them as plain text and never interprets them.
+/// One tool as the server declares it. `title` and `description` are vendor
+/// text passed through `sanitize_display_text`; a client shows them as plain
+/// text and never interprets them. `name` is the tool's identity, not display
+/// text: a client sends it back unchanged when it stores a decision or
+/// switches the tool off for a chat, and every gate compares it byte for byte
+/// with the name the server declares.
 #[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct McpServerTool {
+    /// The name the server declares, verbatim; the key a client echoes back.
     pub name: String,
+    /// Display text: the server's title, else its annotation title, else the
+    /// name, each cleaned; the first that survives cleaning.
     pub title: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -230,47 +236,13 @@ pub async fn list_mcp_server_tools(
         .tools
         .iter()
         .map(|tool| {
-            let verdict = evaluate_mcp_tool_approval(&global.approval, tool);
-            // Decisions and the wait list are keyed by the name the server
-            // uses; only the projected text is cleaned.
-            let name = tool.name.to_string();
-            let user_decision = user_decisions.get(&name).copied();
-            let is_wait_tool = global.enable_wait || is_tool_allowed_to_wait(&name, &config);
-            let title = tool
-                .title
-                .as_deref()
-                .or_else(|| {
-                    tool.annotations
-                        .as_ref()
-                        .and_then(|annotations| annotations.title.as_deref())
-                })
-                .unwrap_or(&name);
-            let description = tool
-                .description
-                .as_deref()
-                .map(|value| sanitize_display_text(value, MAX_DISPLAY_DESCRIPTION_CHARS))
-                .filter(|value| !value.text.is_empty());
-            McpServerTool {
-                title: sanitize_display_text(title, MAX_DISPLAY_NAME_CHARS).text,
-                description_truncated: description.as_ref().is_some_and(|value| value.truncated),
-                description: description.map(|value| value.text),
-                annotations: McpServerToolAnnotations {
-                    read_only_hint: verdict.annotations.read_only_hint,
-                    destructive_hint: verdict.annotations.destructive_hint,
-                    idempotent_hint: verdict.annotations.idempotent_hint,
-                    open_world_hint: verdict.annotations.open_world_hint,
-                    annotated: verdict.annotated,
-                },
-                policy: if verdict.requires_approval {
-                    McpServerToolPolicy::Ask
-                } else {
-                    McpServerToolPolicy::Auto
-                },
-                user_decision: user_decision.into(),
-                effective: effective_mcp_tool_state(&global.approval, &verdict, user_decision),
-                is_wait_tool,
-                name: sanitize_display_text(&name, MAX_DISPLAY_NAME_CHARS).text,
-            }
+            let name = tool.name.as_ref();
+            project_mcp_server_tool(
+                &global.approval,
+                tool,
+                user_decisions.get(name).copied(),
+                global.enable_wait || is_tool_allowed_to_wait(name, &config),
+            )
         })
         .collect();
     sort_tools_by_title(&mut tools);
@@ -282,6 +254,56 @@ pub async fn list_mcp_server_tools(
         ask_available: global.approval.enabled,
         tools,
     }))
+}
+
+/// Project one declared tool for a client. Decisions, the wait list and the
+/// call gates are all keyed by the name the server uses, so `name` leaves
+/// here untouched and only the display text is cleaned.
+fn project_mcp_server_tool(
+    approval: &crate::config::McpToolApprovalConfig,
+    tool: &rmcp::model::Tool,
+    user_decision: Option<UserToolDecision>,
+    is_wait_tool: bool,
+) -> McpServerTool {
+    let verdict = evaluate_mcp_tool_approval(approval, tool);
+    let name = tool.name.to_string();
+    let title = [
+        tool.title.as_deref(),
+        tool.annotations
+            .as_ref()
+            .and_then(|annotations| annotations.title.as_deref()),
+    ]
+    .into_iter()
+    .flatten()
+    .map(|candidate| sanitize_display_text(candidate, MAX_DISPLAY_NAME_CHARS).text)
+    .find(|candidate| !candidate.is_empty())
+    .unwrap_or_else(|| sanitize_display_text(&name, MAX_DISPLAY_NAME_CHARS).text);
+    let description = tool
+        .description
+        .as_deref()
+        .map(|value| sanitize_display_text(value, MAX_DISPLAY_DESCRIPTION_CHARS))
+        .filter(|value| !value.text.is_empty());
+    McpServerTool {
+        title,
+        description_truncated: description.as_ref().is_some_and(|value| value.truncated),
+        description: description.map(|value| value.text),
+        annotations: McpServerToolAnnotations {
+            read_only_hint: verdict.annotations.read_only_hint,
+            destructive_hint: verdict.annotations.destructive_hint,
+            idempotent_hint: verdict.annotations.idempotent_hint,
+            open_world_hint: verdict.annotations.open_world_hint,
+            annotated: verdict.annotated,
+        },
+        policy: if verdict.requires_approval {
+            McpServerToolPolicy::Ask
+        } else {
+            McpServerToolPolicy::Auto
+        },
+        user_decision: user_decision.into(),
+        effective: effective_mcp_tool_state(approval, &verdict, user_decision),
+        is_wait_tool,
+        name,
+    }
 }
 
 fn sort_tools_by_title(tools: &mut [McpServerTool]) {
@@ -598,6 +620,48 @@ mod tests {
         sort_tools_by_title(&mut tools);
         let order: Vec<&str> = tools.iter().map(|tool| tool.name.as_str()).collect();
         assert_eq!(order, vec!["m_tool", "z_tool", "a_tool"]);
+    }
+
+    fn projected(name: &str, title: Option<&str>) -> McpServerTool {
+        let mut tool = rmcp::model::Tool::new(
+            name.to_string(),
+            "reads a fixture",
+            rmcp::model::JsonObject::new(),
+        );
+        tool.title = title.map(str::to_string);
+        let approval = crate::config::McpToolApprovalConfig {
+            enabled: true,
+            preset: crate::config::McpToolApprovalPreset::Restrictive,
+            allow_always: true,
+        };
+        project_mcp_server_tool(&approval, &tool, Some(UserToolDecision::Denied), false)
+    }
+
+    #[test]
+    fn projection_keeps_the_declared_name_as_the_key() {
+        let hostile = "read\u{200E}file";
+        let tool = projected(hostile, None);
+        assert_eq!(tool.name, hostile);
+        assert_eq!(tool.title, "readfile");
+        assert!(matches!(
+            tool.user_decision,
+            McpServerToolUserDecision::Denied
+        ));
+
+        let long_name = "x".repeat(MAX_DISPLAY_NAME_CHARS + 1);
+        let tool = projected(&long_name, None);
+        assert_eq!(tool.name, long_name);
+        assert_eq!(tool.title.chars().count(), MAX_DISPLAY_NAME_CHARS);
+    }
+
+    #[test]
+    fn projection_falls_back_to_the_name_when_the_title_cleans_to_nothing() {
+        assert_eq!(projected("read_file", Some("\u{202E}")).title, "read_file");
+        assert_eq!(projected("read_file", Some("")).title, "read_file");
+        assert_eq!(
+            projected("read_file", Some(" Read file ")).title,
+            "Read file"
+        );
     }
 
     #[test]
