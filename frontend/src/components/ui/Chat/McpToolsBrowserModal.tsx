@@ -13,11 +13,13 @@ import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
 import { ModalBase } from "../Modal/ModalBase";
 import { EntityRow } from "../Settings/EntityRow";
+import { McpToolGroup } from "../Settings/McpToolGroup";
 import { McpToolRow } from "../Settings/McpToolRow";
 import {
   mcpServerDescription,
   mcpServerStatus,
 } from "../Settings/mcpServerStatus";
+import { groupMcpTools } from "../Settings/mcpToolGroups";
 import { LinkIcon, ResolvedIcon } from "../icons";
 
 import type {
@@ -184,16 +186,25 @@ function McpServerToolsList({
     );
   } else {
     body = (
-      <ul className="space-y-3">
-        {toolsResponse.tools.map((tool) => (
-          <McpToolBrowserRow
-            key={tool.name}
-            serverId={serverId}
-            tool={tool}
-            toolSwitch={toolSwitch}
-          />
+      <div className="space-y-4">
+        {groupMcpTools(toolsResponse.tools).map(({ key, tools }) => (
+          <McpToolGroup
+            key={key}
+            group={key}
+            count={tools.length}
+            data-testid="mcp-tools-browser-group"
+          >
+            {tools.map((tool) => (
+              <McpToolBrowserRow
+                key={tool.name}
+                serverId={serverId}
+                tool={tool}
+                toolSwitch={toolSwitch}
+              />
+            ))}
+          </McpToolGroup>
         ))}
-      </ul>
+      </div>
     );
   }
 

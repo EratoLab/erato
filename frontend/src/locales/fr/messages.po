@@ -3677,24 +3677,29 @@ msgid "preferences.dialog.fields.nickname.placeholder"
 msgstr "Comment l’assistant doit-il vous appeler ? ex. Max Mustermann"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+#: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.allow.defaultLabel"
 msgstr "Autoriser (par défaut selon la politique)"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.allow.helper"
-msgstr "S'exécute sans demander ; la politique d'approbation n'arrête pas cet outil."
+#~ msgid "preferences.dialog.mcpServers.approvals.allow.helper"
+#~ msgstr "S'exécute sans demander ; la politique d'approbation n'arrête pas cet outil."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+#: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.allow.label"
 msgstr "Autoriser"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolDecisionControl.tsx
+msgid "preferences.dialog.mcpServers.approvals.allow.unavailable"
+msgstr "« Toujours autoriser » est désactivé par la politique d'approbation."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.always.helper"
-msgstr "Exécute cet outil sans demander."
+#~ msgid "preferences.dialog.mcpServers.approvals.always.helper"
+#~ msgstr "Exécute cet outil sans demander."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
@@ -3702,24 +3707,29 @@ msgstr "Exécute cet outil sans demander."
 #~ msgstr "Toujours autoriser"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+#: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.ask.defaultLabel"
 msgstr "Demander à chaque fois (par défaut selon la politique)"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.ask.escalationHelper"
-msgstr "Vous demande avant chaque exécution, même là où la politique ne le ferait pas."
+#~ msgid "preferences.dialog.mcpServers.approvals.ask.escalationHelper"
+#~ msgstr "Vous demande avant chaque exécution, même là où la politique ne le ferait pas."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.ask.helper"
-msgstr "Affiche la confirmation dans le chat chaque fois que cet outil veut s'exécuter."
+#~ msgid "preferences.dialog.mcpServers.approvals.ask.helper"
+#~ msgstr "Affiche la confirmation dans le chat chaque fois que cet outil veut s'exécuter."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+#: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.ask.label"
 msgstr "Demander à chaque fois"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolDecisionControl.tsx
+msgid "preferences.dialog.mcpServers.approvals.ask.unavailable"
+msgstr "Demander avant chaque exécution est désactivé par la politique d'approbation."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
@@ -3732,22 +3742,67 @@ msgstr "Demander à chaque fois"
 #~ msgstr "Aucune décision pour le moment. Lorsque vous choisissez « Toujours autoriser » dans un chat, l'outil apparaît ici."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.allow.description"
+msgstr "Exécute chaque outil de ce groupe sans demander."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.ask.description"
+msgstr "Vous demande avant chaque exécution de ces outils."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.default.description"
+msgstr "Oublie vos décisions pour ces outils."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.default.label"
+msgstr "Valeur par défaut de la politique"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.mixed"
+msgstr "Mixte"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.never.description"
+msgstr "Tient ces outils à l'écart de l'assistant."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.skipped.allow"
+msgstr "{count, plural, one {# outil ignoré : « Toujours autoriser » est désactivé par la politique d'approbation.} other {# outils ignorés : « Toujours autoriser » est désactivé par la politique d'approbation.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.skipped.ask"
+msgstr "{count, plural, one {# outil ignoré : demander avant chaque exécution est désactivé par la politique d'approbation.} other {# outils ignorés : demander avant chaque exécution est désactivé par la politique d'approbation.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolPermissionsRoster.tsx
+msgid "preferences.dialog.mcpServers.approvals.group.triggerLabel"
+msgstr "{groupLabel} : {stateLabel}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 #~ msgid "preferences.dialog.mcpServers.approvals.heading"
 #~ msgstr "Autorisations d'outils"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.loadError"
-msgstr "Impossible de charger vos décisions d'outils. Veuillez réessayer."
+#~ msgid "preferences.dialog.mcpServers.approvals.loadError"
+#~ msgstr "Impossible de charger vos décisions d'outils. Veuillez réessayer."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.approvals.never.helper"
-msgstr "Tient cet outil à l'écart de l'assistant et le bloque même lorsqu'une confirmation est déjà en attente."
+#~ msgid "preferences.dialog.mcpServers.approvals.never.helper"
+#~ msgstr "Tient cet outil à l'écart de l'assistant et le bloque même lorsqu'une confirmation est déjà en attente."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+#: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.never.label"
 msgstr "Ne jamais autoriser"
 
@@ -3930,8 +3985,8 @@ msgstr "Lecture seule"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.tools.description"
-msgstr "Décidez pour chaque outil de ce serveur s'il peut s'exécuter pour vous. Les décisions s'appliquent à votre compte sur tous les appareils ; choisir « Toujours autoriser » dans un chat est également enregistré ici."
+#~ msgid "preferences.dialog.mcpServers.tools.description"
+#~ msgstr "Décidez pour chaque outil de ce serveur s'il peut s'exécuter pour vous. Les décisions s'appliquent à votre compte sur tous les appareils ; choisir « Toujours autoriser » dans un chat est également enregistré ici."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
@@ -3946,9 +4001,19 @@ msgid "preferences.dialog.mcpServers.tools.failure"
 msgstr "Les outils n'ont pas pu être listés, car le serveur est injoignable."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/mcpToolGroups.ts
+msgid "preferences.dialog.mcpServers.tools.group.readOnly"
+msgstr "Outils en lecture seule"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/mcpToolGroups.ts
+msgid "preferences.dialog.mcpServers.tools.group.write"
+msgstr "Outils d'écriture/suppression"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
-msgid "preferences.dialog.mcpServers.tools.heading"
-msgstr "Outils"
+#~ msgid "preferences.dialog.mcpServers.tools.heading"
+#~ msgstr "Outils"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
@@ -3967,6 +4032,16 @@ msgstr "Chargement des outils..."
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.needsAuthentication"
 msgstr "Connectez-vous pour voir les outils."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.tools.permissions.description"
+msgstr "Choisissez quand l'assistant peut utiliser ces outils."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolApprovalSettings.tsx
+msgid "preferences.dialog.mcpServers.tools.permissions.heading"
+msgstr "Autorisations des outils"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
