@@ -125,9 +125,6 @@ describe("shared surface requirements", () => {
       : { builtAgainstSharedSurfaceMinor }),
   });
 
-  // Kits push onto the global after the host module has evaluated, so the
-  // registrations arrive through `applyComponentKitRegistrations` — the path
-  // that has to reset an already-installed override back to the host's.
   const applyKits = async (
     kits: ComponentKitRegistration[],
     stance?: ComponentKitVersionStance,
@@ -223,9 +220,6 @@ describe("shared surface requirements", () => {
     expect(registry.ChatHistoryList).toBe(list);
   });
 
-  // The deployment's own switch: a customer whose kits are current enforces
-  // without a host release, so this path is the one that makes the guard worth
-  // shipping and nothing else in the suite exercises it.
   it("enforces when the deployment asks for it", async () => {
     window.ERATO_COMPONENT_KIT_VERSION_STANCE = "enforce";
 
@@ -243,9 +237,6 @@ describe("shared surface requirements", () => {
     expect(registry.ChatHistoryList).toBe(list);
   });
 
-  // The claim has to be as fine-grained as the check, or a customer who
-  // rebuilt one override raises the kit-level number and thereby vouches for
-  // every override they never reread.
   it("lets a registration declare its own minor without the kit's", async () => {
     const registry = await applyKits(
       [
@@ -296,8 +287,7 @@ describe("shared surface requirements", () => {
   });
 
   it("lets a current kit take a point a stale kit is barred from", async () => {
-    // Same priority, stale kit last: without the guard it would win on load
-    // order, which is how the incident's silent revert happened.
+    // Same priority, stale kit last: without the guard it would win on load order.
     const current: ComponentKitRegistration = {
       name: "current",
       components: [

@@ -5,9 +5,7 @@ export default defineConfig({
   esbuild: {
     jsx: "automatic",
   },
-  // A kit and the host it borrows from must agree on these instances; in the
-  // app the import map guarantees it, and here the bundler has to. The list
-  // comes from that same import map rather than being copied.
+  // A kit and the host it borrows from must share these module instances.
   resolve: {
     dedupe: [...eratoComponentKitTestDedupe],
   },

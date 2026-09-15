@@ -67,9 +67,6 @@ export default defineConfig(({ mode }) => {
           // or writes the format does not pull the component barrel in to get
           // at a constant.
           teams: path.resolve(__dirname, "./src/utils/teams/index.ts"),
-          // Kept off the shared surface so this test-only suite never reaches
-          // an end user's bundle, and a sibling entry so a kit's test writes
-          // the same store instances the hooks it takes from `shared` read.
           conformance: path.resolve(__dirname, "./src/conformance/index.ts"),
         },
         formats: ["es"],

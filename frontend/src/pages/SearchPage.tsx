@@ -132,17 +132,13 @@ const SearchResultRow = ({
               canEdit: result.canEdit,
               // Asserted rather than resolved: the search payload carries no
               // provenance, so a delegated run listed here is still offered
-              // the archive actions the sidebar withholds from it. A known
-              // divergence waiting on provenance in the payload, not a fact
-              // about search results.
+              // the archive actions the sidebar withholds from it.
               isRun: false,
               status,
             },
             {
               pinnedChatsCount,
               pinnedChatsLimit,
-              // A disabled feature reaches the gates as a missing handler,
-              // which is the same thing as a caller that offers no action.
               onPin: pinnedChatsEnabled ? onPin : undefined,
               onShare: chatSharingEnabled ? onShare : undefined,
               onEditTitle: onRename,

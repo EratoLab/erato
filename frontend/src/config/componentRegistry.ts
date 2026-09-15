@@ -273,9 +273,7 @@ export type ComponentKitComponentRegistration = {
     component: ComponentRegistryComponent<TKey>;
     priority: number;
     /**
-     * Overrides the kit-level claim for this point alone. A kit that rebuilt
-     * one override attests to it here rather than raising the kit-level value,
-     * which would vouch for every other override it did not reread.
+     * Overrides the kit-level claim for this point alone.
      */
     builtAgainstSharedSurfaceMinor?: number;
   };
@@ -287,9 +285,7 @@ export interface ComponentKitRegistration {
   /**
    * The `ERATO_SHARED_SURFACE_MINOR` the kit was built against, written as a
    * literal: the import map resolves the constant itself to the *running*
-   * host, so reading it at runtime would only ever agree with itself. Absent
-   * is read as the oldest contract, not as consent — an override built before
-   * a rule existed cannot be carrying it.
+   * host, so reading it at runtime would only ever agree with itself.
    */
   builtAgainstSharedSurfaceMinor?: number;
 }
@@ -448,9 +444,6 @@ export const componentRegistry: ComponentRegistry = buildComponentRegistry(
  * the initial build above sees an empty kit list. Entry points must call this
  * after kit scripts have executed and before the first render (and before any
  * entry-point-specific registry assignments).
- *
- * The version guard runs here rather than over `window.ERATO_COMPONENT_KITS`
- * separately, so what it reports and what it installs cannot disagree.
  */
 export const applyComponentKitRegistrations = (
   stance: ComponentKitVersionStance = resolveComponentKitVersionStance(),

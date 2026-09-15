@@ -459,8 +459,6 @@ describe("ChatHistoryList", () => {
       });
     });
 
-    // The second indicator the row already had. It rides the hook rather than
-    // the row so an override inherits it the same way it inherits the badges.
     describe("subline", () => {
       const renderSubline = async (session: ChatSession) => {
         const { i18n } = await import("@lingui/core");
@@ -625,13 +623,7 @@ describe("ChatHistoryList", () => {
     });
   });
 
-  // The host runs its own contract suite so the cases cannot describe only
-  // what this list happens to do; each kit runs the same export against its
-  // override.
   describe("row conformance suite", () => {
-    // Stands in for an override that renders the gated array its own way: the
-    // host's items arrive as they always do and this is what the kit did to
-    // them before drawing them.
     const failuresForOverride = async (
       asRenderedByAKit: (items: DropdownMenuItem[]) => DropdownMenuItem[] = (
         items,
@@ -747,11 +739,6 @@ describe("ChatHistoryList", () => {
     });
   });
 
-  // Adding a row rule means adding a conformance case, bumping
-  // ERATO_SHARED_SURFACE_MINOR and raising this point's requirement. Skipping
-  // the last two is invisible — the suite still passes and the requirement
-  // still looks satisfied — so the three sets that make up the contract are
-  // pinned here against the minor that records them.
   describe("row contract shape", () => {
     const rowKeys = async () => {
       const { i18n } = await import("@lingui/core");

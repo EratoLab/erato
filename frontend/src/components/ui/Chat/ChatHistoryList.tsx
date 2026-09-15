@@ -88,16 +88,8 @@ const ChatItemIcon = memo(() => {
 ChatItemIcon.displayName = "ChatItemIcon";
 
 /**
- * Row title, attention status, archived marker, delegated-run origin and the
- * composed aria label — the shape a component kit needs when it overrides this
- * list. Exposed as the resolved result rather than its ingredients so kits
- * cannot reimplement `resolveSessionRowStatus` and end up with a dot that
- * disagrees with the session's group.
- *
- * Render `badges` and `subline` rather than their ingredients: an indicator
- * added to either then reaches every list that overrides this one without
- * touching the kit. The trade is deliberate — the host owns the markup of
- * both, so a kit restyles them through CSS rather than by rebuilding them.
+ * Render `badges` and `subline` rather than their ingredients; a kit that
+ * rebuilds either loses row rules added later.
  */
 export interface ChatHistoryRowPresentation {
   title: string;
@@ -179,21 +171,16 @@ export interface ChatHistoryRowMenuState {
   archived: boolean;
   isPinned: boolean;
   canEdit: boolean;
-  /** Delegated runs get neither archive action; see the hook below. */
   isRun: boolean;
   status: ChatAttentionStatus | null;
 }
 
 /**
  * The row's dropdown items, already gated. A caller renders the array as it
- * comes; nothing it leaves out can drop a rule. Every item carries a stable
- * `id`, so a kit can swap icons or reorder by mapping over the result without
- * reproducing a gate; an id it does not recognise keeps the host's own icon.
+ * comes; nothing it leaves out can drop a rule.
  *
- * Host-only, and withheld from the kit surface by name in the generator:
- * assembling the state by hand is how a caller loses the run and pending-
- * confirmation gates, and a kit overriding this list holds sessions, so
- * `useChatHistoryRow` is its way in.
+ * Host-only, withheld from the kit surface by name in the generator: building
+ * the state by hand loses the run and pending-confirmation gates.
  */
 export const buildChatHistoryRowMenuItems = (
   { archived, isPinned, canEdit, isRun, status }: ChatHistoryRowMenuState,
@@ -280,11 +267,6 @@ export const buildChatHistoryRowMenuItems = (
   ];
 };
 
-/**
- * The menu half of a list's props, curried per row. The kit-facing lists pass
- * their whole props object, so an action added here reaches every override
- * without one of them naming its callback.
- */
 export const chatHistoryRowMenuOptions = (
   {
     onSessionArchive,
@@ -313,8 +295,6 @@ export const chatHistoryRowMenuOptions = (
     : undefined,
 });
 
-// One mapping from session to gate state, so the row below and the kit-facing
-// hook stay identical while each resolves the status only once.
 const rowMenuState = (
   session: ChatSession,
   status: ChatAttentionStatus | null,
@@ -328,7 +308,6 @@ const rowMenuState = (
   status,
 });
 
-/** The gated items for a listed `ChatSession`, status resolved from the stores. */
 export const useChatHistoryRowMenuItems = ({
   session,
   ...handlers
@@ -343,13 +322,7 @@ export interface ChatHistoryRow extends ChatHistoryRowPresentation {
 }
 
 /**
- * A whole listed row, and the one call an override needs: the presentation
- * fields and the gated menu, with the row's status resolved once for both.
- * The two hooks above stay for kits already built on them, but a row that
- * calls both subscribes to the status stores twice.
- *
- * Whatever a later row rule adds lands in `ChatHistoryRow`, so it reaches an
- * override through a type it already names rather than through a new import.
+ * A row that calls both hooks above subscribes to the status stores twice.
  */
 export const useChatHistoryRow = (
   props: ChatHistoryListProps,
@@ -413,8 +386,6 @@ const getFileCountLabel = (count: number) =>
     message: plural(count, { 0: "No files", one: "# file", other: "# files" }),
   });
 
-// The same one call an override makes, so a row rule that reaches kits through
-// `useChatHistoryRow` cannot skip the host's own list.
 const ChatHistoryListItem = memo<{
   listProps: ChatHistoryListProps;
   session: ChatSession;

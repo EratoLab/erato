@@ -1,16 +1,7 @@
 /**
- * The row behaviours any `ChatHistoryList` override has to keep, authored by
- * the host so that a kit which has never heard of a rule still goes red the
- * day it drops one. Both sides run the same cases against their own list.
- *
- * Deliberately framework-free: the caller supplies rendering and menu opening,
- * because a kit's trailing menu mounts on hover while the host's does not, and
- * this module must not drag a test runner in behind it. It reports failures
- * rather than asserting, so each side ends with one
- * `expect(failures).toEqual([])`.
- *
- * Assertions read ids, test ids and relations — never label text: a kit's test
- * harness activates its own catalog, so host copy is unreadable there.
+ * Reports failures rather than asserting: each side ends with one
+ * `expect(failures).toEqual([])`. Assertions read ids and test ids, never
+ * label text, because a kit's harness activates its own catalog.
  */
 /* eslint-disable lingui/no-unlocalized-strings -- failure text for a test run, never shown to a user */
 import { createElement } from "react";
@@ -27,12 +18,11 @@ import type { ChatAttentionStatus } from "@/utils/chatHistoryGrouping";
 import type { ComponentType, ReactElement } from "react";
 
 export interface ChatHistoryConformanceHarness {
-  /** Renders the element inside whatever providers this side needs. */
   render: (element: ReactElement) => {
     container: HTMLElement;
     unmount: () => void;
   };
-  /** Reveals the row's dropdown and returns the items it was handed. */
+  /** Opened by the caller: a kit's trailing menu mounts on hover. */
   openRowMenu: (container: HTMLElement) => DropdownMenuItem[];
 }
 
@@ -51,11 +41,6 @@ const ARCHIVED_SESSION: ChatSession = {
   archivedAt: new Date("2024-01-02T00:00:00.000Z").toISOString(),
 };
 
-/**
- * A run with a terminal outcome and no store behind it: its status dot and its
- * origin line both come from the session alone, which is what lets this run
- * outside the host app.
- */
 const RUN_SESSION: ChatSession = {
   ...ACTIVE_SESSION,
   provenanceKind: DELEGATION_PROVENANCE_KIND,
@@ -83,9 +68,8 @@ const row = (container: HTMLElement) =>
   container.querySelector(`[${CHAT_HISTORY_ROW_TEST_ID.row}]`);
 
 /**
- * Searched upwards first and then inside, because both are legal markup: the
- * host names the row element itself, while a kit that marks the `<li>` and
- * labels the button within it is just as correct.
+ * Searched upwards first and then inside: the host names the row element
+ * itself, while a kit may label an ancestor or a descendant instead.
  */
 const rowLabel = (container: HTMLElement) => {
   const element = row(container);
@@ -99,11 +83,8 @@ const text = (container: HTMLElement, testId: string) =>
   null;
 
 /**
- * The statuses that change what the row's menu does. They live in a host store
- * rather than on the session, so a fixture cannot state one as data; the runner
- * writes the store instead. This module is built as a sibling entry of the
- * shared surface, so that store is the same instance as the one behind the
- * hooks a kit imports from `@erato/frontend/shared`.
+ * The statuses that change what the row's menu does. They live in a host
+ * store, not on the session, so the runner writes the store instead.
  */
 type ConformanceRowStatus = "running" | "action_required";
 
@@ -136,8 +117,6 @@ const statusDotFailures = (
     `[data-testid="${CHAT_HISTORY_ROW_TEST_ID.status}"]`,
   );
   if (!dot) {
-    // Named here rather than in a comment: every status case failing this way
-    // at once means the store below is not the store the override reads.
     return [
       `no status dot on a "${status}" row (if every status case fails, the test build holds two copies of @erato/frontend)`,
     ];
@@ -160,9 +139,7 @@ const menuIds = (items: DropdownMenuItem[]) =>
 
 /**
  * One item the host's gates have to produce. Both flags default to `false`,
- * which is what an absent flag means on a `DropdownMenuItem`, so a case states
- * only what it turns on and an item that is wrongly disabled or wrongly silent
- * still fails.
+ * which is what an absent flag means on a `DropdownMenuItem`.
  */
 interface RequiredMenuItem {
   id: string;
@@ -173,7 +150,6 @@ interface RequiredMenuItem {
 interface ConformanceCase {
   name: string;
   props: ChatHistoryListProps;
-  /** Status to put the listed chat in first; the row then has to show it. */
   status?: ConformanceRowStatus;
   /**
    * A case where no row may appear at all, and the failure to report if one
@@ -182,19 +158,10 @@ interface ConformanceCase {
   noRow?: string;
   /** Ids that must be present, in whatever order the override draws them. */
   menu: readonly RequiredMenuItem[];
-  /** Ids the gates drop for this row, which must not come back. */
   menuMustNotContain: readonly string[];
   check?: (container: HTMLElement) => string[];
 }
 
-/**
- * A required set in any order, not the exact array: the stable ids exist so a
- * kit can reorder the host's items and slot its own between them, and a suite
- * that goes red for that is a suite the kit stops running. Order is left to
- * the kit because no ordering failure costs a user a feature. A required id
- * missing, a wrong gate, or an id the host drops for this row rendered anyway
- * all still fail — a visible inert action is worse than a missing one.
- */
 const menuFailures = (
   items: DropdownMenuItem[],
   { menu, menuMustNotContain }: ConformanceCase,
@@ -303,8 +270,6 @@ const CASES: ConformanceCase[] = [
     },
   },
   {
-    // The pair the whole contract exists for: archiving is reversible, so it
-    // asks first only where unarchiving cannot put the work back.
     name: "a row that is still generating",
     props: listProps(ACTIVE_SESSION),
     status: "running",
@@ -350,9 +315,6 @@ const CASES: ConformanceCase[] = [
     menuMustNotContain: [CHAT_HISTORY_ROW_MENU_ID.unarchive],
   },
   {
-    // Not a row rule but the same failure class: an override that consumes
-    // only the props it happens to need draws whatever it was last given as
-    // if it were final, and the user reads a stale sidebar as a loaded one.
     name: "a list that is still loading",
     props: listProps(ACTIVE_SESSION, { isLoading: true }),
     noRow: "draws a row while the list is still loading",
@@ -403,18 +365,14 @@ const caseFailures = (
 export interface ChatHistoryConformanceOptions {
   /**
    * Menu ids this deployment's policy removes, so the cases stop requiring
-   * them. The escape hatch for a policy that forbids sharing, say: without it
-   * one case a customer considers correct goes red forever, and the whole
-   * suite is what gets deleted. The call site is the record of the omission —
-   * an id no case requires is reported as a failure rather than ignored.
+   * them. An id no case requires is reported as a failure rather than ignored.
    */
   omit?: readonly string[];
 }
 
 /**
  * Every id the cases name, required or forbidden. Exported for the host's own
- * shape test and deliberately not re-exported from `./index.ts`: what a kit
- * runs is the suite.
+ * shape test and deliberately not re-exported from `./index.ts`.
  */
 export const CHAT_HISTORY_ROW_CONTRACT_IDS: readonly string[] = [
   ...new Set(

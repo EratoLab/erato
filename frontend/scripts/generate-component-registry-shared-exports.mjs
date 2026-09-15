@@ -270,11 +270,8 @@ const pinnedComponentModules = [
   path.join(componentsDir, "ui", "FileUpload", "FilePreviewLoading.tsx"),
 ];
 
-// The other half of that decision: exports of a registry-reachable module that
-// the kit surface withholds on purpose. Everything a reachable module exports
-// otherwise reaches kits as a byproduct of the import graph — API nobody chose,
-// undocumented, and free to vanish. Generation fails when an entry stops
-// matching, so a rename cannot quietly re-open one.
+// Exports of a registry-reachable module the kit surface withholds on purpose;
+// everything else a reachable module exports reaches kits as an import-graph byproduct.
 const withheldExports = [
   {
     modulePath: path.join(componentsDir, "ui", "Chat", "ChatHistoryList.tsx"),

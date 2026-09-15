@@ -60,8 +60,7 @@ export const ExampleChatHistoryList: NonNullable<
   const loadMoreRef = useRef<HTMLLIElement | null>(null);
 
   // The pagination half of the contract. An override that consumes only the
-  // props it happens to need ships a sidebar that never loads a second page —
-  // the same silent loss as a dropped row rule, and nothing type-checks it.
+  // props it happens to need ships a sidebar that never loads a second page.
   useEffect(() => {
     const sentinel = loadMoreRef.current;
     if (!sentinel || !hasMore || !onLoadMore) {
