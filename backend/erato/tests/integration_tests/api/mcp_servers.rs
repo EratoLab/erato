@@ -491,3 +491,72 @@ async fn test_list_mcp_server_tools_separates_policy_decision_and_effect(pool: P
         row("ask", "denied", "denied")
     );
 }
+
+/// Vendor text reaches the client as inert, bounded plain text: markup stays
+/// literal, bidi and control characters are gone, and an oversized
+/// description is cut at the cap and flagged.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_list_mcp_server_tools_sanitizes_vendor_text(pool: Pool<Postgres>) {
+    // The in-process mock keeps the fixture next to the assertion instead of
+    // depending on the shared mock server's build.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind mock MCP listener");
+    let mock_mcp_base_url = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(axum::serve(listener, mock_mcp_server::app()).into_future());
+
+    let (mut app_config, _llm_server) = setup_mock_llm_server(None).await;
+    app_config.mcp_servers.insert(
+        "untrusted".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url,
+            "/mcp/untrusted-text",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let server = create_test_server(app_state);
+
+    let response = server
+        .get("/api/v1beta/me/mcp_servers/untrusted/tools")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status_ok();
+    let body: Value = response.json();
+    assert_eq!(body["status"], "SUCCESS");
+    let tools = body["tools"].as_array().expect("tools array");
+    assert_eq!(tools.len(), 2);
+    let untrusted = tools
+        .iter()
+        .find(|tool| tool["name"] == mock_mcp_server::UNTRUSTED_TEXT_TOOL_NAME)
+        .expect("untrusted tool listed");
+    let plain = tools
+        .iter()
+        .find(|tool| tool["name"] == mock_mcp_server::PLAIN_TEXT_TOOL_NAME)
+        .expect("plain tool listed");
+
+    let title = untrusted["title"].as_str().unwrap();
+    assert_eq!(
+        title,
+        format!("{} eltit", mock_mcp_server::UNTRUSTED_TEXT_MARKUP)
+    );
+
+    let description = untrusted["description"].as_str().unwrap();
+    assert!(
+        description.starts_with(&format!(
+            "{} reversed\n\nbody follows\n",
+            mock_mcp_server::UNTRUSTED_TEXT_MARKUP
+        )),
+        "{description:?}"
+    );
+    assert!(!description.contains(['\u{202E}', '\u{202C}', '\u{7}']));
+    assert_eq!(description.chars().count(), 4_000);
+    assert!(description.ends_with('ä'));
+    assert_eq!(untrusted["description_truncated"], true);
+
+    assert_eq!(plain["description"], "Reads a plainly described fixture");
+    assert_eq!(plain["description_truncated"], false);
+}
