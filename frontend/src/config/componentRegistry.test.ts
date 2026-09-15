@@ -145,6 +145,7 @@ describe("shared surface requirements", () => {
   afterEach(() => {
     consoleError.mockRestore();
     delete window.ERATO_COMPONENT_KITS;
+    delete window.ERATO_COMPONENT_KIT_VERSION_STANCE;
     vi.resetModules();
   });
 
@@ -212,11 +213,31 @@ describe("shared surface requirements", () => {
 
     expect(registry.ChatHistoryList).toBe(list);
     expect(consoleError).toHaveBeenCalledWith(
-      expect.stringContaining(`COMPONENT_KIT_VERSION_STANCE is "warn"`),
+      expect.stringContaining(`this deployment's stance is "warn"`),
     );
   });
 
   it("warns rather than enforces by default", async () => {
+    const registry = await applyKits([kit(undefined)]);
+
+    expect(registry.ChatHistoryList).toBe(list);
+  });
+
+  // The deployment's own switch: a customer whose kits are current enforces
+  // without a host release, so this path is the one that makes the guard worth
+  // shipping and nothing else in the suite exercises it.
+  it("enforces when the deployment asks for it", async () => {
+    window.ERATO_COMPONENT_KIT_VERSION_STANCE = "enforce";
+
+    const registry = await applyKits([kit(undefined)]);
+
+    expect(registry.ChatHistoryList).toBeNull();
+  });
+
+  it("keeps the default when the deployment sets something else", async () => {
+    window.ERATO_COMPONENT_KIT_VERSION_STANCE =
+      "strict" as unknown as ComponentKitVersionStance;
+
     const registry = await applyKits([kit(undefined)]);
 
     expect(registry.ChatHistoryList).toBe(list);

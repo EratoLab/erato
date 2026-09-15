@@ -79,11 +79,22 @@ running host. Leaving it out is read as the oldest possible contract, not as
 
 The host records a required minor per extension point and compares the two. A
 kit that is behind for one point is reported by name, with the point and the
-value to declare. What happens next is one constant,
-`COMPONENT_KIT_VERSION_STANCE`. It ships as `"warn"`, which reports the
-mismatch and installs the override anyway while deployed kits are still
-undeclared; `"enforce"` makes the host render its own component for that point
-instead, leaving the kit's other overrides installed.
+value to declare. What happens next is one switch the deployment owns:
+
+```html
+<script>
+  window.ERATO_COMPONENT_KIT_VERSION_STANCE = "enforce";
+</script>
+```
+
+Set it in the same script slot that loads the kit bundles, before the app entry
+point runs. The default is `"warn"`: the mismatch is reported and the override
+is installed anyway, which is what a fleet of kits that declare nothing needs.
+`"enforce"` makes the host render its own component for that one point instead,
+leaving the kit's other overrides installed. Flip it once every kit this
+deployment loads declares a `builtAgainstSharedSurfaceMinor` at or above each
+point's requirement — before that, enforcing reverts customer UI that may be
+perfectly current.
 
 ### Running the host's contract suite
 

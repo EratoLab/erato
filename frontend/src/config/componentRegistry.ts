@@ -24,7 +24,7 @@
  */
 
 import {
-  COMPONENT_KIT_VERSION_STANCE,
+  DEFAULT_COMPONENT_KIT_VERSION_STANCE,
   ERATO_SHARED_SURFACE_MINOR,
   EXTENSION_POINT_REQUIRED_SURFACE_MINOR,
 } from "@/shared/surfaceVersion";
@@ -291,8 +291,20 @@ export interface ComponentKitRegistration {
 declare global {
   interface Window {
     ERATO_COMPONENT_KITS?: ComponentKitRegistration[];
+    /**
+     * What this deployment does about a kit that is behind an extension
+     * point's contract. Set alongside the kit bundles, before the app entry
+     * runs; anything but `"enforce"` leaves the built-in default in place.
+     */
+    ERATO_COMPONENT_KIT_VERSION_STANCE?: ComponentKitVersionStance;
   }
 }
+
+const resolveComponentKitVersionStance = (): ComponentKitVersionStance =>
+  typeof window !== "undefined" &&
+  window.ERATO_COMPONENT_KIT_VERSION_STANCE === "enforce"
+    ? "enforce"
+    : DEFAULT_COMPONENT_KIT_VERSION_STANCE;
 
 export const resolveComponentOverride = <TProps>(
   override: ComponentType<TProps> | null,
@@ -345,7 +357,7 @@ const declaredMinorText = (componentKit: ComponentKitRegistration): string =>
 
 const buildComponentRegistry = (
   componentKits: ComponentKitRegistration[] | undefined,
-  stance: ComponentKitVersionStance = COMPONENT_KIT_VERSION_STANCE,
+  stance: ComponentKitVersionStance = resolveComponentKitVersionStance(),
 ): ComponentRegistry => {
   const registry = emptyComponentRegistry();
   const selectedPriorities: Partial<Record<keyof ComponentRegistry, number>> =
@@ -371,7 +383,7 @@ const buildComponentRegistry = (
           `component kit "${componentKit.name}" overrides ${registration.extensionPoint}, whose contract needs shared surface 1.${requiredMinor}, and ${declaredMinorText(componentKit)}. Rebuild the kit against this host and set builtAgainstSharedSurfaceMinor: ${ERATO_SHARED_SURFACE_MINOR}. ` +
             (stance === "enforce"
               ? `Rendering the host's own ${registration.extensionPoint} instead.`
-              : `Installing the override anyway, because COMPONENT_KIT_VERSION_STANCE is "warn".`),
+              : `Installing the override anyway: this deployment's stance is "warn". Set window.ERATO_COMPONENT_KIT_VERSION_STANCE = "enforce" to render the host's own component instead.`),
         );
 
         if (stance === "enforce") {
@@ -421,7 +433,7 @@ export const componentRegistry: ComponentRegistry = buildComponentRegistry(
  * separately, so what it reports and what it installs cannot disagree.
  */
 export const applyComponentKitRegistrations = (
-  stance: ComponentKitVersionStance = COMPONENT_KIT_VERSION_STANCE,
+  stance: ComponentKitVersionStance = resolveComponentKitVersionStance(),
 ): void => {
   if (typeof window === "undefined") {
     return;
