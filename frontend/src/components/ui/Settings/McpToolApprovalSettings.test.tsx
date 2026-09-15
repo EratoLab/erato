@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -9,12 +10,10 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EntityRow } from "./EntityRow";
-import {
-  McpToolApprovalSettings,
-  offeredDecisions,
-} from "./McpToolApprovalSettings";
+import { McpToolApprovalSettings } from "./McpToolApprovalSettings";
 
 import type {
+  ApplyUserToolApprovalSettingsBatchRequest,
   ListMcpServerToolsResponse,
   McpServerTool,
   UserToolApprovalSetting,
@@ -33,6 +32,7 @@ vi.mock("../Feedback/Alert", () => ({
 const SERVER_ID = "linear";
 const TOOLS_URL = `/api/v1beta/me/mcp_servers/${SERVER_ID}/tools`;
 const SETTINGS_URL = "/api/v1beta/me/mcp-tool-approval-settings";
+const BATCH_URL = `${SETTINGS_URL}/batch`;
 
 /** A tool as the server lists it, before any stored decision is laid over. */
 const tool = (overrides: Partial<McpServerTool>): McpServerTool => ({
@@ -54,6 +54,18 @@ const tool = (overrides: Partial<McpServerTool>): McpServerTool => ({
   ...overrides,
 });
 
+const writeTool = (overrides: Partial<McpServerTool>): McpServerTool =>
+  tool({
+    annotations: {
+      read_only_hint: false,
+      destructive_hint: true,
+      idempotent_hint: false,
+      open_world_hint: false,
+      annotated: true,
+    },
+    ...overrides,
+  });
+
 const roster = (
   tools: McpServerTool[],
   {
@@ -68,47 +80,45 @@ const roster = (
   tools,
 });
 
-const setting = (
-  toolName: string,
-  decision: UserToolDecision,
-  id = "00000000-0000-4000-8000-000000000001",
-  serverId = SERVER_ID,
-): UserToolApprovalSetting => ({
-  id,
-  mcp_server_id: serverId,
-  tool_name: toolName,
-  decision,
-});
-
 const jsonResponse = (payload: unknown, status = 200) =>
   new Response(JSON.stringify(payload), {
     status,
     headers: { "Content-Type": "application/json" },
   });
 
+/** Lets a test hold a request open and settle it by hand. */
+const deferred = () => {
+  let resolve: (response: Response) => void = () => {};
+  let reject: (reason: Error) => void = () => {};
+  const promise = new Promise<Response>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+};
+
 /**
  * A fetch stand-in that keeps a tiny settings store and, like the backend,
  * projects it onto the roster: every listing carries the stored decision and
- * the effective state the gate would apply. POST upserts one row per tool
- * (a decision flip rewrites it in place) and DELETE deactivates it.
+ * the effective state the gate would apply. The batch endpoint writes every
+ * entry in one go — a null decision drops the row — and answers with the
+ * rows it holds, never with the roster.
  */
 const stubServer = ({
   tools,
   settings = [],
-  createStatus = 200,
+  batchStatus = 200,
+  holdBatch = false,
 }: {
   tools: ListMcpServerToolsResponse;
-  settings?: UserToolApprovalSetting[];
-  createStatus?: number;
+  settings?: [string, UserToolDecision][];
+  batchStatus?: number;
+  holdBatch?: boolean;
 }) => {
-  const store = new Map(
-    settings.map((setting) => [setting.tool_name, setting]),
-  );
-  let nextId = 1;
+  const store = new Map<string, UserToolDecision>(settings);
+  const held = deferred();
   const project = (listed: McpServerTool): McpServerTool => {
-    const stored = store.get(listed.name);
-    const decision =
-      stored?.mcp_server_id === SERVER_ID ? stored.decision : undefined;
+    const decision = store.get(listed.name);
     let effective: McpServerTool["effective"];
     if (decision === "denied") {
       effective = "denied";
@@ -121,6 +131,13 @@ const stubServer = ({
     }
     return { ...listed, user_decision: decision ?? "none", effective };
   };
+  const rows = (): UserToolApprovalSetting[] =>
+    [...store.entries()].map(([toolName, decision], index) => ({
+      id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+      mcp_server_id: SERVER_ID,
+      tool_name: toolName,
+      decision,
+    }));
   const fetchMock = vi.fn(
     (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const url = String(input);
@@ -131,47 +148,37 @@ const stubServer = ({
         );
       }
       if (url === SETTINGS_URL && method === "GET") {
-        return Promise.resolve(jsonResponse({ settings: [...store.values()] }));
+        return Promise.resolve(jsonResponse({ settings: rows() }));
       }
-      if (url === SETTINGS_URL && method === "POST") {
-        if (createStatus !== 200) {
+      if (url === BATCH_URL && method === "PUT") {
+        if (batchStatus !== 200) {
           return Promise.resolve(
             new Response("Always allow is disabled by MCP approval policy", {
-              status: createStatus,
+              status: batchStatus,
             }),
           );
         }
-        const body = JSON.parse(String(init?.body)) as {
-          mcp_server_id: string;
-          tool_name: string;
-          decision: UserToolDecision;
-        };
-        const existing = store.get(body.tool_name);
-        const row: UserToolApprovalSetting = {
-          id:
-            existing?.id ??
-            `00000000-0000-4000-8000-${String(nextId++).padStart(12, "0")}`,
-          mcp_server_id: body.mcp_server_id,
-          tool_name: body.tool_name,
-          decision: body.decision,
-        };
-        store.set(body.tool_name, row);
-        return Promise.resolve(jsonResponse(row));
-      }
-      if (url.startsWith(`${SETTINGS_URL}/`) && method === "DELETE") {
-        const id = url.slice(SETTINGS_URL.length + 1);
-        for (const [name, row] of store) {
-          if (row.id === id) {
-            store.delete(name);
+        const body = JSON.parse(
+          String(init?.body),
+        ) as ApplyUserToolApprovalSettingsBatchRequest;
+        for (const entry of body.decisions) {
+          if (entry.decision === null || entry.decision === undefined) {
+            store.delete(entry.tool_name);
+          } else {
+            store.set(entry.tool_name, entry.decision);
           }
         }
-        return Promise.resolve(new Response(null, { status: 204 }));
+        const response = jsonResponse({ settings: rows() });
+        if (holdBatch) {
+          return held.promise.then(() => response);
+        }
+        return Promise.resolve(response);
       }
       return Promise.reject(new Error(`Unexpected request: ${method} ${url}`));
     },
   );
   vi.stubGlobal("fetch", fetchMock);
-  return { fetchMock, store };
+  return { fetchMock, store, releaseBatch: () => held.resolve(new Response()) };
 };
 
 const callsTo = (
@@ -182,6 +189,14 @@ const callsTo = (
   fetchMock.mock.calls.filter(
     ([input, init]) =>
       String(input) === url && (init?.method ?? "GET") === method,
+  );
+
+const batchBodies = (fetchMock: ReturnType<typeof stubServer>["fetchMock"]) =>
+  callsTo(fetchMock, BATCH_URL, "PUT").map(
+    ([, init]) =>
+      JSON.parse(
+        String(init?.body),
+      ) as ApplyUserToolApprovalSettingsBatchRequest,
   );
 
 const queryClient = () =>
@@ -220,16 +235,10 @@ const rowFor = async (name: string) => {
   return row;
 };
 
-const radioLabels = (row: HTMLElement) =>
-  within(row)
-    .getAllByRole("radio")
-    .map((radio) => radio.getAttribute("value"));
-
-/** The radio's accessible name carries its helper too, so pick by value. */
 const radioByValue = (row: HTMLElement, value: string) => {
   const radio = within(row)
     .getAllByRole("radio")
-    .find((candidate) => candidate.getAttribute("value") === value);
+    .find((candidate) => candidate.dataset.decision === value);
   if (!radio) {
     throw new Error(`No ${value} radio in the row`);
   }
@@ -239,8 +248,8 @@ const radioByValue = (row: HTMLElement, value: string) => {
 const checkedRadio = (row: HTMLElement) =>
   within(row)
     .getAllByRole("radio")
-    .find((radio) => (radio as HTMLInputElement).checked)
-    ?.getAttribute("value");
+    .find((radio) => radio.getAttribute("aria-checked") === "true")?.dataset
+    .decision;
 
 const expectChecked = async (row: HTMLElement, value: string) => {
   await waitFor(() => {
@@ -248,26 +257,33 @@ const expectChecked = async (row: HTMLElement, value: string) => {
   });
 };
 
+const groupFor = (key: string) => {
+  const group = screen
+    .getAllByTestId("mcp-tool-group")
+    .find((candidate) => candidate.dataset.toolGroup === key);
+  if (!group) {
+    throw new Error(`No ${key} group`);
+  }
+  return group;
+};
+
+/** The group's decision menu trigger, named after the group and its state. */
+const groupTrigger = (key: string) =>
+  within(groupFor(key)).getByRole("button", { name: /:/ });
+
+const chooseForGroup = async (key: string, itemName: RegExp) => {
+  // A previous choice may still be closing its menu and settling its batch;
+  // the items are locked until then.
+  await waitFor(() => {
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.queryByRole("radiogroup", { busy: true })).toBeNull();
+  });
+  fireEvent.click(groupTrigger(key));
+  fireEvent.click(await screen.findByRole("menuitem", { name: itemName }));
+};
+
 afterEach(() => {
   vi.unstubAllGlobals();
-});
-
-describe("offeredDecisions", () => {
-  it("always offers the policy default and Never, the rest by availability", () => {
-    const all = { allowAlways: true, askAvailable: true };
-    const none = { allowAlways: false, askAvailable: false };
-    expect(offeredDecisions("ask", all)).toEqual(["allow", "ask", "never"]);
-    expect(offeredDecisions("ask", none)).toEqual(["ask", "never"]);
-    expect(offeredDecisions("auto", all)).toEqual(["allow", "ask", "never"]);
-    expect(offeredDecisions("auto", none)).toEqual(["allow", "never"]);
-    // Each flag only unlocks the option it stands for.
-    expect(
-      offeredDecisions("ask", { allowAlways: false, askAvailable: true }),
-    ).toEqual(["ask", "never"]);
-    expect(
-      offeredDecisions("auto", { allowAlways: true, askAvailable: false }),
-    ).toEqual(["allow", "never"]);
-  });
 });
 
 describe("McpToolApprovalSettings", () => {
@@ -305,186 +321,137 @@ describe("McpToolApprovalSettings", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("renders every badge straight from the response", async () => {
-    // The first row is impossible under protocol defaults (read-only yet
-    // unannotated): rendering it as sent is the proof that nothing here
-    // re-derives the annotations or the policy verdict.
+  it("groups the roster by the annotation class the backend reports, with counts", async () => {
+    // The unannotated tool is a write tool under protocol defaults and keeps
+    // its pill; the badge list is rendered straight from the response.
     stubServer({
       tools: roster([
+        writeTool({ name: "copy_file", title: "Copy file", policy: "ask" }),
         tool({
           name: "get_issue",
           title: "Get issue",
           description: "Fetch one issue by id.",
+          policy: "auto",
+        }),
+        writeTool({
+          name: "mystery",
+          title: "mystery",
           annotations: {
-            read_only_hint: true,
+            read_only_hint: false,
             destructive_hint: false,
-            idempotent_hint: true,
+            idempotent_hint: false,
             open_world_hint: true,
             annotated: false,
           },
           policy: "ask",
         }),
-        tool({
-          name: "update_issue",
-          title: "update_issue",
-          description: null,
-          annotations: {
-            read_only_hint: false,
-            destructive_hint: true,
-            idempotent_hint: false,
-            open_world_hint: false,
-            annotated: true,
-          },
-          policy: "auto",
-        }),
-      ]),
-    });
-
-    renderSection();
-
-    const rows = await screen.findAllByTestId("mcp-tool-approval-row");
-    expect(rows.map((row) => row.dataset.toolName)).toEqual([
-      "get_issue",
-      "update_issue",
-    ]);
-
-    const [getIssue, updateIssue] = rows;
-    expect(getIssue).toHaveTextContent("Get issue");
-    expect(getIssue).toHaveTextContent("get_issue");
-    // The description waits behind the row's chevron.
-    expect(getIssue).not.toHaveTextContent("Fetch one issue by id.");
-    fireEvent.click(
-      within(getIssue).getByRole("button", {
-        name: "Description of Get issue",
-      }),
-    );
-    expect(getIssue).toHaveTextContent("Fetch one issue by id.");
-    const getIssueBadges = within(getIssue).getByRole("list", {
-      name: "Get issue",
-    });
-    expect(
-      within(getIssueBadges)
-        .getAllByRole("listitem")
-        .map((badge) => badge.textContent),
-    ).toEqual([
-      "Reads only",
-      "Reaches other systems",
-      "Not declared by the server",
-      "Asks before running",
-    ]);
-
-    const updateIssueBadges = within(updateIssue).getByRole("list", {
-      name: "update_issue",
-    });
-    expect(
-      within(updateIssueBadges)
-        .getAllByRole("listitem")
-        .map((badge) => badge.textContent),
-    ).toEqual(["Can modify"]);
-    // A title equal to the name is shown once, not echoed as a subtitle.
-    expect(within(updateIssue).getAllByText("update_issue")).toHaveLength(1);
-  });
-
-  it("offers Allow, Ask and Never with the policy default marked as such", async () => {
-    stubServer({
-      tools: roster([
-        tool({ name: "get_issue", title: "Get issue", policy: "ask" }),
         tool({ name: "list_teams", title: "List teams", policy: "auto" }),
       ]),
     });
 
     renderSection();
+    await rowFor("get_issue");
 
-    const asking = await rowFor("get_issue");
-    expect(radioLabels(asking)).toEqual(["allow", "ask", "never"]);
-    expect(radioByValue(asking, "allow")).toHaveAccessibleName(/^Allow /);
-    expect(radioByValue(asking, "ask")).toHaveAccessibleName(
-      /^Ask each time \(policy default\)/,
-    );
-    expect(radioByValue(asking, "ask")).toBeChecked();
+    expect(
+      screen.getByRole("heading", { name: "Tool permissions" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Choose when the assistant may use these tools."),
+    ).toBeInTheDocument();
 
-    const unprompted = await rowFor("list_teams");
-    expect(radioLabels(unprompted)).toEqual(["allow", "ask", "never"]);
-    expect(radioByValue(unprompted, "allow")).toHaveAccessibleName(
-      /^Allow \(policy default\)/,
-    );
-    expect(radioByValue(unprompted, "allow")).toBeChecked();
-    expect(radioByValue(unprompted, "ask")).toHaveAccessibleName(
-      /^Ask each time Asks you before every run, even where the policy would not\./,
-    );
-  });
-
-  it("hides the options the deployment does not honor", async () => {
-    stubServer({
-      tools: roster(
-        [
-          tool({ name: "get_issue", title: "Get issue", policy: "ask" }),
-          tool({ name: "list_teams", title: "List teams", policy: "auto" }),
-        ],
-        { allowAlways: false, askAvailable: false },
-      ),
+    const groups = screen.getAllByTestId("mcp-tool-group");
+    expect(groups.map((group) => group.dataset.toolGroup)).toEqual([
+      "readOnly",
+      "write",
+    ]);
+    const readOnlyToggle = within(groups[0]).getByRole("button", {
+      name: "Read-only tools 2",
     });
+    expect(readOnlyToggle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      within(groups[1]).getByRole("button", { name: "Write/delete tools 2" }),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(
+      within(groups[0])
+        .getAllByTestId("mcp-tool-approval-row")
+        .map((row) => row.dataset.toolName),
+    ).toEqual(["get_issue", "list_teams"]);
+    expect(
+      within(groups[1])
+        .getAllByTestId("mcp-tool-approval-row")
+        .map((row) => row.dataset.toolName),
+    ).toEqual(["copy_file", "mystery"]);
 
-    renderSection();
+    const mystery = await rowFor("mystery");
+    expect(
+      within(mystery)
+        .getAllByRole("listitem")
+        .map((badge) => badge.textContent),
+    ).toEqual([
+      "Can modify",
+      "Reaches other systems",
+      "Not declared by the server",
+      "Asks before running",
+    ]);
 
-    // A persistent grant is not honored, so a tool that asks cannot be
-    // relaxed; an ask is not honored either, so a tool that runs unprompted
-    // cannot be escalated. Denying stays available on both.
-    const asking = await rowFor("get_issue");
-    expect(radioLabels(asking)).toEqual(["ask", "never"]);
-    const unprompted = await rowFor("list_teams");
-    expect(radioLabels(unprompted)).toEqual(["allow", "never"]);
+    // Closing a group takes its rows out; the other group stays.
+    fireEvent.click(readOnlyToggle);
+    expect(readOnlyToggle).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen
+        .getAllByTestId("mcp-tool-approval-row")
+        .map((row) => row.dataset.toolName),
+    ).toEqual(["copy_file", "mystery"]);
   });
 
-  it("checks the effective state the backend reports, never the stored row", async () => {
+  it("checks the effective state the backend reports and disables what the deployment does not store", async () => {
     stubServer({
       tools: roster(
         [
           tool({ name: "get_issue", title: "Get issue", policy: "ask" }),
           tool({ name: "update_issue", title: "Update issue", policy: "ask" }),
           tool({ name: "list_teams", title: "List teams", policy: "auto" }),
-          tool({ name: "list_users", title: "List users", policy: "auto" }),
         ],
         { allowAlways: false, askAvailable: true },
       ),
       settings: [
         // A grant stored while the policy still honored it: the gate ignores
         // it now, so the row shows the policy default instead.
-        setting(
-          "get_issue",
-          "always_allow",
-          "00000000-0000-4000-8000-000000000001",
-        ),
-        setting(
-          "update_issue",
-          "denied",
-          "00000000-0000-4000-8000-000000000002",
-        ),
+        ["get_issue", "always_allow"],
+        ["update_issue", "denied"],
         // An ask on a tool the policy would run unprompted escalates it.
-        setting("list_teams", "ask", "00000000-0000-4000-8000-000000000003"),
-        // Another server's row must not leak into this roster.
-        setting(
-          "list_users",
-          "denied",
-          "00000000-0000-4000-8000-000000000004",
-          "notion",
-        ),
+        ["list_teams", "ask"],
       ],
     });
 
     renderSection();
 
-    await expectChecked(await rowFor("get_issue"), "ask");
+    const getIssue = await rowFor("get_issue");
+    await expectChecked(getIssue, "ask");
+    expect(radioByValue(getIssue, "allow")).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(radioByValue(getIssue, "ask")).toHaveAccessibleName(
+      "Ask each time (policy default)",
+    );
     await expectChecked(await rowFor("update_issue"), "never");
-    await expectChecked(await rowFor("list_teams"), "ask");
-    await expectChecked(await rowFor("list_users"), "allow");
+    const listTeams = await rowFor("list_teams");
+    await expectChecked(listTeams, "ask");
+    expect(radioByValue(listTeams, "allow")).toHaveAccessibleName(
+      "Allow (policy default)",
+    );
+    expect(radioByValue(listTeams, "allow")).not.toHaveAttribute(
+      "aria-disabled",
+    );
   });
 
-  it("stores an ask on a tool the policy runs unprompted and reads the roster back", async () => {
-    const { fetchMock, store } = stubServer({
+  it("stores a row decision through the batch endpoint, shows it at once and reads the roster back", async () => {
+    const { fetchMock, store, releaseBatch } = stubServer({
       tools: roster([
         tool({ name: "list_teams", title: "List teams", policy: "auto" }),
       ]),
+      holdBatch: true,
     });
 
     renderSection();
@@ -493,19 +460,35 @@ describe("McpToolApprovalSettings", () => {
 
     fireEvent.click(radioByValue(row, "ask"));
 
+    // Optimistic: checked before the server has answered, controls locked.
     await expectChecked(row, "ask");
-    const [askCall] = callsTo(fetchMock, SETTINGS_URL, "POST");
-    expect(JSON.parse(String(askCall[1]?.body))).toEqual({
-      mcp_server_id: SERVER_ID,
-      tool_name: "list_teams",
-      decision: "ask",
+    expect(within(row).getByRole("radiogroup")).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
+    expect(batchBodies(fetchMock)).toEqual([
+      {
+        mcp_server_id: SERVER_ID,
+        decisions: [{ tool_name: "list_teams", decision: "ask" }],
+      },
+    ]);
+    expect(callsTo(fetchMock, TOOLS_URL)).toHaveLength(1);
+
+    releaseBatch();
+
+    await waitFor(() => {
+      expect(callsTo(fetchMock, TOOLS_URL)).toHaveLength(2);
     });
-    expect(store.get("list_teams")?.decision).toBe("ask");
-    // The checked state came from a fresh listing, not a local guess.
-    expect(callsTo(fetchMock, TOOLS_URL)).toHaveLength(2);
+    await waitFor(() => {
+      expect(within(row).getByRole("radiogroup")).not.toHaveAttribute(
+        "aria-busy",
+      );
+    });
+    expect(store.get("list_teams")).toBe("ask");
+    expect(checkedRadio(row)).toBe("ask");
   });
 
-  it("round-trips never, allow and the policy default through the settings endpoints", async () => {
+  it("round-trips never, allow and the policy default; the default clears the row", async () => {
     const { fetchMock, store } = stubServer({
       tools: roster([
         tool({ name: "get_issue", title: "Get issue", policy: "ask" }),
@@ -517,90 +500,215 @@ describe("McpToolApprovalSettings", () => {
 
     fireEvent.click(radioByValue(row, "never"));
     await expectChecked(row, "never");
-    const [denyCall] = callsTo(fetchMock, SETTINGS_URL, "POST");
-    expect(JSON.parse(String(denyCall[1]?.body))).toEqual({
-      mcp_server_id: SERVER_ID,
-      tool_name: "get_issue",
-      decision: "denied",
+    await waitFor(() => {
+      expect(store.get("get_issue")).toBe("denied");
     });
-    expect(store.get("get_issue")?.decision).toBe("denied");
 
-    // A flip between two stored decisions rewrites the row in place.
     fireEvent.click(radioByValue(row, "allow"));
     await expectChecked(row, "allow");
-    const [, grantCall] = callsTo(fetchMock, SETTINGS_URL, "POST");
-    expect(JSON.parse(String(grantCall[1]?.body))).toEqual({
-      mcp_server_id: SERVER_ID,
-      tool_name: "get_issue",
-      decision: "always_allow",
+    await waitFor(() => {
+      expect(store.get("get_issue")).toBe("always_allow");
     });
-    expect(store.get("get_issue")?.decision).toBe("always_allow");
-    const grantId = store.get("get_issue")?.id;
 
-    // Back to the policy default deletes the row; the tool stays listed.
     fireEvent.click(radioByValue(row, "ask"));
     await expectChecked(row, "ask");
-    expect(
-      callsTo(fetchMock, `${SETTINGS_URL}/${grantId}`, "DELETE"),
-    ).toHaveLength(1);
-    expect(store.has("get_issue")).toBe(false);
+    await waitFor(() => {
+      expect(store.has("get_issue")).toBe(false);
+    });
+
+    expect(batchBodies(fetchMock).map((body) => body.decisions)).toEqual([
+      [{ tool_name: "get_issue", decision: "denied" }],
+      [{ tool_name: "get_issue", decision: "always_allow" }],
+      [{ tool_name: "get_issue", decision: null }],
+    ]);
     expect(await rowFor("get_issue")).toBeInTheDocument();
   });
 
-  it("deletes the row when a tool that runs unprompted goes back to Allow", async () => {
+  it("applies a group decision in one batch and shows the group as Mixed or common", async () => {
     const { fetchMock, store } = stubServer({
       tools: roster([
+        tool({ name: "get_issue", title: "Get issue", policy: "ask" }),
+        tool({ name: "list_teams", title: "List teams", policy: "auto" }),
+        writeTool({ name: "copy_file", title: "Copy file", policy: "ask" }),
+      ]),
+    });
+
+    renderSection();
+    await rowFor("get_issue");
+
+    // One asks, one allows: no common state yet.
+    expect(
+      within(groupFor("readOnly")).getByRole("button", {
+        name: "Read-only tools: Mixed",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(groupFor("write")).getByRole("button", {
+        name: "Write/delete tools: Ask each time",
+      }),
+    ).toBeInTheDocument();
+
+    await chooseForGroup("readOnly", /^Never allow/);
+
+    await expectChecked(await rowFor("get_issue"), "never");
+    await expectChecked(await rowFor("list_teams"), "never");
+    expect(checkedRadio(await rowFor("copy_file"))).toBe("ask");
+    expect(batchBodies(fetchMock)).toEqual([
+      {
+        mcp_server_id: SERVER_ID,
+        decisions: [
+          { tool_name: "get_issue", decision: "denied" },
+          { tool_name: "list_teams", decision: "denied" },
+        ],
+      },
+    ]);
+    await waitFor(() => {
+      expect(store.get("list_teams")).toBe("denied");
+    });
+    expect(
+      await within(groupFor("readOnly")).findByRole("button", {
+        name: "Read-only tools: Never allow",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("maps a group state to each tool's own row and clears rows on the policy default", async () => {
+    const { fetchMock, store } = stubServer({
+      tools: roster([
+        tool({ name: "get_issue", title: "Get issue", policy: "ask" }),
         tool({ name: "list_teams", title: "List teams", policy: "auto" }),
       ]),
       settings: [
-        setting("list_teams", "ask", "00000000-0000-4000-8000-000000000007"),
+        ["get_issue", "denied"],
+        ["list_teams", "denied"],
       ],
     });
 
     renderSection();
-    const row = await rowFor("list_teams");
-    await expectChecked(row, "ask");
+    await expectChecked(await rowFor("get_issue"), "never");
 
-    fireEvent.click(radioByValue(row, "allow"));
-
-    await expectChecked(row, "allow");
-    expect(
-      callsTo(
-        fetchMock,
-        `${SETTINGS_URL}/00000000-0000-4000-8000-000000000007`,
-        "DELETE",
-      ),
-    ).toHaveLength(1);
-    expect(callsTo(fetchMock, SETTINGS_URL, "POST")).toHaveLength(0);
+    // Allow is the policy default for one tool and a grant for the other.
+    await chooseForGroup("readOnly", /^Allow/);
+    await expectChecked(await rowFor("get_issue"), "allow");
+    await expectChecked(await rowFor("list_teams"), "allow");
+    await waitFor(() => {
+      expect(store.get("get_issue")).toBe("always_allow");
+    });
     expect(store.has("list_teams")).toBe(false);
+
+    await chooseForGroup("readOnly", /^Policy default/);
+    await expectChecked(await rowFor("get_issue"), "ask");
+    await waitFor(() => {
+      expect(store.has("get_issue")).toBe(false);
+    });
+
+    expect(batchBodies(fetchMock).map((body) => body.decisions)).toEqual([
+      [
+        { tool_name: "get_issue", decision: "always_allow" },
+        { tool_name: "list_teams", decision: null },
+      ],
+      [{ tool_name: "get_issue", decision: null }],
+    ]);
   });
 
-  it("denies over a stale grant instead of stacking a second row", async () => {
-    const { store } = stubServer({
-      tools: roster(
-        [tool({ name: "get_issue", title: "Get issue", policy: "ask" })],
-        { allowAlways: false },
-      ),
-      settings: [
-        setting(
-          "get_issue",
-          "always_allow",
-          "00000000-0000-4000-8000-000000000001",
+  it("skips the tools a group state is unavailable for and says so for a while", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const { fetchMock } = stubServer({
+        tools: roster(
+          [
+            tool({ name: "get_issue", title: "Get issue", policy: "ask" }),
+            tool({ name: "list_teams", title: "List teams", policy: "auto" }),
+            tool({ name: "list_users", title: "List users", policy: "auto" }),
+          ],
+          { allowAlways: false, askAvailable: true },
         ),
-      ],
+        settings: [["list_teams", "ask"]],
+      });
+
+      renderSection();
+      await rowFor("get_issue");
+
+      await chooseForGroup("readOnly", /^Allow/);
+
+      // The asking tool cannot be granted; the others go back to allowing.
+      await expectChecked(await rowFor("list_teams"), "allow");
+      expect(checkedRadio(await rowFor("get_issue"))).toBe("ask");
+      expect(batchBodies(fetchMock)).toEqual([
+        {
+          mcp_server_id: SERVER_ID,
+          decisions: [{ tool_name: "list_teams", decision: null }],
+        },
+      ]);
+      const note = await screen.findByRole("status");
+      expect(note).toHaveTextContent(
+        "1 tool skipped: Always allow is switched off by the approval policy.",
+      );
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6500);
+      });
+      expect(screen.queryByRole("status")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("offers a group state as unavailable when no tool in the group can take it", async () => {
+    stubServer({
+      tools: roster(
+        [
+          tool({ name: "get_issue", title: "Get issue", policy: "ask" }),
+          tool({ name: "update_issue", title: "Update issue", policy: "ask" }),
+        ],
+        { allowAlways: false, askAvailable: true },
+      ),
+    });
+
+    renderSection();
+    await rowFor("get_issue");
+
+    fireEvent.click(groupTrigger("readOnly"));
+    const allow = await screen.findByRole("menuitem", { name: /^Allow/ });
+    expect(allow).toBeDisabled();
+    expect(allow).toHaveTextContent(
+      "Always allow is switched off by the approval policy.",
+    );
+    expect(
+      screen.getByRole("menuitem", { name: /^Never allow/ }),
+    ).toBeEnabled();
+  });
+
+  it("rolls the roster back and reports when the batch is rejected", async () => {
+    const { fetchMock } = stubServer({
+      tools: roster([
+        tool({ name: "get_issue", title: "Get issue", policy: "ask" }),
+        tool({ name: "list_teams", title: "List teams", policy: "auto" }),
+      ]),
+      batchStatus: 400,
     });
 
     renderSection();
     const row = await rowFor("get_issue");
-    expect(radioLabels(row)).toEqual(["ask", "never"]);
 
-    fireEvent.click(radioByValue(row, "never"));
+    fireEvent.click(radioByValue(row, "allow"));
 
-    await expectChecked(row, "never");
-    expect(store.get("get_issue")?.decision).toBe("denied");
-    expect(store.get("get_issue")?.id).toBe(
-      "00000000-0000-4000-8000-000000000001",
-    );
+    expect(
+      await screen.findByText(/Could not update the decision/),
+    ).toBeInTheDocument();
+    await expectChecked(row, "ask");
+    expect(callsTo(fetchMock, BATCH_URL, "PUT")).toHaveLength(1);
+    // Nothing was read back: the previous listing is what came back.
+    expect(callsTo(fetchMock, TOOLS_URL)).toHaveLength(1);
+
+    // A group decision rolls back the same way.
+    await chooseForGroup("readOnly", /^Never allow/);
+    await waitFor(() => {
+      expect(callsTo(fetchMock, BATCH_URL, "PUT")).toHaveLength(2);
+    });
+    await expectChecked(await rowFor("get_issue"), "ask");
+    await expectChecked(await rowFor("list_teams"), "allow");
   });
 
   it("reports an unreachable server instead of an empty roster", async () => {
@@ -639,25 +747,6 @@ describe("McpToolApprovalSettings", () => {
       await screen.findByText("Connect to see tools."),
     ).toBeInTheDocument();
     expect(screen.queryAllByTestId("mcp-tool-approval-row")).toHaveLength(0);
-  });
-
-  it("surfaces an error when a decision is rejected", async () => {
-    stubServer({
-      tools: roster([
-        tool({ name: "get_issue", title: "Get issue", policy: "ask" }),
-      ]),
-      createStatus: 400,
-    });
-
-    renderSection();
-    const row = await rowFor("get_issue");
-
-    fireEvent.click(radioByValue(row, "allow"));
-
-    expect(
-      await screen.findByText(/Could not update the decision/),
-    ).toBeInTheDocument();
-    expect(checkedRadio(row)).toBe("ask");
   });
 
   it("surfaces a roster load error", async () => {

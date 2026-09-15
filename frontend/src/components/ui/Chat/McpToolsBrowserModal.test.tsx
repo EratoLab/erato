@@ -235,6 +235,57 @@ describe("McpToolsBrowserModal", () => {
     ).toBeInTheDocument();
   });
 
+  it("groups the tools under the same read-only and write headers as the settings roster", async () => {
+    stubToolsFetch({
+      linear: roster("linear", [
+        tool({
+          name: "create_issue",
+          title: "Create issue",
+          annotations: {
+            read_only_hint: false,
+            destructive_hint: false,
+            idempotent_hint: false,
+            open_world_hint: true,
+            annotated: true,
+          },
+        }),
+        tool({ name: "get_issue", title: "Get issue" }),
+        tool({ name: "list_teams", title: "List teams" }),
+      ]),
+    });
+    renderModal([server("linear")]);
+    expand(serverRow("linear"));
+
+    await screen.findAllByTestId("mcp-tools-browser-tool");
+    const groups = screen.getAllByTestId("mcp-tools-browser-group");
+    expect(groups.map((group) => group.dataset.toolGroup)).toEqual([
+      "readOnly",
+      "write",
+    ]);
+    const readOnlyToggle = within(groups[0]).getByRole("button", {
+      name: "Read-only tools 2",
+    });
+    expect(readOnlyToggle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      within(groups[0])
+        .getAllByTestId("mcp-tools-browser-tool")
+        .map((row) => row.dataset.toolName),
+    ).toEqual(["get_issue", "list_teams"]);
+    expect(
+      within(groups[1]).getByRole("button", { name: "Write/delete tools 1" }),
+    ).toBeInTheDocument();
+    // The headers come without the settings roster's decision menus.
+    expect(screen.queryByRole("button", { name: /:/ })).toBeNull();
+    expect(screen.queryByRole("radiogroup")).toBeNull();
+
+    fireEvent.click(readOnlyToggle);
+    expect(
+      screen
+        .getAllByTestId("mcp-tools-browser-tool")
+        .map((row) => row.dataset.toolName),
+    ).toEqual(["create_issue"]);
+  });
+
   it("badges a tool as asking by what will happen, not by the policy verdict", async () => {
     // With no radios here the badge is the only indicator, so it must follow
     // the user's stored decision where the gate honors it.
