@@ -79,10 +79,11 @@ running host. Leaving it out is read as the oldest possible contract, not as
 
 The host records a required minor per extension point and compares the two. A
 kit that is behind for one point is reported by name, with the point and the
-value to declare, and the host renders its own component for that point while
-the kit's other overrides stay installed. Whether the host actually falls back
-or only logs is one constant, `COMPONENT_KIT_VERSION_STANCE`, which ships as
-`"warn"` while deployed kits are still undeclared.
+value to declare. What happens next is one constant,
+`COMPONENT_KIT_VERSION_STANCE`. It ships as `"warn"`, which reports the
+mismatch and installs the override anyway while deployed kits are still
+undeclared; `"enforce"` makes the host render its own component for that point
+instead, leaving the kit's other overrides installed.
 
 ### Running the host's contract suite
 
