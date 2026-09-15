@@ -161,6 +161,23 @@ describe("McpToolRow", () => {
     );
   });
 
+  it("isolates the writing direction of the title and the raw name", () => {
+    const rawName = "read\u200Efile";
+    renderRow({ title: "readfile", name: rawName });
+
+    const title = screen.getByText("readfile");
+    expect(title).toHaveAttribute("dir", "auto");
+    expect(title.className).toContain("unicode-bidi:isolate");
+    const name = screen.getByText(rawName);
+    expect(name).toHaveAttribute("dir", "auto");
+    expect(name.className).toContain("unicode-bidi:isolate");
+    expect(name).toHaveAttribute("title", rawName);
+    expect(screen.getByTestId("row")).toHaveAttribute(
+      "data-tool-name",
+      rawName,
+    );
+  });
+
   it("shows the name once when it equals the title", () => {
     renderRow({ title: "create_attachment" });
 

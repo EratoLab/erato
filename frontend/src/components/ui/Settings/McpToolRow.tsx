@@ -87,10 +87,11 @@ export interface McpToolRowProps {
  * the two differ), the backend-decided badges, and the caller's control.
  *
  * Title, name and description are vendor-authored text. The backend has
- * already bounded and de-fanged them, and this row finishes the job by
- * showing them as inert text only — no markup, no links — in a container
- * that isolates their writing direction, so a hostile description can
- * neither reorder the row around it nor run anything. The description is
+ * bounded and de-fanged the title and description and hands the name over
+ * verbatim, because the name is the key this row's control posts back; the
+ * row finishes the job by showing all three as inert text only — no markup,
+ * no links — each in a container that isolates its writing direction, so a
+ * hostile string can neither reorder the row around it nor run anything. The description is
  * collapsed by default because vendors write tutorials into it and a
  * roster is read at a glance.
  */
@@ -142,14 +143,19 @@ export function McpToolRow({
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex min-w-0 items-baseline gap-x-2">
               <span
-                className="truncate text-sm font-medium text-theme-fg-primary"
+                dir="auto"
+                className="truncate text-sm font-medium text-theme-fg-primary [unicode-bidi:isolate]"
                 title={tool.title}
               >
                 {tool.title}
               </span>
               {tool.title !== tool.name ? (
+                // The name arrives as the server declared it, so it is the
+                // one string here the backend did not clean; it can only
+                // affect its own span.
                 <span
-                  className="truncate font-mono text-xs text-theme-fg-muted"
+                  dir="auto"
+                  className="truncate font-mono text-xs text-theme-fg-muted [unicode-bidi:isolate]"
                   title={tool.name}
                 >
                   {tool.name}
