@@ -78,9 +78,18 @@ pnpm run test
 
 `ExampleChatHistoryList` replaces the whole chat-history list, which is the
 kind of override that can silently drop a shipped feature. It takes the row's
-badges, subline, accessible name and gated menu items from the host hooks and
-hands the menu array on unchanged — the array it is given is already gated, and
-a kit that rebuilds it loses every rule added after the kit shipped.
+badges, subline, accessible name and gated menu items from one host hook,
+`useChatHistoryRow`, and hands the menu array on unchanged — the array it is
+given is already gated, and a kit that rebuilds it loses every rule added after
+the kit shipped.
+
+The cases cover the row contract and the loading state. They cannot see the
+rest of `ChatHistoryListProps`, so an override still has to handle those
+itself: `hasMore`/`onLoadMore`/`isLoadingMore` (this example draws a sentinel
+and calls back on intersection), `layout`, `showTimestamps` and
+`disableRowLinks` — the last of which means a host with no chat routes, the
+add-in pane, needs every activation to go through `onSessionSelect` and no
+`href` on the row.
 
 `ExampleChatHistoryList.test.tsx` runs the host's own cases
 (`@erato/frontend/conformance`) against that override, so the same suite the

@@ -112,6 +112,9 @@ export { CHAT_HISTORY_ROW_TEST_ID } from "@/components/ui/Chat/chatHistoryRowTes
 // reaches a kit that places the badges itself rather than rendering `badges`.
 export { ChatAttentionStatusDot } from "@/components/ui/Chat/ChatAttentionStatusDot";
 export { ArchivedChatPill } from "@/components/ui/Chat/chatArchiveActions";
+// The loading state an override still has to draw: a list that ignores
+// `isLoading` shows its last rows as if they were final.
+export { ChatHistoryListSkeleton } from "@/components/ui/Chat/ChatHistoryList";
 
 // Declared dependencies of shipped kits that still reached the surface only as
 // an import-graph byproduct. Same failure mode as the block above, except these
@@ -223,6 +226,7 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "CardTone",
   "CardVariant",
   "ChatAttentionStatusDot",
+  "ChatHistoryListSkeleton",
   "ChatHistoryRow",
   "ChatHistoryRowMenuId",
   "ChatHistoryRowMenuOptions",

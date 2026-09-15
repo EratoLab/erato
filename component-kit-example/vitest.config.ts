@@ -1,3 +1,4 @@
+import { eratoComponentKitTestDedupe } from "@erato/frontend/component-kit/vite";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
@@ -5,17 +6,10 @@ export default defineConfig({
     jsx: "automatic",
   },
   // A kit and the host it borrows from must agree on these instances; in the
-  // app the import map guarantees it, and here the bundler has to.
+  // app the import map guarantees it, and here the bundler has to. The list
+  // comes from that same import map rather than being copied.
   resolve: {
-    dedupe: [
-      "@lingui/core",
-      "@lingui/react",
-      "@tanstack/react-query",
-      "react",
-      "react-dom",
-      "react-router",
-      "react-router-dom",
-    ],
+    dedupe: [...eratoComponentKitTestDedupe],
   },
   test: {
     environment: "jsdom",

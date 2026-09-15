@@ -175,6 +175,11 @@ interface ConformanceCase {
   props: ChatHistoryListProps;
   /** Status to put the listed chat in first; the row then has to show it. */
   status?: ConformanceRowStatus;
+  /**
+   * A case where no row may appear at all, and the failure to report if one
+   * does. The menu fields go unread.
+   */
+  noRow?: string;
   /** Ids that must be present, in whatever order the override draws them. */
   menu: readonly RequiredMenuItem[];
   /** Ids the gates drop for this row, which must not come back. */
@@ -345,6 +350,16 @@ const CASES: ConformanceCase[] = [
     menuMustNotContain: [CHAT_HISTORY_ROW_MENU_ID.unarchive],
   },
   {
+    // Not a row rule but the same failure class: an override that consumes
+    // only the props it happens to need draws whatever it was last given as
+    // if it were final, and the user reads a stale sidebar as a loaded one.
+    name: "a list that is still loading",
+    props: listProps(ACTIVE_SESSION, { isLoading: true }),
+    noRow: "draws a row while the list is still loading",
+    menu: [],
+    menuMustNotContain: [],
+  },
+  {
     // Omission has to drop the item, not render it inert: a dead entry is
     // worse than a missing one and no type check can see it.
     name: "a row whose caller forwards no handlers",
@@ -367,6 +382,9 @@ const caseFailures = (
     createElement(List, conformanceCase.props),
   );
   try {
+    if (conformanceCase.noRow) {
+      return row(container) ? [conformanceCase.noRow] : [];
+    }
     if (!row(container)) {
       return ["renders no row at all"];
     }
@@ -412,7 +430,9 @@ export const chatHistoryListConformanceFailures = (
   harness: ChatHistoryConformanceHarness,
   { omit = [] }: ChatHistoryConformanceOptions = {},
 ): string[] => {
-  const required = new Set(CASES.flatMap(({ menu }) => menu.map(({ id }) => id)));
+  const required = new Set(
+    CASES.flatMap(({ menu }) => menu.map(({ id }) => id)),
+  );
   const failures: string[] = omit
     .filter((id) => !required.has(id))
     .map((id) => `omitted "${id}" is required by no case; drop it`);

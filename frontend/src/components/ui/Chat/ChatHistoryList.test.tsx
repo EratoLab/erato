@@ -9,8 +9,8 @@ import {
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
-import { EXTENSION_POINT_REQUIRED_SURFACE_MINOR } from "@/shared/surfaceVersion";
 import { messages as enMessages } from "@/locales/en/messages.json";
+import { EXTENSION_POINT_REQUIRED_SURFACE_MINOR } from "@/shared/surfaceVersion";
 
 import {
   ChatHistoryList,
@@ -680,9 +680,9 @@ describe("ChatHistoryList", () => {
     });
 
     it("passes a kit that reorders the host's own items", async () => {
-      expect(await failuresForOverride((items) => [...items].reverse())).toEqual(
-        [],
-      );
+      expect(
+        await failuresForOverride((items) => [...items].reverse()),
+      ).toEqual([]);
     });
 
     it("fails a kit that re-enables a gated item", async () => {

@@ -134,6 +134,21 @@ reorder the host's items, insert its own anywhere, and give any item its own
 icon or label. Ids the host gates OUT for a row must stay out: an item rendered
 inert is worse than one that is missing.
 
+The suite runs in the kit's own test build, which has to resolve React, Lingui,
+React Query and the routers to the same copies the host uses; two copies and the
+hooks read module instances the host never wrote. `@erato/frontend/component-kit/vite`
+exports that list, derived from the host import map, so a vitest config spreads
+it rather than copying it:
+
+```ts
+import { eratoComponentKitTestDedupe } from "@erato/frontend/component-kit/vite";
+
+export default defineConfig({
+  resolve: { dedupe: [...eratoComponentKitTestDedupe] },
+  test: { environment: "jsdom" },
+});
+```
+
 If a deployment policy removes an action outright — no sharing, say — name its
 id in a third argument so the cases stop requiring it:
 

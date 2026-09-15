@@ -348,7 +348,8 @@ const declaredMinor = (
 const declaredSurfaceMinor = (
   componentKit: ComponentKitRegistration,
   registration?: ComponentKitComponentRegistration,
-): number => declaredMinor(componentKit, registration) ?? UNDECLARED_SURFACE_MINOR;
+): number =>
+  declaredMinor(componentKit, registration) ?? UNDECLARED_SURFACE_MINOR;
 
 /**
  * The minor this point's contract needs, when the registration is behind it;
