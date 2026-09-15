@@ -122,6 +122,71 @@ describe("planDecisionChanges", () => {
     });
   });
 
+  it("clears a stored row the policy default makes redundant or no longer honors", () => {
+    const plan = planDecisionChanges(
+      [
+        {
+          // A grant the gate ignores: effective already reads as the policy
+          // default, the row is still there to come back live.
+          tool: tool({
+            name: "get_issue",
+            policy: "ask",
+            user_decision: "always_allow",
+            effective: "ask",
+          }),
+          next: "ask",
+        },
+        {
+          // A grant restating what the policy does anyway.
+          tool: tool({
+            name: "list_teams",
+            policy: "auto",
+            user_decision: "always_allow",
+            effective: "allow",
+          }),
+          next: "allow",
+        },
+        // Nothing stored, nothing to clear.
+        { tool: unprompted, next: "allow" },
+      ],
+      { allowAlways: false, askAvailable: true },
+    );
+
+    expect(plan.entries).toEqual([
+      { tool_name: "get_issue", decision: null },
+      { tool_name: "list_teams", decision: null },
+    ]);
+    expect(plan.skipped).toEqual([]);
+    expect(plan.projected.get("get_issue")).toMatchObject({
+      user_decision: "none",
+      effective: "ask",
+    });
+    expect(plan.projected.get("list_teams")).toMatchObject({
+      user_decision: "none",
+      effective: "allow",
+    });
+  });
+
+  it("sends nothing for a tool whose stored row already is the target", () => {
+    const plan = planDecisionChanges(
+      [
+        {
+          tool: tool({
+            name: "get_issue",
+            policy: "ask",
+            user_decision: "always_allow",
+            effective: "allow",
+          }),
+          next: "allow",
+        },
+      ],
+      all,
+    );
+
+    expect(plan.entries).toEqual([]);
+    expect(plan.projected.size).toBe(0);
+  });
+
   it("leaves a tool out, and reports it, where the deployment cannot store the state", () => {
     const plan = planDecisionChanges(
       [

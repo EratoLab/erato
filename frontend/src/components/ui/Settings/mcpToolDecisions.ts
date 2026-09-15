@@ -96,9 +96,13 @@ export interface McpToolDecisionPlan {
 }
 
 /**
- * Turns a set of changes into one batch. Tools already in the target state
- * cost nothing; tools whose target the deployment cannot store are reported
- * rather than sent, because the endpoint refuses a batch with one bad entry.
+ * Turns a set of changes into one batch. A tool costs nothing when the row
+ * the target needs is the row it already holds — compared as stored rows,
+ * not effective states, so a row the gate no longer honors (or one that
+ * merely restates the policy) is cleared when the policy default is chosen
+ * rather than left behind to come back live once the policy changes. Tools
+ * whose target the deployment cannot store are reported rather than sent,
+ * because the endpoint refuses a batch with one bad entry.
  */
 export const planDecisionChanges = (
   changes: McpToolDecisionChange[],
@@ -110,12 +114,13 @@ export const planDecisionChanges = (
     skipped: [],
   };
   for (const { tool, next } of changes) {
-    if (decisionOfEffective(tool.effective) === next) {
-      continue;
-    }
     const stored = storedDecisionFor(tool, next, availability);
     if (stored === undefined) {
       plan.skipped.push(tool);
+      continue;
+    }
+    const current = tool.user_decision === "none" ? null : tool.user_decision;
+    if (stored === current) {
       continue;
     }
     plan.entries.push({ tool_name: tool.name, decision: stored });

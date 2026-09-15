@@ -612,6 +612,44 @@ describe("McpToolApprovalSettings", () => {
     ]);
   });
 
+  it("forgets a stored grant the policy no longer honors on the group's policy default", async () => {
+    const { fetchMock, store } = stubServer({
+      tools: roster(
+        [
+          tool({ name: "get_issue", title: "Get issue", policy: "ask" }),
+          tool({ name: "list_teams", title: "List teams", policy: "auto" }),
+        ],
+        { allowAlways: false, askAvailable: true },
+      ),
+      // The row reads as the policy default already, so only the batch can
+      // show the grant is gone rather than waiting to come back live.
+      settings: [["get_issue", "always_allow"]],
+    });
+
+    renderSection();
+    const getIssue = await rowFor("get_issue");
+    await expectChecked(getIssue, "ask");
+    expect(
+      within(groupFor("readOnly")).getByRole("button", {
+        name: "Read-only tools: Mixed",
+      }),
+    ).toBeInTheDocument();
+
+    await chooseForGroup("readOnly", /^Policy default/);
+
+    await waitFor(() => {
+      expect(store.has("get_issue")).toBe(false);
+    });
+    expect(batchBodies(fetchMock)).toEqual([
+      {
+        mcp_server_id: SERVER_ID,
+        decisions: [{ tool_name: "get_issue", decision: null }],
+      },
+    ]);
+    await expectChecked(await rowFor("get_issue"), "ask");
+    expect(checkedRadio(await rowFor("list_teams"))).toBe("allow");
+  });
+
   it("skips the tools a group state is unavailable for and says so for a while", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
