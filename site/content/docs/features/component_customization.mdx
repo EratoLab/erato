@@ -51,6 +51,8 @@ import type { ComponentKitRegistration } from "@erato/frontend/library";
 window.ERATO_COMPONENT_KITS ??= [];
 window.ERATO_COMPONENT_KITS.push({
   name: "my-kit",
+  // The ERATO_SHARED_SURFACE_MINOR this kit was built against, as a literal.
+  builtAgainstSharedSurfaceMinor: 8,
   components: [
     {
       extensionPoint: "ChatWelcomeScreen",
@@ -60,6 +62,27 @@ window.ERATO_COMPONENT_KITS.push({
   ],
 } satisfies ComponentKitRegistration);
 ```
+
+### Declaring the surface a kit was built against
+
+An extension point's contract can grow a rule that an override has to carry —
+the chat history row, for instance, gained composed badges, a subline and a
+gated action menu. An override written before that rule existed cannot be
+carrying it, and it fails silently: no error, no warning, just a shipped
+feature missing from the customer's UI.
+
+`builtAgainstSharedSurfaceMinor` is how a kit states which contract it knows.
+Write it as a literal — importing `ERATO_SHARED_SURFACE_MINOR` and passing that
+would only ever agree with itself, because the import map resolves it to the
+running host. Leaving it out is read as the oldest possible contract, not as
+"no opinion".
+
+The host records a required minor per extension point and compares the two. A
+kit that is behind for one point is reported by name, with the point and the
+value to declare, and the host renders its own component for that point while
+the kit's other overrides stay installed. Whether the host actually falls back
+or only logs is one constant, `COMPONENT_KIT_VERSION_STANCE`, which ships as
+`"warn"` while deployed kits are still undeclared.
 
 The main frontend loads a small runtime entrypoint first, then component kit
 entrypoints, then the main app entrypoint. Component kits can assume

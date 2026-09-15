@@ -23,7 +23,11 @@
  * ```
  */
 
-import { ERATO_SHARED_SURFACE_MINOR } from "@/shared/surfaceVersion";
+import {
+  COMPONENT_KIT_VERSION_STANCE,
+  ERATO_SHARED_SURFACE_MINOR,
+  EXTENSION_POINT_REQUIRED_SURFACE_MINOR,
+} from "@/shared/surfaceVersion";
 
 import type { AssistantWelcomeScreenProps } from "@/components/ui/Assistant/AssistantWelcomeScreen";
 import type { ChatHistoryListProps } from "@/components/ui/Chat/ChatHistoryList";
@@ -35,6 +39,7 @@ import type { FileSourceSelectorProps } from "@/components/ui/FileUpload/FileSou
 import type { GroupedFileAttachmentsPreviewProps } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 import type { TeamsConversationViewProps } from "@/components/ui/Teams/TeamsConversationView";
 import type { WelcomeScreenProps } from "@/components/ui/WelcomeScreen";
+import type { ComponentKitVersionStance } from "@/shared/surfaceVersion";
 import type { MessageControlsProps } from "@/types/message-controls";
 import type { ComponentType } from "react";
 
@@ -274,11 +279,17 @@ export interface ComponentKitRegistration {
   name: string;
   components: ComponentKitComponentRegistration[];
   /**
-   * The `ERATO_SHARED_SURFACE_MINOR` the kit was built against. Declaring it
-   * turns a host that is too old to satisfy the kit into one loud error here
-   * instead of an override that silently misbehaves.
+   * The `ERATO_SHARED_SURFACE_MINOR` the kit was built against, written as a
+   * literal: the import map resolves the constant itself to the *running*
+   * host, so reading it at runtime would only ever agree with itself.
+   *
+   * The one fact a kit can state honestly, and the host draws both conclusions
+   * from it — too old for an extension point's contract
+   * (`EXTENSION_POINT_REQUIRED_SURFACE_MINOR`), or newer than the host it
+   * landed on. Absent is not "fine": it is read as the oldest contract, because
+   * an override built before a rule existed cannot be carrying it.
    */
-  requiresSharedSurfaceMinor?: number;
+  builtAgainstSharedSurfaceMinor?: number;
 }
 
 declare global {
@@ -311,15 +322,69 @@ const emptyComponentRegistry = (): ComponentRegistry => ({
   AddinStartView: null,
 });
 
+const UNDECLARED_SURFACE_MINOR = 0;
+
+const declaredSurfaceMinor = (componentKit: ComponentKitRegistration): number =>
+  componentKit.builtAgainstSharedSurfaceMinor ?? UNDECLARED_SURFACE_MINOR;
+
+/**
+ * The minor this point's contract needs, when the kit is behind it; null when
+ * the kit is current or the point has never required one.
+ */
+const behindRequiredMinor = (
+  componentKit: ComponentKitRegistration,
+  extensionPoint: keyof ComponentRegistry,
+): number | null => {
+  const required = EXTENSION_POINT_REQUIRED_SURFACE_MINOR[extensionPoint];
+
+  return required !== undefined && declaredSurfaceMinor(componentKit) < required
+    ? required
+    : null;
+};
+
+const declaredMinorText = (componentKit: ComponentKitRegistration): string =>
+  componentKit.builtAgainstSharedSurfaceMinor === undefined
+    ? "declares none, which counts as the oldest contract"
+    : `declares 1.${componentKit.builtAgainstSharedSurfaceMinor}`;
+
 const buildComponentRegistry = (
   componentKits: ComponentKitRegistration[] | undefined,
+  stance: ComponentKitVersionStance = COMPONENT_KIT_VERSION_STANCE,
 ): ComponentRegistry => {
   const registry = emptyComponentRegistry();
   const selectedPriorities: Partial<Record<keyof ComponentRegistry, number>> =
     {};
 
   for (const componentKit of componentKits ?? []) {
+    // The other direction, and advisory only: a kit built against a newer host
+    // than this one is a deployment to fix, but the requirements below cannot
+    // describe a contract this host has never seen, so there is nothing to
+    // decide per point.
+    if (declaredSurfaceMinor(componentKit) > ERATO_SHARED_SURFACE_MINOR) {
+      console.error(
+        `component kit "${componentKit.name}" was built against shared surface 1.${componentKit.builtAgainstSharedSurfaceMinor}, but this host ships 1.${ERATO_SHARED_SURFACE_MINOR}: the host is older than the kit.`,
+      );
+    }
+
     for (const registration of componentKit.components) {
+      const requiredMinor = behindRequiredMinor(
+        componentKit,
+        registration.extensionPoint,
+      );
+
+      if (requiredMinor !== null) {
+        console.error(
+          `component kit "${componentKit.name}" overrides ${registration.extensionPoint}, whose contract needs shared surface 1.${requiredMinor}, and ${declaredMinorText(componentKit)}. Rebuild the kit against this host and set builtAgainstSharedSurfaceMinor: ${ERATO_SHARED_SURFACE_MINOR}. ` +
+            (stance === "enforce"
+              ? `Rendering the host's own ${registration.extensionPoint} instead.`
+              : `Installing the override anyway, because COMPONENT_KIT_VERSION_STANCE is "warn".`),
+        );
+
+        if (stance === "enforce") {
+          continue;
+        }
+      }
+
       const currentPriority = selectedPriorities[registration.extensionPoint];
 
       if (
@@ -357,25 +422,20 @@ export const componentRegistry: ComponentRegistry = buildComponentRegistry(
  * the initial build above sees an empty kit list. Entry points must call this
  * after kit scripts have executed and before the first render (and before any
  * entry-point-specific registry assignments).
+ *
+ * The version guard runs here rather than over `window.ERATO_COMPONENT_KITS`
+ * separately, so what it reports and what it installs cannot disagree. It only
+ * reaches a kit whose module linked: one that named a value this host does not
+ * export never evaluates, so nothing of it is here to check.
  */
-export const applyComponentKitRegistrations = (): void => {
+export const applyComponentKitRegistrations = (
+  stance: ComponentKitVersionStance = COMPONENT_KIT_VERSION_STANCE,
+): void => {
   if (typeof window === "undefined") {
     return;
   }
-  // Only reaches a kit whose module linked: one that named a value this host
-  // does not export never evaluates, so nothing of it is here to check.
-  for (const kit of window.ERATO_COMPONENT_KITS ?? []) {
-    if (
-      kit.requiresSharedSurfaceMinor !== undefined &&
-      kit.requiresSharedSurfaceMinor > ERATO_SHARED_SURFACE_MINOR
-    ) {
-      console.error(
-        `component kit "${kit.name}" needs shared surface 1.${kit.requiresSharedSurfaceMinor}, host ships 1.${ERATO_SHARED_SURFACE_MINOR}`,
-      );
-    }
-  }
   Object.assign(
     componentRegistry,
-    buildComponentRegistry(window.ERATO_COMPONENT_KITS),
+    buildComponentRegistry(window.ERATO_COMPONENT_KITS, stance),
   );
 };
