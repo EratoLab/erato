@@ -11,6 +11,23 @@ compatibility is established by negotiating an exact protocol version and then
 intersecting the live capability catalogue with methods compiled into the
 client.
 
+## Indexing configuration and statistics
+
+Use `sidecar.configure.v1` to set nullable `indexing_parallelism` (default 1)
+and `indexing_documents_per_minute` (default 40) in the existing user and
+organization configuration layers. A non-null user value takes precedence.
+The rate is shared by all workers; raising parallelism does not multiply it.
+
+Discover `indexing.status.v1` to read resource consumption, per-kind speed,
+backlog, ETA, chronological depth, coverage, discovery health, error counts,
+rebuild progress and search performance. The result also reports the effective
+indexing configuration and absolute local `indexingDirectory` path. See [the statistics contract](SPEC.md#15-indexing-statistics)
+and [the example exchange](examples/indexing-statistics.json).
+
+`indexing.reset.v1` fully clears all managed indexing files, including every
+generation, and returns only after cleanup completes with indexing stopped.
+It preserves source Outlook data and configuration. See [full reset semantics](SPEC.md#16-full-indexing-reset).
+
 ## Quick start
 
 ```sh

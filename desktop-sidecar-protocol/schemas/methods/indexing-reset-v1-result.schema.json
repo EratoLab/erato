@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-reset-v1-result.schema.json",
+  "title": "IndexingResetV1Result",
+  "description": "Returned only after processing has stopped, database handles have closed, and every managed indexing file has been removed. Does not merely acknowledge scheduling a reset.",
+  "type": "object",
+  "properties": {
+    "completed": {
+      "const": true
+    },
+    "completedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "state": {
+      "const": "stopped"
+    }
+  },
+  "required": ["completed", "completedAt", "state"],
+  "additionalProperties": true
+}

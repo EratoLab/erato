@@ -308,6 +308,91 @@
         "method": "sidecar.restart.v1",
         "availability": { "state": "enabled" }
       }
+    },
+    {
+      "name": "indexing.status.v1",
+      "summary": "Read the indexing directory, resources, throughput, backlog, ETA, coverage, depth, discovery health and search performance.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/indexing-status-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/indexing-status-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ],
+      "x-erato-capability": {
+        "id": "indexing.status",
+        "major": 1,
+        "method": "indexing.status.v1",
+        "availability": {
+          "state": "enabled"
+        }
+      }
+    },
+    {
+      "name": "indexing.reset.v1",
+      "summary": "Stop indexing and remove all managed indexing files, including every active, building and retired generation.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/indexing-reset-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/indexing-reset-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/PermissionDenied"
+        },
+        {
+          "$ref": "#/components/errors/RequestCancelled"
+        },
+        {
+          "$ref": "#/components/errors/Timeout"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ],
+      "x-erato-capability": {
+        "id": "indexing.reset",
+        "major": 1,
+        "method": "indexing.reset.v1",
+        "availability": {
+          "state": "enabled"
+        }
+      }
     }
   ],
   "components": {
@@ -350,6 +435,6 @@
   },
   "x-erato-catalogue": {
     "revision": "8",
-    "digest": "sha256:276656ac4710aacb333326150d7e26d967bfa6b35cbcf033b6467645557dd094"
+    "digest": "sha256:95df5baa7277909e6c13d6b965d3b6c1629d0760fc285493b4e0955f97eff8e3"
   }
 }

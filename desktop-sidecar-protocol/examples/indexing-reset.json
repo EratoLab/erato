@@ -1,0 +1,26 @@
+{
+  "name": "Fully reset indexing storage",
+  "messages": [
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "reset-indexing",
+        "method": "indexing.reset.v1",
+        "params": {}
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "reset-indexing",
+        "result": {
+          "completed": true,
+          "completedAt": "2026-09-15T12:00:00Z",
+          "state": "stopped"
+        }
+      }
+    }
+  ]
+}

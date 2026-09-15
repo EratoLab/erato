@@ -113,6 +113,125 @@ describe("DesktopSidecarClient", () => {
     expect(sidecar.restartRequests).toBe(1);
   });
 
+  it("fully resets active and rebuilding indexes while preserving configuration", async () => {
+    const { client, sidecar } = await setup();
+    await client.discover();
+    expect(client.supports("indexing.reset.v1")).toBe(true);
+    const configuration = {
+      user_configuration: {
+        indexing_parallelism: 3,
+        indexing_documents_per_minute: 60,
+        show_tray_icon: false,
+      },
+      organization_configuration: { future_setting: "retained" },
+    };
+    await client.invoke("sidecar.configure.v1", configuration);
+    expect(
+      (await client.invoke("indexing.status.v1", {})).generations,
+    ).toHaveLength(2);
+    const reset = await client.invoke("indexing.reset.v1", {});
+    expect(reset).toMatchObject({ completed: true, state: "stopped" });
+    expect(Number.isNaN(Date.parse(reset.completedAt))).toBe(false);
+    const status = await client.invoke("indexing.status.v1", {});
+    expect(status.state).toBe("stopped");
+    expect(status.indexingDirectory).toBe(
+      "/Users/example/Library/Application Support/Erato/index",
+    );
+    expect(status.generations).toEqual([]);
+    expect(status.discovery).toEqual([]);
+    expect(status.resources.disk.allocatedBytes).toBe(0);
+    expect(status.resources.disk.logicalBytes).toBe(0);
+    expect(Object.values(status.resources.disk.breakdown)).toEqual(
+      Array(7).fill({ allocatedBytes: 0, logicalBytes: 0 }),
+    );
+    expect(status.resources.liveExtractionWorkers).toEqual([]);
+    expect(status.effectiveConfiguration).toEqual({
+      parallelism: 3,
+      documentsPerMinute: 60,
+    });
+    expect(sidecar.configuration).toEqual(configuration);
+    await expect(client.invoke("indexing.reset.v1", {})).resolves.toEqual(
+      reset,
+    );
+    await client.invoke("sidecar.configure.v1", configuration);
+    expect((await client.invoke("indexing.status.v1", {})).state).toBe(
+      "stopped",
+    );
+  });
+
+  it("does not advertise reset on a previous sidecar", async () => {
+    const { client } = await setup({ omitMethods: ["indexing.reset.v1"] });
+    await client.discover();
+    expect(client.supports("indexing.reset.v1")).toBe(false);
+    await expect(client.invoke("indexing.reset.v1", {})).rejects.toBeInstanceOf(
+      SidecarClientError,
+    );
+  });
+
+  it("discovers statistics, resolves indexing knobs and replaces configuration layers", async () => {
+    const { client } = await setup();
+    await client.discover();
+    expect(client.supports("indexing.status.v1")).toBe(true);
+    expect(
+      (await client.invoke("indexing.status.v1", {})).effectiveConfiguration,
+    ).toEqual({ parallelism: 1, documentsPerMinute: 40 });
+    await client.invoke("sidecar.configure.v1", {
+      user_configuration: {
+        indexing_parallelism: 2,
+        indexing_documents_per_minute: null,
+      },
+      organization_configuration: {
+        indexing_parallelism: 4,
+        indexing_documents_per_minute: 60,
+      },
+    });
+    const status = await client.invoke("indexing.status.v1", {
+      includeSourceBreakdowns: false,
+      includeFileTypeBreakdowns: false,
+    });
+    expect(status.effectiveConfiguration).toEqual({
+      parallelism: 2,
+      documentsPerMinute: 60,
+    });
+    expect(status.generations).toHaveLength(2);
+    expect(
+      status.generations.every((g) =>
+        g.segments.every(
+          (s) =>
+            s.sourceId === null && s.mailboxId === null && s.fileType === null,
+        ),
+      ),
+    ).toBe(true);
+    await expect(
+      client.invoke("sidecar.configure.v1", {
+        user_configuration: { indexing_parallelism: 0 },
+        organization_configuration: {},
+      }),
+    ).rejects.toBeInstanceOf(SidecarClientError);
+    expect(
+      (await client.invoke("indexing.status.v1", {})).effectiveConfiguration,
+    ).toEqual({ parallelism: 2, documentsPerMinute: 60 });
+    await client.invoke("sidecar.configure.v1", {
+      user_configuration: {},
+      organization_configuration: {},
+    });
+    expect(
+      (await client.invoke("indexing.status.v1", {})).effectiveConfiguration,
+    ).toEqual({ parallelism: 1, documentsPerMinute: 40 });
+  });
+
+  it("discovers an older sidecar without indexing statistics", async () => {
+    const { client } = await setup({ omitMethods: ["indexing.status.v1"] });
+    await client.discover();
+    expect(client.supports("indexing.status.v1")).toBe(false);
+    await expect(
+      client.invoke("sidecar.configure.v1", {
+        user_configuration: { indexing_parallelism: 2 },
+        organization_configuration: {},
+      }),
+    ).resolves.toEqual({});
+  });
+
   it("sends extensible user and organization configuration", async () => {
     const { client, sidecar } = await setup();
     await client.discover();

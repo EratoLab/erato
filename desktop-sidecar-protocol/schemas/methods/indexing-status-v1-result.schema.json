@@ -1,0 +1,1446 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-status-v1-result.schema.json",
+  "title": "IndexingStatusV1Result",
+  "type": "object",
+  "properties": {
+    "sampledAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sessionId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "uptimeSeconds": {
+      "type": "number",
+      "minimum": 0
+    },
+    "state": {
+      "type": "string",
+      "enum": ["running", "stopping", "stopped", "blocked"]
+    },
+    "effectiveConfiguration": {
+      "$ref": "#/definitions/EffectiveIndexingConfiguration"
+    },
+    "resources": {
+      "$ref": "#/definitions/Resources"
+    },
+    "generations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Generation"
+      }
+    },
+    "discovery": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/DiscoverySource"
+      }
+    },
+    "search": {
+      "$ref": "#/definitions/SearchStatistics"
+    },
+    "resetInProgress": {
+      "type": "boolean",
+      "default": false,
+      "description": "True while a full reset is draining activity or deleting files. State is stopping during reset. Optional; absence means false."
+    },
+    "indexingDirectory": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\)",
+      "description": "Absolute local filesystem path of the sidecar-managed indexing root, in the sidecar OS native path syntax (not a URI). Report it even before initialization or after reset, without creating the directory. Updated implementations must include it; optional in the wire schema for compatibility with older v1 servers."
+    }
+  },
+  "required": [
+    "sampledAt",
+    "sessionId",
+    "uptimeSeconds",
+    "state",
+    "effectiveConfiguration",
+    "resources",
+    "generations",
+    "discovery",
+    "search"
+  ],
+  "additionalProperties": true,
+  "definitions": {
+    "EffectiveIndexingConfiguration": {
+      "type": "object",
+      "properties": {
+        "parallelism": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "documentsPerMinute": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["parallelism", "documentsPerMinute"],
+      "additionalProperties": true
+    },
+    "UnavailableMetric": {
+      "type": "object",
+      "properties": {
+        "metric": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["metric", "reason"],
+      "additionalProperties": true,
+      "description": "Metric is a dotted path relative to its containing section. Every unavailable null measurement must have an entry; zero means an observed zero."
+    },
+    "ProcessResources": {
+      "type": "object",
+      "properties": {
+        "processCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "cpuCoresUsed": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "memoryResidentBytes": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "memoryResidentPeakBytes": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "diskReadBytesPerSecond": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "diskWriteBytesPerSecond": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unavailableMetrics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/UnavailableMetric"
+          }
+        }
+      },
+      "required": [
+        "processCount",
+        "cpuCoresUsed",
+        "memoryResidentBytes",
+        "memoryResidentPeakBytes",
+        "diskReadBytesPerSecond",
+        "diskWriteBytesPerSecond",
+        "unavailableMetrics"
+      ],
+      "additionalProperties": true,
+      "description": "Sidecar measurements include search and discovery. Worker measurements aggregate extraction children, including CPU/I/O accrued by children that exit between samples. Resident sums may double-count shared pages; peak is the maximum simultaneously observed aggregate since process startup."
+    },
+    "DiskUsage": {
+      "type": "object",
+      "properties": {
+        "allocatedBytes": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "logicalBytes": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["allocatedBytes", "logicalBytes"],
+      "additionalProperties": true
+    },
+    "Resources": {
+      "type": "object",
+      "properties": {
+        "sampledAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "observationSeconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "sidecar": {
+          "$ref": "#/definitions/ProcessResources"
+        },
+        "extractionWorkers": {
+          "$ref": "#/definitions/ProcessResources"
+        },
+        "disk": {
+          "type": "object",
+          "properties": {
+            "sampledAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "allocatedBytes": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "logicalBytes": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "availableBytes": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "breakdown": {
+              "type": "object",
+              "properties": {
+                "control": {
+                  "$ref": "#/definitions/DiskUsage"
+                },
+                "catalog": {
+                  "$ref": "#/definitions/DiskUsage"
+                },
+                "activeIndex": {
+                  "$ref": "#/definitions/DiskUsage"
+                },
+                "buildingIndex": {
+                  "$ref": "#/definitions/DiskUsage"
+                },
+                "retiredIndexes": {
+                  "$ref": "#/definitions/DiskUsage"
+                },
+                "wal": {
+                  "$ref": "#/definitions/DiskUsage"
+                },
+                "temporary": {
+                  "$ref": "#/definitions/DiskUsage"
+                }
+              },
+              "required": [
+                "control",
+                "catalog",
+                "activeIndex",
+                "buildingIndex",
+                "retiredIndexes",
+                "wal",
+                "temporary"
+              ],
+              "additionalProperties": true
+            },
+            "unavailableMetrics": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/UnavailableMetric"
+              }
+            }
+          },
+          "required": [
+            "sampledAt",
+            "allocatedBytes",
+            "logicalBytes",
+            "availableBytes",
+            "breakdown",
+            "unavailableMetrics"
+          ],
+          "additionalProperties": true
+        },
+        "liveExtractionWorkers": {
+          "type": "array",
+          "description": "Individual currently live workers. Their memory sums can double-count shared pages. Aggregate CPU/I/O above also includes workers that exited during the sample.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "processId": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "sampledAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "resources": {
+                "$ref": "#/definitions/ProcessResources"
+              }
+            },
+            "required": ["processId", "sampledAt", "resources"],
+            "additionalProperties": true
+          }
+        }
+      },
+      "required": [
+        "sampledAt",
+        "observationSeconds",
+        "sidecar",
+        "extractionWorkers",
+        "disk",
+        "liveExtractionWorkers"
+      ],
+      "additionalProperties": true
+    },
+    "ThroughputWindow": {
+      "type": "object",
+      "properties": {
+        "targetWindowSeconds": {
+          "type": "integer",
+          "enum": [60, 300]
+        },
+        "observationSeconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "sampleCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "indexedPerMinute": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "emptyPerMinute": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unindexablePerMinute": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "completedPerMinute": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "attemptsPerMinute": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retriesPerMinute": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "deletionsPerMinute": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "extractedTextBytesPerSecond": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unavailableReason": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "targetWindowSeconds",
+        "observationSeconds",
+        "sampleCount",
+        "indexedPerMinute",
+        "emptyPerMinute",
+        "unindexablePerMinute",
+        "completedPerMinute",
+        "attemptsPerMinute",
+        "retriesPerMinute",
+        "deletionsPerMinute",
+        "extractedTextBytesPerSecond",
+        "unavailableReason"
+      ],
+      "additionalProperties": true
+    },
+    "Backlog": {
+      "type": "object",
+      "properties": {
+        "sampledAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "discoveryComplete": {
+          "type": "boolean"
+        },
+        "remaining": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ready": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "inProgress": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retryDeferred": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "blocked": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "firstTime": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "updates": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unavailableReason": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "sampledAt",
+        "discoveryComplete",
+        "remaining",
+        "ready",
+        "inProgress",
+        "retryDeferred",
+        "blocked",
+        "firstTime",
+        "updates",
+        "unavailableReason"
+      ],
+      "additionalProperties": true,
+      "description": "Counts concern current eligible revisions, not queue entries. remaining = ready + inProgress + retryDeferred + blocked = firstTime + updates. Incomplete discovery still permits exact counts for known work. Terminal outcomes and deletion-only cleanup are excluded."
+    },
+    "Eta": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": ["available", "unavailable"]
+        },
+        "estimatedRemainingSeconds": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "estimatedCompletionAt": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "basis": {
+          "const": "knownBacklog"
+        },
+        "rateWindowSeconds": {
+          "type": "integer",
+          "enum": [60, 300]
+        },
+        "observationSeconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "sampleCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "unavailableReason": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "state",
+        "estimatedRemainingSeconds",
+        "estimatedCompletionAt",
+        "basis",
+        "rateWindowSeconds",
+        "observationSeconds",
+        "sampleCount",
+        "unavailableReason"
+      ],
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "available"
+              }
+            },
+            "required": ["state"]
+          },
+          "then": {
+            "properties": {
+              "estimatedRemainingSeconds": {
+                "type": "number",
+                "minimum": 0
+              },
+              "estimatedCompletionAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "unavailableReason": {
+                "type": "null"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "estimatedRemainingSeconds": {
+                "type": "null"
+              },
+              "estimatedCompletionAt": {
+                "type": "null"
+              },
+              "unavailableReason": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "Coverage": {
+      "type": "object",
+      "properties": {
+        "sampledAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "knownEligible": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "indexedCurrent": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "emptyCurrent": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unindexableCurrent": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stale": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "neverProcessed": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pendingDeletions": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unavailableReason": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "sampledAt",
+        "knownEligible",
+        "indexedCurrent",
+        "emptyCurrent",
+        "unindexableCurrent",
+        "stale",
+        "neverProcessed",
+        "pendingDeletions",
+        "unavailableReason"
+      ],
+      "additionalProperties": true,
+      "description": "knownEligible is the sum of the five mutually exclusive revision states. stale means an older receipt exists, including an older failed receipt. pendingDeletions is separate. These counts do not imply discovery is complete."
+    },
+    "DepthBoundary": {
+      "type": "object",
+      "properties": {
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "inclusive": {
+          "type": "boolean"
+        }
+      },
+      "required": ["at", "inclusive"],
+      "additionalProperties": true,
+      "description": "All known eligible dated documents between this boundary and the snapshot are covered; inclusive says whether documents exactly at the boundary are included. An old pending document makes an exclusive boundary possible without rounding timestamps."
+    },
+    "Depth": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": ["applicable", "notApplicable", "unknown"]
+        },
+        "dateBasis": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "emailReceivedAtThenSentAt",
+                "parentEmailReceivedAtThenSentAt",
+                "sourceDefined"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sourceDateField": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "discoveryComplete": {
+          "type": "boolean"
+        },
+        "oldestIndexedDocumentAt": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fullyIndexedSince": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DepthBoundary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "processedSince": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DepthBoundary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pendingDocuments": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unindexableDocuments": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "undatedDocuments": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unavailableReason": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "state",
+        "dateBasis",
+        "sourceDateField",
+        "discoveryComplete",
+        "oldestIndexedDocumentAt",
+        "fullyIndexedSince",
+        "processedSince",
+        "pendingDocuments",
+        "unindexableDocuments",
+        "undatedDocuments",
+        "unavailableReason"
+      ],
+      "additionalProperties": true,
+      "description": "Only applicable to chronologically prioritized kinds. fullyIndexedSince requires current indexed/empty receipts; processedSince also accepts current terminal failures. Unknown dates are excluded from the boundary and counted explicitly. Oldest indexed date alone makes no coverage claim."
+    },
+    "Latency": {
+      "type": "object",
+      "properties": {
+        "observationSeconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "sampleCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "p50Seconds": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "p95Seconds": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unavailableReason": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "observationSeconds",
+        "sampleCount",
+        "p50Seconds",
+        "p95Seconds",
+        "unavailableReason"
+      ],
+      "additionalProperties": true,
+      "description": "Freshness is measured from discovery of a revision until its first searchable commit. Retry attempts do not reset the start; failed/empty/deleted revisions are excluded."
+    },
+    "ErrorCount": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "lastOccurredAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["code", "count", "lastOccurredAt"],
+      "additionalProperties": true
+    },
+    "ErrorWindow": {
+      "type": "object",
+      "properties": {
+        "observationSeconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "attemptFailures": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "terminalFailures": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "byCode": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ErrorCount"
+          }
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "observationSeconds",
+        "attemptFailures",
+        "terminalFailures",
+        "byCode",
+        "truncated"
+      ],
+      "additionalProperties": true,
+      "description": "Bounded recent error-code histogram, without content or filesystem paths. Counts include all failures even when byCode is truncated."
+    },
+    "Segment": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["email", "file"]
+        },
+        "sourceId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mailboxId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fileType": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "pdf",
+                "office",
+                "text",
+                "image",
+                "email",
+                "archive",
+                "other"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "throughput": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ThroughputWindow"
+          }
+        },
+        "backlog": {
+          "$ref": "#/definitions/Backlog"
+        },
+        "eta": {
+          "$ref": "#/definitions/Eta"
+        },
+        "coverage": {
+          "$ref": "#/definitions/Coverage"
+        },
+        "depth": {
+          "$ref": "#/definitions/Depth"
+        },
+        "freshness": {
+          "$ref": "#/definitions/Latency"
+        },
+        "errors": {
+          "$ref": "#/definitions/ErrorWindow"
+        }
+      },
+      "required": [
+        "kind",
+        "sourceId",
+        "mailboxId",
+        "fileType",
+        "throughput",
+        "backlog",
+        "eta",
+        "coverage",
+        "depth",
+        "freshness",
+        "errors"
+      ],
+      "additionalProperties": true,
+      "description": "Null source/mailbox denotes an all-source aggregate. Non-null scopes are independent views, not additional documents. Null fileType denotes all file types; breakdowns apply only to file rows. There must be one 60-second and one 300-second throughput window per segment."
+    },
+    "Generation": {
+      "type": "object",
+      "properties": {
+        "instanceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "type": "string",
+          "enum": ["active", "building"]
+        },
+        "sampledAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "segments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Segment"
+          }
+        },
+        "chunks": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "terms": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "indexedAvgdl": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "observedAvgdl": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unavailableReason": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "instanceId",
+        "role",
+        "sampledAt",
+        "segments",
+        "chunks",
+        "terms",
+        "indexedAvgdl",
+        "observedAvgdl",
+        "unavailableReason"
+      ],
+      "additionalProperties": true,
+      "description": "Active and building counters have independent revision receipts. Never sum generations to estimate mailbox progress. An extraction shared across generations can appear in both generation throughput views."
+    },
+    "DiscoverySource": {
+      "type": "object",
+      "properties": {
+        "sourceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mailboxId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "type": "string",
+          "enum": ["notStarted", "scanning", "complete", "failed", "disabled"]
+        },
+        "discoveryComplete": {
+          "type": "boolean"
+        },
+        "scanStartedAt": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lastSuccessfulScanAt": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "discoveredDocuments": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "accessible": {
+          "type": "boolean"
+        },
+        "lastErrorCode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "sourceId",
+        "mailboxId",
+        "state",
+        "discoveryComplete",
+        "scanStartedAt",
+        "lastSuccessfulScanAt",
+        "discoveredDocuments",
+        "accessible",
+        "lastErrorCode"
+      ],
+      "additionalProperties": true,
+      "description": "discoveryComplete refers to the current inventory snapshot; a successful older scan does not imply a current scan is complete."
+    },
+    "SearchStatistics": {
+      "type": "object",
+      "properties": {
+        "sampledAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "observationSeconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "queryCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "errorCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "inFlight": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "p50LatencyMilliseconds": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "p95LatencyMilliseconds": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unavailableReason": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "sampledAt",
+        "observationSeconds",
+        "queryCount",
+        "errorCount",
+        "inFlight",
+        "p50LatencyMilliseconds",
+        "p95LatencyMilliseconds",
+        "unavailableReason"
+      ],
+      "additionalProperties": true
+    }
+  }
+}

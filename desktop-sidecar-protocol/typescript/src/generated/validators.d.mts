@@ -12,6 +12,10 @@ export interface Validator {
   errors?: ValidationError[] | null;
 }
 
+export const validateIndexingResetV1Result: Validator;
+export const validateIndexingResetV1Params: Validator;
+export const validateIndexingStatusV1Result: Validator;
+export const validateIndexingStatusV1Params: Validator;
 export const validateJsonRpcEnvelope: Validator;
 export const validateDiscoverParams: Validator;
 export const validateDiscoverResult: Validator;
