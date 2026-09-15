@@ -159,7 +159,7 @@ interface ConformanceCase {
   props: ChatHistoryListProps;
   /** Status to put the listed chat in first; the row then has to show it. */
   status?: ConformanceRowStatus;
-  /** Ids that must be present, in the relative order they must keep. */
+  /** Ids that must be present, in whatever order the override draws them. */
   menu: readonly RequiredMenuItem[];
   /** Ids the gates drop for this row, which must not come back. */
   menuMustNotContain: readonly string[];
@@ -167,12 +167,12 @@ interface ConformanceCase {
 }
 
 /**
- * A required subset in relative order, not the exact array: the stable ids
- * exist so a kit can add entries of its own and place them where it likes, and
- * a suite that goes red for that is a suite the kit stops running. A required
- * id missing, a pair out of order, a wrong gate, or an id the host drops for
- * this row rendered anyway all still fail — a visible inert action is worse
- * than a missing one.
+ * A required set in any order, not the exact array: the stable ids exist so a
+ * kit can reorder the host's items and slot its own between them, and a suite
+ * that goes red for that is a suite the kit stops running. Order is left to
+ * the kit because no ordering failure costs a user a feature. A required id
+ * missing, a wrong gate, or an id the host drops for this row rendered anyway
+ * all still fail — a visible inert action is worse than a missing one.
  */
 const menuFailures = (
   items: DropdownMenuItem[],
@@ -184,23 +184,14 @@ const menuFailures = (
     .filter((id) => ids.includes(id))
     .map((id) => `"${id}" is rendered where the gates drop it; ${rendered}`);
 
-  let cursor = -1;
   for (const { id, disabled = false, confirmAction = false } of menu) {
-    const inOrder = ids.indexOf(id, cursor + 1);
-    const anywhere = inOrder === -1 ? ids.indexOf(id) : inOrder;
-    if (anywhere === -1) {
+    const at = ids.indexOf(id);
+    if (at === -1) {
       failures.push(`"${id}" is missing; ${rendered}`);
       continue;
     }
-    if (inOrder === -1) {
-      failures.push(
-        `"${id}" comes before an item it has to follow; ${rendered}`,
-      );
-    } else {
-      cursor = inOrder;
-    }
 
-    const item = items[anywhere];
+    const item = items[at];
     if ((item.disabled ?? false) !== disabled) {
       failures.push(
         disabled

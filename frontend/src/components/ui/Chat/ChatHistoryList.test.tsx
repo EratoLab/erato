@@ -634,8 +634,12 @@ describe("ChatHistoryList", () => {
       const { i18n } = await import("@lingui/core");
 
       return chatHistoryListConformanceFailures(ChatHistoryList, {
-        render: (element) =>
-          render(<I18nProvider i18n={i18n}>{element}</I18nProvider>),
+        render: (element) => {
+          // Cleared per case, so a row that stops rendering a menu at all
+          // reads as empty rather than as the previous case's.
+          dropdownItemsLog.length = 0;
+          return render(<I18nProvider i18n={i18n}>{element}</I18nProvider>);
+        },
         openRowMenu: () =>
           asRenderedByAKit(
             (dropdownItemsLog.at(-1) ?? []) as DropdownMenuItem[],
@@ -670,13 +674,9 @@ describe("ChatHistoryList", () => {
       expect(failures.join("\n")).toContain('"archive" is missing');
     });
 
-    it("fails a kit that reorders the host's own items", async () => {
-      const failures = await failuresForOverride((items) =>
-        [...items].reverse(),
-      );
-
-      expect(failures.join("\n")).toContain(
-        "comes before an item it has to follow",
+    it("passes a kit that reorders the host's own items", async () => {
+      expect(await failuresForOverride((items) => [...items].reverse())).toEqual(
+        [],
       );
     });
 

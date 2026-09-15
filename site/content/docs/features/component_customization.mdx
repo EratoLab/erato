@@ -113,11 +113,11 @@ it("keeps the row contract", () => {
 });
 ```
 
-The suite checks that the required menu ids are present, in their required
-relative order, with the required disabled and confirmation flags. A kit is
-free to insert its own items anywhere and to give any item its own icon or
-label — those are not what the cases read. Ids the host gates OUT for a row
-must stay out: an item rendered inert is worse than one that is missing.
+The suite checks that the required menu ids are present, with the required
+disabled and confirmation flags. Order is not read at all: a kit is free to
+reorder the host's items, insert its own anywhere, and give any item its own
+icon or label. Ids the host gates OUT for a row must stay out: an item rendered
+inert is worse than one that is missing.
 
 `component-kit-example/src/components/ExampleChatHistoryList.test.tsx` is a
 working harness for a kit that passes the gated array to the host's
