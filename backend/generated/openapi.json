@@ -6141,7 +6141,7 @@
           },
           "delegation_run_mode": {
             "$ref": "#/components/schemas/DelegationRunMode",
-            "description": "How delegated runs spawned by this message are awaited. Defaults to\n`wait`; `background` requires `assistants.delegation.allow_background`\nand is downgraded to `wait` server-side when the gate is off."
+            "description": "How delegated runs spawned by this message are awaited. Defaults to\n`wait`; `background` requires `delegation.allow_background`\nand is downgraded to `wait` server-side when the gate is off."
           },
           "mentioned_assistant_ids": {
             "type": "array",
@@ -6149,7 +6149,7 @@
               "type": "string",
               "format": "uuid"
             },
-            "description": "Assistants the user @-mentioned in this message as delegation targets.\nValidated server-side; requires `assistants.delegation.enabled`."
+            "description": "Assistants the user @-mentioned in this message as delegation targets.\nValidated server-side; requires `delegation.assistants.enabled`."
           },
           "message_id": {
             "type": "string",
@@ -7057,7 +7057,7 @@
           },
           "delegation_run_mode": {
             "$ref": "#/components/schemas/DelegationRunMode",
-            "description": "How delegated runs spawned by this message are awaited. Defaults to\n`wait`; `background` requires `assistants.delegation.allow_background`\nand is downgraded to `wait` server-side when the gate is off."
+            "description": "How delegated runs spawned by this message are awaited. Defaults to\n`wait`; `background` requires `delegation.allow_background`\nand is downgraded to `wait` server-side when the gate is off."
           },
           "existing_chat_id": {
             "type": [
@@ -7083,7 +7083,7 @@
               "type": "string",
               "format": "uuid"
             },
-            "description": "Assistants the user @-mentioned in this message as delegation targets.\nValidated server-side; requires `assistants.delegation.enabled`."
+            "description": "Assistants the user @-mentioned in this message as delegation targets.\nValidated server-side; requires `delegation.assistants.enabled`."
           },
           "previous_message_id": {
             "type": [
@@ -7947,7 +7947,7 @@
           },
           "delegation_run_mode": {
             "$ref": "#/components/schemas/DelegationRunMode",
-            "description": "How delegated runs spawned by this message are awaited. Defaults to\n`wait`; `background` requires `assistants.delegation.allow_background`\nand is downgraded to `wait` server-side when the gate is off."
+            "description": "How delegated runs spawned by this message are awaited. Defaults to\n`wait`; `background` requires `delegation.allow_background`\nand is downgraded to `wait` server-side when the gate is off."
           },
           "mentioned_assistant_ids": {
             "type": "array",
@@ -7955,7 +7955,7 @@
               "type": "string",
               "format": "uuid"
             },
-            "description": "Assistants the user @-mentioned in this message as delegation targets.\nValidated server-side; requires `assistants.delegation.enabled`."
+            "description": "Assistants the user @-mentioned in this message as delegation targets.\nValidated server-side; requires `delegation.assistants.enabled`."
           },
           "selected_facet_ids": {
             "type": "array",

@@ -83,6 +83,7 @@ mod tests {
             disable_facet_prompt_template: false,
             hidden: false,
             hidden_always_active_for_platform: None,
+            delegation: None,
         }
     }
 

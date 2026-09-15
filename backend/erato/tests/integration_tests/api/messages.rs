@@ -228,6 +228,7 @@ async fn test_facets_persisted_in_generation_parameters(pool: Pool<Postgres>) {
             disable_facet_prompt_template: true,
             hidden: false,
             hidden_always_active_for_platform: None,
+            delegation: None,
         },
     );
     facets.insert(
@@ -243,6 +244,7 @@ async fn test_facets_persisted_in_generation_parameters(pool: Pool<Postgres>) {
             disable_facet_prompt_template: false,
             hidden: false,
             hidden_always_active_for_platform: None,
+            delegation: None,
         },
     );
     app_config.experimental_facets = ExperimentalFacetsConfig {
@@ -906,6 +908,7 @@ async fn test_facet_prompt_injection_toggle_behavior(pool: Pool<Postgres>) {
             disable_facet_prompt_template: false,
             hidden: false,
             hidden_always_active_for_platform: None,
+            delegation: None,
         },
     );
     facets.insert(
@@ -921,6 +924,7 @@ async fn test_facet_prompt_injection_toggle_behavior(pool: Pool<Postgres>) {
             disable_facet_prompt_template: true,
             hidden: false,
             hidden_always_active_for_platform: None,
+            delegation: None,
         },
     );
     app_config.experimental_facets = ExperimentalFacetsConfig {

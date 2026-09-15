@@ -156,7 +156,7 @@ pub(crate) fn resolve_directive_markers_in_generation_input(
                 }
                 ContentPart::DelegationPreambleMarker(marker) => {
                     crate::services::delegation::render_delegation_preamble(
-                        &app_state.config.assistants.delegation.preamble,
+                        &app_state.config.delegation.preamble,
                         marker.expected_output.as_deref(),
                         marker.constraints.as_deref(),
                         marker.run_mode.unwrap_or_default(),

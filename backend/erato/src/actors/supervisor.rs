@@ -29,10 +29,7 @@ impl Actor for WorkerSupervisor {
         let args = CleanupWorkerArgs {
             db: db.clone(),
             cleanup_archived_max_age_days: config.cleanup_archived_max_age_days,
-            delegated_run_auto_archive_after_days: config
-                .assistants
-                .delegation
-                .auto_archive_after_days,
+            delegated_run_auto_archive_after_days: config.delegation.auto_archive_after_days,
             generation_stale_after_secs: config.generation_status.stale_after_secs,
         };
 
