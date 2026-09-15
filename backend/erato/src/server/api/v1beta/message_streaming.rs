@@ -20,6 +20,7 @@ use crate::models::message::{
     get_generation_chat_provider_id_from_message, get_message_by_id, submit_message,
     update_message_content, update_message_generation_metadata,
 };
+use crate::models::user_tool_approval_setting::UserToolDecision;
 use crate::policy::engine::PolicyEngine;
 use crate::policy::types::Subject;
 use crate::server::api::v1beta::ChatMessage;
@@ -45,7 +46,9 @@ use crate::services::genai_langfuse::{
 use crate::services::langfuse::TracingLangfuseClient;
 use crate::services::mcp_manager::{McpRequestAuthContext, convert_mcp_tools_to_genai_tools};
 use crate::services::mcp_session_manager::is_tool_allowed_to_wait;
-use crate::services::mcp_tool_approval::evaluate_mcp_tool_approval;
+use crate::services::mcp_tool_approval::{
+    McpToolEffectiveState, effective_mcp_tool_state, evaluate_mcp_tool_approval,
+};
 use crate::services::prompt_composition::traits::{
     FileResolver, MessageRepository, PromptProvider,
 };
@@ -125,18 +128,18 @@ fn now_timestamp() -> String {
     Utc::now().to_rfc3339()
 }
 
-/// Build the durable approval request when the shared policy evaluation says
-/// the tool must ask before running.
+/// Build the durable approval request when the shared evaluation of the
+/// policy and the user's own decision says the tool must ask before running.
 fn mcp_tool_approval_request(
     config: &McpToolApprovalConfig,
     server_id: &str,
     tool: &rmcp::model::Tool,
     tool_call: &genai::chat::ToolCall,
+    user_decision: Option<UserToolDecision>,
 ) -> Option<ContentPartToolApprovalRequest> {
     let verdict = evaluate_mcp_tool_approval(config, tool);
-    verdict
-        .requires_approval
-        .then(|| ContentPartToolApprovalRequest {
+    (effective_mcp_tool_state(config, &verdict, user_decision) == McpToolEffectiveState::Ask).then(
+        || ContentPartToolApprovalRequest {
             tool_call_id: tool_call.call_id.clone(),
             tool_name: tool_call.fn_name.clone(),
             mcp_server_id: server_id.to_string(),
@@ -149,7 +152,8 @@ fn mcp_tool_approval_request(
             .to_string(),
             allow_always: config.allow_always,
             requested_at: now_timestamp(),
-        })
+        },
+    )
 }
 
 fn build_openai_responses_reasoning_replay_parts(
@@ -3972,32 +3976,33 @@ async fn stream_generate_chat_completion<
             // MCP approval is a durable stop, not an in-memory park. Persist
             // the request in the assistant message and let `continuestream`
             // rehydrate this point after a user decision.
+            let approval_config = &mcp.config.mcp_servers_global.approval;
+            // With the gate off every stored decision but a denial is inert,
+            // and denials never make it into the prepared tool set.
+            let user_decision = if approval_config.enabled {
+                match Uuid::parse_str(&user_id) {
+                    Ok(user_id) => {
+                        crate::models::user_tool_approval_setting::find_active_decision(
+                            &app_state.db,
+                            user_id,
+                            &managed_tool_call.server_id,
+                            &managed_tool_call.tool.name,
+                        )
+                        .await?
+                    }
+                    Err(_) => None,
+                }
+            } else {
+                None
+            };
             if let Some(approval_request) = mcp_tool_approval_request(
-                &mcp.config.mcp_servers_global.approval,
+                approval_config,
                 &managed_tool_call.server_id,
                 &managed_tool_call.tool,
                 &unfinished_tool_call,
+                user_decision,
             ) {
-                let has_active_always_allow = if mcp.config.mcp_servers_global.approval.allow_always
-                {
-                    match Uuid::parse_str(&user_id) {
-                        Ok(user_id) => {
-                            crate::models::user_tool_approval_setting::find_active_always_allow(
-                                &app_state.db,
-                                user_id,
-                                &approval_request.mcp_server_id,
-                                &approval_request.tool_name,
-                            )
-                            .await?
-                            .is_some()
-                        }
-                        Err(_) => false,
-                    }
-                } else {
-                    false
-                };
-
-                if !has_active_always_allow && is_delegated_run {
+                if is_delegated_run {
                     // A delegated child run must never park on approval — the
                     // parent awaits it, and the durable stop would surface a
                     // half-done ToolApprovalRequest tail as the delegate's
@@ -4027,23 +4032,20 @@ async fn stream_generate_chat_completion<
                     });
                     continue;
                 }
-                if !has_active_always_allow {
-                    current_message_content
-                        .push(ContentPart::ToolApprovalRequest(approval_request));
-                    let generation_metadata = build_generation_metadata(
-                        total_prompt_tokens,
-                        total_completion_tokens,
-                        total_total_tokens,
-                        total_reasoning_tokens,
-                        langfuse_trace_id.clone(),
-                        false,
-                        None,
-                        non_empty_string(&captured_reasoning_summary),
-                        non_empty_vec(&captured_reasoning_items),
-                        non_empty_vec(&captured_reasoning_item_encrypted_content),
-                    );
-                    break 'loop_call_turns Ok((current_message_content, generation_metadata));
-                }
+                current_message_content.push(ContentPart::ToolApprovalRequest(approval_request));
+                let generation_metadata = build_generation_metadata(
+                    total_prompt_tokens,
+                    total_completion_tokens,
+                    total_total_tokens,
+                    total_reasoning_tokens,
+                    langfuse_trace_id.clone(),
+                    false,
+                    None,
+                    non_empty_string(&captured_reasoning_summary),
+                    non_empty_vec(&captured_reasoning_items),
+                    non_empty_vec(&captured_reasoning_item_encrypted_content),
+                );
+                break 'loop_call_turns Ok((current_message_content, generation_metadata));
             }
             let output_schema = managed_tool_call.tool.output_schema.clone();
             let tool_call_span_start_time = if langfuse_enabled {
@@ -6794,6 +6796,7 @@ mod tests {
         merge_action_facet_into_mcp_allowlist,
     };
     use crate::config::{McpToolApprovalConfig, McpToolApprovalPreset};
+    use crate::models::user_tool_approval_setting::UserToolDecision;
     use crate::services::mcp_tool_approval::evaluate_mcp_tool_approval;
     use genai::chat::ToolCall;
     use rmcp::model::{Tool, ToolAnnotations};
@@ -7068,7 +7071,7 @@ mod tests {
             (&disabled, &unannotated, false),
         ];
         for (config, tool, expected) in cases {
-            let request = mcp_tool_approval_request(config, "server", tool, &call);
+            let request = mcp_tool_approval_request(config, "server", tool, &call, None);
             let verdict = evaluate_mcp_tool_approval(config, tool);
             assert_eq!(request.is_some(), expected, "{:?} {}", config, tool.name);
             assert_eq!(verdict.requires_approval, request.is_some());
@@ -7076,6 +7079,31 @@ mod tests {
                 assert_eq!(request.annotations, verdict.annotations);
             }
         }
+
+        // The user's own decision escalates a policy-auto tool to ask and
+        // lets a grant bypass a policy-ask tool, while the gate is on.
+        let read_only_closed = Tool::new("read", "read", Map::new()).with_annotations(
+            ToolAnnotations::from_raw(None, Some(true), Some(false), Some(true), Some(false)),
+        );
+        let ask = Some(UserToolDecision::Ask);
+        assert!(
+            mcp_tool_approval_request(&permissive, "server", &read_only_closed, &call, ask)
+                .is_some()
+        );
+        assert!(
+            mcp_tool_approval_request(&disabled, "server", &read_only_closed, &call, ask).is_none()
+        );
+        let granting = McpToolApprovalConfig {
+            allow_always: true,
+            ..restrictive.clone()
+        };
+        let grant = Some(UserToolDecision::AlwaysAllow);
+        assert!(
+            mcp_tool_approval_request(&granting, "server", &unannotated, &call, grant).is_none()
+        );
+        assert!(
+            mcp_tool_approval_request(&restrictive, "server", &unannotated, &call, grant).is_some()
+        );
     }
 
     #[test]

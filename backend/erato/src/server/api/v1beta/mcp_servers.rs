@@ -9,14 +9,16 @@ use crate::services::mcp_oauth::{
     start_oauth_authorization,
 };
 use crate::services::mcp_session_manager::{McpServerConnectionStatus, is_tool_allowed_to_wait};
-use crate::services::mcp_tool_approval::evaluate_mcp_tool_approval;
+use crate::services::mcp_tool_approval::{
+    McpToolEffectiveState, effective_mcp_tool_state, evaluate_mcp_tool_approval,
+};
 use crate::state::AppState;
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::{Extension, Json};
 use sea_orm::prelude::Uuid;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::HashMap;
 use utoipa::ToSchema;
 
 #[derive(Debug, Clone, Copy, Serialize, ToSchema)]
@@ -69,18 +71,31 @@ pub struct McpServerToolAnnotations {
 /// What the configured approval policy does before running the tool.
 #[derive(Debug, Clone, Copy, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum McpServerToolApproval {
+pub enum McpServerToolPolicy {
     Auto,
     Ask,
 }
 
-/// The requesting user's persistent decision for the tool.
+/// The requesting user's stored decision for the tool, whether or not the
+/// policy currently honors it.
 #[derive(Debug, Clone, Copy, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum McpServerToolUserDecision {
+    None,
+    AlwaysAllow,
     Ask,
-    Always,
     Denied,
+}
+
+impl From<Option<UserToolDecision>> for McpServerToolUserDecision {
+    fn from(decision: Option<UserToolDecision>) -> Self {
+        match decision {
+            None => McpServerToolUserDecision::None,
+            Some(UserToolDecision::AlwaysAllow) => McpServerToolUserDecision::AlwaysAllow,
+            Some(UserToolDecision::Ask) => McpServerToolUserDecision::Ask,
+            Some(UserToolDecision::Denied) => McpServerToolUserDecision::Denied,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
@@ -90,8 +105,12 @@ pub struct McpServerTool {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub annotations: McpServerToolAnnotations,
-    pub approval: McpServerToolApproval,
+    /// The policy's own verdict, before any user decision.
+    pub policy: McpServerToolPolicy,
     pub user_decision: McpServerToolUserDecision,
+    /// What happens on the next call; a client renders this rather than
+    /// re-deriving it from the other two.
+    pub effective: McpToolEffectiveState,
     pub is_wait_tool: bool,
 }
 
@@ -103,6 +122,9 @@ pub struct ListMcpServerToolsResponse {
     /// a settings surface offers that decision only when this is set, the
     /// same way the in-chat approval card does.
     pub allow_always: bool,
+    /// Whether a stored "ask" decision is honored: it needs the approval
+    /// gate, so with approvals disabled the decision is stored but inert.
+    pub ask_available: bool,
     /// Empty unless `status` is `SUCCESS`; sorted by title.
     pub tools: Vec<McpServerTool>,
 }
@@ -184,28 +206,17 @@ pub async fn list_mcp_server_tools(
     let enumeration = mcp.servers.enumerate_tools(&server_id, &auth_context).await;
 
     let global = &mcp.config.mcp_servers_global;
-    // The gate only honors persistent grants while `allow_always` is on, so a
-    // stored grant must not read as "always" when it would still ask. A denial
-    // is enforced regardless of the approval policy.
-    let mut always_allowed_tools: HashSet<String> = HashSet::new();
-    let mut denied_tools: HashSet<String> = HashSet::new();
-    for setting in crate::models::user_tool_approval_setting::list_active(&app_state.db, user_id)
+    let user_decisions: HashMap<String, UserToolDecision> =
+        crate::models::user_tool_approval_setting::list_active_for_server(
+            &app_state.db,
+            user_id,
+            &server_id,
+        )
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    {
-        if setting.mcp_server_id != server_id {
-            continue;
-        }
-        match decision_of(&setting) {
-            UserToolDecision::Denied => {
-                denied_tools.insert(setting.tool_name);
-            }
-            UserToolDecision::AlwaysAllow if global.approval.allow_always => {
-                always_allowed_tools.insert(setting.tool_name);
-            }
-            UserToolDecision::AlwaysAllow => {}
-        }
-    }
+        .iter()
+        .map(|setting| (setting.tool_name.clone(), decision_of(setting)))
+        .collect();
 
     let mut tools: Vec<McpServerTool> = enumeration
         .tools
@@ -213,6 +224,7 @@ pub async fn list_mcp_server_tools(
         .map(|tool| {
             let verdict = evaluate_mcp_tool_approval(&global.approval, tool);
             let name = tool.name.to_string();
+            let user_decision = user_decisions.get(&name).copied();
             McpServerTool {
                 title: tool
                     .title
@@ -231,18 +243,13 @@ pub async fn list_mcp_server_tools(
                     open_world_hint: verdict.annotations.open_world_hint,
                     annotated: verdict.annotated,
                 },
-                approval: if verdict.requires_approval {
-                    McpServerToolApproval::Ask
+                policy: if verdict.requires_approval {
+                    McpServerToolPolicy::Ask
                 } else {
-                    McpServerToolApproval::Auto
+                    McpServerToolPolicy::Auto
                 },
-                user_decision: if denied_tools.contains(&name) {
-                    McpServerToolUserDecision::Denied
-                } else if always_allowed_tools.contains(&name) {
-                    McpServerToolUserDecision::Always
-                } else {
-                    McpServerToolUserDecision::Ask
-                },
+                user_decision: user_decision.into(),
+                effective: effective_mcp_tool_state(&global.approval, &verdict, user_decision),
                 is_wait_tool: global.enable_wait || is_tool_allowed_to_wait(&name, &config),
                 name,
             }
@@ -254,6 +261,7 @@ pub async fn list_mcp_server_tools(
         server_id,
         status: map_status(enumeration.status),
         allow_always: global.approval.allow_always,
+        ask_available: global.approval.enabled,
         tools,
     }))
 }
@@ -443,7 +451,7 @@ fn parse_user_id(me_user: &MeProfile) -> Result<Uuid, StatusCode> {
     Uuid::parse_str(&me_user.id).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
-async fn authorized_server_ids(
+pub(crate) async fn authorized_server_ids(
     mcp: &McpAppState,
     me_user: &MeProfile,
     policy: &PolicyEngine,
@@ -554,8 +562,9 @@ mod tests {
                 open_world_hint: true,
                 annotated: false,
             },
-            approval: McpServerToolApproval::Auto,
-            user_decision: McpServerToolUserDecision::Ask,
+            policy: McpServerToolPolicy::Auto,
+            user_decision: McpServerToolUserDecision::None,
+            effective: McpToolEffectiveState::Allow,
             is_wait_tool: false,
         }
     }
