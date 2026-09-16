@@ -749,12 +749,12 @@ msgid "officeAddin.sessionPick.title"
 msgstr "Wybierz ostatni czat"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/outlook/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.addin.clientActions.always.helper"
 msgstr "Wykonuje akcję bez pytania. Nic nie zostanie wysłane, dopóki nie klikniesz Wyślij w Outlooku."
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/core/clientActions/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.always.label"
 msgstr "Zawsze zezwalaj"
 
@@ -774,27 +774,27 @@ msgstr "Zawsze zezwalaj"
 #~ msgstr "Pytaj za każdym razem"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/core/clientActions/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.clickConsent.always.locked"
 msgstr "Zablokowane: Twoja organizacja wymaga potwierdzenia za każdym razem, gdy ta akcja jest uruchamiana automatycznie."
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/core/clientActions/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.clickConsent.ask.helper"
 msgstr "Wyświetla krok potwierdzenia tylko wtedy, gdy asystent uruchamia tę akcję samodzielnie. Kliknięcie przycisku akcji zawsze wykonuje ją bezpośrednio."
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/core/clientActions/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.clickConsent.ask.label"
 msgstr "Pytaj przed automatycznym uruchomieniem"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/core/clientActions/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.empty"
 msgstr "Obecnie nie ma dostępnych akcji sugerowanych przez asystenta."
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/outlook/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.addin.clientActions.intro"
 msgstr "Twoje decyzje z potwierdzenia na czacie są zapisywane tutaj i można je zmienić w dowolnym momencie. Nic nie zostanie wysłane, dopóki nie klikniesz Wyślij w Outlooku."
 
@@ -804,17 +804,17 @@ msgstr "Twoje decyzje z potwierdzenia na czacie są zapisywane tutaj i można je
 #~ msgstr "Akcje sugerowane przez asystenta"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/core/clientActions/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.never.helper"
 msgstr "Ukrywa tę akcję i ignoruje sugestię asystenta."
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/core/clientActions/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.never.label"
 msgstr "Nigdy"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/core/clientActions/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.scope"
 msgstr "Te decyzje są zapisywane tylko na tym urządzeniu."
 

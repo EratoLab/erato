@@ -21,24 +21,21 @@ import { AddinChatInput } from "./components/AddinChatInput";
 import { AddinPinHintBanner } from "./components/AddinPinHintBanner";
 import { AddinSettingsDialog } from "./components/AddinSettingsDialog";
 import { dismissSessionToasts } from "./components/sessionAskToast";
+import { useDropPipeline } from "./hooks/useDropPipeline";
+import { useEmailDedupSet } from "./hooks/useEmailDedupSet";
+import { holdSessionPolicy, releaseSessionPolicy } from "./sessionPolicy";
 import {
   AddinChatCore,
   AddinChatCoreView,
   type AddinChatHostProps,
 } from "../core/AddinChatCore";
-import { useActionFacetClientActions } from "./hooks/useAvailableActionFacets";
-import { useDropPipeline } from "./hooks/useDropPipeline";
-import { useEmailDedupSet } from "./hooks/useEmailDedupSet";
-import { holdSessionPolicy, releaseSessionPolicy } from "./sessionPolicy";
 import { useOfficeDragAndDrop } from "../hooks/useOfficeDragAndDrop";
 import { useOutlookClientTools } from "./hooks/useOutlookClientTools";
 import { useOutlookMailListDrag } from "./hooks/useOutlookMailListDrag";
 import { useOutlookMessageFetcher } from "./hooks/useOutlookMessageFetcher";
-import { useOffice } from "../providers/OfficeProvider";
 import { useOutlookEmailSource } from "./providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "./providers/OutlookMailItemProvider";
 import { resolveEditExchangeItemIdentity } from "./utils/exchangeItemIdentity";
-import { FreshCompletionTracker } from "./utils/freshCompletionTracker";
 import {
   OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
   runWithGraphTimeout,
@@ -50,7 +47,10 @@ import {
   parseDroppedFiles,
 } from "./utils/parseDroppedFiles";
 import { parseEmlBytes } from "./utils/parsedEmail";
+import { useOffice } from "../providers/OfficeProvider";
 import { resolveMailListRowFetcher } from "./utils/resolveMailListRowFetcher";
+import { FreshCompletionTracker } from "../core/clientActions/freshCompletionTracker";
+import { useActionFacetClientActions } from "../core/clientActions/useAvailableActionFacets";
 import { yieldToRenderer } from "../utils/yieldToRenderer";
 
 import type { DropPipelineState } from "./hooks/useDropPipeline";

@@ -2,11 +2,16 @@ import { EntityRow, MailIcon } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 
 import { BehaviorTabContent } from "./BehaviorTabContent";
-import { ClientActionsSettings } from "./ClientActionsSettings";
 import {
   AddinSettingsDialogCore,
   type AddinSettingsDialogCoreProps,
 } from "../../core/AddinSettingsDialogCore";
+import { ClientActionsSettings } from "../../core/clientActions/ClientActionsSettings";
+import { outlookClientActionDecisionStore } from "../utils/clientActionPolicy";
+import {
+  clientActionDisplayLabel,
+  offerableClientActions,
+} from "../utils/outlookClientActions";
 
 export function AddinSettingsDialog(props: AddinSettingsDialogCoreProps) {
   return (
@@ -52,7 +57,23 @@ export function AddinSettingsDialog(props: AddinSettingsDialogCoreProps) {
             })}
             data-testid="servers-tools-outlook-actions-row"
           >
-            <ClientActionsSettings />
+            <ClientActionsSettings
+              store={outlookClientActionDecisionStore}
+              offerableActions={offerableClientActions}
+              displayLabel={clientActionDisplayLabel}
+              copy={{
+                intro: t({
+                  id: "officeAddin.settings.addin.clientActions.intro",
+                  message:
+                    "Your decisions from the in-chat confirmation are stored here and can be changed any time. Nothing is sent until you press Send in Outlook.",
+                }),
+                alwaysAllowHelper: t({
+                  id: "officeAddin.settings.addin.clientActions.always.helper",
+                  message:
+                    "Performs the action without asking. Nothing is sent until you press Send in Outlook.",
+                }),
+              }}
+            />
           </EntityRow>
         ),
         content: (

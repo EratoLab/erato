@@ -145,7 +145,7 @@ vi.mock("@erato/frontend/library", () => {
 vi.mock("../../../providers/OfficeProvider", () => ({
   useOffice: () => ({ host: "Outlook" }),
 }));
-vi.mock("../../hooks/useAvailableActionFacets", () => ({
+vi.mock("../../../core/clientActions/useAvailableActionFacets", () => ({
   useAvailableActionFacetIds: () => new Set<string>(),
 }));
 vi.mock("../../hooks/useOutlookCalendarFetcher", () => ({

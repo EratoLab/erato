@@ -4,10 +4,9 @@ import {
 } from "@erato/frontend/library";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { resolveAutoPromptBehavior } from "../utils/clientActionPolicy";
+import { resolveAutoPromptBehavior } from "./clientActionPolicy";
 
-import type { ClientActionDecisionMap } from "../utils/clientActionPolicy";
-import type { OutlookClientAction } from "../utils/outlookClientActions";
+import type { ClientActionDecisionMap } from "./clientActionPolicy";
 
 /**
  * Auto-prompt fires at most once per assistant message PER SCOPE, across
@@ -19,10 +18,13 @@ import type { OutlookClientAction } from "../utils/outlookClientActions";
  */
 const firedAutoPrompts = new Set<string>();
 
-export interface ConfirmCardState<
-  TSummary,
-  TAction extends OutlookClientAction = OutlookClientAction,
-> {
+/**
+ * `TAction` is the host's client-action id union (`OutlookClientAction`,
+ * a future `"word.apply_edits"` literal, …): any string literal type, so the
+ * host's renderer keeps `confirmCard.action` exactly as narrow as its own
+ * registry.
+ */
+export interface ConfirmCardState<TSummary, TAction extends string> {
   /**
    * Monotonic per-request id: a new confirmation replaces an earlier card
    * and remounts it (fresh scroll/focus), and an async resolution only
@@ -61,7 +63,7 @@ export interface ConfirmCardState<
  */
 export function useClientActionConfirmFlow<
   TSummary,
-  TAction extends OutlookClientAction = OutlookClientAction,
+  TAction extends string,
 >(args: {
   /** Namespaces the once-per-message auto-prompt slot (e.g. `"email"`). */
   promptScope: string;

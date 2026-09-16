@@ -38,8 +38,8 @@ import {
 } from "react";
 
 import { AddinChatInputCore } from "../../core/AddinChatInputCore";
+import { useAvailableActionFacetIds } from "../../core/clientActions/useAvailableActionFacets";
 import { useOffice } from "../../providers/OfficeProvider";
-import { useAvailableActionFacetIds } from "../hooks/useAvailableActionFacets";
 import { useOutlookCalendarFetcher } from "../hooks/useOutlookCalendarFetcher";
 import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection";
 import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
