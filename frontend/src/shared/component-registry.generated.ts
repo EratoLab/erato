@@ -42,6 +42,7 @@ export type { ChatTopLeftAccessoryProps } from "@/components/ui/Chat/ChatTopLeft
 export { McpDisabledServersNotice } from "@/components/ui/Chat/McpDisabledServersNotice";
 export { McpDisabledToolsNotice } from "@/components/ui/Chat/McpDisabledToolsNotice";
 export { McpNeedsAuthNotice } from "@/components/ui/Chat/McpNeedsAuthNotice";
+export { McpNotices } from "@/components/ui/Chat/McpNotices";
 export { MessageAttachments } from "@/components/ui/Chat/MessageAttachments";
 export type { MessageAttachmentsProps } from "@/components/ui/Chat/MessageAttachments";
 export { DefaultStarterPromptsSection } from "@/components/ui/Chat/StarterPromptsSection";
