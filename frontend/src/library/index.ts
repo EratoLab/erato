@@ -57,6 +57,7 @@ export {
   MessageContent,
   useHostArtifact,
   useOutlookArtifact,
+  type HostFenceRules,
 } from "@/components/ui/Message/MessageContent";
 export type { HostArtifact, OutlookArtifact } from "@/types/chat";
 export { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
@@ -523,6 +524,7 @@ export {
   type ComponentKitRegistration,
   type EratoEmailCodeBlockProps,
   type EratoAppointmentCodeBlockProps,
+  type HostCardCodeBlockProps,
   type ChatAddMenuExtraContentProps,
   type AddinStartViewProps,
 } from "@/config/componentRegistry";

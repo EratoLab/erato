@@ -13,6 +13,10 @@ import {
   groupIntoTraceClusters,
 } from "@/components/ui/Trace";
 import { CheckIcon, CopyIcon } from "@/components/ui/icons";
+import {
+  componentRegistry,
+  resolveComponentOverride,
+} from "@/config/componentRegistry";
 import { useOptionalTranslation } from "@/hooks/i18n";
 import { useTraceFeature } from "@/providers/FeatureConfigProvider";
 import { findMentionRanges } from "@/utils/chat/assistantMentions";
@@ -30,6 +34,7 @@ import {
 } from "./SyntaxHighlightedCode";
 
 import type { ToolApprovalStatus } from "../Trace/Trace";
+import type { HostCardCodeBlockProps } from "@/config/componentRegistry";
 import type {
   ContentPart,
   FileUploadItem,
@@ -121,29 +126,103 @@ function isEratoAppointmentLanguage(language: string): boolean {
  * What the fence classifier treats as "this block is a card, not code". The
  * decision has to be made at the markdown seam — `MarkdownPre` picks the
  * `<pre>`-vs-`<div>` wrapper BEFORE any registry slot renders — so a host
- * that needs different rules supplies them here rather than relocating the
- * call site. The default is the current behaviour, byte for byte.
+ * that needs different rules supplies them through the message's
+ * {@link HostArtifact} (`driftedEmailFenceTags`, `cardFenceLanguages`) and the
+ * `HostCardCodeBlock` registry slot rather than relocating the call site. Both
+ * markdown components derive ONE rules object per message through
+ * {@link fenceRulesFor}, so the wrapper decision and the renderer dispatch can
+ * never disagree. The default is the current behaviour, byte for byte.
  */
-interface HostFenceRules {
+export interface HostFenceRules {
   /**
    * Fence tags rescued as the email artifact when an email-bodied facet
-   * (`bodyFormat` present) produced the message.
+   * (`bodyFormat` present) produced the message. Lower-case.
    */
   driftedEmailTags: ReadonlySet<string>;
-  /** Non-email fence tags that always render as a card (never as code). */
+  /**
+   * Fence tags the host's registered `HostCardCodeBlock` renders. Empty while
+   * no renderer is registered, whatever the artifact lists.
+   */
+  isHostCardLanguage: (language: string) => boolean;
+  /**
+   * Every non-email fence tag that renders as a card (never as code): the
+   * shared `erato-appointment` fence plus the host card languages.
+   */
   isCardLanguage: (language: string) => boolean;
 }
 
 const DEFAULT_HOST_FENCE_RULES: HostFenceRules = {
   driftedEmailTags: DRIFTED_EMAIL_TAGS,
+  isHostCardLanguage: () => false,
   isCardLanguage: isEratoAppointmentLanguage,
 };
+
+const EMPTY_LANGUAGES: readonly string[] = [];
+
+/**
+ * The fence rules for the message being rendered: the defaults unless the
+ * host artifact overrides a part. Host card languages only count while a
+ * `HostCardCodeBlock` renderer is registered — a stamped tag with nothing to
+ * render it stays an ordinary code block rather than bare code in a card
+ * wrapper.
+ */
+function fenceRulesFor(artifact: HostArtifact | null): HostFenceRules {
+  if (!artifact) {
+    return DEFAULT_HOST_FENCE_RULES;
+  }
+  const hostCardLanguages = new Set(
+    componentRegistry.HostCardCodeBlock
+      ? (artifact.cardFenceLanguages ?? EMPTY_LANGUAGES)
+      : EMPTY_LANGUAGES,
+  );
+  const driftedEmailTags = artifact.driftedEmailFenceTags
+    ? new Set(artifact.driftedEmailFenceTags.map((tag) => tag.toLowerCase()))
+    : DRIFTED_EMAIL_TAGS;
+  if (hostCardLanguages.size === 0 && driftedEmailTags === DRIFTED_EMAIL_TAGS) {
+    return DEFAULT_HOST_FENCE_RULES;
+  }
+  const isHostCardLanguage = (language: string) =>
+    hostCardLanguages.has(language);
+  return {
+    driftedEmailTags,
+    isHostCardLanguage,
+    isCardLanguage: (language) =>
+      isEratoAppointmentLanguage(language) || isHostCardLanguage(language),
+  };
+}
+
+/**
+ * Host card fence renderer. `fenceRulesFor` only classifies a host card
+ * language while the slot is registered, so the fallback covers the slot
+ * being cleared between the classification and this render rather than a
+ * normal path.
+ */
+function HostCardBlock(props: HostCardCodeBlockProps) {
+  const Renderer = resolveComponentOverride(
+    componentRegistry.HostCardCodeBlock,
+    DefaultHostCardCodeBlock,
+  );
+  return <Renderer {...props} />;
+}
+
+function DefaultHostCardCodeBlock({
+  language,
+  content,
+}: HostCardCodeBlockProps) {
+  return (
+    <SyntaxHighlightedCode
+      code={content}
+      language={language}
+      surface="hoisted"
+    />
+  );
+}
 
 function classifyEratoEmailBlock(
   language: string,
   artifact: HostArtifact | null,
   content: string,
-  rules: HostFenceRules = DEFAULT_HOST_FENCE_RULES,
+  rules: HostFenceRules,
 ): { isEmail: boolean; isHtml: boolean } {
   // isHtml drives data-lossy paths (innerHTML render, text/html clipboard,
   // Html coercion, reply prefill), where plain text loses its newlines and
@@ -239,7 +318,7 @@ function isMermaidLanguage(language: string): boolean {
 function isCardCodeChild(
   children: React.ReactNode,
   artifact: HostArtifact | null,
-  rules: HostFenceRules = DEFAULT_HOST_FENCE_RULES,
+  rules: HostFenceRules,
 ): boolean {
   const language = getCodeChildLanguage(children);
   // Only isEmail is consumed here; it doesn't depend on content.
@@ -260,6 +339,7 @@ function MarkdownPre({
   ...props
 }: MarkdownPreProps) {
   const artifact = React.useContext(HostArtifactContext);
+  const rules = fenceRulesFor(artifact);
   const { isStreaming } = React.useContext(BlockCodeContext);
   const [copied, setCopied] = React.useState(false);
   const surfaceStyle = useCodeBlockSurfaceStyle();
@@ -290,7 +370,10 @@ function MarkdownPre({
   // code block — use a plain <div> to avoid inheriting <pre> monospace font
   // and horizontal scroll from message-content-code-block styling.
   try {
-    if (isCardCodeChild(children, artifact) || isMermaidCodeChild(children)) {
+    if (
+      isCardCodeChild(children, artifact, rules) ||
+      isMermaidCodeChild(children)
+    ) {
       return (
         <div>
           <BlockCodeContext.Provider value={{ isBlockCode: true, isStreaming }}>
@@ -354,10 +437,16 @@ function MarkdownCode({
 }: MarkdownCodeProps) {
   const { isBlockCode, isStreaming } = React.useContext(BlockCodeContext);
   const artifact = React.useContext(HostArtifactContext);
+  const rules = fenceRulesFor(artifact);
   const codeContent = String(children).replace(/\n$/, "");
   const match = /language-([\w-]+)/.exec(className ?? "");
   const language = match ? match[1] : "";
-  const emailBlock = classifyEratoEmailBlock(language, artifact, codeContent);
+  const emailBlock = classifyEratoEmailBlock(
+    language,
+    artifact,
+    codeContent,
+    rules,
+  );
 
   if (isBlockCode && emailBlock.isEmail) {
     return (
@@ -367,6 +456,10 @@ function MarkdownCode({
 
   if (isBlockCode && isEratoAppointmentLanguage(language)) {
     return <EratoAppointmentBlock content={codeContent} />;
+  }
+
+  if (isBlockCode && rules.isHostCardLanguage(language)) {
+    return <HostCardBlock language={language} content={codeContent} />;
   }
 
   if (isBlockCode && isMermaidLanguage(language)) {

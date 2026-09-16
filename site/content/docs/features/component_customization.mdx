@@ -52,7 +52,7 @@ window.ERATO_COMPONENT_KITS ??= [];
 window.ERATO_COMPONENT_KITS.push({
   name: "my-kit",
   // The ERATO_SHARED_SURFACE_MINOR this kit was built against, as a literal.
-  builtAgainstSharedSurfaceMinor: 9,
+  builtAgainstSharedSurfaceMinor: 11,
   components: [
     {
       extensionPoint: "ChatWelcomeScreen",
@@ -228,6 +228,7 @@ components.
 | `ChatMessageRenderer`           | Every message       | `ChatMessageProps`                   | Entire message layout                                                                                              |
 | `ChatTopLeftAccessory`          | Chat shell          | `ChatTopLeftAccessoryProps`          | Model picker slot in the chat top bar; the host positions it in flow, the kit owns the control and its inner inset |
 | `EratoEmailCodeBlock`           | Message code block  | `EratoEmailCodeBlockProps`           | Custom renderer for `erato-email` fenced code blocks                                                               |
+| `HostCardCodeBlock`             | Message code block  | `HostCardCodeBlockProps`             | Renderer for fence tags a host lists in `HostArtifact.cardFenceLanguages`; unregistered, they stay code blocks     |
 
 Each example is available in `frontend/src/customer/examples/` and can be copied to `frontend/src/customer/components/` as a starting point.
 

@@ -289,6 +289,7 @@ export { MermaidBlock } from "@/components/ui/Message/MermaidBlock";
 export { MessageContent } from "@/components/ui/Message/MessageContent";
 export { useHostArtifact } from "@/components/ui/Message/MessageContent";
 export { useOutlookArtifact } from "@/components/ui/Message/MessageContent";
+export type { HostFenceRules } from "@/components/ui/Message/MessageContent";
 export { getContentFilterCategoryLabel } from "@/components/ui/Message/messageErrorCopy";
 export { getContentFilterSeverityLabel } from "@/components/ui/Message/messageErrorCopy";
 export { getErrorCta } from "@/components/ui/Message/messageErrorCopy";

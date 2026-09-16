@@ -77,6 +77,25 @@ export interface HostArtifact {
    */
   bodyFormat?: "text" | "html";
   /**
+   * Fence tags that render as a host card (never as a code block) IN
+   * ADDITION to the shared `erato-appointment` fence, e.g. a document host's
+   * `erato-docx-edits`. A tag listed here is dispatched to the
+   * `HostCardCodeBlock` registry slot; while no renderer is registered there
+   * the fence stays an ordinary code block, so a stamp without a renderer
+   * never degrades to bare code in a card wrapper. Case-sensitive, matched
+   * against the fence tag as written.
+   */
+  cardFenceLanguages?: readonly string[];
+  /**
+   * Replaces the default set of drifted fence tags rescued as the email
+   * artifact when `bodyFormat` is present (the default covers the tags
+   * newer models normalize `erato-email` to: `""`, `email`, `erato`,
+   * `erato-email-text`, `text`, `plaintext`, `plain`, `html`). Matched
+   * case-insensitively; list `""` to keep rescuing untagged fences. Absent
+   * means the default set — the Outlook add-in never stamps this.
+   */
+  driftedEmailFenceTags?: readonly string[];
+  /**
    * How to treat the assistant's output:
    * - `"body"`: the whole response is a single insertable email body, so an
    *   unfenced response falls back to rendering the entire text as the artifact
