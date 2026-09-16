@@ -4,9 +4,7 @@ use axum::Router;
 use axum::http;
 use axum_test::TestServer;
 use chrono::{Duration, Utc};
-use erato::config::{
-    ExperimentalFacetsConfig, FacetConfig, ModelSettings, PromptSourceSpecification,
-};
+use erato::config::{FacetConfig, FacetsConfig, ModelSettings, PromptSourceSpecification};
 use erato::db::entity::{chats, messages};
 use erato::server::router::router;
 use sea_orm::{
@@ -71,7 +69,7 @@ async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
             delegation: None,
         },
     );
-    app_config.experimental_facets = ExperimentalFacetsConfig {
+    app_config.facets = FacetsConfig {
         facets,
         priority_order: vec!["extended_thinking".to_string(), "web_search".to_string()],
         tool_call_allowlist: vec![],

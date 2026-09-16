@@ -292,12 +292,16 @@ fn app_environment_source() -> Environment {
         .with_list_parse_key("chat_provider.additional_request_parameters")
         .with_list_parse_key("chat_provider.additional_request_headers")
         .with_list_parse_key("chat_providers.priority_order")
+        .with_list_parse_key("facets.priority_order")
         .with_list_parse_key("experimental_facets.priority_order")
+        .with_list_parse_key("facets.tool_call_allowlist")
         .with_list_parse_key("experimental_facets.tool_call_allowlist")
+        .with_list_parse_key("facets.default_selected_facets")
         .with_list_parse_key("experimental_facets.default_selected_facets")
         .with_list_parse_key("delegation.tasks.child_facet_ids")
         .with_list_parse_key("frontend.extra_frame_ancestors")
         .with_list_parse_key("i18n.language.language_detection_priority")
+        .with_list_parse_key("integrations.sharepoint.all_drives_sources")
         .with_list_parse_key("integrations.experimental_sharepoint.all_drives_sources")
 }
 
@@ -602,9 +606,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub starter_prompts: StarterPromptsConfig,
 
-    // Experimental facets configuration.
-    #[serde(default)]
-    pub experimental_facets: ExperimentalFacetsConfig,
+    // Facets configuration. `experimental_facets` is a deprecated compatibility alias.
+    #[serde(default, alias = "experimental_facets")]
+    #[facet(erato_config::deprecated_alias(name = "experimental_facets"))]
+    pub facets: FacetsConfig,
 
     // Action facet definitions.
     #[serde(default)]
@@ -1091,12 +1096,12 @@ impl AppConfig {
         }
 
         // Validate Sharepoint configuration
-        if let Err(e) = config.integrations.experimental_sharepoint.validate() {
+        if let Err(e) = config.integrations.sharepoint.validate() {
             panic!("Invalid Sharepoint configuration: {}", e);
         }
 
         // Validate Entra ID configuration
-        if let Err(e) = config.integrations.experimental_entra_id.validate() {
+        if let Err(e) = config.integrations.entra_id.validate() {
             panic!("Invalid Entra ID configuration: {}", e);
         }
 
@@ -1220,10 +1225,10 @@ impl AppConfig {
         // runs, just not the way the operator probably meant.
         if config.delegation.tasks.enabled {
             let selected_globally = allowlist_selects_reserved_tool(
-                &config.experimental_facets.tool_call_allowlist,
+                &config.facets.tool_call_allowlist,
                 DELEGATE_TASK_TOOL_NAME,
             );
-            let selected_by_a_facet = config.experimental_facets.facets.values().any(|facet| {
+            let selected_by_a_facet = config.facets.facets.values().any(|facet| {
                 allowlist_selects_reserved_tool(&facet.tool_call_allowlist, DELEGATE_TASK_TOOL_NAME)
             });
             if !selected_globally && !selected_by_a_facet {
@@ -1235,7 +1240,7 @@ impl AppConfig {
             }
         }
 
-        for (facet_id, facet) in &config.experimental_facets.facets {
+        for (facet_id, facet) in &config.facets.facets {
             if facet.delegation.is_some()
                 && !allowlist_selects_reserved_tool(
                     &facet.tool_call_allowlist,
@@ -1259,7 +1264,7 @@ impl AppConfig {
                     .tool_call_allowlist
                     .iter()
                     .all(|pattern| pattern_names_reserved_namespace(pattern))
-                && config.experimental_facets.tool_call_allowlist.is_empty()
+                && config.facets.tool_call_allowlist.is_empty()
             {
                 startup_log::warn_preinit(format!(
                     "Facet '{facet_id}' allowlists only reserved `{RESERVED_TOOL_NAMESPACE}/` \
@@ -1272,14 +1277,14 @@ impl AppConfig {
         // Every `child_facet_ids` entry, global or per facet, must name a
         // configured facet.
         for id in &config.delegation.tasks.child_facet_ids {
-            if !config.experimental_facets.facets.contains_key(id) {
+            if !config.facets.facets.contains_key(id) {
                 panic!(
                     "delegation.tasks.child_facet_ids references unknown facet '{}'.",
                     id
                 );
             }
         }
-        for (facet_id, facet) in &config.experimental_facets.facets {
+        for (facet_id, facet) in &config.facets.facets {
             let Some(overrides) = &facet.delegation else {
                 continue;
             };
@@ -1287,9 +1292,9 @@ impl AppConfig {
                 continue;
             };
             for id in ids {
-                if !config.experimental_facets.facets.contains_key(id) {
+                if !config.facets.facets.contains_key(id) {
                     panic!(
-                        "experimental_facets.facets.{}.delegation.child_facet_ids references unknown facet '{}'.",
+                        "facets.facets.{}.delegation.child_facet_ids references unknown facet '{}'.",
                         facet_id, id
                     );
                 }
@@ -1865,13 +1870,13 @@ impl AppConfig {
             return true;
         }
 
-        if let Some(template) = &self.experimental_facets.facet_prompt_template
+        if let Some(template) = &self.facets.facet_prompt_template
             && template.uses_langfuse()
         {
             return true;
         }
 
-        for facet in self.experimental_facets.facets.values() {
+        for facet in self.facets.facets.values() {
             if let Some(prompt) = &facet.additional_system_prompt
                 && prompt.uses_langfuse()
             {
@@ -3520,7 +3525,7 @@ pub struct DelegationTasksConfig {
     pub persona: TaskPersona,
 
     // Facets composed into every task child. Each id must name a facet under
-    // `experimental_facets.facets`. Defaults to none.
+    // `facets.facets`. Defaults to none.
     #[serde(default)]
     pub child_facet_ids: Vec<String>,
 }
@@ -3935,7 +3940,7 @@ pub struct StarterPromptConfig {
 }
 
 #[derive(Debug, Deserialize, PartialEq, Clone, Default, Facet)]
-pub struct ExperimentalFacetsConfig {
+pub struct FacetsConfig {
     // Map of facet id to facet configuration.
     #[serde(default)]
     pub facets: HashMap<String, FacetConfig>,
@@ -4507,8 +4512,8 @@ impl SharepointAllDrivesSource {
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
-pub struct ExperimentalSharepointConfig {
-    // Whether the experimental Sharepoint/OneDrive integration is enabled.
+pub struct SharepointConfig {
+    // Whether the Sharepoint/OneDrive integration is enabled.
     // Defaults to `false`.
     #[serde(default)]
     pub enabled: bool,
@@ -4554,7 +4559,7 @@ fn default_true() -> bool {
     true
 }
 
-impl ExperimentalSharepointConfig {
+impl SharepointConfig {
     pub fn resolved_all_drives_sources(&self) -> Vec<SharepointAllDrivesSource> {
         if self.all_drives_sources.is_empty() {
             SharepointAllDrivesSource::ALL.to_vec()
@@ -4576,8 +4581,8 @@ impl ExperimentalSharepointConfig {
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
-pub struct ExperimentalEntraIdConfig {
-    // Whether the experimental Entra ID integration is enabled.
+pub struct EntraIdConfig {
+    // Whether the Entra ID integration is enabled.
     // Defaults to `false`.
     #[serde(default)]
     pub enabled: bool,
@@ -4590,7 +4595,7 @@ pub struct ExperimentalEntraIdConfig {
     pub auth_via_access_token: bool,
 }
 
-impl Default for ExperimentalEntraIdConfig {
+impl Default for EntraIdConfig {
     fn default() -> Self {
         Self {
             enabled: false,
@@ -4599,7 +4604,7 @@ impl Default for ExperimentalEntraIdConfig {
     }
 }
 
-impl ExperimentalEntraIdConfig {
+impl EntraIdConfig {
     /// Validates the Entra ID configuration.
     pub fn validate(&self) -> Result<(), Report> {
         if self.enabled && !self.auth_via_access_token {
@@ -4622,10 +4627,14 @@ pub struct IntegrationsConfig {
     pub otel: OtelConfig,
     #[serde(default)]
     pub prometheus: PrometheusConfig,
-    #[serde(default)]
-    pub experimental_sharepoint: ExperimentalSharepointConfig,
-    #[serde(default)]
-    pub experimental_entra_id: ExperimentalEntraIdConfig,
+    // `experimental_sharepoint` is a deprecated compatibility alias.
+    #[serde(default, alias = "experimental_sharepoint")]
+    #[facet(erato_config::deprecated_alias(name = "experimental_sharepoint"))]
+    pub sharepoint: SharepointConfig,
+    // `experimental_entra_id` is a deprecated compatibility alias.
+    #[serde(default, alias = "experimental_entra_id")]
+    #[facet(erato_config::deprecated_alias(name = "experimental_entra_id"))]
+    pub entra_id: EntraIdConfig,
     #[serde(default)]
     pub ms_office: MsOfficeConfig,
 }
@@ -5814,6 +5823,154 @@ impl FacetPermissionRule {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod stabilized_config_tests {
+    use super::*;
+
+    fn builder() -> ConfigBuilder<DefaultState> {
+        Config::builder().add_source(File::from_str(
+            r#"
+environment = "test"
+http_host = "127.0.0.1"
+http_port = 3130
+database_url = "postgres://localhost/test"
+file_storage_providers = {}
+cleanup_enabled = false
+cleanup_archived_max_age_days = 30
+"#,
+            FileFormat::Toml,
+        ))
+    }
+
+    fn toml(prefix: &str) -> String {
+        format!(
+            r#"
+[{prefix}facets]
+priority_order = ["web_search", "thinking"]
+tool_call_allowlist = ["search/*", "client/*"]
+default_selected_facets = ["web_search"]
+only_single_facet = true
+
+[{prefix}facets.facets.web_search]
+display_name = "Web search"
+tool_call_allowlist = ["search/*"]
+
+[integrations.{prefix}sharepoint]
+enabled = true
+file_upload_enabled = false
+show_disclaimer = true
+all_drives_sources = ["me_drive", "shared_with_me"]
+
+[integrations.{prefix}entra_id]
+enabled = true
+"#
+        )
+    }
+
+    #[test]
+    fn stable_and_deprecated_toml_sections_are_equivalent() {
+        let parse = |prefix| {
+            builder()
+                .add_source(File::from_str(&toml(prefix), FileFormat::Toml))
+                .build()
+                .unwrap()
+                .try_deserialize::<AppConfig>()
+                .unwrap()
+        };
+        let stable = parse("");
+        assert_eq!(stable, parse("experimental_"));
+        assert!(stable.facets.only_single_facet);
+        assert_eq!(
+            stable.facets.facets["web_search"].display_name,
+            "Web search"
+        );
+        assert!(stable.integrations.sharepoint.enabled);
+        assert!(!stable.integrations.sharepoint.file_upload_enabled);
+        assert!(stable.integrations.sharepoint.auth_via_access_token);
+        assert!(stable.integrations.entra_id.enabled);
+        assert!(stable.integrations.entra_id.auth_via_access_token);
+    }
+
+    #[test]
+    fn stable_and_deprecated_environment_variables_override_matching_toml() {
+        for prefix in ["", "experimental_"] {
+            let variables = HashMap::from([
+                (
+                    format!("{prefix}facets__priority_order"),
+                    "thinking web_search".into(),
+                ),
+                (
+                    format!("{prefix}facets__tool_call_allowlist"),
+                    "other/* another/*".into(),
+                ),
+                (
+                    format!("{prefix}facets__default_selected_facets"),
+                    "thinking web_search".into(),
+                ),
+                (format!("{prefix}facets__only_single_facet"), "false".into()),
+                (
+                    format!("integrations__{prefix}sharepoint__all_drives_sources"),
+                    "site_search site_drives".into(),
+                ),
+                (
+                    format!("integrations__{prefix}sharepoint__enabled"),
+                    "false".into(),
+                ),
+                (
+                    format!("integrations__{prefix}entra_id__enabled"),
+                    "false".into(),
+                ),
+            ])
+            .into_iter()
+            .map(|(key, value)| (key.to_uppercase(), value))
+            .collect();
+            let config: AppConfig = builder()
+                .add_source(File::from_str(&toml(prefix), FileFormat::Toml))
+                .add_source(app_environment_source().source(Some(variables)))
+                .build()
+                .unwrap()
+                .try_deserialize()
+                .unwrap();
+            assert_eq!(config.facets.priority_order, ["thinking", "web_search"]);
+            assert_eq!(config.facets.tool_call_allowlist, ["other/*", "another/*"]);
+            assert_eq!(
+                config.facets.default_selected_facets,
+                ["thinking", "web_search"]
+            );
+            assert!(!config.facets.only_single_facet);
+            assert_eq!(
+                config.integrations.sharepoint.all_drives_sources,
+                [
+                    SharepointAllDrivesSource::SiteSearch,
+                    SharepointAllDrivesSource::SiteDrives
+                ]
+            );
+            assert!(!config.integrations.sharepoint.enabled);
+            assert!(!config.integrations.entra_id.enabled);
+        }
+    }
+
+    #[test]
+    fn combining_stable_and_deprecated_sections_is_rejected() {
+        for key in ["facets", "integrations.sharepoint", "integrations.entra_id"] {
+            let legacy = match key.rsplit_once('.') {
+                Some((parent, name)) => format!("{parent}.experimental_{name}"),
+                None => format!("experimental_{key}"),
+            };
+            let error = builder()
+                .add_source(File::from_str(
+                    &format!("[{key}]\n[{legacy}]"),
+                    FileFormat::Toml,
+                ))
+                .build()
+                .unwrap()
+                .try_deserialize::<AppConfig>()
+                .unwrap_err();
+            assert!(error.to_string().contains("duplicate field"), "{error}");
+        }
     }
 }
 

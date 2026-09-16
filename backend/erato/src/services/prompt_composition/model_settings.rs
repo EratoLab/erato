@@ -1,4 +1,4 @@
-use crate::config::{ExperimentalFacetsConfig, ModelSettings};
+use crate::config::{FacetsConfig, ModelSettings};
 use std::collections::HashSet;
 
 /// Build effective model settings based on selected facets.
@@ -8,22 +8,22 @@ use std::collections::HashSet;
 ///   for facets not in the priority list.
 pub fn build_model_settings_for_facets(
     base: &ModelSettings,
-    experimental_facets: &ExperimentalFacetsConfig,
+    facets: &FacetsConfig,
     selected_facet_ids: &[String],
 ) -> ModelSettings {
-    if experimental_facets.facets.is_empty() {
+    if facets.facets.is_empty() {
         return base.clone();
     }
 
     let mut merged = base.clone();
     let selected_set: HashSet<&String> = selected_facet_ids.iter().collect();
-    let priority_set: HashSet<&String> = experimental_facets.priority_order.iter().collect();
+    let priority_set: HashSet<&String> = facets.priority_order.iter().collect();
 
-    for facet_id in &experimental_facets.priority_order {
+    for facet_id in &facets.priority_order {
         if !selected_set.contains(facet_id) {
             continue;
         }
-        if let Some(facet) = experimental_facets.facets.get(facet_id) {
+        if let Some(facet) = facets.facets.get(facet_id) {
             merged = merge_model_settings(&merged, &facet.model_settings);
         }
     }
@@ -32,7 +32,7 @@ pub fn build_model_settings_for_facets(
         if priority_set.contains(facet_id) {
             continue;
         }
-        if let Some(facet) = experimental_facets.facets.get(facet_id) {
+        if let Some(facet) = facets.facets.get(facet_id) {
             merged = merge_model_settings(&merged, &facet.model_settings);
         }
     }
@@ -69,7 +69,7 @@ fn merge_model_settings(base: &ModelSettings, overrides: &ModelSettings) -> Mode
 mod tests {
     use super::build_model_settings_for_facets;
     use crate::config::{
-        ExperimentalFacetsConfig, FacetConfig, ModelReasoningEffort, ModelSettings, ModelVerbosity,
+        FacetConfig, FacetsConfig, ModelReasoningEffort, ModelSettings, ModelVerbosity,
     };
     use std::collections::HashMap;
 
@@ -97,7 +97,7 @@ mod tests {
             reasoning_effort: None,
             verbosity: None,
         };
-        let config = ExperimentalFacetsConfig::default();
+        let config = FacetsConfig::default();
 
         let merged = build_model_settings_for_facets(&base, &config, &["facet".to_string()]);
         assert_eq!(merged, base);
@@ -106,7 +106,7 @@ mod tests {
     #[test]
     fn applies_facets_in_priority_order() {
         let base = ModelSettings::default();
-        let config = ExperimentalFacetsConfig {
+        let config = FacetsConfig {
             priority_order: vec!["first".to_string(), "second".to_string()],
             facets: HashMap::from([
                 (
@@ -147,7 +147,7 @@ mod tests {
     #[test]
     fn applies_selected_facets_not_in_priority_order() {
         let base = ModelSettings::default();
-        let config = ExperimentalFacetsConfig {
+        let config = FacetsConfig {
             priority_order: vec!["priority".to_string()],
             facets: HashMap::from([
                 (
@@ -187,7 +187,7 @@ mod tests {
     #[test]
     fn applies_compat_no_replay_summary() {
         let base = ModelSettings::default();
-        let config = ExperimentalFacetsConfig {
+        let config = FacetsConfig {
             facets: HashMap::from([(
                 "facet".to_string(),
                 facet(

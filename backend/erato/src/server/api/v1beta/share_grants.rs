@@ -101,7 +101,7 @@ pub struct ListShareGrantsResponse {
 }
 
 fn entra_id_enabled(app_state: &AppState) -> bool {
-    app_state.config.integrations.experimental_entra_id.enabled
+    app_state.config.integrations.entra_id.enabled
 }
 
 fn create_graph_client(access_token: &str) -> GraphClient {

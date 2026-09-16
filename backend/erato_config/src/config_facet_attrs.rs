@@ -6,6 +6,8 @@ facet::define_attr_grammar! {
 pub enum Attr {
         /// Marks a config field as deprecated and provides transition metadata.
         Deprecated(Deprecated),
+        /// Documents a deprecated Serde alias without deprecating the canonical field.
+        DeprecatedAlias(DeprecatedAlias),
         /// Marks a config field as hidden from generated docs.
         HideInDocs(HideInDocs),
         /// Marks a config field as requiring scoped replacement.
@@ -32,6 +34,12 @@ pub enum Attr {
         pub replacement_key: Option<&'static str>,
         /// Planned Erato version in which the key is expected to be removed.
         pub planned_removal_version: Option<&'static str>,
+    }
+
+    /// A deprecated field name that is still accepted during deserialization.
+    pub struct DeprecatedAlias {
+        /// Alias relative to the containing config table; must match the Serde alias.
+        pub name: &'static str,
     }
 }
 

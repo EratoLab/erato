@@ -1012,13 +1012,10 @@ fn test_sharepoint_all_drives_sources_defaults_to_all_when_omitted() {
     let config = AppConfig::default();
 
     assert_eq!(
-        config
-            .integrations
-            .experimental_sharepoint
-            .resolved_all_drives_sources(),
+        config.integrations.sharepoint.resolved_all_drives_sources(),
         SharepointAllDrivesSource::ALL.to_vec()
     );
-    assert!(!config.integrations.experimental_sharepoint.show_disclaimer);
+    assert!(!config.integrations.sharepoint.show_disclaimer);
 }
 
 #[test]
@@ -1032,7 +1029,7 @@ fn test_sharepoint_all_drives_sources_can_be_configured() {
 provider_kind = "openai"
 model_name = "o4-mini"
 
-[integrations.experimental_sharepoint]
+[integrations.sharepoint]
 show_disclaimer = true
 all_drives_sources = ["me_drive", "shared_with_me", "shared_drive_details"]
 
@@ -1059,17 +1056,14 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
         .expect("Failed to deserialize config");
 
     assert_eq!(
-        config
-            .integrations
-            .experimental_sharepoint
-            .all_drives_sources,
+        config.integrations.sharepoint.all_drives_sources,
         vec![
             SharepointAllDrivesSource::MeDrive,
             SharepointAllDrivesSource::SharedWithMe,
             SharepointAllDrivesSource::SharedDriveDetails,
         ]
     );
-    assert!(config.integrations.experimental_sharepoint.show_disclaimer);
+    assert!(config.integrations.sharepoint.show_disclaimer);
 }
 
 /// Tests OpenAI provider configuration with custom base URL.
@@ -2786,7 +2780,7 @@ config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = 
 }
 
 #[test]
-fn test_config_with_experimental_facets() {
+fn test_config_with_facets() {
     let mut temp_file = Builder::new()
         .suffix(".toml")
         .tempfile()
@@ -2804,7 +2798,7 @@ api_key = "sk-test-key"
 provider_kind = "s3"
 config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = "us-east-1" }
 
-[experimental_facets]
+[facets]
 only_single_facet = true
 show_facet_indicator_with_display_name = true
 priority_order = ["extended_thinking", "web_search"]
@@ -2812,13 +2806,13 @@ tool_call_allowlist = ["web-search-mcp/*"]
 facet_prompt_template = ""
 default_selected_facets = ["web_search"]
 
-[experimental_facets.facets.extended_thinking]
+[facets.facets.extended_thinking]
 display_name = "Extended thinking"
 icon = "iconoir-lightbulb"
 disable_facet_prompt_template = true
 model_settings = { reasoning_effort = "high", verbosity = "low" }
 
-[experimental_facets.facets.web_search]
+[facets.facets.web_search]
 display_name = "Web search"
 icon = "iconoir-globe"
 tool_call_allowlist = ["web-search-mcp/*", "web-access-mcp/*"]
@@ -2842,7 +2836,7 @@ additional_system_prompt = "Please execute one or multiple web searches to answe
         .try_deserialize()
         .expect("Failed to deserialize config");
 
-    let facets = &config.experimental_facets;
+    let facets = &config.facets;
     assert!(facets.only_single_facet);
     assert!(facets.show_facet_indicator_with_display_name);
     assert_eq!(
@@ -4693,10 +4687,10 @@ model_name = "gpt-4o"
 fn test_per_facet_child_facet_ids_unknown_facet_panics() {
     build_and_migrate_delegation_config(
         r#"
-[experimental_facets.facets.plan]
+[facets.facets.plan]
 display_name = "Plan"
 
-[experimental_facets.facets.plan.delegation]
+[facets.facets.plan.delegation]
 child_facet_ids = ["nope"]
 
 [chat_provider]
@@ -4712,17 +4706,17 @@ model_name = "gpt-4o"
 fn test_facet_delegation_override_parses_dotted_and_inline_forms() {
     let config = build_and_migrate_delegation_config(
         r#"
-[experimental_facets.facets.web_search]
+[facets.facets.web_search]
 display_name = "Web search"
 
-[experimental_facets.facets.dotted]
+[facets.facets.dotted]
 display_name = "Dotted"
 
-[experimental_facets.facets.dotted.delegation]
+[facets.facets.dotted.delegation]
 max_tasks_per_turn = 3
 child_facet_ids = ["web_search"]
 
-[experimental_facets.facets.inline]
+[facets.facets.inline]
 display_name = "Inline"
 delegation = { max_client_tool_calls_per_task = 40, persona = "bare" }
 
@@ -4734,7 +4728,7 @@ model_name = "gpt-4o"
 "#,
     );
 
-    let dotted = config.experimental_facets.facets["dotted"]
+    let dotted = config.facets.facets["dotted"]
         .delegation
         .as_ref()
         .expect("dotted facet carries a delegation override");
@@ -4745,7 +4739,7 @@ model_name = "gpt-4o"
     );
     assert_eq!(dotted.persona, None);
 
-    let inline = config.experimental_facets.facets["inline"]
+    let inline = config.facets.facets["inline"]
         .delegation
         .as_ref()
         .expect("inline facet carries a delegation override");
@@ -4783,7 +4777,7 @@ model_name = "gpt-4o"
     );
 
     assert!(config.delegation.tasks.enabled);
-    assert!(config.experimental_facets.tool_call_allowlist.is_empty());
+    assert!(config.facets.tool_call_allowlist.is_empty());
 }
 
 #[test]
@@ -4793,11 +4787,11 @@ fn planning_facet_without_selection_still_boots() {
 [delegation.tasks]
 enabled = true
 
-[experimental_facets.facets.plan]
+[facets.facets.plan]
 display_name = "Plan"
 tool_call_allowlist = ["web-search-mcp/*"]
 
-[experimental_facets.facets.plan.delegation]
+[facets.facets.plan.delegation]
 max_tasks_per_turn = 2
 
 [chat_provider]
@@ -4808,7 +4802,7 @@ model_name = "gpt-4o"
 "#,
     );
 
-    let plan = &config.experimental_facets.facets["plan"];
+    let plan = &config.facets.facets["plan"];
     assert_eq!(
         plan.delegation
             .as_ref()
@@ -4828,7 +4822,7 @@ fn reserved_only_facet_allowlist_still_boots() {
 [delegation.tasks]
 enabled = true
 
-[experimental_facets.facets.plan]
+[facets.facets.plan]
 display_name = "Plan"
 tool_call_allowlist = ["erato/delegate_task"]
 
@@ -4840,7 +4834,7 @@ model_name = "gpt-4o"
 "#,
     );
 
-    let plan = &config.experimental_facets.facets["plan"];
+    let plan = &config.facets.facets["plan"];
     assert_eq!(plan.tool_call_allowlist, vec!["erato/delegate_task"]);
     // This is the trap the warning describes: the facet selects the built-in
     // and nothing else, so the derived MCP server filter is empty.
@@ -4858,7 +4852,7 @@ fn a_paired_planning_facet_selects_the_reserved_tool_and_keeps_mcp_patterns() {
 [delegation.tasks]
 enabled = true
 
-[experimental_facets.facets.plan]
+[facets.facets.plan]
 display_name = "Plan"
 tool_call_allowlist = ["erato/delegate_task", "web-search-mcp/*"]
 
@@ -4870,7 +4864,7 @@ model_name = "gpt-4o"
 "#,
     );
 
-    let plan = &config.experimental_facets.facets["plan"];
+    let plan = &config.facets.facets["plan"];
     assert!(erato_config::config::allowlist_selects_reserved_tool(
         &plan.tool_call_allowlist,
         erato_config::config::DELEGATE_TASK_TOOL_NAME

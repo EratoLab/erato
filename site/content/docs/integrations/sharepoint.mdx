@@ -1,6 +1,6 @@
 # SharePoint / OneDrive
 
-Erato provides experimental support for [Microsoft SharePoint and OneDrive](https://www.microsoft.com/en-us/microsoft-365/sharepoint/collaboration) integration, allowing users to attach files from their Microsoft cloud storage directly to chats.
+Erato provides support for [Microsoft SharePoint and OneDrive](https://www.microsoft.com/en-us/microsoft-365/sharepoint/collaboration) integration, allowing users to attach files from their Microsoft cloud storage directly to chats.
 
 ## Overview
 
@@ -26,7 +26,7 @@ Before enabling the SharePoint integration, ensure:
 To enable the SharePoint/OneDrive integration, add the following to your configuration:
 
 ```toml filename="erato.toml"
-[integrations.experimental_sharepoint]
+[integrations.sharepoint]
 enabled = true
 ```
 
@@ -43,7 +43,7 @@ enabled = true
 ### Full Example
 
 ```toml filename="erato.toml"
-[integrations.experimental_sharepoint]
+[integrations.sharepoint]
 enabled = true
 file_upload_enabled = true
 auth_via_access_token = true
@@ -75,6 +75,5 @@ If you do not set `all_drives_sources`, Erato queries the full set of sources to
 
 ## Limitations
 
-- **Experimental**: This feature is currently experimental and may change in future releases
 - **Token-based auth only**: Currently requires the user's access token to be forwarded; service account authentication is not yet supported
 - **Read-only**: Files are referenced by ID; Erato does not upload files to SharePoint

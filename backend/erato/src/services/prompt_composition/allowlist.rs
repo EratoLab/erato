@@ -1,4 +1,4 @@
-use crate::config::ExperimentalFacetsConfig;
+use crate::config::FacetsConfig;
 use std::collections::HashSet;
 
 /// Build the MCP tool allowlist for the current generation based on facets.
@@ -7,10 +7,10 @@ use std::collections::HashSet;
 /// - Returns `None` when the computed allowlist is empty (no filtering).
 /// - Otherwise returns a de-duplicated list of allowlist patterns.
 pub fn build_mcp_tool_allowlist(
-    experimental_facets: &ExperimentalFacetsConfig,
+    facets: &FacetsConfig,
     selected_facet_ids: &[String],
 ) -> Option<Vec<String>> {
-    if experimental_facets.facets.is_empty() {
+    if facets.facets.is_empty() {
         return None;
     }
 
@@ -23,12 +23,12 @@ pub fn build_mcp_tool_allowlist(
         }
     };
 
-    for entry in &experimental_facets.tool_call_allowlist {
+    for entry in &facets.tool_call_allowlist {
         push_unique(entry);
     }
 
     for facet_id in selected_facet_ids {
-        if let Some(facet) = experimental_facets.facets.get(facet_id) {
+        if let Some(facet) = facets.facets.get(facet_id) {
             for entry in &facet.tool_call_allowlist {
                 push_unique(entry);
             }
@@ -45,7 +45,7 @@ pub fn build_mcp_tool_allowlist(
 #[cfg(test)]
 mod tests {
     use super::build_mcp_tool_allowlist;
-    use crate::config::{ExperimentalFacetsConfig, FacetConfig};
+    use crate::config::{FacetConfig, FacetsConfig};
     use std::collections::HashMap;
 
     fn facet(display_name: &str, tool_call_allowlist: Vec<&str>) -> FacetConfig {
@@ -67,7 +67,7 @@ mod tests {
 
     #[test]
     fn returns_none_when_no_facets_configured() {
-        let config = ExperimentalFacetsConfig {
+        let config = FacetsConfig {
             tool_call_allowlist: vec!["web-search-mcp/*".to_string()],
             ..Default::default()
         };
@@ -78,7 +78,7 @@ mod tests {
 
     #[test]
     fn includes_global_allowlist_when_facets_exist() {
-        let config = ExperimentalFacetsConfig {
+        let config = FacetsConfig {
             tool_call_allowlist: vec!["web-search-mcp/*".to_string()],
             facets: HashMap::from([("web_search".to_string(), facet("Web search", vec![]))]),
             ..Default::default()
@@ -90,7 +90,7 @@ mod tests {
 
     #[test]
     fn includes_selected_facet_allowlists() {
-        let config = ExperimentalFacetsConfig {
+        let config = FacetsConfig {
             tool_call_allowlist: vec!["global/*".to_string()],
             facets: HashMap::from([
                 (

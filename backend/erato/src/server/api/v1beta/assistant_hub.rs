@@ -213,7 +213,7 @@ struct GraphUserLookup {
 }
 
 fn entra_id_enabled(app_state: &AppState) -> bool {
-    app_state.config.integrations.experimental_entra_id.enabled
+    app_state.config.integrations.entra_id.enabled
 }
 
 async fn resolve_creator_display_names(

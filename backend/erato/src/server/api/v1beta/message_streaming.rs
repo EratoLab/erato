@@ -1,6 +1,5 @@
 use crate::config::{
-    ExperimentalFacetsConfig, HallucinationSuppressionConfig, McpToolApprovalConfig,
-    McpToolApprovalPreset,
+    FacetsConfig, HallucinationSuppressionConfig, McpToolApprovalConfig, McpToolApprovalPreset,
 };
 use crate::db::entity_ext::{chats, messages};
 use crate::metrics::{
@@ -2209,7 +2208,7 @@ async fn build_langfuse_trace_enrichment(
 }
 
 fn build_selected_facets(
-    config: &ExperimentalFacetsConfig,
+    config: &FacetsConfig,
     selected_facet_ids: &[String],
 ) -> HashMap<String, bool> {
     let selected_set: HashSet<&String> = selected_facet_ids.iter().collect();
@@ -2221,7 +2220,7 @@ fn build_selected_facets(
 }
 
 pub(crate) fn sanitize_selected_facet_ids(
-    config: &ExperimentalFacetsConfig,
+    config: &FacetsConfig,
     selected_facet_ids: &[String],
 ) -> Vec<String> {
     // Hidden facets are always-on baselines, never user-selectable — drop them
@@ -2254,7 +2253,7 @@ pub(crate) fn sanitize_selected_facet_ids(
 /// `hidden_always_active_for_platform` applies on every platform. Returned
 /// id-sorted for deterministic ordering.
 pub(crate) fn active_hidden_facet_ids(
-    config: &ExperimentalFacetsConfig,
+    config: &FacetsConfig,
     platform: Option<&str>,
 ) -> Vec<String> {
     let mut ids: Vec<String> = config
@@ -2274,7 +2273,7 @@ pub(crate) fn active_hidden_facet_ids(
 }
 
 pub(crate) fn resolve_effective_selected_facet_ids(
-    config: &ExperimentalFacetsConfig,
+    config: &FacetsConfig,
     requested_facet_ids: &[String],
     assistant_config: Option<&crate::models::assistant::AssistantWithFiles>,
 ) -> Vec<String> {
@@ -2377,7 +2376,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
 ) -> Result<PreparedChatRequest, Report> {
     let mcp = app_state.mcp_state().await;
     let effective_selected_facet_ids = resolve_effective_selected_facet_ids(
-        &app_state.config.experimental_facets,
+        &app_state.config.facets,
         &user_input.selected_facet_ids,
         assistant_config.as_ref(),
     );
@@ -2393,7 +2392,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     // their prompt injection, model settings, and tool allowlist all flow
     // through the same machinery as user-selected facets.
     for facet_id in active_hidden_facet_ids(
-        &app_state.config.experimental_facets,
+        &app_state.config.facets,
         generation_request_context.platform.as_deref(),
     ) {
         if !effective_selected_facet_ids.contains(&facet_id) {
@@ -2458,7 +2457,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     )
     .await?;
     let facet_tool_expansions = build_facet_tool_template_expansions(
-        &app_state.config.experimental_facets,
+        &app_state.config.facets,
         &effective_selected_facet_ids,
         &generation_mcp_tools,
     );
@@ -2471,7 +2470,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         chat,
         &user_input,
         &chat_provider_config,
-        &app_state.config.experimental_facets,
+        &app_state.config.facets,
         Some(me_profile_input.preferred_language),
         me_profile_input.user_preference_nickname,
         me_profile_input.user_preference_job_title,
@@ -2504,7 +2503,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     // Build genai ChatRequest (messages + tools) + ChatOptions
     let effective_model_settings = build_model_settings_for_facets(
         &chat_provider_config.model_settings,
-        &app_state.config.experimental_facets,
+        &app_state.config.facets,
         &effective_selected_facet_ids,
     );
 
@@ -2565,7 +2564,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     }
     // Offer top-level `client_tools` (returning round-trip tools) selected by
     // any active `tool_call_allowlist` — the GLOBAL
-    // `experimental_facets.tool_call_allowlist` (so a client tool can be
+    // `facets.tool_call_allowlist` (so a client tool can be
     // globally active with no facet at all), plus any selected regular facets,
     // plus the active action facet — using the same namespaced pattern
     // mechanism as MCP tools (e.g. `outlook/*`). Like the client-action tool
@@ -2576,7 +2575,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     // `namespace/name` uniqueness is already enforced at config load. An empty
     // effective allowlist offers nothing — client tools are strictly opt-in.
     let client_tool_allowlist = effective_client_tool_allowlist(
-        &app_state.config.experimental_facets,
+        &app_state.config.facets,
         &app_state.config.action_facets,
         &effective_selected_facet_ids,
         user_input.action_facet.as_ref().map(|af| af.id.as_str()),
@@ -2782,7 +2781,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         generation_chat_provider_id: Some(chat_provider_id),
         request_context: Some(generation_request_context.clone()),
         selected_facets: build_selected_facets(
-            &app_state.config.experimental_facets,
+            &app_state.config.facets,
             &effective_selected_facet_ids,
         ),
         action_facet_id: user_input.action_facet.as_ref().map(|af| af.id.clone()),
@@ -6342,7 +6341,7 @@ async fn resolve_generation_mcp_tools(
     mcp_auth_context: &McpRequestAuthContext<'_>,
 ) -> Result<GenerationMcpToolSet, Report> {
     let facet_allowlist = build_mcp_tool_allowlist(
-        &app_state.config.experimental_facets,
+        &app_state.config.facets,
         inputs.effective_selected_facet_ids,
     );
     // The active action facet's `tool_call_allowlist` selects MCP tools too
@@ -6357,7 +6356,7 @@ async fn resolve_generation_mcp_tools(
     };
     let server_filter_from_allowlist = derive_requested_server_ids_from_allowlist(
         facet_allowlist.as_deref(),
-        !app_state.config.experimental_facets.facets.is_empty(),
+        !app_state.config.facets.facets.is_empty(),
     );
     let assistant_server_ids = inputs
         .assistant_config
@@ -6739,7 +6738,7 @@ pub(crate) fn synthetic_tool_offer_slot(
 /// Expand facet tool patterns (e.g. `server/*`) into concrete discovered tool names
 /// for improved facet prompt template rendering.
 fn build_facet_tool_template_expansions(
-    experimental_facets: &ExperimentalFacetsConfig,
+    facets: &FacetsConfig,
     selected_facet_ids: &[String],
     discovered_tools: &[crate::services::mcp_session_manager::ManagedTool],
 ) -> HashMap<String, Vec<String>> {
@@ -6751,7 +6750,7 @@ fn build_facet_tool_template_expansions(
     let mut expansions = HashMap::new();
 
     for facet_id in selected_facet_ids {
-        let Some(facet) = experimental_facets.facets.get(facet_id) else {
+        let Some(facet) = facets.facets.get(facet_id) else {
             continue;
         };
         // Reserved patterns name a built-in, not a discovered MCP tool, so
@@ -6877,7 +6876,7 @@ fn is_qualified_tool_allowed(namespace: &str, tool_name: &str, allowlist: &[Stri
 
 /// The combined allowlist that can select top-level `client_tools` on this
 /// request, using the same namespaced `tool_call_allowlist` pattern syntax as
-/// MCP tools: the GLOBAL `experimental_facets.tool_call_allowlist` (applied
+/// MCP tools: the GLOBAL `facets.tool_call_allowlist` (applied
 /// regardless of selected facets), plus any selected regular facets, plus the
 /// active action facet.
 ///
@@ -6890,21 +6889,21 @@ fn is_qualified_tool_allowed(namespace: &str, tool_name: &str, allowlist: &[Stri
 ///    (opt-out). Reusing the MCP path would offer ALL client tools when none
 ///    are allowlisted.
 /// 2. **No facets-empty gate.** The MCP path short-circuits to `None` when
-///    `experimental_facets.facets` is empty; client tools intentionally do not,
+///    `facets.facets` is empty; client tools intentionally do not,
 ///    so a global allowlist can activate a client tool with no facets at all.
 /// 3. **Action facet is a flat union member here.** MCP folds it in
 ///    additively-only-on-`Some` (never resurrects a `None`/all-allowed base),
 ///    whereas here it is a first-class selector — action facets are the primary
 ///    client-tool path and live in a separate `action_facets` map.
 fn effective_client_tool_allowlist(
-    experimental_facets: &crate::config::ExperimentalFacetsConfig,
+    facets: &crate::config::FacetsConfig,
     action_facets: &crate::config::ActionFacetsConfig,
     selected_facet_ids: &[String],
     action_facet_id: Option<&str>,
 ) -> Vec<String> {
-    let mut allowlist: Vec<String> = experimental_facets.tool_call_allowlist.clone();
+    let mut allowlist: Vec<String> = facets.tool_call_allowlist.clone();
     for facet_id in selected_facet_ids {
-        if let Some(facet) = experimental_facets.facets.get(facet_id) {
+        if let Some(facet) = facets.facets.get(facet_id) {
             allowlist.extend(facet.tool_call_allowlist.iter().cloned());
         }
     }
@@ -7189,12 +7188,10 @@ mod tests {
 
     #[test]
     fn effective_client_tool_allowlist_unions_global_facets_and_action_facet() {
-        use crate::config::{
-            ActionFacetConfig, ActionFacetsConfig, ExperimentalFacetsConfig, FacetConfig,
-        };
+        use crate::config::{ActionFacetConfig, ActionFacetsConfig, FacetConfig, FacetsConfig};
         use std::collections::HashMap;
 
-        let experimental = ExperimentalFacetsConfig {
+        let experimental = FacetsConfig {
             tool_call_allowlist: vec!["client/*".to_string()], // global, regardless of facet
             facets: HashMap::from([(
                 "web_search".to_string(),
@@ -7425,7 +7422,7 @@ mod tests {
     #[test]
     fn active_hidden_facet_ids_scopes_by_platform() {
         use super::active_hidden_facet_ids;
-        use crate::config::{ExperimentalFacetsConfig, FacetConfig};
+        use crate::config::{FacetConfig, FacetsConfig};
         use std::collections::HashMap;
 
         let hidden = |platform: Option<&str>| FacetConfig {
@@ -7435,7 +7432,7 @@ mod tests {
             delegation: None,
             ..Default::default()
         };
-        let config = ExperimentalFacetsConfig {
+        let config = FacetsConfig {
             facets: HashMap::from([
                 ("outlook_baseline".to_string(), hidden(Some("outlook"))),
                 ("teams_baseline".to_string(), hidden(Some("teams"))),
@@ -7475,10 +7472,10 @@ mod tests {
     #[test]
     fn sanitize_drops_hidden_facets_from_user_selection() {
         use super::sanitize_selected_facet_ids;
-        use crate::config::{ExperimentalFacetsConfig, FacetConfig};
+        use crate::config::{FacetConfig, FacetsConfig};
         use std::collections::HashMap;
 
-        let config = ExperimentalFacetsConfig {
+        let config = FacetsConfig {
             facets: HashMap::from([
                 (
                     "web_search".to_string(),

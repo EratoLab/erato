@@ -330,7 +330,7 @@ fn configuration_data(config: &AppConfig) -> JsonValue {
         "resource_attributes": {
             "chat_provider": chat_provider_data,
             "mcp_server": config_resources_policy_data(config.mcp_servers.keys().cloned()),
-            "facet": config_resources_policy_data(config.experimental_facets.facets.keys().cloned()),
+            "facet": config_resources_policy_data(config.facets.facets.keys().cloned()),
         },
         "config": {
             "chat_sharing": { "enabled": config.chat_sharing.enabled },

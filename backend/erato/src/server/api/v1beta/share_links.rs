@@ -196,12 +196,7 @@ pub async fn resolve_share_link(
                 .await
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             if let Some(owner) = owner {
-                let owner_display_name = if app_state
-                    .config
-                    .integrations
-                    .experimental_entra_id
-                    .enabled
-                {
+                let owner_display_name = if app_state.config.integrations.entra_id.enabled {
                     match me_user.access_token.as_deref() {
                         Some(access_token) => {
                             MsGraphService::new(access_token)
@@ -350,7 +345,7 @@ async fn fetch_owner_profile_photo(
     me_user: &MeProfile,
     subject: Option<ProfilePhotoSubject<'_>>,
 ) -> Option<String> {
-    if !app_state.config.integrations.experimental_entra_id.enabled {
+    if !app_state.config.integrations.entra_id.enabled {
         return None;
     }
 

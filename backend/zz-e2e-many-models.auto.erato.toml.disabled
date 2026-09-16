@@ -276,13 +276,13 @@ subtitle = "Turn rough notes into a structured summary"
 icon = "iconoir-page"
 prompt = "Summarize these notes into clear action items and decisions."
 
-[experimental_facets]
+[facets]
 only_single_facet = false
 show_facet_indicator_with_display_name = false
 priority_order = ["web_search"]
 default_selected_facets = []
 
-[experimental_facets.facets.web_search]
+[facets.facets.web_search]
 display_name = "Web search"
 icon = "iconoir-globe"
 tool_call_allowlist = ["web-search-mcp/*", "web-access-mcp/*"]

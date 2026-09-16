@@ -182,7 +182,44 @@ fn collect_field(field: &Field, path: &mut Vec<String>, entries: &mut BTreeMap<S
     path.push(field.rename.unwrap_or(field.name).to_string());
     collect_paths(field_shape, path, entries);
     apply_field_metadata(field, path, entries);
+    collect_deprecated_alias(field, path, entries);
     path.pop();
+}
+
+fn collect_deprecated_alias(field: &Field, path: &[String], entries: &mut BTreeMap<String, Value>) {
+    let Some(config_facet_attrs::Attr::DeprecatedAlias(alias)) = field
+        .get_attr(Some("erato"), "deprecated_alias")
+        .and_then(|attr| attr.get_as::<config_facet_attrs::Attr>())
+    else {
+        return;
+    };
+
+    let canonical_key = path.join(".");
+    let canonical_prefix = format!("{canonical_key}.");
+    let mut alias_path = path.to_vec();
+    *alias_path.last_mut().expect("field path is not empty") = alias.name.to_string();
+    let alias_key = alias_path.join(".");
+
+    // Copy every emitted descendant, including map placeholders and list items.
+    // Keep aliases in the machine-readable reference while documenting the
+    // canonical keys and the migration note in the user-facing docs.
+    let aliases = entries
+        .iter()
+        .filter(|(key, _)| *key == &canonical_key || key.starts_with(&canonical_prefix))
+        .map(|(key, metadata)| {
+            let mut metadata = metadata.clone();
+            metadata["hide_in_docs"] = json!(true);
+            metadata["deprecated"] = json!({
+                "note": format!("Please use `{key}` instead."),
+                "replacement_key": key,
+            });
+            (
+                format!("{alias_key}{}", &key[canonical_key.len()..]),
+                metadata,
+            )
+        })
+        .collect::<Vec<_>>();
+    entries.extend(aliases);
 }
 
 fn apply_field_metadata(field: &Field, path: &[String], entries: &mut BTreeMap<String, Value>) {
@@ -301,7 +338,9 @@ mod tests {
 
         assert!(keys.contains(&"chat_providers.providers.<provider-id>.model_name".to_string()));
         assert!(keys.contains(&"assistants.enabled".to_string()));
-        assert!(keys.contains(&"experimental_facets.facets.<facet-id>.display_name".to_string()));
+        assert!(keys.contains(&"facets.facets.<facet-id>.display_name".to_string()));
+        assert!(keys.contains(&"integrations.sharepoint.enabled".to_string()));
+        assert!(keys.contains(&"integrations.entra_id.enabled".to_string()));
         assert!(keys.contains(&"model_permissions.rules.<rule-name>.rule_type".to_string()));
         assert!(keys.contains(&"server.encryption_key".to_string()));
         assert!(keys.contains(&"chat_providers.priority_order.[]".to_string()));
@@ -339,6 +378,44 @@ mod tests {
             object["additional_frontend_environment"]["deprecated"]["replacement_key"],
             "frontend.additional_environment"
         );
+    }
+
+    #[test]
+    fn deprecated_aliases_preserve_all_descendants_with_replacements() {
+        let generated = generate_config_reference();
+        let object = generated.as_object().unwrap();
+
+        for (canonical, alias) in [
+            ("facets", "experimental_facets"),
+            (
+                "integrations.sharepoint",
+                "integrations.experimental_sharepoint",
+            ),
+            (
+                "integrations.entra_id",
+                "integrations.experimental_entra_id",
+            ),
+        ] {
+            let canonical_prefix = format!("{canonical}.");
+            let mut count = 0;
+            for (key, metadata) in object {
+                if !key.starts_with(&canonical_prefix) {
+                    continue;
+                }
+                count += 1;
+                let alias_key = format!("{alias}{}", &key[canonical.len()..]);
+                let alias_metadata = &object[&alias_key];
+                assert_eq!(
+                    alias_metadata["deprecated"]["replacement_key"],
+                    key.as_str()
+                );
+                assert_eq!(alias_metadata["hide_in_docs"], true);
+                assert!(metadata.get("deprecated").is_none());
+                assert!(metadata.get("hide_in_docs").is_none());
+            }
+            assert!(count > 0, "no reference entries for {canonical}");
+        }
+        validate_config_reference(&generated).unwrap();
     }
 
     #[test]

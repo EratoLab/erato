@@ -138,20 +138,20 @@ chat_provider_ids = ["test-token-limit"]
 # [logging]
 # format = "plain" # "plain" (default) or "json"
 
-# Experimental Sharepoint/OneDrive integration configuration
+# Sharepoint/OneDrive integration configuration
 # Allows users to attach files from their Microsoft OneDrive/Sharepoint to chats.
 # Requires the user's access token to have MS Graph API permissions.
-# [integrations.experimental_sharepoint]
+# [integrations.sharepoint]
 # enabled = true
 # file_upload_enabled = true  # Whether file upload from Sharepoint is enabled (default: true)
 # auth_via_access_token = true  # Use the user's access token for MS Graph API (currently required)
 # show_disclaimer = false  # Show a disclaimer about unexpectedly visible directories (default: false)
 # all_drives_sources = ["me_drive", "me_drives", "shared_with_me", "shared_drive_details"]  # Optional; omit to query all sources
 
-# Experimental Entra ID integration configuration
+# Entra ID integration configuration
 # Exposes organization users and groups to the frontend for sharing features.
 # Requires the user's access token to have MS Graph API permissions.
-# [integrations.experimental_entra_id]
+# [integrations.entra_id]
 # enabled = true
 # auth_via_access_token = true  # Use the user's access token for MS Graph API (currently required)
 
@@ -410,7 +410,7 @@ chat_provider_ids = ["test-token-limit"]
 # # Model-planned delegated tasks, offered to the model as the reserved
 # # erato/delegate_task tool. Enabling this is not enough on its own: a selected
 # # facet's tool_call_allowlist must also select the tool. See the planning
-# # facet example in the experimental_facets section below.
+# # facet example in the facets section below.
 # [delegation.tasks]
 # # Whether the model may plan and dispatch its own delegated tasks (default: false)
 # enabled = false
@@ -430,7 +430,7 @@ chat_provider_ids = ["test-token-limit"]
 # # ("inherit") or on the bare model ("bare") (default: "inherit")
 # persona = "inherit"
 # # Facets composed into every task child. Each id must name a facet configured
-# # under experimental_facets.facets (default: [])
+# # under facets.facets (default: [])
 # child_facet_ids = []
 
 # Starter prompts feature configuration
@@ -556,7 +556,7 @@ chat_provider_ids = ["test-token-limit"]
 # [client_tools.tools.<id>] and selected into a turn by `tool_call_allowlist`
 # patterns (namespaced, e.g. "outlook/*") on a facet — the same mechanism used
 # for MCP tools. CAUTION: allowlist patterns select client tools as well as
-# MCP tools, and the global experimental_facets.tool_call_allowlist has no
+# MCP tools, and the global facets.tool_call_allowlist has no
 # platform axis — a bare "*" (global or on a regular facet) activates ALL
 # client tools on EVERY platform, including ones the client cannot execute;
 # prefer namespace-scoped patterns. Unlike propose_client_action (terminal,
@@ -626,8 +626,8 @@ chat_provider_ids = ["test-token-limit"]
 # a pick emit one erato-appointment JSON block + one propose_client_action call>
 # """
 
-# Experimental facets feature configuration
-# [experimental_facets]
+# Facets feature configuration
+# [facets]
 # # Whether only a single facet can be selected at the same time (default: false)
 # only_single_facet = false
 # # Whether to include the facet display name in the chat box indicator (default: false)
@@ -641,13 +641,13 @@ chat_provider_ids = ["test-token-limit"]
 # # Facets that should be selected by default in the frontend
 # default_selected_facets = ["web_search"]
 #
-# [experimental_facets.facets.extended_thinking]
+# [facets.facets.extended_thinking]
 # display_name = "Extended thinking"
 # icon = "iconoir-lightbulb"
 # disable_facet_prompt_template = true
 # model_settings = { reasoning_effort = "high" }
 #
-# [experimental_facets.facets.web_search]
+# [facets.facets.web_search]
 # display_name = "Web search"
 # icon = "iconoir-globe"
 # tool_call_allowlist = ["web-search-mcp/*", "web-access-mcp/*"]
@@ -664,14 +664,14 @@ chat_provider_ids = ["test-token-limit"]
 # # allowlist naming ONLY erato/* patterns narrows the derived MCP server filter
 # # to nothing, so the parent turn loses every MCP tool while the facet is
 # # selected.
-# [experimental_facets.facets.plan]
+# [facets.facets.plan]
 # display_name = "Plan & delegate"
 # icon = "iconoir-task-list"
 # tool_call_allowlist = ["erato/delegate_task", "web-search-mcp/*"]
 #
 # # Per-facet overrides of the [delegation.tasks] runtime keys. Every key is
 # # optional and falls back to the global value.
-# [experimental_facets.facets.plan.delegation]
+# [facets.facets.plan.delegation]
 # max_tasks_per_turn = 3
 # # Generous with the user's own device, stingy with shared MCP capacity.
 # max_client_tool_calls_per_task = 40

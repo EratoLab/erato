@@ -846,11 +846,8 @@ impl AppState {
         }
 
         // Register Sharepoint file storage if the integration is enabled
-        if config.integrations.experimental_sharepoint.enabled
-            && config
-                .integrations
-                .experimental_sharepoint
-                .file_upload_enabled
+        if config.integrations.sharepoint.enabled
+            && config.integrations.sharepoint.file_upload_enabled
         {
             file_storage_providers.insert(
                 SHAREPOINT_PROVIDER_ID.to_string(),

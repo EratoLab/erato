@@ -390,13 +390,9 @@ async fn validate_assistant_config_permissions(
         if requested_ids
             .iter()
             .any(|facet_id| !allowed.contains(facet_id))
-            || requested_ids.iter().any(|facet_id| {
-                !app_state
-                    .config
-                    .experimental_facets
-                    .facets
-                    .contains_key(facet_id)
-            })
+            || requested_ids
+                .iter()
+                .any(|facet_id| !app_state.config.facets.facets.contains_key(facet_id))
         {
             return Err(StatusCode::BAD_REQUEST);
         }

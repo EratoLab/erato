@@ -65,7 +65,7 @@ async fn test_starter_prompts_endpoint(pool: Pool<Postgres>) {
         prompts,
         priority_order: vec!["draft_email".to_string(), "web_research".to_string()],
     };
-    app_config.experimental_facets.facets.insert(
+    app_config.facets.facets.insert(
         "web_search".to_string(),
         erato::config::FacetConfig {
             display_name: "Web search".to_string(),

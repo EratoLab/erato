@@ -8,9 +8,7 @@ mod test_cases {
     use super::super::types::{
         AbstractChatSequencePart, ActionFacetUserInput, PromptSpec, ResolvedChatSequence,
     };
-    use crate::config::{
-        ChatProviderConfig, ExperimentalFacetsConfig, FacetConfig, PromptSourceSpecification,
-    };
+    use crate::config::{ChatProviderConfig, FacetConfig, FacetsConfig, PromptSourceSpecification};
     use crate::db::entity::{chats, messages};
     use crate::models::assistant::{AssistantWithFiles, FileInfo};
     use crate::models::message::{
@@ -405,7 +403,7 @@ mod test_cases {
             &msg_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -448,7 +446,7 @@ mod test_cases {
             &msg_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -494,7 +492,7 @@ mod test_cases {
             &msg3_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -553,7 +551,7 @@ mod test_cases {
             &msg_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -614,7 +612,7 @@ mod test_cases {
             &msg2_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -655,7 +653,7 @@ mod test_cases {
             &msg_id,
             new_file_ids,
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -777,7 +775,7 @@ mod test_cases {
             &msg1_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -802,7 +800,7 @@ mod test_cases {
             &msg3_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -873,7 +871,7 @@ mod test_cases {
             &msg_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -925,7 +923,7 @@ mod test_cases {
             &msg_id,
             new_file_ids,
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -1006,7 +1004,7 @@ mod test_cases {
             &msg_id,
             vec![user_file_id],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -1097,7 +1095,7 @@ mod test_cases {
             &msg_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -1185,7 +1183,7 @@ mod test_cases {
             &msg1_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -1225,7 +1223,7 @@ mod test_cases {
             &msg3_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -1290,7 +1288,7 @@ mod test_cases {
             &msg1_id,
             vec![user_file_id],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -1329,7 +1327,7 @@ mod test_cases {
             &msg3_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -1396,7 +1394,7 @@ mod test_cases {
             &msg1_id,
             vec![user_file_id],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -1432,7 +1430,7 @@ mod test_cases {
             &msg3_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -1469,7 +1467,7 @@ mod test_cases {
             &msg5_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -1544,7 +1542,7 @@ mod test_cases {
             &msg1_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -1585,7 +1583,7 @@ mod test_cases {
             &msg3_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -1653,7 +1651,7 @@ mod test_cases {
             &msg1_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -1703,7 +1701,7 @@ mod test_cases {
             &msg3_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -1852,7 +1850,7 @@ mod test_cases {
             &msg3_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -1954,7 +1952,7 @@ mod test_cases {
             &msg3_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -2032,7 +2030,7 @@ mod test_cases {
             &msg3_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -2120,7 +2118,7 @@ mod test_cases {
             &msg3_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -2148,7 +2146,7 @@ mod test_cases {
             &msg5_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -2221,7 +2219,7 @@ mod test_cases {
             &msg3_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -2316,7 +2314,7 @@ mod test_cases {
             &msg3_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -2604,7 +2602,7 @@ mod test_cases {
             &msg1_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
             None,
@@ -2692,7 +2690,7 @@ mod test_cases {
             delegation: None,
             ..Default::default()
         };
-        let experimental_facets = ExperimentalFacetsConfig {
+        let facets = FacetsConfig {
             facets: HashMap::from([
                 (
                     "outlook_baseline".to_string(),
@@ -2717,7 +2715,7 @@ mod test_cases {
             &msg1_id,
             vec![],
             &config,
-            &experimental_facets,
+            &facets,
             &[],
             None,
             None,
@@ -2786,7 +2784,7 @@ mod test_cases {
             &msg1_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -2838,7 +2836,7 @@ mod test_cases {
             &msg3_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
             None,
@@ -3011,7 +3009,7 @@ mod test_cases {
             &msg_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -3059,7 +3057,7 @@ mod test_cases {
             &msg_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -3121,7 +3119,7 @@ mod test_cases {
             &msg_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -3167,7 +3165,7 @@ mod test_cases {
                 &msg_id,
                 vec![],
                 &config,
-                &ExperimentalFacetsConfig::default(),
+                &FacetsConfig::default(),
                 &[],
                 None,
             )
@@ -3204,7 +3202,7 @@ mod test_cases {
             &msg1_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
@@ -3243,7 +3241,7 @@ mod test_cases {
             &msg3_id,
             vec![],
             &config,
-            &ExperimentalFacetsConfig::default(),
+            &FacetsConfig::default(),
             &[],
             None,
         )
