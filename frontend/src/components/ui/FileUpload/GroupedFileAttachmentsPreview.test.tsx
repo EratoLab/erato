@@ -29,6 +29,52 @@ async function renderWithI18n(ui: React.ReactElement) {
 }
 
 describe("GroupedFileAttachmentsPreview", () => {
+  it.each([false, true])(
+    "keeps group actions with their disclosure, independently of pagination (sticky: %s)",
+    async (stickyGroupHeaders) => {
+      const remove = vi.fn();
+      await renderWithI18n(
+        <GroupedFileAttachmentsPreview
+          stickyGroupHeaders={stickyGroupHeaders}
+          defaultVisibleItems={1}
+          groups={[
+            {
+              id: "dropped-email",
+              label: "Dropped email",
+              collapsible: true,
+              items: [
+                { kind: "status", id: "body", label: "Email body" },
+                { kind: "status", id: "file", label: "Attached file" },
+              ],
+            },
+          ]}
+          groupActions={{
+            "dropped-email": <button onClick={remove}>Remove email</button>,
+          }}
+        />,
+      );
+
+      const toggle = screen.getByRole("button", { name: /dropped email/i });
+      expect(screen.queryByRole("button", { name: "Remove email" })).toBeNull();
+      fireEvent.click(toggle);
+      expect(screen.getByText("Email body")).toBeVisible();
+      expect(screen.queryByText("Attached file")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Remove email" }));
+      expect(remove).toHaveBeenCalledTimes(1);
+      fireEvent.click(
+        screen.getByRole("button", { name: /show 1 more item/i }),
+      );
+      expect(screen.getByText("Attached file")).toBeVisible();
+      expect(
+        screen.getAllByRole("button", { name: "Remove email" }),
+      ).toHaveLength(1);
+      fireEvent.click(toggle);
+      expect(screen.queryByRole("button", { name: "Remove email" })).toBeNull();
+      fireEvent.click(toggle);
+      expect(screen.getByText("Attached file")).toBeVisible();
+    },
+  );
+
   it("collapses long groups and expands them on demand", async () => {
     await renderWithI18n(
       <GroupedFileAttachmentsPreview

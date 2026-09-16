@@ -1,13 +1,19 @@
 import { plural, t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 import { componentRegistry } from "@/config/componentRegistry";
 
-import { AttachmentNotice } from "./AttachmentNotice";
-import { AttachmentTile } from "./AttachmentTile";
+import {
+  AttachmentNotice,
+  type AttachmentNoticeProps,
+} from "./AttachmentNotice";
+import { AttachmentTile, type AttachmentTileProps } from "./AttachmentTile";
 import { type FileResource } from "./FilePreviewBase";
-import { ThreadMessageCard } from "./ThreadMessageCard";
+import {
+  ThreadMessageCard,
+  type ThreadMessageCardProps,
+} from "./ThreadMessageCard";
 import { FILE_PREVIEW_STYLES } from "./fileUploadStyles";
 import { Card } from "../Container/Card";
 import { Button } from "../Controls/Button";
@@ -223,20 +229,85 @@ function getFileId(item: ItemWithFile): string {
   return item.id;
 }
 
-export const DefaultGroupedFileAttachmentsPreview: React.FC<
-  GroupedFileAttachmentsPreviewProps
-> = ({
-  groups,
-  onRemoveFile,
-  onFilePreview,
-  disabled = false,
-  showFileTypes = false,
-  showFileSizes = true,
-  className = "",
-  defaultVisibleItems = 3,
-  stickyGroupHeaders = false,
-  groupActions,
-}) => {
+/** Optional item faces; the host still owns dispatch, keys and callbacks. */
+export interface GroupedFileAttachmentsPreviewRenderers {
+  attachment?: (
+    props: AttachmentTileProps,
+    context: {
+      kind:
+        | "attachment"
+        | "context"
+        | "selectableAttachment"
+        | "threadAttachment";
+      /** Kits may offer previews on selectable rows as well as plain files. */
+      onPreview?: () => void;
+    },
+  ) => React.ReactNode;
+  notice?: (props: AttachmentNoticeProps) => React.ReactNode;
+  threadMessage?: ThreadMessageCardProps["render"];
+}
+
+/**
+ * Group disclosure and pagination shared by the default renderer and kits.
+ * Kits can replace item faces while keeping dispatch and attachment rules.
+ * Group frames remain with the renderer.
+ */
+export function useGroupedFileAttachmentsPreview(
+  {
+    groups,
+    defaultVisibleItems = 3,
+    groupActions,
+    onRemoveFile,
+    onFilePreview,
+    disabled = false,
+    showFileTypes = false,
+    showFileSizes = true,
+  }: GroupedFileAttachmentsPreviewProps,
+  renderers: GroupedFileAttachmentsPreviewRenderers = {},
+) {
+  const rowTypeLabel = showFileTypes ? "family" : "none";
+  // These are render functions, not component types: changing caller props must
+  // not remount a nested thread card or reset its disclosure state.
+  const renderNotice = ({
+    key,
+    ...noticeProps
+  }: AttachmentNoticeProps & { key: string }) => {
+    return (
+      <Fragment key={key}>
+        {renderers.notice ? (
+          renderers.notice(noticeProps)
+        ) : (
+          <AttachmentNotice {...noticeProps} />
+        )}
+      </Fragment>
+    );
+  };
+  const renderFile = ({
+    kind,
+    onPreview,
+    key,
+    ...props
+  }: AttachmentTileProps & {
+    key: string;
+    kind:
+      | "attachment"
+      | "context"
+      | "selectableAttachment"
+      | "threadAttachment";
+    onPreview?: () => void;
+  }) => (
+    <Fragment key={key}>
+      {renderers.attachment ? (
+        renderers.attachment(props, {
+          kind,
+          onPreview: onPreview ?? props.onActivate,
+        })
+      ) : (
+        <AttachmentTile {...props} />
+      )}
+    </Fragment>
+  );
+
   const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>([]);
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<
     Partial<Record<string, boolean>>
@@ -283,30 +354,186 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
     });
   };
 
+  return groups.map((group) => {
+    const itemCount = group.items.length;
+    const isCollapsed = getGroupCollapsed(group);
+    const isExpanded = expandedGroupIds.includes(group.id);
+    const shouldCollapse = itemCount > defaultVisibleItems;
+    const baseItems = isCollapsed ? [] : group.items;
+    const visibleItems =
+      !isCollapsed && shouldCollapse && !isExpanded
+        ? baseItems.slice(0, defaultVisibleItems)
+        : baseItems;
+    const hiddenCount = isCollapsed ? 0 : itemCount - visibleItems.length;
+    return {
+      group,
+      itemCount,
+      isCollapsed,
+      isExpanded,
+      shouldCollapse,
+      visibleItems,
+      hiddenCount,
+      metaLabel: group.metaLabel ?? getItemCountLabel(itemCount),
+      showMoreLabel: getShowMoreItemsLabel(hiddenCount),
+      showLessLabel: t({
+        id: "chat.attachments.show_less",
+        message: "Show less",
+      }),
+      toggleCollapsed: () => toggleGroupCollapsed(group),
+      setExpanded: (expanded: boolean) => setGroupExpanded(group.id, expanded),
+      actions: isCollapsed ? undefined : groupActions?.[group.id],
+      content: visibleItems.map((item) => {
+        if (item.kind === "loading") {
+          // Inside a group the placeholder is a bare centred
+          // spinner; the framed loading chip belongs to the
+          // composer, where a loading file stands in a row of files.
+          return renderNotice({
+            key: item.id,
+            label:
+              item.label ??
+              t({
+                id: "chat.attachments.loading",
+                message: "Loading attachment...",
+              }),
+            description: item.description,
+            busy: true,
+            bare: true,
+          });
+        }
+
+        if (item.kind === "status") {
+          return renderNotice({
+            key: item.id,
+            label: item.label,
+            description: item.description,
+            tone: item.tone,
+          });
+        }
+
+        if (item.kind === "threadMessageGroup") {
+          return (
+            <ThreadMessageCard
+              key={item.id}
+              label={item.label}
+              sublabel={item.sublabel}
+              selected={item.selected}
+              onToggle={item.onToggle}
+              validation={item.validation}
+              disabled={disabled}
+              defaultCollapsed={item.defaultCollapsed}
+              attachmentCount={item.attachments.length}
+              render={renderers.threadMessage}
+            >
+              {item.attachments.map((attachment) =>
+                renderFile({
+                  key: attachment.id,
+                  // eslint-disable-next-line lingui/no-unlocalized-strings
+                  kind: "threadAttachment",
+                  onPreview: onFilePreview
+                    ? () => onFilePreview(attachment.file)
+                    : undefined,
+                  file: attachment.file,
+                  variant: "row",
+                  selection: attachment.onToggle
+                    ? {
+                        selected: attachment.selected ?? true,
+                        onToggle: attachment.onToggle,
+                      }
+                    : undefined,
+                  validation: attachment.validation,
+                  disabled,
+                  showType: rowTypeLabel,
+                  showSize: showFileSizes,
+                  onActivate:
+                    onFilePreview && "id" in attachment.file
+                      ? () => onFilePreview(attachment.file)
+                      : undefined,
+                }),
+              )}
+            </ThreadMessageCard>
+          );
+        }
+
+        if (item.kind === "selectableAttachment") {
+          return renderFile({
+            key: getFileKey(item),
+            kind: item.kind,
+            onPreview: onFilePreview
+              ? () => onFilePreview(item.file)
+              : undefined,
+            file: item.file,
+            variant: "row",
+            selection: item.onToggle
+              ? { selected: item.selected, onToggle: item.onToggle }
+              : undefined,
+            validation: item.validation,
+            labelOverride: item.labelOverride,
+            metaLabel: item.metaLabel,
+            disabled,
+            showType: rowTypeLabel,
+            showSize: showFileSizes,
+          });
+        }
+
+        const onOpen = item.kind === "attachment" ? item.onOpen : undefined;
+        const activate =
+          onOpen ??
+          (onFilePreview ? () => onFilePreview(item.file) : undefined);
+
+        // `context` chips are read-only by contract — no remove
+        // affordance (there is nothing staged to remove).
+        return renderFile({
+          key: getFileKey(item),
+          kind: item.kind,
+          file: item.file,
+          previewUrl: getItemPreviewUrl(item),
+          labelOverride: item.labelOverride,
+          disabled,
+          onRemove:
+            item.kind === "context" || !onRemoveFile
+              ? undefined
+              : () => onRemoveFile(getFileId(item)),
+          onActivate: activate,
+          activateLabel: onOpen ? t`Open` : undefined,
+        });
+      }),
+    };
+  });
+}
+
+export type GroupedFileAttachmentsPreviewState = ReturnType<
+  typeof useGroupedFileAttachmentsPreview
+>;
+
+export const DefaultGroupedFileAttachmentsPreview: React.FC<
+  GroupedFileAttachmentsPreviewProps
+> = (props) => {
+  const { groups, className = "", stickyGroupHeaders = false } = props;
+  const groupStates = useGroupedFileAttachmentsPreview(props);
+
   if (groups.length === 0) {
     return null;
   }
 
-  // These rows have always read the type as its family name — a .csv says
-  // SPREADSHEET — so that is what a caller asking for type labels gets, and no
-  // line at all is what one asking for none gets. Neither ends in the
-  // extension, so both leave the filename pinning its own tail.
-  const rowTypeLabel = showFileTypes ? "family" : "none";
-
   return (
     <div className={clsx("mb-3 flex flex-col gap-3", className)}>
-      {groups.map((group) => {
-        const itemCount = group.items.length;
+      {groupStates.map((state) => {
+        const {
+          group,
+          isCollapsed,
+          isExpanded,
+          shouldCollapse,
+          visibleItems,
+          hiddenCount,
+          metaLabel,
+          showMoreLabel,
+          showLessLabel,
+          toggleCollapsed,
+          setExpanded,
+          actions,
+          content,
+        } = state;
         const collapsible = group.collapsible === true;
-        const isCollapsed = getGroupCollapsed(group);
-        const isExpanded = expandedGroupIds.includes(group.id);
-        const shouldCollapse = itemCount > defaultVisibleItems;
-        const baseItems = isCollapsed ? [] : group.items;
-        const visibleItems =
-          !isCollapsed && shouldCollapse && !isExpanded
-            ? baseItems.slice(0, defaultVisibleItems)
-            : baseItems;
-        const hiddenCount = isCollapsed ? 0 : itemCount - visibleItems.length;
         // Two inset regimes. Without sticky headers the frame carries the
         // inset and the bands sit inside it; with them the frame stays bare so
         // the header can span its full width, and header and items carry the
@@ -360,9 +587,7 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
                 {group.label}
               </h3>
               {group.metaLabel !== "" && (
-                <p className={FILE_PREVIEW_STYLES.group.meta}>
-                  {group.metaLabel ?? getItemCountLabel(itemCount)}
-                </p>
+                <p className={FILE_PREVIEW_STYLES.group.meta}>{metaLabel}</p>
               )}
             </div>
           </>
@@ -386,7 +611,7 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
               collapsible ? (
                 <button
                   type="button"
-                  onClick={() => toggleGroupCollapsed(group)}
+                  onClick={toggleCollapsed}
                   className={clsx(headerClassName, "w-full text-left")}
                   aria-expanded={!isCollapsed}
                 >
@@ -400,153 +625,31 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() => setGroupExpanded(group.id, false)}
+                      onClick={() => setExpanded(false)}
                       className={FILE_PREVIEW_STYLES.group.toggleButton}
                     >
-                      {t({
-                        id: "chat.attachments.show_less",
-                        message: "Show less",
-                      })}
+                      {showLessLabel}
                     </Button>
                   )}
                 </div>
               )
             }
           >
-            {visibleItems.map((item) => {
-              if (item.kind === "loading") {
-                // Inside a group the placeholder is a bare centred
-                // spinner; the framed loading chip belongs to the
-                // composer, where a loading file stands in a row of files.
-                return (
-                  <AttachmentNotice
-                    key={item.id}
-                    label={
-                      item.label ??
-                      t({
-                        id: "chat.attachments.loading",
-                        message: "Loading attachment...",
-                      })
-                    }
-                    description={item.description}
-                    busy
-                    bare
-                  />
-                );
-              }
-
-              if (item.kind === "status") {
-                return (
-                  <AttachmentNotice
-                    key={item.id}
-                    label={item.label}
-                    description={item.description}
-                    tone={item.tone}
-                  />
-                );
-              }
-
-              if (item.kind === "threadMessageGroup") {
-                return (
-                  <ThreadMessageCard
-                    key={item.id}
-                    label={item.label}
-                    sublabel={item.sublabel}
-                    selected={item.selected}
-                    onToggle={item.onToggle}
-                    validation={item.validation}
-                    disabled={disabled}
-                    defaultCollapsed={item.defaultCollapsed}
-                    attachmentCount={item.attachments.length}
-                  >
-                    {item.attachments.map((attachment) => (
-                      <AttachmentTile
-                        key={attachment.id}
-                        file={attachment.file}
-                        variant="row"
-                        selection={
-                          attachment.onToggle
-                            ? {
-                                selected: attachment.selected ?? true,
-                                onToggle: attachment.onToggle,
-                              }
-                            : undefined
-                        }
-                        validation={attachment.validation}
-                        disabled={disabled}
-                        showType={rowTypeLabel}
-                        showSize={showFileSizes}
-                        onActivate={
-                          onFilePreview && "id" in attachment.file
-                            ? () => onFilePreview(attachment.file)
-                            : undefined
-                        }
-                      />
-                    ))}
-                  </ThreadMessageCard>
-                );
-              }
-
-              if (item.kind === "selectableAttachment") {
-                return (
-                  <AttachmentTile
-                    key={getFileKey(item)}
-                    file={item.file}
-                    variant="row"
-                    selection={
-                      item.onToggle
-                        ? { selected: item.selected, onToggle: item.onToggle }
-                        : undefined
-                    }
-                    validation={item.validation}
-                    labelOverride={item.labelOverride}
-                    metaLabel={item.metaLabel}
-                    disabled={disabled}
-                    showType={rowTypeLabel}
-                    showSize={showFileSizes}
-                  />
-                );
-              }
-
-              const onOpen =
-                item.kind === "attachment" ? item.onOpen : undefined;
-              const activate =
-                onOpen ??
-                (onFilePreview ? () => onFilePreview(item.file) : undefined);
-
-              // `context` chips are read-only by contract — no remove
-              // affordance (there is nothing staged to remove).
-              return (
-                <AttachmentTile
-                  key={getFileKey(item)}
-                  file={item.file}
-                  previewUrl={getItemPreviewUrl(item)}
-                  labelOverride={item.labelOverride}
-                  disabled={disabled}
-                  onRemove={
-                    item.kind === "context" || !onRemoveFile
-                      ? undefined
-                      : () => onRemoveFile(getFileId(item))
-                  }
-                  onActivate={activate}
-                  activateLabel={onOpen ? t`Open` : undefined}
-                />
-              );
-            })}
+            {content}
 
             {hiddenCount > 0 && !isExpanded && (
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() => setGroupExpanded(group.id, true)}
+                onClick={() => setExpanded(true)}
                 className={FILE_PREVIEW_STYLES.group.moreButton}
               >
-                {getShowMoreItemsLabel(hiddenCount)}
+                {showMoreLabel}
               </Button>
             )}
 
-            {!isCollapsed && groupActions?.[group.id]}
+            {actions}
           </Card>
         );
       })}

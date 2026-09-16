@@ -55,6 +55,7 @@ export { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 export { AttachmentNotice } from "@/components/ui/FileUpload/AttachmentNotice";
 export { AttachmentTile } from "@/components/ui/FileUpload/AttachmentTile";
 export { AttachmentTileList } from "@/components/ui/FileUpload/AttachmentTileList";
+export { getFileName } from "@/components/ui/FileUpload/FilePreviewBase";
 export { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
 export { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoading";
 export { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageControls";
@@ -122,7 +123,10 @@ export type {
   CardVariant,
 } from "@/components/ui/Container/Card";
 export { ThreadMessageCard } from "@/components/ui/FileUpload/ThreadMessageCard";
-export type { ThreadMessageCardProps } from "@/components/ui/FileUpload/ThreadMessageCard";
+export type {
+  ThreadMessageCardProps,
+  ThreadMessageCardPresentation,
+} from "@/components/ui/FileUpload/ThreadMessageCard";
 export { FileUploadLoading } from "@/components/ui/FileUpload/FileUploadStates";
 export type { FileUploadLoadingProps } from "@/components/ui/FileUpload/FileUploadStates";
 export { MailIcon, PinIcon } from "@/components/ui/icons/index";
@@ -214,6 +218,14 @@ export type { ChatMessageRendererState } from "@/components/ui/Chat/ChatMessage"
 export { useMessageAttachmentFiles } from "@/components/ui/Chat/MessageAttachments";
 export type { MessageAttachmentFiles } from "@/components/ui/Chat/MessageAttachments";
 
+// Disclosure and pagination for grouped attachment overrides. Item presentation
+// stays with the kit, including its existing chip and image components.
+export { useGroupedFileAttachmentsPreview } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
+export type {
+  GroupedFileAttachmentsPreviewState,
+  GroupedFileAttachmentsPreviewRenderers,
+} from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
+
 export const ERATO_KIT_SURFACE_EXPORTS = [
   "Alert",
   "ArchiveIcon",
@@ -268,6 +280,8 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "FilePreviewLoading",
   "FileUploadLoading",
   "FileUploadLoadingProps",
+  "GroupedFileAttachmentsPreviewRenderers",
+  "GroupedFileAttachmentsPreviewState",
   "IconProps",
   "ImageLightbox",
   "InfoIcon",
@@ -320,12 +334,14 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "ThemeProvider",
   "ThemeProviderProps",
   "ThreadMessageCard",
+  "ThreadMessageCardPresentation",
   "ThreadMessageCardProps",
   "ToolCallInput",
   "ToolCallInputProps",
   "ToolCallOutput",
   "ToolCallOutputProps",
   "Tooltip",
+  "getFileName",
   "messageStyles",
   "resolvePopoverViewportPadding",
   "useChatHistoryRow",
@@ -334,6 +350,7 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "useChatMessageRenderer",
   "useGetFile",
   "useGetFilePreview",
+  "useGroupedFileAttachmentsPreview",
   "useMessageAttachmentFiles",
 ] as const;
 /* eslint-enable lingui/no-unlocalized-strings */
