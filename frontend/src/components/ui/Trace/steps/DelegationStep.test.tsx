@@ -407,6 +407,28 @@ describe("delegation step", () => {
     expect(screen.queryByText("Running")).toBeNull();
   });
 
+  it("keeps a queued slot out of the running state while the turn streams", () => {
+    const { container } = renderStep({ status: "queued" }, "delegate_task");
+
+    expect(screen.getByText("Task queued")).toBeInTheDocument();
+    expect(screen.getByText("Queued")).toBeInTheDocument();
+    expect(screen.queryByText("Running a task")).toBeNull();
+    expect(screen.queryByText("Ran a task")).toBeNull();
+    // The rail inherits "running" — only the pulse says in-flight, and a
+    // queued slot has nothing in flight to pulse for.
+    expect(container.querySelector(".animate-pulse")).toBeNull();
+  });
+
+  it("pulses the rail for a task that is genuinely running", () => {
+    const { container } = renderStep(
+      { ...IDENTITY, status: "working" },
+      "delegate_task",
+    );
+
+    expect(screen.getByText("Running a task")).toBeInTheDocument();
+    expect(container.querySelector(".animate-pulse")).not.toBeNull();
+  });
+
   it("shows a parked child as needing a decision, not as an error", () => {
     renderStep(
       { ...IDENTITY, status: "input_required", reason: "approval_pending" },
