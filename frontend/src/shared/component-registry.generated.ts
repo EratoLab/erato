@@ -162,9 +162,11 @@ export { useGroupedFileAttachmentsPreview } from "@/components/ui/FileUpload/Gro
 export type { FileAttachmentGroup } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 export type { FileAttachmentGroupItem } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 export type { GroupedFileAttachmentsPreviewProps } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
+export type { GroupedFileAttachmentsPreviewRenderers } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 export type { GroupedFileAttachmentsPreviewState } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 export type { ThreadMessageAttachmentItem } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 export { ThreadMessageCard } from "@/components/ui/FileUpload/ThreadMessageCard";
+export type { ThreadMessageCardPresentation } from "@/components/ui/FileUpload/ThreadMessageCard";
 export type { ThreadMessageCardProps } from "@/components/ui/FileUpload/ThreadMessageCard";
 export { Archive } from "@/components/ui/icons/index";
 export { ArchiveIcon } from "@/components/ui/icons/index";

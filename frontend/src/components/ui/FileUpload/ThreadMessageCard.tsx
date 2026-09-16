@@ -57,6 +57,26 @@ export interface ThreadMessageCardProps {
   validation?: { ok: boolean; reason?: string };
   disabled?: boolean;
   defaultCollapsed?: boolean;
+  /** Replace the frame while retaining disclosure state and control semantics. */
+  render?: (presentation: ThreadMessageCardPresentation) => React.ReactNode;
+}
+
+export interface ThreadMessageCardPresentation {
+  label: string;
+  sublabel?: string;
+  children?: React.ReactNode;
+  selected: boolean;
+  collapsed: boolean;
+  hasAttachments: boolean;
+  panelId: string;
+  disclosureProps: Pick<
+    React.ComponentProps<"button">,
+    "onClick" | "aria-expanded" | "aria-controls" | "aria-label"
+  >;
+  selectionProps?: Pick<
+    React.ComponentProps<"input">,
+    "checked" | "onChange" | "disabled" | "aria-label" | "onClick"
+  >;
 }
 
 /**
@@ -75,12 +95,42 @@ export const ThreadMessageCard: React.FC<ThreadMessageCardProps> = ({
   validation,
   disabled = false,
   defaultCollapsed = true,
+  render,
 }) => {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const panelId = useId();
   const hasAttachments = attachmentCount > 0;
   const invalid = validation?.ok === false;
   const reason = invalid ? validation.reason : undefined;
+  const disclosureProps = {
+    onClick: () => setCollapsed((value) => !value),
+    "aria-expanded": !collapsed,
+    "aria-controls": panelId,
+    "aria-label": `${t({ id: "chat.attachments.toggle", message: "Toggle attachments" })} ${label}`,
+  };
+  const selectionProps = onToggle
+    ? {
+        checked: selected,
+        onChange: onToggle,
+        disabled,
+        "aria-label": `${t({ id: "chat.attachments.include_message", message: "Include message" })} ${label}`,
+        onClick: (event: React.MouseEvent<HTMLInputElement>) =>
+          event.stopPropagation(),
+      }
+    : undefined;
+  if (render) {
+    return render({
+      label,
+      sublabel,
+      children: hasAttachments && !collapsed ? children : null,
+      selected,
+      collapsed,
+      hasAttachments,
+      panelId,
+      disclosureProps,
+      selectionProps,
+    });
+  }
   return (
     <Card
       variant="expandable"
@@ -111,11 +161,8 @@ export const ThreadMessageCard: React.FC<ThreadMessageCardProps> = ({
             // disclosure toggle would dangle without any payload.
             <button
               type="button"
-              onClick={() => setCollapsed((value) => !value)}
+              {...disclosureProps}
               className="inline-flex size-4 shrink-0 items-center justify-center text-theme-fg-muted"
-              aria-expanded={!collapsed}
-              aria-controls={panelId}
-              aria-label={`${t({ id: "chat.attachments.toggle", message: "Toggle attachments" })} ${label}`}
             >
               {collapsed ? (
                 <ChevronRightIcon className="size-4" />
@@ -126,15 +173,11 @@ export const ThreadMessageCard: React.FC<ThreadMessageCardProps> = ({
           ) : (
             <span className="size-4 shrink-0" aria-hidden="true" />
           )}
-          {onToggle && (
+          {selectionProps && (
             <input
               type="checkbox"
-              checked={selected}
-              onChange={onToggle}
-              disabled={disabled}
+              {...selectionProps}
               className="size-4 shrink-0 accent-[var(--theme-fg-accent)] focus:ring-theme-focus disabled:cursor-not-allowed"
-              aria-label={`${t({ id: "chat.attachments.include_message", message: "Include message" })} ${label}`}
-              onClick={(event) => event.stopPropagation()}
             />
           )}
           {hasAttachments ? (

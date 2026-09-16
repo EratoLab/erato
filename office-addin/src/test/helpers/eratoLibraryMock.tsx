@@ -224,6 +224,8 @@ export const DEFAULT_STUBS = {
   useGetFile: () => ({ data: undefined, isLoading: false, error: null }),
   useGetFilePreview: () => ({ data: undefined, isLoading: false, error: null }),
   useGroupedFileAttachmentsPreview: () => [],
+  getFileName: (file: { filename?: string; name?: string }) =>
+    file.filename ?? file.name ?? "",
   useMessageAttachmentFiles: () => ({
     items: [],
     relatedFiles: [],
