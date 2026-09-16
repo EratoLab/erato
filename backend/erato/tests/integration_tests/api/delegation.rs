@@ -7762,3 +7762,496 @@ async fn a_task_settles_at_the_index_it_announced(pool: Pool<Postgres>) {
         "exactly one persisted part, at the announced index: {persisted:?}"
     );
 }
+
+/// Two tasks in one batch run at the same time, and the model is answered in
+/// the order it asked. The second child finishes first, which is only possible
+/// if the first was not blocking it — and its answer still comes second.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn two_tasks_of_one_batch_overlap_and_answer_in_call_order(pool: Pool<Postgres>) {
+    let continuation = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    // The slow child. Its answer is first in call order and last in time.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            // The child never sees the conversation that planned it, which is
+            // what tells its turn apart from the parent's continuation — the
+            // continuation replays the brief too.
+            .matcher(BodyContainsMatcher::new(
+                &["SLOW-BRIEF"],
+                &["fan out question"],
+            ));
+        let mut actions = crate::test_utils::build_openai_text_streaming_response(&["ANSWER-SLOW"]);
+        actions.insert(0, BodyAction::Delay(std::time::Duration::from_secs(3)));
+        mock_llm_sse_response(then, actions);
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["QUICK-BRIEF"],
+                &["fan out question"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["ANSWER-QUICK"]),
+        );
+    });
+    {
+        let continuation = continuation.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &["ANSWER-SLOW", "ANSWER-QUICK"],
+                    &[],
+                ))
+                .matcher(continuation);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&["BATCH-FINAL"]),
+            );
+        });
+    }
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["fan out question"],
+                &["SLOW-BRIEF", "ANSWER-SLOW"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[
+                (
+                    "call_slow",
+                    "delegate_task",
+                    json!({ "task": "SLOW-BRIEF: take your time", "facet_ids": ["plan"] }),
+                ),
+                (
+                    "call_quick",
+                    "delegate_task",
+                    json!({ "task": "QUICK-BRIEF: be quick", "facet_ids": ["plan"] }),
+                ),
+            ]),
+        );
+    });
+
+    let (app_state, _llm) = task_enabled_state(pool, mocks, &["erato/delegate_task"]).await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, "fan out question", &["plan"]).await;
+
+    // Both settled, and the quick one settled first — impossible unless the
+    // slow one was being waited on at the same time rather than before.
+    let settle_order: Vec<String> = events
+        .iter()
+        .filter_map(|event| serde_json::from_str::<serde_json::Value>(&event.data).ok())
+        .filter(|value| {
+            value["message_type"] == "tool_call_update"
+                && value["tool_name"] == "delegate_task"
+                // Progress frames ride the same event; only the settle counts.
+                && value["status"] != "in_progress"
+        })
+        .filter_map(|value| value["tool_call_id"].as_str().map(str::to_string))
+        .collect();
+    assert_eq!(
+        settle_order,
+        vec!["call_quick".to_string(), "call_slow".to_string()],
+        "the quick task must settle while the slow one is still running"
+    );
+
+    // ... and the model is still answered in the order it asked.
+    let body = continuation
+        .bodies()
+        .into_iter()
+        .next()
+        .expect("the parent's continuation is recorded");
+    let slow_at = body
+        .find("ANSWER-SLOW")
+        .expect("the slow answer is replayed");
+    let quick_at = body
+        .find("ANSWER-QUICK")
+        .expect("the quick answer is replayed");
+    assert!(
+        slow_at < quick_at,
+        "tool answers must reach the model in call order, not completion order"
+    );
+    assert!(extract_full_text_answer(&events).contains("BATCH-FINAL"));
+}
+
+/// A batch larger than `max_parallel` starts what it may and shows the rest as
+/// queued. A queued slot names no child, because none exists yet.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_batch_beyond_max_parallel_waits_for_a_free_slot(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&["WAVE-BRIEF"], &[]));
+        mock_llm_sse_response(
+            then,
+            vec![
+                BodyAction::Delay(std::time::Duration::from_secs(30)),
+                BodyAction::Bytes("data: [DONE]\n\n".into()),
+            ],
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["wave question"],
+                &["WAVE-BRIEF"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[
+                (
+                    "call_wave_1",
+                    "delegate_task",
+                    json!({ "task": "WAVE-BRIEF one", "facet_ids": ["plan"] }),
+                ),
+                (
+                    "call_wave_2",
+                    "delegate_task",
+                    json!({ "task": "WAVE-BRIEF two", "facet_ids": ["plan"] }),
+                ),
+                (
+                    "call_wave_3",
+                    "delegate_task",
+                    json!({ "task": "WAVE-BRIEF three", "facet_ids": ["plan"] }),
+                ),
+            ]),
+        );
+    });
+
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        config.delegation.tasks.max_parallel = 1;
+        config.delegation.run_timeout_seconds = 4;
+    })
+    .await;
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server_addr = listener.local_addr().unwrap();
+    let app: Router = erato::server::router::router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    let client = reqwest::Client::new();
+    let base_url = format!("http://{server_addr}");
+    let create_response = client
+        .post(format!("{base_url}/api/v1beta/me/chats"))
+        .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert!(create_response.status().is_success());
+    let chat_id = create_response.json::<serde_json::Value>().await.unwrap()["chat_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let streaming = tokio::spawn({
+        let client = client.clone();
+        let base_url = base_url.clone();
+        let chat_id = chat_id.clone();
+        async move {
+            client
+                .post(format!("{base_url}/api/v1beta/me/messages/submitstream"))
+                .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+                .json(&json!({
+                    "existing_chat_id": chat_id,
+                    "user_message": "wave question",
+                    "input_files_ids": [],
+                    "selected_facet_ids": ["plan"],
+                }))
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap()
+        }
+    });
+
+    let task_parts = |body: serde_json::Value| -> Vec<serde_json::Value> {
+        body["messages"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .flat_map(|message| message["content"].as_array().into_iter().flatten())
+            .filter(|part| {
+                part["content_type"] == "tool_use" && part["tool_name"] == "delegate_task"
+            })
+            .cloned()
+            .collect()
+    };
+
+    let mut observed = None;
+    for _ in 0..40 {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        let parts = task_parts(
+            client
+                .get(format!("{base_url}/api/v1beta/chats/{chat_id}/messages"))
+                .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+                .send()
+                .await
+                .unwrap()
+                .json::<serde_json::Value>()
+                .await
+                .unwrap(),
+        );
+        if parts.len() == 3
+            && parts
+                .iter()
+                .any(|part| part["output"]["status"] == "working")
+        {
+            observed = Some(parts);
+            break;
+        }
+    }
+
+    let parts = observed.expect("all three slots are reserved while the first runs");
+    let working = parts
+        .iter()
+        .filter(|part| part["output"]["status"] == "working")
+        .count();
+    let queued = parts
+        .iter()
+        .filter(|part| part["output"]["status"] == "queued")
+        .count();
+    assert_eq!(working, 1, "only one task may run at a time: {parts:?}");
+    assert_eq!(queued, 2, "the rest of the batch waits: {parts:?}");
+    assert!(
+        parts
+            .iter()
+            .filter(|part| part["output"]["status"] == "queued")
+            .all(|part| part["output"]["child_run_id"].is_null()),
+        "a queued slot names no child, because none exists: {parts:?}"
+    );
+
+    streaming.await.unwrap();
+
+    let parts = task_parts(
+        client
+            .get(format!("{base_url}/api/v1beta/chats/{chat_id}/messages"))
+            .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+            .send()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap(),
+    );
+    assert_eq!(parts.len(), 3, "one slot per call, still: {parts:?}");
+    assert!(
+        parts.iter().all(|part| part["status"] != "in_progress"),
+        "every slot settles before the turn ends: {parts:?}"
+    );
+    let child_ids: std::collections::HashSet<String> = parts
+        .iter()
+        .filter_map(|part| part["output"]["child_run_id"].as_str().map(str::to_string))
+        .collect();
+    assert_eq!(
+        child_ids.len(),
+        3,
+        "each queued call eventually got its own child: {parts:?}"
+    );
+}
+
+/// Stopping a turn settles every slot, including the ones that never started.
+/// A cancelled run names the child it cancelled; a call that never got a slot
+/// names nothing, and that absence is how the two are told apart.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn stopping_a_batch_settles_the_queued_calls_without_a_child(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["STOP-BRIEF"],
+                &["stop batch question"],
+            ));
+        mock_llm_sse_response(
+            then,
+            vec![
+                BodyAction::Delay(std::time::Duration::from_secs(30)),
+                BodyAction::Bytes("data: [DONE]\n\n".into()),
+            ],
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["stop batch question"],
+                &["STOP-BRIEF"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[
+                (
+                    "call_stop_1",
+                    "delegate_task",
+                    json!({ "task": "STOP-BRIEF one", "facet_ids": ["plan"] }),
+                ),
+                (
+                    "call_stop_2",
+                    "delegate_task",
+                    json!({ "task": "STOP-BRIEF two", "facet_ids": ["plan"] }),
+                ),
+            ]),
+        );
+    });
+
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        config.delegation.tasks.max_parallel = 1;
+    })
+    .await;
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server_addr = listener.local_addr().unwrap();
+    let app: Router = erato::server::router::router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    let client = reqwest::Client::new();
+    let base_url = format!("http://{server_addr}");
+    let create_response = client
+        .post(format!("{base_url}/api/v1beta/me/chats"))
+        .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert!(create_response.status().is_success());
+    let chat_id = create_response.json::<serde_json::Value>().await.unwrap()["chat_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let streaming = tokio::spawn({
+        let client = client.clone();
+        let base_url = base_url.clone();
+        let chat_id = chat_id.clone();
+        async move {
+            client
+                .post(format!("{base_url}/api/v1beta/me/messages/submitstream"))
+                .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+                .json(&json!({
+                    "existing_chat_id": chat_id,
+                    "user_message": "stop batch question",
+                    "input_files_ids": [],
+                    "selected_facet_ids": ["plan"],
+                }))
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap()
+        }
+    });
+
+    // Wait until the first child is genuinely running, so the abort lands on a
+    // batch with one run in flight and one still queued.
+    for _ in 0..40 {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        let running = client
+            .get(format!("{base_url}/api/v1beta/chats/{chat_id}/messages"))
+            .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+            .send()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap()["messages"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .flat_map(|message| message["content"].as_array().into_iter().flatten())
+            .any(|part| part["output"]["status"] == "working");
+        if running {
+            break;
+        }
+    }
+
+    let abort_response = client
+        .post(format!("{base_url}/api/v1beta/me/messages/abortstream"))
+        .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+        .json(&json!({ "chat_id": chat_id }))
+        .send()
+        .await
+        .unwrap();
+    assert!(abort_response.status().is_success());
+
+    tokio::time::timeout(std::time::Duration::from_secs(30), streaming)
+        .await
+        .expect("the turn ends after the abort")
+        .unwrap();
+
+    let parts: Vec<serde_json::Value> = client
+        .get(format!("{base_url}/api/v1beta/chats/{chat_id}/messages"))
+        .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+        .send()
+        .await
+        .unwrap()
+        .json::<serde_json::Value>()
+        .await
+        .unwrap()["messages"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|message| message["content"].as_array().into_iter().flatten())
+        .filter(|part| part["content_type"] == "tool_use" && part["tool_name"] == "delegate_task")
+        .cloned()
+        .collect();
+
+    assert_eq!(parts.len(), 2, "both calls keep their slots: {parts:?}");
+    assert!(
+        parts.iter().all(|part| part["status"] != "in_progress"),
+        "a stopped turn leaves nothing running: {parts:?}"
+    );
+    for part in &parts {
+        assert_eq!(part["output"]["status"], "cancelled", "{part}");
+        assert_eq!(part["output"]["reason"], "parent_abort", "{part}");
+    }
+    let started = parts
+        .iter()
+        .filter(|part| !part["output"]["child_run_id"].is_null())
+        .count();
+    assert_eq!(
+        started, 1,
+        "exactly one call got a child before the stop: {parts:?}"
+    );
+}

@@ -3383,6 +3383,351 @@ async fn commit_message_content_mid_turn(
     }
 }
 
+/// Turn one delegation outcome into everything the turn owes for it: the
+/// settled part, the events, the Langfuse span and the response the model
+/// gets back.
+///
+/// Shared by the two routes because the outcome shape is shared. A reserved
+/// `slot` settles in place; without one the part is appended where it always
+/// was. The content write and its durable commit happen before the events,
+/// because sending to the client can fail the turn and a reserved slot must
+/// never be left reading "working" for a child that has finished.
+#[allow(clippy::too_many_arguments)]
+async fn settle_delegation_slot<
+    MSG: SendAsSseEvent + From<MessageSubmitStreamingResponseToolCallUpdate>,
+>(
+    outcome: Result<crate::services::delegation::DelegationDispatchOutcome, String>,
+    tool_call: &genai::chat::ToolCall,
+    reserved: Option<usize>,
+    tool_call_started: String,
+    otel_tool_call_start_time: Option<SystemTime>,
+    otel_parent_observation_id: Option<String>,
+    content: &mut Vec<ContentPart>,
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    assistant_message_id: Uuid,
+    assistant_id: Option<Uuid>,
+    streaming_task: Option<&Arc<StreamingTask>>,
+    tracing_client: Option<&TracingLangfuseClient>,
+    platform: &str,
+    tx: &Sender<Result<Event, Report>>,
+) -> Result<genai::chat::ToolResponse, Report> {
+    let (status, bg_status, message_status, output_value, response_text) = match outcome {
+        Ok(crate::services::delegation::DelegationDispatchOutcome::Completed {
+            envelope,
+            trace,
+        }) => {
+            let response_text = envelope.model_response_text();
+            let output_value = envelope.output_value(&trace);
+            if envelope.status == crate::services::delegation::DelegationRunStatus::Completed {
+                (
+                    ToolCallStatus::Success,
+                    BgToolCallStatus::Success,
+                    MessageToolCallStatus::Success,
+                    output_value,
+                    response_text,
+                )
+            } else {
+                (
+                    ToolCallStatus::Error,
+                    BgToolCallStatus::Error,
+                    MessageToolCallStatus::Error,
+                    output_value,
+                    response_text,
+                )
+            }
+        }
+        // A background launch settles the part as a Success — a
+        // dispatch is not an error — with two deliberately
+        // different shapes. The UI output carries NO "status",
+        // and the "background" marker is what its background
+        // presentation keys off. The model gets an explicit
+        // "dispatched" status plus the note so its final prose
+        // reports work that was started, not an answer it never
+        // received.
+        //
+        // The status was originally omitted because the frontend
+        // rendered anything other than "completed" as a failure.
+        // It no longer does — it reads the full vocabulary and
+        // treats "dispatched" as settled — but the omission
+        // stands on its own: a dispatch outcome is not a child
+        // status, and every shipped part already has this shape.
+        Ok(crate::services::delegation::DelegationDispatchOutcome::Dispatched {
+            assistant_id,
+            assistant_name,
+            delegate_chat_id,
+        }) => {
+            // A bare task child has no assistant to name. The
+            // keys are omitted rather than sent null, so a reader
+            // never has to tell "absent" from "present and null".
+            let identity = |value: &mut serde_json::Value| {
+                if let Some(object) = value.as_object_mut() {
+                    if let Some(assistant_id) = assistant_id {
+                        object.insert("assistant_id".to_string(), json!(assistant_id));
+                    }
+                    if let Some(assistant_name) = assistant_name.as_ref() {
+                        object.insert("assistant_name".to_string(), json!(assistant_name));
+                    }
+                }
+            };
+            let mut ui_output = json!({
+                "delegate_chat_id": delegate_chat_id,
+                "child_run_id": delegate_chat_id,
+                "background": true,
+            });
+            identity(&mut ui_output);
+            let mut model_output = json!({
+                "status": "dispatched",
+                "delegate_chat_id": delegate_chat_id,
+                "child_run_id": delegate_chat_id,
+                "note": "the result will not be returned to this conversation",
+            });
+            identity(&mut model_output);
+            (
+                ToolCallStatus::Success,
+                BgToolCallStatus::Success,
+                MessageToolCallStatus::Success,
+                ui_output,
+                model_output.to_string(),
+            )
+        }
+        // Cancelled before it ever started, so the envelope's required
+        // child ids would be a fiction. Their absence is the signal that
+        // nothing ran.
+        Ok(crate::services::delegation::DelegationDispatchOutcome::NeverStarted { reason }) => {
+            let output_value = json!({
+                "status": "cancelled",
+                "reason": reason,
+                "parent_tool_call_id": tool_call.call_id,
+            });
+            (
+                ToolCallStatus::Error,
+                BgToolCallStatus::Error,
+                MessageToolCallStatus::Error,
+                output_value.clone(),
+                output_value.to_string(),
+            )
+        }
+        Err(error) => (
+            ToolCallStatus::Error,
+            BgToolCallStatus::Error,
+            MessageToolCallStatus::Error,
+            json!({ "status": "error", "error": error }),
+            format!("Delegation refused: {error}"),
+        ),
+    };
+    let tool_error = matches!(status, ToolCallStatus::Error).then(|| response_text.clone());
+    // A reserved slot settles in place; everything else appends
+    // where it always did.
+    let settled_index = reserved.unwrap_or(content.len());
+    let settled = ContentPart::ToolUse(ToolUse {
+        tool_call_id: tool_call.call_id.clone(),
+        status: message_status,
+        tool_name: tool_call.fn_name.clone(),
+        input: Some(tool_call.fn_arguments.clone()),
+        progress_message: None,
+        progress: None,
+        total: None,
+        output: Some(output_value.clone()),
+        started_at: Some(tool_call_started),
+        ended_at: Some(now_timestamp()),
+    });
+    // Written before the events below, because sending to the
+    // client can fail the turn and a reserved slot must never be
+    // left reading "working" for a child that has finished.
+    match reserved {
+        Some(index) => content[index] = settled,
+        None => content.push(settled),
+    }
+    if reserved.is_some() {
+        commit_message_content_mid_turn(
+            app_state,
+            policy,
+            subject,
+            assistant_message_id,
+            content,
+            "task settle",
+        )
+        .await;
+    }
+    let update_event = MessageSubmitStreamingResponseToolCallUpdate {
+        message_id: assistant_message_id,
+        content_index: settled_index,
+        tool_call_id: tool_call.call_id.clone(),
+        tool_name: tool_call.fn_name.clone(),
+        input: Some(tool_call.fn_arguments.clone()),
+        status,
+        progress_message: None,
+        progress: None,
+        total: None,
+        output: Some(output_value.clone()),
+    };
+    if let Some(task) = streaming_task {
+        send_background_event(
+            task,
+            StreamingEvent::ToolCallUpdate {
+                message_id: assistant_message_id,
+                content_index: settled_index,
+                tool_call_id: tool_call.call_id.clone(),
+                tool_name: tool_call.fn_name.clone(),
+                input: Some(tool_call.fn_arguments.clone()),
+                status: bg_status,
+                progress_message: None,
+                progress: None,
+                total: None,
+                output: Some(output_value.clone()),
+            },
+            "broadcast delegation tool update",
+        )
+        .await;
+    }
+    let message: MSG = update_event.into();
+    send_generation_event(&message, tx.clone()).await?;
+    persist_otel_tool_call(
+        tracing_client,
+        tool_call,
+        Some(output_value),
+        otel_tool_call_start_time,
+        Some(SystemTime::now()),
+        otel_parent_observation_id,
+        assistant_id,
+        platform,
+        tool_error.as_deref(),
+    )
+    .await;
+    Ok(genai::chat::ToolResponse {
+        call_id: tool_call.call_id.clone(),
+        content: response_text,
+    })
+}
+
+/// Waits for an abort, or forever when there is no stream to abort.
+///
+/// `select!` needs a future in every arm; a turn with no streaming task simply
+/// never takes this one.
+async fn wait_for_optional_abort(streaming_task: Option<&Arc<StreamingTask>>) {
+    match streaming_task {
+        Some(task) => task.wait_for_abort().await,
+        None => std::future::pending::<()>().await,
+    }
+}
+
+/// What a reserved task slot has to remember between its launch and its settle.
+struct TaskSlotMeta {
+    slot: usize,
+    /// Position of the call in the batch the model emitted. The batch settles
+    /// out of order; the model is answered in order.
+    batch_position: usize,
+    tool_call: genai::chat::ToolCall,
+    tool_call_started: String,
+    otel_tool_call_start_time: Option<SystemTime>,
+    otel_parent_observation_id: Option<String>,
+}
+
+/// A validated task call that has not started yet, because the turn already
+/// has as many runs in flight as it is allowed.
+struct PendingTask {
+    meta: TaskSlotMeta,
+    prepared: crate::services::delegation::PreparedTask,
+}
+
+/// A task run that has finished, however it finished.
+struct SettledTask {
+    meta: TaskSlotMeta,
+    outcome: Result<crate::services::delegation::DelegationDispatchOutcome, String>,
+}
+
+/// Boxed so that a launch failure and a real run are the same type: both go
+/// into the in-flight set, and the join is the one place either becomes a part.
+type InFlightTask<'a> =
+    std::pin::Pin<Box<dyn std::future::Future<Output = SettledTask> + Send + 'a>>;
+
+/// Start one validated task and hand back its wait.
+///
+/// Launches are sequential even when the waits are not: one call to this
+/// function completes before the next begins, which is what keeps refusals in
+/// call order and the launch-side counters free of races. Only the waiting
+/// fans out.
+///
+/// A launch that fails comes back as an already-finished wait carrying the
+/// refusal, so the caller has exactly one shape to handle. The returned value
+/// is the placeholder output for a child that really started; `None` means the
+/// slot will be settled immediately by the join.
+async fn launch_prepared_task<'a>(
+    app_state: &'a AppState,
+    policy: &PolicyEngine,
+    context: &DelegationDispatchContext<'_>,
+    streaming_task: Option<&'a Arc<StreamingTask>>,
+    assistant_message_id: Uuid,
+    pending: PendingTask,
+) -> (Option<JsonValue>, InFlightTask<'a>) {
+    let PendingTask { meta, prepared } = pending;
+    match crate::services::delegation::launch_delegation(
+        app_state,
+        policy,
+        context,
+        prepared.target,
+        crate::models::message::DelegationRunMode::Wait,
+        prepared.brief,
+    )
+    .await
+    {
+        Ok(crate::services::delegation::LaunchOutcome::Launched(launched)) => {
+            let output = crate::services::delegation::task_placeholder_output(&launched);
+            let parent =
+                streaming_task.map(|task| crate::services::delegation::DelegationParentStream {
+                    task,
+                    message_id: assistant_message_id,
+                    content_index: meta.slot,
+                });
+            (
+                Some(output),
+                Box::pin(async move {
+                    let outcome = crate::services::delegation::await_delegation(
+                        app_state,
+                        launched,
+                        parent,
+                        &meta.tool_call,
+                    )
+                    .await;
+                    SettledTask {
+                        meta,
+                        outcome: Ok(outcome),
+                    }
+                }),
+            )
+        }
+        // Unreachable while `wait` is the only run mode a task may ask for,
+        // but a dispatch settles its own slot at once and needs no wait, so
+        // the shape is already right for the detached mode.
+        Ok(crate::services::delegation::LaunchOutcome::Dispatched {
+            assistant_id,
+            assistant_name,
+            delegate_chat_id,
+        }) => (
+            None,
+            Box::pin(std::future::ready(SettledTask {
+                meta,
+                outcome: Ok(
+                    crate::services::delegation::DelegationDispatchOutcome::Dispatched {
+                        assistant_id,
+                        assistant_name,
+                        delegate_chat_id,
+                    },
+                ),
+            })),
+        ),
+        Err(error) => (
+            None,
+            Box::pin(std::future::ready(SettledTask {
+                meta,
+                outcome: Err(error),
+            })),
+        ),
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
 async fn stream_generate_chat_completion<
@@ -3500,6 +3845,9 @@ async fn stream_generate_chat_completion<
     // the park below) overrides this default per tool.
     const DEFAULT_CLIENT_TOOL_PARK_TIMEOUT_MS: u64 = 60_000;
     struct PendingWait {
+        /// Where the call sat in the batch, so its answer is fed back in call
+        /// order like every other.
+        batch_position: usize,
         tool_call: genai::chat::ToolCall,
         seconds: u64,
         deadline: tokio::time::Instant,
@@ -3663,9 +4011,32 @@ async fn stream_generate_chat_completion<
         // First work off open tool calls, in the order the model emitted them
         // — for a parallel batch of client-action proposals the FIRST one
         // must be the one that wins.
-        let mut current_turn_tool_responses = vec![];
+        // Paired with the call's position in the batch: task runs settle out
+        // of order, and the model is answered in the order it asked.
+        let mut current_turn_tool_responses: Vec<(usize, genai::chat::ToolResponse)> = vec![];
         let mut pending_waits = Vec::new();
-        while let Some(unfinished_tool_call) = unfinished_tool_calls.pop_front() {
+        let mut in_flight: futures::stream::FuturesUnordered<InFlightTask<'_>> =
+            futures::stream::FuturesUnordered::new();
+        let mut queued_tasks: std::collections::VecDeque<PendingTask> =
+            std::collections::VecDeque::new();
+        // Read once per batch rather than per call: the scope is fixed for the
+        // turn, and a value that moved mid-batch would make the bound a lie.
+        let effective_max_parallel = delegation
+            .as_ref()
+            .and_then(|context| context.task_scope.as_ref())
+            .map_or(1, |scope| scope.effective.max_parallel.max(1) as usize);
+        let mut batch_position = 0usize;
+        // Set by an exit inside the pop loop. The join below still has to run
+        // — leaving children in flight with their slots reading "working" is
+        // worse than the exit it was trying to make.
+        let mut exit_after_join = false;
+        let mut exit_metadata: Option<GenerationMetadata> = None;
+        'pop_calls: while let Some(unfinished_tool_call) = unfinished_tool_calls.pop_front() {
+            let batch_position = {
+                let position = batch_position;
+                batch_position += 1;
+                position
+            };
             let otel_tool_call_start_time = tracing_client
                 .as_ref()
                 .filter(|client| client.uses_otel())
@@ -3683,7 +4054,11 @@ async fn stream_generate_chat_completion<
                     non_empty_vec(&captured_reasoning_items),
                     non_empty_vec(&captured_reasoning_item_encrypted_content),
                 );
-                break 'loop_call_turns Ok((current_message_content, generation_metadata));
+                // Leave the batch, but not before the join below: children are
+                // already running and their slots must not be left open.
+                exit_metadata = generation_metadata;
+                exit_after_join = true;
+                break 'pop_calls;
             }
 
             // A task run is bounded by its own two budgets instead of the
@@ -3761,7 +4136,11 @@ async fn stream_generate_chat_completion<
                         non_empty_vec(&captured_reasoning_items),
                         non_empty_vec(&captured_reasoning_item_encrypted_content),
                     );
-                    break 'loop_call_turns Ok((current_message_content, generation_metadata));
+                    // Leave the batch, but not before the join below: children are
+                    // already running and their slots must not be left open.
+                    exit_metadata = generation_metadata;
+                    exit_after_join = true;
+                    break 'pop_calls;
                 }
                 let error = eyre!(
                     "Maximum tool call count per message ({max_tool_calls_per_message}) exceeded"
@@ -3839,10 +4218,13 @@ async fn stream_generate_chat_completion<
                     started_at: Some(tool_call_started),
                     ended_at: Some(now_timestamp()),
                 }));
-                current_turn_tool_responses.push(genai::chat::ToolResponse {
-                    call_id: unfinished_tool_call.call_id.clone(),
-                    content: error_message.to_string(),
-                });
+                current_turn_tool_responses.push((
+                    batch_position,
+                    genai::chat::ToolResponse {
+                        call_id: unfinished_tool_call.call_id.clone(),
+                        content: error_message.to_string(),
+                    },
+                ));
                 continue;
             }
 
@@ -3881,10 +4263,13 @@ async fn stream_generate_chat_completion<
                     started_at: Some(tool_call_started),
                     ended_at: Some(now_timestamp()),
                 }));
-                current_turn_tool_responses.push(genai::chat::ToolResponse {
-                    call_id: unfinished_tool_call.call_id.clone(),
-                    content: error_message,
-                });
+                current_turn_tool_responses.push((
+                    batch_position,
+                    genai::chat::ToolResponse {
+                        call_id: unfinished_tool_call.call_id.clone(),
+                        content: error_message,
+                    },
+                ));
                 continue;
             }
 
@@ -3907,6 +4292,7 @@ async fn stream_generate_chat_completion<
                     mcp.config.mcp_servers_global.max_wait_seconds,
                 ) {
                     Ok(seconds) => pending_waits.push(PendingWait {
+                        batch_position,
                         tool_call: unfinished_tool_call,
                         seconds,
                         deadline: tokio::time::Instant::now() + Duration::from_secs(seconds),
@@ -3916,6 +4302,7 @@ async fn stream_generate_chat_completion<
                         error: None,
                     }),
                     Err(error) => pending_waits.push(PendingWait {
+                        batch_position,
                         tool_call: unfinished_tool_call,
                         seconds: 0,
                         deadline: tokio::time::Instant::now(),
@@ -4043,10 +4430,13 @@ async fn stream_generate_chat_completion<
                     tool_error.as_deref(),
                 )
                 .await;
-                current_turn_tool_responses.push(genai::chat::ToolResponse {
-                    call_id: unfinished_tool_call.call_id.clone(),
-                    content: response_text,
-                });
+                current_turn_tool_responses.push((
+                    batch_position,
+                    genai::chat::ToolResponse {
+                        call_id: unfinished_tool_call.call_id.clone(),
+                        content: response_text,
+                    },
+                ));
                 continue;
             }
 
@@ -4070,11 +4460,107 @@ async fn stream_generate_chat_completion<
                 let tool_call_parent_observation_id =
                     tool_call_parent_observation_ids.remove(&unfinished_tool_call.call_id);
                 let slot = current_message_content.len();
-                // Set only once a placeholder actually occupies `slot`, so the
-                // settle below knows whether to overwrite it or to append. A
-                // refused task call never launches and never reserves, and the
-                // mention route never reserves at all.
-                let mut reserved: Option<usize> = None;
+
+                // The task route never settles here. A call either starts now
+                // or waits for a free slot, and the join after this loop is
+                // the single place every task outcome is turned into a part.
+                if is_task_route {
+                    let prepared = match delegation.as_ref() {
+                        Some(context) => crate::services::delegation::validate_task_tool_call(
+                            app_state,
+                            context,
+                            &unfinished_tool_call,
+                        ),
+                        None => Err("Delegation is not available for this request.".to_string()),
+                    };
+                    let prepared = match prepared {
+                        Ok(prepared) => prepared,
+                        Err(error) => {
+                            // Refused before anything was reserved, so the
+                            // refusal simply takes the next index.
+                            let response = settle_delegation_slot::<MSG>(
+                                Err(error),
+                                &unfinished_tool_call,
+                                None,
+                                tool_call_started,
+                                otel_tool_call_start_time,
+                                tool_call_parent_observation_id,
+                                &mut current_message_content,
+                                app_state,
+                                policy,
+                                subject,
+                                assistant_message_id,
+                                assistant_id,
+                                streaming_task,
+                                tracing_client.as_ref(),
+                                &langfuse_trace_enrichment.platform,
+                                &tx,
+                            )
+                            .await?;
+                            current_turn_tool_responses.push((batch_position, response));
+                            continue;
+                        }
+                    };
+
+                    let pending = PendingTask {
+                        meta: TaskSlotMeta {
+                            slot,
+                            batch_position,
+                            tool_call: unfinished_tool_call.clone(),
+                            tool_call_started: tool_call_started.clone(),
+                            otel_tool_call_start_time,
+                            otel_parent_observation_id: tool_call_parent_observation_id.clone(),
+                        },
+                        prepared,
+                    };
+                    // Reserved whether or not it starts now: the slot is what
+                    // keeps a batch in call order, and a queued one is already
+                    // worth showing — it names no child because none exists.
+                    current_message_content.push(ContentPart::ToolUse(ToolUse {
+                        tool_call_id: unfinished_tool_call.call_id.clone(),
+                        status: MessageToolCallStatus::InProgress,
+                        tool_name: unfinished_tool_call.fn_name.clone(),
+                        input: Some(unfinished_tool_call.fn_arguments.clone()),
+                        progress_message: None,
+                        progress: None,
+                        total: None,
+                        output: Some(crate::services::delegation::queued_placeholder_output()),
+                        started_at: Some(tool_call_started),
+                        ended_at: None,
+                    }));
+                    match delegation.as_ref() {
+                        Some(context) if in_flight.len() < effective_max_parallel => {
+                            let (placeholder, task) = launch_prepared_task(
+                                app_state,
+                                policy,
+                                context,
+                                streaming_task,
+                                assistant_message_id,
+                                pending,
+                            )
+                            .await;
+                            if let Some(output) = placeholder
+                                && let Some(ContentPart::ToolUse(part)) =
+                                    current_message_content.get_mut(slot)
+                            {
+                                part.output = Some(output);
+                            }
+                            in_flight.push(task);
+                        }
+                        _ => queued_tasks.push_back(pending),
+                    }
+                    commit_message_content_mid_turn(
+                        app_state,
+                        policy,
+                        subject,
+                        assistant_message_id,
+                        &current_message_content,
+                        "task launch",
+                    )
+                    .await;
+                    continue;
+                }
+
                 let outcome = match delegation.as_ref() {
                     Some(context) => {
                         let parent = streaming_task.map(|task| {
@@ -4084,260 +4570,37 @@ async fn stream_generate_chat_completion<
                                 content_index: slot,
                             }
                         });
-                        // Two offer routes into one dispatch core: the
-                        // outcome shape is shared, so everything below —
-                        // status mapping, persistence, Langfuse — is too.
-                        // The task route splits launch from await so the
-                        // child's slot reaches disk before the wait starts.
-                        if is_task_route {
-                            match crate::services::delegation::launch_task_tool_call(
-                                app_state,
-                                policy,
-                                context,
-                                &unfinished_tool_call,
-                            )
-                            .await
-                            {
-                                Err(error) => Err(error),
-                                Ok(crate::services::delegation::LaunchOutcome::Dispatched {
-                                    assistant_id,
-                                    assistant_name,
-                                    delegate_chat_id,
-                                }) => Ok(
-                                    crate::services::delegation::DelegationDispatchOutcome::Dispatched {
-                                        assistant_id,
-                                        assistant_name,
-                                        delegate_chat_id,
-                                    },
-                                ),
-                                Ok(crate::services::delegation::LaunchOutcome::Launched(
-                                    launched,
-                                )) => {
-                                    current_message_content.push(ContentPart::ToolUse(ToolUse {
-                                        tool_call_id: unfinished_tool_call.call_id.clone(),
-                                        status: MessageToolCallStatus::InProgress,
-                                        tool_name: unfinished_tool_call.fn_name.clone(),
-                                        input: Some(unfinished_tool_call.fn_arguments.clone()),
-                                        progress_message: None,
-                                        progress: None,
-                                        total: None,
-                                        output: Some(
-                                            crate::services::delegation::task_placeholder_output(
-                                                &launched,
-                                            ),
-                                        ),
-                                        started_at: Some(tool_call_started.clone()),
-                                        ended_at: None,
-                                    }));
-                                    reserved = Some(slot);
-                                    commit_message_content_mid_turn(
-                                        app_state,
-                                        policy,
-                                        subject,
-                                        assistant_message_id,
-                                        &current_message_content,
-                                        "task launch",
-                                    )
-                                    .await;
-                                    Ok(crate::services::delegation::await_delegation(
-                                        app_state,
-                                        launched,
-                                        parent,
-                                        &unfinished_tool_call,
-                                    )
-                                    .await)
-                                }
-                            }
-                        } else {
-                            crate::services::delegation::dispatch_delegate_tool_call(
-                                app_state,
-                                policy,
-                                context,
-                                &unfinished_tool_call,
-                                parent,
-                            )
-                            .await
-                        }
+                        crate::services::delegation::dispatch_delegate_tool_call(
+                            app_state,
+                            policy,
+                            context,
+                            &unfinished_tool_call,
+                            parent,
+                        )
+                        .await
                     }
                     None => Err("Delegation is not available for this request.".to_string()),
                 };
-                let (status, bg_status, message_status, output_value, response_text) = match outcome
-                {
-                    Ok(crate::services::delegation::DelegationDispatchOutcome::Completed {
-                        envelope,
-                        trace,
-                    }) => {
-                        let response_text = envelope.model_response_text();
-                        let output_value = envelope.output_value(&trace);
-                        if envelope.status
-                            == crate::services::delegation::DelegationRunStatus::Completed
-                        {
-                            (
-                                ToolCallStatus::Success,
-                                BgToolCallStatus::Success,
-                                MessageToolCallStatus::Success,
-                                output_value,
-                                response_text,
-                            )
-                        } else {
-                            (
-                                ToolCallStatus::Error,
-                                BgToolCallStatus::Error,
-                                MessageToolCallStatus::Error,
-                                output_value,
-                                response_text,
-                            )
-                        }
-                    }
-                    // A background launch settles the part as a Success — a
-                    // dispatch is not an error — with two deliberately
-                    // different shapes. The UI output carries NO "status",
-                    // and the "background" marker is what its background
-                    // presentation keys off. The model gets an explicit
-                    // "dispatched" status plus the note so its final prose
-                    // reports work that was started, not an answer it never
-                    // received.
-                    //
-                    // The status was originally omitted because the frontend
-                    // rendered anything other than "completed" as a failure.
-                    // It no longer does — it reads the full vocabulary and
-                    // treats "dispatched" as settled — but the omission
-                    // stands on its own: a dispatch outcome is not a child
-                    // status, and every shipped part already has this shape.
-                    Ok(crate::services::delegation::DelegationDispatchOutcome::Dispatched {
-                        assistant_id,
-                        assistant_name,
-                        delegate_chat_id,
-                    }) => {
-                        // A bare task child has no assistant to name. The
-                        // keys are omitted rather than sent null, so a reader
-                        // never has to tell "absent" from "present and null".
-                        let identity = |value: &mut serde_json::Value| {
-                            if let Some(object) = value.as_object_mut() {
-                                if let Some(assistant_id) = assistant_id {
-                                    object.insert("assistant_id".to_string(), json!(assistant_id));
-                                }
-                                if let Some(assistant_name) = assistant_name.as_ref() {
-                                    object.insert(
-                                        "assistant_name".to_string(),
-                                        json!(assistant_name),
-                                    );
-                                }
-                            }
-                        };
-                        let mut ui_output = json!({
-                            "delegate_chat_id": delegate_chat_id,
-                            "child_run_id": delegate_chat_id,
-                            "background": true,
-                        });
-                        identity(&mut ui_output);
-                        let mut model_output = json!({
-                            "status": "dispatched",
-                            "delegate_chat_id": delegate_chat_id,
-                            "child_run_id": delegate_chat_id,
-                            "note": "the result will not be returned to this conversation",
-                        });
-                        identity(&mut model_output);
-                        (
-                            ToolCallStatus::Success,
-                            BgToolCallStatus::Success,
-                            MessageToolCallStatus::Success,
-                            ui_output,
-                            model_output.to_string(),
-                        )
-                    }
-                    Err(error) => (
-                        ToolCallStatus::Error,
-                        BgToolCallStatus::Error,
-                        MessageToolCallStatus::Error,
-                        json!({ "status": "error", "error": error }),
-                        format!("Delegation refused: {error}"),
-                    ),
-                };
-                let tool_error =
-                    matches!(status, ToolCallStatus::Error).then(|| response_text.clone());
-                // A reserved slot settles in place; everything else appends
-                // where it always did.
-                let settled_index = reserved.unwrap_or(current_message_content.len());
-                let settled = ContentPart::ToolUse(ToolUse {
-                    tool_call_id: unfinished_tool_call.call_id.clone(),
-                    status: message_status,
-                    tool_name: unfinished_tool_call.fn_name.clone(),
-                    input: Some(unfinished_tool_call.fn_arguments.clone()),
-                    progress_message: None,
-                    progress: None,
-                    total: None,
-                    output: Some(output_value.clone()),
-                    started_at: Some(tool_call_started),
-                    ended_at: Some(now_timestamp()),
-                });
-                // Written before the events below, because sending to the
-                // client can fail the turn and a reserved slot must never be
-                // left reading "working" for a child that has finished.
-                match reserved {
-                    Some(index) => current_message_content[index] = settled,
-                    None => current_message_content.push(settled),
-                }
-                if reserved.is_some() {
-                    commit_message_content_mid_turn(
-                        app_state,
-                        policy,
-                        subject,
-                        assistant_message_id,
-                        &current_message_content,
-                        "task settle",
-                    )
-                    .await;
-                }
-                let update_event = MessageSubmitStreamingResponseToolCallUpdate {
-                    message_id: assistant_message_id,
-                    content_index: settled_index,
-                    tool_call_id: unfinished_tool_call.call_id.clone(),
-                    tool_name: unfinished_tool_call.fn_name.clone(),
-                    input: Some(unfinished_tool_call.fn_arguments.clone()),
-                    status,
-                    progress_message: None,
-                    progress: None,
-                    total: None,
-                    output: Some(output_value.clone()),
-                };
-                if let Some(task) = streaming_task {
-                    send_background_event(
-                        task,
-                        StreamingEvent::ToolCallUpdate {
-                            message_id: assistant_message_id,
-                            content_index: settled_index,
-                            tool_call_id: unfinished_tool_call.call_id.clone(),
-                            tool_name: unfinished_tool_call.fn_name.clone(),
-                            input: Some(unfinished_tool_call.fn_arguments.clone()),
-                            status: bg_status,
-                            progress_message: None,
-                            progress: None,
-                            total: None,
-                            output: Some(output_value.clone()),
-                        },
-                        "broadcast delegation tool update",
-                    )
-                    .await;
-                }
-                let message: MSG = update_event.into();
-                send_generation_event(&message, tx.clone()).await?;
-                persist_otel_tool_call(
-                    tracing_client.as_ref(),
+                let response = settle_delegation_slot::<MSG>(
+                    outcome,
                     &unfinished_tool_call,
-                    Some(output_value),
+                    None,
+                    tool_call_started,
                     otel_tool_call_start_time,
-                    Some(SystemTime::now()),
                     tool_call_parent_observation_id,
+                    &mut current_message_content,
+                    app_state,
+                    policy,
+                    subject,
+                    assistant_message_id,
                     assistant_id,
+                    streaming_task,
+                    tracing_client.as_ref(),
                     &langfuse_trace_enrichment.platform,
-                    tool_error.as_deref(),
+                    &tx,
                 )
-                .await;
-                current_turn_tool_responses.push(genai::chat::ToolResponse {
-                    call_id: unfinished_tool_call.call_id.clone(),
-                    content: response_text,
-                });
+                .await?;
+                current_turn_tool_responses.push((batch_position, response));
                 continue;
             }
 
@@ -4391,10 +4654,13 @@ async fn stream_generate_chat_completion<
                         Some(&response_text),
                     )
                     .await;
-                    current_turn_tool_responses.push(genai::chat::ToolResponse {
-                        call_id,
-                        content: response_text,
-                    });
+                    current_turn_tool_responses.push((
+                        batch_position,
+                        genai::chat::ToolResponse {
+                            call_id,
+                            content: response_text,
+                        },
+                    ));
                     continue;
                 };
 
@@ -4500,7 +4766,11 @@ async fn stream_generate_chat_completion<
                             non_empty_vec(&captured_reasoning_items),
                             non_empty_vec(&captured_reasoning_item_encrypted_content),
                         );
-                        break 'loop_call_turns Ok((current_message_content, generation_metadata));
+                        // Leave the batch, but not before the join below: children are
+                        // already running and their slots must not be left open.
+                        exit_metadata = generation_metadata;
+                        exit_after_join = true;
+                        break 'pop_calls;
                     }
                 };
 
@@ -4602,10 +4872,13 @@ async fn stream_generate_chat_completion<
                     tool_error.as_deref(),
                 )
                 .await;
-                current_turn_tool_responses.push(genai::chat::ToolResponse {
-                    call_id,
-                    content: response_text,
-                });
+                current_turn_tool_responses.push((
+                    batch_position,
+                    genai::chat::ToolResponse {
+                        call_id,
+                        content: response_text,
+                    },
+                ));
                 continue;
             }
 
@@ -4681,7 +4954,11 @@ async fn stream_generate_chat_completion<
                         non_empty_vec(&captured_reasoning_items),
                         non_empty_vec(&captured_reasoning_item_encrypted_content),
                     );
-                    break 'loop_call_turns Ok((current_message_content, generation_metadata));
+                    // Leave the batch, but not before the join below: children are
+                    // already running and their slots must not be left open.
+                    exit_metadata = generation_metadata;
+                    exit_after_join = true;
+                    break 'pop_calls;
                 }
             };
             if let Some(error_message) = refusal {
@@ -4700,10 +4977,13 @@ async fn stream_generate_chat_completion<
                     started_at: Some(tool_call_started),
                     ended_at: Some(now_timestamp()),
                 }));
-                current_turn_tool_responses.push(genai::chat::ToolResponse {
-                    call_id: unfinished_tool_call.call_id.clone(),
-                    content: error_message,
-                });
+                current_turn_tool_responses.push((
+                    batch_position,
+                    genai::chat::ToolResponse {
+                        call_id: unfinished_tool_call.call_id.clone(),
+                        content: error_message,
+                    },
+                ));
                 continue;
             }
             let output_schema = managed_tool_call.tool.output_schema.clone();
@@ -4871,7 +5151,11 @@ async fn stream_generate_chat_completion<
                             non_empty_vec(&captured_reasoning_items),
                             non_empty_vec(&captured_reasoning_item_encrypted_content),
                         );
-                        break 'loop_call_turns Ok((current_message_content, generation_metadata));
+                        // Leave the batch, but not before the join below: children are
+                        // already running and their slots must not be left open.
+                        exit_metadata = generation_metadata;
+                        exit_after_join = true;
+                        break 'pop_calls;
                     }
 
                     let post_processed = match post_process_mcp_tool_result(
@@ -4955,10 +5239,13 @@ async fn stream_generate_chat_completion<
                                 started_at: Some(tool_call_started),
                                 ended_at: Some(now_timestamp()),
                             }));
-                            current_turn_tool_responses.push(genai::chat::ToolResponse {
-                                call_id: unfinished_tool_call.call_id.clone(),
-                                content: tool_error,
-                            });
+                            current_turn_tool_responses.push((
+                                batch_position,
+                                genai::chat::ToolResponse {
+                                    call_id: unfinished_tool_call.call_id.clone(),
+                                    content: tool_error,
+                                },
+                            ));
                             continue;
                         }
                     };
@@ -5038,7 +5325,7 @@ async fn stream_generate_chat_completion<
                         }
                     }
 
-                    current_turn_tool_responses.push(tool_response)
+                    current_turn_tool_responses.push((batch_position, tool_response))
                 }
                 Err(err) => {
                     let tool_error = format!("Failed to call MCP tool: {err}");
@@ -5106,14 +5393,140 @@ async fn stream_generate_chat_completion<
                         started_at: Some(tool_call_started),
                         ended_at: Some(now_timestamp()),
                     }));
-                    current_turn_tool_responses.push(genai::chat::ToolResponse {
-                        call_id: unfinished_tool_call.call_id.clone(),
-                        content: tool_error,
-                    });
+                    current_turn_tool_responses.push((
+                        batch_position,
+                        genai::chat::ToolResponse {
+                            call_id: unfinished_tool_call.call_id.clone(),
+                            content: tool_error,
+                        },
+                    ));
                     continue;
                 }
             };
         }
+
+        // Join the fanned-out tasks. Launches were sequential and in call
+        // order; the waits are not, so this is where a batch stops being a
+        // queue and becomes a set. Every task outcome of the turn is turned
+        // into a part here and nowhere else.
+        //
+        // An abort stops further launches but does NOT stop the join: each
+        // child answers its own abort with a `cancelled` envelope, and
+        // dropping the waits would leave those slots reading "working" for
+        // runs that are over.
+        let mut aborting = false;
+        while !in_flight.is_empty() || !queued_tasks.is_empty() {
+            if !aborting && streaming_task.is_some_and(|task| task.is_abort_requested()) {
+                aborting = true;
+            }
+            if aborting {
+                // A queued call never started, so its slot settles with no
+                // child at all — that absence is how a reader tells it from a
+                // run that was cancelled partway.
+                while let Some(pending) = queued_tasks.pop_front() {
+                    let response = settle_delegation_slot::<MSG>(
+                        Ok(
+                            crate::services::delegation::DelegationDispatchOutcome::NeverStarted {
+                                reason:
+                                    crate::services::delegation::DelegationRunReason::ParentAbort,
+                            },
+                        ),
+                        &pending.meta.tool_call,
+                        Some(pending.meta.slot),
+                        pending.meta.tool_call_started,
+                        pending.meta.otel_tool_call_start_time,
+                        pending.meta.otel_parent_observation_id,
+                        &mut current_message_content,
+                        app_state,
+                        policy,
+                        subject,
+                        assistant_message_id,
+                        assistant_id,
+                        streaming_task,
+                        tracing_client.as_ref(),
+                        &langfuse_trace_enrichment.platform,
+                        &tx,
+                    )
+                    .await?;
+                    current_turn_tool_responses.push((pending.meta.batch_position, response));
+                }
+            }
+
+            let settled = tokio::select! {
+                settled = in_flight.next(), if !in_flight.is_empty() => settled,
+                () = wait_for_optional_abort(streaming_task), if !aborting => {
+                    aborting = true;
+                    continue;
+                }
+            };
+            let Some(settled) = settled else {
+                // Nothing left in flight; anything still queued is released on
+                // the next pass, which is only reachable while aborting.
+                continue;
+            };
+            let response = settle_delegation_slot::<MSG>(
+                settled.outcome,
+                &settled.meta.tool_call,
+                Some(settled.meta.slot),
+                settled.meta.tool_call_started,
+                settled.meta.otel_tool_call_start_time,
+                settled.meta.otel_parent_observation_id,
+                &mut current_message_content,
+                app_state,
+                policy,
+                subject,
+                assistant_message_id,
+                assistant_id,
+                streaming_task,
+                tracing_client.as_ref(),
+                &langfuse_trace_enrichment.platform,
+                &tx,
+            )
+            .await?;
+            current_turn_tool_responses.push((settled.meta.batch_position, response));
+
+            // One finished, so one may start — in call order, and only while
+            // the turn is still going anywhere.
+            while !aborting && in_flight.len() < effective_max_parallel {
+                let Some(pending) = queued_tasks.pop_front() else {
+                    break;
+                };
+                let Some(context) = delegation.as_ref() else {
+                    queued_tasks.push_front(pending);
+                    break;
+                };
+                let slot = pending.meta.slot;
+                let (placeholder, task) = launch_prepared_task(
+                    app_state,
+                    policy,
+                    context,
+                    streaming_task,
+                    assistant_message_id,
+                    pending,
+                )
+                .await;
+                if let Some(output) = placeholder
+                    && let Some(ContentPart::ToolUse(part)) = current_message_content.get_mut(slot)
+                {
+                    part.output = Some(output);
+                }
+                in_flight.push(task);
+                commit_message_content_mid_turn(
+                    app_state,
+                    policy,
+                    subject,
+                    assistant_message_id,
+                    &current_message_content,
+                    "task launch",
+                )
+                .await;
+            }
+        }
+
+        if exit_after_join {
+            break 'loop_call_turns Ok((current_message_content, exit_metadata));
+        }
+
         if !pending_waits.is_empty() {
             let latest_wait_deadline = pending_waits
                 .iter()
@@ -5225,21 +5638,29 @@ async fn stream_generate_chat_completion<
                     tool_error.as_deref(),
                 )
                 .await;
-                current_turn_tool_responses.push(genai::chat::ToolResponse {
-                    call_id: pending_wait.tool_call.call_id,
-                    content: response_text,
-                });
+                current_turn_tool_responses.push((
+                    pending_wait.batch_position,
+                    genai::chat::ToolResponse {
+                        call_id: pending_wait.tool_call.call_id,
+                        content: response_text,
+                    },
+                ));
             }
         }
 
         if !current_turn_tool_responses.is_empty() {
+            // The batch finishes out of order — a fanned-out task, a wait —
+            // but the model is answered in the order it asked, so its calls
+            // line up with the answers to them.
+            current_turn_tool_responses.sort_by_key(|(position, _)| *position);
             current_turn_chat_request.messages.push(GenAiChatMessage {
                 role: ChatRole::Tool,
                 content: MessageContent::from_parts(
                     current_turn_tool_responses
-                        .clone()
-                        .into_iter()
-                        .map(genai::chat::ContentPart::ToolResponse)
+                        .iter()
+                        .map(|(_, response)| {
+                            genai::chat::ContentPart::ToolResponse(response.clone())
+                        })
                         .collect::<Vec<_>>(),
                 ),
                 options: None,

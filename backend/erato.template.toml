@@ -417,6 +417,11 @@ chat_provider_ids = ["test-token-limit"]
 # # Maximum number of tasks one origin turn may dispatch in total. A call beyond
 # # the budget is refused with a tool result; it does not end the turn (default: 5)
 # max_tasks_per_turn = 5
+# # How many of those runs may be in flight at once. The rest of the batch waits
+# # and starts as slots free, so this bounds concurrent load while
+# # max_tasks_per_turn bounds the total. Must be between 1 and max_tasks_per_turn
+# # (default: 3)
+# max_parallel = 3
 # # Two INDEPENDENT tool budgets per task run; neither constrains the other and
 # # they are never summed into a shared total. Server-executed calls are MCP
 # # calls, where the backend holds the session and a slot in the tool loop, so
