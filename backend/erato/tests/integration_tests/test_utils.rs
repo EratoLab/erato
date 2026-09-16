@@ -597,6 +597,39 @@ impl Default for MockLlmConfig {
     }
 }
 
+/// Mocks for a provider that streams part of an answer and then goes quiet for
+/// `stall` without closing the connection.
+///
+/// This is the shape of a wedged upstream, and it is deliberately not an
+/// error: nothing arrives to tell the turn that anything is wrong, which is
+/// why the turn has to bound the silence itself.
+///
+/// The first chunk carries real text on purpose. An empty delta is swallowed
+/// by the adapter and would never surface as an item, so the stall would land
+/// before the turn had ever received anything — testing only the opening wait
+/// and never the per-item budget that has to restart after real content.
+pub fn stalling_llm_mocks(stall: Duration) -> MockSet {
+    let mut mocks = MockSet::new();
+    mocks.mock(move |when, then| {
+        when.post().path("/v1/chat/completions");
+        then.status(axum::http::StatusCode::OK)
+            .headers([
+                ("Content-Type", "text/event-stream"),
+                ("Cache-Control", "no-cache"),
+                ("Connection", "keep-alive"),
+            ])
+            .bytes_stream_with_delays(vec![
+                BodyAction::Bytes(build_openai_chat_chunk("", None).into()),
+                BodyAction::Bytes(build_openai_chat_chunk(STALLING_MOCK_FIRST_CHUNK, None).into()),
+                BodyAction::Delay(stall),
+            ]);
+    });
+    mocks
+}
+
+/// The text `stalling_llm_mocks` streams before going quiet.
+pub const STALLING_MOCK_FIRST_CHUNK: &str = "Partial answer before the stall";
+
 /// Sets up a mock LLM server and returns an AppConfig configured to use it.
 ///
 /// This utility function creates a mock OpenAI-compatible server that streams responses

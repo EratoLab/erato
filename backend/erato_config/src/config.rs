@@ -4303,6 +4303,25 @@ pub struct GenerationStatusConfig {
     // termination grace period.
     #[serde(default = "default_generation_status_shutdown_drain_secs")]
     pub shutdown_drain_secs: u64,
+
+    // Seconds a turn may wait on its chat provider without receiving any
+    // content before the generation is failed. This is an IDLE budget, not a
+    // total one: a long answer that keeps streaming never trips it, however
+    // long it takes.
+    //
+    // The heartbeat above proves the process is alive, not that the
+    // generation is progressing, so without this bound a provider connection
+    // that stalls without closing holds the chat's lease 'running' forever
+    // and the reaper never fires. 0 disables the bound (the old behaviour).
+    //
+    // Measured on CONTENT, not on socket traffic: keep-alive pings, empty
+    // deltas and SSE comments are dropped by the provider adapter and never
+    // reach the turn, so a connection held open without producing anything
+    // still counts as idle. The default is therefore sized against a
+    // reasoning model's think time before its first token rather than against
+    // a transport timeout.
+    #[serde(default = "default_generation_status_provider_idle_timeout_secs")]
+    pub provider_idle_timeout_secs: u64,
 }
 
 fn default_generation_status_heartbeat_interval_secs() -> u64 {
@@ -4321,6 +4340,10 @@ fn default_generation_status_shutdown_drain_secs() -> u64 {
     25
 }
 
+fn default_generation_status_provider_idle_timeout_secs() -> u64 {
+    600
+}
+
 impl Default for GenerationStatusConfig {
     fn default() -> Self {
         Self {
@@ -4328,6 +4351,7 @@ impl Default for GenerationStatusConfig {
             stale_after_secs: default_generation_status_stale_after_secs(),
             terminal_retention_secs: default_generation_status_terminal_retention_secs(),
             shutdown_drain_secs: default_generation_status_shutdown_drain_secs(),
+            provider_idle_timeout_secs: default_generation_status_provider_idle_timeout_secs(),
         }
     }
 }

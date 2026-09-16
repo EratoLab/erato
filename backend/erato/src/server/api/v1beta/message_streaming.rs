@@ -1059,6 +1059,176 @@ async fn parse_streaming_error(
     }
 }
 
+/// Why a turn stopped consuming its provider stream.
+///
+/// A stall produces no error of its own — nothing is returned at all — so the
+/// turn has to decide for itself that it has waited long enough.
+enum ProviderStreamFailure {
+    Provider(genai::Error),
+    Idle { after: Duration },
+}
+
+impl ProviderStreamFailure {
+    async fn into_error_event(self, message_id: Uuid) -> MessageSubmitStreamingResponseError {
+        match self {
+            ProviderStreamFailure::Provider(err) => parse_streaming_error(err, message_id).await,
+            // A provider error, not an internal one: nothing on our side
+            // failed. The wording says "no content" because that is what is
+            // measured — see `next_provider_stream_item`.
+            ProviderStreamFailure::Idle { after } => MessageSubmitStreamingResponseError {
+                message_id: Some(message_id),
+                error: GenerationErrorType::ProviderError {
+                    error_description: format!(
+                        "The model provider produced no content for {} seconds, so the \
+                         generation was stopped.",
+                        after.as_secs()
+                    ),
+                    status_code: None,
+                },
+            },
+        }
+    }
+}
+
+/// Resolves to the budget it waited out, or never when there is none.
+async fn provider_idle_elapsed(budget: Option<Duration>) -> Duration {
+    match budget {
+        Some(budget) => {
+            tokio::time::sleep(budget).await;
+            budget
+        }
+        None => std::future::pending().await,
+    }
+}
+
+/// The next item of a provider stream, or the idle failure if nothing arrives
+/// for the whole budget.
+///
+/// Per item, not per turn: every item restarts the budget, so a long answer is
+/// never cut off. `None` restores the unbounded wait.
+///
+/// What restarts it is an item the ADAPTER surfaced, which is not the same as
+/// traffic on the socket — genai drops keep-alive pings, empty deltas and SSE
+/// comments before this loop sees them. A connection held open without
+/// producing content is therefore idle here, deliberately: that is exactly the
+/// case a live socket cannot tell apart from a wedged one.
+async fn next_provider_stream_item<S>(
+    stream: &mut S,
+    budget: Option<Duration>,
+) -> Option<Result<ChatStreamEvent, ProviderStreamFailure>>
+where
+    S: futures::Stream<Item = genai::Result<ChatStreamEvent>> + Unpin,
+{
+    tokio::select! {
+        // Biased so an item that lands in the same poll as the deadline wins
+        // the tie. Unbiased, `select!` would pick at random and could report
+        // a stall while holding the data that disproves it.
+        biased;
+        result = stream.next() => {
+            result.map(|item| item.map_err(ProviderStreamFailure::Provider))
+        }
+        after = provider_idle_elapsed(budget) => Some(Err(ProviderStreamFailure::Idle { after })),
+    }
+}
+
+#[cfg(test)]
+mod provider_stream_idle_tests {
+    use super::*;
+
+    const BUDGET: Duration = Duration::from_secs(45);
+
+    fn chunk(text: &str) -> genai::Result<ChatStreamEvent> {
+        Ok(ChatStreamEvent::Chunk(StreamChunk {
+            content: text.to_string(),
+        }))
+    }
+
+    /// A provider that accepted the request and then went quiet without
+    /// closing the connection: the stream is neither ready nor finished.
+    fn stalled_stream() -> impl futures::Stream<Item = genai::Result<ChatStreamEvent>> + Unpin {
+        futures::stream::pending()
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_stalled_provider_fails_the_turn_once_the_budget_runs_out() {
+        let mut stream = stalled_stream();
+
+        let item = next_provider_stream_item(&mut stream, Some(BUDGET)).await;
+
+        match item {
+            Some(Err(ProviderStreamFailure::Idle { after })) => assert_eq!(after, BUDGET),
+            other => panic!("expected an idle failure, got {:?}", other.is_some()),
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn the_budget_bounds_silence_rather_than_the_whole_answer() {
+        // Each item arrives just inside the budget, so an answer far longer
+        // than the budget still streams to its end. This is the property that
+        // keeps a slow-but-healthy model from being cut off.
+        let items = futures::stream::iter(vec![chunk("one"), chunk("two"), chunk("three")]);
+        let mut paced = Box::pin(futures::StreamExt::then(items, |item| async move {
+            tokio::time::sleep(BUDGET - Duration::from_secs(1)).await;
+            item
+        }));
+
+        for expected in ["one", "two", "three"] {
+            match next_provider_stream_item(&mut paced, Some(BUDGET)).await {
+                Some(Ok(ChatStreamEvent::Chunk(StreamChunk { content }))) => {
+                    assert_eq!(content, expected)
+                }
+                _ => panic!("expected the chunk {expected} to arrive within its own budget"),
+            }
+        }
+        assert!(
+            next_provider_stream_item(&mut paced, Some(BUDGET))
+                .await
+                .is_none(),
+            "a finished stream must end the turn, not raise an idle failure"
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_zero_budget_waits_on_the_provider_indefinitely() {
+        let mut stream = stalled_stream();
+
+        let waited = tokio::time::timeout(
+            Duration::from_secs(60 * 60),
+            next_provider_stream_item(&mut stream, None),
+        )
+        .await;
+
+        assert!(
+            waited.is_err(),
+            "with the bound disabled the turn must keep waiting, as it did before"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_idle_failure_is_reported_as_a_provider_error() {
+        let message_id = Uuid::new_v4();
+
+        let event = ProviderStreamFailure::Idle { after: BUDGET }
+            .into_error_event(message_id)
+            .await;
+
+        assert_eq!(event.message_id, Some(message_id));
+        match event.error {
+            GenerationErrorType::ProviderError {
+                error_description,
+                status_code,
+            } => {
+                assert!(
+                    error_description.contains("45 seconds"),
+                    "{error_description}"
+                );
+                assert_eq!(status_code, None);
+            }
+            other => panic!("expected a provider error, got {other:?}"),
+        }
+    }
+}
+
 async fn fetch_non_streaming_error(
     app_state: &AppState,
     chat_request: ChatRequest,
@@ -1073,15 +1243,34 @@ async fn fetch_non_streaming_error(
             Some(chat_provider_headers_context),
         )
         .wrap_err("Unable to choose a chat provider for non-streaming error recovery")?;
-    Ok(
-        match client
-            .exec_chat("PLACEHOLDER_MODEL", chat_request, Some(chat_options))
-            .await
-        {
-            Err(err) => Some(parse_streaming_error(err, message_id).await),
-            Ok(_) => None,
+    // This runs precisely when a stream ended without saying why — which
+    // includes the upstream having gone sick. Re-asking that same upstream
+    // without a bound would hand the turn straight back to the hang it was
+    // recovering from, so the recovery gets the same budget the stream had.
+    let attempt = client.exec_chat("PLACEHOLDER_MODEL", chat_request, Some(chat_options));
+    let result = match app_state
+        .config
+        .generation_status
+        .provider_idle_timeout_secs
+    {
+        0 => attempt.await,
+        secs => match tokio::time::timeout(Duration::from_secs(secs), attempt).await {
+            Ok(result) => result,
+            Err(_) => {
+                return Ok(Some(
+                    ProviderStreamFailure::Idle {
+                        after: Duration::from_secs(secs),
+                    }
+                    .into_error_event(message_id)
+                    .await,
+                ));
+            }
         },
-    )
+    };
+    Ok(match result {
+        Err(err) => Some(parse_streaming_error(err, message_id).await),
+        Ok(_) => None,
+    })
 }
 /// Convert a StreamingEvent to an SSE Event for message submission
 fn streaming_event_to_sse(event: &StreamingEvent) -> Result<Event, Report> {
@@ -4748,19 +4937,38 @@ async fn stream_generate_chat_completion<
                 Some(chat_provider_headers_context),
             )
             .wrap_err("Unable to choose chat provider")?;
-        let chat_stream = match crate::latency::stage(
+        // The guard below is belt-and-braces: genai builds the request lazily
+        // and does not connect until the stream is first polled, so today it
+        // returns without any I/O and the first real wait is the stream
+        // loop's. It costs nothing and covers an adapter that connects
+        // eagerly.
+        let provider_idle_budget = match app_state
+            .config
+            .generation_status
+            .provider_idle_timeout_secs
+        {
+            0 => None,
+            secs => Some(Duration::from_secs(secs)),
+        };
+        let connect = crate::latency::stage(
             "provider.connect",
             genai_client.exec_chat_stream(
                 "PLACEHOLDER_MODEL",
                 current_turn_chat_request.clone(),
                 Some(&chat_options),
             ),
-        )
-        .await
-        {
+        );
+        let connected = match provider_idle_budget {
+            Some(budget) => match tokio::time::timeout(budget, connect).await {
+                Ok(result) => result.map_err(ProviderStreamFailure::Provider),
+                Err(_) => Err(ProviderStreamFailure::Idle { after: budget }),
+            },
+            None => connect.await.map_err(ProviderStreamFailure::Provider),
+        };
+        let chat_stream = match connected {
             Ok(stream) => stream,
-            Err(err) => {
-                let error_event = parse_streaming_error(err, assistant_message_id).await;
+            Err(failure) => {
+                let error_event = failure.into_error_event(assistant_message_id).await;
                 log_chat_completion_generation_error(
                     chat_provider_metric_label,
                     assistant_message_id,
@@ -4947,10 +5155,12 @@ async fn stream_generate_chat_completion<
                         );
                         break 'loop_call_turns Ok((aborted_content, generation_metadata));
                     }
-                    result = inner_stream.next() => result,
+                    result = next_provider_stream_item(&mut inner_stream, provider_idle_budget) => {
+                        result
+                    }
                 }
             } else {
-                inner_stream.next().await
+                next_provider_stream_item(&mut inner_stream, provider_idle_budget).await
             };
 
             let Some(result) = next_result else {
@@ -5104,8 +5314,10 @@ async fn stream_generate_chat_completion<
                     ChatStreamEvent::Start => {}
                     _ => {}
                 },
-                Err(err) => {
-                    if let genai::Error::JsonValueExt(_) = err {
+                Err(failure) => {
+                    if let ProviderStreamFailure::Provider(err) = &failure
+                        && let genai::Error::JsonValueExt(_) = err
+                    {
                         tracing::warn!(
                             error = ?err,
                             message_id = %assistant_message_id,
@@ -5114,7 +5326,24 @@ async fn stream_generate_chat_completion<
                         continue;
                     }
 
-                    let error_event = parse_streaming_error(err, assistant_message_id).await;
+                    if let ProviderStreamFailure::Idle { after } = &failure {
+                        // An abort racing the deadline must read as the user's
+                        // stop, not as a provider fault: the two arms can be
+                        // ready in the same poll, and only one of them is
+                        // something to report.
+                        if let Some(task) = streaming_task
+                            && task.is_abort_requested()
+                        {
+                            continue;
+                        }
+                        tracing::error!(
+                            message_id = %assistant_message_id,
+                            idle_secs = after.as_secs(),
+                            "Provider stream went idle past its budget; failing the generation"
+                        );
+                    }
+
+                    let error_event = failure.into_error_event(assistant_message_id).await;
                     log_chat_completion_generation_error(
                         chat_provider_metric_label,
                         assistant_message_id,
