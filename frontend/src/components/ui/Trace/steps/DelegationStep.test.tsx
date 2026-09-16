@@ -367,4 +367,120 @@ describe("delegation step", () => {
     expect(screen.queryByTestId("sidecar-trace")).toBeNull();
     expect(screen.queryByText("search_web")).toBeNull();
   });
+
+  it("titles a delegate_task step by its route, not by its identity", () => {
+    // The default persona makes a task child speak as the origin chat's
+    // assistant, so it carries an assistant name exactly like a mention run:
+    // only the tool name tells the two apart.
+    renderStep({ ...IDENTITY, status: "completed" }, "delegate_task", false);
+
+    expect(screen.getByText("Ran a task")).toBeInTheDocument();
+    expect(screen.queryByText(/Delegated to Research/)).toBeNull();
+  });
+
+  it("says a delegate_task step is running while it streams", () => {
+    renderStep({ ...IDENTITY }, "delegate_task");
+    expect(screen.getByText("Running a task")).toBeInTheDocument();
+  });
+
+  it("nests a delegate_task child's trace", () => {
+    renderStep(
+      {
+        ...IDENTITY,
+        status: "completed",
+        localTrace: {
+          steps: [{ sequence: 0, id: "search_web", status: "ok" }],
+        },
+      },
+      "delegate_task",
+    );
+
+    expect(screen.getByTestId("delegation-trace")).toBeInTheDocument();
+    expect(screen.getByText("search_web")).toBeInTheDocument();
+  });
+
+  it("shows a queued slot as queued — neither running nor failed", () => {
+    renderStep({ status: "queued" }, "delegate_task", false);
+
+    expect(screen.getByText("Queued")).toBeInTheDocument();
+    expect(screen.queryByText("Failed")).toBeNull();
+    expect(screen.queryByText("Running")).toBeNull();
+  });
+
+  it("shows a parked child as needing a decision, not as an error", () => {
+    renderStep(
+      { ...IDENTITY, status: "input_required", reason: "approval_pending" },
+      "delegate_task",
+      false,
+    );
+
+    expect(screen.getByText("Needs your decision")).toBeInTheDocument();
+    expect(screen.queryByText("Failed")).toBeNull();
+    expect(screen.getByTestId("delegation-reason")).toHaveTextContent(
+      "Waiting for your decision",
+    );
+  });
+
+  it("keeps the retired timeout status readable on replayed parts", () => {
+    renderStep({ ...IDENTITY, status: "timeout" }, undefined, false);
+    expect(screen.getByText("Timed out")).toBeInTheDocument();
+  });
+
+  it("says why a run was cancelled", () => {
+    renderStep(
+      { ...IDENTITY, status: "cancelled", reason: "timeout" },
+      undefined,
+      false,
+    );
+
+    expect(screen.getByText("Cancelled")).toBeInTheDocument();
+    expect(screen.getByTestId("delegation-reason")).toHaveTextContent(
+      "took too long",
+    );
+  });
+
+  it("stays silent when there is no reason to give", () => {
+    renderStep({ ...IDENTITY, status: "completed" }, undefined, false);
+    expect(screen.queryByTestId("delegation-reason")).toBeNull();
+  });
+
+  it("says a completed run answered nothing, instead of showing a bare tick", () => {
+    // `no_answer` and `cap_exceeded` ride `completed` — they are the two cases
+    // where the rail's green check is the whole story and the story is wrong.
+    renderStep(
+      { ...IDENTITY, status: "completed", reason: "no_answer" },
+      undefined,
+      false,
+    );
+    expect(screen.getByTestId("delegation-reason")).toHaveTextContent(
+      "ended without an answer",
+    );
+  });
+
+  it("marks a budget-stopped answer as partial", () => {
+    renderStep(
+      {
+        ...IDENTITY,
+        status: "completed",
+        reason: "cap_exceeded",
+        result: "Half the figures.",
+      },
+      undefined,
+      false,
+    );
+    expect(screen.getByTestId("delegation-reason")).toHaveTextContent(
+      "may be partial",
+    );
+  });
+
+  it("renders an unknown reason verbatim rather than dropping it", () => {
+    renderStep(
+      { ...IDENTITY, status: "failed", reason: "something_new" },
+      undefined,
+      false,
+    );
+    expect(screen.getByTestId("delegation-reason")).toHaveTextContent(
+      "something_new",
+    );
+  });
 });

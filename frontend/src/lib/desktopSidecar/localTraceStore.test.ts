@@ -165,6 +165,9 @@ describe("isSidecarTraceResultTool", () => {
   it("admits only the tools trusted to carry their own trace", () => {
     expect(isSidecarTraceResultTool("search_sidecar_mailbox")).toBe(true);
     expect(isSidecarTraceResultTool("delegate_to_assistant")).toBe(true);
+    // Both delegation routes nest a child's trace; without this the task
+    // step renders an empty subtree once the part is replayed from storage.
+    expect(isSidecarTraceResultTool("delegate_task")).toBe(true);
     expect(isSidecarTraceResultTool("some_server_tool")).toBe(false);
     expect(isSidecarTraceResultTool(undefined)).toBe(false);
   });

@@ -4544,6 +4544,36 @@ msgstr "Abrir la ejecución delegada"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.reason.approvalPending"
+msgstr "Esperando tu decisión sobre una herramienta que quiere usar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.reason.approvalUnavailable"
+msgstr "Necesitaba una herramienta sobre la que no pudo consultarte"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.reason.capExceeded"
+msgstr "Detenida en su límite de llamadas a herramientas; la respuesta puede ser parcial"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.reason.noAnswer"
+msgstr "La ejecución terminó sin respuesta"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.reason.parentAbort"
+msgstr "Detenida junto con el mensaje que la inició"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.reason.timeout"
+msgstr "La ejecución tardó demasiado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
 msgid "trace.delegation.result.truncated"
 msgstr "Resultado truncado"
 
@@ -4564,6 +4594,16 @@ msgstr "Cancelado"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.status.inputRequired"
+msgstr "Necesita tu decisión"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.status.queued"
+msgstr "En cola"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
 msgid "trace.delegation.status.timeout"
 msgstr "Tiempo agotado"
 
@@ -4571,6 +4611,16 @@ msgstr "Tiempo agotado"
 #: src/components/ui/Trace/steps/DelegationStep.tsx
 msgid "trace.delegation.step.answer"
 msgstr "Respuesta final"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.task.done"
+msgstr "Tarea ejecutada"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.task.running"
+msgstr "Ejecutando una tarea"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
@@ -4646,6 +4696,7 @@ msgstr "Falló"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/NestedTraceView.tsx
+#: src/components/ui/Trace/steps/DelegationStep.tsx
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.running"
 msgstr "En ejecución"

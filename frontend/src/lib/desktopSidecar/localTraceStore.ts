@@ -24,7 +24,7 @@ import { useMemo } from "react";
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 
-import { DELEGATION_TOOL_NAME } from "@/lib/delegation/delegationEnvelope";
+import { DELEGATION_TOOL_NAMES } from "@/lib/delegation/delegationEnvelope";
 
 import { isSidecarStepRunning, mergeSidecarTraces } from "./traceEvents";
 
@@ -48,7 +48,7 @@ const MAX_COUNT_KEY_CHARS = 64;
 const SIDECAR_TRACE_RESULT_TOOLS = new Set([
   // eslint-disable-next-line lingui/no-unlocalized-strings -- tool identifier
   "search_sidecar_mailbox",
-  DELEGATION_TOOL_NAME,
+  ...DELEGATION_TOOL_NAMES,
 ]);
 
 export function isSidecarTraceResultTool(

@@ -1,6 +1,6 @@
 import { ToolCallInput, ToolCallOutput } from "@/components/ui/ToolCall";
 import {
-  DELEGATION_TOOL_NAME,
+  isDelegationToolName,
   parseDelegationEnvelope,
 } from "@/lib/delegation/delegationEnvelope";
 import { useSidecarLocalTrace } from "@/lib/desktopSidecar/localTraceStore";
@@ -102,10 +102,9 @@ const PlainToolUseStep = ({
 // show — those render as the plain tool call. Branching at this level rather
 // than inside keeps each rendering free to hold its own hooks.
 export const ToolUseStep = (props: ToolUseStepProps) => {
-  const envelope =
-    props.part.tool_name === DELEGATION_TOOL_NAME
-      ? parseDelegationEnvelope(props.part.output)
-      : undefined;
+  const envelope = isDelegationToolName(props.part.tool_name)
+    ? parseDelegationEnvelope(props.part.output)
+    : undefined;
   return envelope ? (
     <DelegationStep {...props} envelope={envelope} />
   ) : (
