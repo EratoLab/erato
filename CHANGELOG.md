@@ -86,6 +86,16 @@ Two further startup checks are new: an MCP server may no longer be given the id 
 
 The bundled k3d scenario configuration (`infrastructure/k3d/erato-local/config/erato.scenario-assistants.toml`) deliberately keeps the deprecated table for one release so the deprecation path stays covered by the end-to-end environment.
 
+#### Stability improvements
+
+**MCP calls no longer serialize process-wide.** A tool call used to hold the shared session map for as long as the server took to answer, so one slow tool stalled every other MCP call in the process. Calls on distinct sessions now overlap, which is what lets several delegated runs use MCP tools at the same time. Two wire-level tests pin it.
+
+**A configuration reload no longer waits behind a connecting MCP server.** Opening a session dials the server and lists its tools; the configuration lock was held for that whole round trip, and because the lock prefers writers, a reload queued behind it stalled every later reader — including in-flight tool calls on unrelated servers. The connect now runs with nothing held.
+
+A session can still be dropped while one of its calls is in flight, but only deliberately: a configuration reload, an OAuth disconnect, or an explicit invalidation. Idle expiry cannot do it, because a session with a registered call never counts as idle. Such a call fails with a session error and is retried once against a fresh session.
+
+The unused `McpSessionManager::refresh_tools` entry point was removed. It had no callers, and its lock behaviour was the one place the old process-wide stall survived.
+
 ## [0.6.2] - 2026-06-26
 
 ### Notable changes

@@ -117,19 +117,6 @@ impl McpSession {
             false
         }
     }
-
-    /// Refresh the tools list from the server
-    async fn refresh_tools(&mut self, config: &McpServerConfig) -> Result<(), Report> {
-        let tools_result = self
-            .peer
-            .list_tools(Default::default())
-            .await
-            .map_err(|e| eyre!("Failed to refresh tools: {}", e))?;
-
-        self.tools = filter_tools_by_server_config(tools_result.tools, config);
-        self.touch();
-        Ok(())
-    }
 }
 
 fn filter_tools_by_server_config(tools: Vec<Tool>, config: &McpServerConfig) -> Vec<Tool> {
@@ -439,15 +426,26 @@ impl McpSessionManager {
         server_id: &str,
         auth_context: &McpRequestAuthContext<'_>,
     ) -> Result<SessionKey, Report> {
-        let configuration = self.configuration.read().await;
-        let config = configuration
-            .server_configs
-            .get(server_id)
-            .ok_or_else(|| eyre!("MCP server '{}' not found in configuration", server_id))?;
+        // Everything the connect needs is copied out before any await.
+        // `McpSession::new` dials the server and lists its tools, and tokio's
+        // RwLock is write-preferring: a `reconfigure` queued behind a read
+        // guard held across that round trip would stall every later reader,
+        // including the `configured_server_ids` that each in-flight tool call
+        // takes on its way out.
+        let (config, default_max_idle_seconds) = {
+            let configuration = self.configuration.read().await;
+            let config = configuration
+                .server_configs
+                .get(server_id)
+                .ok_or_else(|| eyre!("MCP server '{}' not found in configuration", server_id))?
+                .clone();
+            (config, configuration.default_max_idle_seconds)
+        };
+
         let key = (
             chat_id,
             server_id.to_string(),
-            Self::session_auth_key(server_id, config, auth_context).await?,
+            Self::session_auth_key(server_id, &config, auth_context).await?,
         );
 
         // Check if session already exists
@@ -466,18 +464,16 @@ impl McpSessionManager {
 
         let session = McpSession::new(
             server_id.to_string(),
-            config,
+            &config,
             auth_context,
-            configuration.default_max_idle_seconds,
+            default_max_idle_seconds,
         )
         .await?;
 
+        let configured_server_ids = self.configured_server_ids().await;
         let mut sessions_guard = self.sessions.write().await;
         sessions_guard.entry(key.clone()).or_insert(session);
-        Self::update_active_session_metrics(
-            &sessions_guard,
-            configuration.server_configs.keys().cloned(),
-        );
+        Self::update_active_session_metrics(&sessions_guard, configured_server_ids.into_iter());
 
         info!(
             chat_id = %chat_id,
@@ -815,65 +811,6 @@ impl McpSessionManager {
             rmcp::model::ServerResult::CallToolResult(result) => Ok(result),
             other => Err(eyre!("Unexpected MCP tool response: {:?}", other)),
         }
-    }
-
-    /// Manually refresh the tools list for a specific chat and server
-    /// Automatically retries once with a new session if the session has become invalid
-    pub async fn refresh_tools(
-        &self,
-        chat_id: Uuid,
-        server_id: &str,
-        auth_context: &McpRequestAuthContext<'_>,
-    ) -> Result<(), Report> {
-        match self
-            .refresh_tools_internal(chat_id, server_id, auth_context)
-            .await
-        {
-            Ok(()) => Ok(()),
-            Err(e) if Self::is_session_invalid_error(&e) => {
-                let config = self.server_config(server_id).await?;
-                let key = (
-                    chat_id,
-                    server_id.to_string(),
-                    Self::session_auth_key(server_id, &config, auth_context).await?,
-                );
-                warn!(
-                    chat_id = %chat_id,
-                    server_id = %server_id,
-                    error = %e,
-                    "MCP session appears to be invalid during refresh, recreating and retrying"
-                );
-
-                // Invalidate the session
-                self.invalidate_session(&key).await;
-
-                // Retry with a new session
-                self.refresh_tools_internal(chat_id, server_id, auth_context)
-                    .await
-            }
-            Err(e) => Err(e),
-        }
-    }
-
-    /// Internal implementation of refresh_tools without retry logic
-    async fn refresh_tools_internal(
-        &self,
-        chat_id: Uuid,
-        server_id: &str,
-        auth_context: &McpRequestAuthContext<'_>,
-    ) -> Result<(), Report> {
-        let key = self
-            .get_or_create_session(chat_id, server_id, auth_context)
-            .await?;
-        let config = self.server_config(server_id).await?;
-
-        let mut sessions_guard = self.sessions.write().await;
-
-        if let Some(session) = sessions_guard.get_mut(&key) {
-            session.refresh_tools(&config).await?;
-        }
-
-        Ok(())
     }
 
     /// Perform connectivity checks for all configured MCP servers
