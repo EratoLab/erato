@@ -306,6 +306,180 @@ pub fn build_delegate_to_assistant_tool(
     }
 }
 
+/// The `[delegation.tasks]` keys after the selected planning facets have had
+/// their say. Resolved once per turn at offer time and carried on the dispatch
+/// context, so the offer and the dispatch cannot disagree about what a task
+/// may do.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct EffectiveTasksConfig {
+    pub max_tasks_per_turn: u32,
+    pub max_server_tool_calls_per_task: u32,
+    pub max_client_tool_calls_per_task: u32,
+    pub persona: erato_config::config::TaskPersona,
+    pub child_facet_ids: Vec<String>,
+}
+
+/// Merge the global `[delegation.tasks]` keys with the overrides of every
+/// selected planning facet.
+///
+/// Caps take the MINIMUM: selecting a second planning facet may only ever
+/// narrow what a turn can spend, so a facet cannot be used to buy its way past
+/// another facet's limit. Child facet ids take the UNION, because they say
+/// what a task run is allowed to reach for and each facet's list is a
+/// capability its author meant to grant. Persona takes the FIRST selected
+/// facet that states one — it is a single-valued choice with no meaningful
+/// "combination", and selection order is the user's own.
+pub(crate) fn effective_tasks_config(
+    global: &erato_config::config::DelegationTasksConfig,
+    facets: &crate::config::FacetsConfig,
+    planning_facet_ids: &[String],
+) -> EffectiveTasksConfig {
+    let mut effective = EffectiveTasksConfig {
+        max_tasks_per_turn: global.max_tasks_per_turn,
+        max_server_tool_calls_per_task: global.max_server_tool_calls_per_task,
+        max_client_tool_calls_per_task: global.max_client_tool_calls_per_task,
+        persona: global.persona,
+        child_facet_ids: global.child_facet_ids.clone(),
+    };
+    let mut persona_set = false;
+    for facet_id in planning_facet_ids {
+        let Some(overrides) = facets
+            .facets
+            .get(facet_id)
+            .and_then(|facet| facet.delegation.as_ref())
+        else {
+            continue;
+        };
+        if let Some(value) = overrides.max_tasks_per_turn {
+            effective.max_tasks_per_turn = effective.max_tasks_per_turn.min(value);
+        }
+        if let Some(value) = overrides.max_server_tool_calls_per_task {
+            effective.max_server_tool_calls_per_task =
+                effective.max_server_tool_calls_per_task.min(value);
+        }
+        if let Some(value) = overrides.max_client_tool_calls_per_task {
+            effective.max_client_tool_calls_per_task =
+                effective.max_client_tool_calls_per_task.min(value);
+        }
+        if let Some(value) = overrides.persona
+            && !persona_set
+        {
+            effective.persona = value;
+            persona_set = true;
+        }
+        if let Some(ids) = overrides.child_facet_ids.as_ref() {
+            for id in ids {
+                if !effective.child_facet_ids.contains(id) {
+                    effective.child_facet_ids.push(id.clone());
+                }
+            }
+        }
+    }
+    effective
+}
+
+/// Everything the task route needs for one turn: what the model may ask for,
+/// and what it is allowed to spend doing it.
+#[derive(Clone, Debug)]
+pub(crate) struct TaskOfferScope {
+    /// Facet ids the model may name in `facet_ids`. Already authorization-
+    /// filtered for the chat owner, and re-checked at dispatch.
+    pub facet_enum: Vec<String>,
+    /// The `[delegation.tasks]` keys after the selected planning facets have
+    /// had their say.
+    pub effective: EffectiveTasksConfig,
+}
+
+/// Build the `delegate_task` tool for this turn.
+///
+/// Same shape family as the mention tool — enum-constrained ids,
+/// `additionalProperties: false` — minus `assistant_id`, because a task is
+/// scoped by facets rather than aimed at an assistant. `run_mode` offers only
+/// `wait` here; the asynchronous mode arrives with its own delivery path.
+pub(crate) fn build_delegate_task_tool(
+    scope: &TaskOfferScope,
+    offered_file_ids: &[Uuid],
+    omit_tool_strict: bool,
+) -> GenaiTool {
+    let file_ids: Vec<String> = offered_file_ids.iter().map(Uuid::to_string).collect();
+    let description = "Run a self-contained sub-task in a separate conversation and get its \
+         result back. Use it to keep a long or noisy piece of work — a search, a summary, a \
+         lookup — out of this conversation, not to ask a question you could answer here. The \
+         sub-task starts with only the brief you write: it cannot see this conversation unless \
+         you set include_conversation_context, so the brief must stand alone. Its final answer \
+         is returned to you as the result of this call."
+        .to_string();
+
+    let mut properties = json!({
+        "task": {
+            "type": "string",
+            "description": "Self-contained description of the work to do. The sub-task sees only this.",
+        },
+        "expected_output": {
+            "type": "string",
+            "description": "The shape the result should take, e.g. a list, a table, a short summary.",
+        },
+        "constraints": {
+            "type": "string",
+            "description": "Limits the sub-task must respect, e.g. which sources to use.",
+        },
+        "run_mode": {
+            "type": "string",
+            "enum": ["wait"],
+            "description": "Only 'wait' is available: the call returns the sub-task's result.",
+        },
+        "include_conversation_context": {
+            "type": "boolean",
+            "description": "Seed the sub-task with this conversation's history. Off by default; prefer writing a complete brief.",
+        },
+    });
+
+    if let Some(object) = properties.as_object_mut() {
+        if !scope.facet_enum.is_empty() {
+            object.insert(
+                "facet_ids".to_string(),
+                json!({
+                    "type": "array",
+                    "items": { "type": "string", "enum": scope.facet_enum },
+                    "description": "Capabilities to give the sub-task. Ask only for what the task needs.",
+                }),
+            );
+        }
+        if !file_ids.is_empty() {
+            object.insert(
+                "file_ids".to_string(),
+                json!({
+                    "type": "array",
+                    "items": { "type": "string", "enum": file_ids },
+                    // The ids are bare, and deliberately so: the model has
+                    // already seen each file announced in this conversation as
+                    // `file name: … / file_id: erato_file_id:…` when it was
+                    // resolved into context, so it can map a name to an id
+                    // without this schema restating it. Keeping filenames out
+                    // means this tool embeds no third-party text at all —
+                    // unlike the mention tool, whose roster and file list are
+                    // author- and sender-controlled and therefore need the
+                    // untrusted-data framing.
+                    "description": "Files already attached to this conversation, to pass                      through to the sub-task. Use the `erato_file_id` value shown with each                      file where it appears above; the sub-task receives the file itself, not                      just the id.",
+                }),
+            );
+        }
+    }
+
+    GenaiTool {
+        name: GenaiToolName::Custom(erato_config::config::DELEGATE_TASK_TOOL_NAME.to_string()),
+        description: Some(description),
+        schema: Some(json!({
+            "type": "object",
+            "properties": properties,
+            "required": ["task"],
+            "additionalProperties": false,
+        })),
+        strict: if omit_tool_strict { None } else { Some(false) },
+        config: None,
+    }
+}
+
 /// Deduplicates mentioned assistant ids preserving first-mention order.
 pub fn dedupe_mentions(ids: &[Uuid]) -> Vec<Uuid> {
     let mut seen = std::collections::HashSet::new();
@@ -1170,12 +1344,11 @@ pub(crate) async fn launch_delegation(
 
     let dispatch_started = std::time::Instant::now();
     let config = app_state.config.delegation.clone();
-    let assistant_id = match target {
-        DelegationTargetSpec::Assistant(assistant_id) => assistant_id,
-        // 2.3 fills this in; until then the offer path cannot produce it.
-        DelegationTargetSpec::Task { .. } => {
-            return Err("task route not available".to_string());
-        }
+    // The mention route aims at an assistant; the task route is scoped by
+    // facets and may have no assistant at all.
+    let (mention_assistant_id, task_facet_ids) = match &target {
+        DelegationTargetSpec::Assistant(assistant_id) => (Some(*assistant_id), Vec::new()),
+        DelegationTargetSpec::Task { facet_ids } => (None, facet_ids.clone()),
     };
 
     let mut file_ids: Vec<Uuid> = Vec::new();
@@ -1209,17 +1382,35 @@ pub(crate) async fn launch_delegation(
     // non-owner path to generation is ever added, this subject choice becomes
     // an escalation and must switch to the requester.
     let owner_subject = Subject::User(context.origin_chat.owner_user_id.clone());
-    let assistant = crate::models::assistant::get_assistant_by_id(
-        &app_state.db,
-        policy,
-        &owner_subject,
-        assistant_id,
-    )
-    .await
-    .map_err(|error| {
-        tracing::debug!(%assistant_id, %error, "Delegation target no longer resolvable");
-        "The mentioned assistant is no longer available.".to_string()
-    })?;
+    // The task route binds no assistant of its own. Under the default
+    // `inherit` persona the child speaks as whatever assistant the origin
+    // chat is bound to — already the owner's, so it needs no re-resolution —
+    // and under `bare` it speaks as the plain model.
+    let persona = context
+        .task_scope
+        .as_ref()
+        .map(|scope| scope.effective.persona)
+        .unwrap_or_default();
+    let (assistant_id, assistant_name) = match mention_assistant_id {
+        Some(assistant_id) => {
+            let assistant = crate::models::assistant::get_assistant_by_id(
+                &app_state.db,
+                policy,
+                &owner_subject,
+                assistant_id,
+            )
+            .await
+            .map_err(|error| {
+                tracing::debug!(%assistant_id, %error, "Delegation target no longer resolvable");
+                "The mentioned assistant is no longer available.".to_string()
+            })?;
+            (Some(assistant_id), Some(assistant.name))
+        }
+        None => match persona {
+            erato_config::config::TaskPersona::Inherit => (context.origin_chat.assistant_id, None),
+            erato_config::config::TaskPersona::Bare => (None, None),
+        },
+    };
 
     // A background run consumes a concurrency slot the moment it launches and
     // frees it only when its own generation ends, so the cap is checked before
@@ -1275,18 +1466,26 @@ pub(crate) async fn launch_delegation(
         run_mode: (run_mode == DelegationRunMode::Background)
             .then_some(DelegationRunMode::Background),
     };
+    // Every field is written explicitly rather than spread from `default()`:
+    // the struct grows as later parts of the level land, and a spread would
+    // silently drop a new field on this route while still compiling.
     let task = crate::models::chat::TaskSpec {
         expected_output: bounded_brief_field(brief.expected_output.as_deref()),
         constraints: bounded_brief_field(brief.constraints.as_deref()),
-        route: crate::models::chat::DelegateRoute::Assistant,
-        ..crate::models::chat::TaskSpec::default()
+        facet_ids: task_facet_ids,
+        persona,
+        scheduling: erato_config::config::TaskScheduling::default(),
+        route: match target {
+            DelegationTargetSpec::Assistant(_) => crate::models::chat::DelegateRoute::Assistant,
+            DelegationTargetSpec::Task { .. } => crate::models::chat::DelegateRoute::Task,
+        },
     };
     let child_chat = crate::models::chat::create_delegated_chat(
         &app_state.db,
         policy,
         &owner_subject,
         &context.origin_chat.owner_user_id,
-        Some(assistant_id),
+        assistant_id,
         provenance,
         Some(task),
         delegated_chat_title(&brief.task),
@@ -1362,10 +1561,8 @@ pub(crate) async fn launch_delegation(
         drop(child_rx);
         drop(handle);
         return Ok(LaunchOutcome::Dispatched {
-            // The mention route always resolved an assistant; the task route
-            // reaches this arm only once it can dispatch in the background.
-            assistant_id: Some(assistant_id),
-            assistant_name: Some(assistant.name),
+            assistant_id,
+            assistant_name,
             delegate_chat_id: child_chat.id,
         });
     }
@@ -1373,8 +1570,8 @@ pub(crate) async fn launch_delegation(
     Ok(LaunchOutcome::Launched(LaunchedDelegation {
         child_chat_id: child_chat.id,
         child_task,
-        assistant_id: Some(assistant_id),
-        target_name: Some(assistant.name),
+        assistant_id,
+        target_name: assistant_name,
         route: crate::models::chat::DelegateRoute::Assistant,
         handle,
         child_rx,
@@ -1570,6 +1767,123 @@ pub(crate) async fn dispatch_delegate_tool_call(
         context,
         DelegationTargetSpec::Assistant(assistant_id),
         context.run_mode,
+        brief,
+    )
+    .await?
+    {
+        LaunchOutcome::Dispatched {
+            assistant_id,
+            assistant_name,
+            delegate_chat_id,
+        } => Ok(DelegationDispatchOutcome::Dispatched {
+            assistant_id,
+            assistant_name,
+            delegate_chat_id,
+        }),
+        LaunchOutcome::Launched(launched) => {
+            Ok(await_delegation(app_state, launched, parent, tool_call).await)
+        }
+    }
+}
+
+/// Arguments of a `delegate_task` call.
+#[derive(Debug, serde::Deserialize)]
+struct DelegateTaskArgs {
+    task: String,
+    #[serde(default)]
+    expected_output: Option<String>,
+    #[serde(default)]
+    constraints: Option<String>,
+    #[serde(default)]
+    facet_ids: Option<Vec<String>>,
+    #[serde(default)]
+    run_mode: Option<String>,
+    #[serde(default)]
+    file_ids: Option<Vec<String>>,
+    #[serde(default)]
+    include_conversation_context: bool,
+}
+
+/// Dispatch one `delegate_task` call: the model planned this sub-task itself,
+/// so everything it named is re-checked here against the scope the offer was
+/// built from rather than trusted because it appeared in the arguments.
+///
+/// Awaited and serial: the call returns the child's result, and the turn's
+/// tool loop moves on only once it has. Running a batch of tasks side by side
+/// is a later change.
+pub(crate) async fn dispatch_task_tool_call(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    context: &crate::server::api::v1beta::message_streaming::DelegationDispatchContext<'_>,
+    tool_call: &genai::chat::ToolCall,
+    parent: Option<DelegationParentStream<'_>>,
+) -> Result<DelegationDispatchOutcome, String> {
+    if !app_state.config.delegation.tasks.enabled {
+        return Err("Delegated tasks are not enabled.".to_string());
+    }
+    let Some(scope) = context.task_scope.as_ref() else {
+        return Err("Delegated tasks are not available for this request.".to_string());
+    };
+
+    // Counted before any refusal below can return: a refused call must still
+    // cost the model one of its attempts, or a model that keeps retrying the
+    // same rejected call has nothing stopping it.
+    let attempt = context
+        .tasks_this_turn
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        + 1;
+    if attempt > scope.effective.max_tasks_per_turn as usize {
+        return Err(format!(
+            "This message already started {} task(s), the most allowed; ask for the remaining work in a later message.",
+            scope.effective.max_tasks_per_turn
+        ));
+    }
+
+    let args: DelegateTaskArgs = serde_json::from_value(tool_call.fn_arguments.clone())
+        .map_err(|error| format!("Invalid delegate_task arguments: {error}"))?;
+    if args.task.trim().is_empty() {
+        return Err("The 'task' argument must not be empty.".to_string());
+    }
+    // Only `wait` is offered. An explicit anything-else is refused rather
+    // than quietly downgraded, so a model cannot believe it detached work
+    // that in fact ran inline.
+    if let Some(run_mode) = args.run_mode.as_deref()
+        && run_mode != "wait"
+    {
+        return Err(format!(
+            "Unsupported run_mode '{run_mode}'; only 'wait' is available."
+        ));
+    }
+
+    // The enum in the schema is advisory — a model can name anything — so
+    // membership is re-checked here against the same list the offer was built
+    // from, which was already authorization-filtered for the chat owner.
+    let mut facet_ids: Vec<String> = Vec::new();
+    for facet_id in args.facet_ids.into_iter().flatten() {
+        if !scope.facet_enum.contains(&facet_id) {
+            return Err(format!(
+                "Capability '{facet_id}' was not offered for tasks on this turn."
+            ));
+        }
+        if !facet_ids.contains(&facet_id) {
+            facet_ids.push(facet_id);
+        }
+    }
+
+    let brief = DelegateBrief {
+        task: args.task,
+        expected_output: args.expected_output,
+        constraints: args.constraints,
+        file_ids: args.file_ids,
+        include_conversation_context: args.include_conversation_context,
+    };
+
+    match launch_delegation(
+        app_state,
+        policy,
+        context,
+        DelegationTargetSpec::Task { facet_ids },
+        DelegationRunMode::Wait,
         brief,
     )
     .await?
@@ -2035,6 +2349,150 @@ mod tests {
             erato_config::config::DELEGATE_TASK_TOOL_NAME
         ));
         assert!(!is_delegation_tool_name("search_web"));
+    }
+
+    fn planning_facet(
+        allowlist: &[&str],
+        overrides: Option<erato_config::config::FacetDelegationOverrides>,
+    ) -> crate::config::FacetConfig {
+        crate::config::FacetConfig {
+            display_name: "Plan".to_string(),
+            icon: None,
+            additional_system_prompt: None,
+            tool_call_allowlist: allowlist.iter().map(|s| s.to_string()).collect(),
+            model_settings: Default::default(),
+            disable_facet_prompt_template: false,
+            hidden: false,
+            hidden_always_active_for_platform: None,
+            delegation: overrides,
+        }
+    }
+
+    fn tasks_config() -> erato_config::config::DelegationTasksConfig {
+        erato_config::config::DelegationTasksConfig {
+            enabled: true,
+            max_tasks_per_turn: 5,
+            max_server_tool_calls_per_task: 5,
+            max_client_tool_calls_per_task: 30,
+            persona: erato_config::config::TaskPersona::Inherit,
+            child_facet_ids: vec!["web_search".to_string()],
+        }
+    }
+
+    #[test]
+    fn selecting_a_second_planning_facet_can_only_narrow_what_a_turn_may_spend() {
+        let mut facets = crate::config::FacetsConfig::default();
+        facets.facets.insert(
+            "strict".to_string(),
+            planning_facet(
+                &["erato/delegate_task"],
+                Some(erato_config::config::FacetDelegationOverrides {
+                    max_tasks_per_turn: Some(2),
+                    max_server_tool_calls_per_task: None,
+                    max_client_tool_calls_per_task: None,
+                    persona: Some(erato_config::config::TaskPersona::Bare),
+                    child_facet_ids: Some(vec!["files".to_string()]),
+                }),
+            ),
+        );
+        facets.facets.insert(
+            "generous".to_string(),
+            planning_facet(
+                &["erato/delegate_task"],
+                Some(erato_config::config::FacetDelegationOverrides {
+                    // Higher than the global value: a facet must not be able
+                    // to buy its way past another facet's limit.
+                    max_tasks_per_turn: Some(99),
+                    max_server_tool_calls_per_task: Some(1),
+                    max_client_tool_calls_per_task: None,
+                    persona: Some(erato_config::config::TaskPersona::Inherit),
+                    child_facet_ids: Some(vec!["web_search".to_string(), "mail".to_string()]),
+                }),
+            ),
+        );
+
+        let effective = effective_tasks_config(
+            &tasks_config(),
+            &facets,
+            &["strict".to_string(), "generous".to_string()],
+        );
+
+        // Caps: minimum wins in both directions.
+        assert_eq!(effective.max_tasks_per_turn, 2);
+        assert_eq!(effective.max_server_tool_calls_per_task, 1);
+        // Untouched by either facet.
+        assert_eq!(effective.max_client_tool_calls_per_task, 30);
+        // Persona: the first selected facet that states one, not the last.
+        assert_eq!(effective.persona, erato_config::config::TaskPersona::Bare);
+        // Child facets: union, deduplicated, global first.
+        assert_eq!(
+            effective.child_facet_ids,
+            vec![
+                "web_search".to_string(),
+                "files".to_string(),
+                "mail".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn with_no_planning_facet_overrides_the_global_config_stands() {
+        let facets = crate::config::FacetsConfig::default();
+        let effective = effective_tasks_config(&tasks_config(), &facets, &[]);
+        assert_eq!(effective.max_tasks_per_turn, 5);
+        assert_eq!(effective.max_server_tool_calls_per_task, 5);
+        assert_eq!(effective.max_client_tool_calls_per_task, 30);
+        assert_eq!(effective.child_facet_ids, vec!["web_search".to_string()]);
+    }
+
+    fn scope(facet_enum: &[&str]) -> TaskOfferScope {
+        TaskOfferScope {
+            facet_enum: facet_enum.iter().map(|s| s.to_string()).collect(),
+            effective: EffectiveTasksConfig {
+                max_tasks_per_turn: 5,
+                max_server_tool_calls_per_task: 5,
+                max_client_tool_calls_per_task: 30,
+                persona: erato_config::config::TaskPersona::Inherit,
+                child_facet_ids: Vec::new(),
+            },
+        }
+    }
+
+    #[test]
+    fn the_task_tool_constrains_every_id_it_accepts() {
+        let file_id = Uuid::new_v4();
+        let tool = build_delegate_task_tool(&scope(&["web_search"]), &[file_id], false);
+
+        assert_eq!(
+            tool.name,
+            GenaiToolName::Custom(erato_config::config::DELEGATE_TASK_TOOL_NAME.to_string())
+        );
+        let schema = tool.schema.expect("tool schema");
+        assert_eq!(schema["required"], json!(["task"]));
+        assert_eq!(schema["additionalProperties"], json!(false));
+        assert_eq!(
+            schema["properties"]["facet_ids"]["items"]["enum"],
+            json!(["web_search"])
+        );
+        assert_eq!(
+            schema["properties"]["file_ids"]["items"]["enum"],
+            json!([file_id.to_string()])
+        );
+        // Only the awaited mode exists on this route.
+        assert_eq!(schema["properties"]["run_mode"]["enum"], json!(["wait"]));
+        // An assistant is not a task's business.
+        assert!(schema["properties"].get("assistant_id").is_none());
+    }
+
+    #[test]
+    fn the_task_tool_omits_the_enums_it_has_nothing_to_put_in() {
+        let tool = build_delegate_task_tool(&scope(&[]), &[], false);
+        let schema = tool.schema.expect("tool schema");
+        // An empty enum would forbid every value rather than allow any, so
+        // the property is left out instead.
+        assert!(schema["properties"].get("facet_ids").is_none());
+        assert!(schema["properties"].get("file_ids").is_none());
+        assert!(schema["properties"]["task"].is_object());
     }
 
     #[test]

@@ -6919,3 +6919,450 @@ async fn test_chat_detail_reports_adopted_and_archived_runs(pool: Pool<Postgres>
     assert!(detail["adopted_at"].is_string());
     assert!(detail["archived_at"].is_string());
 }
+
+/// Build an app state with the task route enabled and a planning facet that
+/// selects `erato/delegate_task`. Submits name the facet through
+/// [`submit_with_facets`]; `default_selected_facets` is a frontend hint and
+/// selects nothing server-side.
+async fn task_enabled_state(
+    pool: Pool<Postgres>,
+    mocks: MockSet,
+    planning_allowlist: &[&str],
+) -> (erato::state::AppState, mocktail::server::MockServer) {
+    task_state(pool, mocks, planning_allowlist, |_| {}).await
+}
+
+/// As above, with a last word on the config before the state is built.
+async fn task_state(
+    pool: Pool<Postgres>,
+    mocks: MockSet,
+    planning_allowlist: &[&str],
+    tweak: impl FnOnce(&mut erato::config::AppConfig),
+) -> (erato::state::AppState, mocktail::server::MockServer) {
+    let (mut app_config, server) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.delegation.tasks.enabled = true;
+    app_config.facets.facets.insert(
+        "plan".to_string(),
+        erato::config::FacetConfig {
+            display_name: "Plan & delegate".to_string(),
+            icon: None,
+            additional_system_prompt: None,
+            tool_call_allowlist: planning_allowlist.iter().map(|s| s.to_string()).collect(),
+            model_settings: Default::default(),
+            disable_facet_prompt_template: true,
+            hidden: false,
+            hidden_always_active_for_platform: None,
+            delegation: None,
+        },
+    );
+    tweak(&mut app_config);
+    let app_state = test_app_state(app_config, pool).await;
+    erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    (app_state, server)
+}
+
+/// Submit a message with an explicit facet selection.
+async fn submit_with_facets(
+    server: &TestServer,
+    chat_id: &str,
+    text: &str,
+    selected_facet_ids: &[&str],
+) -> Vec<Event> {
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "existing_chat_id": chat_id,
+            "user_message": text,
+            "input_files_ids": [],
+            "selected_facet_ids": selected_facet_ids,
+        }))
+        .await;
+    response.assert_status_ok();
+    parse_sse_events(&response)
+}
+
+/// The task tool appears only when the feature is on AND a selected facet's
+/// allowlist asks for it. Both halves are load-bearing: the feature gate
+/// alone would hand the tool to every deployment that flips the flag, and the
+/// allowlist alone would hand it out before the feature is meant to exist.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn task_tool_is_offered_only_when_enabled_and_selected(pool: Pool<Postgres>) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post().path("/v1/chat/completions").matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&["offer probe answer"]),
+            );
+        });
+    }
+
+    // Enabled, and a selected facet asks for the tool.
+    let (app_state, _llm) =
+        task_enabled_state(pool, mocks, &["erato/delegate_task", "web-search-mcp/*"]).await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    submit_with_facets(&server, &chat, "offer probe question", &["plan"]).await;
+
+    assert!(
+        recorder
+            .bodies()
+            .iter()
+            .any(|body| body.contains("delegate_task")),
+        "the task tool must be offered when enabled and selected"
+    );
+}
+
+/// The same turn, with the feature off: nothing is offered even though the
+/// facet still names the tool.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn task_tool_is_not_offered_while_the_feature_is_off(pool: Pool<Postgres>) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post().path("/v1/chat/completions").matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&["gate off answer"]),
+            );
+        });
+    }
+    // The gate is off, the facet selection stays in place.
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "web-search-mcp/*"],
+        |config| config.delegation.tasks.enabled = false,
+    )
+    .await;
+
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    submit_with_facets(&server, &chat, "gate off question", &["plan"]).await;
+
+    for body in recorder.bodies() {
+        assert!(
+            !body.contains("delegate_task"),
+            "the task tool must not be offered while the feature is off"
+        );
+    }
+}
+
+/// Enabled, but no selected facet asks for the tool: still not offered. A
+/// deployment turning the feature on does not thereby hand the tool to every
+/// conversation.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn task_tool_is_not_offered_without_an_allowlist_selecting_it(pool: Pool<Postgres>) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post().path("/v1/chat/completions").matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&["unselected answer"]),
+            );
+        });
+    }
+    // The facet exists and is selected, but its allowlist names other tools.
+    let (app_state, _llm) = task_enabled_state(pool, mocks, &["web-search-mcp/*"]).await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    submit_with_facets(&server, &chat, "unselected question", &["plan"]).await;
+
+    for body in recorder.bodies() {
+        assert!(
+            !body.contains("delegate_task"),
+            "the task tool must not be offered unless an allowlist selects it"
+        );
+    }
+}
+
+/// The happy path: the model plans a sub-task, the child runs it, and the
+/// answer comes back into the same turn as the tool's result. The child is a
+/// real chat the user can open, and it is offered neither delegation tool —
+/// depth stays at one.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_task_run_returns_its_answer_into_the_origin_turn(pool: Pool<Postgres>) {
+    let recorder = RequestBodyRecorder::new();
+    let child_recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    // The child's turn: recognised by the brief, answers in prose. The
+    // parent's continuation also carries the brief — it replays the tool
+    // call's own input — so the parent's user message is what tells them
+    // apart: a task child never sees the conversation that planned it.
+    {
+        let child_recorder = child_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &["TASK-BRIEF-SENTINEL"],
+                    &["task parent question"],
+                ))
+                .matcher(child_recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&["CHILD-TASK-ANSWER"]),
+            );
+        });
+    }
+    // The parent's continuation, once the result is in.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["CHILD-TASK-ANSWER", "task parent question"],
+                &[],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["PARENT-TASK-FINAL"]),
+        );
+    });
+    // The parent's first turn: plans the sub-task.
+    {
+        let recorder = recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &["task parent question"],
+                    &["TASK-BRIEF-SENTINEL", "CHILD-TASK-ANSWER"],
+                ))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                    "call_task_1",
+                    "delegate_task",
+                    json!({
+                        "task": "TASK-BRIEF-SENTINEL: count the figures",
+                        "expected_output": "A single number.",
+                        // Scope the child to the PLANNING facet itself. Without
+                        // this the child has no allowlist and the task tool is
+                        // withheld for that reason, so the depth assertion
+                        // below would be made against a case that never
+                        // exercised the depth guard at all.
+                        "facet_ids": ["plan"],
+                    }),
+                )]),
+            );
+        });
+    }
+
+    let (app_state, _llm) =
+        task_enabled_state(pool, mocks, &["erato/delegate_task", "web-search-mcp/*"]).await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, "task parent question", &["plan"]).await;
+
+    let output = find_tool_call_update_output(&events, "delegate_task");
+    assert_eq!(output["status"], "completed");
+    assert!(
+        output["result"]
+            .as_str()
+            .is_some_and(|text| text.contains("CHILD-TASK-ANSWER")),
+        "the child's answer must come back on the tool part: {output}"
+    );
+    // The two ids the frontend and later parts of the level key off.
+    assert!(output["child_run_id"].is_string());
+    assert_eq!(output["parent_tool_call_id"], "call_task_1");
+    assert!(extract_full_text_answer(&events).contains("PARENT-TASK-FINAL"));
+
+    // The child is a real chat, marked as a task run, and never offered a
+    // delegation tool of its own.
+    let child_chat = delegated_child_chat(&app_state.db, Uuid::parse_str(&chat).unwrap()).await;
+    let configuration = child_chat
+        .assistant_configuration
+        .expect("child configuration");
+    assert_eq!(configuration["task"]["route"], "task");
+    // Delegated work does not nest: the child is offered neither route, even
+    // though it carries the very facet whose allowlist selects the task tool.
+    // The count is asserted first — a filter that matched nothing would make
+    // the loop vacuous and quietly certify nothing at all.
+    let child_bodies = child_recorder.bodies();
+    assert_eq!(
+        child_bodies.len(),
+        1,
+        "expected exactly one recorded child turn, got {}",
+        child_bodies.len()
+    );
+    for body in &child_bodies {
+        assert!(
+            body.contains("TASK-BRIEF-SENTINEL"),
+            "the recorded turn should be the child's"
+        );
+        assert!(
+            !body.contains("delegate_task"),
+            "a task child must not be offered the task tool"
+        );
+        assert!(
+            !body.contains("delegate_to_assistant"),
+            "a task child must not be offered the mention tool"
+        );
+    }
+}
+
+/// A capability the offer did not list is refused, whatever the model writes
+/// in the arguments. The schema's enum is advisory — a model can emit
+/// anything — so the list is what decides, not the shape of the call.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_task_cannot_ask_for_a_capability_that_was_not_offered(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    // Recovery turn, once the refusal is in.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&["was not offered"], &[]));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["TASK-REFUSAL-RECOVERED"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["unoffered facet question"],
+                &["was not offered"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_task_bad",
+                "delegate_task",
+                json!({
+                    "task": "should never run",
+                    "facet_ids": ["a_facet_nobody_offered"],
+                }),
+            )]),
+        );
+    });
+
+    let (app_state, _llm) =
+        task_enabled_state(pool, mocks, &["erato/delegate_task", "web-search-mcp/*"]).await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, "unoffered facet question", &["plan"]).await;
+
+    let output = find_tool_call_update_output(&events, "delegate_task");
+    assert_eq!(output["status"], "error");
+    // The CALL is refused, never the turn.
+    assert!(extract_full_text_answer(&events).contains("TASK-REFUSAL-RECOVERED"));
+}
+
+/// `max_tasks_per_turn` counts ATTEMPTS, not successful dispatches. A model
+/// that keeps retrying a refused call must run out of budget, or nothing
+/// bounds it but wall-clock: the built-in tools are exempt from the per-task
+/// budgets, so a refused call is otherwise free.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_refused_task_still_spends_one_of_the_turns_attempts(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&["the most allowed"], &[]));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["TASK-CAP-RECOVERED"]),
+        );
+    });
+    // Both calls are empty-task refusals, so neither dispatches anything —
+    // yet the second must still be turned away by the per-turn cap.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["attempt cap question"],
+                &["the most allowed"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[
+                ("call_task_a", "delegate_task", json!({ "task": "   " })),
+                ("call_task_b", "delegate_task", json!({ "task": "   " })),
+            ]),
+        );
+    });
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "web-search-mcp/*"],
+        |config| config.delegation.tasks.max_tasks_per_turn = 1,
+    )
+    .await;
+
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, "attempt cap question", &["plan"]).await;
+
+    let refusals: Vec<String> = events
+        .iter()
+        .filter_map(|event| serde_json::from_str::<serde_json::Value>(event.data.as_str()).ok())
+        .filter(|frame| frame["tool_name"] == "delegate_task")
+        .filter_map(|frame| {
+            frame["output"]["error"]
+                .as_str()
+                .map(std::string::ToString::to_string)
+        })
+        .collect();
+    assert!(
+        refusals
+            .iter()
+            .any(|error| error.contains("the most allowed")),
+        "the second attempt must be refused by the per-turn cap: {refusals:?}"
+    );
+    assert!(extract_full_text_answer(&events).contains("TASK-CAP-RECOVERED"));
+}

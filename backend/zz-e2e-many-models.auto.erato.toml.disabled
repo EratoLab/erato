@@ -276,11 +276,30 @@ subtitle = "Turn rough notes into a structured summary"
 icon = "iconoir-page"
 prompt = "Summarize these notes into clear action items and decisions."
 
+# Model-planned delegated tasks. Off by default everywhere else; on here so
+# the task route has a scenario to run in.
+[delegation.tasks]
+enabled = true
+
 [facets]
 only_single_facet = false
 show_facet_indicator_with_display_name = false
-priority_order = ["web_search"]
+priority_order = ["web_search", "plan"]
 default_selected_facets = []
+
+# A planning facet: selecting it is what offers `erato/delegate_task`. The
+# reserved pattern is deliberately paired with a real MCP pattern — an
+# allowlist naming only reserved tools narrows the turn's MCP tool set to
+# nothing, which would leave the parent with no tools at all.
+#
+# `mock_mcp_progress` is the pairing because its permission rule is
+# `allow-all`; pairing with a group-gated server would need its own rule, and
+# the first rule of a kind hides every server not listed.
+[facets.facets.plan]
+display_name = "Plan & delegate"
+icon = "iconoir-strategy"
+tool_call_allowlist = ["erato/delegate_task", "mock_mcp_progress/*"]
+disable_facet_prompt_template = true
 
 [facets.facets.web_search]
 display_name = "Web search"

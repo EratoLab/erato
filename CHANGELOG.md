@@ -30,6 +30,22 @@ Typical "Notable changes" categories to copy & paste:
 
 - Delegation configuration moved to a top-level `[delegation]` section, in preparation for model-planned delegated tasks. The `erato` tool namespace and the tool names `delegate_task` / `collect_tasks` are now reserved for built-in tools.
 - A delegated run now reports **why** it ended, not just that it did, and the delegate's answer reaches the delegating model inside an `untrusted-data` frame so a child's output cannot issue instructions to its parent.
+- **Model-planned delegated tasks (`delegate_task`).** The model can run a self-contained sub-task in a separate conversation and get its result back in the same turn, to keep long or noisy work out of the main conversation. Off by default.
+
+  Turning it on takes two things, not one: `[delegation.tasks] enabled = true`, **and** a selected facet whose `tool_call_allowlist` selects `erato/delegate_task`. Enabling the feature alone offers the tool to nobody.
+
+  ```toml
+  [delegation.tasks]
+  enabled = true
+
+  [facets.facets.plan]
+  display_name = "Plan & delegate"
+  # Always pair the reserved pattern with a real MCP pattern: an allowlist
+  # naming only reserved tools narrows the turn's MCP tool set to nothing.
+  tool_call_allowlist = ["erato/delegate_task", "web-search-mcp/*"]
+  ```
+
+  A task run is a real chat the user can open, scoped by the facets its brief asked for, and it is never offered a delegation tool of its own — delegated work does not nest. `max_tasks_per_turn` (default 5) bounds how many a single message may start, counting attempts rather than successful dispatches. `delegate_task` is a new `tool_name` on the wire and needs the frontend of this release.
 
 #### Stability improvements
 

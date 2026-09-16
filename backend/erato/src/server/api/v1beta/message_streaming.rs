@@ -1985,6 +1985,11 @@ pub struct PreparedChatRequest {
     // Parent-chat file ids enumerated in the delegation tool offer; the
     // dispatch validates requested `file_ids` against this set.
     delegation_offered_file_ids: Vec<Uuid>,
+    // What the task route may offer and spend this turn, or `None` when
+    // `delegate_task` was not offered. Resolved at offer time so the schema
+    // the model saw and the list its arguments are checked against are one
+    // and the same.
+    task_offer_scope: Option<crate::services::delegation::TaskOfferScope>,
 }
 
 impl PreparedChatRequest {
@@ -2157,6 +2162,18 @@ pub(crate) struct DelegationDispatchContext<'a> {
     /// dispatched, so within a turn this counter is what keeps the
     /// concurrency cap honest.
     pub background_dispatches: std::sync::atomic::AtomicUsize,
+    /// What the task route may offer and spend this turn, or `None` when
+    /// `delegate_task` was not offered. Resolved once, at offer time, so the
+    /// tool schema and the dispatch validation cannot drift apart.
+    pub task_scope: Option<crate::services::delegation::TaskOfferScope>,
+    /// `delegate_task` calls ATTEMPTED this turn, refusals included.
+    ///
+    /// Attempts, not successful dispatches: the built-in tools are exempt
+    /// from the per-task budgets, so a refused call costs the model nothing
+    /// and a model that keeps retrying one would otherwise be bounded only by
+    /// wall-clock. Incremented once, where the call is parsed, before
+    /// anything can refuse it.
+    pub tasks_this_turn: std::sync::atomic::AtomicUsize,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -2564,11 +2581,43 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     prompt_provider: &impl PromptProvider,
 ) -> Result<PreparedChatRequest, Report> {
     let mcp = app_state.mcp_state().await;
+    // A task child is scoped by the facets its brief asked for. They are read
+    // from the durable chat row rather than carried on the request, for the
+    // same reason the client-tool collector reads the row: what a delegated
+    // run may reach for is a property of the run, not of whoever submitted
+    // the turn, and it must survive every later turn of that child.
+    let task_facet_ids: Vec<String> = crate::models::chat::parse_chat_configuration(chat)
+        .ok()
+        .flatten()
+        .and_then(|configuration| configuration.task)
+        .map(|task| task.facet_ids)
+        .unwrap_or_default();
+    let requested_facet_ids: &[String] = if user_input.selected_facet_ids.is_empty() {
+        &task_facet_ids
+    } else {
+        &user_input.selected_facet_ids
+    };
     let effective_selected_facet_ids = resolve_effective_selected_facet_ids(
         &app_state.config.facets,
-        &user_input.selected_facet_ids,
+        requested_facet_ids,
         assistant_config.as_ref(),
     );
+    // An assistant that enforces its own facet settings REPLACES the request's
+    // list, so a task child inheriting such an assistant silently loses the
+    // scope its brief asked for. The assistant wins on purpose — it is the
+    // owner's configuration, not the model's — but it is worth saying out loud.
+    if !task_facet_ids.is_empty()
+        && !task_facet_ids
+            .iter()
+            .all(|facet_id| effective_selected_facet_ids.contains(facet_id))
+    {
+        tracing::warn!(
+            chat_id = %chat.id,
+            requested = ?task_facet_ids,
+            effective = ?effective_selected_facet_ids,
+            "Task run's requested facets were narrowed by the assistant's enforced facet settings"
+        );
+    }
     let mut effective_selected_facet_ids = policy
         .filter_authorized_facet_ids(
             &me_profile_input.subject,
@@ -2847,56 +2896,53 @@ pub(crate) async fn prepare_chat_request_with_adapters(
             ));
         }
     }
-    // Offer the `delegate_to_assistant` tool when the turn carries validated
-    // assistant mentions. Request-scoped like the client-action tool, and
-    // never offered inside a delegated run itself — delegation depth stays at
-    // one even if a user mentions assistants inside a delegated chat. If an
-    // MCP tool claims the name, it wins (same precedence as the other
-    // synthetic tools).
-    // The task route's tool is registered in a later change; the slot is wired
-    // now so selection, MCP precedence and delegated-run suppression live in
-    // one place rather than being re-derived when the tool arrives.
-    if synthetic_tool_offer_slot(
+    // Both delegation routes are offered here. They are request-scoped like
+    // the client-action tool and never offered inside a delegated run itself
+    // — depth stays at one even if a user mentions assistants inside a
+    // delegated chat. If an MCP tool claims either name, it wins (same
+    // precedence as the other synthetic tools).
+    //
+    // `delegate_to_assistant` is aimed at an assistant the user mentioned;
+    // `delegate_task` lets the model plan its own sub-task, scoped by facets.
+    // They share one list of attachable files, fetched once below, because
+    // the dispatch context validates every requested file against it.
+    let offer_mention_tool = !user_input.delegation_targets.is_empty()
+        && !is_delegated_run
+        && !mcp_claimed_names
+            .contains(crate::services::delegation::DELEGATE_TO_ASSISTANT_TOOL_NAME);
+    if !user_input.delegation_targets.is_empty() && !is_delegated_run && !offer_mention_tool {
+        tracing::warn!(
+            "Not offering the delegation tool: an MCP tool already uses the name '{}'",
+            crate::services::delegation::DELEGATE_TO_ASSISTANT_TOOL_NAME
+        );
+    }
+    let offer_task_tool = synthetic_tool_offer_slot(
         erato_config::config::DELEGATE_TASK_TOOL_NAME,
         app_state.config.delegation.tasks.enabled,
         &client_tool_allowlist,
         &generation_mcp_tools,
         is_delegated_run,
-    ) {
-        tracing::debug!(
-            "Reserved tool '{}/{}' is selected for this turn; no implementation is registered yet.",
-            erato_config::config::RESERVED_TOOL_NAMESPACE,
-            erato_config::config::DELEGATE_TASK_TOOL_NAME
-        );
-    }
+    );
 
-    // The @-mention delegation tool is deliberately NOT allowlist-gated: it is
-    // offered on validated mentions alone. Gating it would silently break every
-    // deployment whose facets already carry narrow allowlists.
     let mut delegation_offered_file_ids: Vec<Uuid> = Vec::new();
-    if !user_input.delegation_targets.is_empty() && !is_delegated_run {
-        let name_taken_by_mcp_tool = mcp_claimed_names
-            .contains(crate::services::delegation::DELEGATE_TO_ASSISTANT_TOOL_NAME);
-        if name_taken_by_mcp_tool {
-            tracing::warn!(
-                "Not offering the delegation tool: an MCP tool already uses the name '{}'",
-                crate::services::delegation::DELEGATE_TO_ASSISTANT_TOOL_NAME
-            );
-        } else {
-            let offered_files = crate::models::file_upload::get_chat_file_uploads(
-                &app_state.db,
-                policy,
-                &me_profile_input.subject,
-                &chat.id,
-            )
-            .await?
-            .into_iter()
-            .map(|file| crate::services::delegation::DelegationOfferedFile {
-                id: file.id,
-                filename: file.filename,
-            })
-            .collect::<Vec<_>>();
-            delegation_offered_file_ids = offered_files.iter().map(|file| file.id).collect();
+    let mut task_offer_scope: Option<crate::services::delegation::TaskOfferScope> = None;
+    if offer_mention_tool || offer_task_tool {
+        let offered_files = crate::models::file_upload::get_chat_file_uploads(
+            &app_state.db,
+            policy,
+            &me_profile_input.subject,
+            &chat.id,
+        )
+        .await?
+        .into_iter()
+        .map(|file| crate::services::delegation::DelegationOfferedFile {
+            id: file.id,
+            filename: file.filename,
+        })
+        .collect::<Vec<_>>();
+        delegation_offered_file_ids = offered_files.iter().map(|file| file.id).collect();
+
+        if offer_mention_tool {
             chat_request_tools.push(
                 crate::services::delegation::build_delegate_to_assistant_tool(
                     &user_input.delegation_targets,
@@ -2905,6 +2951,76 @@ pub(crate) async fn prepare_chat_request_with_adapters(
                     effective_model_settings.compat_omit_strict,
                 ),
             );
+        }
+
+        if offer_task_tool {
+            // Which of the SELECTED facets asked for the tool. The allowlist
+            // the slot tested is the union of all of them, so it can say
+            // "selected" but never "by which facet" — and the overrides that
+            // decide what a task may spend are per facet.
+            let planning_facet_ids: Vec<String> = effective_selected_facet_ids
+                .iter()
+                .filter(|facet_id| {
+                    app_state
+                        .config
+                        .facets
+                        .facets
+                        .get(*facet_id)
+                        .is_some_and(|facet| {
+                            erato_config::config::allowlist_selects_reserved_tool(
+                                &facet.tool_call_allowlist,
+                                erato_config::config::DELEGATE_TASK_TOOL_NAME,
+                            )
+                        })
+                })
+                .cloned()
+                .collect();
+            let effective = crate::services::delegation::effective_tasks_config(
+                &app_state.config.delegation.tasks,
+                &app_state.config.facets,
+                &planning_facet_ids,
+            );
+
+            // What a task may be scoped to: what this turn already has, plus
+            // what the planning facets and the global config say a child may
+            // reach for. Hidden facets are deliberately excluded — they are
+            // always-on platform baselines appended after the authorization
+            // filter, not capabilities the model chooses between.
+            let mut candidate_facet_ids: Vec<String> = Vec::new();
+            for facet_id in effective_selected_facet_ids
+                .iter()
+                .filter(|facet_id| {
+                    app_state
+                        .config
+                        .facets
+                        .facets
+                        .get(*facet_id)
+                        .is_some_and(|facet| !facet.hidden)
+                })
+                .chain(effective.child_facet_ids.iter())
+            {
+                if !candidate_facet_ids.contains(facet_id) {
+                    candidate_facet_ids.push(facet_id.clone());
+                }
+            }
+            let facet_enum = policy
+                .filter_authorized_facet_ids(
+                    &me_profile_input.subject,
+                    me_profile_input.user_groups,
+                    &candidate_facet_ids,
+                )
+                .await?;
+
+            let scope = crate::services::delegation::TaskOfferScope {
+                facet_enum,
+                effective,
+            };
+            chat_request_tools.push(crate::services::delegation::build_delegate_task_tool(
+                &scope,
+                &delegation_offered_file_ids,
+                effective_model_settings.compat_omit_strict,
+            ));
+            task_offer_scope = Some(scope);
         }
     }
     // Offer the synthetic wait tool when waiting is enabled globally or when
@@ -2993,6 +3109,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         chat_options,
         delegation_targets: user_input.delegation_targets.clone(),
         delegation_offered_file_ids,
+        task_offer_scope,
     })
 }
 
@@ -3760,11 +3877,11 @@ async fn stream_generate_chat_completion<
             // the same name takes precedence (the synthetic tool is never
             // offered in that case — see prepare). Every failure refuses the
             // CALL, never the TURN.
-            if unfinished_tool_call.fn_name
-                == crate::services::delegation::DELEGATE_TO_ASSISTANT_TOOL_NAME
-                && !available_mcp_tools_by_name
-                    .contains_key(crate::services::delegation::DELEGATE_TO_ASSISTANT_TOOL_NAME)
+            if crate::services::delegation::is_delegation_tool_name(&unfinished_tool_call.fn_name)
+                && !available_mcp_tools_by_name.contains_key(&unfinished_tool_call.fn_name)
             {
+                let is_task_route =
+                    unfinished_tool_call.fn_name == erato_config::config::DELEGATE_TASK_TOOL_NAME;
                 let tool_call_started = tool_call_started_at
                     .remove(&unfinished_tool_call.call_id)
                     .unwrap_or_else(now_timestamp);
@@ -3772,20 +3889,35 @@ async fn stream_generate_chat_completion<
                     tool_call_parent_observation_ids.remove(&unfinished_tool_call.call_id);
                 let outcome = match delegation.as_ref() {
                     Some(context) => {
-                        crate::services::delegation::dispatch_delegate_tool_call(
-                            app_state,
-                            policy,
-                            context,
-                            &unfinished_tool_call,
-                            streaming_task.map(|task| {
-                                crate::services::delegation::DelegationParentStream {
-                                    task,
-                                    message_id: assistant_message_id,
-                                    content_index: current_message_content.len(),
-                                }
-                            }),
-                        )
-                        .await
+                        let parent = streaming_task.map(|task| {
+                            crate::services::delegation::DelegationParentStream {
+                                task,
+                                message_id: assistant_message_id,
+                                content_index: current_message_content.len(),
+                            }
+                        });
+                        // Two offer routes into one dispatch core: the
+                        // outcome shape is shared, so everything below —
+                        // status mapping, persistence, Langfuse — is too.
+                        if is_task_route {
+                            crate::services::delegation::dispatch_task_tool_call(
+                                app_state,
+                                policy,
+                                context,
+                                &unfinished_tool_call,
+                                parent,
+                            )
+                            .await
+                        } else {
+                            crate::services::delegation::dispatch_delegate_tool_call(
+                                app_state,
+                                policy,
+                                context,
+                                &unfinished_tool_call,
+                                parent,
+                            )
+                            .await
+                        }
                     }
                     None => Err("Delegation is not available for this request.".to_string()),
                 };
@@ -3955,9 +4087,9 @@ async fn stream_generate_chat_completion<
             // per-call channel, and resume when the client POSTs the result —
             // like an MCP tool, but executed on the client. By construction
             // anything offered that is not an MCP tool, not the client action,
-            // and not `delegate_to_assistant` is a client tool; hallucinated
-            // names were already rejected by the `allowed_tool_names` check
-            // above.
+            // and neither delegation tool (`delegate_to_assistant`,
+            // `delegate_task`) is a client tool; hallucinated names were
+            // already rejected by the `allowed_tool_names` check above.
             if !available_mcp_tools_by_name.contains_key(unfinished_tool_call.fn_name.as_str()) {
                 let call_id = unfinished_tool_call.call_id.clone();
                 let tool_name = unfinished_tool_call.fn_name.clone();
@@ -9551,6 +9683,7 @@ pub(crate) async fn run_message_submit_task(
         offered_client_tool_timeouts,
         delegation_targets,
         delegation_offered_file_ids,
+        task_offer_scope,
     } = prepare_chat_request(
         app_state,
         policy,
@@ -9713,6 +9846,8 @@ pub(crate) async fn run_message_submit_task(
             origin_user_message_id: saved_user_message.id,
             run_mode: effective_delegation_run_mode,
             background_dispatches: std::sync::atomic::AtomicUsize::new(0),
+            task_scope: task_offer_scope.clone(),
+            tasks_this_turn: std::sync::atomic::AtomicUsize::new(0),
         }),
     );
 
@@ -10026,6 +10161,7 @@ pub async fn regenerate_message_sse(
                 offered_client_tool_timeouts,
                 delegation_targets,
                 delegation_offered_file_ids,
+                task_offer_scope,
             } = prepare_chat_request(
                 &app_state,
                 &policy,
@@ -10140,6 +10276,8 @@ pub async fn regenerate_message_sse(
                         origin_user_message_id: previous_message.id,
                         run_mode: effective_delegation_run_mode,
                         background_dispatches: std::sync::atomic::AtomicUsize::new(0),
+                        task_scope: task_offer_scope.clone(),
+                        tasks_this_turn: std::sync::atomic::AtomicUsize::new(0),
                     }),
                 )
                 .await;
@@ -10534,6 +10672,7 @@ pub async fn edit_message_sse(
                 offered_client_tool_timeouts,
                 delegation_targets,
                 delegation_offered_file_ids,
+                task_offer_scope,
             } = prepare_chat_request(
                 &app_state,
                 &policy,
@@ -10648,6 +10787,8 @@ pub async fn edit_message_sse(
                         origin_user_message_id: saved_user_message.id,
                         run_mode: effective_delegation_run_mode,
                         background_dispatches: std::sync::atomic::AtomicUsize::new(0),
+                        task_scope: task_offer_scope.clone(),
+                        tasks_this_turn: std::sync::atomic::AtomicUsize::new(0),
                     }),
                 )
                 .await;
