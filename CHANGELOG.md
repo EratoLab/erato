@@ -33,7 +33,7 @@ Typical "Notable changes" categories to copy & paste:
 
 #### Stability improvements
 
-- A chat whose provider connection stalls without closing no longer stays "running" forever. A turn that receives nothing from its provider — no response headers, no chunk — for `generation_status.provider_idle_timeout_secs` (new, default 300) now fails as a provider error and releases the chat's generation lease. The budget bounds silence, not length: an answer that keeps streaming is never cut off, however long it takes. Set the option to `0` for the previous unbounded behaviour.
+- A chat whose provider connection stalls without closing no longer stays "running" forever. A turn that receives no content from its provider for `generation_status.provider_idle_timeout_secs` (new, default 600) now fails as a provider error and releases the chat's generation lease. The budget bounds silence, not length: an answer that keeps streaming is never cut off, however long it takes. Note that it is measured on content rather than on socket traffic — keep-alive pings and empty deltas are dropped by the provider adapter and do not reset it. Set the option to `0` for the previous unbounded behaviour.
 
 #### Wire changes
 

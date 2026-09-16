@@ -17,8 +17,8 @@ use std::time::Duration;
 
 use crate::test_app_state;
 use crate::test_utils::{
-    MockLlmConfig, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt,
-    archive_chat_via_api, create_test_server, setup_mock_llm_server,
+    MockLlmConfig, STALLING_MOCK_FIRST_CHUNK, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT,
+    TestRequestAuthExt, archive_chat_via_api, create_test_server, setup_mock_llm_server,
     setup_mock_llm_server_with_mocks, stalling_llm_mocks, unarchive_chat_via_api,
 };
 
@@ -532,11 +532,14 @@ async fn test_generating_chats_abort_marks_completed(pool: Pool<Postgres>) {
 /// - `uses-mocked-llm`
 ///
 /// # Test Behavior
-/// A provider that accepts the request and then goes quiet without closing
-/// the connection used to park the turn forever: the heartbeat kept proving
-/// the process was alive, so the stale-heartbeat reaper never fired and the
-/// chat stayed 'running' for good. With `provider_idle_timeout_secs` the turn
-/// gives up on its own and the chats row ends 'errored'.
+/// A provider that streams part of an answer and then goes quiet without
+/// closing the connection used to park the turn forever: the heartbeat kept
+/// proving the process was alive, so the stale-heartbeat reaper never fired
+/// and the chat stayed 'running' for good. With `provider_idle_timeout_secs`
+/// the turn gives up on its own and the chats row ends 'errored'.
+///
+/// The stall lands AFTER real content, so this covers the budget restarting
+/// on a delivered item rather than only the opening wait.
 ///
 /// The reaper is deliberately ruled out here — `stale_after_secs` is far
 /// longer than the test runs and the heartbeat keeps ticking — so the only
@@ -590,6 +593,11 @@ async fn test_generating_chats_stalled_provider_releases_the_lease(pool: Pool<Po
     assert!(
         body.contains("provider_error"),
         "the stall should reach the client as a provider error, got: {body}"
+    );
+    assert!(
+        body.contains(STALLING_MOCK_FIRST_CHUNK),
+        "the turn should have streamed real content before the stall — without it \
+         this test would only cover the opening wait, got: {body}"
     );
 
     let chat_id = {

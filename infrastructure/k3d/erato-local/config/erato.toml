@@ -1,14 +1,23 @@
 # Main configuration file
 # File storage providers are configured in erato.file-storage.auto.erato.toml
 
-# The mock providers answer within a second and stream at most one second
-# between chunks, so a turn that has heard nothing for this long is wedged,
-# not slow. Kept far below the product default (300s, sized for a reasoning
-# model's think time): a lease stuck 'running' is shared state in this
-# cluster, and it fails whichever spec next asserts an idle sidebar rather
-# than the one that caused it.
+# Shortened from the product default because a lease stuck 'running' is
+# shared state in this cluster: it fails whichever spec next asserts an idle
+# sidebar rather than the one that caused it.
+#
+# This bounds REAL providers too, not just the mocks — most scenarios chat with
+# a live OpenAI or Vertex model. So it is set above the longest wait any spec
+# gives a response (`loadingTimeoutMs: 60000`): a turn this fires on is one no
+# test is still waiting for, which is what keeps the bound from ever turning a
+# passing test red. The mocks are not the binding constraint — their longest
+# deliberate silence is 10s (the delayed MCP-approval mock).
+#
+# This file has the LOWEST precedence of the mounted configs: it is loaded
+# first and every `*.auto.erato.toml` overrides it. No scenario sets
+# `[generation_status]` today, so this reaches all of them — but one that did
+# would silently win.
 [generation_status]
-provider_idle_timeout_secs = 45
+provider_idle_timeout_secs = 90
 
 [starter_prompts]
 enabled = true

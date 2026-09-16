@@ -11,10 +11,10 @@
 # - infrastructure/k3d/erato-local/config/erato.toml (starter prompts, facets,
 #   generation status)
 
-# Mirrors the cluster's budget: the mocks stream at most a second apart, so a
-# turn that has heard nothing for this long is wedged rather than slow.
+# Mirrors the cluster's budget: above the longest wait any spec gives a
+# response, so it only ever fires on a turn nothing is waiting for.
 [generation_status]
-provider_idle_timeout_secs = 45
+provider_idle_timeout_secs = 90
 
 [chat_providers]
 priority_order = ["gemini-2-5-flash", "gemini-2-5-pro", "gpt-4-1", "gpt-4-1-mini", "gpt-4o-mini", "gpt-5", "gpt-4-1-no-image", "mock-llm-openai", "mock-llm-100k", "mock-llm-200k"]

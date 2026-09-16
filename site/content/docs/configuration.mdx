@@ -4688,7 +4688,7 @@ Configuration for the persisted per-chat generation status that powers the chat 
 
 **Type:** `object`
 
-**Default behavior:** `heartbeat_interval_secs` defaults to `10`, `stale_after_secs` to `30`, `terminal_retention_secs` to `60`, `shutdown_drain_secs` to `25`, and `provider_idle_timeout_secs` to `300`.
+**Default behavior:** `heartbeat_interval_secs` defaults to `10`, `stale_after_secs` to `30`, `terminal_retention_secs` to `60`, `shutdown_drain_secs` to `25`, and `provider_idle_timeout_secs` to `600`.
 
 **Example:**
 
@@ -4698,7 +4698,7 @@ heartbeat_interval_secs = 10
 stale_after_secs = 30
 terminal_retention_secs = 60
 shutdown_drain_secs = 25
-provider_idle_timeout_secs = 300
+provider_idle_timeout_secs = 600
 ```
 
 #### `generation_status.heartbeat_interval_secs`
@@ -4747,12 +4747,14 @@ The value should stay below the deployment's termination grace period (Kubernete
 
 {/* erato_toml_config_key: generation_status.provider_idle_timeout_secs */}
 
-Seconds a turn may wait on its chat provider without receiving anything — no response headers, no chunk — before the generation is failed and reported as a provider error.
+Seconds a turn may wait on its chat provider without receiving any content before the generation is failed and reported as a provider error.
 
 This is an idle budget, not a total one: a long answer that keeps streaming never trips it, however long it runs. It exists because the heartbeat above proves that the backend process is alive, not that the generation is making progress. A provider connection that stalls without closing would otherwise hold the chat in the running state indefinitely, where neither the stale-heartbeat reaper nor the user can clear it.
 
-The default leaves ample room for a reasoning model's think time before its first token. Set to `0` to wait on the provider indefinitely.
+The budget is measured on **content**, not on traffic. Keep-alive pings, empty deltas and SSE comments are dropped by the provider adapter and never reach the turn, so a provider that holds the connection open without producing anything still counts as idle. That is deliberate — a live socket is exactly what a wedged upstream and a healthy slow one have in common — but it means the value has to be sized against a reasoning model's think time before its first token, not against a transport timeout.
+
+Set to `0` to wait on the provider indefinitely, which is how earlier releases behaved.
 
 **Type:** `number`
 
-**Default value:** `300`
+**Default value:** `600`
