@@ -1492,7 +1492,7 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
             timeout_ms: None,
         },
     );
-    app_config.experimental_facets.tool_call_allowlist = vec!["client/*".to_string()];
+    app_config.facets.tool_call_allowlist = vec!["client/*".to_string()];
     let app_state = test_app_state(app_config, pool).await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,

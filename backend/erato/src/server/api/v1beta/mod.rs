@@ -655,7 +655,7 @@ async fn enrich_profile_with_entra_id_photo(
         return;
     }
 
-    if !app_state.config.integrations.experimental_entra_id.enabled {
+    if !app_state.config.integrations.entra_id.enabled {
         return;
     }
 
@@ -1027,7 +1027,7 @@ pub async fn facets(
     Extension(me_user): Extension<MeProfile>,
     Extension(policy): Extension<PolicyEngine>,
 ) -> Result<Json<FacetsResponse>, StatusCode> {
-    let config = &app_state.config.experimental_facets;
+    let config = &app_state.config.facets;
     let authorized_facet_ids: HashSet<String> = policy
         .filter_authorized_facet_ids(
             &me_user.to_subject(),
@@ -1211,7 +1211,7 @@ async fn build_starter_prompt_info(
             user_groups,
             &app_state
                 .config
-                .experimental_facets
+                .facets
                 .facets
                 .keys()
                 .cloned()
@@ -2185,12 +2185,7 @@ async fn link_sharepoint_file_impl(
         get_file_capabilities(supports_image_understanding, supports_audio_input);
 
     // Check if SharePoint integration is enabled
-    if !app_state
-        .config
-        .integrations
-        .experimental_sharepoint
-        .enabled
-    {
+    if !app_state.config.integrations.sharepoint.enabled {
         tracing::warn!("Sharepoint integration is not enabled");
         return Err(StatusCode::NOT_FOUND);
     }

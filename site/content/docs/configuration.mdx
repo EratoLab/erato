@@ -1317,7 +1317,7 @@ compat_no_replay_summary = false
 
 - **`compat_omit_strict`** _(default: false)_ - When set to `true`, requests will omit explicit tool schema `strict` fields for MCP tools. This can help when provider gateways reject strict-mode tool metadata.
 {/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_settings.compat_no_replay_summary */}
-{/* erato_toml_config_key: experimental_facets.facets.<facet-id>.model_settings.compat_no_replay_summary */}
+{/* erato_toml_config_key: facets.facets.<facet-id>.model_settings.compat_no_replay_summary */}
 - **`compat_no_replay_summary`** _(default: false)_ - When set to `true`, plain reasoning summaries from prior turns are not replayed as reasoning content. Use this for provider gateways that require signed or encrypted reasoning replay data and reject unsigned summary-only reasoning blocks.
 - **`temperature`** _(default: None)_ - Optional sampling temperature for generation (higher values increase randomness).
 - **`top_p`** _(default: None)_ - Optional nucleus sampling parameter to control diversity.
@@ -2800,17 +2800,17 @@ Port for the Prometheus metrics listener. This must be different from `http_port
 
 **Type:** `integer`
 
-#### `integrations.experimental_sharepoint`
+#### `integrations.sharepoint`
 
-{/* erato_toml_config_key: integrations.experimental_sharepoint */}
+{/* erato_toml_config_key: integrations.sharepoint */}
 
-Configuration for the experimental [SharePoint/OneDrive](./integrations/sharepoint) integration. This allows users to attach files from their Microsoft cloud storage directly to chats.
+Configuration for the [SharePoint/OneDrive](./integrations/sharepoint) integration. This allows users to attach files from their Microsoft cloud storage directly to chats.
 
-**Note:** This is an experimental feature. The configuration key will be renamed to `integrations.sharepoint` once the feature has stabilized.
+**Deprecated compatibility:** The previous `[integrations.experimental_sharepoint]` section is still accepted, but it is deprecated. Use `[integrations.sharepoint]` instead. Environment variables also accept both names; migrate to `INTEGRATIONS__SHAREPOINT__...`. Use only one name for each section across configuration files and environment variables; combining the old and new names is rejected as a duplicate field.
 
-##### `integrations.experimental_sharepoint.enabled`
+##### `integrations.sharepoint.enabled`
 
-{/* erato_toml_config_key: integrations.experimental_sharepoint.enabled */}
+{/* erato_toml_config_key: integrations.sharepoint.enabled */}
 
 Whether the SharePoint/OneDrive integration is enabled.
 
@@ -2818,9 +2818,9 @@ Whether the SharePoint/OneDrive integration is enabled.
 
 **Type:** `boolean`
 
-##### `integrations.experimental_sharepoint.file_upload_enabled`
+##### `integrations.sharepoint.file_upload_enabled`
 
-{/* erato_toml_config_key: integrations.experimental_sharepoint.file_upload_enabled */}
+{/* erato_toml_config_key: integrations.sharepoint.file_upload_enabled */}
 
 Whether file linking from SharePoint is enabled. When disabled, users can browse their drives but cannot link files to chats.
 
@@ -2828,9 +2828,9 @@ Whether file linking from SharePoint is enabled. When disabled, users can browse
 
 **Type:** `boolean`
 
-##### `integrations.experimental_sharepoint.auth_via_access_token`
+##### `integrations.sharepoint.auth_via_access_token`
 
-{/* erato_toml_config_key: integrations.experimental_sharepoint.auth_via_access_token */}
+{/* erato_toml_config_key: integrations.sharepoint.auth_via_access_token */}
 
 Whether to use the user's forwarded access token for Microsoft Graph API authentication. Currently, this is the only supported authentication method.
 
@@ -2838,9 +2838,9 @@ Whether to use the user's forwarded access token for Microsoft Graph API authent
 
 **Type:** `boolean`
 
-##### `integrations.experimental_sharepoint.show_disclaimer`
+##### `integrations.sharepoint.show_disclaimer`
 
-{/* erato_toml_config_key: integrations.experimental_sharepoint.show_disclaimer */}
+{/* erato_toml_config_key: integrations.sharepoint.show_disclaimer */}
 
 Whether to show a disclaimer in the SharePoint/OneDrive file picker explaining that users may see directories they do not expect because a SharePoint site or OneDrive directory may have been shared more broadly, such as with the whole organization.
 
@@ -2848,9 +2848,9 @@ Whether to show a disclaimer in the SharePoint/OneDrive file picker explaining t
 
 **Type:** `boolean`
 
-##### `integrations.experimental_sharepoint.all_drives_sources`
+##### `integrations.sharepoint.all_drives_sources`
 
-{/* erato_toml_config_key: integrations.experimental_sharepoint.all_drives_sources */}
+{/* erato_toml_config_key: integrations.sharepoint.all_drives_sources */}
 
 Which Microsoft Graph discovery surfaces Erato should query for `/integrations/sharepoint/all-drives`.
 
@@ -2874,7 +2874,7 @@ Supported values:
 **Example:**
 
 ```toml
-[integrations.experimental_sharepoint]
+[integrations.sharepoint]
 enabled = true
 file_upload_enabled = true
 auth_via_access_token = true
@@ -2888,17 +2888,17 @@ all_drives_sources = ["me_drive", "me_drives", "shared_with_me", "shared_drive_d
 
 See the [SharePoint/OneDrive Integration](./integrations/sharepoint) documentation for detailed setup instructions.
 
-#### `integrations.experimental_entra_id`
+#### `integrations.entra_id`
 
-{/* erato_toml_config_key: integrations.experimental_entra_id */}
+{/* erato_toml_config_key: integrations.entra_id */}
 
-Configuration for the experimental Entra ID integration. This allows exposing organization users and groups to the frontend for sharing features.
+Configuration for the Entra ID integration. This allows exposing organization users and groups to the frontend for sharing features.
 
-**Note:** This is an experimental feature. The configuration key will be renamed to `integrations.entra_id` once the feature has stabilized.
+**Deprecated compatibility:** The previous `[integrations.experimental_entra_id]` section is still accepted, but it is deprecated. Use `[integrations.entra_id]` instead. Environment variables also accept both names; migrate to `INTEGRATIONS__ENTRA_ID__...`. Use only one name for each section across configuration files and environment variables; combining the old and new names is rejected as a duplicate field.
 
-##### `integrations.experimental_entra_id.enabled`
+##### `integrations.entra_id.enabled`
 
-{/* erato_toml_config_key: integrations.experimental_entra_id.enabled */}
+{/* erato_toml_config_key: integrations.entra_id.enabled */}
 
 Whether the Entra ID integration is enabled. When enabled, the `/me/organization/users` and `/me/organization/groups` endpoints will query the Microsoft Graph API to list organization users and groups. When disabled, these endpoints will return empty lists.
 
@@ -2906,9 +2906,9 @@ Whether the Entra ID integration is enabled. When enabled, the `/me/organization
 
 **Type:** `boolean`
 
-##### `integrations.experimental_entra_id.auth_via_access_token`
+##### `integrations.entra_id.auth_via_access_token`
 
-{/* erato_toml_config_key: integrations.experimental_entra_id.auth_via_access_token */}
+{/* erato_toml_config_key: integrations.entra_id.auth_via_access_token */}
 
 Whether to use the user's forwarded access token for Microsoft Graph API authentication. Currently, this is the only supported authentication method.
 
@@ -2919,7 +2919,7 @@ Whether to use the user's forwarded access token for Microsoft Graph API authent
 **Example:**
 
 ```toml
-[integrations.experimental_entra_id]
+[integrations.entra_id]
 enabled = true
 auth_via_access_token = true
 ```
@@ -3934,7 +3934,7 @@ persona = "inherit"
 
 {/* erato_toml_config_key: delegation.tasks.child_facet_ids.[] */}
 
-Facets composed into every task child. Each entry must name a facet configured under `experimental_facets.facets`; an unknown id is rejected at startup. Use this to give task children a capability the origin turn does not need to carry itself, such as web search.
+Facets composed into every task child. Each entry must name a facet configured under `facets.facets`; an unknown id is rejected at startup. Use this to give task children a capability the origin turn does not need to carry itself, such as web search.
 
 **Default value:** `[]`
 
@@ -4153,17 +4153,17 @@ List of starter prompt IDs in the order they should be displayed.
 priority_order = ["research_topic", "draft_email", "summarize_notes"]
 ```
 
-### `experimental_facets`
+### `facets`
 
-{/* erato_toml_config_key: experimental_facets */}
+{/* erato_toml_config_key: facets */}
 
-Configuration for the experimental facets feature. Facets allow users to select tool-focused modes (e.g. web search) with optional tool allowlists, model setting overrides, and system prompt additions.
+Configuration for the facets feature. Facets allow users to select tool-focused modes (e.g. web search) with optional tool allowlists, model setting overrides, and system prompt additions.
 
-**Note:** This is an experimental feature. The configuration key may change once the feature has stabilized.
+**Deprecated compatibility:** The previous `[experimental_facets]` section is still accepted, but it is deprecated. Use `[facets]` instead. Environment variables also accept both names; migrate to `FACETS__...`. Use only one name for each section across configuration files and environment variables; combining the old and new names is rejected as a duplicate field.
 
-#### `experimental_facets.facets`
+#### `facets.facets`
 
-{/* erato_toml_config_key: experimental_facets.facets */}
+{/* erato_toml_config_key: facets.facets */}
 
 Map of facet configurations, keyed by facet id. Each facet defines display properties and optional behavior.
 
@@ -4172,13 +4172,13 @@ Map of facet configurations, keyed by facet id. Each facet defines display prope
 **Example:**
 
 ```toml
-[experimental_facets.facets.extended_thinking]
+[facets.facets.extended_thinking]
 display_name = "Extended thinking"
 icon = "iconoir-lightbulb"
 disable_facet_prompt_template = true
 model_settings = { reasoning_effort = "high" }
 
-[experimental_facets.facets.web_search]
+[facets.facets.web_search]
 display_name = "Web search"
 icon = "iconoir-globe"
 tool_call_allowlist = ["web-search-mcp/*", "web-access-mcp/*"]
@@ -4188,7 +4188,7 @@ additional_system_prompt = "Please execute one or multiple web searches to answe
 Using Langfuse:
 
 ```toml
-[experimental_facets.facets.web_search]
+[facets.facets.web_search]
 display_name = "Web search"
 icon = "iconoir-globe"
 tool_call_allowlist = ["web-search-mcp/*", "web-access-mcp/*"]
@@ -4198,7 +4198,7 @@ additional_system_prompt = { source = "langfuse", prompt_name = "facet-web-searc
 Using a static object:
 
 ```toml
-[experimental_facets.facets.web_search]
+[facets.facets.web_search]
 display_name = "Web search"
 icon = "iconoir-globe"
 tool_call_allowlist = ["web-search-mcp/*", "web-access-mcp/*"]
@@ -4207,8 +4207,8 @@ additional_system_prompt = { source = "static", prompt = "Please execute one or 
 
 ##### Hidden baseline facets
 
-{/* erato_toml_config_key: experimental_facets.facets.<facet-id>.hidden */}
-{/* erato_toml_config_key: experimental_facets.facets.<facet-id>.hidden_always_active_for_platform */}
+{/* erato_toml_config_key: facets.facets.<facet-id>.hidden */}
+{/* erato_toml_config_key: facets.facets.<facet-id>.hidden_always_active_for_platform */}
 
 A facet with `hidden = true` is a platform-baseline: it never appears in the facet pool and cannot be selected or removed by the user. Instead of being toggled, it is injected as an always-on system prompt once at the start of a conversation — under the same rule as the base system prompt — and then persists in history for the rest of the conversation. Because it is an ordinary facet, its `model_settings` and `tool_call_allowlist` still apply (per request) like any active facet.
 
@@ -4217,7 +4217,7 @@ Scope activation to a platform with `hidden_always_active_for_platform`, matched
 Use a hidden facet for general platform-baseline behavior that should always be present (e.g. "you are running inside the Outlook add-in"). For per-request, task-specific instructions that should _not_ persist across turns, use an [action facet](#action_facets) instead.
 
 ```toml
-[experimental_facets.facets.outlook_baseline]
+[facets.facets.outlook_baseline]
 display_name = "Outlook baseline"
 hidden = true
 hidden_always_active_for_platform = "outlook"
@@ -4229,20 +4229,20 @@ additional_system_prompt = "You are assisting inside the Outlook add-in. Keep re
 
 ##### Per-facet delegation overrides
 
-{/* erato_toml_config_key: experimental_facets.facets.<facet-id>.delegation.max_tasks_per_turn */}
-{/* erato_toml_config_key: experimental_facets.facets.<facet-id>.delegation.max_server_tool_calls_per_task */}
-{/* erato_toml_config_key: experimental_facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task */}
-{/* erato_toml_config_key: experimental_facets.facets.<facet-id>.delegation.persona */}
-{/* erato_toml_config_key: experimental_facets.facets.<facet-id>.delegation.child_facet_ids.[] */}
+{/* erato_toml_config_key: facets.facets.<facet-id>.delegation.max_tasks_per_turn */}
+{/* erato_toml_config_key: facets.facets.<facet-id>.delegation.max_server_tool_calls_per_task */}
+{/* erato_toml_config_key: facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task */}
+{/* erato_toml_config_key: facets.facets.<facet-id>.delegation.persona */}
+{/* erato_toml_config_key: facets.facets.<facet-id>.delegation.child_facet_ids.[] */}
 
 A facet may override the [`delegation.tasks`](#delegationtasks) runtime keys while it is selected, so a dedicated planning facet can budget differently from the deployment default. Every key is optional and falls back to the global value.
 
 ```toml
-[experimental_facets.facets.plan]
+[facets.facets.plan]
 display_name = "Plan & delegate"
 tool_call_allowlist = ["erato/delegate_task", "web-search-mcp/*"]
 
-[experimental_facets.facets.plan.delegation]
+[facets.facets.plan.delegation]
 max_tasks_per_turn = 3
 # Generous with the user's own device, stingy with shared MCP capacity.
 max_client_tool_calls_per_task = 40
@@ -4256,9 +4256,9 @@ child_facet_ids = ["web_search"]
 - `persona` - Overrides `delegation.tasks.persona`.
 - `child_facet_ids` - Overrides `delegation.tasks.child_facet_ids`. Each entry must name a configured facet.
 
-#### `experimental_facets.priority_order`
+#### `facets.priority_order`
 
-{/* erato_toml_config_key: experimental_facets.priority_order */}
+{/* erato_toml_config_key: facets.priority_order */}
 
 List of facet IDs in the order they should be displayed.
 
@@ -4269,13 +4269,13 @@ List of facet IDs in the order they should be displayed.
 **Example:**
 
 ```toml
-[experimental_facets]
+[facets]
 priority_order = ["extended_thinking", "web_search"]
 ```
 
-#### `experimental_facets.tool_call_allowlist`
+#### `facets.tool_call_allowlist`
 
-{/* erato_toml_config_key: experimental_facets.tool_call_allowlist */}
+{/* erato_toml_config_key: facets.tool_call_allowlist */}
 
 Global tool allowlist that applies regardless of selected facets.
 
@@ -4286,7 +4286,7 @@ Global tool allowlist that applies regardless of selected facets.
 **Example:**
 
 ```toml
-[experimental_facets]
+[facets]
 tool_call_allowlist = ["web-search-mcp/*"]
 ```
 
@@ -4302,9 +4302,9 @@ Selection is opt-in: unlike the MCP allowlist, where leaving it unset means "all
 
 Note that the `delegate_to_assistant` tool of the [`delegation.assistants`](#delegationassistants) route is **not** allowlist-gated: it is offered whenever the user's message carries validated assistant mentions. Gating it would silently disable in-chat delegation in every deployment whose facets already carry narrow allowlists.
 
-#### `experimental_facets.facet_prompt_template`
+#### `facets.facet_prompt_template`
 
-{/* erato_toml_config_key: experimental_facets.facet_prompt_template */}
+{/* erato_toml_config_key: facets.facet_prompt_template */}
 
 Optional global prompt template injected when facets are selected. Set to an empty string to disable. Uses the common [`prompt`](#prompt) format when set to an object.
 
@@ -4315,27 +4315,27 @@ Optional global prompt template injected when facets are selected. Set to an emp
 **Example:**
 
 ```toml
-[experimental_facets]
+[facets]
 facet_prompt_template = ""
 ```
 
 Using Langfuse:
 
 ```toml
-[experimental_facets]
+[facets]
 facet_prompt_template = { source = "langfuse", prompt_name = "facet-template", label = "production", fallback = "The user has requested the use of the \"{{facet_display_name}}\" feature.\n\nPrioritize the use of the following tools:\n{{facet_tools_list}}" }
 ```
 
 Using a static object:
 
 ```toml
-[experimental_facets]
+[facets]
 facet_prompt_template = { source = "static", prompt = "The user has requested the use of the \"{{facet_display_name}}\" feature.\n\nPrioritize the use of the following tools:\n{{facet_tools_list}}" }
 ```
 
-#### `experimental_facets.only_single_facet`
+#### `facets.only_single_facet`
 
-{/* erato_toml_config_key: experimental_facets.only_single_facet */}
+{/* erato_toml_config_key: facets.only_single_facet */}
 
 Whether only a single facet can be selected at the same time.
 
@@ -4343,9 +4343,9 @@ Whether only a single facet can be selected at the same time.
 
 **Default value:** `false`
 
-#### `experimental_facets.show_facet_indicator_with_display_name`
+#### `facets.show_facet_indicator_with_display_name`
 
-{/* erato_toml_config_key: experimental_facets.show_facet_indicator_with_display_name */}
+{/* erato_toml_config_key: facets.show_facet_indicator_with_display_name */}
 
 Whether the chat box indicator should include the facet display name.
 
@@ -4353,9 +4353,9 @@ Whether the chat box indicator should include the facet display name.
 
 **Default value:** `false`
 
-#### `experimental_facets.default_selected_facets`
+#### `facets.default_selected_facets`
 
-{/* erato_toml_config_key: experimental_facets.default_selected_facets */}
+{/* erato_toml_config_key: facets.default_selected_facets */}
 
 Facets that should be selected by default in the frontend (no backend logic is applied).
 
@@ -4366,7 +4366,7 @@ Facets that should be selected by default in the frontend (no backend logic is a
 **Example:**
 
 ```toml
-[experimental_facets]
+[facets]
 default_selected_facets = ["web_search"]
 ```
 

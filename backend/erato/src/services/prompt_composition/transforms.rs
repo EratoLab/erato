@@ -10,7 +10,7 @@ use super::types::{
 };
 use crate::config::ActionFacetConfig;
 use crate::config::ChatProviderConfig;
-use crate::config::ExperimentalFacetsConfig;
+use crate::config::FacetsConfig;
 use crate::db::entity::chats;
 use crate::db::entity::messages;
 use crate::models::message::{
@@ -40,7 +40,7 @@ pub async fn build_abstract_sequence(
     previous_message_id: &Uuid,
     new_input_file_ids: Vec<Uuid>,
     chat_provider_config: &ChatProviderConfig,
-    experimental_facets: &ExperimentalFacetsConfig,
+    facets: &FacetsConfig,
     selected_facet_ids: &[String],
     preferred_language: Option<&str>,
 ) -> Result<AbstractChatSequence, Report> {
@@ -51,7 +51,7 @@ pub async fn build_abstract_sequence(
         previous_message_id,
         new_input_file_ids,
         chat_provider_config,
-        experimental_facets,
+        facets,
         selected_facet_ids,
         preferred_language,
         None,
@@ -76,7 +76,7 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
     previous_message_id: &Uuid,
     new_input_file_ids: Vec<Uuid>,
     chat_provider_config: &ChatProviderConfig,
-    experimental_facets: &ExperimentalFacetsConfig,
+    facets: &FacetsConfig,
     selected_facet_ids: &[String],
     preferred_language: Option<&str>,
     user_preference_nickname: Option<&str>,
@@ -172,14 +172,14 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
         }
     };
     // 7. Inject hidden-facet baseline system prompts. Hidden facets are regular
-    // facets (`[experimental_facets.facets.<id>]` with `hidden = true`) that are
+    // facets (`[facets.facets.<id>]` with `hidden = true`) that are
     // platform-scoped and always-on rather than user-selectable. Gated like the
     // base system prompt so they are added once at conversation start and then
     // persist in history — a single injection, not a per-turn one. A facet with
     // no `hidden_always_active_for_platform` applies on every platform.
     // Deterministic (id-sorted) order.
     if should_add_system_prompts {
-        let mut hidden_facet_ids: Vec<&String> = experimental_facets
+        let mut hidden_facet_ids: Vec<&String> = facets
             .facets
             .iter()
             .filter(|(_, facet)| facet.hidden)
@@ -193,7 +193,7 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
             .collect();
         hidden_facet_ids.sort();
         for facet_id in hidden_facet_ids {
-            let facet = &experimental_facets.facets[facet_id];
+            let facet = &facets.facets[facet_id];
             if let Some(prompt) = &facet.additional_system_prompt {
                 let prompt = prompt_provider.resolve_prompt_source(prompt).await?;
                 sequence.push(AbstractChatSequencePart::FacetAdditionalSystemPrompt {
@@ -241,13 +241,13 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
 
     // 9.5 Inject facet prompts for newly enabled facets
     let facet_toggle_states =
-        detect_facet_toggle_states(&previous_messages, experimental_facets, selected_facet_ids);
+        detect_facet_toggle_states(&previous_messages, facets, selected_facet_ids);
 
     for (facet_id, toggle_state) in &facet_toggle_states.states {
         if !matches!(toggle_state, FacetToggleState::NewlyEnabled) {
             continue;
         }
-        let Some(facet) = experimental_facets.facets.get(facet_id) else {
+        let Some(facet) = facets.facets.get(facet_id) else {
             continue;
         };
 
@@ -259,7 +259,7 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
         }
 
         if !facet.disable_facet_prompt_template {
-            let template = if let Some(spec) = &experimental_facets.facet_prompt_template {
+            let template = if let Some(spec) = &facets.facet_prompt_template {
                 prompt_provider.resolve_prompt_source(spec).await?
             } else {
                 DEFAULT_FACET_PROMPT_TEMPLATE.to_string()
@@ -813,7 +813,7 @@ struct FacetToggleStates {
 
 fn detect_facet_toggle_states(
     previous_messages: &[messages::Model],
-    experimental_facets: &ExperimentalFacetsConfig,
+    facets: &FacetsConfig,
     selected_facet_ids: &[String],
 ) -> FacetToggleStates {
     let previous_facets = previous_messages.iter().rev().find_map(|msg| {
@@ -839,7 +839,7 @@ fn detect_facet_toggle_states(
         selected_facet_ids.iter().collect();
 
     let mut states = HashMap::new();
-    for facet_id in experimental_facets.facets.keys() {
+    for facet_id in facets.facets.keys() {
         let was_enabled = previous_selected_facets
             .get(facet_id)
             .copied()

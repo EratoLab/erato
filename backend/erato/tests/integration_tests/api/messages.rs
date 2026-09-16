@@ -5,10 +5,10 @@ use axum::http;
 use axum_test::TestServer;
 use chrono::Utc;
 use erato::config::{
-    ActionFacetConfig, ClientToolConfig, ExperimentalFacetsConfig, FacetConfig,
-    McpServerAuthenticationConfig, McpServerConfig, McpServerForwardedAuthenticationConfig,
-    McpServerForwardedCredential, McpServerOauth2AuthenticationConfig, ModelSettings,
-    PromptSourceSpecification, SecretConfigString,
+    ActionFacetConfig, ClientToolConfig, FacetConfig, FacetsConfig, McpServerAuthenticationConfig,
+    McpServerConfig, McpServerForwardedAuthenticationConfig, McpServerForwardedCredential,
+    McpServerOauth2AuthenticationConfig, ModelSettings, PromptSourceSpecification,
+    SecretConfigString,
 };
 use erato::db::entity::{chat_file_uploads, chats, file_uploads};
 use erato::models::message::{GenerationInputMessages, GenerationParameters};
@@ -248,7 +248,7 @@ async fn test_facets_persisted_in_generation_parameters(pool: Pool<Postgres>) {
             delegation: None,
         },
     );
-    app_config.experimental_facets = ExperimentalFacetsConfig {
+    app_config.facets = FacetsConfig {
         facets,
         priority_order: vec!["extended_thinking".to_string(), "web_search".to_string()],
         tool_call_allowlist: vec![],
@@ -928,7 +928,7 @@ async fn test_facet_prompt_injection_toggle_behavior(pool: Pool<Postgres>) {
             delegation: None,
         },
     );
-    app_config.experimental_facets = ExperimentalFacetsConfig {
+    app_config.facets = FacetsConfig {
         facets,
         priority_order: vec!["web_search".to_string(), "extended_thinking".to_string()],
         tool_call_allowlist: vec![],
@@ -5816,7 +5816,7 @@ async fn test_denied_mcp_tool_does_not_promote_a_same_named_client_tool(pool: Po
             timeout_ms: None,
         },
     );
-    app_config.experimental_facets.tool_call_allowlist = vec!["outlook/read_file".to_string()];
+    app_config.facets.tool_call_allowlist = vec!["outlook/read_file".to_string()];
     let app_state = test_app_state(app_config, pool).await;
     get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
         .await
@@ -6206,7 +6206,7 @@ async fn test_writes_off_withholds_client_actions_but_keeps_client_tools(pool: P
             timeout_ms: None,
         },
     );
-    app_config.experimental_facets.tool_call_allowlist = vec!["client/*".to_string()];
+    app_config.facets.tool_call_allowlist = vec!["client/*".to_string()];
     let app_state = test_app_state(app_config, pool).await;
     get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
         .await
@@ -6749,7 +6749,7 @@ async fn test_disabled_mcp_server_does_not_promote_a_same_named_client_tool(pool
             timeout_ms: None,
         },
     );
-    app_config.experimental_facets.tool_call_allowlist = vec!["outlook/read_file".to_string()];
+    app_config.facets.tool_call_allowlist = vec!["outlook/read_file".to_string()];
     let app_state = test_app_state(app_config, pool).await;
     get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
         .await
@@ -7331,7 +7331,7 @@ async fn test_disabled_mcp_tool_does_not_promote_a_same_named_client_tool(pool: 
             timeout_ms: None,
         },
     );
-    app_config.experimental_facets.tool_call_allowlist = vec!["outlook/read_file".to_string()];
+    app_config.facets.tool_call_allowlist = vec!["outlook/read_file".to_string()];
     let app_state = test_app_state(app_config, pool).await;
     get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
         .await

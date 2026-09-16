@@ -45,11 +45,8 @@ async fn test_app_state_with_entra_id(
     mut app_config: erato::config::AppConfig,
     pool: Pool<Postgres>,
 ) -> erato::state::AppState {
-    app_config.integrations.experimental_entra_id.enabled = true;
-    app_config
-        .integrations
-        .experimental_entra_id
-        .auth_via_access_token = true;
+    app_config.integrations.entra_id.enabled = true;
+    app_config.integrations.entra_id.auth_via_access_token = true;
 
     crate::test_app_state(app_config, pool).await
 }

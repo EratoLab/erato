@@ -374,43 +374,281 @@
   "environment": {
     "hide_in_docs": true
   },
-  "experimental_facets.default_selected_facets.[]": {},
-  "experimental_facets.facet_prompt_template": {},
-  "experimental_facets.facet_prompt_template.fallback": {},
-  "experimental_facets.facet_prompt_template.label": {},
-  "experimental_facets.facet_prompt_template.prompt": {},
-  "experimental_facets.facet_prompt_template.prompt_name": {},
-  "experimental_facets.facet_prompt_template.source": {},
-  "experimental_facets.facets.<facet-id>.additional_system_prompt": {},
-  "experimental_facets.facets.<facet-id>.additional_system_prompt.fallback": {},
-  "experimental_facets.facets.<facet-id>.additional_system_prompt.label": {},
-  "experimental_facets.facets.<facet-id>.additional_system_prompt.prompt": {},
-  "experimental_facets.facets.<facet-id>.additional_system_prompt.prompt_name": {},
-  "experimental_facets.facets.<facet-id>.additional_system_prompt.source": {},
-  "experimental_facets.facets.<facet-id>.delegation.child_facet_ids.[]": {},
-  "experimental_facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task": {},
-  "experimental_facets.facets.<facet-id>.delegation.max_server_tool_calls_per_task": {},
-  "experimental_facets.facets.<facet-id>.delegation.max_tasks_per_turn": {},
-  "experimental_facets.facets.<facet-id>.delegation.persona": {},
-  "experimental_facets.facets.<facet-id>.disable_facet_prompt_template": {},
-  "experimental_facets.facets.<facet-id>.display_name": {},
-  "experimental_facets.facets.<facet-id>.hidden": {},
-  "experimental_facets.facets.<facet-id>.hidden_always_active_for_platform": {},
-  "experimental_facets.facets.<facet-id>.icon": {},
-  "experimental_facets.facets.<facet-id>.model_settings.compat_no_replay_summary": {},
-  "experimental_facets.facets.<facet-id>.model_settings.compat_omit_strict": {},
-  "experimental_facets.facets.<facet-id>.model_settings.reasoning_effort": {},
-  "experimental_facets.facets.<facet-id>.model_settings.temperature": {},
-  "experimental_facets.facets.<facet-id>.model_settings.top_p": {},
-  "experimental_facets.facets.<facet-id>.model_settings.verbosity": {},
-  "experimental_facets.facets.<facet-id>.tool_call_allowlist.[]": {},
-  "experimental_facets.only_single_facet": {},
-  "experimental_facets.priority_order.[]": {},
-  "experimental_facets.show_facet_indicator_with_display_name": {},
-  "experimental_facets.tool_call_allowlist.[]": {},
+  "experimental_facets.default_selected_facets.[]": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.default_selected_facets.[]` instead.",
+      "replacement_key": "facets.default_selected_facets.[]"
+    }
+  },
+  "experimental_facets.facet_prompt_template": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facet_prompt_template` instead.",
+      "replacement_key": "facets.facet_prompt_template"
+    }
+  },
+  "experimental_facets.facet_prompt_template.fallback": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facet_prompt_template.fallback` instead.",
+      "replacement_key": "facets.facet_prompt_template.fallback"
+    }
+  },
+  "experimental_facets.facet_prompt_template.label": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facet_prompt_template.label` instead.",
+      "replacement_key": "facets.facet_prompt_template.label"
+    }
+  },
+  "experimental_facets.facet_prompt_template.prompt": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facet_prompt_template.prompt` instead.",
+      "replacement_key": "facets.facet_prompt_template.prompt"
+    }
+  },
+  "experimental_facets.facet_prompt_template.prompt_name": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facet_prompt_template.prompt_name` instead.",
+      "replacement_key": "facets.facet_prompt_template.prompt_name"
+    }
+  },
+  "experimental_facets.facet_prompt_template.source": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facet_prompt_template.source` instead.",
+      "replacement_key": "facets.facet_prompt_template.source"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.additional_system_prompt": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.additional_system_prompt` instead.",
+      "replacement_key": "facets.facets.<facet-id>.additional_system_prompt"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.additional_system_prompt.fallback": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.additional_system_prompt.fallback` instead.",
+      "replacement_key": "facets.facets.<facet-id>.additional_system_prompt.fallback"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.additional_system_prompt.label": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.additional_system_prompt.label` instead.",
+      "replacement_key": "facets.facets.<facet-id>.additional_system_prompt.label"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.additional_system_prompt.prompt": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.additional_system_prompt.prompt` instead.",
+      "replacement_key": "facets.facets.<facet-id>.additional_system_prompt.prompt"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.additional_system_prompt.prompt_name": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.additional_system_prompt.prompt_name` instead.",
+      "replacement_key": "facets.facets.<facet-id>.additional_system_prompt.prompt_name"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.additional_system_prompt.source": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.additional_system_prompt.source` instead.",
+      "replacement_key": "facets.facets.<facet-id>.additional_system_prompt.source"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.delegation.child_facet_ids.[]": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.delegation.child_facet_ids.[]` instead.",
+      "replacement_key": "facets.facets.<facet-id>.delegation.child_facet_ids.[]"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task` instead.",
+      "replacement_key": "facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.delegation.max_server_tool_calls_per_task": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.delegation.max_server_tool_calls_per_task` instead.",
+      "replacement_key": "facets.facets.<facet-id>.delegation.max_server_tool_calls_per_task"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.delegation.max_tasks_per_turn": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.delegation.max_tasks_per_turn` instead.",
+      "replacement_key": "facets.facets.<facet-id>.delegation.max_tasks_per_turn"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.delegation.persona": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.delegation.persona` instead.",
+      "replacement_key": "facets.facets.<facet-id>.delegation.persona"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.disable_facet_prompt_template": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.disable_facet_prompt_template` instead.",
+      "replacement_key": "facets.facets.<facet-id>.disable_facet_prompt_template"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.display_name": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.display_name` instead.",
+      "replacement_key": "facets.facets.<facet-id>.display_name"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.hidden": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.hidden` instead.",
+      "replacement_key": "facets.facets.<facet-id>.hidden"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.hidden_always_active_for_platform": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.hidden_always_active_for_platform` instead.",
+      "replacement_key": "facets.facets.<facet-id>.hidden_always_active_for_platform"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.icon": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.icon` instead.",
+      "replacement_key": "facets.facets.<facet-id>.icon"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.model_settings.compat_no_replay_summary": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.model_settings.compat_no_replay_summary` instead.",
+      "replacement_key": "facets.facets.<facet-id>.model_settings.compat_no_replay_summary"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.model_settings.compat_omit_strict": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.model_settings.compat_omit_strict` instead.",
+      "replacement_key": "facets.facets.<facet-id>.model_settings.compat_omit_strict"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.model_settings.reasoning_effort": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.model_settings.reasoning_effort` instead.",
+      "replacement_key": "facets.facets.<facet-id>.model_settings.reasoning_effort"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.model_settings.temperature": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.model_settings.temperature` instead.",
+      "replacement_key": "facets.facets.<facet-id>.model_settings.temperature"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.model_settings.top_p": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.model_settings.top_p` instead.",
+      "replacement_key": "facets.facets.<facet-id>.model_settings.top_p"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.model_settings.verbosity": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.model_settings.verbosity` instead.",
+      "replacement_key": "facets.facets.<facet-id>.model_settings.verbosity"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.tool_call_allowlist.[]": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.tool_call_allowlist.[]` instead.",
+      "replacement_key": "facets.facets.<facet-id>.tool_call_allowlist.[]"
+    }
+  },
+  "experimental_facets.only_single_facet": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.only_single_facet` instead.",
+      "replacement_key": "facets.only_single_facet"
+    }
+  },
+  "experimental_facets.priority_order.[]": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.priority_order.[]` instead.",
+      "replacement_key": "facets.priority_order.[]"
+    }
+  },
+  "experimental_facets.show_facet_indicator_with_display_name": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.show_facet_indicator_with_display_name` instead.",
+      "replacement_key": "facets.show_facet_indicator_with_display_name"
+    }
+  },
+  "experimental_facets.tool_call_allowlist.[]": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.tool_call_allowlist.[]` instead.",
+      "replacement_key": "facets.tool_call_allowlist.[]"
+    }
+  },
   "facet_permissions.rules.<rule-name>.facet_ids.[]": {},
   "facet_permissions.rules.<rule-name>.groups.[]": {},
   "facet_permissions.rules.<rule-name>.rule_type": {},
+  "facets.default_selected_facets.[]": {},
+  "facets.facet_prompt_template": {},
+  "facets.facet_prompt_template.fallback": {},
+  "facets.facet_prompt_template.label": {},
+  "facets.facet_prompt_template.prompt": {},
+  "facets.facet_prompt_template.prompt_name": {},
+  "facets.facet_prompt_template.source": {},
+  "facets.facets.<facet-id>.additional_system_prompt": {},
+  "facets.facets.<facet-id>.additional_system_prompt.fallback": {},
+  "facets.facets.<facet-id>.additional_system_prompt.label": {},
+  "facets.facets.<facet-id>.additional_system_prompt.prompt": {},
+  "facets.facets.<facet-id>.additional_system_prompt.prompt_name": {},
+  "facets.facets.<facet-id>.additional_system_prompt.source": {},
+  "facets.facets.<facet-id>.delegation.child_facet_ids.[]": {},
+  "facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task": {},
+  "facets.facets.<facet-id>.delegation.max_server_tool_calls_per_task": {},
+  "facets.facets.<facet-id>.delegation.max_tasks_per_turn": {},
+  "facets.facets.<facet-id>.delegation.persona": {},
+  "facets.facets.<facet-id>.disable_facet_prompt_template": {},
+  "facets.facets.<facet-id>.display_name": {},
+  "facets.facets.<facet-id>.hidden": {},
+  "facets.facets.<facet-id>.hidden_always_active_for_platform": {},
+  "facets.facets.<facet-id>.icon": {},
+  "facets.facets.<facet-id>.model_settings.compat_no_replay_summary": {},
+  "facets.facets.<facet-id>.model_settings.compat_omit_strict": {},
+  "facets.facets.<facet-id>.model_settings.reasoning_effort": {},
+  "facets.facets.<facet-id>.model_settings.temperature": {},
+  "facets.facets.<facet-id>.model_settings.top_p": {},
+  "facets.facets.<facet-id>.model_settings.verbosity": {},
+  "facets.facets.<facet-id>.tool_call_allowlist.[]": {},
+  "facets.only_single_facet": {},
+  "facets.priority_order.[]": {},
+  "facets.show_facet_indicator_with_display_name": {},
+  "facets.tool_call_allowlist.[]": {},
   "file_processor.processor": {},
   "file_storage_providers.<provider-id>.config.access_key_id": {},
   "file_storage_providers.<provider-id>.config.account_key": {},
@@ -475,13 +713,57 @@
   },
   "i18n.language.default_language": {},
   "i18n.language.language_detection_priority.[]": {},
-  "integrations.experimental_entra_id.auth_via_access_token": {},
-  "integrations.experimental_entra_id.enabled": {},
-  "integrations.experimental_sharepoint.all_drives_sources.[]": {},
-  "integrations.experimental_sharepoint.auth_via_access_token": {},
-  "integrations.experimental_sharepoint.enabled": {},
-  "integrations.experimental_sharepoint.file_upload_enabled": {},
-  "integrations.experimental_sharepoint.show_disclaimer": {},
+  "integrations.entra_id.auth_via_access_token": {},
+  "integrations.entra_id.enabled": {},
+  "integrations.experimental_entra_id.auth_via_access_token": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `integrations.entra_id.auth_via_access_token` instead.",
+      "replacement_key": "integrations.entra_id.auth_via_access_token"
+    }
+  },
+  "integrations.experimental_entra_id.enabled": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `integrations.entra_id.enabled` instead.",
+      "replacement_key": "integrations.entra_id.enabled"
+    }
+  },
+  "integrations.experimental_sharepoint.all_drives_sources.[]": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `integrations.sharepoint.all_drives_sources.[]` instead.",
+      "replacement_key": "integrations.sharepoint.all_drives_sources.[]"
+    }
+  },
+  "integrations.experimental_sharepoint.auth_via_access_token": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `integrations.sharepoint.auth_via_access_token` instead.",
+      "replacement_key": "integrations.sharepoint.auth_via_access_token"
+    }
+  },
+  "integrations.experimental_sharepoint.enabled": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `integrations.sharepoint.enabled` instead.",
+      "replacement_key": "integrations.sharepoint.enabled"
+    }
+  },
+  "integrations.experimental_sharepoint.file_upload_enabled": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `integrations.sharepoint.file_upload_enabled` instead.",
+      "replacement_key": "integrations.sharepoint.file_upload_enabled"
+    }
+  },
+  "integrations.experimental_sharepoint.show_disclaimer": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `integrations.sharepoint.show_disclaimer` instead.",
+      "replacement_key": "integrations.sharepoint.show_disclaimer"
+    }
+  },
   "integrations.langfuse.base_url": {},
   "integrations.langfuse.enable_feedback": {},
   "integrations.langfuse.enabled": {},
@@ -524,6 +806,11 @@
   "integrations.prometheus.host": {},
   "integrations.prometheus.port": {},
   "integrations.sentry.sentry_dsn": {},
+  "integrations.sharepoint.all_drives_sources.[]": {},
+  "integrations.sharepoint.auth_via_access_token": {},
+  "integrations.sharepoint.enabled": {},
+  "integrations.sharepoint.file_upload_enabled": {},
+  "integrations.sharepoint.show_disclaimer": {},
   "logging.format": {},
   "mcp_server_permissions.rules.<rule-name>.groups.[]": {},
   "mcp_server_permissions.rules.<rule-name>.mcp_server_ids.[]": {},

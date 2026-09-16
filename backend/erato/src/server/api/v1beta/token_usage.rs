@@ -562,7 +562,7 @@ pub async fn token_usage_estimate(
                 &subject,
                 &me_user.groups,
                 &resolve_effective_selected_facet_ids(
-                    &app_state.config.experimental_facets,
+                    &app_state.config.facets,
                     &request.selected_facet_ids,
                     assistant_config.as_ref(),
                 ),

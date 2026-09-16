@@ -405,16 +405,13 @@ fn build_frontend_environment(
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_SHAREPOINT_ENABLED.to_string(),
         Value::Bool(
-            config.integrations.experimental_sharepoint.enabled
-                && config
-                    .integrations
-                    .experimental_sharepoint
-                    .file_upload_enabled,
+            config.integrations.sharepoint.enabled
+                && config.integrations.sharepoint.file_upload_enabled,
         ),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_SHAREPOINT_SHOW_DISCLAIMER.to_string(),
-        Value::Bool(config.integrations.experimental_sharepoint.show_disclaimer),
+        Value::Bool(config.integrations.sharepoint.show_disclaimer),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_CHAT_SHARING_ENABLED.to_string(),

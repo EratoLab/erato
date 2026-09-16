@@ -121,12 +121,7 @@ fn get_access_token(me_user: &MeProfile) -> Result<&str, StatusCode> {
 
 /// Check if Sharepoint integration is enabled in the config.
 fn check_sharepoint_enabled(app_state: &AppState) -> Result<(), StatusCode> {
-    if !app_state
-        .config
-        .integrations
-        .experimental_sharepoint
-        .enabled
-    {
+    if !app_state.config.integrations.sharepoint.enabled {
         tracing::warn!("Sharepoint integration is not enabled");
         return Err(StatusCode::NOT_FOUND);
     }
@@ -1444,7 +1439,7 @@ pub async fn all_drives(
     let enabled_sources: Vec<_> = app_state
         .config
         .integrations
-        .experimental_sharepoint
+        .sharepoint
         .resolved_all_drives_sources()
         .into_iter()
         .collect();

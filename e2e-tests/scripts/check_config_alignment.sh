@@ -102,7 +102,7 @@ Check these alignment rules:
 - Also check: `VITE_MESSAGE_FEEDBACK_ENABLED` and `VITE_MESSAGE_FEEDBACK_COMMENTS_ENABLED` should be set if feedback is configured in backend
 
 ### 4. SharePoint Integration
-- Backend `erato.toml`: `[integrations.experimental_sharepoint]` with `enabled = true/false`
+- Backend `erato.toml`: `[integrations.sharepoint]` with `enabled = true/false`
 - Frontend: `VITE_SHAREPOINT_ENABLED=true/false`
 - Rule: Both should match (if either is set)
 

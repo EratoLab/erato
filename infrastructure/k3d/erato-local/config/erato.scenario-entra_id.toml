@@ -10,11 +10,11 @@ K3D_TEST_SCENARIO = "entra_id"
 # Whether to enable the assistants feature in the frontend (default: false)
 enabled = true
 
-[integrations.experimental_entra_id]
+[integrations.entra_id]
 enabled = true
 auth_via_access_token = true  # Use the user's access token for MS Graph API (currently required)
 
-[integrations.experimental_sharepoint]
+[integrations.sharepoint]
 enabled = true
 file_upload_enabled = true
 auth_via_access_token = true  # Use the user's access token for MS Graph API (currently required)

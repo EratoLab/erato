@@ -3,7 +3,7 @@
 use axum::Router;
 use axum_test::TestServer;
 use erato::config::{
-    ExperimentalFacetsConfig, FacetConfig, FacetPermissionRule, ModelPermissionRule, ModelSettings,
+    FacetConfig, FacetPermissionRule, FacetsConfig, ModelPermissionRule, ModelSettings,
     PromptSourceSpecification,
 };
 use erato::server::router::router;
@@ -59,7 +59,7 @@ async fn test_facets_endpoint(pool: Pool<Postgres>) {
         },
     );
 
-    app_config.experimental_facets = ExperimentalFacetsConfig {
+    app_config.facets = FacetsConfig {
         facets,
         priority_order: vec!["extended_thinking".to_string(), "web_search".to_string()],
         tool_call_allowlist: vec![],
@@ -294,7 +294,7 @@ async fn test_facets_endpoint_filters_by_policy(pool: Pool<Postgres>) {
         },
     );
 
-    app_config.experimental_facets = ExperimentalFacetsConfig {
+    app_config.facets = FacetsConfig {
         facets,
         priority_order: vec!["extended_thinking".to_string(), "web_search".to_string()],
         tool_call_allowlist: vec![],

@@ -69,15 +69,9 @@ pub async fn test_app_state_with_sharepoint(
     pool: Pool<Postgres>,
 ) -> AppState {
     // Enable Sharepoint integration
-    app_config.integrations.experimental_sharepoint.enabled = true;
-    app_config
-        .integrations
-        .experimental_sharepoint
-        .file_upload_enabled = true;
-    app_config
-        .integrations
-        .experimental_sharepoint
-        .auth_via_access_token = true;
+    app_config.integrations.sharepoint.enabled = true;
+    app_config.integrations.sharepoint.file_upload_enabled = true;
+    app_config.integrations.sharepoint.auth_via_access_token = true;
 
     test_app_state_internal(app_config, pool, true).await
 }

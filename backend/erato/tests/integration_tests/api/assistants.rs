@@ -4,7 +4,7 @@ use axum::Router;
 use axum::http;
 use axum_test::TestServer;
 use erato::config::{
-    ExperimentalFacetsConfig, FacetConfig, McpServerAuthenticationConfig, McpServerConfig,
+    FacetConfig, FacetsConfig, McpServerAuthenticationConfig, McpServerConfig,
     McpServerPermissionRule, ModelSettings, PromptSourceSpecification,
 };
 use erato::policy::engine::PolicyEngine;
@@ -264,7 +264,7 @@ async fn test_update_assistant_endpoint(pool: Pool<Postgres>) {
             max_session_idle_seconds: None,
         },
     );
-    app_config.experimental_facets = ExperimentalFacetsConfig {
+    app_config.facets = FacetsConfig {
         facets: HashMap::from([
             (
                 "web_search".to_string(),
@@ -739,7 +739,7 @@ async fn test_create_assistant_endpoint(pool: Pool<Postgres>) {
             max_session_idle_seconds: None,
         },
     );
-    app_config.experimental_facets = ExperimentalFacetsConfig {
+    app_config.facets = FacetsConfig {
         facets: HashMap::from([(
             "web_search".to_string(),
             FacetConfig {
