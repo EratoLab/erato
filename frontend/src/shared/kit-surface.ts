@@ -214,6 +214,11 @@ export type { ChatMessageRendererState } from "@/components/ui/Chat/ChatMessage"
 export { useMessageAttachmentFiles } from "@/components/ui/Chat/MessageAttachments";
 export type { MessageAttachmentFiles } from "@/components/ui/Chat/MessageAttachments";
 
+// Disclosure and pagination for grouped attachment overrides. Item presentation
+// stays with the kit, including its existing chip and image components.
+export { useGroupedFileAttachmentsPreview } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
+export type { GroupedFileAttachmentsPreviewState } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
+
 export const ERATO_KIT_SURFACE_EXPORTS = [
   "Alert",
   "ArchiveIcon",
@@ -268,6 +273,7 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "FilePreviewLoading",
   "FileUploadLoading",
   "FileUploadLoadingProps",
+  "GroupedFileAttachmentsPreviewState",
   "IconProps",
   "ImageLightbox",
   "InfoIcon",
@@ -334,6 +340,7 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "useChatMessageRenderer",
   "useGetFile",
   "useGetFilePreview",
+  "useGroupedFileAttachmentsPreview",
   "useMessageAttachmentFiles",
 ] as const;
 /* eslint-enable lingui/no-unlocalized-strings */

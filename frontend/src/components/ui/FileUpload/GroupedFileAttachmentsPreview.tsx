@@ -223,20 +223,19 @@ function getFileId(item: ItemWithFile): string {
   return item.id;
 }
 
-export const DefaultGroupedFileAttachmentsPreview: React.FC<
-  GroupedFileAttachmentsPreviewProps
-> = ({
+/**
+ * Group disclosure and pagination shared by the default renderer and kits.
+ * The kit owns its frames and item faces; the host owns which items and
+ * caller-supplied actions are visible, and the copy that describes them.
+ */
+export function useGroupedFileAttachmentsPreview({
   groups,
-  onRemoveFile,
-  onFilePreview,
-  disabled = false,
-  showFileTypes = false,
-  showFileSizes = true,
-  className = "",
   defaultVisibleItems = 3,
-  stickyGroupHeaders = false,
   groupActions,
-}) => {
+}: Pick<
+  GroupedFileAttachmentsPreviewProps,
+  "groups" | "defaultVisibleItems" | "groupActions"
+>) {
   const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>([]);
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<
     Partial<Record<string, boolean>>
@@ -283,6 +282,62 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
     });
   };
 
+  return groups.map((group) => {
+    const itemCount = group.items.length;
+    const isCollapsed = getGroupCollapsed(group);
+    const isExpanded = expandedGroupIds.includes(group.id);
+    const shouldCollapse = itemCount > defaultVisibleItems;
+    const baseItems = isCollapsed ? [] : group.items;
+    const visibleItems =
+      !isCollapsed && shouldCollapse && !isExpanded
+        ? baseItems.slice(0, defaultVisibleItems)
+        : baseItems;
+    const hiddenCount = isCollapsed ? 0 : itemCount - visibleItems.length;
+    return {
+      group,
+      itemCount,
+      isCollapsed,
+      isExpanded,
+      shouldCollapse,
+      visibleItems,
+      hiddenCount,
+      metaLabel: group.metaLabel ?? getItemCountLabel(itemCount),
+      showMoreLabel: getShowMoreItemsLabel(hiddenCount),
+      showLessLabel: t({
+        id: "chat.attachments.show_less",
+        message: "Show less",
+      }),
+      toggleCollapsed: () => toggleGroupCollapsed(group),
+      setExpanded: (expanded: boolean) => setGroupExpanded(group.id, expanded),
+      actions: isCollapsed ? undefined : groupActions?.[group.id],
+    };
+  });
+}
+
+export type GroupedFileAttachmentsPreviewState = ReturnType<
+  typeof useGroupedFileAttachmentsPreview
+>;
+
+export const DefaultGroupedFileAttachmentsPreview: React.FC<
+  GroupedFileAttachmentsPreviewProps
+> = ({
+  groups,
+  onRemoveFile,
+  onFilePreview,
+  disabled = false,
+  showFileTypes = false,
+  showFileSizes = true,
+  className = "",
+  defaultVisibleItems = 3,
+  stickyGroupHeaders = false,
+  groupActions,
+}) => {
+  const groupStates = useGroupedFileAttachmentsPreview({
+    groups,
+    defaultVisibleItems,
+    groupActions,
+  });
+
   if (groups.length === 0) {
     return null;
   }
@@ -295,18 +350,22 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
 
   return (
     <div className={clsx("mb-3 flex flex-col gap-3", className)}>
-      {groups.map((group) => {
-        const itemCount = group.items.length;
+      {groupStates.map((state) => {
+        const {
+          group,
+          isCollapsed,
+          isExpanded,
+          shouldCollapse,
+          visibleItems,
+          hiddenCount,
+          metaLabel,
+          showMoreLabel,
+          showLessLabel,
+          toggleCollapsed,
+          setExpanded,
+          actions,
+        } = state;
         const collapsible = group.collapsible === true;
-        const isCollapsed = getGroupCollapsed(group);
-        const isExpanded = expandedGroupIds.includes(group.id);
-        const shouldCollapse = itemCount > defaultVisibleItems;
-        const baseItems = isCollapsed ? [] : group.items;
-        const visibleItems =
-          !isCollapsed && shouldCollapse && !isExpanded
-            ? baseItems.slice(0, defaultVisibleItems)
-            : baseItems;
-        const hiddenCount = isCollapsed ? 0 : itemCount - visibleItems.length;
         // Two inset regimes. Without sticky headers the frame carries the
         // inset and the bands sit inside it; with them the frame stays bare so
         // the header can span its full width, and header and items carry the
@@ -360,9 +419,7 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
                 {group.label}
               </h3>
               {group.metaLabel !== "" && (
-                <p className={FILE_PREVIEW_STYLES.group.meta}>
-                  {group.metaLabel ?? getItemCountLabel(itemCount)}
-                </p>
+                <p className={FILE_PREVIEW_STYLES.group.meta}>{metaLabel}</p>
               )}
             </div>
           </>
@@ -386,7 +443,7 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
               collapsible ? (
                 <button
                   type="button"
-                  onClick={() => toggleGroupCollapsed(group)}
+                  onClick={toggleCollapsed}
                   className={clsx(headerClassName, "w-full text-left")}
                   aria-expanded={!isCollapsed}
                 >
@@ -400,13 +457,10 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() => setGroupExpanded(group.id, false)}
+                      onClick={() => setExpanded(false)}
                       className={FILE_PREVIEW_STYLES.group.toggleButton}
                     >
-                      {t({
-                        id: "chat.attachments.show_less",
-                        message: "Show less",
-                      })}
+                      {showLessLabel}
                     </Button>
                   )}
                 </div>
@@ -539,14 +593,14 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() => setGroupExpanded(group.id, true)}
+                onClick={() => setExpanded(true)}
                 className={FILE_PREVIEW_STYLES.group.moreButton}
               >
-                {getShowMoreItemsLabel(hiddenCount)}
+                {showMoreLabel}
               </Button>
             )}
 
-            {!isCollapsed && groupActions?.[group.id]}
+            {actions}
           </Card>
         );
       })}
