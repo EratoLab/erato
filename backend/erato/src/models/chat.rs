@@ -120,6 +120,16 @@ pub struct TaskSpec {
     /// provenance envelope because nothing in SQL reads them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub facet_ids: Vec<String>,
+    /// Server-executed (MCP) tool calls this run may make, resolved from the
+    /// config and the planning facets when it was launched. Resolved at
+    /// launch rather than read live: the run must be bounded by what was
+    /// agreed when it started, not by whatever the config says later.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_server_tool_calls_per_task: Option<u32>,
+    /// Client-executed tool calls this run may make. Independent of the
+    /// server budget: neither constrains the other and they are never summed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_client_tool_calls_per_task: Option<u32>,
     /// Whether the run speaks as the origin chat's assistant or the bare model.
     #[serde(default)]
     pub persona: TaskPersona,

@@ -7366,3 +7366,133 @@ async fn a_refused_task_still_spends_one_of_the_turns_attempts(pool: Pool<Postgr
     );
     assert!(extract_full_text_answer(&events).contains("TASK-CAP-RECOVERED"));
 }
+
+/// A task child that runs out of SERVER tool calls refuses the call and
+/// finishes in prose, and its envelope says the answer is partial rather than
+/// pretending the run went cleanly — or that it failed.
+///
+/// The child is given a real MCP tool and a server budget of zero, so the
+/// refusal can only come from the budget: the call is turned away before
+/// anything is dispatched.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_task_that_spends_its_server_budget_finishes_with_a_partial_answer(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    // The child, once its call has been refused: wraps up in prose.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["all of its tool calls that run on the server"],
+                &["budget parent question"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["CHILD-PARTIAL-ANSWER"]),
+        );
+    });
+    // The child's first turn: reaches for a server tool it cannot afford.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["BUDGET-BRIEF-SENTINEL"],
+                &[
+                    "budget parent question",
+                    "all of its tool calls that run on the server",
+                ],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_child_mcp",
+                "publish_approval_probe",
+                json!({}),
+            )]),
+        );
+    });
+    // The parent's continuation.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["CHILD-PARTIAL-ANSWER", "budget parent question"],
+                &[],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["PARENT-BUDGET-FINAL"]),
+        );
+    });
+    // The parent plans the task.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["budget parent question"],
+                &["BUDGET-BRIEF-SENTINEL", "CHILD-PARTIAL-ANSWER"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_task_budget",
+                "delegate_task",
+                json!({ "task": "BUDGET-BRIEF-SENTINEL: look it up" }),
+            )]),
+        );
+    });
+
+    // No server tool calls at all: the cheapest way to prove the budget is
+    // consulted before anything is dispatched. Approval stays off so the
+    // refusal can only be the budget.
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_budget/*"],
+        |config| {
+            config.delegation.tasks.max_server_tool_calls_per_task = 0;
+            config.mcp_servers.insert(
+                "mock_mcp_budget".to_string(),
+                erato::config::McpServerConfig {
+                    transport_type: "streamable_http".to_string(),
+                    url: format!("{}/mcp/approval-policy", mock_mcp_base_url()),
+                    http_headers: None,
+                    allow_tools: None,
+                    exclude_tools: vec![],
+                    wait_tools: vec![],
+                    authentication: erato::config::McpServerAuthenticationConfig::None,
+                    max_session_idle_seconds: None,
+                },
+            );
+            config.mcp_server_permissions.rules.insert(
+                "allow-mock-mcp-budget".to_string(),
+                erato::config::McpServerPermissionRule::AllowAll {
+                    mcp_server_ids: vec!["mock_mcp_budget".to_string()],
+                },
+            );
+        },
+    )
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, "budget parent question", &["plan"]).await;
+
+    let output = find_tool_call_update_output(&events, "delegate_task");
+    // Completed, not cancelled: the text is real and the child chat is
+    // adoptable — calling it a failure would tell the model to discard it.
+    assert_eq!(output["status"], "completed");
+    assert_eq!(output["reason"], "cap_exceeded");
+    assert!(
+        output["result"]
+            .as_str()
+            .is_some_and(|text| text.contains("CHILD-PARTIAL-ANSWER")),
+        "the partial answer must still come back: {output}"
+    );
+    assert!(extract_full_text_answer(&events).contains("PARENT-BUDGET-FINAL"));
+}
