@@ -4,39 +4,26 @@ import clsx from "clsx";
 import { memo, useCallback, useMemo, useState } from "react";
 
 import { useImageLightbox } from "@/hooks/ui/useImageLightbox";
-import {
-  useErrorReportFeature,
-  useMessageFeedbackFeature,
-} from "@/providers/FeatureConfigProvider";
-import {
-  isPromptInjectionFilterDetails,
-  type MessageErrorFilterDetails,
-} from "@/types/chat";
+import { useMessageFeedbackFeature } from "@/providers/FeatureConfigProvider";
 import { hasToolCalls as messageHasToolCalls } from "@/utils/adapters/toolCallAdapter";
 
 import { McpNotices } from "./McpNotices";
 import { MessageAttachments } from "./MessageAttachments";
-import { Alert } from "../Feedback/Alert";
+import { MessageErrorAlert } from "./MessageErrorAlert";
+import { messageAttachmentFileIds } from "./messageAttachmentFileIds";
 import { Avatar } from "../Feedback/Avatar";
-import { CopyErrorButton } from "../Feedback/CopyErrorButton";
 import { LoadingIndicator } from "../Feedback/LoadingIndicator";
 import { ActionFacetContext } from "../Message/ActionFacetContext";
 import { DefaultMessageControls } from "../Message/DefaultMessageControls";
 import { ImageLightbox } from "../Message/ImageLightbox";
 import { MessageContent } from "../Message/MessageContent";
-import {
-  getContentFilterCategoryLabel,
-  getContentFilterSeverityLabel,
-  getErrorCta,
-  getErrorDescription,
-  getErrorTitle,
-} from "../Message/messageErrorCopy";
 import { messageStyles } from "../styles/chatMessageStyles";
 
 import type {
   MessageAction,
   MessageControlsComponent,
   MessageControlsContext,
+  MessageControlsProps,
 } from "../../../types/message-controls";
 import type {
   FileUploadItem,
@@ -44,6 +31,7 @@ import type {
   UserProfile,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
+import type { ComponentProps } from "react";
 
 /**
  * Host-implemented building blocks handed to `ChatMessageRenderer` overrides.
@@ -103,26 +91,46 @@ export interface ChatMessageProps {
   hostComponents?: ChatMessageHostComponents;
 }
 
-export const ChatMessage = memo(function ChatMessage({
+export interface ChatMessageRendererState {
+  isUser: boolean;
+  role: "user" | "assistant";
+  /** Who the message is attributed to, already through the host's precedence. */
+  userDisplayName: string;
+  /** True when the host draws nothing at all for this message. */
+  isEmpty: boolean;
+  /** Uploads plus, on the assistant side, the documents it generated. */
+  attachmentIds: string[];
+  /** Every file the conversation knows about, keyed by id. */
+  filesById: Record<string, FileUploadItem>;
+  /** The same files as a list, for a preview to navigate between. */
+  relatedFiles: readonly FileUploadItem[];
+  contentProps: ComponentProps<typeof MessageContent>;
+  controlsProps: MessageControlsProps;
+  lightbox: ReturnType<typeof useImageLightbox>;
+}
+
+/**
+ * Everything `ChatMessage` works out before it draws anything.
+ *
+ * `ChatMessage` itself consumes this, so a `ChatMessageRenderer` override that
+ * only wants different markup can take the derived values rather than deriving
+ * them again — the mention list, the streaming flag, the raw-markdown toggle
+ * and the lightbox wiring included. A kit that re-derives them drifts silently:
+ * its copy keeps working while its behaviour stops matching the host's.
+ */
+export const useChatMessageRenderer = ({
   message,
-  className = "",
-  showTimestamp = true,
-  showAvatar = false,
   userProfile,
   showControlsOnHover = true,
-  controls: Controls = DefaultMessageControls,
   controlsContext,
   onMessageAction,
   onFilePreview,
   onViewFeedback,
   allFilesById = {},
   userDisplayNameOverride,
-}: ChatMessageProps) {
+}: ChatMessageProps): ChatMessageRendererState => {
   const isUser = message.role === "user";
   const role = isUser ? "user" : "assistant";
-  const messageContentRowStyle = {
-    gap: "var(--theme-spacing-message-gap)",
-  } as const;
 
   // Get user display name - use profile name if available, otherwise use form of address
   const userDisplayName = isUser
@@ -138,7 +146,6 @@ export const ChatMessage = memo(function ChatMessage({
 
   // Get message feedback feature config
   const messageFeedbackConfig = useMessageFeedbackFeature();
-  const errorReportConfig = useErrorReportFeature();
 
   // Local state for raw markdown toggle
   const [showRawMarkdown, setShowRawMarkdown] = useState(false);
@@ -155,34 +162,101 @@ export const ChatMessage = memo(function ChatMessage({
   const filesById = allFilesById;
   // Every file the chat knows about, so a viewer can resolve one its own
   // artifact only names — the transcript's uploads are the case in point.
-  const siblingFiles = useMemo(
+  const relatedFiles = useMemo(
     () => Object.values(allFilesById),
     [allFilesById],
   );
 
+  return {
+    isUser,
+    role,
+    userDisplayName,
+    // The host draws nothing for a message with no content, attachments or
+    // not; the openwebui kit draws an attachment-only user message instead.
+    // The divergence is unresolved, so this reports what the host does.
+    isEmpty: message.content.length === 0 && !message.loading && !message.error,
+    attachmentIds: messageAttachmentFileIds(message),
+    filesById,
+    relatedFiles,
+    contentProps: {
+      content: message.content,
+      messageId: message.id,
+      filesById,
+      isStreaming: !!message.loading && message.loading.state !== "done",
+      showRaw: showRawMarkdown,
+      onImageClick: lightbox.openLightbox,
+      onFileLinkPreview: onFilePreview,
+      preserveSoftLineBreaks: isUser,
+      createdAt: message.createdAt,
+      updatedAt: message.updatedAt,
+      hasError: !!message.error,
+      outlookArtifact: message.outlookArtifact,
+      // Mentions are a user-message affordance; an assistant echoing
+      // "@Name" is quoting, not addressing, so it never highlights.
+      mentionedAssistants: isUser ? message.mentioned_assistants : undefined,
+    },
+    controlsProps: {
+      messageId: message.id,
+      messageType: message.sender,
+      createdAt: message.createdAt,
+      context: controlsContext,
+      showOnHover: showControlsOnHover,
+      onAction: onMessageAction,
+      className: "z-10",
+      isUserMessage: isUser,
+      showRawMarkdown,
+      onToggleRawMarkdown: handleToggleRawMarkdown,
+      hasToolCalls: hasCompletedToolCalls,
+      showFeedbackButtons: messageFeedbackConfig.enabled,
+      showFeedbackComments: messageFeedbackConfig.commentsEnabled,
+      initialFeedback: message.feedback,
+      onViewFeedback,
+    },
+    lightbox,
+  };
+};
+
+export const ChatMessage = memo(function ChatMessage(props: ChatMessageProps) {
+  const {
+    message,
+    className = "",
+    showTimestamp = true,
+    showAvatar = false,
+    userProfile,
+    controls: Controls = DefaultMessageControls,
+    controlsContext,
+    onFilePreview,
+    userDisplayNameOverride,
+  } = props;
+
+  const {
+    isUser,
+    role,
+    userDisplayName,
+    isEmpty,
+    attachmentIds,
+    filesById,
+    relatedFiles,
+    contentProps,
+    controlsProps,
+    lightbox,
+  } = useChatMessageRenderer(props);
+
+  const messageContentRowStyle = {
+    gap: "var(--theme-spacing-message-gap)",
+  } as const;
+
   // Content validation
-  if (message.content.length === 0 && !message.loading && !message.error) {
+  if (isEmpty) {
     return null;
   }
 
-  const attachmentIds = [
-    ...new Set([
-      ...(message.input_files_ids ?? []),
-      ...(!isUser
-        ? message.content.flatMap((part) =>
-            part.content_type === "text_file_pointer"
-              ? [part.file_upload_id]
-              : [],
-          )
-        : []),
-    ]),
-  ];
   const attachments =
     attachmentIds.length > 0 ? (
       <MessageAttachments
         fileIds={attachmentIds}
         filesById={filesById}
-        relatedFiles={siblingFiles}
+        relatedFiles={relatedFiles}
         onFilePreview={onFilePreview}
       />
     ) : null;
@@ -246,72 +320,13 @@ export const ChatMessage = memo(function ChatMessage({
             </div>
           </div>
 
-          {message.error && (
-            <Alert
-              type="error"
-              title={getErrorTitle(message.error.error_type)}
-              geometryVariant="message"
-              className="mb-3"
-              data-testid="chat-message-error"
-            >
-              <p>
-                {getErrorDescription(
-                  message.error.error_type,
-                  message.error.filter_details,
-                )}
-              </p>
-              {getErrorCta(
-                message.error.error_type,
-                message.error.filter_details,
-              ) && (
-                <p className="mt-2">
-                  {getErrorCta(
-                    message.error.error_type,
-                    message.error.filter_details,
-                  )}
-                </p>
-              )}
-              {renderContentFilterDetails(
-                message.error.error_type,
-                message.error.filter_details,
-              )}
-              {renderVerboseErrorDescription(
-                message.error.error_type,
-                message.error.error_description,
-                errorReportConfig.showVerboseAssistantErrors,
-              )}
-              {errorReportConfig.showCopyErrorReport &&
-                message.error_report && (
-                  <div className="mt-3">
-                    <CopyErrorButton report={message.error_report} />
-                  </div>
-                )}
-            </Alert>
-          )}
+          <MessageErrorAlert message={message} />
 
           {isUser && message.action_facet_args && (
             <ActionFacetContext actionFacetArgs={message.action_facet_args} />
           )}
 
-          <MessageContent
-            content={message.content}
-            messageId={message.id}
-            filesById={filesById}
-            isStreaming={!!message.loading && message.loading.state !== "done"}
-            showRaw={showRawMarkdown}
-            onImageClick={lightbox.openLightbox}
-            onFileLinkPreview={onFilePreview}
-            preserveSoftLineBreaks={isUser}
-            createdAt={message.createdAt}
-            updatedAt={message.updatedAt}
-            hasError={!!message.error}
-            outlookArtifact={message.outlookArtifact}
-            // Mentions are a user-message affordance; an assistant echoing
-            // "@Name" is quoting, not addressing, so it never highlights.
-            mentionedAssistants={
-              isUser ? message.mentioned_assistants : undefined
-            }
-          />
+          <MessageContent {...contentProps} />
 
           <McpNotices
             message={message}
@@ -332,23 +347,7 @@ export const ChatMessage = memo(function ChatMessage({
           )}
           {showTimestamp && (
             <div className="z-10">
-              <Controls
-                messageId={message.id}
-                messageType={message.sender}
-                createdAt={message.createdAt}
-                context={controlsContext}
-                showOnHover={showControlsOnHover}
-                onAction={onMessageAction}
-                className="z-10"
-                isUserMessage={isUser}
-                showRawMarkdown={showRawMarkdown}
-                onToggleRawMarkdown={handleToggleRawMarkdown}
-                hasToolCalls={hasCompletedToolCalls}
-                showFeedbackButtons={messageFeedbackConfig.enabled}
-                showFeedbackComments={messageFeedbackConfig.commentsEnabled}
-                initialFeedback={message.feedback}
-                onViewFeedback={onViewFeedback}
-              />
+              <Controls {...controlsProps} />
             </div>
           )}
         </div>
@@ -363,89 +362,6 @@ export const ChatMessage = memo(function ChatMessage({
     </div>
   );
 });
-
-const renderContentFilterDetails = (
-  errorType: string,
-  filterDetails?: MessageErrorFilterDetails | null,
-) => {
-  if (errorType !== "content_filter" || !filterDetails) {
-    return null;
-  }
-
-  if (isPromptInjectionFilterDetails(filterDetails)) {
-    return (
-      <div className="mt-2 text-xs">
-        <div className="font-medium">
-          {t({
-            id: "chat.message.error.variant.prompt_injection.offending_text",
-            message: "Offending text",
-          })}
-        </div>
-        <blockquote className="mt-1 break-words border-l-2 pl-2 italic">
-          {filterDetails.matched_text}
-        </blockquote>
-      </div>
-    );
-  }
-
-  const filteredCategories = Object.entries(filterDetails)
-    .filter(([, details]) => details.filtered)
-    .map(([category, details]) => ({
-      category,
-      severity: details.severity,
-    }));
-
-  if (filteredCategories.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="mt-2 text-xs">
-      <div className="font-medium">
-        {t({
-          id: "chat.message.error.variant.content_filter.filtered_categories",
-          message: "Filtered categories",
-        })}
-      </div>
-      <ul className="mt-1 list-disc pl-5">
-        {filteredCategories.map(({ category, severity }) => (
-          <li key={category}>
-            {getContentFilterCategoryLabel(category)} (
-            {getContentFilterSeverityLabel(severity)})
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-};
-
-const renderVerboseErrorDescription = (
-  errorType: string,
-  errorDescription: string | undefined,
-  showVerboseAssistantErrors: boolean,
-) => {
-  if (
-    !showVerboseAssistantErrors ||
-    errorType === "content_filter" ||
-    !errorDescription?.trim()
-  ) {
-    return null;
-  }
-
-  return (
-    <div className="mt-3 text-xs">
-      <div className="font-medium">
-        {t({
-          id: "chat.message.error.details",
-          message: "Details",
-        })}
-      </div>
-      <pre className="mt-1 whitespace-pre-wrap break-words font-sans">
-        {errorDescription}
-      </pre>
-    </div>
-  );
-};
 
 // Add display name for better debugging
 // eslint-disable-next-line lingui/no-unlocalized-strings

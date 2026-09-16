@@ -200,6 +200,20 @@ export {
 // so tooling on either side of the boundary can diff a kit's declared needs
 // against what the host actually ships without parsing TypeScript.
 /* eslint-disable lingui/no-unlocalized-strings -- export identifiers, not copy */
+// The host behaviour behind a message, so a `ChatMessageRenderer` override can
+// consume it rather than re-implement it. Most of a kit's override is not its
+// own design: it is the host's derivation copied to reach the markup, and that
+// copy has already drifted into refetching files the conversation was holding,
+// losing the sibling list the preview navigates by, never showing the documents
+// an assistant generated, and dropping the resolved mentions so @-highlighting
+// is dead kit-side. `MessageErrorAlert` renders nothing without an error and
+// the hooks derive only, so all three are safe to place unconditionally.
+export { MessageErrorAlert } from "@/components/ui/Chat/MessageErrorAlert";
+export { useChatMessageRenderer } from "@/components/ui/Chat/ChatMessage";
+export type { ChatMessageRendererState } from "@/components/ui/Chat/ChatMessage";
+export { useMessageAttachmentFiles } from "@/components/ui/Chat/MessageAttachments";
+export type { MessageAttachmentFiles } from "@/components/ui/Chat/MessageAttachments";
+
 export const ERATO_KIT_SURFACE_EXPORTS = [
   "Alert",
   "ArchiveIcon",
@@ -224,6 +238,7 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "ChatHistoryRowMenuId",
   "ChatHistoryRowMenuOptions",
   "ChatHistoryRowPresentation",
+  "ChatMessageRendererState",
   "ChevronDownIcon",
   "ChevronRightIcon",
   "CloseIcon",
@@ -263,7 +278,9 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "LogOutIcon",
   "MailIcon",
   "MediaVideoIcon",
+  "MessageAttachmentFiles",
   "MessageContent",
+  "MessageErrorAlert",
   "MessageTimestamp",
   "ModalBase",
   "MoreVertical",
@@ -314,7 +331,9 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "useChatHistoryRow",
   "useChatHistoryRowMenuItems",
   "useChatHistoryRowPresentation",
+  "useChatMessageRenderer",
   "useGetFile",
   "useGetFilePreview",
+  "useMessageAttachmentFiles",
 ] as const;
 /* eslint-enable lingui/no-unlocalized-strings */

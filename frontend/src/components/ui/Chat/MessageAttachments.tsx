@@ -8,8 +8,12 @@ import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext"
 import { groupTeamsSentAttachments } from "@/utils/teams/teamsSentAttachmentGroups";
 import { teamsUploadDisplayName } from "@/utils/teams/teamsUploadName";
 
+import { messageAttachmentFileIds } from "./messageAttachmentFileIds";
+
 import type { AttachmentTileItem } from "@/components/ui/FileUpload/AttachmentTileList";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
+import type { TeamsSentAttachmentGrouping } from "@/utils/teams/teamsSentAttachmentGroups";
 import type React from "react";
 
 export interface MessageAttachmentsProps {
@@ -28,20 +32,28 @@ export interface MessageAttachmentsProps {
 const getPreviewUrl = (file: FileUploadItem): string =>
   typeof file.preview_url === "string" ? file.preview_url : file.download_url;
 
+export interface MessageAttachmentFiles {
+  /** Tiles to draw, in attachment order, minus the ids that do not resolve. */
+  items: AttachmentTileItem[];
+  /** Handed to the preview so it can offer navigation between siblings. */
+  relatedFiles: readonly FileUploadItem[];
+  /** Set only where a Teams transcript claims the files shared inside it. */
+  teamsGrouping: TeamsSentAttachmentGrouping | null;
+}
+
 /**
- * Attachments of a sent message, drawn with the shared tile.
+ * Resolve a message's attachment ids to drawable tiles.
  *
- * The conversation already carries its file records, so ids are resolved from
- * that map rather than refetched one request per attachment. Only ids missing
- * from it fall back to a fetch — an optimistic message can name a file before
- * its metadata has been rehydrated.
+ * The lookup order, the fallback fetch, the Teams display name and the Teams
+ * grouping all live here, so `MessageAttachments` and any renderer drawing its
+ * own tiles run the same resolution rather than two copies of it. The copy the
+ * openwebui kit carries had already drifted into refetching every attachment
+ * the conversation was holding all along.
  */
-export const MessageAttachments: React.FC<MessageAttachmentsProps> = ({
-  fileIds,
-  filesById,
-  relatedFiles,
-  onFilePreview,
-}) => {
+const useAttachmentTiles = (
+  fileIds: readonly string[],
+  filesById: Record<string, FileUploadItem>,
+): Omit<MessageAttachmentFiles, "relatedFiles"> => {
   const { queryOptions, fetcherOptions } = useV1betaApiContext({});
 
   const missingIds = useMemo(
@@ -104,6 +116,47 @@ export const MessageAttachments: React.FC<MessageAttachmentsProps> = ({
       ),
     [items],
   );
+
+  return { items, teamsGrouping };
+};
+
+/**
+ * Everything a message's attachments need before anything is drawn, keyed off
+ * the message itself.
+ *
+ * The id union is the part a renderer gets wrong on its own: an assistant's
+ * generated documents arrive as content parts, not as upload ids. The sibling
+ * list is the other: without it the preview opens on an island and offers no
+ * navigation. Both are derived here so a `ChatMessageRenderer` override keeps
+ * only its markup.
+ */
+export const useMessageAttachmentFiles = (
+  message: UiChatMessage,
+  filesById: Record<string, FileUploadItem>,
+): MessageAttachmentFiles => {
+  const fileIds = useMemo(() => messageAttachmentFileIds(message), [message]);
+  // Every file the chat knows about, so a viewer can resolve one its own
+  // artifact only names — the transcript's uploads are the case in point.
+  const relatedFiles = useMemo(() => Object.values(filesById), [filesById]);
+
+  return { ...useAttachmentTiles(fileIds, filesById), relatedFiles };
+};
+
+/**
+ * Attachments of a sent message, drawn with the shared tile.
+ *
+ * The conversation already carries its file records, so ids are resolved from
+ * that map rather than refetched one request per attachment. Only ids missing
+ * from it fall back to a fetch — an optimistic message can name a file before
+ * its metadata has been rehydrated.
+ */
+export const MessageAttachments: React.FC<MessageAttachmentsProps> = ({
+  fileIds,
+  filesById,
+  relatedFiles,
+  onFilePreview,
+}) => {
+  const { items, teamsGrouping } = useAttachmentTiles(fileIds, filesById);
 
   if (items.length === 0) {
     return null;
