@@ -1267,6 +1267,73 @@ describe("MessageContent", () => {
     expect(screen.getByText(/vielen Dank/)).toBeInTheDocument();
   });
 
+  describe("host artifact envelope (hostArtifact prop)", () => {
+    it("treats a drifted email fence as the artifact via hostArtifact", () => {
+      const { container } = renderWithTheme(
+        <MessageContent
+          content={textContent("```email\nHere is the rewritten passage.\n```")}
+          hostArtifact={{
+            facetId: "outlook_rewrite_selection",
+            bodyFormat: "text",
+            renderMode: "body",
+          }}
+        />,
+      );
+
+      expect(
+        container.querySelector("pre.message-content-code-block code"),
+      ).toBeNull();
+      expect(
+        screen.getByText(/Here is the rewritten passage/),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Copy/ })).toBeInTheDocument();
+    });
+
+    it("falls back to the whole body as the artifact via hostArtifact", () => {
+      renderWithTheme(
+        <MessageContent
+          content={textContent(
+            "Hallo Frau Berger,\n\nvielen Dank fuer Ihre Nachricht.",
+          )}
+          hostArtifact={{
+            facetId: "outlook_rewrite_selection",
+            bodyFormat: "text",
+            renderMode: "body",
+          }}
+        />,
+      );
+
+      expect(screen.getByRole("button", { name: /Copy/ })).toBeInTheDocument();
+      expect(screen.getByText(/vielen Dank/)).toBeInTheDocument();
+    });
+
+    it("prefers hostArtifact over the deprecated outlookArtifact when both are set", () => {
+      renderWithTheme(
+        <MessageContent
+          content={textContent("Hallo Frau Berger, vielen Dank.")}
+          // The new envelope suppresses the card; the deprecated one would
+          // card. The resolved value must be the new one.
+          hostArtifact={{
+            facetId: "outlook_reply_from_read",
+            bodyFormat: "text",
+            renderMode: "body",
+            shouldRenderEmailCard: false,
+          }}
+          outlookArtifact={{
+            facetId: "outlook_rewrite_selection",
+            bodyFormat: "text",
+            renderMode: "body",
+          }}
+        />,
+      );
+
+      expect(
+        screen.queryByRole("button", { name: /Copy/ }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByText(/vielen Dank/)).toBeInTheDocument();
+    });
+  });
+
   describe("showRaw with maskReasoningTraceText", () => {
     it("includes reasoning text in raw view when masking is disabled", () => {
       const { container } = render(

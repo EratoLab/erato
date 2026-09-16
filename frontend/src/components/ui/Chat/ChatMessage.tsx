@@ -190,7 +190,7 @@ export const useChatMessageRenderer = ({
       createdAt: message.createdAt,
       updatedAt: message.updatedAt,
       hasError: !!message.error,
-      outlookArtifact: message.outlookArtifact,
+      hostArtifact: message.hostArtifact ?? message.outlookArtifact,
       // Mentions are a user-message affordance; an assistant echoing
       // "@Name" is quoting, not addressing, so it never highlights.
       mentionedAssistants: isUser ? message.mentioned_assistants : undefined,

@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro";
 
-import type { ContentPart, OutlookArtifact } from "@erato/frontend/library";
+import type { ContentPart, HostArtifact } from "@erato/frontend/library";
 
 /**
  * Id of the config-defined action facet (erato.toml only) that lets the model
@@ -162,7 +162,7 @@ export function extractProposedClientAction(
 }
 
 /**
- * Producer-side verdict for {@link OutlookArtifact.shouldRenderEmailCard}:
+ * Producer-side verdict for {@link HostArtifact.shouldRenderEmailCard}:
  * whether an UNFENCED, `"body"`-mode response should render as the insertable
  * email card. A facet that OFFERS email client actions (reply / reply-all) is
  * attached ambiently to every read-mode message, so a plain answer with no
@@ -189,7 +189,7 @@ export function computeShouldRenderEmailCard(args: {
 }
 
 /**
- * Build the `outlookArtifact` stamp for one assistant message, or `undefined`
+ * Build the `hostArtifact` stamp for one assistant message, or `undefined`
  * when the producing facet doesn't render through the artifact machinery.
  *
  * A message qualifies through EITHER door:
@@ -223,7 +223,7 @@ export function buildOutlookArtifact(args: {
    * completions render as history-like drafts).
    */
   freshItemIdentity: string | undefined;
-}): OutlookArtifact | undefined {
+}): HostArtifact | undefined {
   const bodyFormatArg = args.facetArgs?.body_format;
   const bodyFormat =
     bodyFormatArg === "text" || bodyFormatArg === "html"
@@ -243,7 +243,7 @@ export function buildOutlookArtifact(args: {
   const proposedClientAction = allowedClientActions
     ? extractProposedClientAction(args.content, allowedClientActions)
     : undefined;
-  // Single source of truth for carding (see OutlookArtifact.shouldRenderEmailCard).
+  // Single source of truth for carding (see HostArtifact.shouldRenderEmailCard).
   // Stamped below only when it SUPPRESSES (false); absent ⇒ cards.
   const shouldRenderEmailCard = computeShouldRenderEmailCard({
     allowedClientActions,

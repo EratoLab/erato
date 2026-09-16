@@ -5,7 +5,7 @@ import type {
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message, MessageError } from "@/types/chat";
 
-export type { OutlookArtifact } from "@/types/chat";
+export type { HostArtifact, OutlookArtifact } from "@/types/chat";
 
 /**
  * Interface for UI-specific message properties

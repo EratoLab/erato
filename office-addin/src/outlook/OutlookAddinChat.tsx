@@ -552,7 +552,7 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
       }
       const previous = controller.messages[message.previous_message_id];
       const facetId = previous?.action_facet_id;
-      const outlookArtifact = buildOutlookArtifact({
+      const hostArtifact = buildOutlookArtifact({
         facetId,
         facetArgs: previous?.action_facet_args,
         clientActionInfo: facetId
@@ -564,9 +564,12 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
           ? freshItemIdentityRef.current.get(id)!
           : undefined,
       });
-      if (!outlookArtifact) continue;
+      if (!hostArtifact) continue;
       if (next === controller.messages) next = { ...controller.messages };
-      next[id] = { ...message, outlookArtifact };
+      // `outlookArtifact` is the deprecated alias of `hostArtifact` — stamped
+      // with the same object for one release so kits reading the old field
+      // keep working; drop it together with the alias.
+      next[id] = { ...message, hostArtifact, outlookArtifact: hostArtifact };
     }
     return next;
   }, [

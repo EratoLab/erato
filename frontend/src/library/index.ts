@@ -55,9 +55,10 @@ export {
 } from "@/components/ui/MessageList/MessageEditor";
 export {
   MessageContent,
+  useHostArtifact,
   useOutlookArtifact,
 } from "@/components/ui/Message/MessageContent";
-export type { OutlookArtifact } from "@/types/chat";
+export type { HostArtifact, OutlookArtifact } from "@/types/chat";
 export { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 export { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageControls";
 export {
