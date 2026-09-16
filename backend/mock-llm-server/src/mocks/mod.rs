@@ -393,6 +393,17 @@ const DELEGATION_PARENT_PROMPT: &str = "delegate to the probe assistant";
 const DELEGATION_CHILD_BRIEF: &str =
     "Delegation probe child brief: list the available mock files and report how many there are.";
 
+/// Typed into the origin chat by the dynamic-tasks e2e. Distinct from the
+/// mention prompt above so the two delegation routes never answer each
+/// other's turns.
+const TASK_PARENT_PROMPT: &str = "run the probe as a task";
+
+/// The brief the origin model writes into its own `delegate_task` call. Like
+/// the mention brief, it is the one thing present in every task turn and
+/// absent from every origin turn.
+const TASK_CHILD_BRIEF: &str =
+    "Task probe child brief: count the available mock files and report the number.";
+
 fn build_delegation_child_answer_chunks() -> Vec<String> {
     [
         "CHILD-ANSWER",
@@ -471,6 +482,61 @@ pub fn get_default_mocks() -> Vec<Mock> {
                 tool_name: "list_files".to_string(),
                 arguments: "{}".to_string(),
                 delay_ms: 200,
+            }),
+        },
+        Mock {
+            name: "DynamicTaskParentToolCall".to_string(),
+            description: "Plans a sub-task with the reserved erato/delegate_task tool"
+                .to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: TASK_PARENT_PROMPT.to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
+                tool_name: "delegate_task".to_string(),
+                arguments: format!(
+                    "{{\"task\": \"{TASK_CHILD_BRIEF}\", \"expected_output\": \"A single number.\"}}"
+                ),
+                delay_ms: 100,
+            }),
+        },
+        Mock {
+            name: "DynamicTaskChildAnswer".to_string(),
+            description: "Answers the sub-task on the turn that carries its brief".to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: TASK_CHILD_BRIEF.to_string(),
+            })],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec![
+                    "TASK-CHILD-ANSWER".to_string(),
+                    ": there".to_string(),
+                    " are".to_string(),
+                    " three".to_string(),
+                    " files".to_string(),
+                    ".".to_string(),
+                ],
+                delay_ms: 300,
+                ..Default::default()
+            }),
+        },
+        Mock {
+            name: "DynamicTaskParentAnswer".to_string(),
+            description: "Answers the origin chat once the sub-task's result is in".to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: TASK_PARENT_PROMPT.to_string(),
+            })],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec![
+                    "TASK-PARENT-ANSWER".to_string(),
+                    ": the".to_string(),
+                    " task".to_string(),
+                    " counted".to_string(),
+                    " three".to_string(),
+                    ".".to_string(),
+                ],
+                delay_ms: 200,
+                ..Default::default()
             }),
         },
         Mock {
