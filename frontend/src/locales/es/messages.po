@@ -4408,6 +4408,91 @@ msgid "sharing.type.user"
 msgstr "Usuario"
 
 #. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.attachments"
+msgstr "{indexed} / {total} adjuntos indexados"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.caption"
+msgstr "Búsqueda local en este dispositivo"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.documents"
+msgstr "{indexed} / {total} documentos indexados"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.emails"
+msgstr "{indexed} / {total} correos indexados"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.empty"
+msgstr "No se encontraron buzones locales."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.enable"
+msgstr "Activar la indexación de {mailbox}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.knownTotals"
+msgstr "Los totales reflejan los elementos detectados. Un guion indica que aún no hay estadísticas disponibles."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.loadError"
+msgstr "No se pudieron cargar las estadísticas de indexación. Reintentando…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.loading"
+msgstr "Cargando estadísticas de indexación…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.moveDown"
+msgstr "Reducir la prioridad de {mailbox}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.moveUp"
+msgstr "Aumentar la prioridad de {mailbox}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.parallelism"
+msgstr "Procesos de indexación en paralelo"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.save"
+msgstr "Guardar ajustes de indexación"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.saveError"
+msgstr "No se pudieron guardar los ajustes de indexación. Inténtalo de nuevo."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.throttle"
+msgstr "Documentos por minuto"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.title"
+msgstr "Indexación de buzones"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.upgrade"
+msgstr "Actualiza Desktop Sidecar para configurar la indexación."
+
+#. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallInput.tsx
 msgid "toolcall.input.title"
 msgstr "Parámetros de entrada"

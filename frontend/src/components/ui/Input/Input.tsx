@@ -29,7 +29,7 @@ export interface InputProps
    * Input type
    * @default "text"
    */
-  type?: "text" | "email" | "url" | "password" | "search" | "tel";
+  type?: "text" | "email" | "url" | "password" | "search" | "tel" | "number";
   /**
    * Additional CSS classes
    */

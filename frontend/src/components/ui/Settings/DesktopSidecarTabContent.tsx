@@ -4,12 +4,14 @@ import { useState } from "react";
 import {
   DEFAULT_DESKTOP_SIDECAR_ENDPOINT,
   DesktopSidecarProvider,
+  DesktopSidecarConfigurationSync,
   resolveDesktopSidecarEndpoint,
   useDesktopSidecar,
 } from "@/providers/DesktopSidecarProvider";
 
 import { EntityRow } from "./EntityRow";
 import { Button } from "../Controls/Button";
+import { SidecarIndexingControls } from "../DesktopSidecar/SidecarIndexingCard";
 import { ComputerIcon } from "../icons";
 
 // eslint-disable-next-line lingui/no-unlocalized-strings -- Desktop-sidecar URL protocol.
@@ -31,6 +33,7 @@ export function DesktopSidecarRow() {
       }
       retryDiscovery={false}
     >
+      <DesktopSidecarConfigurationSync />
       <DesktopSidecarEntityRow
         onRetry={() => setAttempt((currentAttempt) => currentAttempt + 1)}
       />
@@ -39,7 +42,7 @@ export function DesktopSidecarRow() {
 }
 
 function DesktopSidecarEntityRow({ onRetry }: { onRetry: () => void }) {
-  const { snapshot } = useDesktopSidecar();
+  const { client, snapshot } = useDesktopSidecar();
   const connected = snapshot.state === "ready";
   const connecting = snapshot.state === "discovering";
 
@@ -88,6 +91,9 @@ function DesktopSidecarEntityRow({ onRetry }: { onRetry: () => void }) {
               message: "Start the desktop sidecar, then try connecting again.",
             })}
       </p>
+      {connected && client?.supports("indexing.status.v1") && (
+        <SidecarIndexingControls />
+      )}
       <div className="flex flex-wrap gap-2">
         <Button
           variant="secondary"

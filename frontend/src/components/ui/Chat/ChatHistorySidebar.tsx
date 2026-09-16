@@ -50,6 +50,7 @@ import {
 } from "./SidebarResizeHandle";
 import { SidebarToggle } from "./SidebarToggle";
 import { UserProfileThemeDropdown } from "../Controls/UserProfileThemeDropdown";
+import { SidecarIndexingCard } from "../DesktopSidecar/SidecarIndexingCard";
 import { CopyErrorButton } from "../Feedback/CopyErrorButton";
 import {
   SidebarToggleIcon,
@@ -954,6 +955,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                 )}
               </div>
             </div>
+            {!collapsed && <SidecarIndexingCard />}
             <ChatHistoryFooter
               userProfile={userProfile}
               onSignOut={handleSignOut}

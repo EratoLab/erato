@@ -4,6 +4,20 @@
   "title": "IndexingStatusV1Result",
   "type": "object",
   "properties": {
+    "configuration": {
+      "description": "Persisted layers for editing configuration without losing unrelated settings. Updated sidecars include both layers; absent on older servers.",
+      "type": "object",
+      "properties": {
+        "user_configuration": {
+          "$ref": "../configuration/sidecar-configuration.schema.json"
+        },
+        "organization_configuration": {
+          "$ref": "../configuration/sidecar-configuration.schema.json"
+        }
+      },
+      "required": ["user_configuration", "organization_configuration"],
+      "additionalProperties": true
+    },
     "sampledAt": {
       "type": "string",
       "format": "date-time"

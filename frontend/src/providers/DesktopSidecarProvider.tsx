@@ -5,8 +5,11 @@ import {
   HttpTransport,
   createBrowserClientInfo,
 } from "@erato/desktop-sidecar-protocol";
+import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
+import { useProfileApi } from "@/hooks/profile/useProfileApi";
+import { initializeMailboxConfiguration } from "@/lib/desktopSidecar/indexingConfiguration";
 import { useOrganizationConfiguration } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import type {
@@ -138,6 +141,8 @@ export function useDesktopSidecar(): DesktopSidecarContextValue {
 
 export function DesktopSidecarConfigurationSync() {
   const { client, snapshot } = useDesktopSidecar();
+  const { profile } = useProfileApi();
+  const queryClient = useQueryClient();
   const { data: organizationConfiguration } = useOrganizationConfiguration(
     {},
     { retry: false },
@@ -153,15 +158,54 @@ export function DesktopSidecarConfigurationSync() {
       return;
     }
 
-    void client
-      .invoke("sidecar.configure.v1", {
-        user_configuration: { show_tray_icon: null },
+    const controller = new AbortController();
+    void (async () => {
+      // Older servers cannot return saved overrides; avoid replacing them blindly.
+      if (!client.supports("indexing.status.v1")) return;
+      const status = await client.invoke(
+        "indexing.status.v1",
+        {},
+        { signal: controller.signal },
+      );
+      if (!status.configuration || controller.signal.aborted) return;
+      const configuration = {
+        ...status.configuration,
         organization_configuration: organizationConfiguration,
-      })
-      .catch((error: unknown) => {
-        console.warn("Failed to configure the Erato desktop sidecar:", error);
+      };
+      const { mailboxes } = client.supports("outlook.list_mailboxes.v1")
+        ? await client.invoke(
+            "outlook.list_mailboxes.v1",
+            {},
+            { signal: controller.signal },
+          )
+        : { mailboxes: [] };
+      controller.signal.throwIfAborted();
+      await client.invoke(
+        "sidecar.configure.v1",
+        initializeMailboxConfiguration(
+          configuration,
+          mailboxes,
+          profile?.email,
+        ),
+      );
+      await queryClient.invalidateQueries({
+        queryKey: ["sidecar-indexing", snapshot.instanceId],
       });
-  }, [client, organizationConfiguration, snapshot.instanceId, snapshot.state]);
+    })().catch((error: unknown) => {
+      if (controller.signal.aborted) return;
+      console.warn("Failed to configure the Erato desktop sidecar:", error);
+    });
+    return () => {
+      controller.abort();
+    };
+  }, [
+    client,
+    organizationConfiguration,
+    profile?.email,
+    queryClient,
+    snapshot.instanceId,
+    snapshot.state,
+  ]);
 
   return null;
 }

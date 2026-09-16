@@ -499,6 +499,12 @@ export class MockSidecar {
         return rpcError(message.id, -32602, "Invalid method parameters.");
       const params = message.params as IndexingStatusV1Params;
       const result = structuredClone(mockIndexingStatistics);
+      result.configuration = structuredClone(
+        this.#configuration ?? {
+          user_configuration: {},
+          organization_configuration: {},
+        },
+      );
       if (this.#indexingStopped) result.state = "stopped";
       const user = this.#configuration?.user_configuration;
       const organization = this.#configuration?.organization_configuration;
@@ -560,6 +566,18 @@ export class MockSidecar {
     if (message.method === "sidecar.configure.v1") {
       if (!validateSidecarConfigureV1Params(message.params)) {
         return rpcError(message.id, -32602, "Invalid method parameters.");
+      }
+      const configuration = message.params as SidecarConfigureV1Params;
+      for (const layer of [
+        configuration.user_configuration,
+        configuration.organization_configuration,
+      ]) {
+        const ids =
+          layer.indexing_mailboxes?.map((mailbox) =>
+            mailbox.mailbox_id.toLowerCase(),
+          ) ?? [];
+        if (new Set(ids).size !== ids.length)
+          return rpcError(message.id, -32602, "Duplicate mailbox IDs.");
       }
       this.#configuration = structuredClone(
         message.params,

@@ -22,6 +22,52 @@ const fixture = JSON.parse(
 ) as IndexingStatusV1Result;
 
 describe("indexing statistics contract", () => {
+  it("requires explicit valid mailbox priorities independently of array order", () => {
+    const mailbox = {
+      mailbox_id: "00000000-0000-4000-8000-000000000001",
+      enabled: true,
+      priority: 0,
+    };
+    const valid = (entry: unknown) =>
+      validateSidecarConfigureV1Params({
+        user_configuration: { indexing_mailboxes: [entry] },
+        organization_configuration: {},
+      });
+    expect(valid(mailbox)).toBe(true);
+    expect(valid({ ...mailbox, priority: Number.MAX_SAFE_INTEGER })).toBe(true);
+    for (const priority of [
+      -1,
+      1.5,
+      Number.MAX_SAFE_INTEGER + 1,
+      null,
+      "0",
+      undefined,
+    ])
+      expect(valid({ ...mailbox, priority })).toBe(false);
+    expect(valid({ ...mailbox, mailbox_id: "not-a-uuid" })).toBe(false);
+    expect(valid({ ...mailbox, enabled: "true" })).toBe(false);
+    const entries = [
+      mailbox,
+      {
+        ...mailbox,
+        mailbox_id: "00000000-0000-4000-8000-000000000002",
+        priority: 5,
+      },
+    ];
+    for (const indexing_mailboxes of [
+      null,
+      [],
+      entries,
+      [...entries].reverse(),
+    ]) {
+      expect(
+        validateSidecarConfigureV1Params({
+          user_configuration: { indexing_mailboxes },
+          organization_configuration: {},
+        }),
+      ).toBe(true);
+    }
+  });
   it("accepts native absolute directory paths and older v1 results", () => {
     for (const indexingDirectory of [
       "/Users/example/Library/Application Support/Erato/index",
