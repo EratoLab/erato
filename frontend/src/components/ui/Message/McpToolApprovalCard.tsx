@@ -33,10 +33,12 @@ export type McpToolApprovalRequestPart = Omit<
 };
 
 /**
- * Message-scoped UI for a durable MCP approval request. The continuation is
- * an SSE response; consuming it to completion before refetching the current
- * chat lets the regular message query render the rehydrated transcript
- * without duplicating the chat streaming state machine here.
+ * Message-scoped UI for a durable MCP approval request. The decision is
+ * handed to the chat's streaming machinery (`continueToolApproval`), which
+ * seeds the transcript with the decision at once — this card then reads its
+ * resolution off that part and hides — and streams the continuation like any
+ * other turn. A host that has not wired the action falls back to consuming
+ * the continuation here, which keeps the card up until the answer is done.
  *
  * Layout follows the add-in's client-action grammar — the thing being
  * approved above, the consent card attached below: the pending tool call is
@@ -107,34 +109,68 @@ export const McpToolApprovalCard = ({
     useGenerationStatusStore.getState().seedActionRequired(chatId, requestedAt);
   }, [chatId, isArchived, isPending, requestedAt]);
 
+  /**
+   * Hand the decision to the chat's own streaming machinery when the host
+   * wired it: that resolves as soon as the server ACCEPTS the decision, and
+   * the continuation then streams into the transcript like any other turn.
+   *
+   * The fallback consumes the continuation here instead, which cannot release
+   * this card until the whole answer has been generated.
+   */
+  const submitDecision = async (
+    decision: "approve" | "reject" | "approve_always",
+  ) => {
+    if (chatContext?.continueToolApproval) {
+      await chatContext.continueToolApproval({
+        messageId,
+        decision,
+        toolCallId: request.tool_call_id,
+        toolName: request.tool_name,
+        toolInput: request.input,
+        mcpServerId: request.mcp_server_id,
+      });
+      // Deliberately no local resolution: the seeded decision part is what
+      // hides this card, and it is rolled back if the server refuses the
+      // decision — a latch here would keep the card hidden over a row that
+      // is still parked, with no way left to decide it.
+      return;
+    }
+    const token = getIdToken();
+    // eslint-disable-next-line lingui/no-unlocalized-strings -- API route
+    const response = await fetch("/api/v1beta/me/messages/continuestream", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        // eslint-disable-next-line lingui/no-unlocalized-strings -- HTTP auth header
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ message_id: messageId, decision }),
+    });
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    await response.text();
+    if (chatId) {
+      // Tombstone the durable indicator: the server marker is already
+      // cleared, but a stale list row or in-flight poll may still carry it.
+      useGenerationStatusStore.getState().markApprovalDecided(chatId);
+    }
+    await chatContext?.refetchMessages();
+  };
+
   const decide = async (decision: "approve" | "reject" | "approve_always") => {
     setIsBusy(true);
     setError(null);
     try {
-      const token = getIdToken();
-      // eslint-disable-next-line lingui/no-unlocalized-strings -- API route
-      const response = await fetch("/api/v1beta/me/messages/continuestream", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          // eslint-disable-next-line lingui/no-unlocalized-strings -- HTTP auth header
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ message_id: messageId, decision }),
-      });
-      if (!response.ok) {
-        throw new Error(await response.text());
+      await submitDecision(decision);
+      if (chatContext?.continueToolApproval) {
+        return;
       }
-      await response.text();
       setLocalResolution(decision === "reject" ? "denied" : "approved");
-      if (chatId) {
-        // Tombstone the durable indicator: the server marker is already
-        // cleared, but a stale list row or in-flight poll may still carry it.
-        useGenerationStatusStore.getState().markApprovalDecided(chatId);
-      }
       if (decision === "approve_always") {
         // The grant is account-wide, and the settings roster and the tool
         // browser would otherwise keep serving it from their cached listing.
+        // (The streamed path drops them itself, once the grant is written.)
         await Promise.all([
           queryClient.invalidateQueries({
             queryKey: listMcpServerToolsQuery({
@@ -146,9 +182,6 @@ export const McpToolApprovalCard = ({
           }),
         ]);
       }
-      // Keep the user in the current chat. This refreshes the persisted
-      // decision and the resumed assistant output without a document reload.
-      await chatContext?.refetchMessages();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -214,7 +247,10 @@ export const McpToolApprovalCard = ({
         onDeny={() => void decide("reject")}
         status={isArchived ? "dismissed" : "pending"}
         resolvedLabel={isArchived ? archivedNoticeText() : undefined}
-        isBusy={isBusy}
+        // Held while the chat is still settling the park's own completion
+        // (its refetch resets the buffer a decision would seed), and while the
+        // decision is in flight.
+        isBusy={isBusy || (chatContext?.isPendingResponse ?? false)}
         scrollIntoViewOnMount
         data-testid="mcp-tool-approval-card"
       />

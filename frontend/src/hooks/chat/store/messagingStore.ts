@@ -154,9 +154,16 @@ export const useMessagingStore = create<MessagingStore>()(
           return combinedMessages;
         }
 
+        // A turn that streams into an already-persisted message (a resumed
+        // tool approval) has a stale copy of it in the API set from the
+        // moment it starts. That copy wins only once finalization is over —
+        // the completion refetch then holds the finished row — and not in
+        // the window between the completion event and that refetch, where it
+        // would show the message as it was before the turn.
         if (
           combinedMessages[currentStreaming.currentMessageId] &&
-          !currentStreaming.isStreaming
+          !currentStreaming.isStreaming &&
+          !currentStreaming.isFinalizing
         ) {
           return combinedMessages;
         }

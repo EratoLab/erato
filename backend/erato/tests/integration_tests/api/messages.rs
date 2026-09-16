@@ -4549,6 +4549,211 @@ async fn test_continuestream_resumes_a_parked_tool_approval(pool: Pool<Postgres>
     );
 }
 
+/// The wire contract the web client seeds its streaming buffer from: a
+/// continuation extends the SAME assistant message, so it emits NO
+/// `assistant_message_started` and numbers its deltas as offsets into that
+/// message's full persisted content — after the two parts the continuation
+/// appends before it reaches the model (the decision, then the gated call).
+/// A client that starts from an empty buffer, or seeds only the parked parts,
+/// misplaces every delta. Asserted for both decisions, on a park that already
+/// carries earlier content so index 0 is not the degenerate answer.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_continuestream_numbers_deltas_after_the_decision_and_call_parts(
+    pool: Pool<Postgres>,
+) {
+    for (decision, marker) in [
+        ("approve", "approval probe published"),
+        ("reject", "denied this tool call"),
+    ] {
+        let mut mocks = MockSet::new();
+        {
+            let marker = marker.to_string();
+            mocks.mock(move |when, then| {
+                when.post()
+                    .path("/v1/chat/completions")
+                    .matcher(BodyContainsMatcher::new(&[&marker], &[]));
+                mock_llm_sse_response(
+                    then,
+                    build_openai_text_streaming_response(&["CONTINUED-", "ANSWER"]),
+                );
+            });
+        }
+        {
+            let marker = marker.to_string();
+            mocks.mock(move |when, then| {
+                when.post()
+                    .path("/v1/chat/completions")
+                    .matcher(BodyContainsMatcher::new(&[], &[&marker]));
+                mock_llm_sse_response(
+                    then,
+                    crate::test_utils::build_openai_narrated_tool_calls_streaming_response(
+                        "Let me publish that. ",
+                        &[("call_probe", "publish_approval_probe", json!({}))],
+                    ),
+                );
+            });
+        }
+
+        let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+        app_config.mcp_servers.insert(
+            "mock_mcp_approval".to_string(),
+            mcp_server_config(
+                &mock_mcp_base_url(),
+                "/mcp/approval-policy",
+                McpServerAuthenticationConfig::None,
+            ),
+        );
+        app_config.mcp_server_permissions.rules.insert(
+            "allow-mock-mcp".to_string(),
+            erato::config::McpServerPermissionRule::AllowAll {
+                mcp_server_ids: vec!["mock_mcp_approval".to_string()],
+            },
+        );
+        app_config.mcp_servers_global.approval = erato::config::McpToolApprovalConfig {
+            enabled: true,
+            preset: erato::config::McpToolApprovalPreset::Restrictive,
+            allow_always: false,
+        };
+        let app_state = test_app_state(app_config, pool.clone()).await;
+        get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+            .await
+            .expect("Failed to create user");
+        let db = app_state.db.clone();
+        let server = app_server(app_state);
+
+        let response = server
+            .post("/api/v1beta/me/messages/submitstream")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&json!({ "user_message": "publish the approval probe" }))
+            .await;
+        response.assert_status_ok();
+        let events = parse_sse_events(&response);
+        let assistant_message_id =
+            Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+
+        let parked = erato::db::entity::messages::Entity::find_by_id(assistant_message_id)
+            .one(&db)
+            .await
+            .unwrap()
+            .expect("Expected the parked assistant message");
+        let parked_len = parked.raw_message["content"].as_array().unwrap().len();
+        assert_eq!(
+            parked_len, 2,
+            "{decision}: expected the narrated park to persist text + the approval request"
+        );
+
+        let continued = server
+            .post("/api/v1beta/me/messages/continuestream")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&json!({
+                "message_id": assistant_message_id,
+                "decision": decision,
+            }))
+            .await;
+        continued.assert_status_ok();
+        let continued_events = parse_sse_events(&continued);
+
+        assert!(
+            !continued_events
+                .iter()
+                .any(|event| event.event_type == "assistant_message_started"),
+            "{decision}: a continuation extends an existing message and must not announce a new one"
+        );
+
+        let delta_indices: Vec<usize> = continued_events
+            .iter()
+            .filter(|event| event.event_type == "text_delta")
+            .map(|event| {
+                serde_json::from_str::<serde_json::Value>(&event.data).unwrap()["content_index"]
+                    .as_u64()
+                    .unwrap() as usize
+            })
+            .collect();
+        assert!(
+            !delta_indices.is_empty(),
+            "{decision}: expected the continuation to stream an answer"
+        );
+        assert!(
+            delta_indices.iter().all(|index| *index == parked_len + 2),
+            "{decision}: expected every delta at parked_len + 2 ({}), got {delta_indices:?}",
+            parked_len + 2
+        );
+
+        // The gated call's outcome is announced at its own index, ahead of
+        // the answer, so a client that seeded the call as running can settle
+        // it in place (and a resume can rebuild it) while the answer streams.
+        let tool_updates: Vec<serde_json::Value> = continued_events
+            .iter()
+            .filter(|event| event.event_type == "tool_call_update")
+            .map(|event| serde_json::from_str(&event.data).unwrap())
+            .collect();
+        assert_eq!(
+            tool_updates.len(),
+            1,
+            "{decision}: expected one terminal update for the gated call, got {tool_updates:?}"
+        );
+        assert_eq!(tool_updates[0]["tool_call_id"], "call_probe");
+        assert_eq!(tool_updates[0]["content_index"], parked_len + 1);
+        assert_eq!(
+            tool_updates[0]["status"],
+            if decision == "reject" {
+                "error"
+            } else {
+                "success"
+            },
+            "{decision}: the announced status must match the persisted call"
+        );
+        let first_update_at = continued_events
+            .iter()
+            .position(|event| event.event_type == "tool_call_update")
+            .unwrap();
+        let first_delta_at = continued_events
+            .iter()
+            .position(|event| event.event_type == "text_delta")
+            .unwrap();
+        assert!(
+            first_update_at < first_delta_at,
+            "{decision}: the call's outcome must precede the answer"
+        );
+
+        // The two parts the client seeds, in the order it seeds them.
+        let resumed = erato::db::entity::messages::Entity::find_by_id(assistant_message_id)
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap();
+        let content_types: Vec<&str> = resumed.raw_message["content"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|part| part["content_type"].as_str().unwrap())
+            .collect();
+        let expected_decision_part = if decision == "reject" {
+            "tool_rejection"
+        } else {
+            "tool_approval"
+        };
+        assert_eq!(
+            content_types,
+            vec![
+                "text",
+                "tool_approval_request",
+                expected_decision_part,
+                "tool_use",
+                "text"
+            ],
+            "{decision}: unexpected persisted layout"
+        );
+    }
+}
+
 /// The same park continued with a denial: the tool is never called, the
 /// rejection and a failed tool result are persisted in its place, and the model
 /// answers around it. `approve_always` is refused outright while the approval

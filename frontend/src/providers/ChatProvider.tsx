@@ -19,6 +19,7 @@ import {
 } from "./FeatureConfigProvider";
 import { useFileCapabilitiesContext } from "./FileCapabilitiesProvider";
 
+import type { ContinueToolApprovalInput } from "@/hooks/chat/useChatMessaging";
 import type {
   ChatsError,
   ChatMessagesError,
@@ -102,6 +103,12 @@ export interface ChatContextValue {
     selectedFacetIds?: string[],
   ) => Promise<void>;
   cancelMessage: () => void;
+  /**
+   * Resume a turn parked on an MCP tool approval. Optional: a host that does
+   * not wire it makes the consent card fall back to buffering the
+   * continuation itself, which keeps the card on screen until it ends.
+   */
+  continueToolApproval?: (input: ContinueToolApprovalInput) => Promise<void>;
   refetchMessages: () => Promise<unknown>;
 
   // File upload
@@ -231,6 +238,7 @@ export function ChatProvider({
     editMessage,
     regenerateMessage,
     cancelMessage,
+    continueToolApproval,
     refetch: refetchMessages,
   } = useChatMessaging({
     chatId: isNewChatPending ? null : currentChatId,
@@ -365,6 +373,7 @@ export function ChatProvider({
       editMessage,
       regenerateMessage,
       cancelMessage,
+      continueToolApproval,
       refetchMessages,
 
       // File upload
@@ -418,6 +427,7 @@ export function ChatProvider({
     editMessage,
     regenerateMessage,
     cancelMessage,
+    continueToolApproval,
     refetchMessages,
 
     // File upload dependencies
