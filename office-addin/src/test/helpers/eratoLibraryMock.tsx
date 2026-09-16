@@ -167,6 +167,7 @@ export const DEFAULT_STUBS = {
   MailIcon: StubNothing,
   MediaVideoIcon: StubNothing,
   MessageContent: StubNothing,
+  MessageErrorAlert: StubNothing,
   MessageTimestamp: StubNothing,
   ModalBase: StubModalBase,
   MoreVertical: StubNothing,
@@ -201,8 +202,32 @@ export const DEFAULT_STUBS = {
   },
   resolvePopoverViewportPadding: () => 0,
   useChatHistoryRowPresentation: () => ({}),
+  // A renderer destructures the whole state in one go, so the neutral value
+  // carries every key rather than the handful a caller happens to read first.
+  useChatMessageRenderer: () => ({
+    isUser: false,
+    role: "assistant",
+    userDisplayName: "",
+    isEmpty: false,
+    attachmentIds: [],
+    filesById: {},
+    relatedFiles: [],
+    contentProps: { content: [] },
+    controlsProps: {},
+    lightbox: {
+      selectedImage: null,
+      isOpen: false,
+      openLightbox: noop,
+      closeLightbox: noop,
+    },
+  }),
   useGetFile: () => ({ data: undefined, isLoading: false, error: null }),
   useGetFilePreview: () => ({ data: undefined, isLoading: false, error: null }),
+  useMessageAttachmentFiles: () => ({
+    items: [],
+    relatedFiles: [],
+    teamsGrouping: null,
+  }),
   // The surface's own metadata. Only the major is pinned to the host's value
   // and checked against it: kits compare it with a strict `!==`, so a bump is
   // a breaking change the add-in has to see. The other two are deliberately

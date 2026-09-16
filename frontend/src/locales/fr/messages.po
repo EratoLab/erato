@@ -1969,102 +1969,102 @@ msgid "chat.message.error.copy_report.copied"
 msgstr "Copié"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Chat/MessageErrorAlert.tsx
 msgid "chat.message.error.details"
 msgstr "Détails"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.title"
 msgstr "Erreur de l'assistant"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter"
 msgstr "La réponse a été filtrée car le message a déclenché la politique de gestion du contenu."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter.cta"
 msgstr "Veuillez réessayer avec un message différent qui évite les catégories filtrées."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Chat/MessageErrorAlert.tsx
 msgid "chat.message.error.variant.content_filter.filtered_categories"
 msgstr "Catégories filtrées"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter.hate"
 msgstr "Haine"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter.high_severity"
 msgstr "gravité élevée"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter.low_severity"
 msgstr "faible gravité"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter.medium_severity"
 msgstr "gravité moyenne"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter.safe_severity"
 msgstr "sûr"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter.self_harm"
 msgstr "Automutilation"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter.sexual"
 msgstr "Sexuel"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter.violence"
 msgstr "Violence"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.default"
 msgstr "L’assistant n’a pas pu répondre."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.hallucination_loop"
 msgstr "Génération interrompue. Boucle d'hallucination détectée. Veuillez régénérer le message."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.prompt_injection"
 msgstr "La requête a été bloquée, car elle correspondait à une règle de protection contre les injections de prompt."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.prompt_injection.cta"
 msgstr "Veuillez modifier le message précédent pour supprimer le texte problématique avant de continuer."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Chat/MessageErrorAlert.tsx
 msgid "chat.message.error.variant.prompt_injection.offending_text"
 msgstr "Texte problématique"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.rate_limit"
 msgstr "Limite de requêtes ou quota dépassé. Cela peut aussi arriver si votre entrée est trop volumineuse."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.rate_limit.cta"
 msgstr "Réessayez dans une minute et réduisez la longueur ou le nombre de pièces jointes."
 
