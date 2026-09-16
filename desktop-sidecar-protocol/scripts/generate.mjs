@@ -18,6 +18,38 @@ const outputDirectory =
 
 const typeTargets = [
   [
+    "schemas/methods/indexing-benchmark-list-v1-params.schema.json",
+    "indexing-benchmark-list-v1-params.ts",
+    "IndexingBenchmarkListV1Params",
+  ],
+  [
+    "schemas/methods/indexing-benchmark-list-v1-result.schema.json",
+    "indexing-benchmark-list-v1-result.ts",
+    "IndexingBenchmarkListV1Result",
+  ],
+
+  [
+    "schemas/methods/indexing-benchmark-start-v1-params.schema.json",
+    "indexing-benchmark-start-v1-params.ts",
+    "IndexingBenchmarkStartV1Params",
+  ],
+  [
+    "schemas/methods/indexing-benchmark-start-v1-result.schema.json",
+    "indexing-benchmark-start-v1-result.ts",
+    "IndexingBenchmarkStartV1Result",
+  ],
+  [
+    "schemas/methods/indexing-benchmark-status-v1-params.schema.json",
+    "indexing-benchmark-status-v1-params.ts",
+    "IndexingBenchmarkStatusV1Params",
+  ],
+  [
+    "schemas/methods/indexing-benchmark-status-v1-result.schema.json",
+    "indexing-benchmark-status-v1-result.ts",
+    "IndexingBenchmarkStatusV1Result",
+  ],
+
+  [
     "schemas/methods/indexing-start-v1-params.schema.json",
     "indexing-start-v1-params.ts",
     "IndexingStartV1Params",
@@ -251,6 +283,20 @@ const typeTargets = [
 ];
 
 const validatorTargets = {
+  validateIndexingBenchmarkListV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-benchmark-list-v1-params.schema.json",
+  validateIndexingBenchmarkListV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-benchmark-list-v1-result.schema.json",
+
+  validateIndexingBenchmarkStartV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-benchmark-start-v1-params.schema.json",
+  validateIndexingBenchmarkStartV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-benchmark-start-v1-result.schema.json",
+  validateIndexingBenchmarkStatusV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-benchmark-status-v1-params.schema.json",
+  validateIndexingBenchmarkStatusV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-benchmark-status-v1-result.schema.json",
+
   validateIndexingStartV1Params:
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-start-v1-params.schema.json",
   validateIndexingStartV1Result:

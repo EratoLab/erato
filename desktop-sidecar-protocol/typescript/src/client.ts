@@ -1,6 +1,12 @@
 import { SidecarClientError, SidecarRpcError } from "./errors.js";
 import {
   validateCancelResult,
+  validateIndexingBenchmarkListV1Params,
+  validateIndexingBenchmarkListV1Result,
+  validateIndexingBenchmarkStartV1Params,
+  validateIndexingBenchmarkStartV1Result,
+  validateIndexingBenchmarkStatusV1Params,
+  validateIndexingBenchmarkStatusV1Result,
   validateIndexingStartV1Params,
   validateIndexingStartV1Result,
   validateIndexingStopV1Params,
@@ -34,6 +40,12 @@ import {
 
 import type {
   CapabilityDescriptor,
+  IndexingBenchmarkListV1Params,
+  IndexingBenchmarkListV1Result,
+  IndexingBenchmarkStartV1Params,
+  IndexingBenchmarkStartV1Result,
+  IndexingBenchmarkStatusV1Params,
+  IndexingBenchmarkStatusV1Result,
   IndexingStartV1Params,
   IndexingStartV1Result,
   IndexingStopV1Params,
@@ -193,6 +205,18 @@ const builtInContracts: Readonly<Record<string, SidecarMethodContract>> = {
     validateParams: validateSidecarRestartV1Params,
     validateResult: validateSidecarRestartV1Result,
   },
+  "indexing.benchmark.list.v1": {
+    validateParams: validateIndexingBenchmarkListV1Params,
+    validateResult: validateIndexingBenchmarkListV1Result,
+  },
+  "indexing.benchmark.start.v1": {
+    validateParams: validateIndexingBenchmarkStartV1Params,
+    validateResult: validateIndexingBenchmarkStartV1Result,
+  },
+  "indexing.benchmark.status.v1": {
+    validateParams: validateIndexingBenchmarkStatusV1Params,
+    validateResult: validateIndexingBenchmarkStatusV1Result,
+  },
   "indexing.start.v1": {
     validateParams: validateIndexingStartV1Params,
     validateResult: validateIndexingStartV1Result,
@@ -316,6 +340,21 @@ export class DesktopSidecarClient {
     params: SidecarProgressV1Params,
     options?: InvokeOptions,
   ): Promise<SidecarProgressV1Result>;
+  async invoke(
+    method: "indexing.benchmark.list.v1",
+    params: IndexingBenchmarkListV1Params,
+    options?: InvokeOptions,
+  ): Promise<IndexingBenchmarkListV1Result>;
+  async invoke(
+    method: "indexing.benchmark.start.v1",
+    params: IndexingBenchmarkStartV1Params,
+    options?: InvokeOptions,
+  ): Promise<IndexingBenchmarkStartV1Result>;
+  async invoke(
+    method: "indexing.benchmark.status.v1",
+    params: IndexingBenchmarkStatusV1Params,
+    options?: InvokeOptions,
+  ): Promise<IndexingBenchmarkStatusV1Result>;
   async invoke(
     method: "indexing.start.v1",
     params: IndexingStartV1Params,

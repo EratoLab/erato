@@ -1,4 +1,10 @@
 /* This file is generated. Do not edit. */
+export type { IndexingBenchmarkListV1Params } from "./indexing-benchmark-list-v1-params.js";
+export type { IndexingBenchmarkListV1Result } from "./indexing-benchmark-list-v1-result.js";
+export type { IndexingBenchmarkStartV1Params } from "./indexing-benchmark-start-v1-params.js";
+export type { IndexingBenchmarkStartV1Result } from "./indexing-benchmark-start-v1-result.js";
+export type { IndexingBenchmarkStatusV1Params } from "./indexing-benchmark-status-v1-params.js";
+export type { IndexingBenchmarkStatusV1Result } from "./indexing-benchmark-status-v1-result.js";
 export type { IndexingStartV1Params } from "./indexing-start-v1-params.js";
 export type { IndexingStartV1Result } from "./indexing-start-v1-result.js";
 export type { IndexingStopV1Params } from "./indexing-stop-v1-params.js";
