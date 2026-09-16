@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-benchmark-list-v1-result.schema.json",
+  "title": "IndexingBenchmarkListV1Result",
+  "type": "object",
+  "properties": {
+    "runs": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "mailboxId": {
+            "type": "string",
+            "pattern": "^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["fiveMinutes", "fullMailbox"]
+          },
+          "state": {
+            "type": "string",
+            "enum": ["preparing", "running", "completed", "failed"]
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finishedAt": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "runId",
+          "mailboxId",
+          "mode",
+          "state",
+          "startedAt",
+          "finishedAt"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "nextOffset": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "maximum": 9007199254740991
+    }
+  },
+  "required": ["runs", "nextOffset"],
+  "additionalProperties": false
+}

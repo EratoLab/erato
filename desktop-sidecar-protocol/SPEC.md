@@ -634,3 +634,49 @@ Search uses a consistent active generation and never creates an index. With no
 active index it returns `capability_unavailable`, reason `index_not_initialized`;
 during reset the reason is `index_reset_in_progress`. The mock returns an empty
 synthetic search result and models lifecycle state, not actual BM25 or rebuilding.
+
+## Mailbox indexing benchmarks
+
+`indexing.benchmark.start.v1` accepts a discovered `mailboxId` and an optional
+`mode` (`fiveMinutes`, the default, or `fullMailbox`). It returns a durably persisted
+`runId` and snapshot. `indexing.benchmark.status.v1` accepts that ID and returns
+current/final statistics. Mailbox IDs accept the compact IDs from mailbox discovery
+and their equivalent hyphenated UUID representation.
+Unknown mailboxes, unknown run IDs, and overlapping starts are invalid
+parameters. RPC run IDs and final results survive process restarts.
+
+The sidecar drains normal indexing before timing the benchmark, creates a fresh
+temporary index, and runs one mailbox scan with CPU-count parallelism and no
+normal indexing rate limit. States are `preparing`, `running`, `completed`, and
+`failed`. Full-mailbox mode attempts each discovered document once; extraction
+failures are counted without retries. Five-minute mode cancels work at 300
+seconds; in-flight source/database operations must drain before completion. Runs
+may finish earlier when the mailbox is exhausted. The temporary index is deleted
+on completion/failure, and the runtime index is preserved. Normal indexing resumes
+if it was running before the benchmark; ordinary stop/start requests during a run
+update whether indexing should resume. Rebuilds are rejected during a benchmark.
+
+Snapshots report chosen parallelism, elapsed seconds, discovered/indexed/failed
+document counts, counts by email/attachment MIME type, discovery completion, and
+time-limit status. `completed` does not imply zero extraction failures or a fully
+scanned mailbox. `mailboxBytes` sums source sizes represented by successful work:
+PST/OST email message sizes include attachments and are counted once; macOS OLK
+email and separately indexed attachment files contribute their file sizes.
+`emailsWithUnknownSize` explicitly counts indexed emails omitted from the byte
+sum. Sizes are not allocated disk usage or index size. Terminal failures carry an
+`error`; timed-out runs can complete successfully with partial statistics.
+
+`indexing.benchmark.list.v1` rediscovers run IDs after frontend state loss. It
+accepts optional `limit` (1–100, default 50) and `offset` (nonnegative, default 0).
+The result contains `runs` and `nextOffset` (null at the end). Summaries contain
+`runId`, `mailboxId`, `mode`, `state`, `startedAt`, and nullable `finishedAt`, sorted
+by start time descending with run ID as a descending tie-breaker. Use the status
+RPC for full results. New runs can shift offset pages; refresh from offset zero
+when polling. Empty history or an offset beyond the end returns an empty page.
+
+The sidecar atomically persists each RPC run before acknowledging its start and
+persists its final snapshot after completion. History has no automatic 32-run
+expiry and is independent of the disposable benchmark index. On startup,
+previously preparing/running records are marked failed with an interruption error
+and finish timestamp; partial volatile counters are not restored. Standalone CLI
+runs continue to return their results directly without writing runtime history.

@@ -634,6 +634,147 @@
           "state": "enabled"
         }
       }
+    },
+    {
+      "name": "indexing.benchmark.start.v1",
+      "summary": "Start an isolated mailbox indexing benchmark; pause normal indexing until completion.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/indexing-benchmark-start-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/indexing-benchmark-start-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/PermissionDenied"
+        },
+        {
+          "$ref": "#/components/errors/RequestCancelled"
+        },
+        {
+          "$ref": "#/components/errors/Timeout"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ],
+      "x-erato-capability": {
+        "id": "indexing.benchmark.start",
+        "major": 1,
+        "method": "indexing.benchmark.start.v1",
+        "availability": {
+          "state": "enabled"
+        }
+      }
+    },
+    {
+      "name": "indexing.benchmark.status.v1",
+      "summary": "Poll a benchmark run and collect its statistics.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/indexing-benchmark-status-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/indexing-benchmark-status-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/PermissionDenied"
+        },
+        {
+          "$ref": "#/components/errors/RequestCancelled"
+        },
+        {
+          "$ref": "#/components/errors/Timeout"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ],
+      "x-erato-capability": {
+        "id": "indexing.benchmark.status",
+        "major": 1,
+        "method": "indexing.benchmark.status.v1",
+        "availability": {
+          "state": "enabled"
+        }
+      }
+    },
+    {
+      "name": "indexing.benchmark.list.v1",
+      "summary": "List persisted benchmark runs, newest first, to recover their IDs and retrieve results.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/indexing-benchmark-list-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/indexing-benchmark-list-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/PermissionDenied"
+        },
+        {
+          "$ref": "#/components/errors/RequestCancelled"
+        },
+        {
+          "$ref": "#/components/errors/Timeout"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ],
+      "x-erato-capability": {
+        "id": "indexing.benchmark.list",
+        "major": 1,
+        "method": "indexing.benchmark.list.v1",
+        "availability": {
+          "state": "enabled"
+        }
+      }
     }
   ],
   "components": {
@@ -688,6 +829,6 @@
   },
   "x-erato-catalogue": {
     "revision": "8",
-    "digest": "sha256:cfe3b7293d9fc1663467123f374db3f9819234ec7fcd19fded09b131b5556447"
+    "digest": "sha256:e16b4bcf349bd42eb2a5d2f58b48dcda143441462860741db6fd17559f8b4c0f"
   }
 }
