@@ -1,7 +1,7 @@
 import { i18n, type Messages } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
@@ -15,11 +15,134 @@ import {
   AssistantWelcomeUpper,
 } from "./AssistantWelcomeScreen";
 
+import type { AssistantWelcomeHeaderState } from "./AssistantWelcomeScreen";
 import type { AssistantWithFiles } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
 
 i18n.load("en", enMessages as unknown as Messages);
 i18n.activate("en");
+
+function CustomHeader({
+  assistantInitial,
+  configurationLabel,
+  openConfiguration,
+  editAction,
+}: AssistantWelcomeHeaderState) {
+  return (
+    <header>
+      <button aria-label={configurationLabel} onClick={openConfiguration}>
+        {assistantInitial}
+      </button>
+      {editAction && (
+        <button onClick={editAction.onClick}>{editAction.label}</button>
+      )}
+    </header>
+  );
+}
+
+function LocationProbe() {
+  return <output data-testid="location">{useLocation().pathname}</output>;
+}
+
+describe("AssistantWelcomeUpper custom header", () => {
+  const assistant: AssistantWithFiles = {
+    id: "custom-assistant",
+    name: "  Budget Assistant",
+    prompt: "x".repeat(510),
+    created_at: "2026-03-23T08:00:00.000Z",
+    updated_at: "2026-03-23T09:00:00.000Z",
+    facet_ids: [],
+    enforce_facet_settings: false,
+    mcp_server_ids: [],
+    can_edit: true,
+    owner_email: "owner@example.com",
+    files: [
+      {
+        id: "restricted",
+        filename: "restricted.pdf",
+        download_url: null,
+        preview_url: null,
+        file_contents_unavailable_missing_permissions: true,
+        file_capability:
+          FileTypeUtil.createMockFileCapability("restricted.pdf"),
+        is_sharepoint_file: false,
+      },
+    ],
+  };
+
+  function renderCustom(value = assistant) {
+    return render(
+      <ThemeProvider enableCustomTheme={false}>
+        <I18nProvider i18n={i18n}>
+          <MemoryRouter>
+            <AssistantWelcomeUpper
+              assistant={value}
+              renderHeader={(state) => <CustomHeader {...state} />}
+              configurationClassName="custom-configuration"
+            />
+            <LocationProbe />
+          </MemoryRouter>
+        </I18nProvider>
+      </ThemeProvider>,
+    );
+  }
+
+  it("keeps the host configuration lifecycle and content with a custom header", () => {
+    renderCustom();
+    const trigger = screen.getByRole("button", {
+      name: "View assistant configuration",
+    });
+    expect(trigger).toHaveTextContent("B");
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveClass("custom-configuration", "max-w-2xl");
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(
+      "Some default files are inaccessible",
+    );
+    expect(
+      within(dialog).getByRole("link", { name: assistant.owner_email! }),
+    ).toHaveAttribute("href", "mailto:owner@example.com");
+    expect(within(dialog).getByText(`${"x".repeat(500)}...`)).toBeVisible();
+    expect(within(dialog).getByText("restricted.pdf")).toBeVisible();
+    expect(
+      within(dialog).queryByRole("button", { name: "Edit Assistant Settings" }),
+    ).toBeNull();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(trigger);
+    expect(screen.getByRole("dialog")).toBeVisible();
+  });
+
+  it("lets the custom header place the host edit action and retain its route", () => {
+    renderCustom();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Edit Assistant Settings" }),
+    );
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      "/assistants/custom-assistant/edit",
+    );
+  });
+
+  it("withholds edit without permission and retains the host's empty-name fallback", () => {
+    renderCustom({
+      ...assistant,
+      name: " ",
+      can_edit: false,
+      owner_email: undefined,
+      files: [],
+    });
+    const trigger = screen.getByRole("button", {
+      name: "View assistant configuration",
+    });
+    expect(trigger).toHaveTextContent("A");
+    expect(
+      screen.queryByRole("button", { name: "Edit Assistant Settings" }),
+    ).toBeNull();
+    fireEvent.click(trigger);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText("Default Files")).toBeNull();
+  });
+});
 
 vi.mock("@/hooks/ui/usePageAlignment", () => ({
   usePageAlignment: () => ({

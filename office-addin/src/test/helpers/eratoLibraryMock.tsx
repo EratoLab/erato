@@ -115,6 +115,11 @@ const createStoreStub = <S,>(readState: () => S) =>
   );
 
 export const DEFAULT_STUBS = {
+  useThemedIcon: () => null,
+  getChatUrl: () => "",
+  ModelSelector: StubNothing,
+  StarterPromptsSection: StubNothing,
+  AssistantWelcomeUpper: StubNothing,
   splitFilenameForDisplay: () => ({ stem: "", extension: "" }),
   isImageFileResource: () => false,
   getFilePreviewUrl: () => undefined,
