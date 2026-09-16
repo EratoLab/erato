@@ -239,10 +239,23 @@ export type {
   GroupedFileAttachmentsPreviewRenderers,
 } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 
+export { AssistantWelcomeUpper } from "@/components/ui/Assistant/AssistantWelcomeScreen";
+export type {
+  AssistantWelcomeHeaderState,
+  AssistantWelcomeUpperProps,
+} from "@/components/ui/Assistant/AssistantWelcomeScreen";
+export { StarterPromptsSection } from "@/components/ui/Chat/StarterPromptsSection";
+export { ModelSelector } from "@/components/ui/Chat/ModelSelector";
+export { getChatUrl } from "@/utils/chat/urlUtils";
+export { useThemedIcon } from "@/hooks/ui/useThemedIcon";
+
 export const ERATO_KIT_SURFACE_EXPORTS = [
   "Alert",
   "ArchiveIcon",
   "ArchivedChatPill",
+  "AssistantWelcomeHeaderState",
+  "AssistantWelcomeUpper",
+  "AssistantWelcomeUpperProps",
   "AttachmentNotice",
   "AttachmentTile",
   "AttachmentTileList",
@@ -314,6 +327,7 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "MessageErrorAlert",
   "MessageTimestamp",
   "ModalBase",
+  "ModelSelector",
   "MoreVertical",
   "MultiplePagesIcon",
   "MusicNoteIcon",
@@ -345,6 +359,7 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "SidebarToggleProps",
   "SidebarToggleSurface",
   "SpinnerIcon",
+  "StarterPromptsSection",
   "TabRail",
   "TabRailOption",
   "TabRailProps",
@@ -359,6 +374,7 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "ToolCallOutputProps",
   "Tooltip",
   "findCapabilityByExtension",
+  "getChatUrl",
   "getFileName",
   "getFilePreviewUrl",
   "isImageFileResource",
@@ -374,5 +390,5 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "useGetFilePreview",
   "useGroupedFileAttachmentsPreview",
   "useMessageAttachmentFiles",
+  "useThemedIcon",
 ] as const;
-/* eslint-enable lingui/no-unlocalized-strings */

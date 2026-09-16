@@ -29,6 +29,7 @@ import type { SegmentedControlOption } from "@/components/ui/Controls/SegmentedC
 import type { AssistantWithFiles } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
 import type { ChatAttentionStatus } from "@/utils/chatHistoryGrouping";
+import type { ReactNode } from "react";
 
 export interface AssistantWelcomeScreenProps {
   /** The assistant this chat space is for */
@@ -109,15 +110,27 @@ const rowTitle = ({ title, titleResolved }: ChatSession): string => {
     : t({ id: "chat.newChat.title", message: "New Chat" });
 };
 
-type AssistantWelcomeUpperProps = Pick<
-  AssistantWelcomeScreenProps,
-  "assistant" | "className"
->;
+export interface AssistantWelcomeHeaderState {
+  assistantInitial: string;
+  configurationLabel: string;
+  openConfiguration: () => void;
+  editAction: { label: string; onClick: () => void } | null;
+}
+
+export interface AssistantWelcomeUpperProps
+  extends Pick<AssistantWelcomeScreenProps, "assistant" | "className"> {
+  /** Replace the identity header and its wrapper; the host keeps the modal. */
+  renderHeader?: (state: AssistantWelcomeHeaderState) => ReactNode;
+  /** Scope custom configuration styling without rebuilding its contents. */
+  configurationClassName?: string;
+}
 
 /** Avatar, name and description, each opening the configuration modal; sits above the composer. */
 export function AssistantWelcomeUpper({
   assistant,
   className = "",
+  renderHeader,
+  configurationClassName,
 }: AssistantWelcomeUpperProps) {
   const navigate = useNavigate();
   const [isConfigurationOpen, setIsConfigurationOpen] = useState(false);
@@ -146,56 +159,76 @@ export function AssistantWelcomeUpper({
     message: "View assistant configuration",
   });
 
+  const editAction = assistant.can_edit
+    ? {
+        label: t({
+          id: "assistant.welcome.edit",
+          message: "Edit Assistant Settings",
+        }),
+        onClick: handleEditAssistant,
+      }
+    : null;
+
   return (
-    <div
-      className={clsx("w-full", horizontalPadding, className)}
-      data-testid="assistant-welcome-screen-default"
-    >
-      <div className={clsx("w-full", headerContainerClasses)}>
-        <div className={clsx("mb-4 flex", headerJustifyAlignment)}>
-          <button
-            type="button"
-            onClick={openConfiguration}
-            className="focus-ring flex size-20 items-center justify-center rounded-full bg-theme-avatar-assistant-bg text-3xl font-semibold text-theme-avatar-assistant-fg transition-transform hover:scale-105"
-            aria-label={configurationLabel}
-            data-testid="assistant-welcome-avatar-button"
-          >
-            <span data-testid="assistant-welcome-avatar-initial">
-              {assistantInitial}
-            </span>
-          </button>
+    <>
+      {renderHeader ? (
+        renderHeader({
+          assistantInitial,
+          configurationLabel,
+          openConfiguration,
+          editAction,
+        })
+      ) : (
+        <div
+          className={clsx("w-full", horizontalPadding, className)}
+          data-testid="assistant-welcome-screen-default"
+        >
+          <div className={clsx("w-full", headerContainerClasses)}>
+            <div className={clsx("mb-4 flex", headerJustifyAlignment)}>
+              <button
+                type="button"
+                onClick={openConfiguration}
+                className="focus-ring flex size-20 items-center justify-center rounded-full bg-theme-avatar-assistant-bg text-3xl font-semibold text-theme-avatar-assistant-fg transition-transform hover:scale-105"
+                aria-label={configurationLabel}
+                data-testid="assistant-welcome-avatar-button"
+              >
+                <span data-testid="assistant-welcome-avatar-initial">
+                  {assistantInitial}
+                </span>
+              </button>
+            </div>
+
+            <h1 className={clsx("mb-2", headerTextAlignment)}>
+              <button
+                type="button"
+                onClick={openConfiguration}
+                className={clsx(
+                  // Control radius, not shell: this is a bare text affordance
+                  // with no padding or fill, so the radius only shapes the focus
+                  // ring. A card radius made that ring capsule-ish on one line
+                  // of text.
+                  "focus-ring-tight rounded-[var(--theme-radius-control)] text-2xl font-bold text-theme-fg-primary hover:text-theme-fg-accent",
+                  headerTextAlignment,
+                )}
+                title={configurationLabel}
+              >
+                {assistant.name}
+              </button>
+            </h1>
+
+            {assistant.description && (
+              <p
+                className={clsx(
+                  "text-lg text-theme-fg-secondary",
+                  headerTextAlignment,
+                )}
+              >
+                {assistant.description}
+              </p>
+            )}
+          </div>
         </div>
-
-        <h1 className={clsx("mb-2", headerTextAlignment)}>
-          <button
-            type="button"
-            onClick={openConfiguration}
-            className={clsx(
-              // Control radius, not shell: this is a bare text affordance
-              // with no padding or fill, so the radius only shapes the focus
-              // ring. A card radius made that ring capsule-ish on one line
-              // of text.
-              "focus-ring-tight rounded-[var(--theme-radius-control)] text-2xl font-bold text-theme-fg-primary hover:text-theme-fg-accent",
-              headerTextAlignment,
-            )}
-            title={configurationLabel}
-          >
-            {assistant.name}
-          </button>
-        </h1>
-
-        {assistant.description && (
-          <p
-            className={clsx(
-              "text-lg text-theme-fg-secondary",
-              headerTextAlignment,
-            )}
-          >
-            {assistant.description}
-          </p>
-        )}
-      </div>
-
+      )}
       <ModalBase
         isOpen={isConfigurationOpen}
         onClose={closeConfiguration}
@@ -203,7 +236,7 @@ export function AssistantWelcomeUpper({
           id: "assistant.welcome.configuration.title",
           message: "Configuration",
         })}
-        contentClassName="max-w-2xl"
+        contentClassName={clsx("max-w-2xl", configurationClassName)}
       >
         <div className="space-y-5 text-left" data-ui="assistant-detail-card">
           {inaccessibleFiles.length > 0 ? (
@@ -245,7 +278,10 @@ export function AssistantWelcomeUpper({
               })}
             </h3>
             <div className="max-h-48 overflow-y-auto rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3">
-              <p className="whitespace-pre-wrap font-mono text-xs text-theme-fg-primary">
+              <p
+                data-ui="assistant-configuration-prompt"
+                className="whitespace-pre-wrap font-mono text-xs text-theme-fg-primary"
+              >
                 {assistant.prompt.length > 500
                   ? `${assistant.prompt.slice(0, 500)}...`
                   : assistant.prompt}
@@ -266,6 +302,7 @@ export function AssistantWelcomeUpper({
                 {assistant.files.map((file) => (
                   <span
                     key={file.id}
+                    data-ui="assistant-configuration-file"
                     className="rounded-[var(--theme-radius-pill)] bg-theme-bg-accent px-2 py-1 text-xs text-theme-fg-secondary"
                   >
                     {file.filename}
@@ -275,22 +312,19 @@ export function AssistantWelcomeUpper({
             </div>
           )}
 
-          {assistant.can_edit && (
+          {!renderHeader && editAction && (
             <Button
               variant="secondary"
               size="sm"
               icon={<EditIcon />}
-              onClick={handleEditAssistant}
+              onClick={editAction.onClick}
             >
-              {t({
-                id: "assistant.welcome.edit",
-                message: "Edit Assistant Settings",
-              })}
+              {editAction.label}
             </Button>
           )}
         </div>
       </ModalBase>
-    </div>
+    </>
   );
 }
 
