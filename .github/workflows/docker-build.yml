@@ -766,6 +766,42 @@ jobs:
         run: |
           pnpm exec playwright test ${{ matrix.projects }} ${{ matrix.shard && format('--shard={0}', matrix.shard) || '' }} --retries 2 --trace on-first-retry --grep-invert "@no-ci"
 
+      # Playwright's report shows what the browser saw; a failure whose cause
+      # is server-side (a generation that never finishes, a request that 500s)
+      # leaves no trace in it at all. The cluster is thrown away with the
+      # runner, so the logs have to be pulled out here or they are gone.
+      #
+      # `always()`, not `failure()`: the suite retries, so the interesting
+      # server-side faults are the ones a retry papers over — the job stays
+      # green and the evidence would be discarded exactly when it is needed.
+      # Selector rather than `deploy/`, because multi-replica runs two pods and
+      # `kubectl logs deploy/...` would pick one of them, unlabelled.
+      - name: Dump backend logs
+        if: always()
+        run: |
+          kubectl logs -n erato-local-ns \
+            --selector=app.kubernetes.io/component=erato-app \
+            --all-containers --prefix --tail=3000 --timestamps \
+            > backend.log 2>&1 || true
+          # A pod killed and restarted (OOM under the tight-budget limits)
+          # leaves its story in the dead container, which the above cannot see.
+          kubectl logs -n erato-local-ns \
+            --selector=app.kubernetes.io/component=erato-app \
+            --all-containers --prefix --previous --tail=3000 --timestamps \
+            >> backend.log 2>&1 || true
+          # Restart counts and pod ages belong next to the log, not in a step
+          # output that expires with the run.
+          kubectl get pods -n erato-local-ns -o wide >> backend.log 2>&1 || true
+
+      - name: Upload backend logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-backend-log-${{ matrix.scenario }}${{ matrix.shard_name || '' }}
+          path: backend.log
+          retention-days: 30
+          if-no-files-found: ignore
+
       - name: Upload blob report
         uses: actions/upload-artifact@v4
         if: always()
