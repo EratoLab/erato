@@ -48,8 +48,14 @@ const stepTitle = (
   toolName: string | undefined,
   name: string | undefined,
   isRunning: boolean,
+  isQueued: boolean,
 ): string => {
   if (toolName === DELEGATE_TASK_TOOL_NAME) {
+    // A queued slot has no child yet, so neither the running nor the past
+    // tense is true of it. Only the task route can queue.
+    if (isQueued) {
+      return t({ id: "trace.delegation.task.queued", message: "Task queued" });
+    }
     return isRunning
       ? t({ id: "trace.delegation.task.running", message: "Running a task" })
       : t({ id: "trace.delegation.task.done", message: "Ran a task" });
@@ -318,7 +324,11 @@ export const DelegationStep = ({
     envelope.background ? envelope.delegateChatId : undefined,
   );
   const stepStatus = stepStatusFor(envelope, status);
-  const isRunning = stepStatus === "running" && isStreaming;
+  // A queued slot inherits the rail's "running", because the rail has only
+  // three states — but nothing about it is in flight, so it must not pulse
+  // or call itself running in the title.
+  const isQueued = envelope.status === "queued";
+  const isRunning = stepStatus === "running" && isStreaming && !isQueued;
   const nested = trace && trace.steps.length > 0 ? trace : undefined;
   const outcome =
     envelope.status !== undefined ? outcomeLabel(envelope.status) : undefined;
@@ -376,7 +386,12 @@ export const DelegationStep = ({
       <TraceStep
         railIcon={railIconFor(part.content_type, stepStatus)}
         hasTrailingRailLine={!isLastStep}
-        title={stepTitle(part.tool_name, envelope.assistantName, isRunning)}
+        title={stepTitle(
+          part.tool_name,
+          envelope.assistantName,
+          isRunning,
+          isQueued,
+        )}
         titleSlot={
           envelope.background ? (
             // The detachment is the one thing worth saying about this step —
