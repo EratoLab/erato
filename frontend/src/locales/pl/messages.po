@@ -4408,6 +4408,91 @@ msgid "sharing.type.user"
 msgstr "Użytkownik"
 
 #. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.attachments"
+msgstr "Zindeksowane załączniki: {indexed} / {total}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.caption"
+msgstr "Wyszukiwanie lokalne na tym urządzeniu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.documents"
+msgstr "Zindeksowane dokumenty: {indexed} / {total}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.emails"
+msgstr "Zindeksowane e-maile: {indexed} / {total}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.empty"
+msgstr "Nie znaleziono lokalnych skrzynek pocztowych."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.enable"
+msgstr "Włącz indeksowanie skrzynki {mailbox}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.knownTotals"
+msgstr "Łączne liczby dotyczą wykrytych elementów. Myślnik oznacza, że statystyki nie są jeszcze dostępne."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.loadError"
+msgstr "Nie udało się wczytać statystyk indeksowania. Ponawianie próby…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.loading"
+msgstr "Wczytywanie statystyk indeksowania…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.moveDown"
+msgstr "Zmniejsz priorytet skrzynki {mailbox}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.moveUp"
+msgstr "Zwiększ priorytet skrzynki {mailbox}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.parallelism"
+msgstr "Równoległe procesy indeksowania"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.save"
+msgstr "Zapisz ustawienia indeksowania"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.saveError"
+msgstr "Nie udało się zapisać ustawień indeksowania. Spróbuj ponownie."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.throttle"
+msgstr "Dokumenty na minutę"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.title"
+msgstr "Indeksowanie skrzynek pocztowych"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.upgrade"
+msgstr "Zaktualizuj Desktop Sidecar, aby skonfigurować indeksowanie."
+
+#. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallInput.tsx
 msgid "toolcall.input.title"
 msgstr "Parametry wejściowe"

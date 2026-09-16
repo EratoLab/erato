@@ -4408,6 +4408,91 @@ msgid "sharing.type.user"
 msgstr "Benutzer"
 
 #. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.attachments"
+msgstr "{indexed} / {total} Anhänge indexiert"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.caption"
+msgstr "Lokale Suche auf diesem Gerät"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.documents"
+msgstr "{indexed} / {total} Dokumente indexiert"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.emails"
+msgstr "{indexed} / {total} E-Mails indexiert"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.empty"
+msgstr "Keine lokalen Postfächer gefunden."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.enable"
+msgstr "Indexierung für {mailbox} aktivieren"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.knownTotals"
+msgstr "Die Gesamtzahlen beziehen sich auf erfasste Elemente. Ein Strich bedeutet, dass noch keine Statistiken verfügbar sind."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.loadError"
+msgstr "Indexierungsstatistiken konnten nicht geladen werden. Erneuter Versuch…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.loading"
+msgstr "Indexierungsstatistiken werden geladen…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.moveDown"
+msgstr "Priorität für {mailbox} verringern"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.moveUp"
+msgstr "Priorität für {mailbox} erhöhen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.parallelism"
+msgstr "Parallele Indexierungsvorgänge"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.save"
+msgstr "Indexierungseinstellungen speichern"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.saveError"
+msgstr "Indexierungseinstellungen konnten nicht gespeichert werden. Bitte erneut versuchen."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.throttle"
+msgstr "Dokumente pro Minute"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.title"
+msgstr "Postfachindexierung"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.upgrade"
+msgstr "Aktualisieren Sie den Desktop Sidecar, um die Indexierung zu konfigurieren."
+
+#. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallInput.tsx
 msgid "toolcall.input.title"
 msgstr "Eingabeparameter"

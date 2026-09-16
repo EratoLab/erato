@@ -225,6 +225,23 @@ sidecar without requiring a restart.
 
 ### Indexing configuration
 
+`indexing_mailboxes` is a nullable array of `{mailbox_id, enabled, priority}`
+overrides. IDs are UUIDs from `outlook.list_mailboxes.v1` and MUST be unique
+(case-insensitive). Priority is a nonnegative safe integer; lower numbers are
+processed first, with canonical mailbox ID breaking ties. Array order has no
+effect. Unlisted mailboxes are enabled at priority `9007199254740991`. A non-null
+user array replaces the organization array as a whole; null inherits and an
+empty array uses defaults. Disabling prevents new discovery and processing,
+including queued work, without deleting searchable data. In-flight work may
+finish. Priority changes apply to subsequent work without restarting.
+
+Updated status responses include `configuration` containing both persisted
+layers so clients can preserve unrelated properties when editing. Clients must
+not overwrite saved settings on connection. If both mailbox arrays are null or
+absent, clients should match the signed-in user's email case-insensitively to a
+discovered mailbox and send a configure request assigning it priority `0`.
+Explicit arrays, including empty arrays, must not be initialized again.
+
 Both existing configuration layers accept nullable positive safe integers:
 
 | Property                        | Default | Meaning                                                                                                     |

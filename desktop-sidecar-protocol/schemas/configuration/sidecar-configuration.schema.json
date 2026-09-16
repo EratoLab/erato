@@ -5,6 +5,25 @@
   "description": "An extensible configuration layer. Unknown properties must be accepted and preserved.",
   "type": "object",
   "properties": {
+    "indexing_mailboxes": {
+      "description": "Mailbox indexing overrides. Priority is explicit and independent of array order: lower numbers are processed first, with mailbox ID as a deterministic tie-breaker. Unlisted mailboxes remain enabled with priority 9007199254740991. Null inherits the other layer; an empty array explicitly uses defaults. Mailbox IDs must be unique. Disabling stops new discovery and processing but retains existing searchable data; in-flight work may finish.",
+      "type": ["array", "null"],
+      "items": {
+        "type": "object",
+        "properties": {
+          "mailbox_id": { "type": "string", "format": "uuid" },
+          "enabled": { "type": "boolean" },
+          "priority": {
+            "description": "Indexing priority; lower numbers are processed first. Array order has no effect.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": ["mailbox_id", "enabled", "priority"],
+        "additionalProperties": true
+      }
+    },
     "show_tray_icon": {
       "description": "Whether the sidecar should show its system tray icon. Null leaves the decision to the other configuration layer or the sidecar default.",
       "type": ["boolean", "null"]
