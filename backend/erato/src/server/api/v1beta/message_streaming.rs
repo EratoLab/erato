@@ -3630,13 +3630,19 @@ async fn stream_generate_chat_completion<
                     }
                     // A background launch settles the part as a Success — a
                     // dispatch is not an error — with two deliberately
-                    // different shapes. The UI output carries NO "status":
-                    // the frontend renders any status other than "completed"
-                    // as a failure, and the "background" marker is what its
-                    // background presentation keys off. The model gets an
-                    // explicit "dispatched" status plus the note so its
-                    // final prose reports work that was started, not an
-                    // answer it never received.
+                    // different shapes. The UI output carries NO "status",
+                    // and the "background" marker is what its background
+                    // presentation keys off. The model gets an explicit
+                    // "dispatched" status plus the note so its final prose
+                    // reports work that was started, not an answer it never
+                    // received.
+                    //
+                    // The status was originally omitted because the frontend
+                    // rendered anything other than "completed" as a failure.
+                    // It no longer does — it reads the full vocabulary and
+                    // treats "dispatched" as settled — but the omission
+                    // stands on its own: a dispatch outcome is not a child
+                    // status, and every shipped part already has this shape.
                     Ok(crate::services::delegation::DelegationDispatchOutcome::Dispatched {
                         assistant_id,
                         assistant_name,

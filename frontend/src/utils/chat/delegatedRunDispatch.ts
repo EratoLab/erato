@@ -15,7 +15,7 @@
  * exists, inviting a false terminal transition.
  */
 import {
-  DELEGATION_TOOL_NAME,
+  isDelegationToolName,
   parseDelegationEnvelope,
 } from "@/lib/delegation/delegationEnvelope";
 import { recentChatsQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
@@ -66,7 +66,7 @@ export function seedDispatchedDelegatedRun(
   originChatId: string,
   update: MessageSubmitStreamingResponseToolCallUpdate,
 ): boolean {
-  if (update.tool_name !== DELEGATION_TOOL_NAME) {
+  if (!isDelegationToolName(update.tool_name)) {
     return false;
   }
   const envelope = parseDelegationEnvelope(update.output ?? undefined);

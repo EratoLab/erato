@@ -2,6 +2,7 @@ import { t } from "@lingui/core/macro";
 
 import { OpenNewWindowIcon } from "@/components/ui/icons";
 import { useDelegatedRunLiveStatus } from "@/hooks/chat/useDelegatedRunLiveStatus";
+import { DELEGATE_TASK_TOOL_NAME } from "@/lib/delegation/delegationEnvelope";
 import { useSidecarLocalTrace } from "@/lib/desktopSidecar/localTraceStore";
 import { useDelegatedRunOpener } from "@/providers/DelegatedRunOpenProvider";
 import { getChatUrl } from "@/utils/chat/urlUtils";
@@ -37,7 +38,22 @@ const headline = (summary: string): string =>
     message: `Delegated run: ${summary}`,
   });
 
-const stepTitle = (name: string | undefined, isRunning: boolean): string => {
+/**
+ * What the step says it is doing. The route is read off the tool name, never
+ * off the envelope's identity: under the default persona a task child speaks
+ * as the origin chat's assistant, so it carries an assistant name exactly
+ * like an @-mention run and the two are indistinguishable by identity alone.
+ */
+const stepTitle = (
+  toolName: string | undefined,
+  name: string | undefined,
+  isRunning: boolean,
+): string => {
+  if (toolName === DELEGATE_TASK_TOOL_NAME) {
+    return isRunning
+      ? t({ id: "trace.delegation.task.running", message: "Running a task" })
+      : t({ id: "trace.delegation.task.done", message: "Ran a task" });
+  }
   if (name === undefined) {
     return isRunning
       ? t({
@@ -58,9 +74,14 @@ const stepTitle = (name: string | undefined, isRunning: boolean): string => {
 const outcomeLabel = (status: string): string | undefined => {
   switch (status) {
     case "completed":
+    case "dispatched":
       return undefined;
+    case "working":
+      return t({ id: "trace.tool.running", message: "Running" });
     case "failed":
       return t({ id: "trace.tool.failed", message: "Failed" });
+    // Retired in favour of `cancelled` + `reason: "timeout"`, but parts
+    // persisted before that change replay forever and keep their own word.
     case "timeout":
       return t({ id: "trace.delegation.status.timeout", message: "Timed out" });
     case "cancelled":
@@ -70,6 +91,74 @@ const outcomeLabel = (status: string): string | undefined => {
       });
     default:
       return status;
+  }
+};
+
+/**
+ * The closed `reason` vocabulary, said in the user's words. An unknown value
+ * is rendered verbatim rather than dropped: a newer backend should degrade to
+ * something readable, not to silence.
+ */
+const reasonLabel = (reason: string): string => {
+  switch (reason) {
+    case "timeout":
+      return t({
+        id: "trace.delegation.reason.timeout",
+        message: "The run took too long",
+      });
+    case "no_answer":
+      return t({
+        id: "trace.delegation.reason.noAnswer",
+        message: "The run ended without an answer",
+      });
+    case "parent_abort":
+      return t({
+        id: "trace.delegation.reason.parentAbort",
+        message: "Stopped with the message that started it",
+      });
+    case "cap_exceeded":
+      return t({
+        id: "trace.delegation.reason.capExceeded",
+        message: "Stopped at its tool-call budget; the answer may be partial",
+      });
+    case "approval_pending":
+      return t({
+        id: "trace.delegation.reason.approvalPending",
+        message: "Waiting for your decision on a tool it wants to use",
+      });
+    case "approval_unavailable":
+      return t({
+        id: "trace.delegation.reason.approvalUnavailable",
+        message: "Needed a tool it could not ask you about",
+      });
+    default:
+      return reason;
+  }
+};
+
+/**
+ * Pill for a run that is neither in flight nor finished — states the rail has
+ * no glyph for. `stepStatusFor` deliberately keeps those steps out of the
+ * error tone, so the pill is what carries the news.
+ */
+const pendingPill = (
+  status: string,
+): { label: string; toneClassName?: string } | undefined => {
+  switch (status) {
+    case "queued":
+      return {
+        label: t({ id: "trace.delegation.status.queued", message: "Queued" }),
+      };
+    case "input_required":
+      return {
+        label: t({
+          id: "trace.delegation.status.inputRequired",
+          message: "Needs your decision",
+        }),
+        toneClassName: "bg-theme-warning-bg text-theme-warning-fg",
+      };
+    default:
+      return undefined;
   }
 };
 
@@ -85,7 +174,23 @@ const stepStatusFor = (
   if (envelope.status === undefined) {
     return status;
   }
-  return envelope.status === "completed" ? "done" : "error";
+  switch (envelope.status) {
+    case "completed":
+    case "dispatched":
+      return "done";
+    case "failed":
+    case "cancelled":
+    case "timeout":
+      return "error";
+    // Alive, or waiting on someone. None of these is a failure, and the rail
+    // has only three states, so they inherit the step's own status and say
+    // what they are in the pill instead.
+    case "working":
+    case "queued":
+    case "input_required":
+    default:
+      return status;
+  }
 };
 
 /**
@@ -217,8 +322,17 @@ export const DelegationStep = ({
   const nested = trace && trace.steps.length > 0 ? trace : undefined;
   const outcome =
     envelope.status !== undefined ? outcomeLabel(envelope.status) : undefined;
+  const pending =
+    envelope.status !== undefined ? pendingPill(envelope.status) : undefined;
   const preview = resultPreview(envelope.result);
-  const hasSummary = preview !== undefined || envelope.truncated;
+  // Any reason the backend sends is shown. A `completed` run is exactly where
+  // the interesting ones ride — a run that answered nothing, or one that
+  // stopped at its budget with a partial answer — and those are the cases the
+  // rail's green check would otherwise report as an unqualified success.
+  const why =
+    envelope.reason !== undefined ? reasonLabel(envelope.reason) : undefined;
+  const hasSummary =
+    preview !== undefined || envelope.truncated || why !== undefined;
 
   const body =
     nested !== undefined || hasSummary ? (
@@ -236,6 +350,7 @@ export const DelegationStep = ({
             className="space-y-0.5 pb-1 pl-2.5 text-xs text-theme-fg-muted"
             data-testid="delegation-result"
           >
+            {why !== undefined && <p data-testid="delegation-reason">{why}</p>}
             {preview !== undefined && (
               <p className="whitespace-pre-wrap">{preview}</p>
             )}
@@ -261,12 +376,14 @@ export const DelegationStep = ({
       <TraceStep
         railIcon={railIconFor(part.content_type, stepStatus)}
         hasTrailingRailLine={!isLastStep}
-        title={stepTitle(envelope.assistantName, isRunning)}
+        title={stepTitle(part.tool_name, envelope.assistantName, isRunning)}
         titleSlot={
           envelope.background ? (
             // The detachment is the one thing worth saying about this step —
             // it outranks even an approval decision.
             <SettledInfoPill {...backgroundPill(liveStatus)} />
+          ) : pending !== undefined ? (
+            <SettledInfoPill {...pending} />
           ) : (
             <ToolStatusPill
               status={stepStatus}

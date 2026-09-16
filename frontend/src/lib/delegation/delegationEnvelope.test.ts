@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { parseDelegationEnvelope } from "./delegationEnvelope";
+import {
+  DELEGATE_TASK_TOOL_NAME,
+  DELEGATION_TOOL_NAME,
+  isDelegationToolName,
+  parseDelegationEnvelope,
+} from "./delegationEnvelope";
 
 const RUNNING = {
   assistant_id: "asst-1",
@@ -122,5 +127,103 @@ describe("parseDelegationEnvelope", () => {
       assistant_name: "n".repeat(500),
     });
     expect(envelope?.assistantName).toHaveLength(128);
+  });
+
+  it("parses every status the backend may emit, plus legacy timeout", () => {
+    for (const status of [
+      "queued",
+      "working",
+      "input_required",
+      "completed",
+      "failed",
+      "cancelled",
+      "dispatched",
+      "timeout",
+    ]) {
+      expect(parseDelegationEnvelope({ ...RUNNING, status })).toMatchObject({
+        status,
+      });
+    }
+  });
+
+  it("admits a queued slot, which has no run to point at yet", () => {
+    expect(parseDelegationEnvelope({ status: "queued" })).toMatchObject({
+      status: "queued",
+      delegateChatId: undefined,
+      background: false,
+    });
+  });
+
+  it("admits a parked child that has not answered", () => {
+    expect(parseDelegationEnvelope({ status: "input_required" })).toMatchObject(
+      { status: "input_required" },
+    );
+  });
+
+  it("still rejects a status it does not know", () => {
+    expect(parseDelegationEnvelope({ status: "elaborating" })).toBeUndefined();
+  });
+
+  it("reads the reason and the parent tool call", () => {
+    expect(
+      parseDelegationEnvelope({
+        ...RUNNING,
+        status: "cancelled",
+        reason: "timeout",
+        parent_tool_call_id: "call-9",
+      }),
+    ).toMatchObject({
+      status: "cancelled",
+      reason: "timeout",
+      parentToolCallId: "call-9",
+    });
+  });
+
+  it("falls back to child_run_id when the legacy key is absent", () => {
+    expect(
+      parseDelegationEnvelope({
+        status: "completed",
+        child_run_id: "chat-7",
+      }),
+    ).toMatchObject({ delegateChatId: "chat-7" });
+  });
+
+  it("prefers delegate_chat_id when a writer sends both", () => {
+    expect(
+      parseDelegationEnvelope({
+        status: "completed",
+        delegate_chat_id: "chat-1",
+        child_run_id: "chat-1",
+      }),
+    ).toMatchObject({ delegateChatId: "chat-1" });
+  });
+
+  it("reads a task envelope that carries no assistant at all", () => {
+    expect(
+      parseDelegationEnvelope({
+        status: "completed",
+        child_run_id: "chat-3",
+        result: "done",
+      }),
+    ).toMatchObject({
+      assistantId: undefined,
+      assistantName: undefined,
+      delegateChatId: "chat-3",
+      result: "done",
+    });
+  });
+});
+
+describe("isDelegationToolName", () => {
+  it("recognises both delegation routes", () => {
+    expect(isDelegationToolName(DELEGATION_TOOL_NAME)).toBe(true);
+    expect(isDelegationToolName(DELEGATE_TASK_TOOL_NAME)).toBe(true);
+  });
+
+  it("recognises nothing else", () => {
+    expect(isDelegationToolName("search_web")).toBe(false);
+    expect(isDelegationToolName(undefined)).toBe(false);
+    // The model sees the bare name; `erato/` is allowlist selection syntax.
+    expect(isDelegationToolName("erato/delegate_task")).toBe(false);
   });
 });
