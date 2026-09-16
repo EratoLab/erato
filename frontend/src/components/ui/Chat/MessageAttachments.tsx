@@ -2,6 +2,7 @@ import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import { AttachmentTileList } from "@/components/ui/FileUpload/AttachmentTileList";
+import { getFilePreviewUrl } from "@/components/ui/FileUpload/FilePreviewBase";
 import { GroupedFileAttachmentsPreview } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 import { getFileQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
@@ -28,9 +29,6 @@ export interface MessageAttachmentsProps {
     relatedFiles?: readonly FileUploadItem[],
   ) => void;
 }
-
-const getPreviewUrl = (file: FileUploadItem): string =>
-  typeof file.preview_url === "string" ? file.preview_url : file.download_url;
 
 export interface MessageAttachmentFiles {
   /** Tiles to draw, in attachment order, minus the ids that do not resolve. */
@@ -100,7 +98,7 @@ const useAttachmentTiles = (
           {
             id: fileId,
             file: displayName ? { ...file, displayName } : file,
-            previewUrl: getPreviewUrl(file),
+            previewUrl: getFilePreviewUrl(file),
           },
         ];
       }),

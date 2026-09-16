@@ -115,6 +115,10 @@ const createStoreStub = <S,>(readState: () => S) =>
   );
 
 export const DEFAULT_STUBS = {
+  splitFilenameForDisplay: () => ({ stem: "", extension: "" }),
+  isImageFileResource: () => false,
+  getFilePreviewUrl: () => undefined,
+  FileAttachmentsPreview: StubNothing,
   // The declared kit surface. Covered wholesale so a name pinned by
   // `kit-surface.ts` can never be the one missing entry that breaks linking.
   Alert: StubNothing,

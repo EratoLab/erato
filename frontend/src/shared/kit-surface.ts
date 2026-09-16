@@ -55,7 +55,20 @@ export { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 export { AttachmentNotice } from "@/components/ui/FileUpload/AttachmentNotice";
 export { AttachmentTile } from "@/components/ui/FileUpload/AttachmentTile";
 export { AttachmentTileList } from "@/components/ui/FileUpload/AttachmentTileList";
-export { getFileName } from "@/components/ui/FileUpload/FilePreviewBase";
+export type {
+  AttachmentTileProps,
+  AttachmentTilePresentation,
+} from "@/components/ui/FileUpload/AttachmentTile";
+export { FileAttachmentsPreview } from "@/components/ui/FileUpload/FileAttachmentsPreview";
+export type { FileAttachmentsPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
+export {
+  getFileName,
+  getFilePreviewUrl,
+  isImageFileResource,
+  splitFilenameForDisplay,
+} from "@/components/ui/FileUpload/FilePreviewBase";
+export { findCapabilityByExtension } from "@/utils/fileCapabilities";
+export { useFileCapabilitiesContext } from "@/providers/FileCapabilitiesProvider";
 export { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
 export { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoading";
 export { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageControls";
@@ -233,6 +246,8 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "AttachmentNotice",
   "AttachmentTile",
   "AttachmentTileList",
+  "AttachmentTilePresentation",
+  "AttachmentTileProps",
   "Avatar",
   "Button",
   "CHAT_HISTORY_ROW_MENU_ID",
@@ -276,6 +291,8 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "EntityRowTone",
   "EratoGeometryClassKey",
   "ErrorIcon",
+  "FileAttachmentsPreview",
+  "FileAttachmentsPreviewProps",
   "FilePreviewButton",
   "FilePreviewLoading",
   "FileUploadLoading",
@@ -341,13 +358,18 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "ToolCallOutput",
   "ToolCallOutputProps",
   "Tooltip",
+  "findCapabilityByExtension",
   "getFileName",
+  "getFilePreviewUrl",
+  "isImageFileResource",
   "messageStyles",
   "resolvePopoverViewportPadding",
+  "splitFilenameForDisplay",
   "useChatHistoryRow",
   "useChatHistoryRowMenuItems",
   "useChatHistoryRowPresentation",
   "useChatMessageRenderer",
+  "useFileCapabilitiesContext",
   "useGetFile",
   "useGetFilePreview",
   "useGroupedFileAttachmentsPreview",

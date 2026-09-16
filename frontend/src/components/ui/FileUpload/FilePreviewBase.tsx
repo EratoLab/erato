@@ -1,3 +1,4 @@
+import { isImageFile } from "@/utils/file/fileTypeUtils";
 import { FILE_TYPES } from "@/utils/fileTypes";
 
 import { AttachmentTile } from "./AttachmentTile";
@@ -20,6 +21,29 @@ export interface LocalFilePreviewItem {
  * Type that can represent a browser File, a local preview item, or a server-side FileUploadItem
  */
 export type FileResource = File | LocalFilePreviewItem | FileUploadItem;
+
+/** The preview endpoint takes precedence over the original download. */
+export function getFilePreviewUrl(file: FileResource): string | undefined {
+  return (
+    ("preview_url" in file && typeof file.preview_url === "string"
+      ? file.preview_url
+      : undefined) ??
+    ("download_url" in file && typeof file.download_url === "string"
+      ? file.download_url
+      : undefined)
+  );
+}
+
+/** API capability metadata also identifies images with opaque filenames. */
+export function isImageFileResource(file: FileResource): boolean {
+  return (
+    ("file_capability" in file &&
+      (file.file_capability.id === "image" ||
+        // eslint-disable-next-line lingui/no-unlocalized-strings -- API operation identifier
+        file.file_capability.operations.includes("analyze_image"))) ||
+    isImageFile(getFileName(file))
+  );
+}
 
 /**
  * Type guard to determine if a FileResource is a File

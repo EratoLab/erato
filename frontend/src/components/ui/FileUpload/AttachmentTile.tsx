@@ -57,10 +57,22 @@ const TILE_GEOMETRY = {
   },
 } as const satisfies Record<AttachmentTileSize, Record<string, string>>;
 
+/** A custom face uses host metadata and image failure handling. */
+export interface AttachmentTilePresentation {
+  filename: string;
+  imageProps: React.ImgHTMLAttributes<HTMLImageElement> | null;
+}
+
 export interface AttachmentTileProps {
   file: FileResource;
   /** Without it every file renders as a document tile. */
   previewUrl?: string | null;
+  /** Overrides extension-based media detection, e.g. an API image capability. */
+  isImage?: boolean;
+  /** Replaces the face and its chrome, retaining activation/removal/selection. */
+  renderContent?: (presentation: AttachmentTilePresentation) => React.ReactNode;
+  /** Replaces the default remove badge classes; its behaviour stays with the host. */
+  removeButtonClassName?: string;
   size?: AttachmentTileSize;
   variant?: AttachmentTileVariant;
   onRemove?: () => void;
@@ -95,7 +107,8 @@ const RemoveButton: React.FC<{
   onRemove: () => void;
   filename: string;
   disabled: boolean;
-}> = ({ onRemove, filename, disabled }) => (
+  className?: string;
+}> = ({ onRemove, filename, disabled, className }) => (
   <button
     type="button"
     onClick={(event) => {
@@ -105,15 +118,18 @@ const RemoveButton: React.FC<{
     disabled={disabled}
     data-ui="attachment-remove"
     aria-label={`${t({ id: "common.remove", message: "Remove" })} ${filename}`}
-    className={clsx(
-      // Overhangs enough to clear its own tile without reaching the next one.
-      "attachment-badge-geometry absolute -right-1 -top-1 z-10 inline-flex size-5 items-center justify-center",
-      "border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] text-[var(--theme-fg-muted)] shadow-sm",
-      "hover:text-[var(--theme-fg-primary)] disabled:cursor-not-allowed",
-      // Hidden until hover or focus, but always shown where there is no hover.
-      "opacity-0 transition-opacity focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100",
-      "[@media(hover:none)]:opacity-100",
-    )}
+    className={
+      className ??
+      clsx(
+        // Overhangs enough to clear its own tile without reaching the next one.
+        "attachment-badge-geometry absolute -right-1 -top-1 z-10 inline-flex size-5 items-center justify-center",
+        "border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] text-[var(--theme-fg-muted)] shadow-sm",
+        "hover:text-[var(--theme-fg-primary)] disabled:cursor-not-allowed",
+        // Hidden until hover or focus, but always shown where there is no hover.
+        "opacity-0 transition-opacity focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100",
+        "[@media(hover:none)]:opacity-100",
+      )
+    }
   >
     <CloseIcon className="size-3" />
   </button>
@@ -123,6 +139,9 @@ const RemoveButton: React.FC<{
 export const AttachmentTile: React.FC<AttachmentTileProps> = ({
   file,
   previewUrl,
+  isImage,
+  renderContent,
+  removeButtonClassName,
   size = "compact",
   variant = "tile",
   onRemove,
@@ -189,7 +208,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
     variant === "tile" &&
     !selection &&
     Boolean(previewUrl) &&
-    fileType === "image" &&
+    (isImage ?? fileType === "image") &&
     !imageFailed;
   // A tile has no room inside it for a control, so the badge overhangs a
   // corner; a row draws the caller's inline, where a disabled one stays visible.
@@ -219,7 +238,17 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
       </span>
     );
 
-  const body = (
+  const imageProps: React.ImgHTMLAttributes<HTMLImageElement> = {
+    src: previewUrl ?? undefined,
+    alt: onActivate ? "" : filename,
+    onError: () => setImageFailed(true),
+  };
+  const customContent = renderContent?.({
+    filename,
+    imageProps: isMedia ? imageProps : null,
+  });
+
+  const body = customContent ?? (
     <>
       {!hideIcon && (
         <span
@@ -255,16 +284,18 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
     "data-selected": selection ? selection.selected || undefined : undefined,
     "data-invalid": invalid || undefined,
     title: selection ? filename : undefined,
-    className: clsx(
-      "attachment-tile-geometry flex w-full items-center gap-2 text-left",
-      variant !== "bare" &&
-        "border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-secondary)] p-2",
-      variant !== "bare" &&
-        onActivate &&
-        !selection &&
-        "transition-colors group-hover:border-[var(--theme-border-focus)] group-hover:bg-[var(--theme-bg-accent)]",
-      selection && !selection.selected && "opacity-50",
-    ),
+    className: renderContent
+      ? undefined
+      : clsx(
+          "attachment-tile-geometry flex w-full items-center gap-2 text-left",
+          variant !== "bare" &&
+            "border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-secondary)] p-2",
+          variant !== "bare" &&
+            onActivate &&
+            !selection &&
+            "transition-colors group-hover:border-[var(--theme-border-focus)] group-hover:bg-[var(--theme-bg-accent)]",
+          selection && !selection.selected && "opacity-50",
+        ),
   };
   const documentFaceInner = (
     <>
@@ -297,29 +328,30 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
   // A `label` forwards clicks to its control, so a chip that is selectable and
   // activatable would preview and deselect at once; there the frame stays plain.
   const face = isMedia ? (
-    // Inside an activatable tile the button already names the file, so alt text
-    // would announce it twice; standalone, the alt text is the only carrier.
-    <img
-      src={previewUrl ?? undefined}
-      alt={onActivate ? "" : filename}
-      onError={() => setImageFailed(true)}
-      data-ui="attachment-tile"
-      data-variant={variant}
-      data-media="image"
-      style={
-        expanded
-          ? {
-              maxWidth: "var(--theme-layout-chat-image-preview-max-width)",
-              maxHeight: "var(--theme-layout-chat-image-preview-max-height)",
-            }
-          : { width: geometry.mediaSize, height: geometry.mediaSize }
-      }
-      className={clsx(
-        "attachment-tile-geometry border [border-color:var(--theme-border-media)]",
-        // Cropping suits a thumbnail, not an image opened to be looked at.
-        expanded ? "w-full object-contain" : "object-cover",
-      )}
-    />
+    (customContent ?? (
+      // Inside an activatable tile the button already names the file, so alt text
+      // would announce it twice; standalone, the alt text is the only carrier.
+      <img
+        {...imageProps}
+        alt={imageProps.alt}
+        data-ui="attachment-tile"
+        data-variant={variant}
+        data-media="image"
+        style={
+          expanded
+            ? {
+                maxWidth: "var(--theme-layout-chat-image-preview-max-width)",
+                maxHeight: "var(--theme-layout-chat-image-preview-max-height)",
+              }
+            : { width: geometry.mediaSize, height: geometry.mediaSize }
+        }
+        className={clsx(
+          "attachment-tile-geometry border [border-color:var(--theme-border-media)]",
+          // Cropping suits a thumbnail, not an image opened to be looked at.
+          expanded ? "w-full object-contain" : "object-cover",
+        )}
+      />
+    ))
   ) : selection && !onActivate ? (
     <label {...documentFaceProps}>{documentFaceInner}</label>
   ) : (
@@ -342,8 +374,10 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
           "attachment-tile-geometry block w-full cursor-pointer text-left",
           "focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus focus-visible:ring-offset-2",
           // A bare chip has no face to tint, so hover lives on the button.
-          variant === "bare" && "hover:bg-[var(--theme-bg-accent)]",
-          isMedia && "hover:opacity-90",
+          !renderContent &&
+            variant === "bare" &&
+            "hover:bg-[var(--theme-bg-accent)]",
+          !renderContent && isMedia && "hover:opacity-90",
         )}
       >
         {face}
@@ -366,7 +400,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
       )}
       style={
         {
-          ...(variant === "tile" && !isMedia
+          ...(!renderContent && variant === "tile" && !isMedia
             ? { maxWidth: geometry.docMaxWidth }
             : undefined),
           // Handed down as a variable rather than set on the plate, where an
@@ -391,6 +425,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
           onRemove={onRemove}
           filename={filename}
           disabled={disabled}
+          className={removeButtonClassName}
         />
       )}
 
