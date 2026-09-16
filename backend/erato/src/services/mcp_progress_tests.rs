@@ -12,21 +12,63 @@ use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
 type Events = UnboundedSender<Result<Event, std::convert::Infallible>>;
+
+/// A deterministic server-side pause. The handler parks until the test lets
+/// it go, so a concurrency assertion can be about ORDER — did B finish while
+/// A was still in flight — instead of about elapsed time. `just test` runs
+/// nextest with `--retries 2`, which would quietly mask a timing flake.
+#[derive(Debug)]
+struct Gate {
+    entered: tokio::sync::Semaphore,
+    release: tokio::sync::Semaphore,
+}
+
+impl Default for Gate {
+    fn default() -> Self {
+        Self {
+            entered: tokio::sync::Semaphore::new(0),
+            release: tokio::sync::Semaphore::new(0),
+        }
+    }
+}
+
+impl Gate {
+    /// Server side: announce arrival, then park until the test releases us.
+    async fn park(&self) {
+        self.entered.add_permits(1);
+        self.release.acquire().await.unwrap().forget();
+    }
+
+    /// Test side: return once a handler is parked inside the gate.
+    async fn wait_entered(&self) {
+        self.entered.acquire().await.unwrap().forget();
+    }
+
+    /// Test side: let one parked handler go.
+    fn release(&self) {
+        self.release.add_permits(1);
+    }
+}
+
 #[derive(Clone, Default)]
-struct WireServer(
-    Arc<tokio::sync::Mutex<Option<Events>>>,
-    Arc<std::sync::atomic::AtomicUsize>,
-);
+struct WireServer {
+    events: Arc<tokio::sync::Mutex<Option<Events>>>,
+    attempts: Arc<std::sync::atomic::AtomicUsize>,
+    /// Parks a `tools/call` whose marker is `gate`.
+    call_gate: Arc<Gate>,
+    /// Parks the `tools/list` that a new session issues while connecting.
+    list_gate: Arc<Gate>,
+}
 
 async fn sse_connect(State(state): State<WireServer>) -> Response {
     let (tx, rx) = unbounded_channel();
     tx.send(Ok(Event::default().event("endpoint").data("/messages")))
         .unwrap();
-    *state.0.lock().await = Some(tx);
+    *state.events.lock().await = Some(tx);
     Sse::new(UnboundedReceiverStream::new(rx)).into_response()
 }
 
-async fn emit(request: Value, tx: Events, attempts: Arc<std::sync::atomic::AtomicUsize>) {
+async fn emit(request: Value, tx: Events, state: WireServer) {
     let result = match request["method"].as_str().unwrap_or_default() {
         "initialize" => {
             json!({"protocolVersion": request["params"]["protocolVersion"], "capabilities": {"tools": {}}, "serverInfo": {"name": "progress-test", "version": "1"}})
@@ -38,9 +80,15 @@ async fn emit(request: Value, tx: Events, attempts: Arc<std::sync::atomic::Atomi
             let marker = request["params"]["arguments"]["marker"].as_str().unwrap();
             let token = request["params"]["_meta"]["progressToken"].clone();
             assert!(!token.is_null(), "SDK must request progress");
+            if marker == "gate" {
+                state.call_gate.park().await;
+            }
             if marker == "error"
                 || (marker == "retry"
-                    && attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0)
+                    && state
+                        .attempts
+                        .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+                        == 0)
             {
                 let message = if marker == "retry" {
                     "session invalid"
@@ -50,7 +98,7 @@ async fn emit(request: Value, tx: Events, attempts: Arc<std::sync::atomic::Atomi
                 let _ = tx.send(Ok(Event::default().event("message").data(json!({"jsonrpc":"2.0", "id":request["id"], "error":{"code":-32603,"message":message}}).to_string())));
                 return;
             }
-            if marker != "silent" {
+            if marker != "silent" && marker != "gate" {
                 for step in 1..=3 {
                     let mut params = json!({"progressToken": token, "progress": step});
                     if step != 2 {
@@ -73,8 +121,8 @@ async fn emit(request: Value, tx: Events, attempts: Arc<std::sync::atomic::Atomi
 }
 
 async fn sse_post(State(state): State<WireServer>, Json(request): Json<Value>) -> StatusCode {
-    let tx = state.0.lock().await.clone().unwrap();
-    tokio::spawn(emit(request, tx, state.1));
+    let tx = state.events.lock().await.clone().unwrap();
+    tokio::spawn(emit(request, tx, state));
     StatusCode::ACCEPTED
 }
 
@@ -83,7 +131,29 @@ async fn http_post(State(state): State<WireServer>, Json(request): Json<Value>) 
         return StatusCode::ACCEPTED.into_response();
     }
     let (tx, rx) = unbounded_channel();
-    tokio::spawn(emit(request, tx, state.1));
+    tokio::spawn(emit(request, tx, state));
+    Sse::new(UnboundedReceiverStream::new(rx)).into_response()
+}
+
+/// Same as `http_post`, but parks the `tools/list` a connecting session
+/// issues. `tools/list` carries no arguments, so the marker trick the call
+/// gate uses cannot reach it — the route is the discriminator instead.
+async fn http_post_gated_list(
+    State(state): State<WireServer>,
+    Json(request): Json<Value>,
+) -> Response {
+    if request.get("id").is_none() {
+        return StatusCode::ACCEPTED.into_response();
+    }
+    let (tx, rx) = unbounded_channel();
+    let parks = request["method"].as_str() == Some("tools/list");
+    let list_gate = state.list_gate.clone();
+    tokio::spawn(async move {
+        if parks {
+            list_gate.park().await;
+        }
+        emit(request, tx, state).await;
+    });
     Sse::new(UnboundedReceiverStream::new(rx)).into_response()
 }
 
@@ -226,4 +296,132 @@ async fn existing_progress_mock_delivers_three_updates_before_result() {
     .await
     .unwrap();
     assert!(rx.recv().await.is_none());
+}
+
+/// Bind the wire fixture on an ephemeral port and return its address.
+async fn serve(app: Router) -> (std::net::SocketAddr, tokio::task::JoinHandle<()>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let handle = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (address, handle)
+}
+
+fn streamable(address: std::net::SocketAddr, path: &str) -> McpServerConfig {
+    let mut entry = super::tests::server_config(None, vec![]);
+    entry.transport_type = "streamable_http".to_owned();
+    entry.url = format!("http://{address}/{path}");
+    entry
+}
+
+async fn call(
+    manager: &McpSessionManager,
+    chat: Uuid,
+    server: &str,
+    marker: &str,
+) -> Result<CallToolResult, Report> {
+    let mut params = CallToolRequestParams::default();
+    params.name = "read_file".into();
+    params.arguments = json!({ "marker": marker }).as_object().cloned();
+    manager
+        .call_tool_with_progress(
+            chat,
+            server,
+            params,
+            &McpRequestAuthContext::default(),
+            None,
+        )
+        .await
+}
+
+/// The regression net for bounded fan-out: N children calling MCP tools at
+/// once must not queue behind each other on the session map.
+#[tokio::test]
+async fn a_tool_call_in_flight_does_not_hold_the_session_map() {
+    let state = WireServer::default();
+    let (address, server) = serve(
+        Router::new()
+            .route("/mcp", post(http_post))
+            .with_state(state.clone()),
+    )
+    .await;
+
+    let mut config = AppConfig::default();
+    for id in ["parked", "prompt"] {
+        config
+            .mcp_servers
+            .insert(id.to_owned(), streamable(address, "mcp"));
+    }
+    let manager = Arc::new(McpSessionManager::new(&config));
+    let chat = Uuid::new_v4();
+
+    let parked = tokio::spawn({
+        let manager = Arc::clone(&manager);
+        async move { call(&manager, chat, "parked", "gate").await }
+    });
+    state.call_gate.wait_entered().await;
+
+    // The second server has no session yet, so this takes the session map for
+    // read and then for write. A guard held across the first call's response
+    // wait would deadlock here rather than merely slow it down.
+    tokio::time::timeout(
+        Duration::from_secs(10),
+        call(&manager, chat, "prompt", "silent"),
+    )
+    .await
+    .expect("a call on another session must not wait for one in flight")
+    .expect("the second call must succeed");
+
+    assert!(
+        !parked.is_finished(),
+        "the gated call must still be waiting for its response"
+    );
+    state.call_gate.release();
+    parked.await.unwrap().unwrap();
+    server.abort();
+}
+
+/// Creating a session dials the server and lists its tools. Holding the
+/// configuration lock across that made every later reader wait behind a
+/// queued reload, because tokio's `RwLock` is write-preferring.
+#[tokio::test]
+async fn a_connect_in_flight_does_not_hold_the_configuration_lock() {
+    let state = WireServer::default();
+    let (address, server) = serve(
+        Router::new()
+            .route("/mcp", post(http_post))
+            .route("/mcp-gated", post(http_post_gated_list))
+            .with_state(state.clone()),
+    )
+    .await;
+
+    let mut config = AppConfig::default();
+    config
+        .mcp_servers
+        .insert("connecting".to_owned(), streamable(address, "mcp-gated"));
+    let manager = Arc::new(McpSessionManager::new(&config));
+    let chat = Uuid::new_v4();
+
+    let connecting = tokio::spawn({
+        let manager = Arc::clone(&manager);
+        async move { call(&manager, chat, "connecting", "silent").await }
+    });
+    state.list_gate.wait_entered().await;
+
+    // A reload wants the configuration for write. The server being dialled is
+    // left untouched, so nothing invalidates the session under construction.
+    let mut next = McpRuntimeConfig::from_app_config(&config);
+    next.mcp_servers
+        .insert("added".to_owned(), streamable(address, "mcp"));
+    let changed = tokio::time::timeout(Duration::from_secs(10), manager.reconfigure(&next))
+        .await
+        .expect("a reload must not wait for an in-flight connect");
+    assert_eq!(changed, vec!["added"]);
+
+    assert!(
+        !connecting.is_finished(),
+        "the connect must still be waiting on its tool listing"
+    );
+    state.list_gate.release();
+    connecting.await.unwrap().unwrap();
+    server.abort();
 }
