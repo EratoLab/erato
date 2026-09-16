@@ -1061,34 +1061,20 @@ async fn parse_streaming_error(
 
 /// Why a turn stopped consuming its provider stream.
 ///
-/// The idle case is not a provider error the adapter ever produced: a stalled
-/// connection is indistinguishable from a slow one at the transport, so
-/// nothing is returned at all and the turn has to decide for itself that it
-/// has waited long enough.
+/// A stall produces no error of its own — nothing is returned at all — so the
+/// turn has to decide for itself that it has waited long enough.
 enum ProviderStreamFailure {
-    /// The provider (or the adapter talking to it) reported a failure.
     Provider(genai::Error),
-    /// Nothing arrived from the provider for the whole idle budget.
     Idle { after: Duration },
 }
 
 impl ProviderStreamFailure {
-    /// The turn's error event for this failure. Kept next to
-    /// `parse_streaming_error` so both stream-failure shapes render through
-    /// one call site.
     async fn into_error_event(self, message_id: Uuid) -> MessageSubmitStreamingResponseError {
         match self {
             ProviderStreamFailure::Provider(err) => parse_streaming_error(err, message_id).await,
-            // Reported as the provider error it effectively is, not as an
-            // internal fault: nothing on our side went wrong, the provider
-            // stopped answering.
-            //
-            // "no content", not "no bytes": the adapter swallows keep-alive
-            // pings, empty deltas and SSE comments before they reach this
-            // loop, so a connection being deliberately held open still reads
-            // as silence here. Worth saying plainly in the message, because a
-            // provider that pings is a provider an operator will believe was
-            // alive.
+            // A provider error, not an internal one: nothing on our side
+            // failed. The wording says "no content" because that is what is
+            // measured — see `next_provider_stream_item`.
             ProviderStreamFailure::Idle { after } => MessageSubmitStreamingResponseError {
                 message_id: Some(message_id),
                 error: GenerationErrorType::ProviderError {
@@ -1104,9 +1090,7 @@ impl ProviderStreamFailure {
     }
 }
 
-/// Wait for the provider's idle budget to run out, or forever when no budget
-/// is configured. Resolves to the budget it waited out, which is what the
-/// failure reports.
+/// Resolves to the budget it waited out, or never when there is none.
 async fn provider_idle_elapsed(budget: Option<Duration>) -> Duration {
     match budget {
         Some(budget) => {
@@ -1120,16 +1104,14 @@ async fn provider_idle_elapsed(budget: Option<Duration>) -> Duration {
 /// The next item of a provider stream, or the idle failure if nothing arrives
 /// for the whole budget.
 ///
-/// The budget is per item, not per turn: every item that does arrive restarts
-/// it, so an answer that keeps streaming is never cut off however long it
-/// runs. `None` restores the unbounded wait.
+/// Per item, not per turn: every item restarts the budget, so a long answer is
+/// never cut off. `None` restores the unbounded wait.
 ///
-/// What resets it is an item the ADAPTER surfaced, which is not the same as
-/// traffic on the socket: keep-alive pings, empty deltas and SSE comments are
-/// dropped inside genai and never reach this loop. A provider that holds the
-/// connection open without producing content is therefore idle by this
-/// measure — deliberately, since that is exactly the case a live socket
-/// cannot distinguish from a wedged one.
+/// What restarts it is an item the ADAPTER surfaced, which is not the same as
+/// traffic on the socket — genai drops keep-alive pings, empty deltas and SSE
+/// comments before this loop sees them. A connection held open without
+/// producing content is therefore idle here, deliberately: that is exactly the
+/// case a live socket cannot tell apart from a wedged one.
 async fn next_provider_stream_item<S>(
     stream: &mut S,
     budget: Option<Duration>,
@@ -1232,8 +1214,6 @@ mod provider_stream_idle_tests {
 
         assert_eq!(event.message_id, Some(message_id));
         match event.error {
-            // Not an internal error: nothing on our side failed, the provider
-            // stopped answering.
             GenerationErrorType::ProviderError {
                 error_description,
                 status_code,
@@ -4957,17 +4937,11 @@ async fn stream_generate_chat_completion<
                 Some(chat_provider_headers_context),
             )
             .wrap_err("Unable to choose chat provider")?;
-        // What the provider owes us before this turn gives up on it. An IDLE
-        // budget, so an answer that keeps arriving is never cut off however
-        // long it runs. Without it a connection that stalls without closing
-        // parks the turn forever, and the chat's lease stays 'running' because
-        // the heartbeat proves only that this process is alive.
-        //
-        // The guard around the call below is belt-and-braces: genai builds the
-        // request lazily and does not connect until the stream is first
-        // polled, so with today's adapters it returns without any I/O and the
-        // first real wait is the stream loop's. It costs nothing and covers an
-        // adapter that ever does connect eagerly.
+        // The guard below is belt-and-braces: genai builds the request lazily
+        // and does not connect until the stream is first polled, so today it
+        // returns without any I/O and the first real wait is the stream
+        // loop's. It costs nothing and covers an adapter that connects
+        // eagerly.
         let provider_idle_budget = match app_state
             .config
             .generation_status
@@ -5181,10 +5155,6 @@ async fn stream_generate_chat_completion<
                         );
                         break 'loop_call_turns Ok((aborted_content, generation_metadata));
                     }
-                    // The idle budget is bounded inside the helper rather
-                    // than as a transport read timeout, so a stalled provider
-                    // lands in the same failure path as any other provider
-                    // error — which is what releases the chat's lease.
                     result = next_provider_stream_item(&mut inner_stream, provider_idle_budget) => {
                         result
                     }
