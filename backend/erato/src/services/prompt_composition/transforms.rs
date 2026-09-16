@@ -742,19 +742,27 @@ fn is_prior_turn_directive_message(input_msg: &InputMessage) -> bool {
     }
 }
 
-/// A replayed tool output must carry only what the tool returned. The
-/// delegation trace rides on the same part for the UI's benefit; replaying it
-/// would hand the origin model the delegate's tool inventory and whatever
-/// steered it.
+/// A replayed tool output must carry only what the tool returned, in the form
+/// the model saw it. The delegation trace rides on the same part for the UI's
+/// benefit; replaying it would hand the origin model the delegate's tool
+/// inventory and whatever steered it.
+///
+/// A delegation result is also re-framed here. The stored `output` holds the
+/// child's answer raw — that is what the UI renders — but the model was given
+/// it inside an untrusted-data frame, and from this turn on it is this value,
+/// not the envelope, that becomes the tool response. Without the re-frame the
+/// containment would last exactly one turn.
 fn strip_ui_only_tool_output(
     mut tool_use: crate::models::message::ToolUse,
 ) -> crate::models::message::ToolUse {
-    if let Some(output) = tool_use
-        .output
-        .as_mut()
-        .and_then(serde_json::Value::as_object_mut)
-    {
-        output.remove(crate::services::delegation::DELEGATION_LOCAL_TRACE_KEY);
+    let is_delegation = crate::services::delegation::is_delegation_tool_name(&tool_use.tool_name);
+    if let Some(output) = tool_use.output.as_mut() {
+        if let Some(object) = output.as_object_mut() {
+            object.remove(crate::services::delegation::DELEGATION_LOCAL_TRACE_KEY);
+        }
+        if is_delegation {
+            crate::services::delegation::frame_delegation_result(output);
+        }
     }
     tool_use
 }
@@ -926,4 +934,104 @@ pub fn to_concrete_request(
         request,
         unresolved: unresolved_messages,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::message::{ToolCallStatus, ToolUse};
+    use crate::services::delegation::{
+        DELEGATE_TO_ASSISTANT_TOOL_NAME, DelegationResultEnvelope, DelegationRunStatus,
+    };
+    use crate::services::delegation_trace::DelegationTrace;
+
+    fn envelope() -> DelegationResultEnvelope {
+        let child = Uuid::from_u128(7);
+        DelegationResultEnvelope {
+            status: DelegationRunStatus::Completed,
+            reason: None,
+            assistant_id: Some(Uuid::from_u128(1)),
+            assistant_name: Some("Research".to_string()),
+            delegate_chat_id: child,
+            child_run_id: child,
+            parent_tool_call_id: "call-1".to_string(),
+            result: Some("The answer.".to_string()),
+            truncated: false,
+        }
+    }
+
+    fn part(tool_name: &str, output: serde_json::Value) -> ToolUse {
+        ToolUse {
+            tool_call_id: "call-1".to_string(),
+            status: ToolCallStatus::Success,
+            tool_name: tool_name.to_string(),
+            progress_message: None,
+            progress: None,
+            total: None,
+            input: None,
+            output: Some(output),
+            started_at: None,
+            ended_at: None,
+        }
+    }
+
+    /// The model must see the SAME tool-result text on the turn the delegate
+    /// answered and on every turn after it. The live text comes from the
+    /// envelope; the replayed text comes from the stored part through this
+    /// module's real transform, so this drives the actual replay path rather
+    /// than re-deriving it, and fails if framing is removed from either seam.
+    #[test]
+    fn a_replayed_delegation_result_is_framed_exactly_as_the_live_turn_framed_it() {
+        let envelope = envelope();
+        let live = envelope.model_response_text();
+
+        let stored = envelope.output_value(&DelegationTrace {
+            steps: Vec::new(),
+            total_duration_ms: None,
+        });
+        let replayed = strip_ui_only_tool_output(part(DELEGATE_TO_ASSISTANT_TOOL_NAME, stored));
+        let replayed_text =
+            serde_json::to_string(&replayed.output).expect("serializable tool output");
+
+        // Asserted FIRST and separately: if framing were dropped from both
+        // seams the equality below would still hold, and this test would
+        // quietly certify unframed output.
+        assert!(
+            replayed_text.contains("untrusted-data"),
+            "the replayed result must still be framed: {replayed_text}"
+        );
+        assert_eq!(live, replayed_text);
+    }
+
+    /// The trace is the UI's, not the model's: replaying it would hand the
+    /// origin model the delegate's tool inventory.
+    #[test]
+    fn a_replayed_delegation_result_drops_the_ui_only_trace() {
+        let stored = envelope().output_value(&DelegationTrace {
+            steps: Vec::new(),
+            total_duration_ms: None,
+        });
+        assert!(
+            stored
+                .get(crate::services::delegation::DELEGATION_LOCAL_TRACE_KEY)
+                .is_some()
+        );
+
+        let replayed = strip_ui_only_tool_output(part(DELEGATE_TO_ASSISTANT_TOOL_NAME, stored));
+        let output = replayed.output.expect("output");
+        assert!(
+            output
+                .get(crate::services::delegation::DELEGATION_LOCAL_TRACE_KEY)
+                .is_none()
+        );
+    }
+
+    /// Framing keys on the tool that produced the part. Another tool's output
+    /// is passed through untouched, even when it happens to carry a `result`.
+    #[test]
+    fn a_foreign_tools_result_is_not_framed() {
+        let foreign = serde_json::json!({ "result": "plain text", "status": "completed" });
+        let replayed = strip_ui_only_tool_output(part("search_web", foreign.clone()));
+        assert_eq!(replayed.output.expect("output"), foreign);
+    }
 }

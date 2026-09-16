@@ -29,6 +29,21 @@ Typical "Notable changes" categories to copy & paste:
 #### Features and enhancements
 
 - Delegation configuration moved to a top-level `[delegation]` section, in preparation for model-planned delegated tasks. The `erato` tool namespace and the tool names `delegate_task` / `collect_tasks` are now reserved for built-in tools.
+- A delegated run now reports **why** it ended, not just that it did, and the delegate's answer reaches the delegating model inside an `untrusted-data` frame so a child's output cannot issue instructions to its parent.
+
+#### Wire changes
+
+**Delegated-run results report a new status vocabulary.** This changes values the shipped `@`-mention delegation route already emits, and it is not behind a feature flag.
+
+Deploy the frontend of this release **before or with** the backend: an older frontend renders any status other than `completed` as a failed step, so it would show the new values as errors.
+
+| Before | Now |
+| --- | --- |
+| `"status": "timeout"` | `"status": "cancelled"` with `"reason": "timeout"` |
+| `"status": "failed"` on a run that produced no text | `"status": "completed"` with `"reason": "no_answer"` |
+| `"status": "failed"` on a run stopped by an approval it could not raise | unchanged, plus `"reason": "approval_unavailable"` |
+
+`failed` now means infrastructure failure only — a run that could not be carried out. The result envelope also gains `reason`, `child_run_id` (the same value as the existing `delegate_chat_id`, which is kept) and `parent_tool_call_id`, and `assistant_id` / `assistant_name` became optional: they are omitted entirely for a task child that runs on the bare model rather than as an assistant.
 
 #### Deprecations
 

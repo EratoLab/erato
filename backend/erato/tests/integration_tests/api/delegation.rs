@@ -2532,7 +2532,10 @@ async fn test_delegation_timeout_aborts_child_and_parent_completes(pool: Pool<Po
     let events = parse_sse_events(&response);
 
     let output = find_tool_call_update_output(&events, "delegate_to_assistant");
-    assert_eq!(output["status"], "timeout");
+    // A deadline is a cause, not an outcome: the run was cancelled, and the
+    // reason says by what.
+    assert_eq!(output["status"], "cancelled");
+    assert_eq!(output["reason"], "timeout");
     assert!(extract_full_text_answer(&events).contains("PARENT-TIMEOUT-FINAL"));
 
     let chat_id = crate::test_utils::extract_chat_id(&events).unwrap();
@@ -2646,7 +2649,8 @@ async fn test_delegation_timeout_persists_partial_trace(pool: Pool<Postgres>) {
     );
 
     let output = find_tool_call_update_output(&events, "delegate_to_assistant");
-    assert_eq!(output["status"], "timeout");
+    assert_eq!(output["status"], "cancelled");
+    assert_eq!(output["reason"], "timeout");
     let steps = output["localTrace"]["steps"].as_array().unwrap();
     assert_eq!(steps.len(), 1);
     assert_eq!(steps[0]["id"], "answer");
@@ -5367,7 +5371,7 @@ async fn test_delegation_result_truncated_at_cap(pool: Pool<Postgres>) {
 /// - `sse-streaming`
 /// - `uses-mocked-llm`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn test_delegation_empty_child_answer_reports_failed(pool: Pool<Postgres>) {
+async fn test_delegation_empty_child_answer_completes_with_no_answer(pool: Pool<Postgres>) {
     let mut mocks = MockSet::new();
     mocks.mock(|when, then| {
         when.post()
@@ -5434,7 +5438,11 @@ async fn test_delegation_empty_child_answer_reports_failed(pool: Pool<Postgres>)
     response.assert_status_ok();
     let events = parse_sse_events(&response);
     let output = find_tool_call_update_output(&events, "delegate_to_assistant");
-    assert_eq!(output["status"], "failed");
+    // "The delegate had nothing to add" is a result the origin model can
+    // reason about; reporting it as a failure invited a retry that would say
+    // nothing again.
+    assert_eq!(output["status"], "completed");
+    assert_eq!(output["reason"], "no_answer");
     assert!(output["result"].is_null());
     assert!(extract_full_text_answer(&events).contains("PARENT-EMPTY-FINAL"));
 }

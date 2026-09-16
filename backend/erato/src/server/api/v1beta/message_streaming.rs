@@ -3647,25 +3647,44 @@ async fn stream_generate_chat_completion<
                         assistant_id,
                         assistant_name,
                         delegate_chat_id,
-                    }) => (
-                        ToolCallStatus::Success,
-                        BgToolCallStatus::Success,
-                        MessageToolCallStatus::Success,
-                        json!({
-                            "assistant_id": assistant_id,
-                            "assistant_name": assistant_name,
+                    }) => {
+                        // A bare task child has no assistant to name. The
+                        // keys are omitted rather than sent null, so a reader
+                        // never has to tell "absent" from "present and null".
+                        let identity = |value: &mut serde_json::Value| {
+                            if let Some(object) = value.as_object_mut() {
+                                if let Some(assistant_id) = assistant_id {
+                                    object.insert("assistant_id".to_string(), json!(assistant_id));
+                                }
+                                if let Some(assistant_name) = assistant_name.as_ref() {
+                                    object.insert(
+                                        "assistant_name".to_string(),
+                                        json!(assistant_name),
+                                    );
+                                }
+                            }
+                        };
+                        let mut ui_output = json!({
                             "delegate_chat_id": delegate_chat_id,
+                            "child_run_id": delegate_chat_id,
                             "background": true,
-                        }),
-                        json!({
+                        });
+                        identity(&mut ui_output);
+                        let mut model_output = json!({
                             "status": "dispatched",
                             "delegate_chat_id": delegate_chat_id,
-                            "assistant_id": assistant_id,
-                            "assistant_name": assistant_name,
+                            "child_run_id": delegate_chat_id,
                             "note": "the result will not be returned to this conversation",
-                        })
-                        .to_string(),
-                    ),
+                        });
+                        identity(&mut model_output);
+                        (
+                            ToolCallStatus::Success,
+                            BgToolCallStatus::Success,
+                            MessageToolCallStatus::Success,
+                            ui_output,
+                            model_output.to_string(),
+                        )
+                    }
                     Err(error) => (
                         ToolCallStatus::Error,
                         BgToolCallStatus::Error,
