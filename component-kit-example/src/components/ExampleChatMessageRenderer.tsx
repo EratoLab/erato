@@ -72,7 +72,7 @@ export const ExampleChatMessageRenderer: NonNullable<
           createdAt={message.createdAt}
           updatedAt={message.updatedAt}
           hasError={!!message.error}
-          outlookArtifact={message.outlookArtifact}
+          hostArtifact={message.hostArtifact}
         />
 
         {Controls ? (

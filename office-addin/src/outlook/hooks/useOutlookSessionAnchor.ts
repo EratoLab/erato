@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import { useDebouncedValue } from "./useDebouncedValue";
+import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 import { outlookAnchorFromSelectedConversation } from "../sessionPolicy";
 

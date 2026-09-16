@@ -749,12 +749,12 @@ msgid "officeAddin.sessionPick.title"
 msgstr "Choisir un chat récent"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/outlook/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.addin.clientActions.always.helper"
 msgstr "Exécute l'action sans demander. Rien n'est envoyé tant que vous n'appuyez pas sur Envoyer dans Outlook."
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/core/clientActions/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.always.label"
 msgstr "Toujours autoriser"
 
@@ -774,27 +774,27 @@ msgstr "Toujours autoriser"
 #~ msgstr "Demander à chaque fois"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/core/clientActions/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.clickConsent.always.locked"
 msgstr "Verrouillé : votre organisation exige une confirmation chaque fois que cette action s'exécute automatiquement."
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/core/clientActions/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.clickConsent.ask.helper"
 msgstr "Affiche une étape de confirmation uniquement lorsque l'assistant déclenche cette action de lui-même. Un clic sur le bouton de l'action l'exécute toujours directement."
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/core/clientActions/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.clickConsent.ask.label"
 msgstr "Demander avant l'exécution automatique"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/core/clientActions/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.empty"
 msgstr "Aucune action suggérée par l'assistant n'est disponible pour le moment."
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/outlook/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.addin.clientActions.intro"
 msgstr "Vos décisions prises lors de la confirmation dans la discussion sont enregistrées ici et peuvent être modifiées à tout moment. Rien n'est envoyé tant que vous n'appuyez pas sur Envoyer dans Outlook."
 
@@ -804,17 +804,17 @@ msgstr "Vos décisions prises lors de la confirmation dans la discussion sont en
 #~ msgstr "Actions suggérées par l'assistant"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/core/clientActions/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.never.helper"
 msgstr "Masque cette action et ignore la suggestion de l'assistant."
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/core/clientActions/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.never.label"
 msgstr "Jamais"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/core/clientActions/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.scope"
 msgstr "Ces décisions sont enregistrées uniquement sur cet appareil."
 

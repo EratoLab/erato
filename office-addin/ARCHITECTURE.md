@@ -12,7 +12,16 @@ implement the seams listed below, and never modify the core itself.
   every import that escapes it (see Boundary enforcement). `core/auth` holds
   the neutral auth contract (`AuthSource.ts`: `AuthSource`, `BootstrapToken`,
   `InteractionRequiredError`) plus the oauth2-proxy session logic
-  (`oauth2ProxySession.ts`).
+  (`oauth2ProxySession.ts`). `core/clientActions` holds the host-neutral
+  client-action primitives — the ask/always/never decision engine with its
+  per-host store factory (`clientActionPolicy.ts`), the confirm-card state
+  machine and auto-prompt one-shot (`useClientActionConfirmFlow.ts`), the
+  settings rows (`ClientActionsSettings.tsx`), the facet lookup
+  (`useAvailableActionFacets.ts`) and the fresh-completion tracker. They are
+  generic over the action id (`TAction extends string`); each host keeps its
+  own action registry and executors and binds them in (Outlook:
+  `outlook/utils/outlookClientActions.ts` + the store in
+  `outlook/utils/clientActionPolicy.ts`).
 - `src/outlook` — the Outlook composition: `OutlookApp.tsx` (root),
   `OutlookAddinSessionController.tsx`, `OutlookAddinChat.tsx` (the Outlook
   chat host), `installOutlookComponentRegistrations.ts`, and all Outlook-only
@@ -57,7 +66,9 @@ implement the seams listed below, and never modify the core itself.
 4. **Settings contribution** — `AddinSettingsDialogCore`
    (`src/core/AddinSettingsDialogCore.tsx`) takes
    `hostContribution?: AddinSettingsHostContribution` (tab label, heading,
-   description, content, optional system description and appearance notice).
+   description, content, optional system description, appearance notice and
+   `serversToolsEntities` — the host's rows in the Servers & Tools pane, e.g.
+   Outlook's actions entity wrapping the core `ClientActionsSettings`).
    No contribution means no host tab.
 5. **Component registry** — hosts assign `componentRegistry` overrides at
    host-module eval: `src/outlook/OutlookApp.tsx` calls
@@ -113,6 +124,10 @@ feature-specific overrides inline in `SharedAddinShell`.
 - Storage keys — new keys use `erato.addin.<host>.*` (e.g.
   `erato.addin.neutral.currentChat.v1`). Existing `erato.outlookAddin.*` and
   `erato.officeAddin.*` keys stay as-is; renaming discards user state.
+  Client-action decision stores are one key per host
+  (`erato.addin.<host>.clientActionDecisions` for new hosts; Outlook keeps
+  `erato.outlookAddin.clientActionDecisions`) — two hosts sharing a key would
+  each drop the other's entries on read.
 - Lingui ids — ids are stable contracts (translations and component kits key
   on them). When host copy diverges, split ids per host
   (`officeAddin.settings.appearance.system.description.neutral` vs

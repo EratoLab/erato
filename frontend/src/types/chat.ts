@@ -48,12 +48,14 @@ export interface MessageError {
 }
 
 /**
- * Render hint set on an ASSISTANT message whose triggering user message carried
- * an Outlook action facet. Lets the renderer treat the response as an
- * insert/replace email artifact independent of whether the model emitted the
- * exact `erato-email` fence tag (newer models often drift the tag or omit it).
+ * Host-neutral artifact envelope: a render hint set on an ASSISTANT message
+ * whose triggering user message carried a host action facet (an Outlook
+ * compose/reply facet today; other hosts stamp their own). Lets the renderer
+ * treat the response as an insert/replace artifact independent of whether the
+ * model emitted the exact `erato-email` fence tag (newer models often drift
+ * the tag or omit it).
  *
- * Resolved by the Outlook add-in from the assistant message's
+ * Resolved by the host (e.g. the Outlook add-in) from the assistant message's
  * `previous_message_id` → the user message's `action_facet_id`/`action_facet_args`.
  * The web app never sets this, so its rendering is unchanged.
  *
@@ -61,7 +63,7 @@ export interface MessageError {
  * fields below, NOT by an id allowlist, so action facets added only in
  * `erato.toml` (no code change) render correctly.
  */
-export interface OutlookArtifact {
+export interface HostArtifact {
   /** The action facet id that produced this assistant message (free-form). */
   facetId: string;
   /**
@@ -74,6 +76,25 @@ export interface OutlookArtifact {
    * treated as an insertable email.
    */
   bodyFormat?: "text" | "html";
+  /**
+   * Fence tags that render as a host card (never as a code block) IN
+   * ADDITION to the shared `erato-appointment` fence, e.g. a document host's
+   * `erato-docx-edits`. A tag listed here is dispatched to the
+   * `HostCardCodeBlock` registry slot; while no renderer is registered there
+   * the fence stays an ordinary code block, so a stamp without a renderer
+   * never degrades to bare code in a card wrapper. Case-sensitive, matched
+   * against the fence tag as written.
+   */
+  cardFenceLanguages?: readonly string[];
+  /**
+   * Replaces the default set of drifted fence tags rescued as the email
+   * artifact when `bodyFormat` is present (the default covers the tags
+   * newer models normalize `erato-email` to: `""`, `email`, `erato`,
+   * `erato-email-text`, `text`, `plaintext`, `plain`, `html`). Matched
+   * case-insensitively; list `""` to keep rescuing untagged fences. Absent
+   * means the default set — the Outlook add-in never stamps this.
+   */
+  driftedEmailFenceTags?: readonly string[];
   /**
    * How to treat the assistant's output:
    * - `"body"`: the whole response is a single insertable email body, so an
@@ -99,15 +120,15 @@ export interface OutlookArtifact {
   alwaysAskClientActions?: string[];
   /**
    * The client action the model proposed for this message via the
-   * `propose_client_action` tool, already validated by the add-in against
-   * {@link OutlookArtifact.allowedClientActions} and the tool-call status.
+   * `propose_client_action` tool, already validated by the host against
+   * {@link HostArtifact.allowedClientActions} and the tool-call status.
    * Used as a render hint (e.g. which button is primary) — auto-surfaced
    * only under `auto_prompt` presentation and the user's local approval
    * preferences, never on history reloads.
    */
   proposedClientAction?: string;
   /**
-   * Producer-computed verdict (add-in only) for whether an UNFENCED whole
+   * Producer-computed verdict (host only) for whether an UNFENCED whole
    * `"body"`-mode response should render as the insertable email card. Stamped
    * only when it SUPPRESSES (`false`); absent is treated as `true`. Undefined on
    * the web app.
@@ -132,14 +153,15 @@ export interface OutlookArtifact {
    */
   isFreshCompletion?: boolean;
   /**
-   * The Outlook item identity captured when the user SENT the message that
-   * triggered this completion (fresh completions only). Send time is the
-   * guard's baseline — the user can switch emails while the response
-   * streams, so the item open at completion time proves nothing. Executors
-   * compare it against the CURRENT item before opening anything, so a draft
-   * never opens a reply on a different email than it was requested for.
+   * The host item identity (e.g. the open Outlook mail item) captured when
+   * the user SENT the message that triggered this completion (fresh
+   * completions only). Send time is the guard's baseline — the user can
+   * switch items while the response streams, so the item open at completion
+   * time proves nothing. Executors compare it against the CURRENT item before
+   * opening anything, so a draft never opens a reply on a different email
+   * than it was requested for.
    *
-   * A fresh completion ({@link OutlookArtifact.isFreshCompletion}) WITHOUT
+   * A fresh completion ({@link HostArtifact.isFreshCompletion}) WITHOUT
    * this field means no send-time identity was recorded (no open item at
    * send, or the completion could not be matched to a send): executors must
    * fail closed — never auto-prompt, and treat the draft as stale rather
@@ -148,6 +170,12 @@ export interface OutlookArtifact {
    */
   itemIdentity?: string;
 }
+
+/**
+ * @deprecated Use {@link HostArtifact}. Kept as an alias for one release so
+ * component kits and hosts can migrate; removed afterwards.
+ */
+export type OutlookArtifact = HostArtifact;
 
 export interface Message {
   id: string;
@@ -200,11 +228,16 @@ export interface Message {
    */
   mentioned_assistants?: MentionedAssistant[];
   /**
-   * Set on assistant messages produced under an Outlook action facet — drives
-   * insert/replace email-artifact rendering in {@link Message} content
-   * regardless of the model's fence tag. See {@link OutlookArtifact}.
+   * Set on assistant messages produced under a host action facet — drives
+   * insert/replace artifact rendering in {@link Message} content regardless
+   * of the model's fence tag. See {@link HostArtifact}.
    */
-  outlookArtifact?: OutlookArtifact;
+  hostArtifact?: HostArtifact;
+  /**
+   * @deprecated Use {@link Message.hostArtifact}. Read as a fallback for one
+   * release (`hostArtifact ?? outlookArtifact`); removed afterwards.
+   */
+  outlookArtifact?: HostArtifact;
 }
 
 // Metadata for a chat session

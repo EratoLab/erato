@@ -13,6 +13,10 @@ import {
   groupIntoTraceClusters,
 } from "@/components/ui/Trace";
 import { CheckIcon, CopyIcon } from "@/components/ui/icons";
+import {
+  componentRegistry,
+  resolveComponentOverride,
+} from "@/config/componentRegistry";
 import { useOptionalTranslation } from "@/hooks/i18n";
 import { useTraceFeature } from "@/providers/FeatureConfigProvider";
 import { findMentionRanges } from "@/utils/chat/assistantMentions";
@@ -30,12 +34,13 @@ import {
 } from "./SyntaxHighlightedCode";
 
 import type { ToolApprovalStatus } from "../Trace/Trace";
+import type { HostCardCodeBlockProps } from "@/config/componentRegistry";
 import type {
   ContentPart,
   FileUploadItem,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { HostArtifact } from "@/types/chat";
 import type { UiImagePart } from "@/utils/adapters/contentPartAdapter";
-import type { OutlookArtifact } from "@/utils/adapters/messageAdapter";
 import type { AssistantMention } from "@/utils/chat/assistantMentions";
 import type { Components } from "react-markdown";
 
@@ -59,14 +64,19 @@ interface MessageContentProps {
   /** When true, the cold-load trace pill flips to "Stopped after X". */
   hasError?: boolean;
   /**
-   * Present when this assistant message was generated under an Outlook action
-   * facet. When set, a fenced block is treated as the email insert/replace
-   * artifact regardless of the exact language tag (newer models drift it), and
-   * a `rewrite_selection` response with no fence at all falls back to rendering
-   * the whole body as the artifact. Absent on the web app, so behavior there is
-   * unchanged. See {@link OutlookArtifact}.
+   * Present when this assistant message was generated under a host action
+   * facet. When set, a fenced block is treated as the insert/replace artifact
+   * regardless of the exact language tag (newer models drift it), and a
+   * `"body"`-mode response with no fence at all falls back to rendering the
+   * whole body as the artifact. Absent on the web app, so behavior there is
+   * unchanged. See {@link HostArtifact}.
    */
-  outlookArtifact?: OutlookArtifact;
+  hostArtifact?: HostArtifact;
+  /**
+   * @deprecated Use {@link MessageContentProps.hostArtifact}. Honored as a
+   * fallback (`hostArtifact ?? outlookArtifact`) for one release.
+   */
+  outlookArtifact?: HostArtifact;
   /**
    * Resolved `{id, name}` mentions of this (user) message. When present,
    * `@Name` tokens matching them render as highlighted pills; names that do
@@ -77,12 +87,12 @@ interface MessageContentProps {
 
 /**
  * Tags newer models drift to when they drop the `erato-email` convention.
- * Only consulted when an Outlook facet produced the message (see
- * {@link OutlookArtifactContext}), so generic chat code blocks are never
+ * Only consulted when a host facet produced the message (see
+ * {@link HostArtifactContext}), so generic chat code blocks are never
  * hijacked. HTML-vs-text is then taken from the facet's `body_format`, not the
  * tag (the `-html` suffix is exactly what the model keeps normalizing away).
  */
-const DRIFTED_EMAIL_TAGS = new Set([
+const DRIFTED_EMAIL_TAGS: ReadonlySet<string> = new Set([
   "",
   "email",
   "erato",
@@ -103,10 +113,116 @@ function looksLikeHtmlFragment(text: string): boolean {
   return HTML_FRAGMENT_TAG_RE.test(text);
 }
 
+/**
+ * The `erato-appointment` fence (the JSON payload a scheduling facet's
+ * confirm step emits) always renders as a card: a host-registered renderer
+ * when present (the Outlook add-in), otherwise the read-only default summary.
+ */
+function isEratoAppointmentLanguage(language: string): boolean {
+  return language === "erato-appointment";
+}
+
+/**
+ * What the fence classifier treats as "this block is a card, not code". The
+ * decision has to be made at the markdown seam — `MarkdownPre` picks the
+ * `<pre>`-vs-`<div>` wrapper BEFORE any registry slot renders — so a host
+ * that needs different rules supplies them through the message's
+ * {@link HostArtifact} (`driftedEmailFenceTags`, `cardFenceLanguages`) and the
+ * `HostCardCodeBlock` registry slot rather than relocating the call site. Both
+ * markdown components derive ONE rules object per message through
+ * {@link fenceRulesFor}, so the wrapper decision and the renderer dispatch can
+ * never disagree. The default is the current behaviour, byte for byte.
+ */
+export interface HostFenceRules {
+  /**
+   * Fence tags rescued as the email artifact when an email-bodied facet
+   * (`bodyFormat` present) produced the message. Lower-case.
+   */
+  driftedEmailTags: ReadonlySet<string>;
+  /**
+   * Fence tags the host's registered `HostCardCodeBlock` renders. Empty while
+   * no renderer is registered, whatever the artifact lists.
+   */
+  isHostCardLanguage: (language: string) => boolean;
+  /**
+   * Every non-email fence tag that renders as a card (never as code): the
+   * shared `erato-appointment` fence plus the host card languages.
+   */
+  isCardLanguage: (language: string) => boolean;
+}
+
+const DEFAULT_HOST_FENCE_RULES: HostFenceRules = {
+  driftedEmailTags: DRIFTED_EMAIL_TAGS,
+  isHostCardLanguage: () => false,
+  isCardLanguage: isEratoAppointmentLanguage,
+};
+
+const EMPTY_LANGUAGES: readonly string[] = [];
+
+/**
+ * The fence rules for the message being rendered: the defaults unless the
+ * host artifact overrides a part. Host card languages only count while a
+ * `HostCardCodeBlock` renderer is registered — a stamped tag with nothing to
+ * render it stays an ordinary code block rather than bare code in a card
+ * wrapper.
+ */
+function fenceRulesFor(artifact: HostArtifact | null): HostFenceRules {
+  if (!artifact) {
+    return DEFAULT_HOST_FENCE_RULES;
+  }
+  const hostCardLanguages = new Set(
+    componentRegistry.HostCardCodeBlock
+      ? (artifact.cardFenceLanguages ?? EMPTY_LANGUAGES)
+      : EMPTY_LANGUAGES,
+  );
+  const driftedEmailTags = artifact.driftedEmailFenceTags
+    ? new Set(artifact.driftedEmailFenceTags.map((tag) => tag.toLowerCase()))
+    : DRIFTED_EMAIL_TAGS;
+  if (hostCardLanguages.size === 0 && driftedEmailTags === DRIFTED_EMAIL_TAGS) {
+    return DEFAULT_HOST_FENCE_RULES;
+  }
+  const isHostCardLanguage = (language: string) =>
+    hostCardLanguages.has(language);
+  return {
+    driftedEmailTags,
+    isHostCardLanguage,
+    isCardLanguage: (language) =>
+      isEratoAppointmentLanguage(language) || isHostCardLanguage(language),
+  };
+}
+
+/**
+ * Host card fence renderer. `fenceRulesFor` only classifies a host card
+ * language while the slot is registered, so the fallback covers the slot
+ * being cleared between the classification and this render rather than a
+ * normal path.
+ */
+function HostCardBlock(props: HostCardCodeBlockProps) {
+  const Renderer = resolveComponentOverride(
+    componentRegistry.HostCardCodeBlock,
+    DefaultHostCardCodeBlock,
+  );
+  return <Renderer {...props} />;
+}
+
+function DefaultHostCardCodeBlock({
+  language,
+  content,
+}: HostCardCodeBlockProps) {
+  return (
+    <SyntaxHighlightedCode
+      code={content}
+      language={language}
+      surface="hoisted"
+    />
+  );
+}
+
 function classifyEratoEmailBlock(
   language: string,
-  artifact: OutlookArtifact | null,
+  artifact: HostArtifact | null,
   content: string,
+  rules: HostFenceRules,
 ): { isEmail: boolean; isHtml: boolean } {
   // isHtml drives data-lossy paths (innerHTML render, text/html clipboard,
   // Html coercion, reply prefill), where plain text loses its newlines and
@@ -130,7 +246,10 @@ function classifyEratoEmailBlock(
   // an action-fence facet (e.g. scheduling) also stamps an artifact, but its
   // prose may legitimately contain generic code blocks that must not be
   // hijacked into email cards.
-  if (artifact?.bodyFormat && DRIFTED_EMAIL_TAGS.has(language.toLowerCase())) {
+  if (
+    artifact?.bodyFormat &&
+    rules.driftedEmailTags.has(language.toLowerCase())
+  ) {
     return {
       isEmail: true,
       isHtml: artifact.bodyFormat === "html" && looksLikeHtmlFragment(content),
@@ -143,18 +262,24 @@ function containsMarkdownFence(text: string): boolean {
   return /^[^\S\n]*```/m.test(text);
 }
 
-const OutlookArtifactContext = React.createContext<OutlookArtifact | null>(
-  null,
-);
+const HostArtifactContext = React.createContext<HostArtifact | null>(null);
 
 /**
- * The Outlook artifact hint for the message currently being rendered, or null
- * outside an Outlook-facet message. Exposed so registry overrides (e.g. the
- * add-in's erato-email renderer) can read facet metadata such as the allowed
- * and proposed client actions without new props on every code block.
+ * The host artifact hint for the message currently being rendered, or null
+ * outside a host-facet message. Exposed so registry overrides (e.g. the
+ * Outlook add-in's erato-email renderer) can read facet metadata such as the
+ * allowed and proposed client actions without new props on every code block.
  */
-export function useOutlookArtifact(): OutlookArtifact | null {
-  return React.useContext(OutlookArtifactContext);
+export function useHostArtifact(): HostArtifact | null {
+  return React.useContext(HostArtifactContext);
+}
+
+/**
+ * @deprecated Use {@link useHostArtifact}; same context, same value. Kept for
+ * one release so existing host renderers keep working.
+ */
+export function useOutlookArtifact(): HostArtifact | null {
+  return useHostArtifact();
 }
 
 const INLINE_CODE_CLASS_NAME =
@@ -177,15 +302,6 @@ type MarkdownPreProps = React.ComponentPropsWithoutRef<"pre"> & {
   node?: unknown;
 };
 
-/**
- * The `erato-appointment` fence (the JSON payload a scheduling facet's
- * confirm step emits) always renders as a card: a host-registered renderer
- * when present (the Outlook add-in), otherwise the read-only default summary.
- */
-function isEratoAppointmentLanguage(language: string): boolean {
-  return language === "erato-appointment";
-}
-
 function getCodeChildLanguage(children: React.ReactNode): string {
   const child = React.Children.only(children) as React.ReactElement<{
     className?: string;
@@ -201,13 +317,14 @@ function isMermaidLanguage(language: string): boolean {
 
 function isCardCodeChild(
   children: React.ReactNode,
-  artifact: OutlookArtifact | null,
+  artifact: HostArtifact | null,
+  rules: HostFenceRules,
 ): boolean {
   const language = getCodeChildLanguage(children);
   // Only isEmail is consumed here; it doesn't depend on content.
   return (
-    classifyEratoEmailBlock(language, artifact, "").isEmail ||
-    isEratoAppointmentLanguage(language)
+    classifyEratoEmailBlock(language, artifact, "", rules).isEmail ||
+    rules.isCardLanguage(language)
   );
 }
 
@@ -221,7 +338,8 @@ function MarkdownPre({
   children,
   ...props
 }: MarkdownPreProps) {
-  const artifact = React.useContext(OutlookArtifactContext);
+  const artifact = React.useContext(HostArtifactContext);
+  const rules = fenceRulesFor(artifact);
   const { isStreaming } = React.useContext(BlockCodeContext);
   const [copied, setCopied] = React.useState(false);
   const surfaceStyle = useCodeBlockSurfaceStyle();
@@ -252,7 +370,10 @@ function MarkdownPre({
   // code block — use a plain <div> to avoid inheriting <pre> monospace font
   // and horizontal scroll from message-content-code-block styling.
   try {
-    if (isCardCodeChild(children, artifact) || isMermaidCodeChild(children)) {
+    if (
+      isCardCodeChild(children, artifact, rules) ||
+      isMermaidCodeChild(children)
+    ) {
       return (
         <div>
           <BlockCodeContext.Provider value={{ isBlockCode: true, isStreaming }}>
@@ -315,11 +436,17 @@ function MarkdownCode({
   ...props
 }: MarkdownCodeProps) {
   const { isBlockCode, isStreaming } = React.useContext(BlockCodeContext);
-  const artifact = React.useContext(OutlookArtifactContext);
+  const artifact = React.useContext(HostArtifactContext);
+  const rules = fenceRulesFor(artifact);
   const codeContent = String(children).replace(/\n$/, "");
   const match = /language-([\w-]+)/.exec(className ?? "");
   const language = match ? match[1] : "";
-  const emailBlock = classifyEratoEmailBlock(language, artifact, codeContent);
+  const emailBlock = classifyEratoEmailBlock(
+    language,
+    artifact,
+    codeContent,
+    rules,
+  );
 
   if (isBlockCode && emailBlock.isEmail) {
     return (
@@ -329,6 +456,10 @@ function MarkdownCode({
 
   if (isBlockCode && isEratoAppointmentLanguage(language)) {
     return <EratoAppointmentBlock content={codeContent} />;
+  }
+
+  if (isBlockCode && rules.isHostCardLanguage(language)) {
+    return <HostCardBlock language={language} content={codeContent} />;
   }
 
   if (isBlockCode && isMermaidLanguage(language)) {
@@ -538,9 +669,13 @@ export const MessageContent = memo(function MessageContent({
   createdAt,
   updatedAt,
   hasError = false,
+  hostArtifact: hostArtifactProp,
   outlookArtifact,
   mentionedAssistants,
 }: MessageContentProps) {
+  // The deprecated prop is honored as a fallback for one release; every
+  // artifact-driven path below reads this single resolved value.
+  const hostArtifact = hostArtifactProp ?? outlookArtifact;
   const imageAdvisory = useOptionalTranslation("chat.message.image_advisory");
   const { maskReasoningText } = useTraceFeature();
   const toolApprovalStatuses = React.useMemo<
@@ -1051,7 +1186,7 @@ export const MessageContent = memo(function MessageContent({
 
     return (
       <BlockCodeContext.Provider value={{ isBlockCode: false, isStreaming }}>
-        <OutlookArtifactContext.Provider value={outlookArtifact ?? null}>
+        <HostArtifactContext.Provider value={hostArtifact ?? null}>
           <Markdown
             remarkPlugins={[remarkGfm, remarkMath]}
             rehypePlugins={[rehypeKatex]}
@@ -1069,7 +1204,7 @@ export const MessageContent = memo(function MessageContent({
           >
             {linkedTextContent}
           </Markdown>
-        </OutlookArtifactContext.Provider>
+        </HostArtifactContext.Provider>
       </BlockCodeContext.Provider>
     );
   };
@@ -1080,11 +1215,11 @@ export const MessageContent = memo(function MessageContent({
   // itself as the insert/replace artifact. Gated to completed messages and to
   // `renderMode === "body"`: `"suggestions"` facets (review/critique) are
   // feedback, not a single drop-in body, so they keep normal markdown. The
-  // producer (add-in AddinChat) decides whether an ambient-reply facet's plain
-  // answer should card and stamps the verdict as `shouldRenderEmailCard`;
-  // absent (web app, or a facet that always cards) is treated as `true`. This
-  // single field is the source of truth shared with the add-in renderer — see
-  // {@link OutlookArtifact.shouldRenderEmailCard}.
+  // producer (the host, e.g. the Outlook add-in's chat) decides whether an
+  // ambient-reply facet's plain answer should card and stamps the verdict as
+  // `shouldRenderEmailCard`; absent (web app, or a facet that always cards) is
+  // treated as `true`. This single field is the source of truth shared with
+  // the host renderer — see {@link HostArtifact.shouldRenderEmailCard}.
   const textForArtifact = React.useMemo(
     () =>
       content
@@ -1094,17 +1229,17 @@ export const MessageContent = memo(function MessageContent({
     [content],
   );
   const wholeBodyArtifact =
-    outlookArtifact?.renderMode === "body" &&
+    hostArtifact?.renderMode === "body" &&
     // Only an email-bodied facet (body_format present) has a "whole response
     // is one insertable email" fallback; an action-fence facet's unfenced
     // prose is just prose.
-    outlookArtifact.bodyFormat !== undefined &&
+    hostArtifact.bodyFormat !== undefined &&
     !isStreaming &&
     !showRaw &&
     textForArtifact.trim().length > 0 &&
     !containsMarkdownFence(textForArtifact) &&
-    (outlookArtifact.shouldRenderEmailCard ?? true)
-      ? outlookArtifact
+    (hostArtifact.shouldRenderEmailCard ?? true)
+      ? hostArtifact
       : null;
 
   // Index of the first text part — the single anchor at which the whole-body

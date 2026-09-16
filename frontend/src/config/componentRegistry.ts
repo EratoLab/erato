@@ -59,6 +59,19 @@ export interface EratoAppointmentCodeBlockProps {
 }
 
 /**
+ * Props for a host card fence: a fenced block whose tag the producing host
+ * listed in `HostArtifact.cardFenceLanguages` (e.g. a document host's
+ * `erato-docx-edits`). One slot serves every such tag, so the renderer
+ * receives the tag to dispatch on.
+ */
+export interface HostCardCodeBlockProps {
+  /** The fence tag as written, one of the artifact's `cardFenceLanguages`. */
+  language: string;
+  /** The raw text inside the fence (may be incomplete while streaming). */
+  content: string;
+}
+
+/**
  * Props for a host-contributed section rendered inside the unified chat "+"
  * add menu (e.g. the Outlook add-in's email-content sources). The shared menu
  * owns file sources and tools and provides the upload + close plumbing; the
@@ -251,6 +264,19 @@ export interface ComponentRegistry {
   EratoAppointmentCodeBlock: ComponentType<EratoAppointmentCodeBlockProps> | null;
 
   /**
+   * Renderer for host card fences — fenced blocks whose tag the message's
+   * `HostArtifact.cardFenceLanguages` names (never `erato-email` or
+   * `erato-appointment`, which have their own slots). The shared markdown
+   * renderer classifies such a fence as a card (a `<div>` wrapper instead of
+   * the `<pre>` code block) only while this slot is registered; when null the
+   * fence renders as an ordinary code block, whatever the artifact lists.
+   *
+   * Consulted only for messages a host stamped with card fence languages —
+   * the web app never stamps any, so it never reads this.
+   */
+  HostCardCodeBlock: ComponentType<HostCardCodeBlockProps> | null;
+
+  /**
    * Start view hosted by the Office add-in shell (Outlook task pane). When a
    * kit registers it, the task pane opens on this view first and the shell
    * shows a toggle to switch to the regular chat and back. When null, the
@@ -329,6 +355,7 @@ const emptyComponentRegistry = (): ComponentRegistry => ({
   ChatTopLeftAccessory: null,
   EratoEmailCodeBlock: null,
   EratoAppointmentCodeBlock: null,
+  HostCardCodeBlock: null,
   AddinStartView: null,
 });
 

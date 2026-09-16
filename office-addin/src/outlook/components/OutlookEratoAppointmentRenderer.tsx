@@ -1,7 +1,6 @@
 import {
   ActionConfirmationCard,
   useOutlookArtifact,
-  usePersistedState,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -9,15 +8,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ACTION_BUTTON_CLASS,
   PRIMARY_ACTION_BUTTON_CLASS,
-} from "./clientActionButtonStyles";
-import { useClientActionConfirmFlow } from "../hooks/useClientActionConfirmFlow";
+} from "../../core/clientActions/clientActionButtonStyles";
+import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
+import { useClientActionDecisions } from "../../core/clientActions/useClientActionDecisions";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 import {
-  CLIENT_ACTION_DECISIONS_KEY,
-  DEFAULT_CLIENT_ACTION_DECISIONS,
-  clientActionDecisionsPersistedOptions,
   decisionKey,
   isActionDenied,
+  outlookClientActionDecisionStore,
 } from "../utils/clientActionPolicy";
 import {
   clientActionDisplayLabel,
@@ -94,10 +92,8 @@ export function OutlookEratoAppointmentRenderer({
 }: EratoAppointmentCodeBlockProps) {
   const { itemIdentity } = useOutlookMailItem();
   const artifact = useOutlookArtifact();
-  const [decisions, setDecisions] = usePersistedState(
-    CLIENT_ACTION_DECISIONS_KEY,
-    DEFAULT_CLIENT_ACTION_DECISIONS,
-    clientActionDecisionsPersistedOptions,
+  const [decisions, setDecisions] = useClientActionDecisions(
+    outlookClientActionDecisionStore,
   );
   const facetId = artifact?.facetId ?? "";
   const enforcedAskActions = useMemo(

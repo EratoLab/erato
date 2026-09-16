@@ -1267,6 +1267,198 @@ describe("MessageContent", () => {
     expect(screen.getByText(/vielen Dank/)).toBeInTheDocument();
   });
 
+  describe("host artifact envelope (hostArtifact prop)", () => {
+    it("treats a drifted email fence as the artifact via hostArtifact", () => {
+      const { container } = renderWithTheme(
+        <MessageContent
+          content={textContent("```email\nHere is the rewritten passage.\n```")}
+          hostArtifact={{
+            facetId: "outlook_rewrite_selection",
+            bodyFormat: "text",
+            renderMode: "body",
+          }}
+        />,
+      );
+
+      expect(
+        container.querySelector("pre.message-content-code-block code"),
+      ).toBeNull();
+      expect(
+        screen.getByText(/Here is the rewritten passage/),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Copy/ })).toBeInTheDocument();
+    });
+
+    it("falls back to the whole body as the artifact via hostArtifact", () => {
+      renderWithTheme(
+        <MessageContent
+          content={textContent(
+            "Hallo Frau Berger,\n\nvielen Dank fuer Ihre Nachricht.",
+          )}
+          hostArtifact={{
+            facetId: "outlook_rewrite_selection",
+            bodyFormat: "text",
+            renderMode: "body",
+          }}
+        />,
+      );
+
+      expect(screen.getByRole("button", { name: /Copy/ })).toBeInTheDocument();
+      expect(screen.getByText(/vielen Dank/)).toBeInTheDocument();
+    });
+
+    it("prefers hostArtifact over the deprecated outlookArtifact when both are set", () => {
+      renderWithTheme(
+        <MessageContent
+          content={textContent("Hallo Frau Berger, vielen Dank.")}
+          // The new envelope suppresses the card; the deprecated one would
+          // card. The resolved value must be the new one.
+          hostArtifact={{
+            facetId: "outlook_reply_from_read",
+            bodyFormat: "text",
+            renderMode: "body",
+            shouldRenderEmailCard: false,
+          }}
+          outlookArtifact={{
+            facetId: "outlook_rewrite_selection",
+            bodyFormat: "text",
+            renderMode: "body",
+          }}
+        />,
+      );
+
+      expect(
+        screen.queryByRole("button", { name: /Copy/ }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByText(/vielen Dank/)).toBeInTheDocument();
+    });
+  });
+
+  describe("host-supplied fence rules", () => {
+    const docxEditsFence =
+      '```erato-docx-edits\n{"edits":[{"paragraph":3,"text":"Revised."}]}\n```';
+
+    it("renders a host card fence through the HostCardCodeBlock slot in a card wrapper", () => {
+      const original = componentRegistry.HostCardCodeBlock;
+      function HostCardStub({
+        language,
+        content,
+      }: {
+        language: string;
+        content: string;
+      }) {
+        return (
+          <div data-testid="host-card" data-language={language}>
+            {content}
+          </div>
+        );
+      }
+      componentRegistry.HostCardCodeBlock = HostCardStub;
+      try {
+        const { container } = renderWithTheme(
+          <MessageContent
+            content={textContent(docxEditsFence)}
+            hostArtifact={{
+              facetId: "word_apply_edits",
+              renderMode: "suggestions",
+              cardFenceLanguages: ["erato-docx-edits"],
+            }}
+          />,
+        );
+
+        // Both halves of the seam agree: the <pre> wrapper is skipped AND the
+        // registered renderer gets the fence (not highlighted code in a div).
+        const card = screen.getByTestId("host-card");
+        expect(card).toHaveAttribute("data-language", "erato-docx-edits");
+        expect(card).toHaveTextContent('"paragraph":3');
+        expect(
+          container.querySelector("pre.message-content-code-block"),
+        ).toBeNull();
+        expect(container.querySelector("code")).toBeNull();
+      } finally {
+        componentRegistry.HostCardCodeBlock = original;
+      }
+    });
+
+    it("keeps a stamped card language an ordinary code block while no renderer is registered", () => {
+      expect(componentRegistry.HostCardCodeBlock).toBeNull();
+      const { container } = renderWithTheme(
+        <MessageContent
+          content={textContent(docxEditsFence)}
+          hostArtifact={{
+            facetId: "word_apply_edits",
+            renderMode: "suggestions",
+            cardFenceLanguages: ["erato-docx-edits"],
+          }}
+        />,
+      );
+
+      expect(
+        container.querySelector("pre.message-content-code-block code"),
+      ).toHaveTextContent('"paragraph":3');
+    });
+
+    it("does not let host card languages hijack fences outside the list", () => {
+      const original = componentRegistry.HostCardCodeBlock;
+      function HostCardStub() {
+        return <div data-testid="host-card" />;
+      }
+      componentRegistry.HostCardCodeBlock = HostCardStub;
+      try {
+        const { container } = renderWithTheme(
+          <MessageContent
+            content={textContent("```json\n{}\n```")}
+            hostArtifact={{
+              facetId: "word_apply_edits",
+              renderMode: "suggestions",
+              cardFenceLanguages: ["erato-docx-edits"],
+            }}
+          />,
+        );
+
+        expect(screen.queryByTestId("host-card")).toBeNull();
+        expect(
+          container.querySelector("pre.message-content-code-block code"),
+        ).toHaveTextContent("{}");
+      } finally {
+        componentRegistry.HostCardCodeBlock = original;
+      }
+    });
+
+    it("lets the artifact narrow the drifted email tag set", () => {
+      const artifact = {
+        facetId: "word_rewrite",
+        bodyFormat: "text" as const,
+        renderMode: "body" as const,
+        driftedEmailFenceTags: ["email"],
+      };
+
+      const narrowed = renderWithTheme(
+        <MessageContent
+          content={textContent("```text\nNot an email card.\n```")}
+          hostArtifact={artifact}
+        />,
+      );
+      // `text` is in the DEFAULT drifted set but not in the narrowed one.
+      expect(
+        narrowed.container.querySelector("pre.message-content-code-block code"),
+      ).toHaveTextContent("Not an email card.");
+      narrowed.unmount();
+
+      const kept = renderWithTheme(
+        <MessageContent
+          content={textContent("```email\nStill an email card.\n```")}
+          hostArtifact={artifact}
+        />,
+      );
+      expect(
+        kept.container.querySelector("pre.message-content-code-block code"),
+      ).toBeNull();
+      expect(screen.getByText(/Still an email card/)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Copy/ })).toBeInTheDocument();
+    });
+  });
+
   describe("showRaw with maskReasoningTraceText", () => {
     it("includes reasoning text in raw view when masking is disabled", () => {
       const { container } = render(

@@ -749,12 +749,12 @@ msgid "officeAddin.sessionPick.title"
 msgstr "Pick a recent chat"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/outlook/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.addin.clientActions.always.helper"
 msgstr "Performs the action without asking. Nothing is sent until you press Send in Outlook."
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/core/clientActions/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.always.label"
 msgstr "Always allow"
 
@@ -774,27 +774,27 @@ msgstr "Always allow"
 #~ msgstr "Ask every time"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/core/clientActions/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.clickConsent.always.locked"
 msgstr "Locked: your organization requires confirmation each time this action runs automatically."
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/core/clientActions/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.clickConsent.ask.helper"
 msgstr "Shows a confirmation step only when the assistant triggers this action on its own. Clicking the action's button always runs it directly."
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/core/clientActions/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.clickConsent.ask.label"
 msgstr "Ask before running automatically"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/core/clientActions/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.empty"
 msgstr "No assistant-suggested actions are available right now."
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/outlook/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.addin.clientActions.intro"
 msgstr "Your decisions from the in-chat confirmation are stored here and can be changed any time. Nothing is sent until you press Send in Outlook."
 
@@ -804,17 +804,17 @@ msgstr "Your decisions from the in-chat confirmation are stored here and can be 
 #~ msgstr "Assistant-suggested actions"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/core/clientActions/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.never.helper"
 msgstr "Hides this action and ignores the assistant's suggestion."
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/core/clientActions/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.never.label"
 msgstr "Never"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/ClientActionsSettings.tsx
+#: src/core/clientActions/ClientActionsSettings.tsx
 msgid "officeAddin.settings.addin.clientActions.scope"
 msgstr "These decisions are stored on this device only."
 
