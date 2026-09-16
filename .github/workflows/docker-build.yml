@@ -766,6 +766,26 @@ jobs:
         run: |
           pnpm exec playwright test ${{ matrix.projects }} ${{ matrix.shard && format('--shard={0}', matrix.shard) || '' }} --retries 2 --trace on-first-retry --grep-invert "@no-ci"
 
+      # Playwright's report shows what the browser saw; a failure whose cause
+      # is server-side (a generation that never finishes, a request that 500s)
+      # leaves no trace in it at all. The cluster is thrown away with the
+      # runner, so the logs have to be pulled out here or they are gone.
+      - name: Dump backend logs
+        if: failure()
+        run: |
+          kubectl logs -n erato-local-ns deploy/erato-local-erato-app \
+            --all-containers --tail=3000 --timestamps > backend.log || true
+          kubectl get pods -n erato-local-ns -o wide || true
+
+      - name: Upload backend logs
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-backend-log-${{ matrix.scenario }}${{ matrix.shard_name || '' }}
+          path: backend.log
+          retention-days: 30
+          if-no-files-found: ignore
+
       - name: Upload blob report
         uses: actions/upload-artifact@v4
         if: always()

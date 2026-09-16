@@ -8,7 +8,13 @@
 # Sources mirrored:
 # - infrastructure/scripts/setup-e2e-secrets (many-models provider roster)
 # - infrastructure/k3d/erato-local/config/erato.scenario-many-models.toml
-# - infrastructure/k3d/erato-local/config/erato.toml (starter prompts, facets)
+# - infrastructure/k3d/erato-local/config/erato.toml (starter prompts, facets,
+#   generation status)
+
+# Mirrors the cluster's budget: the mocks stream at most a second apart, so a
+# turn that has heard nothing for this long is wedged rather than slow.
+[generation_status]
+provider_idle_timeout_secs = 45
 
 [chat_providers]
 priority_order = ["gemini-2-5-flash", "gemini-2-5-pro", "gpt-4-1", "gpt-4-1-mini", "gpt-4o-mini", "gpt-5", "gpt-4-1-no-image", "mock-llm-openai", "mock-llm-100k", "mock-llm-200k"]

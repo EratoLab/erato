@@ -1,6 +1,15 @@
 # Main configuration file
 # File storage providers are configured in erato.file-storage.auto.erato.toml
 
+# The mock providers answer within a second and stream at most one second
+# between chunks, so a turn that has heard nothing for this long is wedged,
+# not slow. Kept far below the product default (300s, sized for a reasoning
+# model's think time): a lease stuck 'running' is shared state in this
+# cluster, and it fails whichever spec next asserts an idle sidebar rather
+# than the one that caused it.
+[generation_status]
+provider_idle_timeout_secs = 45
+
 [starter_prompts]
 enabled = true
 priority_order = ["research_topic", "draft_email", "summarize_notes"]

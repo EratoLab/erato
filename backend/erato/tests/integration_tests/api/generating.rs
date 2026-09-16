@@ -19,7 +19,7 @@ use crate::test_app_state;
 use crate::test_utils::{
     MockLlmConfig, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt,
     archive_chat_via_api, create_test_server, setup_mock_llm_server,
-    setup_mock_llm_server_with_mocks, unarchive_chat_via_api,
+    setup_mock_llm_server_with_mocks, stalling_llm_mocks, unarchive_chat_via_api,
 };
 
 /// Mark a chat as having a running generation with the given heartbeat age.
@@ -519,6 +519,115 @@ async fn test_generating_chats_abort_marks_completed(pool: Pool<Postgres>) {
     let entries = body["chats"].as_array().expect("chats array");
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0]["state"], "completed");
+
+    server_handle.abort();
+}
+
+/// Test that a provider that stalls mid-stream releases the chat's lease.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+///
+/// # Test Behavior
+/// A provider that accepts the request and then goes quiet without closing
+/// the connection used to park the turn forever: the heartbeat kept proving
+/// the process was alive, so the stale-heartbeat reaper never fired and the
+/// chat stayed 'running' for good. With `provider_idle_timeout_secs` the turn
+/// gives up on its own and the chats row ends 'errored'.
+///
+/// The reaper is deliberately ruled out here — `stale_after_secs` is far
+/// longer than the test runs and the heartbeat keeps ticking — so the only
+/// thing that can end this generation is the idle budget.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_generating_chats_stalled_provider_releases_the_lease(pool: Pool<Postgres>) {
+    let (mut app_config, _server) =
+        setup_mock_llm_server_with_mocks(stalling_llm_mocks(Duration::from_secs(120))).await;
+    app_config.generation_status.provider_idle_timeout_secs = 2;
+    app_config.generation_status.heartbeat_interval_secs = 1;
+    app_config.generation_status.stale_after_secs = 3600;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server_addr = listener.local_addr().unwrap();
+    let app: axum::Router = erato::server::router::router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+    let server_handle = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let client = reqwest::Client::new();
+    let base_url = format!("http://{}", server_addr);
+
+    // The request returns when the turn ends. Without the idle budget it
+    // would hang for the mock's full stall instead.
+    let response = tokio::time::timeout(
+        Duration::from_secs(30),
+        client
+            .post(format!("{}/api/v1beta/me/messages/submitstream", base_url))
+            .header("Authorization", format!("Bearer {}", TEST_JWT_TOKEN))
+            .header("Content-Type", "application/json")
+            .json(&json!({ "user_message": "Say something" }))
+            .send(),
+    )
+    .await
+    .expect("submitstream should not outlive the idle budget")
+    .expect("Failed to send submit request");
+    assert!(response.status().is_success());
+    let body = tokio::time::timeout(Duration::from_secs(30), response.text())
+        .await
+        .expect("the stream should end once the provider's idle budget runs out")
+        .expect("Failed to read submit body");
+    assert!(
+        body.contains("provider_error"),
+        "the stall should reach the client as a provider error, got: {body}"
+    );
+
+    let chat_id = {
+        let tasks = app_state.background_tasks.tasks.read().await;
+        tasks.keys().next().copied()
+    };
+
+    // The turn is over, so its task is gone from the registry; find the chat
+    // through the endpoint the sidebar uses instead.
+    let generating: Value = client
+        .get(format!("{}/api/v1beta/me/generating", base_url))
+        .header("Authorization", format!("Bearer {}", TEST_JWT_TOKEN))
+        .send()
+        .await
+        .expect("Failed to fetch /me/generating")
+        .json()
+        .await
+        .expect("Failed to parse /me/generating body");
+    let entries = generating["chats"].as_array().expect("chats array");
+    assert_eq!(entries.len(), 1);
+    assert_eq!(
+        entries[0]["state"], "errored",
+        "a stalled provider must not leave the chat reported as running"
+    );
+    assert!(entries[0]["ended_at"].is_string());
+
+    let reported_chat_id = Uuid::parse_str(entries[0]["chat_id"].as_str().expect("chat_id"))
+        .expect("chat_id should be a uuid");
+    if let Some(chat_id) = chat_id {
+        assert_eq!(chat_id, reported_chat_id);
+    }
+    let chat = Chats::find_by_id(reported_chat_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("Chat row should exist");
+    assert_eq!(chat.generation_state.as_deref(), Some("errored"));
+    assert!(chat.generation_ended_at.is_some());
 
     server_handle.abort();
 }
