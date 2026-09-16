@@ -1034,4 +1034,22 @@ mod tests {
         let replayed = strip_ui_only_tool_output(part("search_web", foreign.clone()));
         assert_eq!(replayed.output.expect("output"), foreign);
     }
+
+    /// A task slot reserved at launch carries no result yet. A process that
+    /// dies mid-batch leaves exactly that shape on disk, and every later
+    /// message in the chat replays it — so it has to pass through intact
+    /// rather than fail on the key it does not have.
+    #[test]
+    fn a_placeholder_that_never_settled_replays_unchanged() {
+        let placeholder = serde_json::json!({
+            "status": "working",
+            "child_run_id": "6f1b5f7e-0000-4000-8000-000000000001",
+            "delegate_chat_id": "6f1b5f7e-0000-4000-8000-000000000001",
+        });
+        let replayed = strip_ui_only_tool_output(part(
+            erato_config::config::DELEGATE_TASK_TOOL_NAME,
+            placeholder.clone(),
+        ));
+        assert_eq!(replayed.output.expect("output"), placeholder);
+    }
 }
