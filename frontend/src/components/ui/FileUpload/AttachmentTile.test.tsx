@@ -265,3 +265,62 @@ describe("AttachmentTile filename and type line", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("AttachmentTile custom face", () => {
+  it("retains preview and removal beside a custom image, including failure fallback", async () => {
+    const onActivate = vi.fn();
+    const onRemove = vi.fn();
+    const tile = (disabled: boolean) => (
+      <AttachmentTile
+        file={file("opaque-upload")}
+        previewUrl="blob:photo"
+        isImage
+        onActivate={onActivate}
+        onRemove={onRemove}
+        disabled={disabled}
+        removeButtonClassName="custom-badge"
+        renderContent={({ imageProps, filename }) =>
+          imageProps ? (
+            <img
+              {...imageProps}
+              alt={imageProps.alt}
+              data-testid="custom-image"
+            />
+          ) : (
+            <span>{filename}</span>
+          )
+        }
+      />
+    );
+    const { rerender } = await renderWithProviders(tile(true));
+    const preview = screen.getByRole("button", {
+      name: /Preview attachment opaque-upload/,
+    });
+    const remove = screen.getByRole("button", { name: "Remove opaque-upload" });
+    expect(remove).toBeDisabled();
+    expect(remove).toHaveClass("custom-badge");
+    expect(preview).not.toContainElement(remove);
+    fireEvent.click(preview);
+    expect(onActivate).toHaveBeenCalledTimes(1);
+    fireEvent.error(screen.getByTestId("custom-image"));
+    expect(screen.queryByTestId("custom-image")).toBeNull();
+    expect(screen.getByText("opaque-upload")).toBeVisible();
+    // Keep the providers mounted while changing the mutation guard.
+    rerender(
+      <I18nProvider i18n={(await import("@lingui/core")).i18n}>
+        <ThemeProvider
+          enableCustomTheme={false}
+          initialThemeMode="light"
+          persistThemeMode={false}
+        >
+          {tile(false)}
+        </ThemeProvider>
+      </I18nProvider>,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove opaque-upload" }),
+    );
+    expect(onRemove).toHaveBeenCalledTimes(1);
+    expect(onActivate).toHaveBeenCalledTimes(1);
+  });
+});

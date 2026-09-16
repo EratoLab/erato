@@ -190,3 +190,50 @@ describe("FileAttachmentsPreview", () => {
     expect(container).toBeEmptyDOMElement();
   });
 });
+
+it("wires custom tiles in attachment order and retains the bulk controls", async () => {
+  const files = [
+    file("doc", "spec.pdf"),
+    file("photo", "shot.png", "blob:shot"),
+    file("notes", "notes.txt"),
+  ];
+  const onFilePreview = vi.fn();
+  const onRemoveFile = vi.fn();
+  const onRemoveAllFiles = vi.fn();
+  await renderWithProviders(
+    <FileAttachmentsPreview
+      attachedFiles={files}
+      maxFiles={50}
+      onFilePreview={onFilePreview}
+      onRemoveFile={onRemoveFile}
+      onRemoveAllFiles={onRemoveAllFiles}
+      renderItems={(items) => (
+        <section aria-label="Custom tray">{items}</section>
+      )}
+      renderAttachment={({ file: item, onActivate, onRemove }) => (
+        <div data-testid="custom-tile">
+          <button onClick={onActivate}>
+            {(item as FileUploadItem).filename}
+          </button>
+          <button onClick={onRemove}>
+            Remove {(item as FileUploadItem).filename}
+          </button>
+        </div>
+      )}
+    />,
+  );
+  expect(
+    screen
+      .getAllByTestId("custom-tile")
+      .map((tile) => tile.firstChild?.textContent),
+  ).toEqual(files.map((item) => item.filename));
+  fireEvent.click(screen.getByRole("button", { name: "shot.png" }));
+  expect(onFilePreview).toHaveBeenCalledWith(files[1]);
+  fireEvent.click(screen.getByRole("button", { name: "Remove spec.pdf" }));
+  expect(onRemoveFile).toHaveBeenCalledWith("doc");
+  expect(screen.getByText("3/50")).toBeVisible();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Remove all attachments" }),
+  );
+  expect(onRemoveAllFiles).toHaveBeenCalledOnce();
+});

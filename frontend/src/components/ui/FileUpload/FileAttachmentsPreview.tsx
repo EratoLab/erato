@@ -2,7 +2,10 @@ import { useMemo } from "react";
 
 import { AttachmentTileList } from "./AttachmentTileList";
 
-import type { AttachmentTileItem } from "./AttachmentTileList";
+import type {
+  AttachmentTileItem,
+  AttachmentTileListProps,
+} from "./AttachmentTileList";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
 
@@ -36,6 +39,8 @@ export interface ChatInputAttachmentPreviewProps {
  */
 export interface FileAttachmentsPreviewProps
   extends ChatInputAttachmentPreviewProps {
+  renderAttachment?: AttachmentTileListProps["renderAttachment"];
+  renderItems?: AttachmentTileListProps["renderItems"];
   /** Whether to display file size */
   showFileSizes?: boolean;
   /** Optional CSS class name */
@@ -62,6 +67,8 @@ export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
   onFilePreview,
   disabled = false,
   className = "",
+  renderAttachment,
+  renderItems,
 }) => {
   const items = useMemo<AttachmentTileItem[]>(
     () =>
@@ -80,6 +87,8 @@ export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
   return (
     <AttachmentTileList
       items={items}
+      renderAttachment={renderAttachment}
+      renderItems={renderItems}
       size="compact"
       onRemove={onRemoveFile}
       onRemoveAll={onRemoveAllFiles}
