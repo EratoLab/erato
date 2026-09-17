@@ -1019,7 +1019,7 @@ export type ContentPartTaskResult = {
    * The `delegate_task` call in the origin turn that started it.
    */
   parent_tool_call_id: string;
-  reason?: null | undefined;
+  reason?: string;
   /**
    * Which delivery for this task this is. `0` is the first; a later value
    * means the result was delivered again after the origin branched away
@@ -2667,7 +2667,7 @@ export type TaskResultInput = {
    * @format uuid
    */
   delivery_id: string;
-  reason?: null | undefined;
+  reason?: string;
   /**
    * The child's assistant row this result came from.
    *

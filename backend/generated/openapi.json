@@ -5799,10 +5799,7 @@
             "description": "The `delegate_task` call in the origin turn that started it."
           },
           "reason": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string"
           },
           "sequence": {
             "type": "integer",
@@ -9008,10 +9005,7 @@
             "description": "Matches `ResultDelivery::delivery_id`; the idempotency key that makes\n\"has this already been delivered?\" answerable with a query."
           },
           "reason": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string"
           },
           "result_message_id": {
             "type": "string",
