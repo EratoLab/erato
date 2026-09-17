@@ -3475,6 +3475,24 @@ impl DelegationConfig {
         // independent, and `0` is a meaningful value for either (it forbids
         // that execution class in task runs).
 
+        // A reserved spelling fails loudly. Serde would already refuse an
+        // unknown variant, but only these two names carry a promise the
+        // deployment would otherwise believe: both would silently behave as
+        // `reject`, which is the opposite of what they say.
+        match self.tasks.multitask_strategy {
+            MultitaskStrategy::Reject => {}
+            MultitaskStrategy::Enqueue => {
+                return Err(eyre!(
+                    "delegation.tasks.multitask_strategy = \"enqueue\" is not supported yet"
+                ));
+            }
+            MultitaskStrategy::Interrupt => {
+                return Err(eyre!(
+                    "delegation.tasks.multitask_strategy = \"interrupt\" is not supported yet"
+                ));
+            }
+        }
+
         Ok(())
     }
 }
@@ -3556,6 +3574,15 @@ pub struct DelegationTasksConfig {
     // `facets.facets`. Defaults to none.
     #[serde(default)]
     pub child_facet_ids: Vec<String>,
+
+    // What happens to a write that arrives while the chat's generation is
+    // still running. `reject` answers `409 generation_running` and leaves the
+    // running turn alone; the client holds the draft and sends it when the
+    // turn ends. `enqueue` and `interrupt` are reserved spellings with no
+    // implementation and are rejected at load.
+    // Defaults to `reject`.
+    #[serde(default)]
+    pub multitask_strategy: MultitaskStrategy,
 }
 
 impl Default for DelegationTasksConfig {
@@ -3570,8 +3597,28 @@ impl Default for DelegationTasksConfig {
             max_parallel: default_delegation_tasks_max_parallel(),
             persona: TaskPersona::default(),
             child_facet_ids: Vec::new(),
+            multitask_strategy: MultitaskStrategy::default(),
         }
     }
+}
+
+/// What a user write does when the chat's generation is still running.
+///
+/// Only `reject` is implemented. The other two spellings are reserved so a
+/// deployment that writes one gets a named error instead of silently getting
+/// `reject` behaviour under a name that promises something else.
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[facet(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+#[repr(C)]
+pub enum MultitaskStrategy {
+    /// Answer `409 generation_running`; the client keeps the draft.
+    #[default]
+    Reject,
+    /// Reserved: hold the write server-side and run it when the lease frees.
+    Enqueue,
+    /// Reserved: abort the running generation and start the write's turn.
+    Interrupt,
 }
 
 /// Per-facet overrides of the `[delegation.tasks]` runtime keys. Every field

@@ -437,6 +437,12 @@ chat_provider_ids = ["test-token-limit"]
 # # Facets composed into every task child. Each id must name a facet configured
 # # under facets.facets (default: [])
 # child_facet_ids = []
+# # What a user write does while the chat's generation is still running.
+# # "reject" answers 409 generation_running and leaves the running turn alone;
+# # the client holds the draft and sends it when the turn ends. "enqueue" and
+# # "interrupt" are reserved spellings with no implementation and are rejected
+# # at load (default: "reject")
+# multitask_strategy = "reject"
 
 # Starter prompts feature configuration
 # [starter_prompts]

@@ -3969,6 +3969,27 @@ Facets composed into every task child. Each entry must name a facet configured u
 child_facet_ids = ["web_search"]
 ```
 
+#### `delegation.tasks.multitask_strategy`
+
+{/* erato_toml_config_key: delegation.tasks.multitask_strategy */}
+
+What happens to a message, edit or regenerate that arrives while the chat's generation is still running. `reject` answers `409 generation_running` and leaves the running turn untouched; the client holds the draft and sends it once the turn ends. Before this key existed, a second write silently replaced the running generation's lease.
+
+`enqueue` and `interrupt` are reserved spellings with no implementation. Writing either is rejected at startup rather than silently treated as `reject`, because both names promise behaviour the deployment would not get.
+
+This only takes effect when `delegation.tasks.enabled` is `true`.
+
+**Default value:** `"reject"`
+
+**Type:** `string` (one of `reject`, `enqueue`, `interrupt`)
+
+**Example:**
+
+```toml
+[delegation.tasks]
+multitask_strategy = "reject"
+```
+
 ### `assistant_hub`
 
 {/* erato_toml_config_key: assistant_hub */}

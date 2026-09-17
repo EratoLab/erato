@@ -234,7 +234,10 @@ impl AppState {
                 .delegation
                 .any_route_enabled()
                 .then_some(config.delegation.run_timeout_seconds),
-        );
+        )
+        // The lease only has to arbitrate once a write can be refused because
+        // of it, which is what the task route turns on.
+        .with_lease_identity_guard(config.delegation.tasks.enabled);
 
         // Initialize the system prompt renderer
         let system_prompt_renderer = SystemPromptRenderer::new();

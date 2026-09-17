@@ -1,10 +1,11 @@
 //! Generation status API tests (chats-row persistence and GET /me/generating).
 
 use chrono::Utc;
+use erato::config::GenerationStatusConfig;
 use erato::db::entity::chats;
 use erato::db::entity::prelude::Chats;
 use erato::models::user::get_or_create_user;
-use erato::services::background_tasks::TaskOutcome;
+use erato::services::background_tasks::{BackgroundTaskManager, Takeover, TaskOutcome};
 use mocktail::MockSet;
 use sea_orm::prelude::Uuid;
 use sea_orm::{
@@ -949,5 +950,438 @@ async fn test_generating_chats_follow_archive_and_unarchive(pool: Pool<Postgres>
             .generation_state
             .as_deref(),
         Some("awaiting_approval")
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Compare-and-set lease acquisition (ERMAIN-776)
+// ---------------------------------------------------------------------------
+
+/// Read the chat's current lease holder and state.
+async fn read_lease(db: &DatabaseConnection, chat_id: Uuid) -> (Option<Uuid>, Option<String>) {
+    let row = db
+        .query_one_raw(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT active_generation_id, generation_state FROM chats WHERE id = $1",
+            [chat_id.into()],
+        ))
+        .await
+        .expect("Failed to read lease")
+        .expect("Chat row missing");
+    (
+        row.try_get("", "active_generation_id").ok(),
+        row.try_get("", "generation_state").ok(),
+    )
+}
+
+/// Mark a chat running for a SPECIFIC generation, with the given heartbeat age.
+/// `mark_running` invents a new generation id; these tests need the row to keep
+/// naming the task under test, or the identity guard would refuse to refresh it
+/// for reasons unrelated to what is being measured.
+async fn mark_running_for_generation(
+    db: &DatabaseConnection,
+    chat_id: Uuid,
+    generation_id: Uuid,
+    heartbeat_age_secs: u64,
+) {
+    db.execute_raw(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        r#"
+        UPDATE chats
+        SET active_generation_id = $1,
+            generation_state = 'running',
+            generation_started_at = now() - make_interval(secs => $2::double precision),
+            generation_heartbeat_at = now() - make_interval(secs => $2::double precision),
+            generation_ended_at = NULL
+        WHERE id = $3
+        "#,
+        [
+            generation_id.into(),
+            (heartbeat_age_secs as f64).into(),
+            chat_id.into(),
+        ],
+    ))
+    .await
+    .expect("Failed to mark chat running for generation");
+}
+
+fn lease_test_manager(db: &DatabaseConnection, guard: bool) -> BackgroundTaskManager {
+    let config = GenerationStatusConfig {
+        heartbeat_interval_secs: 1,
+        ..Default::default()
+    };
+    BackgroundTaskManager::new(Some(db.clone()), config, None).with_lease_identity_guard(guard)
+}
+
+/// A fresh running lease is not takeable.
+///
+/// # Test Categories
+/// - `uses-db`
+///
+/// # Test Behavior
+/// `try_start_task` refuses a chat whose generation is running with a current
+/// heartbeat, and reports the holder so the caller can build a typed 409.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn try_start_task_refuses_a_fresh_running_lease(pool: Pool<Postgres>) {
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool.clone());
+    let user = get_or_create_user(&db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let chat = insert_chat(&db, &user.id.to_string()).await;
+    mark_running(&db, chat.id, 0).await;
+    let (holder_before, _) = read_lease(&db, chat.id).await;
+
+    let manager = lease_test_manager(&db, true);
+    let refused = manager
+        .try_start_task(chat.id, Uuid::new_v4(), Takeover::TakeParked, 30)
+        .await;
+
+    let held = refused.expect_err("Expected the fresh lease to be kept");
+    assert_eq!(
+        held.active_generation_id, holder_before,
+        "The refusal must name the generation actually holding the chat"
+    );
+    assert!(
+        held.started_at.is_some(),
+        "The refusal must carry the holder's start time for the 409 body"
+    );
+    assert_eq!(
+        read_lease(&db, chat.id).await.0,
+        holder_before,
+        "A refused acquisition must not touch the row"
+    );
+}
+
+/// A lease whose process died is takeable.
+///
+/// # Test Categories
+/// - `uses-db`
+///
+/// # Test Behavior
+/// A 'running' row whose heartbeat is older than `stale_after_secs` is claimed,
+/// and the claim replaces the holder.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn try_start_task_takes_a_stale_lease(pool: Pool<Postgres>) {
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool.clone());
+    let user = get_or_create_user(&db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let chat = insert_chat(&db, &user.id.to_string()).await;
+    mark_running(&db, chat.id, 600).await;
+    let (stale_holder, _) = read_lease(&db, chat.id).await;
+
+    let manager = lease_test_manager(&db, true);
+    let (_rx, task) = manager
+        .try_start_task(chat.id, Uuid::new_v4(), Takeover::TakeParked, 30)
+        .await
+        .expect("A stale lease must be takeable");
+
+    let (holder, state) = read_lease(&db, chat.id).await;
+    assert_eq!(holder, Some(task.generation_id));
+    assert_ne!(holder, stale_holder, "The stale holder must be displaced");
+    assert_eq!(state.as_deref(), Some("running"));
+}
+
+/// Only a user write may abandon a parked approval.
+///
+/// # Test Categories
+/// - `uses-db`
+///
+/// # Test Behavior
+/// `RefuseParked` leaves an `awaiting_approval` chat alone so a system-initiated
+/// turn cannot append underneath a mounted approval card; `TakeParked` claims
+/// it. Note the fixture leaves `generation_heartbeat_at` NULL, which is also
+/// the case that must not be mistaken for staleness.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn try_start_task_refuses_awaiting_approval_unless_take_parked(pool: Pool<Postgres>) {
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool.clone());
+    let user = get_or_create_user(&db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let chat = insert_chat(&db, &user.id.to_string()).await;
+    mark_awaiting_approval(&db, chat.id).await;
+    let (parked_holder, _) = read_lease(&db, chat.id).await;
+
+    let manager = lease_test_manager(&db, true);
+    assert!(
+        manager
+            .try_start_task(chat.id, Uuid::new_v4(), Takeover::RefuseParked, 30)
+            .await
+            .is_err(),
+        "A system-initiated turn must not take a parked lease"
+    );
+    assert_eq!(
+        read_lease(&db, chat.id).await.0,
+        parked_holder,
+        "The refusal must leave the parked generation in place"
+    );
+
+    let (_rx, task) = manager
+        .try_start_task(chat.id, Uuid::new_v4(), Takeover::TakeParked, 30)
+        .await
+        .expect("A user write may abandon a parked approval");
+    assert_eq!(read_lease(&db, chat.id).await.0, Some(task.generation_id));
+}
+
+/// Two replicas contending for one chat produce one winner.
+///
+/// # Test Categories
+/// - `uses-db`
+///
+/// # Test Behavior
+/// Two independent managers on the same pool race the same free chat. Exactly
+/// one claims it, and the row names that one — the property that makes the
+/// lease admission control rather than status reporting.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn two_managers_on_one_pool_have_a_single_lease_winner(pool: Pool<Postgres>) {
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool.clone());
+    let user = get_or_create_user(&db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let chat = insert_chat(&db, &user.id.to_string()).await;
+
+    let first = lease_test_manager(&db, true);
+    let second = lease_test_manager(&db, true);
+    let (a, b) = tokio::join!(
+        first.try_start_task(chat.id, Uuid::new_v4(), Takeover::TakeParked, 30),
+        second.try_start_task(chat.id, Uuid::new_v4(), Takeover::TakeParked, 30),
+    );
+
+    let winners: Vec<Uuid> = [a, b]
+        .into_iter()
+        .filter_map(|outcome| outcome.ok().map(|(_rx, task)| task.generation_id))
+        .collect();
+    assert_eq!(
+        winners.len(),
+        1,
+        "Exactly one manager may hold the lease, got {}",
+        winners.len()
+    );
+    assert_eq!(read_lease(&db, chat.id).await.0, Some(winners[0]));
+}
+
+/// The heartbeat must not undo a legitimate takeover.
+///
+/// # Test Categories
+/// - `uses-db`
+///
+/// # Test Behavior
+/// The regression this guard exists for: manager A holds a chat and keeps it in
+/// its map; B takes the lease over after A goes stale. A's heartbeat then runs
+/// repeatedly. With the guard on it must not write A's generation back — if it
+/// did, B's own identity-gated `remove_task` would never land and the chat would
+/// sit 'running' until the reaper. A is also told it lost, so it stops.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn the_heartbeat_does_not_resurrect_a_lease_that_was_taken_over(pool: Pool<Postgres>) {
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool.clone());
+    let user = get_or_create_user(&db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let chat = insert_chat(&db, &user.id.to_string()).await;
+
+    // A holds the chat and is in its own map, so its heartbeat covers it.
+    let manager_a = lease_test_manager(&db, true);
+    let (_rx_a, task_a) = manager_a
+        .try_start_task(chat.id, Uuid::new_v4(), Takeover::TakeParked, 30)
+        .await
+        .expect("The first claim must succeed");
+
+    // Another replica takes the lease over. It is represented by the row alone
+    // and runs no maintenance loop here, so the only thing that could put A
+    // back is A's own heartbeat — which is exactly what is under test.
+    mark_running(&db, chat.id, 0).await;
+    let taker = read_lease(&db, chat.id)
+        .await
+        .0
+        .expect("The taker must hold the lease");
+    assert_ne!(taker, task_a.generation_id);
+
+    // Past several of A's heartbeat ticks, the row must still name the taker.
+    for _ in 0..4 {
+        tokio::time::sleep(Duration::from_millis(600)).await;
+        assert_eq!(
+            read_lease(&db, chat.id).await.0,
+            Some(taker),
+            "A's heartbeat resurrected a lease it no longer holds"
+        );
+    }
+
+    assert!(
+        task_a.is_abort_requested(),
+        "A displaced generation must be told it lost, or it keeps writing"
+    );
+}
+
+/// With the gate off, nothing about the old lease behaviour changes.
+///
+/// # Test Categories
+/// - `uses-db`
+///
+/// # Test Behavior
+/// The un-guarded heartbeat deliberately re-asserts the lease from the
+/// in-memory map, which is what repairs a lost start race. That behaviour is
+/// load-bearing for every deployment that has not enabled the task route, so it
+/// is pinned here rather than left to be rediscovered.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn the_unguarded_heartbeat_still_reasserts_the_lease_from_the_map(pool: Pool<Postgres>) {
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool.clone());
+    let user = get_or_create_user(&db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let chat = insert_chat(&db, &user.id.to_string()).await;
+
+    let manager = lease_test_manager(&db, false);
+    let (_rx, task) = manager.start_task(chat.id, Uuid::new_v4()).await;
+
+    // Something else overwrites the row, as a raced start UPDATE would.
+    mark_running(&db, chat.id, 0).await;
+    assert_ne!(read_lease(&db, chat.id).await.0, Some(task.generation_id));
+
+    // The heartbeat puts the map's generation back.
+    let mut restored = false;
+    for _ in 0..10 {
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        if read_lease(&db, chat.id).await.0 == Some(task.generation_id) {
+            restored = true;
+            break;
+        }
+    }
+    assert!(
+        restored,
+        "With the guard off the heartbeat must still repair a lost start race"
+    );
+}
+
+/// Pressing Stop must eventually free the chat, even when nothing observes it.
+///
+/// Abort is cooperative, and several awaits inside a turn never check it — MCP
+/// session discovery, guardrails and file parsing all run under the lease with
+/// no timeout and no abort arm. Once the lease became admission control, a turn
+/// wedged in one of those would hold the chat against every later write from
+/// every replica, forever: Stop returns 200, nothing winds down, the heartbeat
+/// keeps the row fresh so the reaper never fires, and only a process restart
+/// recovers it. Before the CAS the next message simply replaced the lease.
+///
+/// The bound is: a stopped generation stops being heartbeated, so the row goes
+/// stale on the normal schedule and the next writer takes it over.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_stopped_generation_stops_holding_the_chat(pool: Pool<Postgres>) {
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool.clone());
+    let user = get_or_create_user(&db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let chat = insert_chat(&db, &user.id.to_string()).await;
+
+    let manager = lease_test_manager(&db, true);
+    let (_rx, task) = manager
+        .try_start_task(chat.id, Uuid::new_v4(), Takeover::TakeParked, 30)
+        .await
+        .expect("the first claim must succeed");
+
+    // While it is running it holds the chat, as it should.
+    assert!(
+        manager
+            .try_start_task(chat.id, Uuid::new_v4(), Takeover::TakeParked, 30)
+            .await
+            .is_err(),
+        "a running generation must hold its chat"
+    );
+
+    // The user presses Stop. The task never observes it — this stands in for
+    // an await with no abort arm.
+    task.request_abort();
+
+    // The row is not refreshed any more, so it ages exactly as a dead
+    // process's would. Simulate that age rather than waiting it out.
+    mark_running_for_generation(&db, chat.id, task.generation_id, 600).await;
+
+    let (_rx2, replacement) = manager
+        .try_start_task(chat.id, Uuid::new_v4(), Takeover::TakeParked, 30)
+        .await
+        .expect("a stopped generation must not hold the chat once its row goes stale");
+    assert_ne!(replacement.generation_id, task.generation_id);
+    assert_eq!(
+        read_lease(&db, chat.id).await.0,
+        Some(replacement.generation_id)
+    );
+}
+
+/// The typed `409` is the client-facing contract of ERMAIN-776 — pin it at the route.
+///
+/// The manager-level tests above prove the lease refuses; none of them proves a
+/// client can tell *why*. Replace the `StreamRouteError::GenerationRunning` arm
+/// with a plain-text 409, or rename `code`, and they all stay green while every
+/// client loses its only discriminator: the same status also answers an archived
+/// chat and a live delegated run.
+///
+/// Both refusal paths are exercised, because they fill the body differently. A
+/// holder in this process's own map is answered without reading the row, so it
+/// reports no `started_at`; a holder on another replica is found by the CAS,
+/// which has the row in hand.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_held_lease_answers_a_submit_with_the_typed_409(pool: Pool<Postgres>) {
+    let (mut app_config, _mock) = setup_mock_llm_server(None).await;
+    app_config.delegation.tasks.enabled = true;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let own_replica = insert_chat(&app_state.db, &user.id.to_string()).await;
+    let other_replica = insert_chat(&app_state.db, &user.id.to_string()).await;
+    app_state.global_policy_engine.invalidate_data().await;
+
+    // This process holds one chat's lease in its own map ...
+    let (_rx, held) = app_state
+        .background_tasks
+        .try_start_task(
+            own_replica.id,
+            Uuid::new_v4(),
+            Takeover::TakeParked,
+            app_state.config.generation_status.stale_after_secs,
+        )
+        .await
+        .expect("the first claim must succeed");
+
+    // ... and another replica holds the other's, visible here only as a fresh row.
+    mark_running(&app_state.db, other_replica.id, 0).await;
+
+    let server = create_test_server(app_state.clone());
+
+    for (chat_id, reports_started_at, label) in [
+        (own_replica.id, false, "refused by this replica's own map"),
+        (other_replica.id, true, "refused by the cross-replica CAS"),
+    ] {
+        let response = server
+            .post("/api/v1beta/me/messages/submitstream")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&json!({
+                "user_message": "a second writer into a generating chat",
+                "existing_chat_id": chat_id.to_string(),
+            }))
+            .await;
+
+        response.assert_status(axum::http::StatusCode::CONFLICT);
+
+        let body: Value = response.json();
+        assert_eq!(
+            body["code"], "generation_running",
+            "{label}: the client discriminates on `code`, not on the status"
+        );
+        assert_eq!(body["chat_id"], chat_id.to_string(), "{label}");
+        assert_eq!(
+            body["initiator"], "user",
+            "{label}: only user turns take a lease until deliveries carry their own marker"
+        );
+        assert_eq!(
+            body["started_at"].is_string(),
+            reports_started_at,
+            "{label}: `started_at` is reported exactly when the row was read"
+        );
+    }
+
+    assert!(
+        !held.is_abort_requested(),
+        "a refused write must leave the generation already holding the chat alone"
     );
 }
