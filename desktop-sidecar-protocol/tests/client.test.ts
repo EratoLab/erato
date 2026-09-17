@@ -618,6 +618,7 @@ describe("index lifecycle and lexical search", () => {
       "indexing.start.v1",
       "indexing.stop.v1",
       "search.query.v1",
+      "search.metadata_fields.v1",
     ])
       expect(client.supports(method)).toBe(true);
     await client.invoke("sidecar.configure.v1", {
@@ -634,6 +635,9 @@ describe("index lifecycle and lexical search", () => {
           filters: { kind: "file" },
         })
       ).hits,
+    ).toEqual([]);
+    expect(
+      (await client.invoke("search.metadata_fields.v1", {})).fields,
     ).toEqual([]);
     const started = await client.invoke("indexing.start.v1", {});
     expect(started.state).toBe("running");

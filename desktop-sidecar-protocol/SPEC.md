@@ -625,6 +625,11 @@ mailboxId identifies a mailbox, kind selects email/file, fileType matches MIME t
 or filename extension, and dateFrom/dateTo are Unix seconds with an inclusive lower bound and exclusive upper bound. Reversed
 date bounds are invalid params. Files inherit available sender/mailbox/date/thread
 metadata from their parent email. Missing metadata does not satisfy a filter.
+The optional `metadata_filters` array expresses source- and implementation-specific
+metadata predicates. Each entry has a `field`, `operator`, and `value`; entries are
+combined with AND semantics. Values may be arrays for operators such as `in`, and
+the sidecar may expose virtual fields whose predicates are rewritten to an
+implementation-specific query.
 Empty text performs a filtered listing. Text searches use exact BM25, one result
 per document using its highest scoring chunk, descending score then documentId
 for deterministic ties. limit defaults to 20 and is capped at 100. Scores are
@@ -634,6 +639,10 @@ Search uses a consistent active generation and never creates an index. With no
 active index it returns `capability_unavailable`, reason `index_not_initialized`;
 during reset the reason is `index_reset_in_progress`. The mock returns an empty
 synthetic search result and models lifecycle state, not actual BM25 or rebuilding.
+
+`search.metadata_fields.v1` lists the metadata fields exposed by the sidecar for
+these filters. Each field describes its supported operators, value type, human-
+readable description, and applicable document kinds.
 
 ## Mailbox indexing benchmarks
 

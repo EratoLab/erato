@@ -696,6 +696,44 @@
       }
     },
     {
+      "name": "search.metadata_fields.v1",
+      "summary": "List metadata fields supported by search filters.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/search-metadata-fields-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/search-metadata-fields-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ],
+      "x-erato-capability": {
+        "id": "search.metadata_fields",
+        "major": 1,
+        "method": "search.metadata_fields.v1",
+        "availability": {
+          "state": "enabled"
+        }
+      }
+    },
+    {
       "name": "indexing.benchmark.start.v1",
       "summary": "Start an isolated mailbox indexing benchmark; pause normal indexing until completion.",
       "params": [
@@ -889,6 +927,6 @@
   },
   "x-erato-catalogue": {
     "revision": "8",
-    "digest": "sha256:e55040a2ee6a532f2c99c1357e6cf9d27c66fb3d8c24dc5bb05f948dc5453b8b"
+    "digest": "sha256:e4889a98d15c80676f84b8cb8f006ebd26abff28a08ec44c4be0086b761a076b"
   }
 }

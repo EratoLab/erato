@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/search-metadata-filter.schema.json",
+  "title": "SearchMetadataFilter",
+  "type": "object",
+  "properties": {
+    "field": {
+      "type": "string",
+      "minLength": 1
+    },
+    "operator": {
+      "type": "string",
+      "minLength": 1
+    },
+    "value": {}
+  },
+  "required": ["field", "operator", "value"],
+  "additionalProperties": false
+}

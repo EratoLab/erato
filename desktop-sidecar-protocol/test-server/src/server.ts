@@ -20,6 +20,8 @@ import {
   validateIndexingStartV1Params,
   validateIndexingStopV1Params,
   validateSearchQueryV1Params,
+  validateSearchMetadataFieldsV1Params,
+  validateSearchMetadataFieldsV1Result,
   validateIndexingResetV1Params,
   validateIndexingStatusV1Params,
   validateDiagnosticsEchoV1Params,
@@ -465,6 +467,18 @@ export class MockSidecar {
         blocksRead: 0,
         candidatesScored: 0,
       });
+    }
+    if (message.method === "search.metadata_fields.v1") {
+      if (!validateSearchMetadataFieldsV1Params(message.params))
+        return rpcError(message.id, -32602, "Invalid method parameters.");
+      const result = { fields: [] };
+      if (!validateSearchMetadataFieldsV1Result(result))
+        return rpcError(
+          message.id,
+          -32016,
+          "The sidecar could not complete the request.",
+        );
+      return rpcResult(message.id, result);
     }
     if (
       message.method === "indexing.start.v1" ||

@@ -15,6 +15,12 @@
       "maximum": 100,
       "default": 20
     },
+    "metadata_filters": {
+      "type": "array",
+      "items": {
+        "$ref": "./search-metadata-filter.schema.json"
+      }
+    },
     "filters": {
       "type": "object",
       "properties": {

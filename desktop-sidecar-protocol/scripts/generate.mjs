@@ -75,6 +75,21 @@ const typeTargets = [
     "SearchQueryV1Params",
   ],
   [
+    "schemas/methods/search-metadata-filter.schema.json",
+    "search-metadata-filter.ts",
+    "SearchMetadataFilter",
+  ],
+  [
+    "schemas/methods/search-metadata-fields-v1-params.schema.json",
+    "search-metadata-fields-v1-params.ts",
+    "SearchMetadataFieldsV1Params",
+  ],
+  [
+    "schemas/methods/search-metadata-fields-v1-result.schema.json",
+    "search-metadata-fields-v1-result.ts",
+    "SearchMetadataFieldsV1Result",
+  ],
+  [
     "schemas/methods/search-query-v1-result.schema.json",
     "search-query-v1-result.ts",
     "SearchQueryV1Result",
@@ -339,6 +354,10 @@ const validatorTargets = {
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/search-query-v1-params.schema.json",
   validateSearchQueryV1Result:
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/search-query-v1-result.schema.json",
+  validateSearchMetadataFieldsV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/search-metadata-fields-v1-params.schema.json",
+  validateSearchMetadataFieldsV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/search-metadata-fields-v1-result.schema.json",
   validateIndexingResetV1Result:
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-reset-v1-result.schema.json",
   validateIndexingResetV1Params:
