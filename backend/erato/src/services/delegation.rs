@@ -112,6 +112,69 @@ pub fn is_delegation_tool_name(tool_name: &str) -> bool {
         || tool_name == erato_config::config::DELEGATE_TASK_TOOL_NAME
 }
 
+/// The backend-synthetic tools, which count against NEITHER per-task budget.
+///
+/// They are not the work the budgets exist to bound. Charging a delegation
+/// call to the server budget would make a planning facet's MCP allowance
+/// double as its allowance for starting tasks; charging it to the client
+/// budget would be plainly false, since spawning a child run is the most
+/// expensive thing on the list. `wait` is here too: it is a backend-held
+/// sleep in the tool loop, not work on anyone's device, and the naive
+/// "MCP first, else client" rule would otherwise bill it to the user's
+/// machine. Each already has a bound of its own — `max_tasks_per_turn`,
+/// `max_mentions_per_message`, and `propose_client_action` being terminal.
+pub fn is_budget_exempt_tool_name(tool_name: &str) -> bool {
+    is_delegation_tool_name(tool_name)
+        || tool_name == crate::services::client_actions::CLIENT_ACTION_TOOL_NAME
+        || tool_name == crate::services::mcp_wait::WAIT_TOOL_NAME
+}
+
+/// What one task run may spend, resolved when it was launched.
+///
+/// Two independent budgets, never summed and with no cross-key rule. A
+/// server-executed call makes the backend hold a session, a connection and a
+/// slot in the sequential tool loop — shared capacity that scales slowly —
+/// while a client-executed call runs on the user's own device. A run that has
+/// spent its server budget may still make client calls, and the other way
+/// round. `0` forbids a class outright.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TaskToolBudgets {
+    pub server: u32,
+    pub client: u32,
+}
+
+/// Which budget a proposed call is charged to, if any.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TaskToolClass {
+    /// Backend-synthetic: charged to neither budget.
+    Exempt,
+    /// An MCP tool. Checked FIRST, matching the MCP-wins precedence the
+    /// dispatch branches already use: a name present in both resolves to the
+    /// MCP tool, so it must be billed as one.
+    Server,
+    /// Anything else offered is a client tool by construction — hallucinated
+    /// names were already rejected before this point.
+    Client,
+}
+
+/// Classify a proposed tool call for budgeting.
+///
+/// MCP is tested FIRST, because that is the precedence the dispatch itself
+/// uses: every synthetic branch is guarded on the name NOT being a discovered
+/// MCP tool, so on a collision the call is dispatched to the real server. A
+/// built-in name that an MCP server has claimed is therefore server work and
+/// is billed as server work — classifying it as exempt would let a server
+/// exposing a tool called `wait` run unbudgeted.
+pub fn classify_task_tool_call(tool_name: &str, is_mcp_tool: bool) -> TaskToolClass {
+    if is_mcp_tool {
+        TaskToolClass::Server
+    } else if is_budget_exempt_tool_name(tool_name) {
+        TaskToolClass::Exempt
+    } else {
+        TaskToolClass::Client
+    }
+}
+
 /// Prepares a multi-line third-party value for a delimited block. Angle
 /// brackets are escaped so no value can spell a delimiter of its own — the
 /// same reasoning as [`bounded_untrusted`] — but unlike that helper the line
@@ -1069,6 +1132,7 @@ async fn build_result_envelope(
     parent_tool_call_id: String,
     requested_status: DelegationRunStatus,
     requested_reason: Option<DelegationRunReason>,
+    hit_tool_budget: bool,
     result_max_chars: usize,
 ) -> DelegationResultEnvelope {
     use sea_orm::EntityTrait;
@@ -1160,6 +1224,19 @@ async fn build_result_envelope(
 
     if result_text.is_none() && status == DelegationRunStatus::Completed {
         reason = Some(DelegationRunReason::NoAnswer);
+    }
+
+    // A run that stopped at one of its own budgets finished with a partial
+    // but usable answer, and says so rather than looking like a clean
+    // completion. It stays `completed` on purpose: the text is real, the
+    // child chat is adoptable, and calling it `cancelled` would tell the
+    // origin model to throw the work away. An empty answer is the more
+    // specific news, so `no_answer` is not overwritten.
+    if hit_tool_budget
+        && status == DelegationRunStatus::Completed
+        && reason != Some(DelegationRunReason::NoAnswer)
+    {
+        reason = Some(DelegationRunReason::CapExceeded);
     }
 
     DelegationResultEnvelope {
@@ -1386,9 +1463,11 @@ pub(crate) async fn launch_delegation(
     // `inherit` persona the child speaks as whatever assistant the origin
     // chat is bound to — already the owner's, so it needs no re-resolution —
     // and under `bare` it speaks as the plain model.
-    let persona = context
-        .task_scope
-        .as_ref()
+    // Present only on the task route; a mention run has no task scope.
+    let task_scope = matches!(target, DelegationTargetSpec::Task { .. })
+        .then_some(context.task_scope.as_ref())
+        .flatten();
+    let persona = task_scope
         .map(|scope| scope.effective.persona)
         .unwrap_or_default();
     let (assistant_id, assistant_name) = match mention_assistant_id {
@@ -1473,6 +1552,12 @@ pub(crate) async fn launch_delegation(
         expected_output: bounded_brief_field(brief.expected_output.as_deref()),
         constraints: bounded_brief_field(brief.constraints.as_deref()),
         facet_ids: task_facet_ids,
+        // Only a task run carries budgets: a mention run is bounded by the
+        // ordinary per-message cap, as it always has been.
+        max_server_tool_calls_per_task: task_scope
+            .map(|scope| scope.effective.max_server_tool_calls_per_task),
+        max_client_tool_calls_per_task: task_scope
+            .map(|scope| scope.effective.max_client_tool_calls_per_task),
         persona,
         scheduling: erato_config::config::TaskScheduling::default(),
         route: match target {
@@ -1714,6 +1799,10 @@ pub(crate) async fn await_delegation(
             tool_call.call_id.clone(),
             status,
             reason,
+            // Read off the child's own task rather than its last content
+            // part: a call refused on a budget looks exactly like any other
+            // refusal from the outside.
+            child_task.tool_budget_exhausted(),
             config.result_max_chars,
         )
         .await,
@@ -2493,6 +2582,71 @@ mod tests {
         assert!(schema["properties"].get("facet_ids").is_none());
         assert!(schema["properties"].get("file_ids").is_none());
         assert!(schema["properties"]["task"].is_object());
+    }
+
+    #[test]
+    fn the_built_in_tools_are_charged_to_neither_budget() {
+        for name in [
+            DELEGATE_TO_ASSISTANT_TOOL_NAME,
+            erato_config::config::DELEGATE_TASK_TOOL_NAME,
+            crate::services::client_actions::CLIENT_ACTION_TOOL_NAME,
+            // A backend-held sleep in the tool loop, not work on a device:
+            // the naive "MCP first, else client" rule would bill it to the
+            // user's machine.
+            crate::services::mcp_wait::WAIT_TOOL_NAME,
+        ] {
+            assert_eq!(
+                classify_task_tool_call(name, false),
+                TaskToolClass::Exempt,
+                "{name} must be exempt"
+            );
+            // But NOT when an MCP server has claimed the name: the
+            // dispatch gives MCP precedence, so that call really does run
+            // against the server and must be billed as server work.
+            assert_eq!(
+                classify_task_tool_call(name, true),
+                TaskToolClass::Server,
+                "{name} claimed by an MCP server is dispatched to that server"
+            );
+        }
+    }
+
+    #[test]
+    fn a_server_tool_is_charged_to_the_server_budget_and_wins_on_a_name_clash() {
+        assert_eq!(
+            classify_task_tool_call("search_web", true),
+            TaskToolClass::Server
+        );
+        // Anything else offered is a client tool by construction —
+        // hallucinated names were rejected before this point.
+        assert_eq!(
+            classify_task_tool_call("search_sidecar_mailbox", false),
+            TaskToolClass::Client
+        );
+    }
+
+    #[test]
+    fn the_two_budgets_are_resolved_independently() {
+        // A facet may lower one axis without touching the other: the budgets
+        // are never summed and neither constrains the other.
+        let mut facets = crate::config::FacetsConfig::default();
+        facets.facets.insert(
+            "plan".to_string(),
+            planning_facet(
+                &["erato/delegate_task"],
+                Some(erato_config::config::FacetDelegationOverrides {
+                    max_tasks_per_turn: None,
+                    max_server_tool_calls_per_task: Some(0),
+                    max_client_tool_calls_per_task: None,
+                    persona: None,
+                    child_facet_ids: None,
+                }),
+            ),
+        );
+        let effective = effective_tasks_config(&tasks_config(), &facets, &["plan".to_string()]);
+        // Server work forbidden outright, client work untouched.
+        assert_eq!(effective.max_server_tool_calls_per_task, 0);
+        assert_eq!(effective.max_client_tool_calls_per_task, 30);
     }
 
     #[test]

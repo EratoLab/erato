@@ -769,6 +769,13 @@ pub struct StreamingTask {
     /// last content part; set by the completion paths, consumed by
     /// `derive_outcome`.
     awaiting_approval: Arc<AtomicBool>,
+    /// Whether this run refused one of its own tool calls because a per-task
+    /// budget ran out. Set by the agentic loop, read when a delegated run's
+    /// result envelope is built: a run that stopped at its budget finished
+    /// with a partial but usable answer, which is a different thing from one
+    /// that failed, and the refusal part itself is indistinguishable from any
+    /// other refusal.
+    tool_budget_exhausted: Arc<AtomicBool>,
     /// Whether the generation is complete
     completed: Arc<AtomicBool>,
     /// Whether cancellation was requested by the user
@@ -812,6 +819,7 @@ impl StreamingTask {
             event_history: Arc::new(RwLock::new(Vec::new())),
             saw_error: Arc::new(AtomicBool::new(false)),
             awaiting_approval: Arc::new(AtomicBool::new(false)),
+            tool_budget_exhausted: Arc::new(AtomicBool::new(false)),
             completed: Arc::new(AtomicBool::new(false)),
             abort_requested: Arc::new(AtomicBool::new(false)),
             abort_notify: Arc::new(Notify::new()),
@@ -922,6 +930,16 @@ impl StreamingTask {
 
     /// Record that the generation finalized on a pending tool approval, so
     /// its outcome parks the chat instead of completing it.
+    /// Record that this run refused a tool call on a per-task budget.
+    pub fn mark_tool_budget_exhausted(&self) {
+        self.tool_budget_exhausted.store(true, Ordering::SeqCst);
+    }
+
+    /// Whether this run ever refused a tool call on a per-task budget.
+    pub fn tool_budget_exhausted(&self) -> bool {
+        self.tool_budget_exhausted.load(Ordering::SeqCst)
+    }
+
     pub fn mark_awaiting_approval(&self) {
         self.awaiting_approval.store(true, Ordering::SeqCst);
     }

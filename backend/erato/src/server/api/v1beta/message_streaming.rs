@@ -2478,6 +2478,26 @@ pub(crate) fn active_hidden_facet_ids(
     ids
 }
 
+/// What a run may spend on tool calls, read off its own chat row.
+///
+/// Only a task run has budgets: they were resolved from the config and the
+/// planning facets when it was launched and written into its `TaskSpec`, so
+/// the run stays bounded by what was agreed at launch rather than by whatever
+/// the config happens to say now. Every other turn — ordinary chats, mention
+/// runs — returns `None` and keeps the per-message cap.
+pub(crate) fn task_tool_budgets_for_chat(
+    chat: &chats::Model,
+) -> Option<crate::services::delegation::TaskToolBudgets> {
+    let task = crate::models::chat::parse_chat_configuration(chat)
+        .ok()
+        .flatten()?
+        .task?;
+    Some(crate::services::delegation::TaskToolBudgets {
+        server: task.max_server_tool_calls_per_task?,
+        client: task.max_client_tool_calls_per_task?,
+    })
+}
+
 pub(crate) fn resolve_effective_selected_facet_ids(
     config: &FacetsConfig,
     requested_facet_ids: &[String],
@@ -3367,6 +3387,10 @@ async fn stream_generate_chat_completion<
     initial_message_content: Vec<ContentPart>,
     is_delegated_run: bool,
     delegation: Option<DelegationDispatchContext<'_>>,
+    // What this run may spend on tool calls, when it is a task run. `None`
+    // for every ordinary turn and for a mention run, which stay bounded by
+    // `generation.max_tool_calls_per_message` as before.
+    task_tool_budgets: Option<crate::services::delegation::TaskToolBudgets>,
 ) -> Result<(Vec<ContentPart>, Option<GenerationMetadata>), Report> {
     let mcp = app_state.mcp_state().await;
     // Record the real assistant message id on the streaming task. `start_task`
@@ -3454,6 +3478,10 @@ async fn stream_generate_chat_completion<
         std::collections::VecDeque::new();
     let mut current_turn = 0;
     let mut current_tool_call_count = 0;
+    // Charged per class and never summed: a run that has spent its server
+    // budget may still make client calls, and the other way round.
+    let mut task_server_tool_calls: u32 = 0;
+    let mut task_client_tool_calls: u32 = 0;
     // At most one successful client-action proposal per generation: the
     // client needs a single authoritative proposal, so duplicate or
     // conflicting calls after the first are answered with an error.
@@ -3624,14 +3652,89 @@ async fn stream_generate_chat_completion<
                 break 'loop_call_turns Ok((current_message_content, generation_metadata));
             }
 
+            // A task run is bounded by its own two budgets instead of the
+            // per-message cap: it was launched with an allowance, and running
+            // out of it is an ordinary outcome rather than a failure. The
+            // call is refused and the run continues, so the model finishes in
+            // prose with a partial — but usable and resumable — answer.
+            //
+            // Only a call that would actually be dispatched is charged. A name
+            // the model invented is rejected further down by
+            // `allowed_tool_names` and never runs, so billing it would let
+            // hallucinations drain a real allowance — and, with a budget of
+            // `0`, would answer an invalid name with "you are out of budget",
+            // telling the model nothing about what was actually wrong with it.
+            let budget_refusal = task_tool_budgets
+                .filter(|_| allowed_tool_names.contains(unfinished_tool_call.fn_name.as_str()))
+                .and_then(|budgets| {
+                let class = crate::services::delegation::classify_task_tool_call(
+                    &unfinished_tool_call.fn_name,
+                    available_mcp_tools_by_name
+                        .contains_key(unfinished_tool_call.fn_name.as_str()),
+                );
+                match class {
+                    crate::services::delegation::TaskToolClass::Exempt => None,
+                    crate::services::delegation::TaskToolClass::Server => {
+                        if task_server_tool_calls >= budgets.server {
+                            Some("This task has used all of its tool calls that run on the server; finish with what you have.")
+                        } else {
+                            task_server_tool_calls += 1;
+                            None
+                        }
+                    }
+                    crate::services::delegation::TaskToolClass::Client => {
+                        if task_client_tool_calls >= budgets.client {
+                            Some("This task has used all of its tool calls that run on your device; finish with what you have.")
+                        } else {
+                            task_client_tool_calls += 1;
+                            None
+                        }
+                    }
+                }
+            });
+
+            // The per-message cap is the outer backstop for every turn,
+            // including a task run — the per-task budgets bound the work a
+            // task may DISPATCH, but exempt and refused calls still cost a
+            // round trip each, so something has to stop a model that keeps
+            // proposing them.
+            //
+            // For a task run it must not kill the turn. The child's partial
+            // answer IS the result its parent is waiting for, and a
+            // `return Err` here discards it: the content is only persisted on
+            // the success path, so the error path hands the parent
+            // `{"status":"failed"}` with nothing in it. Ending the turn
+            // gracefully keeps what the child has and reports it as the
+            // partial, resumable result it is.
             if current_tool_call_count >= max_tool_calls_per_message {
+                if let Some(task) = streaming_task.filter(|_| task_tool_budgets.is_some()) {
+                    tracing::warn!(
+                        chat_id = %chat_id,
+                        max_tool_calls_per_message,
+                        "Task run reached the per-message tool-call backstop; \
+                         ending the turn with the answer it has"
+                    );
+                    task.mark_tool_budget_exhausted();
+                    let generation_metadata = build_generation_metadata(
+                        total_prompt_tokens,
+                        total_completion_tokens,
+                        total_total_tokens,
+                        total_reasoning_tokens,
+                        langfuse_trace_id.clone(),
+                        false,
+                        None,
+                        non_empty_string(&captured_reasoning_summary),
+                        non_empty_vec(&captured_reasoning_items),
+                        non_empty_vec(&captured_reasoning_item_encrypted_content),
+                    );
+                    break 'loop_call_turns Ok((current_message_content, generation_metadata));
+                }
                 let error = eyre!(
                     "Maximum tool call count per message ({max_tool_calls_per_message}) exceeded"
                 );
                 return Err(error);
-            } else {
-                current_tool_call_count += 1;
             }
+            current_tool_call_count += 1;
             // Emit event for tool call proposed
             {
                 let unfinished_tool_call = unfinished_tool_call.clone();
@@ -3662,6 +3765,51 @@ async fn stream_generate_chat_completion<
                 }
                 let message: MSG = proposed_call.into();
                 send_generation_event(&message, tx.clone()).await?;
+            }
+
+            // Budget refusal, decided above and emitted here so it lands
+            // before every dispatch branch and so client tools are bounded
+            // the same way MCP tools are.
+            if let Some(error_message) = budget_refusal {
+                if let Some(task) = streaming_task {
+                    // The refusal part is indistinguishable from any other
+                    // refusal, so the run says out of band that it stopped at
+                    // a budget: a partial answer is a different outcome from
+                    // a failed one, and only this flag can tell them apart.
+                    task.mark_tool_budget_exhausted();
+                }
+                let tool_call_started = tool_call_started_at
+                    .remove(&unfinished_tool_call.call_id)
+                    .unwrap_or_else(now_timestamp);
+                persist_otel_tool_call(
+                    tracing_client.as_ref(),
+                    &unfinished_tool_call,
+                    Some(json!({ "error": error_message })),
+                    otel_tool_call_start_time,
+                    Some(SystemTime::now()),
+                    tool_call_parent_observation_ids.remove(&unfinished_tool_call.call_id),
+                    assistant_id,
+                    &langfuse_trace_enrichment.platform,
+                    Some(error_message),
+                )
+                .await;
+                current_message_content.push(ContentPart::ToolUse(ToolUse {
+                    tool_call_id: unfinished_tool_call.call_id.clone(),
+                    status: MessageToolCallStatus::Error,
+                    tool_name: unfinished_tool_call.fn_name.clone(),
+                    input: Some(unfinished_tool_call.fn_arguments.clone()),
+                    progress_message: None,
+                    progress: None,
+                    total: None,
+                    output: Some(json!({ "status": "rejected", "error": error_message })),
+                    started_at: Some(tool_call_started),
+                    ended_at: Some(now_timestamp()),
+                }));
+                current_turn_tool_responses.push(genai::chat::ToolResponse {
+                    call_id: unfinished_tool_call.call_id.clone(),
+                    content: error_message.to_string(),
+                });
+                continue;
             }
 
             if !allowed_tool_names.contains(unfinished_tool_call.fn_name.as_str()) {
@@ -9849,6 +9997,7 @@ pub(crate) async fn run_message_submit_task(
             task_scope: task_offer_scope.clone(),
             tasks_this_turn: std::sync::atomic::AtomicUsize::new(0),
         }),
+        task_tool_budgets_for_chat(&chat),
     );
 
     let (end_content, generation_metadata) = match generation_task.await {
@@ -10279,6 +10428,7 @@ pub async fn regenerate_message_sse(
                         task_scope: task_offer_scope.clone(),
                         tasks_this_turn: std::sync::atomic::AtomicUsize::new(0),
                     }),
+                    task_tool_budgets_for_chat(&chat),
                 )
                 .await;
             let (end_content, generation_metadata) = match generation_result {
@@ -10790,6 +10940,7 @@ pub async fn edit_message_sse(
                         task_scope: task_offer_scope.clone(),
                         tasks_this_turn: std::sync::atomic::AtomicUsize::new(0),
                     }),
+                    task_tool_budgets_for_chat(&chat),
                 )
                 .await;
             let (end_content, generation_metadata) = match generation_result {
@@ -11608,6 +11759,10 @@ async fn run_continue_message_task(
             parsed.content,
             crate::models::chat::chat_is_delegated_run(&chat),
             None,
+            // The budget is per generation, like the per-message cap it sits
+            // beside: a continuation starts a fresh one. Documented, not
+            // fixed — the same is already true of `max_tool_calls_per_message`.
+            task_tool_budgets_for_chat(&chat),
         )
         .await?;
     if let Some(metadata) = generation_metadata {
