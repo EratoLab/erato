@@ -107,6 +107,7 @@ pub struct TaskResultInput {
     pub result_message_id: Uuid,
     pub status: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     pub reason: Option<String>,
     /// Whether the delivery was meant to provoke a reaction turn. A `silent`
     /// result is folded into the user's next message instead.
@@ -401,6 +402,7 @@ pub struct ContentPartTaskResult {
     /// Terminal status of the run, from the D-K vocabulary.
     pub status: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     pub reason: Option<String>,
     /// The child's answer, bounded. Untrusted.
     pub summary: String,

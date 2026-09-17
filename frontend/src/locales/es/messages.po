@@ -3261,6 +3261,36 @@ msgid "message.showRawMarkdown.aria"
 msgstr "Mostrar markdown sin procesar"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.openRun"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.sequence"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.status.cancelled"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.status.failed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.title"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.truncated"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/App.tsx
 msgid "navigation.goHome"
 msgstr "Ir al inicio"
@@ -4723,32 +4753,32 @@ msgid "trace.delegation.openRun"
 msgstr "Abrir la ejecución delegada"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.approvalPending"
 msgstr "Esperando tu decisión sobre una herramienta que quiere usar"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.approvalUnavailable"
 msgstr "Necesitaba una herramienta sobre la que no pudo consultarte"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.capExceeded"
 msgstr "Detenida en su límite de llamadas a herramientas; la respuesta puede ser parcial"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.noAnswer"
 msgstr "La ejecución terminó sin respuesta"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.parentAbort"
 msgstr "Detenida junto con el mensaje que la inició"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.timeout"
 msgstr "La ejecución tardó demasiado"
 
