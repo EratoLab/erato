@@ -1,14 +1,17 @@
 use crate::db::entity::messages;
 use crate::db::entity::prelude::*;
+use crate::metrics_constants::POSTGRES_QUERY_RESOLVE_SYSTEM_DELIVERED_TIP;
 use crate::models::file_upload::proxied_preview_url_for_file;
 use crate::models::pagination;
 use crate::policy::prelude::*;
+use crate::query_metrics::named_statement_from_sql_and_values;
 use crate::server::api::v1beta::message_streaming::FileContentsForGeneration;
 use eyre::{Report, eyre};
 use genai::chat::ReasoningItem;
 use sea_orm::prelude::*;
 use sea_orm::{
-    ActiveValue, DatabaseConnection, EntityTrait, QueryOrder, QuerySelect, TransactionTrait,
+    ActiveValue, DatabaseConnection, EntityTrait, FromQueryResult, QueryOrder, QuerySelect,
+    TransactionTrait,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value as JsonValue, to_value};
@@ -122,6 +125,11 @@ pub enum GenerationInitiator {
     /// The turn reacting to a delivered task result.
     TaskResult,
 }
+
+/// The stored spelling of `GenerationInitiator::TaskResult`, as the
+/// re-anchoring walk compares it in SQL. Kept honest by
+/// `task_result_initiator_wire_spelling_matches_the_sql_predicate`.
+pub const TASK_RESULT_INITIATOR_WIRE: &str = "task_result";
 
 /// Request-scoped context captured for a generation request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -782,6 +790,89 @@ pub async fn submit_message(
         .map_err(|e| eyre!("Failed to commit transaction: {}", e))?;
 
     Ok(created_message)
+}
+
+/// The deepest system-delivered row still on the active thread below
+/// `anchor_message_id`, if the chain below the anchor starts with one.
+///
+/// A client that last saw the assistant row above a delivered task result
+/// anchors there; submitting on that anchor would branch the result and the
+/// turn that reacted to it off the active thread, because `submit_message`
+/// deactivates the whole chat and reactivates only the anchor's ancestors.
+/// Walking down past the server's own rows puts the new turn below them
+/// instead, and that reactivation then keeps them on the thread for free.
+///
+/// `None` means "leave the anchor alone": either nothing is below it, or what
+/// is below it is a row the user wrote. Branching below a user's own later
+/// turn stays a feature.
+pub async fn resolve_system_delivered_tip(
+    conn: &DatabaseConnection,
+    chat_id: &Uuid,
+    anchor_message_id: &Uuid,
+) -> Result<Option<Uuid>, Report> {
+    #[derive(Debug, FromQueryResult)]
+    struct TipRow {
+        id: Uuid,
+    }
+
+    // The join is served by the index on `previous_message_id`; the chat id and
+    // the active flag are rechecks over the one row a parent normally has.
+    //
+    // UNION ALL with a depth cap rather than UNION: `previous_message_id` is a
+    // self-referencing FK, so a cycle is representable even though a real chain
+    // is two rows. The cap is a stop, not a business rule.
+    //
+    // The `is_task_result AND role = 'assistant'` clause is load-bearing, not
+    // belt-and-braces. Regenerating a reaction rebuilds its generation
+    // parameters through the ordinary request path, which writes no
+    // `initiator`, so a regenerated reaction carries no marker. Keying on the
+    // marker alone would stop the walk one row short and silently deactivate
+    // the answer the user just pressed regenerate for.
+    let sql = format!(
+        r#"
+        WITH RECURSIVE chain AS (
+            SELECT "m"."id",
+                   "m"."created_at",
+                   0 AS depth,
+                   ("m"."input_parameters"      #>> '{{task_result,delivery_id}}') IS NOT NULL AS is_task_result,
+                   ("m"."generation_parameters" #>> '{{initiator}}') = '{initiator}'           AS is_reaction
+            FROM "messages" AS "m"
+            WHERE "m"."chat_id" = $1::uuid
+              AND "m"."previous_message_id" = $2::uuid
+              AND "m"."is_message_in_active_thread"
+            UNION ALL
+            SELECT "c"."id",
+                   "c"."created_at",
+                   chain.depth + 1,
+                   ("c"."input_parameters"      #>> '{{task_result,delivery_id}}') IS NOT NULL,
+                   ("c"."generation_parameters" #>> '{{initiator}}') = '{initiator}'
+                       OR (chain.is_task_result AND ("c"."raw_message" ->> 'role') = 'assistant')
+            FROM "messages" AS "c"
+            JOIN chain ON "c"."previous_message_id" = chain.id
+            WHERE "c"."chat_id" = $1::uuid
+              AND "c"."is_message_in_active_thread"
+              AND (chain.is_task_result OR chain.is_reaction)
+              AND chain.depth < 64
+        )
+        SELECT id
+        FROM chain
+        WHERE is_task_result OR is_reaction
+        ORDER BY depth DESC, created_at DESC, id DESC
+        LIMIT 1
+        "#,
+        initiator = TASK_RESULT_INITIATOR_WIRE,
+    );
+
+    let row = TipRow::find_by_statement(named_statement_from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        POSTGRES_QUERY_RESOLVE_SYSTEM_DELIVERED_TIP,
+        sql,
+        [(*chat_id).into(), (*anchor_message_id).into()],
+    ))
+    .one(conn)
+    .await?;
+
+    Ok(row.map(|row| row.id))
 }
 
 /// Get messages for a chat with pagination support.
@@ -1535,6 +1626,25 @@ mod action_facet_filter_tests {
                 download_url: None,
                 preview_url: None,
             })]
+        );
+    }
+}
+
+#[cfg(test)]
+mod task_result_marker_tests {
+    use super::{GenerationInitiator, TASK_RESULT_INITIATOR_WIRE};
+
+    /// The re-anchoring walk compares a literal against the stored JSON; the
+    /// enum decides what is stored. If they drift, re-anchoring stops one row
+    /// short of the reaction and nothing fails loudly — the user just loses
+    /// the answer off the active thread.
+    #[test]
+    fn task_result_initiator_wire_spelling_matches_the_sql_predicate() {
+        assert_eq!(
+            serde_json::to_value(GenerationInitiator::TaskResult)
+                .unwrap()
+                .as_str(),
+            Some(TASK_RESULT_INITIATOR_WIRE),
         );
     }
 }
