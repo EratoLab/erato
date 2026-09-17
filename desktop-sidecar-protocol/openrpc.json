@@ -926,7 +926,7 @@
     }
   },
   "x-erato-catalogue": {
-    "revision": "8",
-    "digest": "sha256:e4889a98d15c80676f84b8cb8f006ebd26abff28a08ec44c4be0086b761a076b"
+    "revision": "9",
+    "digest": "sha256:6e212f0dc129e827998f8da693101fa0eb6c149a9ad28ed15e0835c4db9e8f1e"
   }
 }

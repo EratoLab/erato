@@ -476,6 +476,10 @@ const validatorSource = `${standaloneCode(ajv, validatorTargets)}\n`
   .replace(
     /const (formats\d+) = require\("ajv-formats\/dist\/formats"\)\.fullFormats\["date-time"\];/g,
     "const $1 = { validate: (value) => /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$/.test(value) && !Number.isNaN(Date.parse(value)) };",
+  )
+  .replace(
+    /const (formats\d+) = require\("ajv-formats\/dist\/formats"\)\.fullFormats\.uri;/g,
+    "const $1 = (value) => /^(?:[a-z][a-z0-9+\\-.]*:)(?:\\/?\\/)?[^\\s]*$/i.test(value);",
   );
 await writeFile(
   path.join(outputDirectory, "validators.mjs"),

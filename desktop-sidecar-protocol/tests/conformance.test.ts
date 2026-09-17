@@ -10,6 +10,7 @@ import {
   validateOutlookListMailboxesV1Result,
   validateOutlookSearchEmailsV1Params,
   validateOutlookSearchEmailsV1Result,
+  validateSearchQueryV1Result,
   validateSidecarProgressV1Params,
   validateSidecarProgressV1Result,
 } from "../typescript/src/generated/validators.mjs";
@@ -245,6 +246,82 @@ describe("outlook.search_emails.v1 boundary", () => {
       }),
     ).toBe(true);
     expect(validateOutlookSearchEmailsV1Result({ hits: [] })).toBe(false);
+  });
+});
+
+describe("search.query.v1 result boundary", () => {
+  it("accepts externally relatable identifiers and a document URI", () => {
+    expect(
+      validateSearchQueryV1Result({
+        hits: [
+          {
+            documentId: "document-1",
+            uri: "https://outlook.example.test/message-1",
+            external_ids: [
+              { key: "email_message_id", value: "<message-1@example.com>" },
+              { key: "future_source_identifier", value: "source-value" },
+            ],
+            chunkId: null,
+            score: 1.25,
+            kind: "email",
+            title: "Quarterly offer",
+            sender: "sender@example.com",
+            mailboxId: "mailbox-1",
+            date: 1774291200,
+            mimeType: "message/rfc822",
+            conversationKey: "conversation-1",
+          },
+        ],
+        elapsedMs: 1,
+        blocksRead: 1,
+        candidatesScored: 1,
+      }),
+    ).toBe(true);
+  });
+
+  it("keeps the new fields optional for previous sidecars", () => {
+    expect(
+      validateSearchQueryV1Result({
+        hits: [],
+        elapsedMs: 0,
+        blocksRead: 0,
+        candidatesScored: 0,
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects malformed external identifiers and URIs", () => {
+    const baseHit = {
+      documentId: "document-1",
+      chunkId: null,
+      score: 1,
+      kind: "email",
+      title: null,
+      sender: null,
+      mailboxId: null,
+      date: null,
+      mimeType: null,
+      conversationKey: null,
+    };
+    const baseResult = {
+      hits: [baseHit],
+      elapsedMs: 0,
+      blocksRead: 0,
+      candidatesScored: 0,
+    };
+
+    expect(
+      validateSearchQueryV1Result({
+        ...baseResult,
+        hits: [{ ...baseHit, uri: "not a URI" }],
+      }),
+    ).toBe(false);
+    expect(
+      validateSearchQueryV1Result({
+        ...baseResult,
+        hits: [{ ...baseHit, external_ids: [{ key: "only-key" }] }],
+      }),
+    ).toBe(false);
   });
 });
 
