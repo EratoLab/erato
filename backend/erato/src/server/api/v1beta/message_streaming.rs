@@ -10602,13 +10602,39 @@ pub(crate) async fn run_message_submit_task(
     } else {
         None
     };
+    // A delivered task result and the turn that reacted to it sit below the
+    // assistant row the client last saw, so a client that has not caught up
+    // anchors above them and the submit would branch them away. Walk down past
+    // the server's own rows and submit below them instead.
+    //
+    // Deliberately here rather than beside the lease acquisition: nothing
+    // between that call and the spawn is fallible today, so a `?` there would
+    // return with the lease still held and no task to release it — and under
+    // the identity-guarded heartbeat that chat then refuses every later write.
+    // Here it runs inside the generation lifecycle, which already owns
+    // cleanup. Still after the lease, so no concurrent delivery can append a
+    // row between this read and the write.
+    //
+    // The client's own anchor is what `validate_submit_request` checked; this
+    // one is server-computed and is deliberately allowed to be a user row,
+    // which is the steady state for a `silent` delivery.
+    let effective_previous_message_id = match request.previous_message_id {
+        Some(anchor) if app_state.config.delegation.tasks.enabled => {
+            crate::models::message::resolve_system_delivered_tip(&app_state.db, &chat.id, &anchor)
+                .await
+                .wrap_err("Failed to resolve the system-delivered tip")?
+                .or(Some(anchor))
+        }
+        other => other,
+    };
+
     let saved_user_message = bg_stream_save_user_message(
         task,
         app_state,
         policy,
         me_user,
         &chat,
-        request.previous_message_id.as_ref(),
+        effective_previous_message_id.as_ref(),
         &request.user_message,
         &request.input_files_ids,
         user_input_parameters,
@@ -11194,6 +11220,22 @@ pub async fn regenerate_message_sse(
             .await
             .wrap_err("Failed to submit initial assistant message for regenerate")?;
 
+            // The branch write just knocked every row below the new anchor off
+            // the active thread, including any `task_result` row a finished
+            // task was delivered into. Re-queue the ones whose origin turn is
+            // still live so they reach this branch, and close the rest.
+            // After `submit_message` returns, because it owns its own
+            // transaction and the active flags are not final until it commits.
+            if app_state.config.delegation.tasks.enabled
+                && let Err(error) = crate::models::chat::requeue_or_supersede_branched_deliveries(
+                    &app_state.db,
+                    &chat.id,
+                )
+                .await
+            {
+                tracing::warn!(%error, "Failed to reconcile deliveries after a regenerate");
+            }
+
             let assistant_started_event: RegenerateMessageStreamingResponseMessage =
                 MessageSubmitStreamingResponseAssistantMessageStarted {
                     message_id: initial_assistant_message.id,
@@ -11704,6 +11746,22 @@ pub async fn edit_message_sse(
             )
             .await
             .wrap_err("Failed to submit initial assistant message for edit")?;
+
+            // The branch write just knocked every row below the new anchor off
+            // the active thread, including any `task_result` row a finished
+            // task was delivered into. Re-queue the ones whose origin turn is
+            // still live so they reach this branch, and close the rest.
+            // After `submit_message` returns, because it owns its own
+            // transaction and the active flags are not final until it commits.
+            if app_state.config.delegation.tasks.enabled
+                && let Err(error) = crate::models::chat::requeue_or_supersede_branched_deliveries(
+                    &app_state.db,
+                    &chat.id,
+                )
+                .await
+            {
+                tracing::warn!(%error, "Failed to reconcile deliveries after a edit");
+            }
 
             let assistant_started_event: EditMessageStreamingResponseMessage =
                 MessageSubmitStreamingResponseAssistantMessageStarted {
