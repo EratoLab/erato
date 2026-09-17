@@ -3,6 +3,17 @@
 export interface SearchQueryV1Result {
   hits: {
     documentId: string;
+    /**
+     * A URI identifying the document, ideally an externally retrievable URL.
+     */
+    uri?: string;
+    /**
+     * Externally relatable identifiers for the document. Identifier keys are open-ended so new identifier kinds do not require a protocol change.
+     */
+    external_ids?: {
+      key: string;
+      value: string;
+    }[];
     chunkId: string | null;
     score: number;
     kind: string;

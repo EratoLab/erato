@@ -633,8 +633,15 @@ implementation-specific query.
 Empty text performs a filtered listing. Text searches use exact BM25, one result
 per document using its highest scoring chunk, descending score then documentId
 for deterministic ties. limit defaults to 20 and is capped at 100. Scores are
-relative ranking values, not probabilities. The response contains result metadata
-and execution counters; it does not contain extracted document contents.
+relative ranking values, not probabilities. Each hit may include `uri`, a URI
+identifying the document and ideally an externally retrievable URL, and
+`external_ids`, a list of `{key, value}` objects containing externally relatable
+identifiers. Both fields are optional in the v1 compatibility schema so current
+clients can communicate with previous sidecars; current sidecars SHOULD include
+them for every returned document. Identifier keys are open-ended and values are
+strings, so adding a new identifier kind does not require a protocol change. The
+response contains result metadata and execution counters; it does not contain
+extracted document contents.
 Search uses a consistent active generation and never creates an index. With no
 active index it returns `capability_unavailable`, reason `index_not_initialized`;
 during reset the reason is `index_reset_in_progress`. The mock returns an empty

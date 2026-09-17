@@ -12,6 +12,31 @@
           "documentId": {
             "type": "string"
           },
+          "uri": {
+            "description": "A URI identifying the document, ideally an externally retrievable URL.",
+            "type": "string",
+            "format": "uri",
+            "minLength": 1
+          },
+          "external_ids": {
+            "description": "Externally relatable identifiers for the document. Identifier keys are open-ended so new identifier kinds do not require a protocol change.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": ["key", "value"],
+              "additionalProperties": false
+            }
+          },
           "chunkId": {
             "type": ["string", "null"]
           },
