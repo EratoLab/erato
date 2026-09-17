@@ -293,6 +293,66 @@
       }
     },
     {
+      "name": "sources.list.v1",
+      "summary": "List the generalized source records currently present in the catalog.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/sources-list-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/sources-list-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        { "$ref": "#/components/errors/CapabilityUnavailable" },
+        { "$ref": "#/components/errors/InvalidParams" },
+        { "$ref": "#/components/errors/SidecarInternal" }
+      ],
+      "x-erato-capability": {
+        "id": "sources.list",
+        "major": 1,
+        "method": "sources.list.v1",
+        "availability": { "state": "enabled" }
+      }
+    },
+    {
+      "name": "sources.get_folder_hierarchy.v1",
+      "summary": "Return the catalog folder hierarchy for one generalized source.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/sources-get-folder-hierarchy-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/sources-get-folder-hierarchy-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        { "$ref": "#/components/errors/CapabilityUnavailable" },
+        { "$ref": "#/components/errors/InvalidParams" },
+        { "$ref": "#/components/errors/SidecarInternal" }
+      ],
+      "x-erato-capability": {
+        "id": "sources.get_folder_hierarchy",
+        "major": 1,
+        "method": "sources.get_folder_hierarchy.v1",
+        "availability": { "state": "enabled" }
+      }
+    },
+    {
       "name": "sidecar.progress.v1",
       "summary": "Report a pending request's point-in-time progress as the sidecar's on-device step log.",
       "params": [
@@ -829,6 +889,6 @@
   },
   "x-erato-catalogue": {
     "revision": "8",
-    "digest": "sha256:e16b4bcf349bd42eb2a5d2f58b48dcda143441462860741db6fd17559f8b4c0f"
+    "digest": "sha256:e55040a2ee6a532f2c99c1357e6cf9d27c66fb3d8c24dc5bb05f948dc5453b8b"
   }
 }

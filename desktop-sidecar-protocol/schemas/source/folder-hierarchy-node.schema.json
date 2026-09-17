@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/source/folder-hierarchy-node.schema.json",
+  "title": "SourceFolderHierarchyNode",
+  "type": "object",
+  "properties": {
+    "nodeId": { "type": "string", "minLength": 1 },
+    "parentNodeId": { "type": ["string", "null"] },
+    "name": { "type": "string" },
+    "pathName": { "type": "string" },
+    "artificialRoot": { "type": "boolean" },
+    "directLeafChildren": { "type": "integer", "minimum": 0 },
+    "totalLeafChildren": { "type": "integer", "minimum": 0 },
+    "directChildNodes": { "type": "integer", "minimum": 0 }
+  },
+  "required": [
+    "nodeId",
+    "parentNodeId",
+    "name",
+    "pathName",
+    "artificialRoot",
+    "directLeafChildren",
+    "totalLeafChildren",
+    "directChildNodes"
+  ],
+  "additionalProperties": false
+}

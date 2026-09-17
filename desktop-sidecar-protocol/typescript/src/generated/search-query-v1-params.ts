@@ -5,6 +5,7 @@ export interface SearchQueryV1Params {
   limit?: number;
   filters?: {
     sender?: string;
+    sourceId?: string;
     mailboxId?: string;
     dateFrom?: number;
     dateTo?: number;

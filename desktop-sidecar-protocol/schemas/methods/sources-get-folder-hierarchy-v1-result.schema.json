@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-folder-hierarchy-v1-result.schema.json",
+  "title": "SourcesGetFolderHierarchyV1Result",
+  "type": "object",
+  "properties": {
+    "sourceId": { "type": "string", "format": "uuid" },
+    "nodes": {
+      "type": "array",
+      "items": { "$ref": "../source/folder-hierarchy-node.schema.json" }
+    }
+  },
+  "required": ["sourceId", "nodes"],
+  "additionalProperties": false
+}

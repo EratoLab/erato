@@ -50,3 +50,7 @@ export const validateSidecarProgressV1Params: Validator;
 export const validateSidecarProgressV1Result: Validator;
 export const validateOutlookSearchEmailsV1Params: Validator;
 export const validateOutlookSearchEmailsV1Result: Validator;
+export const validateSourcesListV1Params: Validator;
+export const validateSourcesListV1Result: Validator;
+export const validateSourcesGetFolderHierarchyV1Params: Validator;
+export const validateSourcesGetFolderHierarchyV1Result: Validator;
