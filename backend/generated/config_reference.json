@@ -353,6 +353,7 @@
   "delegation.tasks.child_facet_ids.[]": {},
   "delegation.tasks.enabled": {},
   "delegation.tasks.max_client_tool_calls_per_task": {},
+  "delegation.tasks.max_parallel": {},
   "delegation.tasks.max_server_tool_calls_per_task": {},
   "delegation.tasks.max_tasks_per_turn": {},
   "delegation.tasks.persona": {},
@@ -477,6 +478,13 @@
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task` instead.",
       "replacement_key": "facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.delegation.max_parallel": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.delegation.max_parallel` instead.",
+      "replacement_key": "facets.facets.<facet-id>.delegation.max_parallel"
     }
   },
   "experimental_facets.facets.<facet-id>.delegation.max_server_tool_calls_per_task": {
@@ -630,6 +638,7 @@
   "facets.facets.<facet-id>.additional_system_prompt.source": {},
   "facets.facets.<facet-id>.delegation.child_facet_ids.[]": {},
   "facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task": {},
+  "facets.facets.<facet-id>.delegation.max_parallel": {},
   "facets.facets.<facet-id>.delegation.max_server_tool_calls_per_task": {},
   "facets.facets.<facet-id>.delegation.max_tasks_per_turn": {},
   "facets.facets.<facet-id>.delegation.persona": {},

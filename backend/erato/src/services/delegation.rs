@@ -378,6 +378,7 @@ pub(crate) struct EffectiveTasksConfig {
     pub max_tasks_per_turn: u32,
     pub max_server_tool_calls_per_task: u32,
     pub max_client_tool_calls_per_task: u32,
+    pub max_parallel: u32,
     pub persona: erato_config::config::TaskPersona,
     pub child_facet_ids: Vec<String>,
 }
@@ -401,6 +402,7 @@ pub(crate) fn effective_tasks_config(
         max_tasks_per_turn: global.max_tasks_per_turn,
         max_server_tool_calls_per_task: global.max_server_tool_calls_per_task,
         max_client_tool_calls_per_task: global.max_client_tool_calls_per_task,
+        max_parallel: global.max_parallel,
         persona: global.persona,
         child_facet_ids: global.child_facet_ids.clone(),
     };
@@ -424,6 +426,9 @@ pub(crate) fn effective_tasks_config(
             effective.max_client_tool_calls_per_task =
                 effective.max_client_tool_calls_per_task.min(value);
         }
+        if let Some(value) = overrides.max_parallel {
+            effective.max_parallel = effective.max_parallel.min(value);
+        }
         if let Some(value) = overrides.persona
             && !persona_set
         {
@@ -438,6 +443,11 @@ pub(crate) fn effective_tasks_config(
             }
         }
     }
+    // Load-time validation only sees the global pair, so a facet that lowers
+    // the total below the global concurrency would break the invariant that
+    // one is a bound on the other. Clamping keeps it true for every selection
+    // without making a previously valid configuration refuse to boot.
+    effective.max_parallel = effective.max_parallel.min(effective.max_tasks_per_turn);
     effective
 }
 
@@ -834,6 +844,12 @@ pub(crate) enum DelegationDispatchOutcome {
         assistant_name: Option<String>,
         delegate_chat_id: Uuid,
     },
+    /// A task that was cancelled while it was still waiting for a free slot.
+    ///
+    /// Distinct from a cancelled run because there is no child to name: the
+    /// envelope requires the ids of a run that exists, and the absence of
+    /// them is precisely what tells a reader this one never started.
+    NeverStarted { reason: DelegationRunReason },
 }
 
 /// The parent generation's stream, and where on it the delegation tool part
@@ -1389,6 +1405,14 @@ pub(crate) struct LaunchedDelegation {
     /// Start of the whole dispatch, not of the child: the trace the parent sees
     /// measures from the moment the tool call was picked up.
     dispatch_started: std::time::Instant,
+    /// When this run stops counting as in time.
+    ///
+    /// Captured at launch, not when the wait is first polled: the child's own
+    /// deadline starts when it is spawned, and a batch defers its waits, so a
+    /// timer created on first poll would run late by however long the rest of
+    /// the batch took and could classify a child the deadline already killed
+    /// as a clean completion.
+    run_deadline: tokio::time::Instant,
 }
 
 /// What a launch settled into.
@@ -1420,6 +1444,8 @@ pub(crate) async fn launch_delegation(
     use sea_orm::EntityTrait;
 
     let dispatch_started = std::time::Instant::now();
+    let run_deadline = tokio::time::Instant::now()
+        + std::time::Duration::from_secs(app_state.config.delegation.run_timeout_seconds);
     let config = app_state.config.delegation.clone();
     // The mention route aims at an assistant; the task route is scoped by
     // facets and may have no assistant at all.
@@ -1662,6 +1688,7 @@ pub(crate) async fn launch_delegation(
         child_rx,
         spawned_at,
         dispatch_started,
+        run_deadline,
     }))
 }
 
@@ -1686,6 +1713,7 @@ pub(crate) async fn await_delegation(
         mut child_rx,
         spawned_at,
         dispatch_started,
+        run_deadline,
     } = launched;
 
     let config = app_state.config.delegation.clone();
@@ -1708,8 +1736,7 @@ pub(crate) async fn await_delegation(
     // inside [`run_delegated_child`], which also covers runs this loop never
     // awaits. This arm is what turns the deadline into a `timeout` envelope
     // for the parent — the child's own wind-down joins as a plain completion.
-    let run_timeout =
-        tokio::time::sleep(std::time::Duration::from_secs(config.run_timeout_seconds));
+    let run_timeout = tokio::time::sleep_until(run_deadline);
     tokio::pin!(run_timeout);
     let mut tap_open = true;
 
@@ -1920,22 +1947,36 @@ pub(crate) fn task_placeholder_output(launched: &LaunchedDelegation) -> serde_js
     output
 }
 
+/// The placeholder output a slot carries while it waits for a free slot.
+///
+/// It names no child because none exists yet: a queued call that is cancelled
+/// before it launches settles with no child ids at all, and a reader must be
+/// able to tell that from a run that started.
+pub(crate) fn queued_placeholder_output() -> serde_json::Value {
+    serde_json::json!({ "status": "queued" })
+}
+
+/// One `delegate_task` call that passed validation and is ready to launch.
+pub(crate) struct PreparedTask {
+    pub target: DelegationTargetSpec,
+    pub brief: DelegateBrief,
+}
+
 /// Validate one `delegate_task` call and start its child, without awaiting it.
 ///
 /// The model planned this sub-task itself, so everything it named is re-checked
 /// here against the scope the offer was built from rather than trusted because
 /// it appeared in the arguments.
 ///
-/// Launching and awaiting are separate so the caller can reserve the child's
-/// content slot in between: the slot has to be on disk before the wait begins,
-/// or a reader mid-run sees a message with no trace of a task that is already
-/// running.
-pub(crate) async fn launch_task_tool_call(
+/// Validating, launching and awaiting are three steps rather than one, because
+/// the caller needs to act between them: it reserves the child's content slot
+/// after the launch, so the slot is on disk before the wait begins, and it may
+/// hold a validated call back until a concurrency slot frees up.
+pub(crate) fn validate_task_tool_call(
     app_state: &AppState,
-    policy: &PolicyEngine,
     context: &crate::server::api::v1beta::message_streaming::DelegationDispatchContext<'_>,
     tool_call: &genai::chat::ToolCall,
-) -> Result<LaunchOutcome, String> {
+) -> Result<PreparedTask, String> {
     if !app_state.config.delegation.tasks.enabled {
         return Err("Delegated tasks are not enabled.".to_string());
     }
@@ -1996,15 +2037,10 @@ pub(crate) async fn launch_task_tool_call(
         include_conversation_context: args.include_conversation_context,
     };
 
-    launch_delegation(
-        app_state,
-        policy,
-        context,
-        DelegationTargetSpec::Task { facet_ids },
-        DelegationRunMode::Wait,
+    Ok(PreparedTask {
+        target: DelegationTargetSpec::Task { facet_ids },
         brief,
-    )
-    .await
+    })
 }
 
 #[cfg(test)]
@@ -2478,6 +2514,7 @@ mod tests {
             max_tasks_per_turn: 5,
             max_server_tool_calls_per_task: 5,
             max_client_tool_calls_per_task: 30,
+            max_parallel: 3,
             persona: erato_config::config::TaskPersona::Inherit,
             child_facet_ids: vec!["web_search".to_string()],
         }
@@ -2494,6 +2531,7 @@ mod tests {
                     max_tasks_per_turn: Some(2),
                     max_server_tool_calls_per_task: None,
                     max_client_tool_calls_per_task: None,
+                    max_parallel: None,
                     persona: Some(erato_config::config::TaskPersona::Bare),
                     child_facet_ids: Some(vec!["files".to_string()]),
                 }),
@@ -2509,6 +2547,7 @@ mod tests {
                     max_tasks_per_turn: Some(99),
                     max_server_tool_calls_per_task: Some(1),
                     max_client_tool_calls_per_task: None,
+                    max_parallel: None,
                     persona: Some(erato_config::config::TaskPersona::Inherit),
                     child_facet_ids: Some(vec!["web_search".to_string(), "mail".to_string()]),
                 }),
@@ -2523,6 +2562,10 @@ mod tests {
 
         // Caps: minimum wins in both directions.
         assert_eq!(effective.max_tasks_per_turn, 2);
+        // Concurrency is clamped to the total a facet just lowered: load-time
+        // validation only ever sees the global pair, so this is the only place
+        // the invariant can be kept for a per-facet override.
+        assert_eq!(effective.max_parallel, 2);
         assert_eq!(effective.max_server_tool_calls_per_task, 1);
         // Untouched by either facet.
         assert_eq!(effective.max_client_tool_calls_per_task, 30);
@@ -2556,6 +2599,7 @@ mod tests {
                 max_tasks_per_turn: 5,
                 max_server_tool_calls_per_task: 5,
                 max_client_tool_calls_per_task: 30,
+                max_parallel: 3,
                 persona: erato_config::config::TaskPersona::Inherit,
                 child_facet_ids: Vec::new(),
             },
@@ -2653,6 +2697,7 @@ mod tests {
                     max_tasks_per_turn: None,
                     max_server_tool_calls_per_task: Some(0),
                     max_client_tool_calls_per_task: None,
+                    max_parallel: None,
                     persona: None,
                     child_facet_ids: None,
                 }),

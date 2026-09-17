@@ -3867,6 +3867,28 @@ Maximum number of tasks one origin turn may dispatch in total. A call beyond the
 max_tasks_per_turn = 5
 ```
 
+#### `delegation.tasks.max_parallel`
+
+{/* erato_toml_config_key: delegation.tasks.max_parallel */}
+
+How many task runs of one turn may be in flight at the same time. A batch larger than this starts the first `max_parallel` runs and queues the rest, launching each as a slot frees up — so ten tasks with `max_parallel = 4` run four, then four, then two, and never five at once.
+
+This bounds concurrent load; [`max_tasks_per_turn`](#delegationtasksmax_tasks_per_turn) bounds the total. A queued run is already visible in the conversation, marked as waiting, before it starts.
+
+**Default value:** `3`
+
+**Type:** `integer` (at least 1)
+
+A value larger than `max_tasks_per_turn` is capped to it — a turn cannot run more tasks at once than it may run at all. Writing one explicitly is rejected at startup as a contradiction; inheriting the default under a lower total is simply capped, so lowering `max_tasks_per_turn` alone never stops a deployment booting. The same cap applies to a per-facet override.
+
+**Example:**
+
+```toml
+[delegation.tasks]
+max_tasks_per_turn = 10
+max_parallel = 4
+```
+
 #### Tool budgets for a task run
 
 A task run carries **two independent tool budgets**, one per execution class. Neither constrains the other and they are never summed into a shared total, so there is no third number to keep consistent: each says exactly what it says.
@@ -4232,6 +4254,7 @@ additional_system_prompt = "You are assisting inside the Outlook add-in. Keep re
 {/* erato_toml_config_key: facets.facets.<facet-id>.delegation.max_tasks_per_turn */}
 {/* erato_toml_config_key: facets.facets.<facet-id>.delegation.max_server_tool_calls_per_task */}
 {/* erato_toml_config_key: facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task */}
+{/* erato_toml_config_key: facets.facets.<facet-id>.delegation.max_parallel */}
 {/* erato_toml_config_key: facets.facets.<facet-id>.delegation.persona */}
 {/* erato_toml_config_key: facets.facets.<facet-id>.delegation.child_facet_ids.[] */}
 
@@ -4244,6 +4267,7 @@ tool_call_allowlist = ["erato/delegate_task", "web-search-mcp/*"]
 
 [facets.facets.plan.delegation]
 max_tasks_per_turn = 3
+max_parallel = 2
 # Generous with the user's own device, stingy with shared MCP capacity.
 max_client_tool_calls_per_task = 40
 max_server_tool_calls_per_task = 4

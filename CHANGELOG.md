@@ -67,6 +67,12 @@ Deploy the frontend of this release **before or with** the backend: an older fro
 
 `failed` now means infrastructure failure only — a run that could not be carried out. The result envelope also gains `reason`, `child_run_id` (the same value as the existing `delegate_chat_id`, which is kept) and `parent_tool_call_id`, and `assistant_id` / `assistant_name` became optional: they are omitted entirely for a task child that runs on the bare model rather than as an assistant.
 
+**Delegated tasks now run side by side.** When the model plans several tasks in one turn, they run at the same time instead of one after another, so a turn waits about as long as its slowest task rather than as long as all of them added together.
+
+Concurrency is bounded by the new `delegation.tasks.max_parallel` (default `3`, also overridable per facet). A batch larger than that starts what it may and queues the rest, launching each as a slot frees up. A queued task is already visible in the conversation, marked as waiting, before it starts.
+
+The model is still answered in the order it asked, whatever order the tasks finish in. A task is written to the conversation as soon as it settles rather than at the end of the turn, so a reload mid-turn shows the work that is already done.
+
 #### Deprecations
 
 **`[assistants.delegation]` is deprecated; use `[delegation]` and `[delegation.assistants]`.**

@@ -4966,3 +4966,61 @@ show_frontend_tab = true
     assert!(config.mcp_servers_global.show_frontend_tab);
     assert!(config.mcp_server_permissions.rules.contains_key("docs"));
 }
+
+#[test]
+#[should_panic(expected = "delegation.tasks.max_parallel must be at least 1")]
+fn test_delegation_tasks_zero_max_parallel_is_invalid() {
+    build_and_migrate_delegation_config(
+        r#"
+[delegation.tasks]
+enabled = true
+max_parallel = 0
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "delegation.tasks.max_parallel (4) cannot exceed")]
+fn test_delegation_tasks_max_parallel_above_the_total_is_invalid() {
+    build_and_migrate_delegation_config(
+        r#"
+[delegation.tasks]
+enabled = true
+max_tasks_per_turn = 2
+max_parallel = 4
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
+
+/// Lowering the total alone must not stop a deployment booting: the new key's
+/// default is capped to the total at use rather than rejected at load.
+#[test]
+fn test_delegation_tasks_default_max_parallel_yields_to_a_lower_total() {
+    let config = build_and_migrate_delegation_config(
+        r#"
+[delegation.tasks]
+enabled = true
+max_tasks_per_turn = 2
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+    assert_eq!(config.delegation.tasks.max_tasks_per_turn, 2);
+    assert_eq!(config.delegation.tasks.max_parallel, 3);
+}

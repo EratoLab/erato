@@ -3451,6 +3451,26 @@ impl DelegationConfig {
             ));
         }
 
+        if self.tasks.max_parallel == 0 {
+            return Err(eyre!("delegation.tasks.max_parallel must be at least 1"));
+        }
+
+        // Only a value the operator actually wrote is rejected. A deployment
+        // that merely lowered the total never asked for a concurrency it
+        // cannot have, and a new key's default must never stop it booting —
+        // the effective value is clamped to the total at use instead. The
+        // degenerate case, writing the default explicitly under a lower
+        // total, is clamped like any other and accepted.
+        if self.tasks.max_parallel != default_delegation_tasks_max_parallel()
+            && self.tasks.max_parallel > self.tasks.max_tasks_per_turn
+        {
+            return Err(eyre!(
+                "delegation.tasks.max_parallel ({}) cannot exceed delegation.tasks.max_tasks_per_turn ({})",
+                self.tasks.max_parallel,
+                self.tasks.max_tasks_per_turn
+            ));
+        }
+
         // The two tool budgets deliberately carry no cross-key rule: each is
         // independent, and `0` is a meaningful value for either (it forbids
         // that execution class in task runs).
@@ -3518,6 +3538,14 @@ pub struct DelegationTasksConfig {
     #[serde(default = "default_delegation_tasks_max_client_tool_calls_per_task")]
     pub max_client_tool_calls_per_task: u32,
 
+    // How many task runs of one turn may be in flight at the same time. The
+    // rest of the batch waits its turn and starts as slots free, so this
+    // bounds concurrent load while `max_tasks_per_turn` bounds the total.
+    // Must be at least 1 and no larger than `max_tasks_per_turn`.
+    // Defaults to `3`.
+    #[serde(default = "default_delegation_tasks_max_parallel")]
+    pub max_parallel: u32,
+
     // Whether a task child runs with the origin chat's assistant persona
     // (`inherit`) or on the bare model (`bare`).
     // Defaults to `inherit`.
@@ -3539,6 +3567,7 @@ impl Default for DelegationTasksConfig {
             ),
             max_client_tool_calls_per_task: default_delegation_tasks_max_client_tool_calls_per_task(
             ),
+            max_parallel: default_delegation_tasks_max_parallel(),
             persona: TaskPersona::default(),
             child_facet_ids: Vec::new(),
         }
@@ -3557,6 +3586,9 @@ pub struct FacetDelegationOverrides {
 
     #[serde(default)]
     pub max_client_tool_calls_per_task: Option<u32>,
+
+    #[serde(default)]
+    pub max_parallel: Option<u32>,
 
     #[serde(default)]
     pub persona: Option<TaskPersona>,
@@ -3596,6 +3628,10 @@ fn default_delegation_tasks_max_tasks_per_turn() -> u32 {
 
 fn default_delegation_tasks_max_server_tool_calls_per_task() -> u32 {
     5
+}
+
+fn default_delegation_tasks_max_parallel() -> u32 {
+    3
 }
 
 fn default_delegation_tasks_max_client_tool_calls_per_task() -> u32 {
