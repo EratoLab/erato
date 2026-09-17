@@ -280,6 +280,36 @@ const typeTargets = [
     "outlook-search-emails-v1-result.ts",
     "OutlookSearchEmailsV1Result",
   ],
+  [
+    "schemas/source/source-descriptor.schema.json",
+    "source-descriptor.ts",
+    "SourceDescriptor",
+  ],
+  [
+    "schemas/source/folder-hierarchy-node.schema.json",
+    "folder-hierarchy-node.ts",
+    "SourceFolderHierarchyNode",
+  ],
+  [
+    "schemas/methods/sources-list-v1-params.schema.json",
+    "sources-list-v1-params.ts",
+    "SourcesListV1Params",
+  ],
+  [
+    "schemas/methods/sources-list-v1-result.schema.json",
+    "sources-list-v1-result.ts",
+    "SourcesListV1Result",
+  ],
+  [
+    "schemas/methods/sources-get-folder-hierarchy-v1-params.schema.json",
+    "sources-get-folder-hierarchy-v1-params.ts",
+    "SourcesGetFolderHierarchyV1Params",
+  ],
+  [
+    "schemas/methods/sources-get-folder-hierarchy-v1-result.schema.json",
+    "sources-get-folder-hierarchy-v1-result.ts",
+    "SourcesGetFolderHierarchyV1Result",
+  ],
 ];
 
 const validatorTargets = {
@@ -361,6 +391,14 @@ const validatorTargets = {
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-search-emails-v1-params.schema.json",
   validateOutlookSearchEmailsV1Result:
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/outlook-search-emails-v1-result.schema.json",
+  validateSourcesListV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-params.schema.json",
+  validateSourcesListV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-list-v1-result.schema.json",
+  validateSourcesGetFolderHierarchyV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-folder-hierarchy-v1-params.schema.json",
+  validateSourcesGetFolderHierarchyV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-folder-hierarchy-v1-result.schema.json",
 };
 
 await rm(outputDirectory, { recursive: true, force: true });
