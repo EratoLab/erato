@@ -7496,3 +7496,269 @@ async fn a_task_that_spends_its_server_budget_finishes_with_a_partial_answer(poo
     );
     assert!(extract_full_text_answer(&events).contains("PARENT-BUDGET-FINAL"));
 }
+
+/// A task that is still running is already on disk, at the slot it will settle
+/// into. Without the commit at launch the assistant row stays `"content": []`
+/// until the turn ends, so anyone opening the chat mid-run — a reload, a second
+/// device, the sidebar — sees a message with no sign of work that is underway.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_running_task_is_persisted_at_its_slot_before_it_finishes(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    // The child stalls, so the parent's turn is parked on the await while the
+    // test reads the row.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&["SLOW-TASK-BRIEF"], &[]));
+        mock_llm_sse_response(
+            then,
+            vec![
+                BodyAction::Delay(std::time::Duration::from_secs(30)),
+                BodyAction::Bytes("data: [DONE]\n\n".into()),
+            ],
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["slow task question"],
+                &["SLOW-TASK-BRIEF"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_slow_task",
+                "delegate_task",
+                json!({ "task": "SLOW-TASK-BRIEF: take your time", "facet_ids": ["plan"] }),
+            )]),
+        );
+    });
+
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        // Short enough that the parent turn ends on its own once the row has
+        // been read, rather than the test waiting out a 30 s stall.
+        config.delegation.run_timeout_seconds = 5;
+    })
+    .await;
+
+    // Real TCP server so the read can run concurrently with the stream.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server_addr = listener.local_addr().unwrap();
+    let app: Router = erato::server::router::router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    let client = reqwest::Client::new();
+    let base_url = format!("http://{server_addr}");
+    let create_response = client
+        .post(format!("{base_url}/api/v1beta/me/chats"))
+        .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert!(create_response.status().is_success());
+    let chat_id = create_response.json::<serde_json::Value>().await.unwrap()["chat_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let streaming = tokio::spawn({
+        let client = client.clone();
+        let base_url = base_url.clone();
+        let chat_id = chat_id.clone();
+        async move {
+            client
+                .post(format!("{base_url}/api/v1beta/me/messages/submitstream"))
+                .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+                .json(&json!({
+                    "existing_chat_id": chat_id,
+                    "user_message": "slow task question",
+                    "input_files_ids": [],
+                    "selected_facet_ids": ["plan"],
+                }))
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap()
+        }
+    });
+
+    // Poll the durable row while the child is stalled.
+    let mut placeholder = None;
+    for _ in 0..40 {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        let messages = client
+            .get(format!("{base_url}/api/v1beta/chats/{chat_id}/messages"))
+            .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+            .send()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+        let found = messages["messages"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .flat_map(|message| message["content"].as_array().into_iter().flatten())
+            .find(|part| part["content_type"] == "tool_use" && part["tool_name"] == "delegate_task")
+            .cloned();
+        if let Some(part) = found
+            && part["status"] == "in_progress"
+        {
+            placeholder = Some(part);
+            break;
+        }
+    }
+
+    let placeholder = placeholder.expect("the running task must be on disk before it settles");
+    assert_eq!(
+        placeholder["output"]["status"], "working",
+        "a reserved slot always carries a status, or history replay sees a call with no answer: {placeholder}"
+    );
+    assert!(
+        placeholder["output"]["child_run_id"].is_string(),
+        "the placeholder names the child it is waiting on: {placeholder}"
+    );
+
+    streaming.await.unwrap();
+
+    // The same slot now holds the outcome, and nothing was appended beside it.
+    let messages = client
+        .get(format!("{base_url}/api/v1beta/chats/{chat_id}/messages"))
+        .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+        .send()
+        .await
+        .unwrap()
+        .json::<serde_json::Value>()
+        .await
+        .unwrap();
+    let task_parts: Vec<serde_json::Value> = messages["messages"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|message| message["content"].as_array().into_iter().flatten())
+        .filter(|part| part["content_type"] == "tool_use" && part["tool_name"] == "delegate_task")
+        .cloned()
+        .collect();
+    assert_eq!(
+        task_parts.len(),
+        1,
+        "the slot is overwritten, never appended beside: {task_parts:?}"
+    );
+    assert_ne!(
+        task_parts[0]["status"], "in_progress",
+        "no slot may be left running once the turn is over: {:?}",
+        task_parts[0]
+    );
+    assert_eq!(task_parts[0]["output"]["status"], "cancelled");
+    assert_eq!(task_parts[0]["output"]["reason"], "timeout");
+}
+
+/// The index a task call announces is the index it settles at. The frontend
+/// splices a proposal in at `content_index` and then matches updates by
+/// `tool_call_id`, so a settle that appended instead of overwriting would
+/// leave the running placeholder on screen next to its own result.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_task_settles_at_the_index_it_announced(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&["INDEX-TASK-BRIEF"], &[]));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["INDEX-CHILD-ANSWER"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["INDEX-CHILD-ANSWER"],
+                &["INDEX-TASK-BRIEF"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["INDEX-PARENT-FINAL"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["index task question"],
+                &["INDEX-TASK-BRIEF", "INDEX-CHILD-ANSWER"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_index_task",
+                "delegate_task",
+                json!({ "task": "INDEX-TASK-BRIEF: answer it", "facet_ids": ["plan"] }),
+            )]),
+        );
+    });
+
+    let (app_state, _llm) = task_enabled_state(pool, mocks, &["erato/delegate_task"]).await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, "index task question", &["plan"]).await;
+
+    let index_of = |kind: &str| -> Option<u64> {
+        events
+            .iter()
+            .filter_map(|event| serde_json::from_str::<serde_json::Value>(&event.data).ok())
+            .find(|value| value["message_type"] == kind && value["tool_name"] == "delegate_task")
+            .and_then(|value| value["content_index"].as_u64())
+    };
+    let proposed = index_of("tool_call_proposed").expect("the call is announced");
+    let updated = index_of("tool_call_update").expect("the call settles");
+    assert_eq!(
+        proposed, updated,
+        "a task call must settle at the slot it reserved"
+    );
+
+    let rows = chat_messages_by_created_at(&app_state.db, Uuid::parse_str(&chat).unwrap()).await;
+    let assistant_row = rows
+        .iter()
+        .rev()
+        .find(|row| row.raw_message["role"] == "assistant")
+        .expect("assistant message row");
+    let persisted = assistant_row.raw_message["content"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let task_indices: Vec<usize> = persisted
+        .iter()
+        .enumerate()
+        .filter(|(_, part)| part["tool_name"] == "delegate_task")
+        .map(|(index, _)| index)
+        .collect();
+    assert_eq!(
+        task_indices,
+        vec![proposed as usize],
+        "exactly one persisted part, at the announced index: {persisted:?}"
+    );
+}

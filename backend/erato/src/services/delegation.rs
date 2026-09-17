@@ -1893,20 +1893,49 @@ struct DelegateTaskArgs {
     include_conversation_context: bool,
 }
 
-/// Dispatch one `delegate_task` call: the model planned this sub-task itself,
-/// so everything it named is re-checked here against the scope the offer was
-/// built from rather than trusted because it appeared in the arguments.
+/// The placeholder output a reserved task slot carries while its child runs.
 ///
-/// Awaited and serial: the call returns the child's result, and the turn's
-/// tool loop moves on only once it has. Running a batch of tasks side by side
-/// is a later change.
-pub(crate) async fn dispatch_task_tool_call(
+/// `status` is always set and the value is never `None`: history replay
+/// re-emits every persisted `ToolUse` as a call plus a response, so an empty
+/// output would replay as a call the model never got an answer to. Identity
+/// keys are omitted rather than sent null, so a reader never has to tell
+/// "absent" from "present and null" — a bare task child has no assistant.
+pub(crate) fn task_placeholder_output(launched: &LaunchedDelegation) -> serde_json::Value {
+    let mut output = serde_json::json!({
+        "status": "working",
+        "child_run_id": launched.child_chat_id,
+        "delegate_chat_id": launched.child_chat_id,
+    });
+    if let Some(object) = output.as_object_mut() {
+        if let Some(assistant_id) = launched.assistant_id {
+            object.insert("assistant_id".to_string(), serde_json::json!(assistant_id));
+        }
+        if let Some(assistant_name) = launched.target_name.as_ref() {
+            object.insert(
+                "assistant_name".to_string(),
+                serde_json::json!(assistant_name),
+            );
+        }
+    }
+    output
+}
+
+/// Validate one `delegate_task` call and start its child, without awaiting it.
+///
+/// The model planned this sub-task itself, so everything it named is re-checked
+/// here against the scope the offer was built from rather than trusted because
+/// it appeared in the arguments.
+///
+/// Launching and awaiting are separate so the caller can reserve the child's
+/// content slot in between: the slot has to be on disk before the wait begins,
+/// or a reader mid-run sees a message with no trace of a task that is already
+/// running.
+pub(crate) async fn launch_task_tool_call(
     app_state: &AppState,
     policy: &PolicyEngine,
     context: &crate::server::api::v1beta::message_streaming::DelegationDispatchContext<'_>,
     tool_call: &genai::chat::ToolCall,
-    parent: Option<DelegationParentStream<'_>>,
-) -> Result<DelegationDispatchOutcome, String> {
+) -> Result<LaunchOutcome, String> {
     if !app_state.config.delegation.tasks.enabled {
         return Err("Delegated tasks are not enabled.".to_string());
     }
@@ -1967,7 +1996,7 @@ pub(crate) async fn dispatch_task_tool_call(
         include_conversation_context: args.include_conversation_context,
     };
 
-    match launch_delegation(
+    launch_delegation(
         app_state,
         policy,
         context,
@@ -1975,21 +2004,7 @@ pub(crate) async fn dispatch_task_tool_call(
         DelegationRunMode::Wait,
         brief,
     )
-    .await?
-    {
-        LaunchOutcome::Dispatched {
-            assistant_id,
-            assistant_name,
-            delegate_chat_id,
-        } => Ok(DelegationDispatchOutcome::Dispatched {
-            assistant_id,
-            assistant_name,
-            delegate_chat_id,
-        }),
-        LaunchOutcome::Launched(launched) => {
-            Ok(await_delegation(app_state, launched, parent, tool_call).await)
-        }
-    }
+    .await
 }
 
 #[cfg(test)]

@@ -3349,6 +3349,40 @@ async fn persist_otel_tool_call(
     }
 }
 
+/// Persist the assistant row's parts mid-turn, so a reader — or a crash —
+/// sees the delegated slots as they really are instead of an empty message
+/// until the turn ends.
+///
+/// Deliberately best-effort. At launch the child is already running, so
+/// failing the turn here would orphan it; at settle the end-of-turn writer is
+/// still the authoritative write. Either way the turn is worth more than the
+/// early copy of it.
+async fn commit_message_content_mid_turn(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    assistant_message_id: Uuid,
+    content: &[ContentPart],
+    stage: &str,
+) {
+    if let Err(error) = crate::models::message::update_message_content(
+        &app_state.db,
+        policy,
+        subject,
+        &assistant_message_id,
+        content.to_vec(),
+    )
+    .await
+    {
+        tracing::warn!(
+            message_id = %assistant_message_id,
+            stage,
+            error = %error,
+            "Failed to commit delegated task slot mid-turn"
+        );
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
 async fn stream_generate_chat_completion<
@@ -4035,27 +4069,85 @@ async fn stream_generate_chat_completion<
                     .unwrap_or_else(now_timestamp);
                 let tool_call_parent_observation_id =
                     tool_call_parent_observation_ids.remove(&unfinished_tool_call.call_id);
+                let slot = current_message_content.len();
+                // Set only once a placeholder actually occupies `slot`, so the
+                // settle below knows whether to overwrite it or to append. A
+                // refused task call never launches and never reserves, and the
+                // mention route never reserves at all.
+                let mut reserved: Option<usize> = None;
                 let outcome = match delegation.as_ref() {
                     Some(context) => {
                         let parent = streaming_task.map(|task| {
                             crate::services::delegation::DelegationParentStream {
                                 task,
                                 message_id: assistant_message_id,
-                                content_index: current_message_content.len(),
+                                content_index: slot,
                             }
                         });
                         // Two offer routes into one dispatch core: the
                         // outcome shape is shared, so everything below —
                         // status mapping, persistence, Langfuse — is too.
+                        // The task route splits launch from await so the
+                        // child's slot reaches disk before the wait starts.
                         if is_task_route {
-                            crate::services::delegation::dispatch_task_tool_call(
+                            match crate::services::delegation::launch_task_tool_call(
                                 app_state,
                                 policy,
                                 context,
                                 &unfinished_tool_call,
-                                parent,
                             )
                             .await
+                            {
+                                Err(error) => Err(error),
+                                Ok(crate::services::delegation::LaunchOutcome::Dispatched {
+                                    assistant_id,
+                                    assistant_name,
+                                    delegate_chat_id,
+                                }) => Ok(
+                                    crate::services::delegation::DelegationDispatchOutcome::Dispatched {
+                                        assistant_id,
+                                        assistant_name,
+                                        delegate_chat_id,
+                                    },
+                                ),
+                                Ok(crate::services::delegation::LaunchOutcome::Launched(
+                                    launched,
+                                )) => {
+                                    current_message_content.push(ContentPart::ToolUse(ToolUse {
+                                        tool_call_id: unfinished_tool_call.call_id.clone(),
+                                        status: MessageToolCallStatus::InProgress,
+                                        tool_name: unfinished_tool_call.fn_name.clone(),
+                                        input: Some(unfinished_tool_call.fn_arguments.clone()),
+                                        progress_message: None,
+                                        progress: None,
+                                        total: None,
+                                        output: Some(
+                                            crate::services::delegation::task_placeholder_output(
+                                                &launched,
+                                            ),
+                                        ),
+                                        started_at: Some(tool_call_started.clone()),
+                                        ended_at: None,
+                                    }));
+                                    reserved = Some(slot);
+                                    commit_message_content_mid_turn(
+                                        app_state,
+                                        policy,
+                                        subject,
+                                        assistant_message_id,
+                                        &current_message_content,
+                                        "task launch",
+                                    )
+                                    .await;
+                                    Ok(crate::services::delegation::await_delegation(
+                                        app_state,
+                                        launched,
+                                        parent,
+                                        &unfinished_tool_call,
+                                    )
+                                    .await)
+                                }
+                            }
                         } else {
                             crate::services::delegation::dispatch_delegate_tool_call(
                                 app_state,
@@ -4164,9 +4256,42 @@ async fn stream_generate_chat_completion<
                 };
                 let tool_error =
                     matches!(status, ToolCallStatus::Error).then(|| response_text.clone());
+                // A reserved slot settles in place; everything else appends
+                // where it always did.
+                let settled_index = reserved.unwrap_or(current_message_content.len());
+                let settled = ContentPart::ToolUse(ToolUse {
+                    tool_call_id: unfinished_tool_call.call_id.clone(),
+                    status: message_status,
+                    tool_name: unfinished_tool_call.fn_name.clone(),
+                    input: Some(unfinished_tool_call.fn_arguments.clone()),
+                    progress_message: None,
+                    progress: None,
+                    total: None,
+                    output: Some(output_value.clone()),
+                    started_at: Some(tool_call_started),
+                    ended_at: Some(now_timestamp()),
+                });
+                // Written before the events below, because sending to the
+                // client can fail the turn and a reserved slot must never be
+                // left reading "working" for a child that has finished.
+                match reserved {
+                    Some(index) => current_message_content[index] = settled,
+                    None => current_message_content.push(settled),
+                }
+                if reserved.is_some() {
+                    commit_message_content_mid_turn(
+                        app_state,
+                        policy,
+                        subject,
+                        assistant_message_id,
+                        &current_message_content,
+                        "task settle",
+                    )
+                    .await;
+                }
                 let update_event = MessageSubmitStreamingResponseToolCallUpdate {
                     message_id: assistant_message_id,
-                    content_index: current_message_content.len(),
+                    content_index: settled_index,
                     tool_call_id: unfinished_tool_call.call_id.clone(),
                     tool_name: unfinished_tool_call.fn_name.clone(),
                     input: Some(unfinished_tool_call.fn_arguments.clone()),
@@ -4181,7 +4306,7 @@ async fn stream_generate_chat_completion<
                         task,
                         StreamingEvent::ToolCallUpdate {
                             message_id: assistant_message_id,
-                            content_index: current_message_content.len(),
+                            content_index: settled_index,
                             tool_call_id: unfinished_tool_call.call_id.clone(),
                             tool_name: unfinished_tool_call.fn_name.clone(),
                             input: Some(unfinished_tool_call.fn_arguments.clone()),
@@ -4197,18 +4322,6 @@ async fn stream_generate_chat_completion<
                 }
                 let message: MSG = update_event.into();
                 send_generation_event(&message, tx.clone()).await?;
-                current_message_content.push(ContentPart::ToolUse(ToolUse {
-                    tool_call_id: unfinished_tool_call.call_id.clone(),
-                    status: message_status,
-                    tool_name: unfinished_tool_call.fn_name.clone(),
-                    input: Some(unfinished_tool_call.fn_arguments.clone()),
-                    progress_message: None,
-                    progress: None,
-                    total: None,
-                    output: Some(output_value.clone()),
-                    started_at: Some(tool_call_started),
-                    ended_at: Some(now_timestamp()),
-                }));
                 persist_otel_tool_call(
                     tracing_client.as_ref(),
                     &unfinished_tool_call,
