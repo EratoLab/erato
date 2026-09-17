@@ -505,6 +505,9 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         AbortStreamRequest,
         AbortStreamResponse,
         GenerationRunningError,
+        crate::models::message::TaskResultInput,
+        crate::models::message::GenerationInitiator,
+        crate::models::message::ContentPartTaskResult,
         ResumeStreamRequest,
         ClientToolResultRequest,
         ClientToolResultResponse,
@@ -1627,6 +1630,19 @@ pub struct ChatMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     action_facet_args: Option<HashMap<String, String>>,
+    /// Present on a user message the server appended to deliver a finished
+    /// delegated task's result. The client uses it to tell such a row apart
+    /// from one a person wrote, and to decide whether it still needs a
+    /// reaction.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    task_result: Option<crate::models::message::TaskResultInput>,
+    /// Who started the generation that produced this assistant message.
+    /// Absent means a user did, so messages written before this existed keep
+    /// their meaning.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    initiator: Option<crate::models::message::GenerationInitiator>,
     /// Assistants the user @-mentioned in this message, resolved to display
     /// names at read time. Mentions whose assistant no longer resolves are
     /// omitted; absent on assistant messages and mention-less user messages.
@@ -2389,6 +2405,24 @@ impl ChatMessage {
                         .ok()
                 })
                 .and_then(|p| p.action_facet_args),
+            task_result: msg
+                .input_parameters
+                .as_ref()
+                .and_then(|p| {
+                    serde_json::from_value::<crate::models::message::InputParameters>(p.clone())
+                        .ok()
+                })
+                .and_then(|p| p.task_result),
+            initiator: msg
+                .generation_parameters
+                .as_ref()
+                .and_then(|p| {
+                    serde_json::from_value::<crate::models::message::GenerationParameters>(
+                        p.clone(),
+                    )
+                    .ok()
+                })
+                .and_then(|p| p.initiator),
             // Needs the assistants table for names, so it is filled separately
             // (like `files`) — batched per page, or per message on SSE.
             mentioned_assistants: vec![],

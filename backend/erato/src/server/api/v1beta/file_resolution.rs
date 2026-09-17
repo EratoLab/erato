@@ -162,6 +162,27 @@ pub(crate) fn resolve_directive_markers_in_generation_input(
                         marker.run_mode.unwrap_or_default(),
                     )
                 }
+                ContentPart::TaskResult(part) => {
+                    // Deliberately NOT wrapped in the directive sentinel below.
+                    // That sentinel marks platform instruction; a task result
+                    // is third-party text that arrived, and it carries the
+                    // untrusted-data frame instead. Wrapping it as a directive
+                    // would tell the model the opposite of the truth about it.
+                    let rendered = crate::services::delegation::render_task_result(
+                        &app_state.config.delegation.tasks.result_template,
+                        part,
+                    );
+                    let rendered = rendered.trim();
+                    if rendered.is_empty() {
+                        return None;
+                    }
+                    return Some(InputMessage {
+                        role: input_message.role,
+                        content: ContentPart::Text(ContentPartText {
+                            text: rendered.to_string(),
+                        }),
+                    });
+                }
                 _ => return Some(input_message),
             };
             let rendered = rendered.trim();

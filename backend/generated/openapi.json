@@ -5186,6 +5186,10 @@
             "type": "string",
             "description": "The unique ID of the message"
           },
+          "initiator": {
+            "$ref": "#/components/schemas/GenerationInitiator",
+            "description": "Who started the generation that produced this assistant message.\nAbsent means a user did, so messages written before this existed keep\ntheir meaning."
+          },
           "input_files_ids": {
             "type": "array",
             "items": {
@@ -5243,6 +5247,10 @@
           "sibling_message_id": {
             "type": "string",
             "description": "The unique ID of the sibling message, if any"
+          },
+          "task_result": {
+            "$ref": "#/components/schemas/TaskResultInput",
+            "description": "Present on a user message the server appended to deliver a finished\ndelegated task's result. The client uses it to tell such a row apart\nfrom one a person wrote, and to decide whether it still needs a\nreaction."
           },
           "updated_at": {
             "type": "string",
@@ -5629,6 +5637,29 @@
               }
             ],
             "description": "Reference to the run directive of a delegated chat, resolved the same\nway as `ActionFacetMarker`: metadata in the persisted snapshot, text\nonly in the request about to be sent, dropped when the snapshot is\nreplayed as prior-turn history."
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContentPartTaskResult",
+                "description": "The result of an `async` delegated task, delivered back into the chat\nthe task was started from as a user-role row.\n\nA user row rather than an assistant one because the model has to react\nto it: it is material that arrived, not something the assistant said.\nThe history walk keeps it (unlike the directive markers above, which\nare request-scoped) so later turns can still see what came back."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "content_type"
+                ],
+                "properties": {
+                  "content_type": {
+                    "type": "string",
+                    "enum": [
+                      "task_result"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "The result of an `async` delegated task, delivered back into the chat\nthe task was started from as a user-role row.\n\nA user row rather than an assistant one because the model has to react\nto it: it is material that arrived, not something the assistant said.\nThe history walk keeps it (unlike the directive markers above, which\nare request-scoped) so later turns can still see what came back."
           }
         ]
       },
@@ -5743,6 +5774,53 @@
           "text": {
             "type": "string",
             "default": ""
+          }
+        }
+      },
+      "ContentPartTaskResult": {
+        "type": "object",
+        "description": "A delivered task result, as it sits in the conversation.\n\n`summary` is the child's own answer, already bounded to\n`delegation.result_max_chars`, and is the only untrusted field here: the\nrest is written by the server. It is stored RAW — the untrusted-data frame\nand the safety guidance are applied when the conversation is composed for\nthe model, so the UI can render the answer plainly.",
+        "required": [
+          "child_chat_id",
+          "parent_tool_call_id",
+          "status",
+          "summary",
+          "truncated",
+          "sequence"
+        ],
+        "properties": {
+          "child_chat_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The child chat that produced this result; the link the UI offers."
+          },
+          "parent_tool_call_id": {
+            "type": "string",
+            "description": "The `delegate_task` call in the origin turn that started it."
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Which delivery for this task this is. `0` is the first; a later value\nmeans the result was delivered again after the origin branched away\nfrom the first one.",
+            "minimum": 0
+          },
+          "status": {
+            "type": "string",
+            "description": "Terminal status of the run, from the D-K vocabulary."
+          },
+          "summary": {
+            "type": "string",
+            "description": "The child's answer, bounded. Untrusted."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Whether `summary` was shortened to fit."
           }
         }
       },
@@ -7025,6 +7103,14 @@
           }
         ],
         "description": "Represents different types of errors that can occur during message generation."
+      },
+      "GenerationInitiator": {
+        "type": "string",
+        "description": "Who started a generation.\n\nAbsent means a person did, so rows written before this existed keep their\nmeaning without a migration.",
+        "enum": [
+          "user",
+          "task_result"
+        ]
       },
       "GenerationRunningError": {
         "type": "object",
@@ -8910,6 +8996,52 @@
           "user_pick",
           "audience_pin"
         ]
+      },
+      "TaskResultInput": {
+        "type": "object",
+        "description": "The marker on a delivered task result's user row.\n\nDeliberately not the same shape as `ContentPartTaskResult`: that one is the\nrendered artifact the UI shows, this one is the bookkeeping that ties the\nrow back to the delivery record on the child chat.",
+        "required": [
+          "delivery_id",
+          "child_chat_id",
+          "result_message_id",
+          "status",
+          "scheduling",
+          "sequence"
+        ],
+        "properties": {
+          "child_chat_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "delivery_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Matches `ResultDelivery::delivery_id`; the idempotency key that makes\n\"has this already been delivered?\" answerable with a query."
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "result_message_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The child's assistant row this result came from."
+          },
+          "scheduling": {
+            "type": "string",
+            "description": "Whether the delivery was meant to provoke a reaction turn. A `silent`\nresult is folded into the user's next message instead."
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "status": {
+            "type": "string"
+          }
+        }
       },
       "TokenUsageFileInput": {
         "type": "object",

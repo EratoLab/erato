@@ -3969,6 +3969,38 @@ Facets composed into every task child. Each entry must name a facet configured u
 child_facet_ids = ["web_search"]
 ```
 
+#### `delegation.tasks.result_template`
+
+{/* erato_toml_config_key: delegation.tasks.result_template */}
+
+How a delivered task result is presented to the model that has to react to it, once an `async` task's answer re-enters the conversation it was started from.
+
+This is **presentation only**. `{{result}}` is required — a template without it is rejected at startup, because it would render a task result with the answer silently missing rather than failing. The child's answer is substituted inside an `untrusted-data` frame, and the run's status, reason and identifiers are stated ahead of this text, where editing the template cannot remove them. The safety guidance that tells the model not to follow instructions found in a child's answer is likewise fixed.
+
+`{{truncated_note}}` expands to a note when the answer was shortened to `delegation.result_max_chars`, and to nothing otherwise.
+
+Note that the template is applied when the conversation is composed, not when the result is stored, so editing it also changes how results already in a chat's history are presented on the next turn.
+
+**Default value:**
+
+```
+A task you delegated earlier has finished and its result is below.{{truncated_note}}
+
+{{result}}
+```
+
+**Type:** `string`
+
+**Example:**
+
+```toml
+[delegation.tasks]
+result_template = """
+Background task finished.{{truncated_note}}
+
+{{result}}"""
+```
+
 #### `delegation.tasks.multitask_strategy`
 
 {/* erato_toml_config_key: delegation.tasks.multitask_strategy */}

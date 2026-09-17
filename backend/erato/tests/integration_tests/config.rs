@@ -5024,3 +5024,65 @@ model_name = "gpt-4o"
     assert_eq!(config.delegation.tasks.max_tasks_per_turn, 2);
     assert_eq!(config.delegation.tasks.max_parallel, 3);
 }
+
+/// A template that lost its `{{result}}` placeholder is rejected.
+///
+/// Non-empty is not a sufficient check: such a template renders perfectly well
+/// and what it renders is a task result with the child's answer silently
+/// missing. There is no error to notice and no empty string to spot — just a
+/// model told a task finished and never shown what it said.
+#[test]
+#[should_panic(
+    expected = "delegation.tasks.result_template must contain the {{result}} placeholder"
+)]
+fn test_delegation_tasks_result_template_without_the_result_placeholder_is_invalid() {
+    build_and_migrate_delegation_config(
+        r#"
+[delegation.tasks]
+enabled = true
+result_template = "A task finished, but this template forgot to include it."
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "delegation.tasks.result_template cannot be empty")]
+fn test_delegation_tasks_empty_result_template_is_invalid() {
+    build_and_migrate_delegation_config(
+        r#"
+[delegation.tasks]
+enabled = true
+result_template = "   "
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "delegation.tasks.multitask_strategy = \"enqueue\" is not supported yet")]
+fn test_delegation_tasks_reserved_multitask_strategy_is_rejected() {
+    build_and_migrate_delegation_config(
+        r#"
+[delegation.tasks]
+enabled = true
+multitask_strategy = "enqueue"
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}

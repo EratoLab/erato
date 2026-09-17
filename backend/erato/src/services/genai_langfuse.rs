@@ -180,6 +180,19 @@ pub fn convert_content_parts_to_json(content_parts: &[ContentPart]) -> Result<Js
                     "run_mode": marker.run_mode,
                 }));
             }
+            ContentPart::TaskResult(result) => {
+                // Metadata only: the summary is the child's own text and does
+                // not belong in a trace attribute.
+                output_parts.push(json!({
+                    "type": "task_result",
+                    "child_chat_id": result.child_chat_id,
+                    "parent_tool_call_id": result.parent_tool_call_id,
+                    "status": result.status,
+                    "reason": result.reason,
+                    "truncated": result.truncated,
+                    "sequence": result.sequence,
+                }));
+            }
             ContentPart::ToolApprovalRequest(request) => {
                 output_parts.push(json!({
                     "type": "tool_approval_request",

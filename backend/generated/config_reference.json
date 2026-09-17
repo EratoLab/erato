@@ -358,6 +358,7 @@
   "delegation.tasks.max_tasks_per_turn": {},
   "delegation.tasks.multitask_strategy": {},
   "delegation.tasks.persona": {},
+  "delegation.tasks.result_template": {},
   "desktop_sidecar.allowed_origins.[]": {},
   "desktop_sidecar.directory_suffix": {},
   "desktop_sidecar.display_name": {},
