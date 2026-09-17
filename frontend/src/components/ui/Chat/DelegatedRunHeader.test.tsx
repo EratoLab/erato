@@ -138,6 +138,18 @@ describe("DelegatedRunHeader", () => {
     expect(header).not.toHaveTextContent("system-reminder");
   });
 
+  it("still says what a bare task run is, with no assistant to name", () => {
+    // A task child dispatched on the bare model has no assistant, and one
+    // dispatched under the default persona is indistinguishable from a
+    // mention run on the API — so the header says "Delegated run" for both
+    // rather than claiming a distinction it cannot see.
+    render(<DelegatedRunHeader {...run({ assistantName: undefined })} />);
+
+    const header = screen.getByTestId("delegated-run-header");
+    expect(header).toHaveTextContent("Delegated run");
+    expect(header).not.toHaveTextContent("Research Helper");
+  });
+
   it("renders nothing for a chat that is not a delegated run", () => {
     const { container } = render(
       <DelegatedRunHeader {...run({ provenanceKind: undefined })} />,

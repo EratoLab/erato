@@ -26,7 +26,7 @@ const part = (output: unknown, toolName = "delegate_to_assistant") =>
     tool_call_id: "call-delegate",
     tool_name: toolName,
     status: "in_progress",
-    input: { prompt: "look it up" },
+    input: { prompt: "look it up", task: "count the figures" },
     output,
   }) as unknown as ToolUse & { content_type: "tool_use" };
 
@@ -493,6 +493,18 @@ describe("delegation step", () => {
     expect(screen.getByTestId("delegation-reason")).toHaveTextContent(
       "may be partial",
     );
+  });
+
+  it("shows the brief, which is the only thing that says what ran", () => {
+    renderStep({ ...IDENTITY, status: "completed" }, "delegate_task", false);
+    expect(screen.getByTestId("delegation-brief")).toHaveTextContent(
+      "count the figures",
+    );
+  });
+
+  it("shows no brief on a mention step, which names its assistant instead", () => {
+    renderStep({ ...IDENTITY, status: "completed" }, undefined, false);
+    expect(screen.queryByTestId("delegation-brief")).toBeNull();
   });
 
   it("renders an unknown reason verbatim rather than dropping it", () => {

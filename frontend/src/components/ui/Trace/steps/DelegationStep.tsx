@@ -27,6 +27,9 @@ interface DelegationStepProps extends BaseStepProps {
 /** The delegate's answer is quoted, not reproduced — the run itself is a click away. */
 const RESULT_PREVIEW_CHARS = 280;
 
+/** Same reasoning for the brief, which is a sentence or two by design. */
+const BRIEF_PREVIEW_CHARS = 160;
+
 const stepLabel = (id: string): string =>
   id === "answer"
     ? t({ id: "trace.delegation.step.answer", message: "Final answer" })
@@ -248,6 +251,32 @@ const backgroundPill = (
   }
 };
 
+/**
+ * The brief the model wrote for the sub-task, off the tool call's own input.
+ *
+ * A task step's title can only say that a task ran; what it was is the part
+ * worth reading, and unlike a mention run there is no assistant name standing
+ * in for it. Bounded like the result: the step is a summary, and the run
+ * itself is one click away.
+ */
+const taskBrief = (input: unknown): string | undefined => {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    return undefined;
+  }
+  const task = (input as Record<string, unknown>).task;
+  if (typeof task !== "string") {
+    return undefined;
+  }
+  const text = task.trim();
+  if (text.length === 0) {
+    return undefined;
+  }
+  const characters = [...text];
+  return characters.length > BRIEF_PREVIEW_CHARS
+    ? `${characters.slice(0, BRIEF_PREVIEW_CHARS).join("")}…`
+    : text;
+};
+
 const resultPreview = (result: string | undefined): string | undefined => {
   const text = result?.trim();
   if (!text) {
@@ -334,6 +363,12 @@ export const DelegationStep = ({
     envelope.status !== undefined ? outcomeLabel(envelope.status) : undefined;
   const pending =
     envelope.status !== undefined ? pendingPill(envelope.status) : undefined;
+  // Only the task route: a mention step already names the assistant it
+  // delegated to, and its brief would just repeat the conversation.
+  const brief =
+    part.tool_name === DELEGATE_TASK_TOOL_NAME
+      ? taskBrief(part.input)
+      : undefined;
   const preview = resultPreview(envelope.result);
   // Any reason the backend sends is shown. A `completed` run is exactly where
   // the interesting ones ride — a run that answered nothing, or one that
@@ -342,7 +377,10 @@ export const DelegationStep = ({
   const why =
     envelope.reason !== undefined ? reasonLabel(envelope.reason) : undefined;
   const hasSummary =
-    preview !== undefined || envelope.truncated || why !== undefined;
+    preview !== undefined ||
+    envelope.truncated ||
+    why !== undefined ||
+    brief !== undefined;
 
   const body =
     nested !== undefined || hasSummary ? (
@@ -360,6 +398,14 @@ export const DelegationStep = ({
             className="space-y-0.5 pb-1 pl-2.5 text-xs text-theme-fg-muted"
             data-testid="delegation-result"
           >
+            {brief !== undefined && (
+              <p
+                className="italic text-theme-fg-muted"
+                data-testid="delegation-brief"
+              >
+                {brief}
+              </p>
+            )}
             {why !== undefined && <p data-testid="delegation-reason">{why}</p>}
             {preview !== undefined && (
               <p className="whitespace-pre-wrap">{preview}</p>
