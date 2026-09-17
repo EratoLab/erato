@@ -461,11 +461,6 @@ msgstr "Zglos do sklepu"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
-#~ msgid "assistantHub.action.view"
-#~ msgstr "Zobacz"
-
-#. js-lingui-explicit-id
-#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.all.title"
 msgstr "Wszyscy asystenci"
 
@@ -475,19 +470,9 @@ msgid "assistantHub.card.creator"
 msgstr "autor:"
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
-#~ msgid "assistantHub.categories.subtitle"
-#~ msgstr "Przegladaj asystentow wedlug skonfigurowanej kategorii"
-
-#. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
 msgid "assistantHub.categories.title"
 msgstr "Kategorie"
-
-#. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
-#~ msgid "assistantHub.category.all"
-#~ msgstr "Wszystkie"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
@@ -498,16 +483,6 @@ msgstr "{count} asystentow"
 #: src/pages/AssistantsPage.tsx
 msgid "assistantHub.category.count.one"
 msgstr "1 asystent"
-
-#. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
-#~ msgid "assistantHub.category.empty"
-#~ msgstr "Brak asystentow w tej kategorii."
-
-#. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
-#~ msgid "assistantHub.category.filter"
-#~ msgstr "Filtruj sklep asystentow wedlug kategorii"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
@@ -583,11 +558,6 @@ msgstr "Ocena"
 #: src/pages/AssistantHubDetailPage.tsx
 msgid "assistantHub.detail.title"
 msgstr "Sklep asystentow"
-
-#. js-lingui-explicit-id
-#: src/pages/AssistantHubDetailPage.tsx
-#~ msgid "assistantHub.detail.tools"
-#~ msgstr "Narzędzia"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubDetailPage.tsx
@@ -917,11 +887,6 @@ msgstr "Komentarz recenzenta"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
-#~ msgid "assistantHub.review.subtitle"
-#~ msgstr "Recenzuj niezmienne wersje asystentow przed publikacja"
-
-#. js-lingui-explicit-id
-#: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.title"
 msgstr "Recenzja sklepu asystentow"
 
@@ -959,11 +924,6 @@ msgstr "Opcjonalnie: dodaj kontekst do swojej oceny."
 #: src/pages/AssistantHubDetailPage.tsx
 msgid "assistantHub.reviews.empty"
 msgstr "Brak widocznych komentarzy recenzji."
-
-#. js-lingui-explicit-id
-#: src/pages/AssistantHubDetailPage.tsx
-#~ msgid "assistantHub.reviews.error.load"
-#~ msgstr "Nie udalo sie wczytac recenzji."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubDetailPage.tsx
@@ -1019,11 +979,6 @@ msgstr "Wersja {0}"
 #: src/pages/AssistantHubDetailPage.tsx
 msgid "assistantHub.reviews.visibleComments"
 msgstr "Widoczne komentarze"
-
-#. js-lingui-explicit-id
-#: src/pages/AssistantsPage.tsx
-#~ msgid "assistantHub.search.aria"
-#~ msgstr "Szukaj w sklepie asystentow"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
@@ -1207,18 +1162,8 @@ msgstr "Numer wersji"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
-#~ msgid "assistantHub.subtitle"
-#~ msgstr "Przegladaj zrecenzowanych asystentow dostepnych dla Twojej organizacji"
-
-#. js-lingui-explicit-id
-#: src/pages/AssistantsPage.tsx
 msgid "assistantHub.title"
 msgstr "Sklep asystentow"
-
-#. js-lingui-explicit-id
-#: src/pages/AssistantHubPage.tsx
-#~ msgid "assistantHub.uncategorized.title"
-#~ msgstr "Inni asystenci"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubDetailPage.tsx
@@ -1232,11 +1177,6 @@ msgstr "Wersja {versionNumber}"
 #: src/pages/AssistantsPage.tsx
 msgid "assistants.action.archive"
 msgstr "Archiwizuj"
-
-#. js-lingui-explicit-id
-#: src/pages/AssistantsPage.tsx
-#~ msgid "assistants.action.createFirst"
-#~ msgstr "Utwórz pierwszego asystenta"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
@@ -1265,16 +1205,6 @@ msgstr "Zaktualizowano {updatedRelativeTime}"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
-#~ msgid "assistants.disabled"
-#~ msgstr "Asystenci nie są włączeni."
-
-#. js-lingui-explicit-id
-#: src/pages/AssistantsListPage.tsx
-#~ msgid "assistants.empty.all"
-#~ msgstr "Nie ma jeszcze asystentów"
-
-#. js-lingui-explicit-id
-#: src/pages/AssistantsPage.tsx
 msgid "assistants.empty.createFirst"
 msgstr "Utwórz pierwszego asystenta, aby rozpocząć"
 
@@ -1299,11 +1229,6 @@ msgid "assistants.error.load"
 msgstr "Nie udało się załadować asystentów. Spróbuj ponownie."
 
 #. js-lingui-explicit-id
-#: src/pages/AssistantsListPage.tsx
-#~ msgid "assistants.filter.all"
-#~ msgstr "Wszystkie"
-
-#. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
 msgid "assistants.filter.aria"
 msgstr "Filtruj asystentów"
@@ -1317,11 +1242,6 @@ msgstr "Moi asystenci"
 #: src/pages/AssistantsPage.tsx
 msgid "assistants.filter.shared_with_user"
 msgstr "Udostępnione mi"
-
-#. js-lingui-explicit-id
-#: src/pages/AssistantsListPage.tsx
-#~ msgid "assistants.list.title.all"
-#~ msgstr "Wszystkie asystenty"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
@@ -1387,11 +1307,6 @@ msgstr "Opublikowany"
 #: src/pages/AssistantsPage.tsx
 msgid "assistants.status.unpublished"
 msgstr "Nieopublikowany"
-
-#. js-lingui-explicit-id
-#: src/pages/AssistantsPage.tsx
-#~ msgid "assistants.subtitle"
-#~ msgstr "Twórz i zarządzaj niestandardowymi asystentami z określonymi instrukcjami i możliwościami"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
@@ -1541,11 +1456,6 @@ msgid "chat.facetSelector.deselectFacet.title"
 msgstr "Odznacz {facetDisplayName}"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
-#~ msgid "chat.file.error"
-#~ msgstr "Błąd wczytywania pliku"
-
-#. js-lingui-explicit-id
 #: src/components/ui/FileUpload/FilePreviewLoading.tsx
 msgid "chat.file.loading"
 msgstr "Ładowanie pliku..."
@@ -1554,11 +1464,6 @@ msgstr "Ładowanie pliku..."
 #: src/components/ui/FileUpload/AttachmentTile.tsx
 msgid "chat.file.preview_attachment"
 msgstr "Podgląd załącznika"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
-#~ msgid "chat.file.preview.aria"
-#~ msgstr "Podgląd załączonego pliku:"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
@@ -1857,41 +1762,6 @@ msgid "chat.history.unarchiveFailed"
 msgstr "Nie udało się cofnąć archiwizacji czatu"
 
 #. js-lingui-explicit-id
-#: src/hooks/audio/useAudioTranscriptionRecorder.ts
-#~ msgid "chat.input.audioRecording.diagnostics.autoGainControl"
-#~ msgstr ""
-
-#. js-lingui-explicit-id
-#: src/hooks/audio/useAudioTranscriptionRecorder.ts
-#~ msgid "chat.input.audioRecording.diagnostics.channels"
-#~ msgstr ""
-
-#. js-lingui-explicit-id
-#: src/hooks/audio/useAudioTranscriptionRecorder.ts
-#~ msgid "chat.input.audioRecording.diagnostics.echoCancellation"
-#~ msgstr ""
-
-#. js-lingui-explicit-id
-#: src/hooks/audio/useAudioTranscriptionRecorder.ts
-#~ msgid "chat.input.audioRecording.diagnostics.noiseSuppression"
-#~ msgstr ""
-
-#. js-lingui-explicit-id
-#: src/hooks/audio/useAudioTranscriptionRecorder.ts
-#~ msgid "chat.input.audioRecording.diagnostics.sampleRate"
-#~ msgstr ""
-
-#. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
-#~ msgid "chat.input.audioTranscription.progress"
-#~ msgstr ""
-
-#. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
-#~ msgid "chat.input.audioTranscription.statusWithFile"
-#~ msgstr ""
-
-#. js-lingui-explicit-id
 #: src/components/ui/Message/ActionFacetContext.tsx
 msgid "chat.message.action_facet.selection_label"
 msgstr "Zaznaczenie"
@@ -1932,16 +1802,6 @@ msgstr ""
 #: src/components/ui/Message/MessageContent.tsx
 msgid "chat.message.code.copy"
 msgstr ""
-
-#. js-lingui-explicit-id
-#: src/components/ui/Message/CollapsibleCodeBlock.tsx
-#~ msgid "chat.message.code.showAll"
-#~ msgstr ""
-
-#. js-lingui-explicit-id
-#: src/components/ui/Message/CollapsibleCodeBlock.tsx
-#~ msgid "chat.message.code.showLess"
-#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/EratoEmailSuggestion.tsx
@@ -2129,11 +1989,6 @@ msgid "chat.message.modelChanged"
 msgstr "Model zmieniono z {fromModel} na {toModel}"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/ModelSwitchMarker.tsx
-#~ msgid "chat.message.modelSwitched"
-#~ msgstr "Model został zmieniony. Kontynuowanie tej rozmowy z innym modelem może wpłynąć na jej kontekst."
-
-#. js-lingui-explicit-id
 #: src/components/ui/MessageList/MessageEditor.tsx
 msgid "chat.messageEditor.ariaLabel"
 msgstr "Edytuj swoją wiadomość"
@@ -2195,11 +2050,6 @@ msgstr "Ładowanie udostępnionego czatu..."
 #: src/pages/SharedChatPage.tsx
 msgid "chat.share.owner.unknown"
 msgstr "Nieznany użytkownik"
-
-#. js-lingui-explicit-id
-#: src/pages/SharedChatPage.tsx
-#~ msgid "chat.share.page.heading"
-#~ msgstr "Udostępniony czat - {title}"
 
 #. js-lingui-explicit-id
 #: src/pages/SharedChatPage.tsx
@@ -2440,28 +2290,8 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudDriveList.tsx
-#~ msgid "cloudDriveList.driveType.personal"
-#~ msgstr "Osobisty"
-
-#. js-lingui-explicit-id
-#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
-#~ msgid "cloudDriveList.driveType.shared"
-#~ msgstr "Udostępniony"
-
-#. js-lingui-explicit-id
-#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
 msgid "cloudDriveList.empty.noDrives"
 msgstr "Brak dostępnych dysków"
-
-#. js-lingui-explicit-id
-#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
-#~ msgid "cloudDriveList.location"
-#~ msgstr ""
-
-#. js-lingui-explicit-id
-#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
-#~ msgid "cloudDriveList.locationLabel"
-#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudDriveList.tsx
@@ -2470,23 +2300,8 @@ msgstr "Otwórz dysk"
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudDriveList.tsx
-#~ msgid "cloudDriveList.owner"
-#~ msgstr "Właściciel:"
-
-#. js-lingui-explicit-id
-#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
 msgid "cloudDriveList.ownerLabel"
 msgstr ""
-
-#. js-lingui-explicit-id
-#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
-#~ msgid "cloudDriveList.ownerLine"
-#~ msgstr ""
-
-#. js-lingui-explicit-id
-#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
-#~ msgid "cloudDriveList.site"
-#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudDriveList.tsx
@@ -2865,16 +2680,6 @@ msgstr "Co mogłoby być lepsze?"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/FeedbackCommentDialog.tsx
-#~ msgid "feedback.comment.placeholder.negative"
-#~ msgstr ""
-
-#. js-lingui-explicit-id
-#: src/components/ui/Feedback/FeedbackCommentDialog.tsx
-#~ msgid "feedback.comment.placeholder.positive"
-#~ msgstr ""
-
-#. js-lingui-explicit-id
-#: src/components/ui/Feedback/FeedbackCommentDialog.tsx
 msgid "feedback.comment.positive"
 msgstr "Uznałeś tę odpowiedź za przydatną"
 
@@ -3127,11 +2932,6 @@ msgstr "Zablokowane: Twoja organizacja wymaga potwierdzenia za każdym razem, gd
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/McpToolApprovalCard.tsx
-#~ msgid "mcpApproval.inputPreview"
-#~ msgstr ""
-
-#. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
 msgid "mcpApproval.openWorldWarning"
 msgstr ""
 
@@ -3164,6 +2964,36 @@ msgstr "Pokaż sformatowane"
 #: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "message.showRawMarkdown.aria"
 msgstr "Pokaż surowy markdown"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.openRun"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.sequence"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.status.cancelled"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.status.failed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.title"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.truncated"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/App.tsx
@@ -3295,11 +3125,6 @@ msgstr "Nie znaleziono mikrofonów. Zanim nazwy urządzeń będą dostępne, mo�
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.audio.input.heading"
 msgstr "Mikrofon"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
-#~ msgid "preferences.dialog.audio.input.label"
-#~ msgstr "Wejście audio"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/AudioInputTabContent.tsx
@@ -3557,24 +3382,9 @@ msgid "preferences.dialog.dataTab.archiveAll.help"
 msgstr "Archiwizuje wszystkie czaty na Twoim koncie."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
-#~ msgid "preferences.dialog.dataTab.archiveAll.success"
-#~ msgstr "Pomyślnie zarchiwizowano czaty."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
-#~ msgid "preferences.dialog.dataTab.placeholder"
-#~ msgstr "Preferencje dotyczące danych pojawią się tutaj."
-
-#. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
 msgid "preferences.dialog.desktopSidecar.connected.description"
 msgstr ""
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
-#~ msgid "preferences.dialog.desktopSidecar.description"
-#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
@@ -3618,11 +3428,6 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-#~ msgid "preferences.dialog.fields.additionalInformation.help"
-#~ msgstr "Dowolny dodatkowy kontekst, który asystent powinien znać."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.fields.additionalInformation.label"
 msgstr "Dodatkowe informacje"
 
@@ -3630,11 +3435,6 @@ msgstr "Dodatkowe informacje"
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.fields.additionalInformation.placeholder"
 msgstr "Dodatkowy kontekst dla asystenta, np. Pracuję z klientami korporacyjnymi"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
-#~ msgid "preferences.dialog.fields.customInstructions.help"
-#~ msgstr "Dodatkowe preferencje dotyczące zachowania, stylu i tonu."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -3663,11 +3463,6 @@ msgstr "Jaka jest Twoja rola? np. Menedżer produktu"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-#~ msgid "preferences.dialog.fields.nickname.help"
-#~ msgstr "Jak asystent powinien się do Ciebie zwracać?"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.fields.nickname.label"
 msgstr "Pseudonim"
 
@@ -3682,11 +3477,6 @@ msgid "preferences.dialog.mcpServers.approvals.allow.defaultLabel"
 msgstr "Zezwól (domyślnie wg zasad)"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
-#~ msgid "preferences.dialog.mcpServers.approvals.allow.helper"
-#~ msgstr "Uruchamia się bez pytania; zasady zatwierdzania nie zatrzymują tego narzędzia."
-
-#. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.allow.label"
 msgstr "Zezwól"
@@ -3697,29 +3487,9 @@ msgid "preferences.dialog.mcpServers.approvals.allow.unavailable"
 msgstr "Opcja „Zawsze zezwalaj” jest wyłączona przez politykę zatwierdzania."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
-#~ msgid "preferences.dialog.mcpServers.approvals.always.helper"
-#~ msgstr "Uruchamia to narzędzie bez pytania."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
-#~ msgid "preferences.dialog.mcpServers.approvals.always.label"
-#~ msgstr "Zawsze zezwalaj"
-
-#. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.ask.defaultLabel"
 msgstr "Pytaj za każdym razem (domyślnie wg zasad)"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
-#~ msgid "preferences.dialog.mcpServers.approvals.ask.escalationHelper"
-#~ msgstr "Pyta Cię przed każdym uruchomieniem, nawet tam, gdzie zasady by nie pytały."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
-#~ msgid "preferences.dialog.mcpServers.approvals.ask.helper"
-#~ msgstr "Pokazuje potwierdzenie w czacie za każdym razem, gdy to narzędzie chce zostać uruchomione."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolDecisionControl.tsx
@@ -3730,16 +3500,6 @@ msgstr "Pytaj za każdym razem"
 #: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.ask.unavailable"
 msgstr "Pytanie przed każdym uruchomieniem jest wyłączone przez politykę zatwierdzania."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
-#~ msgid "preferences.dialog.mcpServers.approvals.description"
-#~ msgstr "Twoje decyzje z potwierdzenia w czacie są zapisywane tutaj i można je zmienić w dowolnym momencie. Obowiązują dla Twojego konta na wszystkich urządzeniach."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
-#~ msgid "preferences.dialog.mcpServers.approvals.empty"
-#~ msgstr "Brak decyzji. Gdy wybierzesz „Zawsze zezwalaj” w czacie, narzędzie pojawi się tutaj."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolPermissionsRoster.tsx
@@ -3787,39 +3547,9 @@ msgid "preferences.dialog.mcpServers.approvals.group.triggerLabel"
 msgstr "{groupLabel}: {stateLabel}"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
-#~ msgid "preferences.dialog.mcpServers.approvals.heading"
-#~ msgstr "Zatwierdzenia narzędzi"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
-#~ msgid "preferences.dialog.mcpServers.approvals.loadError"
-#~ msgstr "Nie udało się załadować Twoich decyzji dotyczących narzędzi. Spróbuj ponownie."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
-#~ msgid "preferences.dialog.mcpServers.approvals.never.helper"
-#~ msgstr "Trzyma to narzędzie z dala od asystenta i blokuje je nawet wtedy, gdy potwierdzenie już czeka."
-
-#. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.never.label"
 msgstr "Nigdy nie zezwalaj"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
-#~ msgid "preferences.dialog.mcpServers.approvals.remove"
-#~ msgstr "Usuń"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
-#~ msgid "preferences.dialog.mcpServers.approvals.removeError"
-#~ msgstr "Nie udało się usunąć zgody. Spróbuj ponownie."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
-#~ msgid "preferences.dialog.mcpServers.approvals.removing"
-#~ msgstr "Usuwanie..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
@@ -3827,25 +3557,10 @@ msgid "preferences.dialog.mcpServers.approvals.updateError"
 msgstr "Nie udało się zaktualizować decyzji. Spróbuj ponownie."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
-#~ msgid "preferences.dialog.mcpServers.authenticationMode"
-#~ msgstr "Tryb uwierzytelniania"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
-#~ msgid "preferences.dialog.mcpServers.description"
-#~ msgstr "Sprawdź serwery MCP dostępne dla Twojego konta i dokończ wymagane autoryzacje."
-
-#. js-lingui-explicit-id
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
 #: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.empty"
 msgstr "Obecnie nie masz dostępnych żadnych serwerów MCP."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
-#~ msgid "preferences.dialog.mcpServers.heading"
-#~ msgstr "Połączenia z serwerami MCP"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/ServersToolsPane.tsx
@@ -3867,11 +3582,6 @@ msgstr "Autoryzuj"
 #: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.oauth.authorizing"
 msgstr "Autoryzowanie..."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
-#~ msgid "preferences.dialog.mcpServers.oauth.closed"
-#~ msgstr "Okno autoryzacji zostało zamknięte, zanim połączenie zostało zakończone."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/ServersToolsPane.tsx
@@ -3905,11 +3615,6 @@ msgstr "Autoryzacja nie została zakończona pomyślnie. Spróbuj ponownie."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-#~ msgid "preferences.dialog.mcpServers.oauth.popupBlocked"
-#~ msgstr "Nie udało się otworzyć okna autoryzacji. Zezwól na wyskakujące okna i spróbuj ponownie."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.mcpServers.oauth.startError"
 msgstr "Nie udało się rozpocząć autoryzacji. Spróbuj ponownie."
 
@@ -3917,16 +3622,6 @@ msgstr "Nie udało się rozpocząć autoryzacji. Spróbuj ponownie."
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.mcpServers.oauth.success"
 msgstr "Autoryzacja zakończona. Serwer jest gotowy do użycia."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
-#~ msgid "preferences.dialog.mcpServers.refresh"
-#~ msgstr "Odśwież status"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
-#~ msgid "preferences.dialog.mcpServers.refreshing"
-#~ msgstr "Odświeżanie..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/mcpServerStatus.ts
@@ -3947,11 +3642,6 @@ msgstr "Przed użyciem tego serwera wymagana jest autoryzacja."
 #: src/components/ui/Settings/mcpServerStatus.ts
 msgid "preferences.dialog.mcpServers.status.needsAuthentication.label"
 msgstr "Wymaga uwierzytelnienia"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/ServersToolsPane.tsx
-#~ msgid "preferences.dialog.mcpServers.status.success.description"
-#~ msgstr "Połączono i gotowe do użycia."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/mcpServerStatus.ts
@@ -3984,11 +3674,6 @@ msgid "preferences.dialog.mcpServers.tools.badge.readsOnly"
 msgstr "Tylko odczyt"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
-#~ msgid "preferences.dialog.mcpServers.tools.description"
-#~ msgstr "Zdecyduj dla każdego narzędzia tego serwera, czy może być uruchamiane w Twoim imieniu. Decyzje obowiązują dla Twojego konta na wszystkich urządzeniach; wybór „Zawsze zezwalaj” w czacie również jest tu zapisywany."
-
-#. js-lingui-explicit-id
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.empty"
@@ -4009,11 +3694,6 @@ msgstr "Narzędzia tylko do odczytu"
 #: src/components/ui/Settings/mcpToolGroups.ts
 msgid "preferences.dialog.mcpServers.tools.group.write"
 msgstr "Narzędzia zapisu/usuwania"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/McpToolApprovalSettings.tsx
-#~ msgid "preferences.dialog.mcpServers.tools.heading"
-#~ msgstr "Narzędzia"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
@@ -4147,16 +3827,6 @@ msgstr "Audio"
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.tabs.data"
 msgstr "Dane"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
-#~ msgid "preferences.dialog.tabs.desktopSidecar"
-#~ msgstr ""
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
-#~ msgid "preferences.dialog.tabs.mcpServers"
-#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -4543,32 +4213,32 @@ msgid "trace.delegation.openRun"
 msgstr "Otwórz delegowane uruchomienie"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.approvalPending"
 msgstr "Oczekuje na Twoją decyzję w sprawie narzędzia, którego chce użyć"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.approvalUnavailable"
 msgstr "Potrzebował narzędzia, o które nie mógł Cię zapytać"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.capExceeded"
 msgstr "Zatrzymany na limicie wywołań narzędzi; odpowiedź może być niepełna"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.noAnswer"
 msgstr "Przebieg zakończył się bez odpowiedzi"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.parentAbort"
 msgstr "Zatrzymany wraz z wiadomością, która go rozpoczęła"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.timeout"
 msgstr "Przebieg trwał zbyt długo"
 
@@ -4766,10 +4436,6 @@ msgstr "Maksymalny rozmiar pliku: {maxSizeFormatted}"
 # ==============================
 # Unstable IDs
 # ==============================
-#: src/components/ui/MessageList/MessageListHeader.tsx
-#~ msgid " (more available)"
-#~ msgstr " (więcej dostępnych)"
-
 #: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid " File attachments account for {fileTokensFormatted} tokens."
 msgstr " Załączniki plików zajmują {fileTokensFormatted} tokenów."
@@ -4777,10 +4443,6 @@ msgstr " Załączniki plików zajmują {fileTokensFormatted} tokenów."
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "(no body)"
 msgstr ""
-
-#: src/components/ui/Chat/ChatHistoryList.tsx
-#~ msgid "{0, plural, =0 {No files} one {# file} other {# files}}"
-#~ msgstr "{0, plural, =0 {Brak plików} one {# plik} few {# pliki} other {# plików}}"
 
 #. placeholder {0}: queuedMessage.attachedFiles.length
 #: src/components/ui/Chat/ChatInput.tsx
@@ -4791,14 +4453,6 @@ msgstr ""
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "{0, plural, one {Cannot send: {names} exceeds the {limit} limit. Remove it to send.} other {Cannot send: {names} exceed the {limit} limit. Remove them to send.}}"
 msgstr "{0, plural, one {Nie można wysłać: {names} przekracza limit {limit}. Usuń ten plik, aby wysłać.} few {Nie można wysłać: {names} przekraczają limit {limit}. Usuń te pliki, aby wysłać.} many {Nie można wysłać: {names} przekraczają limit {limit}. Usuń te pliki, aby wysłać.} other {Nie można wysłać: {names} przekraczają limit {limit}. Usuń te pliki, aby wysłać.}}"
-
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
-#~ msgid "{0} items"
-#~ msgstr ""
-
-#: src/components/ui/Teams/TeamsConversationView.tsx
-#~ msgid "{0} messages could not be loaded."
-#~ msgstr "Nie udało się wczytać {0} wiadomości."
 
 #: src/components/ui/FileUpload/ThreadMessageCard.tsx
 msgid "{attachmentCount} files"
@@ -4813,10 +4467,6 @@ msgstr ""
 msgid "{fileName}: {filePercentage}%"
 msgstr "{fileName}: {filePercentage}%"
 
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
-#~ msgid "{itemCount} items"
-#~ msgstr "{itemCount} elementów"
-
 #: src/utils/teams/teamsSentAttachmentGroups.ts
 msgid "{sharedCount} shared files"
 msgstr ""
@@ -4828,10 +4478,6 @@ msgstr ""
 #: src/components/ui/Trace/NestedTraceView.tsx
 msgid "{stepCount, plural, one {# step} other {# steps}}"
 msgstr "{stepCount, plural, one {# krok} few {# kroki} many {# kroków} other {# kroku}}"
-
-#: src/components/ui/Trace/SidecarLocalTraceView.tsx
-#~ msgid "{stepCount} steps"
-#~ msgstr ""
 
 #: src/components/ui/Trace/SidecarLocalTraceView.tsx
 msgid "{value} matched"
@@ -4879,10 +4525,6 @@ msgstr "• Użyj \"Resetuj do wykrywania przeglądarki\" aby przetestować świ
 msgid "1 file"
 msgstr "1 plik"
 
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
-#~ msgid "1 item"
-#~ msgstr "1 element"
-
 #: src/components/ui/Teams/TeamsConversationView.tsx
 msgid "1 message could not be loaded."
 msgstr "Nie udało się wczytać 1 wiadomości."
@@ -4891,10 +4533,6 @@ msgstr "Nie udało się wczytać 1 wiadomości."
 msgid "1 shared file"
 msgstr ""
 
-#: src/components/ui/Trace/SidecarLocalTraceView.tsx
-#~ msgid "1 step"
-#~ msgstr ""
-
 #: src/hooks/audio/audioTranscriptionErrors.ts
 msgid "A passage could not be transcribed because the AI provider's content filter blocked it. This also happens with harmless speech. Please say it differently or type it."
 msgstr "Nie udało się transkrybować fragmentu, ponieważ filtr treści dostawcy AI go zablokował. Zdarza się to także przy nieszkodliwych wypowiedziach. Powiedz to inaczej lub wpisz tekst ręcznie."
@@ -4902,22 +4540,6 @@ msgstr "Nie udało się transkrybować fragmentu, ponieważ filtr treści dostaw
 #: src/hooks/audio/audioTranscriptionErrors.ts
 msgid "A passage could not be transcribed. Please try again."
 msgstr "Nie udało się transkrybować fragmentu. Spróbuj ponownie."
-
-#: src/components/ui/FileUpload/FileUpload.tsx
-#~ msgid "Accepted types:"
-#~ msgstr "Akceptowane typy plików:"
-
-#: src/components/ui/Chat/ChatInput.tsx
-#~ msgid "Action required — the assistant is waiting for your approval"
-#~ msgstr "Wymagane działanie — asystent czeka na Twoją zgodę"
-
-#: src/components/ui/FileUpload/FileUpload.tsx
-#~ msgid "All file types accepted"
-#~ msgstr "Wszystkie typy plików akceptowane"
-
-#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
-#~ msgid "And"
-#~ msgstr ""
 
 #: src/components/ui/DesktopSidecar/SidecarLocalAnswerPanel.tsx
 msgid "Answer from this device"
@@ -4931,47 +4553,18 @@ msgstr "Zbliżanie się do limitu budżetowego"
 msgid "Approaching Token Limit"
 msgstr "Zbliżanie się do limitu tokenów"
 
-#: src/pages/AssistantsListPage.tsx
-#~ msgid "Archive"
-#~ msgstr ""
-
-#: src/pages/AssistantsListPage.tsx
-#~ msgid "Are you sure you want to archive this assistant?"
-#~ msgstr ""
-
 #: src/components/ui/Controls/Button.tsx
 #: src/components/ui/Controls/DropdownMenu.tsx
 msgid "Are you sure you want to proceed?"
 msgstr "Czy na pewno chcesz kontynuować?"
 
-#: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
-#~ msgid "Are you sure you want to remove this chat?"
-#~ msgstr "Czy na pewno chcesz usunąć ten czat?"
-
 #: src/components/ui/Feedback/Avatar.tsx
 msgid "Assistant avatar"
 msgstr "Awatar asystenta"
 
-#: src/pages/AssistantCreatePage.tsx
-#~ msgid "Assistant created successfully!"
-#~ msgstr ""
-
-#: src/pages/AssistantHubDetailPage.tsx
-#~ msgid "Assistant Hub"
-#~ msgstr ""
-
-#: src/pages/AssistantEditPage.tsx
-#~ msgid "Assistant updated successfully!"
-#~ msgstr ""
-
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
 msgid "Assistants"
 msgstr ""
-
-#: src/pages/AssistantsListPage.tsx
-#~ msgid "Assistants that others share with you will appear here"
-#~ msgstr ""
 
 #: src/components/ui/FileUpload/FileUploadButton.tsx
 msgid "Attach File"
@@ -4984,10 +4577,6 @@ msgstr ""
 #: src/components/ui/Teams/TeamsConversationView.tsx
 msgid "Attachment"
 msgstr "Załącznik"
-
-#: src/components/ui/Chat/ChatInput.tsx
-#~ msgid "Attachment ready to send"
-#~ msgstr ""
 
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "Attachments"
@@ -5028,21 +4617,9 @@ msgstr "Dyktowanie audio nie jest dostępne w tym środowisku."
 msgid "Audio dictation response timed out."
 msgstr "Upłynął limit czasu odpowiedzi dyktowania audio."
 
-#: src/components/ui/Chat/ChatInput.tsx
-#~ msgid "Audio file: {0} · Status: {1}"
-#~ msgstr ""
-
 #: src/hooks/audio/useAudioInputDevicePreference.ts
 msgid "Audio input device selection is not supported in this browser."
 msgstr "Wybór urządzenia wejściowego audio nie jest obsługiwany w tej przeglądarce."
-
-#: src/hooks/audio/useAudioInputLevelPreview.ts
-#~ msgid "Audio input is not supported in this browser."
-#~ msgstr ""
-
-#: src/components/ui/Chat/ChatInput.tsx
-#~ msgid "Audio recording - Status: {0}"
-#~ msgstr "Nagranie audio - Status: {0}"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Audio recording - Status: {displayStatus}"
@@ -5062,10 +4639,6 @@ msgstr "Nagranie audio musi być kanonicznym plikiem WAV."
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Audio recording must be mono 16-bit PCM WAV at 16 kHz."
 msgstr "Nagranie audio musi być plikiem WAV PCM mono 16-bit przy 16 kHz."
-
-#: src/components/ui/Chat/ChatInput.tsx
-#~ msgid "Audio transcription"
-#~ msgstr "Transkrypcja audio"
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Audio transcription chunk failed."
@@ -5096,16 +4669,8 @@ msgid "Audio transcription is not enabled."
 msgstr "Transkrypcja audio nie jest włączona."
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
-#~ msgid "auto gain: {0}"
-#~ msgstr ""
-
-#: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "auto gain: {autoGainControl}"
 msgstr "automatyczne wzmocnienie: {autoGainControl}"
-
-#: src/pages/AssistantEditPage.tsx
-#~ msgid "Back to Assistants"
-#~ msgstr ""
 
 #: src/components/ui/FilePreview/TeamsTranscriptPreview.tsx
 msgid "Back to conversation"
@@ -5147,10 +4712,6 @@ msgid "Cancel queued message"
 msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
-#~ msgid "Cancel starting dictation"
-#~ msgstr "Anuluj uruchamianie dyktowania"
-
-#: src/components/ui/Chat/ChatInput.tsx
 msgid "Canceled"
 msgstr ""
 
@@ -5161,10 +4722,6 @@ msgstr "Anulowano"
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Cannot send: a message can carry at most {limit} files. Remove some to send."
 msgstr "Nie można wysłać: wiadomość może zawierać najwyżej {limit} plików. Usuń część z nich, aby wysłać."
-
-#: src/components/ui/Chat/ChatInput.tsx
-#~ msgid "Cannot send: Audio transcription in progress"
-#~ msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Cannot send: File count limit exceeded"
@@ -5178,17 +4735,9 @@ msgstr "Nie można wysłać: przekroczono limit rozmiaru pliku"
 msgid "Cannot send: Token limit exceeded"
 msgstr "Nie można wysłać: Przekroczony limit tokenów"
 
-#: src/components/ui/Chat/ChatInput.tsx
-#~ msgid "Capturing audio — waiting for transcription to start"
-#~ msgstr "Przechwytywanie dźwięku — oczekiwanie na rozpoczęcie transkrypcji"
-
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "Cc"
 msgstr ""
-
-#: src/hooks/audio/useAudioTranscriptionRecorder.ts
-#~ msgid "channels: {0}"
-#~ msgstr ""
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "channels: {channelCount}"
@@ -5213,10 +4762,6 @@ msgstr ""
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Choose audio mode"
 msgstr ""
-
-#: src/components/ui/FileUpload/FileUpload.tsx
-#~ msgid "Clear All"
-#~ msgstr "Wyczyść wszystko"
 
 #: src/pages/SearchPage.tsx
 msgid "Clear search"
@@ -5246,14 +4791,6 @@ msgstr "zwiń pasek boczny"
 msgid "Completed"
 msgstr ""
 
-#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
-#~ msgid "Configuration"
-#~ msgstr ""
-
-#: src/pages/AssistantCreatePage.tsx
-#~ msgid "Configure a custom assistant with specific instructions and capabilities"
-#~ msgstr ""
-
 #: src/components/ui/Modal/ConfirmationDialog.tsx
 msgid "Confirm"
 msgstr "Potwierdź"
@@ -5267,15 +4804,6 @@ msgstr "Potwierdź akcję"
 msgid "Confirm Action"
 msgstr "Potwierdź akcję"
 
-#: src/pages/AssistantsListPage.tsx
-#~ msgid "Confirm Archive"
-#~ msgstr ""
-
-#: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/SearchPage.tsx
-#~ msgid "Confirm Removal"
-#~ msgstr "Potwierdź usunięcie"
-
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Context usage"
 msgstr "Wykorzystanie kontekstu"
@@ -5288,41 +4816,13 @@ msgstr "Wykorzystanie kontekstu przekracza pojemność modelu. Asystent nie moż
 msgid "Conversational"
 msgstr ""
 
-#: src/components/ui/Message/MessageContent.tsx
-#~ msgid "Copied"
-#~ msgstr ""
-
-#: src/components/ui/Message/EratoEmailSuggestion.tsx
-#~ msgid "Copied!"
-#~ msgstr ""
-
-#: src/components/ui/Message/EratoEmailSuggestion.tsx
-#~ msgid "Copy"
-#~ msgstr ""
-
-#: src/components/ui/Message/MessageContent.tsx
-#~ msgid "Copy code"
-#~ msgstr ""
-
 #: src/hooks/audio/useGuidedAudioCapture.ts
 msgid "Could not capture audio from the microphone. Please try again."
 msgstr "Nie udało się przechwycić dźwięku z mikrofonu. Spróbuj ponownie."
 
-#: src/hooks/audio/useAudioDictationRecorder.ts
-#~ msgid "Could not complete audio dictation."
-#~ msgstr "Nie udało się ukończyć dyktowania audio."
-
-#: src/hooks/audio/useAudioTranscriptionRecorder.ts
-#~ msgid "Could not complete audio recording."
-#~ msgstr ""
-
 #: src/hooks/audio/useAudioInputDevicePreference.ts
 msgid "Could not load audio input devices."
 msgstr "Nie udało się załadować urządzeń wejściowych audio."
-
-#: src/hooks/audio/useAudioTranscriptionRecorder.ts
-#~ msgid "Could not prepare audio recording for transcription."
-#~ msgstr ""
 
 #: src/hooks/audio/audio-dictation-protocol.ts
 #: src/hooks/audio/useAudioDictationRecorder.ts
@@ -5357,25 +4857,9 @@ msgstr "Nie można rozpocząć testu mikrofonu."
 msgid "Could not transcribe the clip."
 msgstr ""
 
-#: src/pages/AssistantsListPage.tsx
-#~ msgid "Create and manage custom assistants with specific instructions and capabilities"
-#~ msgstr ""
-
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Create Assistant"
 msgstr ""
-
-#: src/pages/AssistantsListPage.tsx
-#~ msgid "Create Your First Assistant"
-#~ msgstr ""
-
-#: src/pages/AssistantsListPage.tsx
-#~ msgid "Create your first assistant to get started"
-#~ msgstr ""
-
-#: src/components/ui/Controls/UserProfileDropdown.tsx
-#~ msgid "Dark mode"
-#~ msgstr "Tryb ciemny"
 
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "Date"
@@ -5433,25 +4917,9 @@ msgstr "Dyktowanie zostało automatycznie zatrzymane po skonfigurowanym maksymal
 msgid "Dismiss"
 msgstr "Odrzuć"
 
-#: src/components/ui/Trace/TraceDoneMarker.tsx
-#~ msgid "Done"
-#~ msgstr "Gotowe"
-
 #: src/components/ui/Modal/FilePreviewModal.tsx
 msgid "Download File"
 msgstr "Pobierz plik"
-
-#: src/components/ui/FileUpload/FileUpload.tsx
-#~ msgid "Drag files here or click to upload"
-#~ msgstr "Przeciągnij pliki tutaj lub kliknij aby przesłać"
-
-#: src/components/ui/FileUpload/FileUpload.tsx
-#~ msgid "Drop files to upload..."
-#~ msgstr "Upuść pliki aby przesłać..."
-
-#: src/hooks/audio/useAudioTranscriptionRecorder.ts
-#~ msgid "echo cancellation: {0}"
-#~ msgstr ""
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "echo cancellation: {echoCancellation}"
@@ -5462,25 +4930,9 @@ msgstr "redukcja echa: {echoCancellation}"
 msgid "Edit"
 msgstr "Edytuj"
 
-#: src/pages/AssistantsListPage.tsx
-#~ msgid "Edit"
-#~ msgstr ""
-
-#: src/pages/AssistantEditPage.tsx
-#~ msgid "Edit Assistant"
-#~ msgstr ""
-
-#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
-#~ msgid "Edit Assistant Settings"
-#~ msgstr ""
-
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Edit queued message"
 msgstr ""
-
-#: src/components/ui/Chat/ChatInput.tsx
-#~ msgid "Edit your message..."
-#~ msgstr ""
 
 #: src/components/ui/Teams/TeamsConversationView.tsx
 msgid "Edited"
@@ -5505,14 +4957,6 @@ msgstr "Błąd"
 #: src/hooks/audio/audioTranscriptionErrors.ts
 msgid "Error code: {code}"
 msgstr "Kod błędu: {code}"
-
-#: src/components/ui/ThemeApplier.tsx
-#~ msgid "Error loading theme:"
-#~ msgstr "Błąd wczytywania motywu:"
-
-#: src/components/ui/ToolCall/ToolCallOutput.tsx
-#~ msgid "Error Output"
-#~ msgstr "Wyjście błędu"
 
 #: src/components/ui/FileUpload/FileUploadStates.tsx
 msgid "Error:"
@@ -5550,10 +4994,6 @@ msgstr "rozwiń pasek boczny"
 msgid "facets.<facet-id>.displayName"
 msgstr "facets.<facet-id>.displayName"
 
-#: src/components/ui/ToolCall/ToolCallDisplay.tsx
-#~ msgid "failed"
-#~ msgstr "nie udało się"
-
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Failed"
 msgstr "Niepowodzenie"
@@ -5561,23 +5001,6 @@ msgstr "Niepowodzenie"
 #: src/hooks/audio/useAudioDictationRecorder.ts
 msgid "Failed to complete audio dictation."
 msgstr "Nie udało się ukończyć dyktowania audio."
-
-#: src/pages/AssistantCreatePage.tsx
-#~ msgid "Failed to create assistant. Please try again."
-#~ msgstr ""
-
-#: src/pages/AssistantChatSpacePage.tsx
-#: src/pages/AssistantEditPage.tsx
-#~ msgid "Failed to load assistant. Please try again."
-#~ msgstr ""
-
-#: src/pages/AssistantsListPage.tsx
-#~ msgid "Failed to load assistants. Please try again."
-#~ msgstr ""
-
-#: src/pages/AssistantEditPage.tsx
-#~ msgid "Failed to update assistant. Please try again."
-#~ msgstr ""
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Failed to upload audio recording for transcription."
@@ -5587,10 +5010,6 @@ msgstr ""
 msgid "File"
 msgstr "Plik"
 
-#: src/pages/AssistantsListPage.tsx
-#~ msgid "Filter assistants"
-#~ msgstr ""
-
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Finishing audio transcript"
 msgstr ""
@@ -5598,10 +5017,6 @@ msgstr ""
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Finishing dictation"
 msgstr "Kończenie dyktowania"
-
-#: src/components/ui/Message/MessageContent.tsx
-#~ msgid "Footnotes"
-#~ msgstr "Przypisy"
 
 #: src/pages/SearchPage.tsx
 msgid "Found {resultsCount} results"
@@ -5643,19 +5058,6 @@ msgstr "Obraz"
 msgid "In Progress"
 msgstr "W trakcie"
 
-#: src/components/ui/FileUpload/AttachmentTile.tsx
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
-#~ msgid "Include"
-#~ msgstr "Dołącz"
-
-#: src/components/ui/FileUpload/ThreadMessageCard.tsx
-#~ msgid "Include message"
-#~ msgstr "Uwzględnij wiadomość"
-
-#: src/components/ui/ToolCall/ToolCallInput.tsx
-#~ msgid "Input Parameters"
-#~ msgstr "Parametry wejściowe"
-
 #: src/components/ui/Message/MessageTimestamp.tsx
 msgid "Invalid date provided to MessageTimestamp, using current date"
 msgstr "Podano nieprawidłową datę do MessageTimestamp, używam bieżącej daty"
@@ -5667,18 +5069,6 @@ msgstr ""
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Largest file context contributors:"
 msgstr "Największy udział plików w kontekście:"
-
-#: src/components/ui/Trace/hooks/useThinkingDuration.ts
-#~ msgid "less than a second"
-#~ msgstr "mniej niż sekundę"
-
-#: src/components/ui/Controls/UserProfileDropdown.tsx
-#~ msgid "Light mode"
-#~ msgstr "Tryb jasny"
-
-#: src/components/ui/Message/MessageContent.tsx
-#~ msgid "Link"
-#~ msgstr ""
 
 #: src/components/ui/Chat/ChatInputAudioModeButton.tsx
 msgid "Listening"
@@ -5696,26 +5086,9 @@ msgstr "Załaduj starsze wiadomości"
 msgid "Loading"
 msgstr "Ładowanie"
 
-#: src/pages/AssistantChatSpacePage.tsx
-#: src/pages/AssistantEditPage.tsx
-#~ msgid "Loading assistant..."
-#~ msgstr ""
-
-#: src/pages/AssistantsListPage.tsx
-#~ msgid "Loading assistants..."
-#~ msgstr ""
-
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
-#~ msgid "Loading attachment..."
-#~ msgstr ""
-
 #: src/components/ui/FilePreview/TeamsTranscriptPreview.tsx
 msgid "Loading conversation…"
 msgstr "Wczytywanie konwersacji…"
-
-#: src/components/ui/FileUpload/FilePreviewLoading.tsx
-#~ msgid "Loading file..."
-#~ msgstr ""
 
 #: src/components/ui/Chat/ModelSelector.tsx
 #: src/components/ui/Message/LoadMoreButton.tsx
@@ -5739,21 +5112,9 @@ msgstr "Dopasowanie wiadomości i załączników"
 msgid "Message exceeds token limit. Please reduce length or remove files."
 msgstr "Wiadomość przekracza limit tokenów. Proszę skrócić lub usunąć pliki."
 
-#: src/components/ui/MessageList/MessageListHeader.tsx
-#~ msgid "messages"
-#~ msgstr "wiadomości"
-
-#: src/hooks/audio/useAudioInputDevicePreference.ts
-#~ msgid "Microphone {0}"
-#~ msgstr "Mikrofon {0}"
-
 #: src/hooks/audio/useAudioInputDevicePreference.ts
 msgid "Microphone {microphoneIndex}"
 msgstr "Mikrofon {microphoneIndex}"
-
-#: src/components/ui/Chat/ChatInput.tsx
-#~ msgid "Microphone is starting — wait for the level meter before speaking"
-#~ msgstr "Mikrofon się uruchamia; zaczekaj na miernik poziomu, zanim zaczniesz mówić"
 
 #: src/hooks/audio/useGuidedAudioCapture.ts
 msgid "Microphone permission denied. Allow access to run the mic check."
@@ -5766,14 +5127,6 @@ msgstr "Odmowa dostępu do mikrofonu. Zezwól na dostęp, aby przetestować mikr
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Microphone permission denied. Allow microphone access and try again."
 msgstr ""
-
-#: src/components/ui/Chat/ChatInput.tsx
-#~ msgid "Microphone settings:"
-#~ msgstr ""
-
-#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
-#~ msgid "more conversations..."
-#~ msgstr ""
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "My Assistant"
@@ -5788,14 +5141,6 @@ msgstr ""
 msgid "New Chat"
 msgstr "Nowy czat"
 
-#: src/pages/assistantHubUtils.tsx
-#~ msgid "No"
-#~ msgstr ""
-
-#: src/pages/AssistantsListPage.tsx
-#~ msgid "No assistants yet"
-#~ msgstr ""
-
 #: src/hooks/audio/useAudioDictationRecorder.ts
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "No audio was captured. Please try recording again."
@@ -5804,10 +5149,6 @@ msgstr ""
 #: src/pages/SearchPage.tsx
 msgid "No chats found"
 msgstr "Nie znaleziono czatów"
-
-#: src/components/ui/Chat/ChatHistoryList.tsx
-#~ msgid "No files"
-#~ msgstr ""
 
 #: src/components/ui/Message/ConversationIndicator.tsx
 msgid "No messages yet"
@@ -5826,24 +5167,8 @@ msgid "No text."
 msgstr "Brak tekstu."
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
-#~ msgid "noise suppression: {0}"
-#~ msgstr ""
-
-#: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "noise suppression: {noiseSuppression}"
 msgstr "redukcja szumów: {noiseSuppression}"
-
-#: src/pages/assistantHubUtils.tsx
-#~ msgid "None"
-#~ msgstr ""
-
-#: src/pages/assistantHubUtils.tsx
-#~ msgid "Not set"
-#~ msgstr ""
-
-#: src/components/ui/MessageList/MessageListHeader.tsx
-#~ msgid "of"
-#~ msgstr "z"
 
 #: src/components/ui/Teams/TeamsConversationView.tsx
 msgid "Older messages are not included."
@@ -5874,32 +5199,14 @@ msgstr "Otwórz menu"
 msgid "assistant.form.prompt-optimizer.tooltip"
 msgstr "Optymalizuj prompt"
 
-#: src/components/ui/ToolCall/ToolCallOutput.tsx
-#~ msgid "Output"
-#~ msgstr "Wyjście"
-
 #: src/components/ui/FileUpload/FilePreviewLoading.tsx
 msgid "Please wait"
 msgstr ""
-
-#: src/components/ui/Chat/ChatInput.tsx
-#~ msgid "Please wait for audio transcription to finish before sending this message."
-#~ msgstr ""
-
-#: src/components/ui/FileUpload/AttachmentTile.tsx
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
-#: src/components/ui/Teams/TeamsConversationView.tsx
-#~ msgid "Preview attachment"
-#~ msgstr "Podgląd załącznika"
 
 #: src/components/ui/FilePreview/FilePreviewContent.tsx
 #: src/components/ui/Modal/FilePreviewModal.tsx
 msgid "Preview is not available for this file type."
 msgstr "Podgląd nie jest dostępny dla tego typu pliku."
-
-#: src/components/ui/Modal/FilePreviewModal.tsx
-#~ msgid "Preview of"
-#~ msgstr "Podgląd"
 
 #: src/components/ui/FilePreview/FilePreviewContent.tsx
 msgid "Preview of {filename}"
@@ -5912,10 +5219,6 @@ msgstr ""
 #: src/components/ui/Modal/FilePreviewModal.tsx
 msgid "Preview:"
 msgstr "Podgląd:"
-
-#: src/components/ui/Chat/ChatInput.tsx
-#~ msgid "Progress: {0}%"
-#~ msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Queue — sends when the response finishes"
@@ -5937,33 +5240,13 @@ msgstr ""
 msgid "Read local mailbox"
 msgstr "Odczyt lokalnej skrzynki pocztowej"
 
-#: src/components/ui/Message/MessageContent.tsx
-#~ msgid "Reasoning"
-#~ msgstr "Rozumowanie"
-
-#: src/components/ui/Chat/ChatHistorySidebar.tsx
-#~ msgid "Recent"
-#~ msgstr ""
-
 #: src/pages/SearchPage.tsx
 msgid "Recent Chats"
 msgstr "Ostatnie czaty"
 
 #: src/components/ui/Chat/ChatInput.tsx
-#~ msgid "Record"
-#~ msgstr ""
-
-#: src/components/ui/Chat/ChatInput.tsx
-#~ msgid "Record audio"
-#~ msgstr "Nagraj audio"
-
-#: src/components/ui/Chat/ChatInput.tsx
 msgid "Recording"
 msgstr "Nagrywanie"
-
-#: src/components/ui/Chat/ChatInputAudioModeButton.tsx
-#~ msgid "Recording audio"
-#~ msgstr "Nagrywanie audio"
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Recording audio is disabled while uploads are not available."
@@ -5981,14 +5264,6 @@ msgstr "Nagrywanie zostało automatycznie zatrzymane po skonfigurowanym maksymal
 msgid "Remaining context: {remainingContextPercentage}%"
 msgstr "Pozostały kontekst: {remainingContextPercentage}%"
 
-#: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/components/ui/FileUpload/AttachmentTile.tsx
-#: src/components/ui/FileUpload/FilePreviewBase.tsx
-#: src/components/ui/FileUpload/FilePreviewButton.tsx
-#: src/pages/SearchPage.tsx
-#~ msgid "Remove"
-#~ msgstr "Usuń"
-
 #: src/components/ui/FileUpload/AttachmentTileList.tsx
 msgid "Remove all"
 msgstr "Usuń wszystko"
@@ -5996,10 +5271,6 @@ msgstr "Usuń wszystko"
 #: src/components/ui/FileUpload/AttachmentTileList.tsx
 msgid "Remove all attachments"
 msgstr "Usuń wszystkie załączniki"
-
-#: src/components/ui/FileUpload/FileAttachmentsPreview.tsx
-#~ msgid "Remove all files"
-#~ msgstr "Usuń wszystkie pliki"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Removing this audio attachment will also clear its transcription. Continue?"
@@ -6029,21 +5300,9 @@ msgstr "Ponów transkrypcję"
 msgid "Retrying..."
 msgstr "Ponawianie..."
 
-#: src/components/ui/Trace/steps/ToolUseStep.tsx
-#~ msgid "Running"
-#~ msgstr "W toku"
-
-#: src/hooks/audio/useAudioTranscriptionRecorder.ts
-#~ msgid "sample rate: {0} Hz"
-#~ msgstr ""
-
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "sample rate: {sampleRate} Hz"
 msgstr "częstotliwość próbkowania: {sampleRate} Hz"
-
-#: src/components/ui/Chat/ChatInput.tsx
-#~ msgid "Save edit"
-#~ msgstr ""
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Saving..."
@@ -6069,10 +5328,6 @@ msgstr "Przeszukaj swoje czaty"
 msgid "Searching..."
 msgstr "Wyszukiwanie..."
 
-#: src/components/ui/Message/ActionFacetContext.tsx
-#~ msgid "Selection"
-#~ msgstr ""
-
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Send message"
 msgstr "Wyślij wiadomość"
@@ -6081,21 +5336,9 @@ msgstr "Wyślij wiadomość"
 msgid "Shared Chat - {effectiveSharedChatTitle}"
 msgstr ""
 
-#: src/pages/SharedChatPage.tsx
-#~ msgid "Shared Chat - {sharedChatTitle}"
-#~ msgstr "Udostępniony czat - {sharedChatTitle}"
-
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Show"
 msgstr "Pokaż"
-
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
-#~ msgid "Show {hiddenCount} more items"
-#~ msgstr "Pokaż jeszcze {hiddenCount} elementów"
-
-#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
-#~ msgid "Show 1 more item"
-#~ msgstr "Pokaż jeszcze 1 element"
 
 #: src/components/ui/Message/CollapsibleCodeBlock.tsx
 msgid "Show all {lineCount} lines"
@@ -6113,10 +5356,6 @@ msgstr "Pokaż mniej"
 msgid "Show tool calls"
 msgstr "Pokaż wywołania narzędzi"
 
-#: src/components/ui/MessageList/MessageListHeader.tsx
-#~ msgid "Showing"
-#~ msgstr "Pokazuje"
-
 #: src/pages/SearchPage.tsx
 msgid "Showing {resultsCount} recent chats"
 msgstr "Wyświetlanie {resultsCount} ostatnich czatów"
@@ -6128,14 +5367,6 @@ msgstr "Wyloguj"
 #: src/components/ui/Trace/NestedTraceView.tsx
 msgid "Skipped"
 msgstr "Pominięto"
-
-#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
-#~ msgid "Some default files are inaccessible due to missing permissions."
-#~ msgstr ""
-
-#: src/components/ui/FileUpload/FileUpload.tsx
-#~ msgid "Some files won't be accepted..."
-#~ msgstr "Niektóre pliki nie zostaną zaakceptowane..."
 
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
 msgid "Something went wrong"
@@ -6152,10 +5383,6 @@ msgstr ""
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Start dictation"
 msgstr "Rozpocznij dyktowanie"
-
-#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
-#~ msgid "Start typing below to begin a new conversation"
-#~ msgstr "Zacznij pisać poniżej, aby rozpocząć nową rozmowę"
 
 #: src/components/ui/Chat/StarterPromptsSection.tsx
 #: src/hooks/chat/useStarterPrompts.ts
@@ -6184,10 +5411,6 @@ msgstr "Zatrzymaj"
 msgid "Stop audio mode"
 msgstr ""
 
-#: src/components/ui/Chat/ChatInputAudioModeButton.tsx
-#~ msgid "Stop audio recording"
-#~ msgstr ""
-
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Stop audio transcript recording"
 msgstr ""
@@ -6196,18 +5419,6 @@ msgstr ""
 msgid "Stop dictation"
 msgstr "Zatrzymaj dyktowanie"
 
-#: src/components/ui/Chat/ChatInput.tsx
-#~ msgid "Stop recording"
-#~ msgstr "Zatrzymaj nagrywanie"
-
-#: src/components/ui/Trace/TraceClusterHeader.tsx
-#~ msgid "Stopped"
-#~ msgstr "Zatrzymano"
-
-#: src/components/ui/Trace/TraceClusterHeader.tsx
-#~ msgid "Stopped after {formatted}"
-#~ msgstr "Zatrzymano po {formatted}"
-
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "Subject"
 msgstr ""
@@ -6215,10 +5426,6 @@ msgstr ""
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Success"
 msgstr "Sukces"
-
-#: src/components/ui/ToolCall/ToolCallDisplay.tsx
-#~ msgid "successful"
-#~ msgstr "udane"
 
 #: src/components/ui/Trace/SidecarLocalTraceView.tsx
 msgid "Summarize on device"
@@ -6235,10 +5442,6 @@ msgstr ""
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "System prompt must be less than {maxSystemPromptLength} characters"
 msgstr "Prompt systemowy musi mieć mniej niż {maxSystemPromptLength} znaków"
-
-#: src/components/ui/Controls/UserProfileDropdown.tsx
-#~ msgid "System theme"
-#~ msgstr "Motyw systemowy"
 
 #: src/utils/teams/teamsSentAttachmentGroups.ts
 msgid "Teams conversation"
@@ -6306,10 +5509,6 @@ msgstr "Wybrany mikrofon jest niedostępny. Odśwież listę urządzeń i sprób
 msgid "Thinking"
 msgstr "Myślę"
 
-#: src/components/ui/Trace/TraceThinkingPlaceholder.tsx
-#~ msgid "Thinking…"
-#~ msgstr "Myślę…"
-
 #: src/components/ui/FilePreview/TeamsTranscriptPreview.tsx
 msgid "This conversation could not be loaded."
 msgstr "Nie udało się wczytać tej konwersacji."
@@ -6326,21 +5525,9 @@ msgstr "Ta wiadomość przekracza limit tokenów {maxTokensFormatted}. Proszę s
 msgid "This message is using {percentUsed}% of the available token limit ({totalTokensFormatted} of {maxTokensFormatted})."
 msgstr "Ta wiadomość używa {percentUsed}% dostępnego limitu tokenów ({totalTokensFormatted} z {maxTokensFormatted})."
 
-#: src/components/ui/Trace/TraceClusterHeader.tsx
-#~ msgid "Thought"
-#~ msgstr "Myślano"
-
-#: src/components/ui/Trace/TraceClusterHeader.tsx
-#~ msgid "Thought for {formatted}"
-#~ msgstr "Myślano przez {formatted}"
-
 #: src/components/ui/FilePreview/EmlPreview.tsx
 msgid "To"
 msgstr ""
-
-#: src/components/ui/FileUpload/ThreadMessageCard.tsx
-#~ msgid "Toggle attachments"
-#~ msgstr "Przełącz załączniki"
 
 #: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "Token Limit Exceeded"
@@ -6354,29 +5541,13 @@ msgstr "Użycie tokenów"
 msgid "Tool Call Display"
 msgstr "Wyświetlanie wywołań narzędzi"
 
-#: src/components/ui/ToolCall/ToolCallDisplay.tsx
-#~ msgid "Tool calls"
-#~ msgstr "Wywołania narzędzi"
-
-#: src/components/ui/ToolCall/ToolCallDisplay.tsx
-#~ msgid "Tool Calls"
-#~ msgstr "Wywołania narzędzi"
-
 #: src/components/ui/Settings/ToolCallSettings.tsx
 msgid "Tool calls show how the assistant used external tools to generate responses."
 msgstr "Wywołania narzędzi pokazują jak asystent używał zewnętrznych narzędzi do generowania odpowiedzi."
 
-#: src/components/ui/Feedback/LoadingIndicator.tsx
-#~ msgid "Tool usage:"
-#~ msgstr "Użycie narzędzi:"
-
 #: src/components/ui/Chat/FacetSelector.tsx
 msgid "Tools"
 msgstr ""
-
-#: src/components/ui/ToolCall/ToolCallDisplay.tsx
-#~ msgid "total"
-#~ msgstr "ogółem"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Transcribing"
@@ -6410,26 +5581,6 @@ msgstr "Nieznana data"
 msgid "Unknown sender"
 msgstr ""
 
-#: src/pages/AssistantEditPage.tsx
-#~ msgid "Update your assistant's configuration and settings"
-#~ msgstr ""
-
-#: src/pages/AssistantsListPage.tsx
-#~ msgid "Updated"
-#~ msgstr ""
-
-#: src/pages/AssistantsListPage.tsx
-#~ msgid "Updated {updatedRelativeTime}"
-#~ msgstr ""
-
-#: src/components/ui/FileUpload/FileUpload.tsx
-#~ msgid "Upload Files"
-#~ msgstr "Prześlij pliki"
-
-#: src/components/ui/FileUpload/FileUpload.tsx
-#~ msgid "Uploaded Files"
-#~ msgstr "Przesłane pliki"
-
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Uploading"
 msgstr "Przesyłanie"
@@ -6458,30 +5609,6 @@ msgstr "Tak duże wykorzystanie kontekstu może ograniczyć sesję czatu i zmnie
 msgid "Using tools"
 msgstr "Używam narzędzi"
 
-#: src/pages/AssistantHubDetailPage.tsx
-#: src/pages/assistantHubUtils.tsx
-#~ msgid "Version {0}"
-#~ msgstr ""
-
-#: src/pages/AssistantHubDetailPage.tsx
-#: src/pages/AssistantHubMyPage.tsx
-#: src/pages/AssistantHubReviewPage.tsx
-#: src/pages/assistantHubUtils.tsx
-#~ msgid "Version {versionNumber}"
-#~ msgstr "Wersja {versionNumber}"
-
-#: src/components/ui/Chat/ChatInput.tsx
-#~ msgid "View"
-#~ msgstr "Pokaż"
-
-#: src/components/ui/Chat/FrequentAssistantsList.tsx
-#~ msgid "View all assistants"
-#~ msgstr ""
-
-#: src/pages/assistantHubUtils.tsx
-#~ msgid "Yes"
-#~ msgstr ""
-
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "You are using {percentUsed}% of your budget ({formattedSpending} of {formattedLimit})."
 msgstr ""
@@ -6489,11 +5616,3 @@ msgstr ""
 #: src/components/ui/DesktopSidecar/SidecarLocalAnswerPanel.tsx
 msgid "You asked: {query}"
 msgstr "Twoje pytanie: {query}"
-
-#: src/pages/AssistantEditPage.tsx
-#~ msgid "You don't have permission to edit this assistant. Only the owner can modify assistant settings."
-#~ msgstr ""
-
-#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
-#~ msgid "Your conversations with this assistant"
-#~ msgstr "Twoje rozmowy z tym asystentem"

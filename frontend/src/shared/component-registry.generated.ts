@@ -308,6 +308,7 @@ export { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 export { SyntaxHighlightedCode } from "@/components/ui/Message/SyntaxHighlightedCode";
 export { useCodeBlockSurfaceStyle } from "@/components/ui/Message/SyntaxHighlightedCode";
 export type { SyntaxHighlightedCodeProps } from "@/components/ui/Message/SyntaxHighlightedCode";
+export { TaskResultCard } from "@/components/ui/Message/TaskResultCard";
 export { ConfirmationDialog } from "@/components/ui/Modal/ConfirmationDialog";
 export { ModalBase } from "@/components/ui/Modal/ModalBase";
 export { messageStyles } from "@/components/ui/styles/chatMessageStyles";

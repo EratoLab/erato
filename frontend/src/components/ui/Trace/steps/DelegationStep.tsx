@@ -3,6 +3,7 @@ import { t } from "@lingui/core/macro";
 import { OpenNewWindowIcon } from "@/components/ui/icons";
 import { useDelegatedRunLiveStatus } from "@/hooks/chat/useDelegatedRunLiveStatus";
 import { DELEGATE_TASK_TOOL_NAME } from "@/lib/delegation/delegationEnvelope";
+import { delegationReasonLabel } from "@/lib/delegation/delegationLabels";
 import { useSidecarLocalTrace } from "@/lib/desktopSidecar/localTraceStore";
 import { useDelegatedRunOpener } from "@/providers/DelegatedRunOpenProvider";
 import { getChatUrl } from "@/utils/chat/urlUtils";
@@ -100,48 +101,6 @@ const outcomeLabel = (status: string): string | undefined => {
       });
     default:
       return status;
-  }
-};
-
-/**
- * The closed `reason` vocabulary, said in the user's words. An unknown value
- * is rendered verbatim rather than dropped: a newer backend should degrade to
- * something readable, not to silence.
- */
-const reasonLabel = (reason: string): string => {
-  switch (reason) {
-    case "timeout":
-      return t({
-        id: "trace.delegation.reason.timeout",
-        message: "The run took too long",
-      });
-    case "no_answer":
-      return t({
-        id: "trace.delegation.reason.noAnswer",
-        message: "The run ended without an answer",
-      });
-    case "parent_abort":
-      return t({
-        id: "trace.delegation.reason.parentAbort",
-        message: "Stopped with the message that started it",
-      });
-    case "cap_exceeded":
-      return t({
-        id: "trace.delegation.reason.capExceeded",
-        message: "Stopped at its tool-call budget; the answer may be partial",
-      });
-    case "approval_pending":
-      return t({
-        id: "trace.delegation.reason.approvalPending",
-        message: "Waiting for your decision on a tool it wants to use",
-      });
-    case "approval_unavailable":
-      return t({
-        id: "trace.delegation.reason.approvalUnavailable",
-        message: "Needed a tool it could not ask you about",
-      });
-    default:
-      return reason;
   }
 };
 
@@ -375,7 +334,9 @@ export const DelegationStep = ({
   // stopped at its budget with a partial answer — and those are the cases the
   // rail's green check would otherwise report as an unqualified success.
   const why =
-    envelope.reason !== undefined ? reasonLabel(envelope.reason) : undefined;
+    envelope.reason !== undefined
+      ? delegationReasonLabel(envelope.reason)
+      : undefined;
   const hasSummary =
     preview !== undefined ||
     envelope.truncated ||

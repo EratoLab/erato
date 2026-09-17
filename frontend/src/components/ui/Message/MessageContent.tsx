@@ -7,6 +7,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import "katex/dist/katex.min.css";
 
+import { TaskResultCard } from "@/components/ui/Message/TaskResultCard";
 import {
   Trace,
   durationFromTracePartsOrLegacyMessageTimestamps,
@@ -1329,6 +1330,10 @@ export const MessageContent = memo(function MessageContent({
 
         const { part, index } = cluster;
         const isLastRenderablePart = index === lastRenderableIndex;
+
+        if (part.content_type === "task_result") {
+          return <TaskResultCard key={`task-result-${index}`} part={part} />;
+        }
 
         if (part.content_type === "tool_approval_request" && messageId) {
           return (
