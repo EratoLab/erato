@@ -94,6 +94,11 @@ export function handleUserMessageSaved(
         // Server-resolved pairs replace the optimistic ones so the mention
         // highlight survives the temp → real message swap.
         mentioned_assistants: serverConfirmedMessage.mentioned_assistants,
+        // The server may anchor the turn below rows this client has not seen —
+        // a delivered task result and the turn that reacted to it. Keep the
+        // server's answer, or the store's copy of the thread disagrees with
+        // the API until the next refetch.
+        previous_message_id: serverConfirmedMessage.previous_message_id,
       };
 
       // Find the temporary message by content comparison (extract text from ContentPart[])

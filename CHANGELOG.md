@@ -89,6 +89,12 @@ Unlike the request-scoped directive markers, a delivered result stays in the con
 
 How it is presented to the model is tunable via the new `delegation.tasks.result_template`, but only its prose is. The run's status and reason, the identifiers, the `untrusted-data` frame around the child's answer and the safety guidance are emitted around the template and cannot be edited away — the status is the only thing distinguishing a failed task from a successful one, and the frame and guidance are what stop a child's answer being read as instructions. A template that does not contain `{{result}}` is rejected at startup rather than silently rendering a result with the answer missing.
 
+**A message sent from a client that had not yet seen a delivered task result is now placed below it, rather than branching it away.** Only with `[delegation.tasks] enabled = true`.
+
+A delivered result and the turn that reacted to it sit below the assistant message a client last saw, so submitting on that anchor would have knocked both off the conversation. The `user_message_saved` event's `message.previous_message_id` may therefore differ from the `previous_message_id` the client sent; clients already replace their optimistic row with the server's.
+
+Editing or regenerating a turn is still a branch operation and still branches. If the turn that started the task is itself still on the thread, the result is delivered again on the new branch — once, so repeated branching cannot accumulate re-appended results. If the user rewrote the very turn that started the task, the result is stale by definition and is marked superseded.
+
 #### Deprecations
 
 **`[assistants.delegation]` is deprecated; use `[delegation]` and `[delegation.assistants]`.**
