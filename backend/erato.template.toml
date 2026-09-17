@@ -437,6 +437,16 @@ chat_provider_ids = ["test-token-limit"]
 # # Facets composed into every task child. Each id must name a facet configured
 # # under facets.facets (default: [])
 # child_facet_ids = []
+# # How a delivered task result is presented to the model that has to react to
+# # it. Presentation only: {{result}} is REQUIRED and is replaced with the
+# # child's answer inside an untrusted-data frame, and the run's status, reason
+# # and ids are stated ahead of this text where an edit here cannot reach them.
+# # {{truncated_note}} expands to a note when the answer was shortened, and to
+# # nothing otherwise.
+# result_template = """
+# A task you delegated earlier has finished and its result is below.{{truncated_note}}
+#
+# {{result}}"""
 # # What a user write does while the chat's generation is still running.
 # # "reject" answers 409 generation_running and leaves the running turn alone;
 # # the client holds the draft and sends it when the turn ends. "enqueue" and

@@ -400,6 +400,19 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
 
             match parsed.role {
                 MessageRole::User => {
+                    // A delivered task result is history, not something the
+                    // user typed, so it is emitted for EVERY prior turn — the
+                    // current-row check below deliberately does not gate it.
+                    // Without this the model would see a result exactly once,
+                    // on the turn that reacted to it, and lose it thereafter.
+                    for part in &parsed.content {
+                        if let ContentPart::TaskResult(task_result) = part {
+                            sequence.push(AbstractChatSequencePart::TaskResult {
+                                part: task_result.clone(),
+                            });
+                        }
+                    }
+
                     if prev_msg.id == *previous_message_id {
                         for part in parsed.content {
                             if let ContentPart::Text(ContentPartText { text }) = part
@@ -578,6 +591,17 @@ pub async fn resolve_sequence(
                             run_mode,
                         },
                     ),
+                });
+            }
+
+            AbstractChatSequencePart::TaskResult { part } => {
+                // A marker, like the directives above, so the configured
+                // result template and the untrusted-data frame are applied at
+                // request-build time. Unlike them it is NOT stripped from
+                // prior turns: the result stays in the conversation.
+                input_messages.push(InputMessage {
+                    role: MessageRole::User,
+                    content: ContentPart::TaskResult(part),
                 });
             }
 

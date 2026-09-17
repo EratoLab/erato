@@ -3208,6 +3208,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         ),
         action_facet_id: user_input.action_facet.as_ref().map(|af| af.id.clone()),
         action_facet_args: user_input.action_facet.as_ref().map(|af| af.args.clone()),
+        initiator: None,
     };
 
     // Return the unresolved version for saving to DB (to avoid duplicating file contents)
@@ -7429,7 +7430,8 @@ fn summary_user_message_text_from_generation_input(
                 | ContentPart::ImageFilePointer(_)
                 | ContentPart::Image(_)
                 | ContentPart::ActionFacetMarker(_)
-                | ContentPart::DelegationPreambleMarker(_) => None,
+                | ContentPart::DelegationPreambleMarker(_)
+                | ContentPart::TaskResult(_) => None,
             }
         })
 }
@@ -9928,6 +9930,7 @@ mod reasoning_replay_tests {
             selected_facets: HashMap::new(),
             action_facet_id: None,
             action_facet_args: None,
+            initiator: None,
         };
         let changed_parameters = GenerationParameters {
             generation_chat_provider_id: Some("responses-sonnet".to_string()),
@@ -9935,6 +9938,7 @@ mod reasoning_replay_tests {
             selected_facets: HashMap::new(),
             action_facet_id: None,
             action_facet_args: None,
+            initiator: None,
         };
 
         assert!(openai_responses_reasoning_replay_model_matches(
@@ -10593,6 +10597,7 @@ pub(crate) async fn run_message_submit_task(
             action_facet_args: request.action_facet.as_ref().map(|af| af.args.clone()),
             mentioned_assistant_ids: mentioned_assistant_ids_for_persistence,
             delegation_run_mode: delegation_run_mode_for_persistence,
+            task_result: None,
         })
     } else {
         None
@@ -11529,6 +11534,7 @@ pub async fn edit_message_sse(
                 .filter(|ids| !ids.is_empty())
                 .map(|ids| ids.iter().map(|id| id.to_string()).collect()),
             delegation_run_mode: resolved_delegation_run_mode,
+            task_result: None,
         })
     } else {
         None

@@ -206,6 +206,96 @@ pub struct ChatProvenance {
     /// those written before the field existed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run_mode: Option<DelegationRunMode>,
+    /// Delegation only, `async` runs only: how this run's result is getting
+    /// back to the chat it was started from.
+    ///
+    /// Lives in `provenance` rather than beside the task spec because SQL
+    /// reads it: the backstop sweep scans for deliveries that never completed,
+    /// and the listing reports whether an origin still has work in flight.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result_delivery: Option<ResultDelivery>,
+}
+
+/// Where a finished `async` task's result has got to on its way back to the
+/// origin chat.
+///
+/// The states are a one-way ladder, and two of them are easy to misread:
+/// `delivered` means the result row is in the conversation but nothing has
+/// reacted to it yet, and `reacted` means a turn has. That split is what lets
+/// a crash-appended row be picked up later by whatever request comes next.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ResultDelivery {
+    pub state: ResultDeliveryState,
+    /// Stable id for this delivery attempt; the idempotency key that stops a
+    /// re-run of the delivery path appending the same result twice.
+    pub delivery_id: Uuid,
+    /// The child's own assistant row carrying the answer to deliver.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result_message_id: Option<Uuid>,
+    /// Terminal status of the run being delivered, from the D-K vocabulary.
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    /// Which process holds the claim, for diagnosis only — never for
+    /// correctness, which the compare-and-set owns.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claimed_by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claimed_at: Option<DateTimeWithTimeZone>,
+    /// The `task_result` row appended to the origin chat.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message_id: Option<Uuid>,
+    /// The assistant row that reacted to it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reaction_message_id: Option<Uuid>,
+    /// Delivery attempts made, including ones deferred because the origin was
+    /// busy.
+    #[serde(default)]
+    pub attempts: u32,
+    /// How many times this result has been delivered again after the origin
+    /// branched away from an earlier delivery.
+    #[serde(default)]
+    pub redeliveries: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub redelivery_of: Option<Uuid>,
+    /// Matches `ContentPartTaskResult::sequence`.
+    #[serde(default)]
+    pub sequence: u32,
+    pub at: DateTimeWithTimeZone,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ResultDeliveryState {
+    /// Waiting for an origin that is free to take it.
+    Pending,
+    /// A process has taken it and is appending; a claim that goes stale is
+    /// returned to `pending` by the backstop sweep.
+    Claimed,
+    /// The `task_result` row is in the conversation. Nothing has reacted yet.
+    Delivered,
+    /// A turn has reacted to the result.
+    Reacted,
+    /// The origin moved on — it was archived, or branched away from the row
+    /// this result was delivered onto.
+    Superseded,
+    /// The result cannot be delivered at all.
+    Failed,
+}
+
+impl ResultDeliveryState {
+    /// The wire spelling, matching what the sweep's SQL predicate compares
+    /// against the stored JSON.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ResultDeliveryState::Pending => "pending",
+            ResultDeliveryState::Claimed => "claimed",
+            ResultDeliveryState::Delivered => "delivered",
+            ResultDeliveryState::Reacted => "reacted",
+            ResultDeliveryState::Superseded => "superseded",
+            ResultDeliveryState::Failed => "failed",
+        }
+    }
 }
 
 impl ChatProvenanceKind {

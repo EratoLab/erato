@@ -4929,7 +4929,10 @@ export const useClientToolResult = (
   });
 };
 
-export type ContinueMessageSseError = Fetcher.ErrorWrapper<undefined>;
+export type ContinueMessageSseError = Fetcher.ErrorWrapper<{
+  status: 409;
+  payload: Schemas.GenerationRunningError;
+}>;
 
 export type ContinueMessageSseVariables = {
   body: Schemas.ContinueStreamRequest;
@@ -4975,7 +4978,10 @@ export const useContinueMessageSse = (
   });
 };
 
-export type EditMessageSseError = Fetcher.ErrorWrapper<undefined>;
+export type EditMessageSseError = Fetcher.ErrorWrapper<{
+  status: 409;
+  payload: Schemas.GenerationRunningError;
+}>;
 
 export type EditMessageSseVariables = {
   body: Schemas.EditMessageRequest;
@@ -5021,7 +5027,10 @@ export const useEditMessageSse = (
   });
 };
 
-export type RegenerateMessageSseError = Fetcher.ErrorWrapper<undefined>;
+export type RegenerateMessageSseError = Fetcher.ErrorWrapper<{
+  status: 409;
+  payload: Schemas.GenerationRunningError;
+}>;
 
 export type RegenerateMessageSseVariables = {
   body: Schemas.RegenerateMessageRequest;
@@ -5113,7 +5122,10 @@ export const useResumeMessageSse = (
   });
 };
 
-export type MessageSubmitSseError = Fetcher.ErrorWrapper<undefined>;
+export type MessageSubmitSseError = Fetcher.ErrorWrapper<{
+  status: 409;
+  payload: Schemas.GenerationRunningError;
+}>;
 
 export type MessageSubmitSseVariables = {
   body: Schemas.MessageSubmitRequest;
