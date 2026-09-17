@@ -12,6 +12,9 @@ const TASK_PROMPT = "run the probe as a task";
 /** The facet whose allowlist selects `erato/delegate_task`. */
 const PLANNING_FACET = "Plan & delegate";
 
+/** Its configured id, which is what the selected-facet chip is keyed by. */
+const PLANNING_FACET_ID = "plan";
+
 /** Turns the whole task run — child turn plus the origin's answer — take. */
 const RUN_TIMEOUT_MS = 60000;
 
@@ -21,12 +24,37 @@ const TASK_STEP =
 /**
  * Selects the planning facet, which is what offers the tool: enabling the
  * feature is deliberately not enough on its own.
+ *
+ * Facets are rows of the composer's "Tools" dropdown, not bare toggles, so the
+ * menu has to be opened before the row exists. Selecting one renders it as its
+ * own chip beside the trigger, which is what confirms the selection stuck.
  */
 const selectPlanningFacet = async (page: Page) => {
-  const toggle = page.getByRole("button", { name: PLANNING_FACET });
-  await expect(toggle).toBeVisible({ timeout: 15000 });
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  const trigger = page.locator(
+    'button[aria-controls="facet-selector-dropdown"]',
+  );
+  await expect(trigger).toBeVisible({ timeout: 15000 });
+  await trigger.click();
+  await page
+    .getByRole("menuitem", { name: PLANNING_FACET, exact: true })
+    .click();
+  await expect(
+    page.getByTestId(`selected-facet-${PLANNING_FACET_ID}`),
+  ).toBeVisible();
+};
+
+/**
+ * The scenario's default model is a real provider; only Mock-LLM answers the
+ * scripted task turns, so the run has to be pointed at it explicitly.
+ */
+const selectMockModel = async (page: Page) => {
+  const modelSelectorButton = page.locator(
+    'button[aria-controls="model-selector-dropdown"]',
+  );
+  await expect(modelSelectorButton).toBeVisible();
+  await modelSelectorButton.click();
+  await page.getByRole("menuitem", { name: "Mock-LLM", exact: true }).click();
+  await expect(modelSelectorButton).toContainText("Mock-LLM");
 };
 
 const sendTaskMessage = async (page: Page) => {
@@ -58,6 +86,7 @@ test("runs a model-planned task and brings its answer back into the chat", async
 
   await gotoAppPage(page, "/");
   await chatIsReadyToChat(page);
+  await selectMockModel(page);
   await selectPlanningFacet(page);
   await sendTaskMessage(page);
 
