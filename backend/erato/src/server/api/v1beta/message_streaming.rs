@@ -3602,6 +3602,58 @@ async fn settle_delegation_slot<
     })
 }
 
+/// Tell the client what a reserved task slot is doing.
+///
+/// The commit beside this call makes the slot durable; this makes it visible
+/// without a reload. `tool_call_proposed` cannot carry it — that event has no
+/// output field — so the placeholder rides the same update event the settle
+/// uses, still `in_progress`, distinguished only by `output.status`.
+#[allow(clippy::too_many_arguments)]
+async fn announce_reserved_task_slot<
+    MSG: SendAsSseEvent + From<MessageSubmitStreamingResponseToolCallUpdate>,
+>(
+    tool_call: &genai::chat::ToolCall,
+    slot: usize,
+    output: JsonValue,
+    assistant_message_id: Uuid,
+    streaming_task: Option<&Arc<StreamingTask>>,
+    tx: &Sender<Result<Event, Report>>,
+) -> Result<(), Report> {
+    if let Some(task) = streaming_task {
+        send_background_event(
+            task,
+            StreamingEvent::ToolCallUpdate {
+                message_id: assistant_message_id,
+                content_index: slot,
+                tool_call_id: tool_call.call_id.clone(),
+                tool_name: tool_call.fn_name.clone(),
+                input: Some(tool_call.fn_arguments.clone()),
+                status: BgToolCallStatus::InProgress,
+                progress_message: None,
+                progress: None,
+                total: None,
+                output: Some(output.clone()),
+            },
+            "broadcast reserved task slot",
+        )
+        .await;
+    }
+    let message: MSG = MessageSubmitStreamingResponseToolCallUpdate {
+        message_id: assistant_message_id,
+        content_index: slot,
+        tool_call_id: tool_call.call_id.clone(),
+        tool_name: tool_call.fn_name.clone(),
+        input: Some(tool_call.fn_arguments.clone()),
+        status: ToolCallStatus::InProgress,
+        progress_message: None,
+        progress: None,
+        total: None,
+        output: Some(output),
+    }
+    .into();
+    send_generation_event(&message, tx.clone()).await
+}
+
 /// Waits for an abort, or forever when there is no stream to abort.
 ///
 /// `select!` needs a future in every arm; a turn with no streaming task simply
@@ -4031,12 +4083,59 @@ async fn stream_generate_chat_completion<
         // worse than the exit it was trying to make.
         let mut exit_after_join = false;
         let mut exit_metadata: Option<GenerationMetadata> = None;
+        // An error that ends the turn still has to let the join settle the
+        // children it already started, or they run on with their slots frozen
+        // at "working" and nothing ever writes their outcome.
+        let mut exit_error: Option<Report> = None;
+        // An approval reached mid-batch. The part must be the LAST one, and it
+        // must not reach disk until the batch it interrupted has settled.
+        let mut pending_approval_part: Option<ContentPartToolApprovalRequest> = None;
         'pop_calls: while let Some(unfinished_tool_call) = unfinished_tool_calls.pop_front() {
             let batch_position = {
                 let position = batch_position;
                 batch_position += 1;
                 position
             };
+            // Settle whatever finished while the loop was busy with the last
+            // call. Waiting for the join would freeze a finished child's slot
+            // at "working" for as long as the rest of the batch takes — a
+            // client-tool park is a minute by default, an MCP call has no
+            // bound at all — and leave its progress tap filling meanwhile.
+            loop {
+                let Some(Some(settled)) = futures::FutureExt::now_or_never(in_flight.next()) else {
+                    break;
+                };
+                match settle_delegation_slot::<MSG>(
+                    settled.outcome,
+                    &settled.meta.tool_call,
+                    Some(settled.meta.slot),
+                    settled.meta.tool_call_started,
+                    settled.meta.otel_tool_call_start_time,
+                    settled.meta.otel_parent_observation_id,
+                    &mut current_message_content,
+                    app_state,
+                    policy,
+                    subject,
+                    assistant_message_id,
+                    assistant_id,
+                    streaming_task,
+                    tracing_client.as_ref(),
+                    &langfuse_trace_enrichment.platform,
+                    &tx,
+                )
+                .await
+                {
+                    Ok(response) => {
+                        current_turn_tool_responses.push((settled.meta.batch_position, response));
+                    }
+                    // Through the join like every other exit, so the rest of
+                    // the batch is still settled.
+                    Err(error) => {
+                        exit_error = Some(error);
+                        break 'pop_calls;
+                    }
+                }
+            }
             let otel_tool_call_start_time = tracing_client
                 .as_ref()
                 .filter(|client| client.uses_otel())
@@ -4142,10 +4241,13 @@ async fn stream_generate_chat_completion<
                     exit_after_join = true;
                     break 'pop_calls;
                 }
-                let error = eyre!(
+                // Still an error for an ordinary turn, exactly as before —
+                // but raised after the join, so a batch already in flight is
+                // settled rather than orphaned.
+                exit_error = Some(eyre!(
                     "Maximum tool call count per message ({max_tool_calls_per_message}) exceeded"
-                );
-                return Err(error);
+                ));
+                break 'pop_calls;
             }
             current_tool_call_count += 1;
             // Emit event for tool call proposed
@@ -4528,6 +4630,8 @@ async fn stream_generate_chat_completion<
                         started_at: Some(tool_call_started),
                         ended_at: None,
                     }));
+                    let mut announced =
+                        Some(crate::services::delegation::queued_placeholder_output());
                     match delegation.as_ref() {
                         Some(context) if in_flight.len() < effective_max_parallel => {
                             let (placeholder, task) = launch_prepared_task(
@@ -4539,15 +4643,32 @@ async fn stream_generate_chat_completion<
                                 pending,
                             )
                             .await;
-                            if let Some(output) = placeholder
-                                && let Some(ContentPart::ToolUse(part)) =
+                            if let Some(output) = placeholder {
+                                if let Some(ContentPart::ToolUse(part)) =
                                     current_message_content.get_mut(slot)
-                            {
-                                part.output = Some(output);
+                                {
+                                    part.output = Some(output.clone());
+                                }
+                                announced = Some(output);
+                            } else {
+                                // Settling immediately in the join; nothing
+                                // worth announcing as a state of its own.
+                                announced = None;
                             }
                             in_flight.push(task);
                         }
                         _ => queued_tasks.push_back(pending),
+                    }
+                    if let Some(output) = announced {
+                        announce_reserved_task_slot::<MSG>(
+                            &unfinished_tool_call,
+                            slot,
+                            output,
+                            assistant_message_id,
+                            streaming_task,
+                            &tx,
+                        )
+                        .await?;
                     }
                     commit_message_content_mid_turn(
                         app_state,
@@ -4940,8 +5061,13 @@ async fn stream_generate_chat_completion<
                     ))
                 }
                 McpToolCallGate::Ask(approval_request) => {
-                    current_message_content
-                        .push(ContentPart::ToolApprovalRequest(approval_request));
+                    // Held back rather than pushed: the join below commits the
+                    // whole part list every time a task settles, and an
+                    // approval part sitting at the tail makes the row look
+                    // parked while the turn is still running — which is enough
+                    // for a continuation to start a second generation on it.
+                    // It goes on after the join, still last.
+                    pending_approval_part = Some(approval_request);
                     let generation_metadata = build_generation_metadata(
                         total_prompt_tokens,
                         total_completion_tokens,
@@ -5414,12 +5540,36 @@ async fn stream_generate_chat_completion<
         // child answers its own abort with a `cancelled` envelope, and
         // dropping the waits would leave those slots reading "working" for
         // runs that are over.
+        // Two ways to stop: the user pressed stop, or the batch decided to
+        // leave early. Either way nothing further launches — starting work the
+        // turn has already decided not to report would be worse than useless —
+        // and the queued slots settle instead.
         let mut aborting = false;
+        let mut leaving = exit_after_join || exit_error.is_some();
         while !in_flight.is_empty() || !queued_tasks.is_empty() {
             if !aborting && streaming_task.is_some_and(|task| task.is_abort_requested()) {
                 aborting = true;
+                leaving = true;
+                // An abort noticed in here must end the turn too. Settling the
+                // slots correctly and then carrying on to the model would
+                // answer a question the user has already withdrawn.
+                if !exit_after_join && exit_error.is_none() {
+                    exit_after_join = true;
+                    exit_metadata = build_generation_metadata(
+                        total_prompt_tokens,
+                        total_completion_tokens,
+                        total_total_tokens,
+                        total_reasoning_tokens,
+                        langfuse_trace_id.clone(),
+                        true,
+                        None,
+                        non_empty_string(&captured_reasoning_summary),
+                        non_empty_vec(&captured_reasoning_items),
+                        non_empty_vec(&captured_reasoning_item_encrypted_content),
+                    );
+                }
             }
-            if aborting {
+            if leaving {
                 // A queued call never started, so its slot settles with no
                 // child at all — that absence is how a reader tells it from a
                 // run that was cancelled partway.
@@ -5452,6 +5602,17 @@ async fn stream_generate_chat_completion<
                 }
             }
 
+            // With nothing in flight both select arms below can be disabled at
+            // once, which is a panic rather than a wait. Decide here instead.
+            if in_flight.is_empty() {
+                if queued_tasks.is_empty() {
+                    break;
+                }
+                // Nothing is running and nothing started the rest of the
+                // batch. Settle them on the next pass rather than spin.
+                leaving = true;
+                continue;
+            }
             let settled = tokio::select! {
                 settled = in_flight.next(), if !in_flight.is_empty() => settled,
                 () = wait_for_optional_abort(streaming_task), if !aborting => {
@@ -5487,7 +5648,15 @@ async fn stream_generate_chat_completion<
 
             // One finished, so one may start — in call order, and only while
             // the turn is still going anywhere.
-            while !aborting && in_flight.len() < effective_max_parallel {
+            while !leaving && in_flight.len() < effective_max_parallel {
+                // Re-read the abort here, not just at the top of the join: a
+                // stop that lands while a child is settling must stop the NEXT
+                // launch, not the one after it. The top of the loop then does
+                // the full handling on its next pass.
+                if streaming_task.is_some_and(|task| task.is_abort_requested()) {
+                    leaving = true;
+                    break;
+                }
                 let Some(pending) = queued_tasks.pop_front() else {
                     break;
                 };
@@ -5496,6 +5665,7 @@ async fn stream_generate_chat_completion<
                     break;
                 };
                 let slot = pending.meta.slot;
+                let announce_call = pending.meta.tool_call.clone();
                 let (placeholder, task) = launch_prepared_task(
                     app_state,
                     policy,
@@ -5505,10 +5675,20 @@ async fn stream_generate_chat_completion<
                     pending,
                 )
                 .await;
-                if let Some(output) = placeholder
-                    && let Some(ContentPart::ToolUse(part)) = current_message_content.get_mut(slot)
-                {
-                    part.output = Some(output);
+                if let Some(output) = placeholder {
+                    if let Some(ContentPart::ToolUse(part)) = current_message_content.get_mut(slot)
+                    {
+                        part.output = Some(output.clone());
+                    }
+                    announce_reserved_task_slot::<MSG>(
+                        &announce_call,
+                        slot,
+                        output,
+                        assistant_message_id,
+                        streaming_task,
+                        &tx,
+                    )
+                    .await?;
                 }
                 in_flight.push(task);
                 commit_message_content_mid_turn(
@@ -5523,6 +5703,16 @@ async fn stream_generate_chat_completion<
             }
         }
 
+        // After the join, so every settled slot is already in place and the
+        // approval is genuinely the last part — which is what the six
+        // last-part checks and the continuation both rely on.
+        if let Some(approval_request) = pending_approval_part.take() {
+            current_message_content.push(ContentPart::ToolApprovalRequest(approval_request));
+        }
+
+        if let Some(error) = exit_error {
+            return Err(error);
+        }
         if exit_after_join {
             break 'loop_call_turns Ok((current_message_content, exit_metadata));
         }

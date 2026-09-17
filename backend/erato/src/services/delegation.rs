@@ -1405,6 +1405,14 @@ pub(crate) struct LaunchedDelegation {
     /// Start of the whole dispatch, not of the child: the trace the parent sees
     /// measures from the moment the tool call was picked up.
     dispatch_started: std::time::Instant,
+    /// When this run stops counting as in time.
+    ///
+    /// Captured at launch, not when the wait is first polled: the child's own
+    /// deadline starts when it is spawned, and a batch defers its waits, so a
+    /// timer created on first poll would run late by however long the rest of
+    /// the batch took and could classify a child the deadline already killed
+    /// as a clean completion.
+    run_deadline: tokio::time::Instant,
 }
 
 /// What a launch settled into.
@@ -1436,6 +1444,8 @@ pub(crate) async fn launch_delegation(
     use sea_orm::EntityTrait;
 
     let dispatch_started = std::time::Instant::now();
+    let run_deadline = tokio::time::Instant::now()
+        + std::time::Duration::from_secs(app_state.config.delegation.run_timeout_seconds);
     let config = app_state.config.delegation.clone();
     // The mention route aims at an assistant; the task route is scoped by
     // facets and may have no assistant at all.
@@ -1678,6 +1688,7 @@ pub(crate) async fn launch_delegation(
         child_rx,
         spawned_at,
         dispatch_started,
+        run_deadline,
     }))
 }
 
@@ -1702,6 +1713,7 @@ pub(crate) async fn await_delegation(
         mut child_rx,
         spawned_at,
         dispatch_started,
+        run_deadline,
     } = launched;
 
     let config = app_state.config.delegation.clone();
@@ -1724,8 +1736,7 @@ pub(crate) async fn await_delegation(
     // inside [`run_delegated_child`], which also covers runs this loop never
     // awaits. This arm is what turns the deadline into a `timeout` envelope
     // for the parent — the child's own wind-down joins as a plain completion.
-    let run_timeout =
-        tokio::time::sleep(std::time::Duration::from_secs(config.run_timeout_seconds));
+    let run_timeout = tokio::time::sleep_until(run_deadline);
     tokio::pin!(run_timeout);
     let mut tap_open = true;
 

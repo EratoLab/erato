@@ -8255,3 +8255,311 @@ async fn stopping_a_batch_settles_the_queued_calls_without_a_child(pool: Pool<Po
         "exactly one call got a child before the stop: {parts:?}"
     );
 }
+
+/// A turn that runs out of tool calls while tasks are in flight still settles
+/// them. The cap ends the turn with an error, as it always has — but the
+/// children it already started are its responsibility, and abandoning them
+/// leaves their slots reading "working" with nothing left to ever write the
+/// outcome.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_batch_cut_short_by_the_tool_call_cap_still_settles_its_children(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["CAP-BRIEF"],
+                &["cap batch question"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["CAP-CHILD-ANSWER"]),
+        );
+    });
+    // Two task calls and a third call that trips the cap, all in one batch.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["cap batch question"],
+                &["CAP-BRIEF"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[
+                (
+                    "call_cap_1",
+                    "delegate_task",
+                    json!({ "task": "CAP-BRIEF one", "facet_ids": ["plan"] }),
+                ),
+                (
+                    "call_cap_2",
+                    "delegate_task",
+                    json!({ "task": "CAP-BRIEF two", "facet_ids": ["plan"] }),
+                ),
+            ]),
+        );
+    });
+
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        // One call allowed: the first task is launched, the second trips the
+        // cap and ends the turn while the first is still in flight.
+        config.generation.max_tool_calls_per_message = 1;
+    })
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let _events = submit_with_facets(&server, &chat, "cap batch question", &["plan"]).await;
+
+    let rows = chat_messages_by_created_at(&app_state.db, Uuid::parse_str(&chat).unwrap()).await;
+    let parts: Vec<serde_json::Value> = rows
+        .iter()
+        .flat_map(|row| row.raw_message["content"].as_array().into_iter().flatten())
+        .filter(|part| part["tool_name"] == "delegate_task")
+        .cloned()
+        .collect();
+
+    assert!(
+        !parts.is_empty(),
+        "the launched task keeps its slot even though the turn failed"
+    );
+    assert!(
+        parts.iter().all(|part| part["status"] != "in_progress"),
+        "no child may be abandoned mid-flight by the cap: {parts:?}"
+    );
+    assert!(
+        parts
+            .iter()
+            .all(|part| part["output"]["status"] != "working"),
+        "a slot left reading 'working' has nothing left to settle it: {parts:?}"
+    );
+}
+
+/// An approval that interrupts a batch must not reach disk until the batch has
+/// settled. Every task that settles rewrites the whole message, so an approval
+/// part parked at the tail makes the durable row look like a parked turn while
+/// children are still running — and a continuation reading that row would start
+/// a second generation on it.
+///
+/// The invariant is about the INTERMEDIATE state, so this reads the row while
+/// the turn is still going.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn an_approval_never_reaches_disk_beside_a_running_task(pool: Pool<Postgres>) {
+    const TOOL: &str = "read_approval_fixture";
+    let mut mocks = MockSet::new();
+    // Two children with different lifetimes: the quick one settles — and so
+    // commits the whole message — while the slow one is still running. That
+    // commit is what would publish a held-back approval part too early.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["APPROVAL-BRIEF-QUICK"],
+                &["approval batch question"],
+            ));
+        let mut actions =
+            crate::test_utils::build_openai_text_streaming_response(&["APPROVAL-QUICK-ANSWER"]);
+        actions.insert(0, BodyAction::Delay(std::time::Duration::from_secs(1)));
+        mock_llm_sse_response(then, actions);
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["APPROVAL-BRIEF-SLOW"],
+                &["approval batch question"],
+            ));
+        let mut actions =
+            crate::test_utils::build_openai_text_streaming_response(&["APPROVAL-SLOW-ANSWER"]);
+        actions.insert(0, BodyAction::Delay(std::time::Duration::from_secs(6)));
+        mock_llm_sse_response(then, actions);
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["approval batch question"],
+                &["APPROVAL-BRIEF-QUICK"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[
+                (
+                    "call_appr_quick",
+                    "delegate_task",
+                    json!({ "task": "APPROVAL-BRIEF-QUICK", "facet_ids": ["plan"] }),
+                ),
+                (
+                    "call_appr_slow",
+                    "delegate_task",
+                    json!({ "task": "APPROVAL-BRIEF-SLOW", "facet_ids": ["plan"] }),
+                ),
+                ("call_appr_mcp", TOOL, json!({})),
+            ]),
+        );
+    });
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        |config| {
+            config
+                .mcp_servers
+                .insert("mock_mcp_approval".to_string(), approval_fixture_server());
+            config.mcp_server_permissions.rules.insert(
+                "allow-mock-mcp".to_string(),
+                erato::config::McpServerPermissionRule::AllowAll {
+                    mcp_server_ids: vec!["mock_mcp_approval".to_string()],
+                },
+            );
+            config.mcp_servers_global.approval = erato::config::McpToolApprovalConfig {
+                enabled: true,
+                preset: erato::config::McpToolApprovalPreset::Permissive,
+                allow_always: false,
+            };
+        },
+    )
+    .await;
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server_addr = listener.local_addr().unwrap();
+    let app: Router = erato::server::router::router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    let client = reqwest::Client::new();
+    let base_url = format!("http://{server_addr}");
+    let create_response = client
+        .post(format!("{base_url}/api/v1beta/me/chats"))
+        .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert!(create_response.status().is_success());
+    let chat_id = create_response.json::<serde_json::Value>().await.unwrap()["chat_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // The fixture tool is closed-world and read-only, so no preset asks about
+    // it on its own. The user's own "ask" decision is what parks it.
+    let ask = client
+        .post(format!(
+            "{base_url}/api/v1beta/me/mcp-tool-approval-settings"
+        ))
+        .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+        .json(&json!({
+            "mcp_server_id": "mock_mcp_approval",
+            "tool_name": TOOL,
+            "decision": "ask",
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(ask.status().is_success(), "seeding the ask decision failed");
+
+    let streaming = tokio::spawn({
+        let client = client.clone();
+        let base_url = base_url.clone();
+        let chat_id = chat_id.clone();
+        async move {
+            client
+                .post(format!("{base_url}/api/v1beta/me/messages/submitstream"))
+                .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+                .json(&json!({
+                    "existing_chat_id": chat_id,
+                    "user_message": "approval batch question",
+                    "input_files_ids": [],
+                    "selected_facet_ids": ["plan"],
+                }))
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap()
+        }
+    });
+
+    // Watch the durable row for the forbidden pair: an approval part present
+    // while a task slot is still running.
+    let mut saw_running_task = false;
+    let mut saw_approval = false;
+    for _ in 0..60 {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        let body = client
+            .get(format!("{base_url}/api/v1beta/chats/{chat_id}/messages"))
+            .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+            .send()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+        for message in body["messages"].as_array().into_iter().flatten() {
+            let parts: Vec<&serde_json::Value> = message["content"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .collect();
+            let running = parts.iter().any(|part| {
+                part["tool_name"] == "delegate_task" && part["output"]["status"] == "working"
+            });
+            let approval = parts
+                .iter()
+                .any(|part| part["content_type"] == "tool_approval_request");
+            saw_running_task |= running;
+            saw_approval |= approval;
+            assert!(
+                !(running && approval),
+                "a parked shape must never be published while a task is still running: {parts:?}"
+            );
+        }
+    }
+
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(30), streaming).await;
+    assert!(
+        saw_running_task,
+        "the test never observed a running task, so it certified nothing"
+    );
+    assert!(
+        saw_approval,
+        "the test never observed an approval part, so it certified nothing"
+    );
+}
+
+/// The mock MCP server's approval-policy endpoint, as an erato server config.
+fn approval_fixture_server() -> erato::config::McpServerConfig {
+    let base_url = std::env::var("TEST_MOCK_MCP_SERVER_BASE_URL")
+        .unwrap_or_else(|_| "http://127.0.0.1:44321".to_string());
+    erato::config::McpServerConfig {
+        transport_type: "streamable_http".to_string(),
+        url: format!("{base_url}/mcp/approval-policy"),
+        http_headers: None,
+        allow_tools: None,
+        exclude_tools: vec![],
+        wait_tools: vec![],
+        authentication: erato::config::McpServerAuthenticationConfig::None,
+        max_session_idle_seconds: None,
+    }
+}
