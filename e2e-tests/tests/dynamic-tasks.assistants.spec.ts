@@ -3,6 +3,14 @@ import { expect, test, type Page } from "@playwright/test";
 import { chatIsReadyToChat, gotoAppPage } from "./shared";
 
 /**
+ * Runs in the `assistants` scenario, not `many-models`, and the reason is
+ * load-bearing: a delegated child run carries no provider of its own and falls
+ * back to the deployment default. Here the only provider is the mock, so the
+ * child answers from the scripted rules. In many-models the default is a live
+ * model, which answers the child turn itself.
+ */
+
+/**
  * Keyed by the mock LLM server's DynamicTaskParentToolCall rule, which answers
  * it with a `delegate_task` call the model "planned" itself. Distinct from the
  * mention route's prompt so the two routes never answer each other's turns.
@@ -43,20 +51,6 @@ const selectPlanningFacet = async (page: Page) => {
   ).toBeVisible();
 };
 
-/**
- * The scenario's default model is a real provider; only Mock-LLM answers the
- * scripted task turns, so the run has to be pointed at it explicitly.
- */
-const selectMockModel = async (page: Page) => {
-  const modelSelectorButton = page.locator(
-    'button[aria-controls="model-selector-dropdown"]',
-  );
-  await expect(modelSelectorButton).toBeVisible();
-  await modelSelectorButton.click();
-  await page.getByRole("menuitem", { name: "Mock-LLM", exact: true }).click();
-  await expect(modelSelectorButton).toContainText("Mock-LLM");
-};
-
 const sendTaskMessage = async (page: Page) => {
   const textbox = page.getByRole("textbox", { name: "Type a message..." });
   await textbox.click();
@@ -86,7 +80,6 @@ test("runs a model-planned task and brings its answer back into the chat", async
 
   await gotoAppPage(page, "/");
   await chatIsReadyToChat(page);
-  await selectMockModel(page);
   await selectPlanningFacet(page);
   await sendTaskMessage(page);
 
