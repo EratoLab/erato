@@ -3121,6 +3121,76 @@ msgid "library.toast.region"
 msgstr "Benachrichtigungen"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/McpAuthorizationNotice.tsx
+msgid "mcp.authorization.check"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpAuthorizationNotice.tsx
+msgid "mcp.authorization.denied"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpAuthorizationNotice.tsx
+msgid "mcp.authorization.dismiss"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpAuthorizationNotice.tsx
+msgid "mcp.authorization.error"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpAuthorizationNotice.tsx
+msgid "mcp.authorization.finishing"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/providers/McpOauthCallbackBoundary.tsx
+msgid "mcp.authorization.finishingNamed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/providers/McpOauthCallbackBoundary.tsx
+msgid "mcp.authorization.missingReturn"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/providers/McpOauthCallbackBoundary.tsx
+msgid "mcp.authorization.openSettings"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/ServersToolsPane.tsx
+msgid "mcp.authorization.rowPending"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpAuthorizationNotice.tsx
+msgid "mcp.authorization.starting"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpAuthorizationNotice.tsx
+msgid "mcp.authorization.stopWaiting"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpAuthorizationNotice.tsx
+msgid "mcp.authorization.timeout"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpAuthorizationNotice.tsx
+msgid "mcp.authorization.unavailable"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpAuthorizationNotice.tsx
+msgid "mcp.authorization.waiting"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/McpToolApprovalCard.tsx
 msgid "mcpApproval.alwaysAllowDisabled"
 msgstr "Gesperrt: Ihre Organisation verlangt jedes Mal eine Bestätigung, wenn dieses Tool ausgeführt wird."
@@ -3895,13 +3965,13 @@ msgstr "Verbindung erfolgreich getrennt."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.mcpServers.oauth.failureAfterCallback"
-msgstr "Die Autorisierung wurde abgeschlossen, aber der Server ist weiterhin nicht verfügbar. Öffnen Sie diesen Tab erneut, um es noch einmal zu prüfen."
+#~ msgid "preferences.dialog.mcpServers.oauth.failureAfterCallback"
+#~ msgstr "Die Autorisierung wurde abgeschlossen, aber der Server ist weiterhin nicht verfügbar. Öffnen Sie diesen Tab erneut, um es noch einmal zu prüfen."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.mcpServers.oauth.incompleteAfterCallback"
-msgstr "Die Autorisierung wurde nicht erfolgreich abgeschlossen. Bitte versuche es erneut."
+#~ msgid "preferences.dialog.mcpServers.oauth.incompleteAfterCallback"
+#~ msgstr "Die Autorisierung wurde nicht erfolgreich abgeschlossen. Bitte versuche es erneut."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -3910,11 +3980,11 @@ msgstr "Die Autorisierung wurde nicht erfolgreich abgeschlossen. Bitte versuche 
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.mcpServers.oauth.startError"
-msgstr "Die Autorisierung konnte nicht gestartet werden. Bitte versuche es erneut."
+#~ msgid "preferences.dialog.mcpServers.oauth.startError"
+#~ msgstr "Die Autorisierung konnte nicht gestartet werden. Bitte versuche es erneut."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/McpAuthorizationNotice.tsx
 msgid "preferences.dialog.mcpServers.oauth.success"
 msgstr "Autorisierung abgeschlossen. Der Server ist einsatzbereit."
 

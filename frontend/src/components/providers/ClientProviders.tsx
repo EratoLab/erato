@@ -2,6 +2,7 @@
 
 import { ApiProvider } from "./ApiProvider";
 import { GenerationStatusPoller } from "./GenerationStatusPoller";
+import { McpOauthCallbackBoundary } from "./McpOauthCallbackBoundary";
 import { TabChatIndicator } from "./TabChatIndicator";
 import { ThemeProvider } from "./ThemeProvider";
 import {
@@ -33,7 +34,9 @@ export function ClientProviders({ children }: PropsWithChildren) {
                   className="flex h-screen min-h-screen bg-theme-bg-primary"
                   data-ui="app-shell"
                 >
-                  {children}
+                  <McpOauthCallbackBoundary>
+                    {children}
+                  </McpOauthCallbackBoundary>
                 </div>
                 <Toaster placement="bottom-center" />
               </>

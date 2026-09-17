@@ -1,12 +1,8 @@
 import { t } from "@lingui/core/macro";
 import { clsx } from "clsx";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import {
-  clearMcpOauthCallback,
-  getMcpOauthServerId,
-} from "@/lib/mcpOauthCallback";
 import {
   useAuthFeature,
   useUserPreferencesFeature,
@@ -30,65 +26,27 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
     const [searchParams, setSearchParams] = useSearchParams();
     const [isPreferencesDialogOpen, setIsPreferencesDialogOpen] =
       useState(false);
-    const [isMcpOauthDialog, setIsMcpOauthDialog] = useState(false);
     /* eslint-disable lingui/no-unlocalized-strings -- URL query parameter keys */
     const requestedPreferencesTab = searchParams.get("preferencesTab");
-    const pendingMcpOauthCallback = useMemo(() => {
-      const code = searchParams.get("code");
-      const state = searchParams.get("state");
-      const serverId =
-        (state ? getMcpOauthServerId(state) : null) ??
-        searchParams.get("mcpOauthServerId");
-      if (!serverId || !code || !state) {
-        return null;
-      }
-      return {
-        code,
-        serverId,
-        state,
-        iss: searchParams.get("iss") ?? undefined,
-      };
-    }, [searchParams]);
-
+    const selectedMcpServerId = searchParams.get("mcpServerId") ?? undefined;
     useEffect(() => {
-      if (pendingMcpOauthCallback) {
-        setIsMcpOauthDialog(true);
-      }
-      if (
-        pendingMcpOauthCallback ||
-        searchParams.get("preferencesDialog") === "open"
-      ) {
+      if (searchParams.get("preferencesDialog") === "open")
         setIsPreferencesDialogOpen(true);
-      }
-    }, [pendingMcpOauthCallback, searchParams]);
-
+    }, [searchParams]);
     const clearPreferencesDialogSearchParams = useCallback(() => {
-      const state = searchParams.get("state");
-      if (state) clearMcpOauthCallback(state);
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete("preferencesDialog");
       nextParams.delete("preferencesTab");
-      nextParams.delete("mcpOauthServerId");
-      nextParams.delete("code");
-      nextParams.delete("state");
-      nextParams.delete("iss");
+      nextParams.delete("mcpServerId");
       setSearchParams(nextParams, { replace: true });
     }, [searchParams, setSearchParams]);
 
     const closePreferencesDialog = useCallback(() => {
       setIsPreferencesDialogOpen(false);
-      setIsMcpOauthDialog(false);
-      if (
-        pendingMcpOauthCallback ||
-        searchParams.get("preferencesDialog") === "open"
-      ) {
+      if (searchParams.get("preferencesDialog") === "open") {
         clearPreferencesDialogSearchParams();
       }
-    }, [
-      clearPreferencesDialogSearchParams,
-      pendingMcpOauthCallback,
-      searchParams,
-    ]);
+    }, [clearPreferencesDialogSearchParams, searchParams]);
     /* eslint-enable lingui/no-unlocalized-strings */
 
     // Check if logout should be shown
@@ -138,19 +96,14 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
           onClose={closePreferencesDialog}
           initialTab={
             // Keep supporting legacy OAuth return URLs.
-            (isMcpOauthDialog ||
-              pendingMcpOauthCallback ||
-              requestedPreferencesTab === "mcpServers" ||
+            (requestedPreferencesTab === "mcpServers" ||
               requestedPreferencesTab === "serversTools") &&
             mcpServersTabEnabled
               ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal tab id
                 "serversTools"
               : undefined
           }
-          pendingMcpOauthCallback={
-            mcpServersTabEnabled ? pendingMcpOauthCallback : null
-          }
-          onMcpOauthCallbackHandled={clearPreferencesDialogSearchParams}
+          selectedMcpServerId={selectedMcpServerId}
           userProfile={userProfile}
         />
       </div>

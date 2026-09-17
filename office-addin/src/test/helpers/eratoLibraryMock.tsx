@@ -115,6 +115,7 @@ const createStoreStub = <S,>(readState: () => S) =>
   );
 
 export const DEFAULT_STUBS = {
+  useMcpBrowserAuthorization: () => noop,
   useThemedIcon: () => null,
   getChatUrl: () => "",
   ModelSelector: StubNothing,

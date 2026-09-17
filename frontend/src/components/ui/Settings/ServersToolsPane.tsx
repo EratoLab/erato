@@ -1,10 +1,16 @@
 import { t } from "@lingui/core/macro";
-import { skipToken } from "@tanstack/react-query";
+import { skipToken, useQueryClient } from "@tanstack/react-query";
 
 import { useListMcpServers } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import {
+  isMcpAuthorizationPending,
+  useMcpAuthorizationStore,
+  checkMcpConnection,
+} from "@/lib/mcpAuthorization";
 
 import { DesktopSidecarRow } from "./DesktopSidecarTabContent";
 import { EntityRow } from "./EntityRow";
+import { McpAuthorizationNotice } from "./McpAuthorizationNotice";
 import { McpToolApprovalSettings } from "./McpToolApprovalSettings";
 import { mcpServerDescription, mcpServerStatus } from "./mcpServerStatus";
 import { Button } from "../Controls/Button";
@@ -17,6 +23,8 @@ import type { ReactNode } from "react";
 export interface ServersToolsMcpConfig {
   onAuthorize: (serverId: string) => void;
   onDisconnect: (serverId: string) => void;
+  selectedServerId?: string;
+  /** Also honor pending state supplied by an existing component-kit host. */
   authorizingServerId?: string | null;
   disconnectingServerId?: string | null;
   /**
@@ -40,7 +48,9 @@ function McpServerEntityRow({
 }) {
   const status = mcpServerStatus(server);
   const description = mcpServerDescription(server);
-  const isAuthorizing = mcp.authorizingServerId === server.id;
+  const phase = useMcpAuthorizationStore((state) => state.phases[server.id]);
+  const isAuthorizing =
+    isMcpAuthorizationPending(phase) || mcp.authorizingServerId === server.id;
   const isDisconnecting = mcp.disconnectingServerId === server.id;
 
   return (
@@ -52,10 +62,19 @@ function McpServerEntityRow({
         />
       }
       name={server.id}
-      status={status}
+      status={isAuthorizing ? undefined : status}
+      defaultExpanded={mcp.selectedServerId === server.id}
+      caption={
+        isAuthorizing
+          ? t({
+              id: "mcp.authorization.rowPending",
+              message: "Connection in progress…",
+            })
+          : undefined
+      }
       data-testid="servers-tools-mcp-row"
       action={
-        server.connection_status === "NEEDS_AUTHENTICATION" ? (
+        server.connection_status === "NEEDS_AUTHENTICATION" || isAuthorizing ? (
           <Button
             variant="primary"
             size="sm"
@@ -77,7 +96,7 @@ function McpServerEntityRow({
         ) : undefined
       }
     >
-      {description !== null ? (
+      {description !== null && !isAuthorizing ? (
         <p className="text-sm text-theme-fg-secondary">{description}</p>
       ) : null}
       {(mcp.showDisconnect ?? true) &&
@@ -87,7 +106,7 @@ function McpServerEntityRow({
           variant="secondary"
           size="sm"
           icon={<LinkSlashIcon className="size-4" />}
-          disabled={isDisconnecting}
+          disabled={isDisconnecting || isAuthorizing}
           onClick={() => mcp.onDisconnect(server.id)}
         >
           {isDisconnecting
@@ -102,7 +121,9 @@ function McpServerEntityRow({
         </Button>
       ) : null}
       {/* Details unmount on collapse, so this list fetches on expand only. */}
-      <McpToolApprovalSettings serverId={server.id} isActive={isActive} />
+      {!isAuthorizing ? (
+        <McpToolApprovalSettings serverId={server.id} isActive={isActive} />
+      ) : null}
     </EntityRow>
   );
 }
@@ -129,6 +150,8 @@ export function ServersToolsPane({
   showDesktopSidecar = false,
   children,
 }: ServersToolsPaneProps) {
+  const queryClient = useQueryClient();
+  const phases = useMcpAuthorizationStore((state) => state.phases);
   const {
     data: mcpServersResponse,
     error: mcpServersError,
@@ -144,6 +167,17 @@ export function ServersToolsPane({
 
   return (
     <div className="space-y-4" data-testid="servers-tools-pane">
+      {mcp
+        ? Object.keys(phases)
+            .filter((serverId) => phases[serverId])
+            .map((serverId) => (
+              <McpAuthorizationNotice
+                key={serverId}
+                serverId={serverId}
+                onCheck={() => void checkMcpConnection(queryClient, serverId)}
+              />
+            ))
+        : null}
       {mcp && mcpServersError ? (
         <Alert type="error">
           {t({

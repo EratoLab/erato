@@ -1,11 +1,10 @@
 import { t } from "@lingui/core/macro";
 import { skipToken, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
   chatDetailQuery,
-  fetchCompleteMcpServerOauth,
   fetchUpdateProfilePreferences,
   listMcpServerToolsQuery,
   profileQuery,
@@ -17,10 +16,12 @@ import {
   useListAssistantHubAssistants,
   useListAssistants,
   useListMcpServers,
-  useStartMcpServerOauth,
   useAvailableModels,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
-import { storeMcpOauthCallback } from "@/lib/mcpOauthCallback";
+import {
+  clearMcpAuthorization,
+  startMcpAuthorization,
+} from "@/lib/mcpAuthorization";
 import {
   useAssistantsFeature,
   useAudioDictationFeature,
@@ -69,23 +70,16 @@ type PreferencesTab =
 interface UserPreferencesDialogProps {
   isOpen: boolean;
   initialTab?: PreferencesTab;
-  onMcpOauthCallbackHandled?: () => void;
   onClose: () => void;
-  pendingMcpOauthCallback?: {
-    code: string;
-    iss?: string;
-    serverId: string;
-    state: string;
-  } | null;
+  selectedMcpServerId?: string;
   userProfile?: UserProfile;
 }
 
 export function UserPreferencesDialog({
   isOpen,
   initialTab,
-  onMcpOauthCallbackHandled,
   onClose,
-  pendingMcpOauthCallback,
+  selectedMcpServerId,
   userProfile,
 }: UserPreferencesDialogProps) {
   const navigate = useNavigate();
@@ -120,9 +114,6 @@ export function UserPreferencesDialog({
   const [isSaving, setIsSaving] = useState(false);
   const [mcpError, setMcpError] = useState<string | null>(null);
   const [mcpSuccess, setMcpSuccess] = useState<string | null>(null);
-  const [authorizingServerId, setAuthorizingServerId] = useState<string | null>(
-    null,
-  );
   const [disconnectingServerId, setDisconnectingServerId] = useState<
     string | null
   >(null);
@@ -132,7 +123,6 @@ export function UserPreferencesDialog({
   const { mutateAsync: archiveAllChatsMutation } = useArchiveAllChatsEndpoint();
   const { mutateAsync: disconnectMcpServerOauthMutation } =
     useDisconnectMcpServerOauth();
-  const { mutateAsync: startMcpServerOauthMutation } = useStartMcpServerOauth();
   const { data: availableModelsResponse } = useAvailableModels(
     isOpen ? {} : skipToken,
   );
@@ -233,7 +223,6 @@ export function UserPreferencesDialog({
       personalizationEnabled,
     ],
   );
-  const handledOauthCallbackKeyRef = useRef<string | null>(null);
   const requestedDefaultTab =
     initialTab && visibleTabs.includes(initialTab) ? initialTab : defaultTab;
 
@@ -297,85 +286,6 @@ export function UserPreferencesDialog({
       setActiveTab(visibleTabs[0]);
     }
   }, [activeTab, visibleTabs]);
-
-  useEffect(() => {
-    if (!isOpen || activeTab !== "serversTools" || !pendingMcpOauthCallback) {
-      return;
-    }
-
-    const callbackKey = [
-      pendingMcpOauthCallback.serverId,
-      pendingMcpOauthCallback.code,
-      pendingMcpOauthCallback.state,
-      pendingMcpOauthCallback.iss ?? "",
-    ].join(":");
-    if (handledOauthCallbackKeyRef.current === callbackKey) {
-      return;
-    }
-    handledOauthCallbackKeyRef.current = callbackKey;
-
-    const completeOauthCallback = async () => {
-      setMcpError(null);
-      setMcpSuccess(null);
-
-      try {
-        const response = await fetchCompleteMcpServerOauth({
-          pathParams: { serverId: pendingMcpOauthCallback.serverId },
-          queryParams: {
-            code: pendingMcpOauthCallback.code,
-            state: pendingMcpOauthCallback.state,
-            ...(pendingMcpOauthCallback.iss !== undefined
-              ? { iss: pendingMcpOauthCallback.iss }
-              : {}),
-          },
-        });
-        await refetchMcpServers();
-
-        if (response.connection_status === "SUCCESS") {
-          setMcpSuccess(
-            t({
-              id: "preferences.dialog.mcpServers.oauth.success",
-              message: "Authorization complete. The server is ready to use.",
-            }),
-          );
-        } else if (response.connection_status === "NEEDS_AUTHENTICATION") {
-          setMcpError(
-            t({
-              id: "preferences.dialog.mcpServers.oauth.incompleteAfterCallback",
-              message:
-                "Authorization did not complete successfully. Please try again.",
-            }),
-          );
-        } else {
-          setMcpError(
-            t({
-              id: "preferences.dialog.mcpServers.oauth.failureAfterCallback",
-              message:
-                "Authorization finished, but the server is still unavailable. Reopen this tab to check again.",
-            }),
-          );
-        }
-      } catch {
-        setMcpError(
-          t({
-            id: "preferences.dialog.mcpServers.oauth.incompleteAfterCallback",
-            message:
-              "Authorization did not complete successfully. Please try again.",
-          }),
-        );
-      } finally {
-        onMcpOauthCallbackHandled?.();
-      }
-    };
-
-    void completeOauthCallback();
-  }, [
-    activeTab,
-    isOpen,
-    onMcpOauthCallbackHandled,
-    pendingMcpOauthCallback,
-    refetchMcpServers,
-  ]);
 
   // What the UI resolves to on save. The two id fields are alternatives, and
   // both go on the wire so the save states which kind was chosen.
@@ -553,32 +463,11 @@ export function UserPreferencesDialog({
     }
   };
 
-  const handleStartMcpOauth = async (serverId: string) => {
-    setMcpError(null);
-    setMcpSuccess(null);
-    setAuthorizingServerId(serverId);
-
-    try {
-      const response = await startMcpServerOauthMutation({
-        pathParams: { serverId },
-      });
-      storeMcpOauthCallback(response.authorization_url, serverId);
-      window.location.href = response.authorization_url;
-    } catch {
-      setAuthorizingServerId(null);
-      setMcpError(
-        t({
-          id: "preferences.dialog.mcpServers.oauth.startError",
-          message: "Could not start authorization. Please try again.",
-        }),
-      );
-    }
-  };
-
   const handleDisconnectMcpOauth = async (serverId: string) => {
     setMcpError(null);
     setMcpSuccess(null);
     setDisconnectingServerId(serverId);
+    clearMcpAuthorization(serverId);
 
     try {
       await disconnectMcpServerOauthMutation({
@@ -864,12 +753,12 @@ export function UserPreferencesDialog({
                     mcpServersTabEnabled
                       ? {
                           onAuthorize: (serverId) => {
-                            void handleStartMcpOauth(serverId);
+                            void startMcpAuthorization(serverId);
                           },
                           onDisconnect: (serverId) => {
                             void handleDisconnectMcpOauth(serverId);
                           },
-                          authorizingServerId,
+                          selectedServerId: selectedMcpServerId,
                           disconnectingServerId,
                         }
                       : null

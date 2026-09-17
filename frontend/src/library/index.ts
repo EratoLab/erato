@@ -614,3 +614,5 @@ export type {
   GroupedFileAttachmentsPreviewProps,
   ThreadMessageAttachmentItem,
 } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
+
+export { useMcpBrowserAuthorization } from "@/hooks/ui/useMcpBrowserAuthorization";

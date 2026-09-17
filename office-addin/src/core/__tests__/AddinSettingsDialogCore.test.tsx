@@ -7,6 +7,7 @@ import { AddinSettingsDialogCore } from "../AddinSettingsDialogCore";
 import type { TabRailProps } from "@erato/frontend/library";
 
 const featureFlags = vi.hoisted(() => ({ audio: false, mcpServers: false }));
+const authorizeInBrowser = vi.hoisted(() => vi.fn());
 
 vi.mock("@erato/frontend/library", async () => {
   // The core zone rule reads any `src/` import as host behavior reaching a
@@ -18,7 +19,17 @@ vi.mock("@erato/frontend/library", async () => {
     AppearanceTabContent: () => <div data-testid="appearance-settings" />,
     TextSizeSetting: () => <div data-testid="text-size-settings" />,
     AudioInputTabContent: () => null,
-    ServersToolsPane: () => null,
+    useMcpBrowserAuthorization: () => authorizeInBrowser,
+    ServersToolsPane: ({
+      mcp,
+    }: {
+      mcp?: { onAuthorize: (serverId: string) => void };
+    }) =>
+      mcp ? (
+        <button onClick={() => mcp.onAuthorize("sales")}>
+          Authorize in browser
+        </button>
+      ) : null,
     // Renders real tabs from the options: the assertions below resolve tabs
     // by role and name and panels through the tab ids, so a null stub would
     // turn them into false failures and a permissive one into false passes.
@@ -63,11 +74,22 @@ const tabNames = () => screen.getAllByRole("tab").map((tab) => tab.textContent);
 
 describe("AddinSettingsDialogCore", () => {
   beforeEach(() => {
+    authorizeInBrowser.mockClear();
     i18n.activate("en");
     featureFlags.audio = false;
     featureFlags.mcpServers = false;
   });
   afterEach(cleanup);
+
+  it("hands the selected server to the shared browser authorization controller", () => {
+    featureFlags.mcpServers = true;
+    render(<AddinSettingsDialogCore isOpen={true} onClose={() => {}} />);
+    fireEvent.click(screen.getByRole("tab", { name: "MCP & Apps" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Authorize in browser" }),
+    );
+    expect(authorizeInBrowser).toHaveBeenCalledWith("sales");
+  });
 
   it("shows generic settings without an empty Outlook behavior tab", () => {
     render(<AddinSettingsDialogCore isOpen={true} onClose={() => {}} />);

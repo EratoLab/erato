@@ -15,6 +15,10 @@ import {
   type ThemeMode,
 } from "@/components/providers/ThemeProvider";
 import { profileQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import {
+  clearMcpAuthorization,
+  useMcpAuthorizationStore,
+} from "@/lib/mcpAuthorization";
 import { getMcpOauthServerId } from "@/lib/mcpOauthCallback";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 import { useAudioInputDeviceStore } from "@/state/audioInputDeviceStore";
@@ -101,8 +105,6 @@ function renderDialog({
   dataTabEnabled = true,
   audioTranscriptionEnabled = false,
   assistantsEnabled = false,
-  onMcpOauthCallbackHandled,
-  pendingMcpOauthCallback = null,
   queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false, refetchOnWindowFocus: false },
@@ -125,13 +127,6 @@ function renderDialog({
   dataTabEnabled?: boolean;
   audioTranscriptionEnabled?: boolean;
   assistantsEnabled?: boolean;
-  onMcpOauthCallbackHandled?: () => void;
-  pendingMcpOauthCallback?: {
-    code: string;
-    iss?: string;
-    serverId: string;
-    state: string;
-  } | null;
   queryClient?: QueryClient;
   onClose?: () => void;
   profile?: UserProfile;
@@ -164,9 +159,7 @@ function renderDialog({
             <UserPreferencesDialog
               isOpen={true}
               initialTab={initialTab}
-              onMcpOauthCallbackHandled={onMcpOauthCallbackHandled}
               onClose={onClose}
-              pendingMcpOauthCallback={pendingMcpOauthCallback}
               userProfile={profile}
             />
           </QueryClientProvider>
@@ -198,6 +191,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  for (const serverId of Object.keys(
+    useMcpAuthorizationStore.getState().phases,
+  ))
+    clearMcpAuthorization(serverId);
   cleanup();
   vi.restoreAllMocks();
   vi.clearAllMocks();
@@ -756,67 +753,6 @@ describe("UserPreferencesDialog", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Search pages")).not.toBeInTheDocument();
   });
-
-  it.each([undefined, "https://issuer.example.com"])(
-    "completes an OAuth callback with issuer %s",
-    async (iss) => {
-      const callbackUrl = `/api/v1beta/me/mcp_servers/notion/oauth/callback?code=oauth-code&state=oauth-state${iss ? `&iss=${encodeURIComponent(iss)}` : ""}`;
-      const onMcpOauthCallbackHandled = vi.fn();
-      const fetchMock = vi
-        .spyOn(globalThis, "fetch")
-        .mockImplementation(async (input, init) => {
-          const url = String(input);
-          const method = init?.method ?? "GET";
-
-          if (url === "/api/v1beta/me/mcp_servers" && method === "GET") {
-            return createJsonResponse({
-              servers: [
-                {
-                  id: "notion",
-                  authentication_mode: "oauth2",
-                  connection_status: "SUCCESS",
-                },
-              ],
-            });
-          }
-
-          if (url === callbackUrl && method === "GET") {
-            return createJsonResponse({
-              connection_status: "SUCCESS",
-            });
-          }
-
-          throw new Error(`Unexpected request: ${method} ${url}`);
-        });
-
-      renderDialog({
-        initialTab: "serversTools",
-        onMcpOauthCallbackHandled,
-        pendingMcpOauthCallback: {
-          code: "oauth-code",
-          iss,
-          serverId: "notion",
-          state: "oauth-state",
-        },
-      });
-
-      await waitFor(() => {
-        expect(fetchMock).toHaveBeenCalledWith(
-          callbackUrl,
-          expect.objectContaining({
-            method: "GET",
-          }),
-        );
-      });
-
-      expect(
-        await screen.findByText(
-          "Authorization complete. The server is ready to use.",
-        ),
-      ).toBeInTheDocument();
-      expect(onMcpOauthCallbackHandled).toHaveBeenCalled();
-    },
-  );
 
   it("archives chats, refreshes recent chats, and redirects to a new chat", async () => {
     const queryClient = new QueryClient({
