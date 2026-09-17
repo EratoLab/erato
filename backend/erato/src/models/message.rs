@@ -34,6 +34,9 @@ pub struct GenerationParameters {
     /// The arguments of the action facet used for this generation, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub action_facet_args: Option<HashMap<String, String>>,
+    /// Who started this generation. Absent means a user did.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub initiator: Option<GenerationInitiator>,
 }
 
 // Homed here rather than in `services::delegation` because it is a
@@ -76,6 +79,48 @@ pub struct InputParameters {
     /// honours the user's original choice.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub delegation_run_mode: Option<DelegationRunMode>,
+    /// Present on a user row the server appended to deliver a finished
+    /// `async` task's result. Absent on everything a person wrote.
+    ///
+    /// This is what the composition walk keys on to fold a delivered result
+    /// into later turns, and what the client keys on to decide whether the
+    /// result still needs reacting to.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task_result: Option<TaskResultInput>,
+}
+
+/// The marker on a delivered task result's user row.
+///
+/// Deliberately not the same shape as `ContentPartTaskResult`: that one is the
+/// rendered artifact the UI shows, this one is the bookkeeping that ties the
+/// row back to the delivery record on the child chat.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
+pub struct TaskResultInput {
+    /// Matches `ResultDelivery::delivery_id`; the idempotency key that makes
+    /// "has this already been delivered?" answerable with a query.
+    pub delivery_id: Uuid,
+    pub child_chat_id: Uuid,
+    /// The child's assistant row this result came from.
+    pub result_message_id: Uuid,
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    /// Whether the delivery was meant to provoke a reaction turn. A `silent`
+    /// result is folded into the user's next message instead.
+    pub scheduling: String,
+    pub sequence: u32,
+}
+
+/// Who started a generation.
+///
+/// Absent means a person did, so rows written before this existed keep their
+/// meaning without a migration.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum GenerationInitiator {
+    User,
+    /// The turn reacting to a delivered task result.
+    TaskResult,
 }
 
 /// Request-scoped context captured for a generation request.
@@ -316,6 +361,41 @@ pub enum ContentPart {
     /// only in the request about to be sent, dropped when the snapshot is
     /// replayed as prior-turn history.
     DelegationPreambleMarker(ContentPartDelegationPreambleMarker),
+    /// The result of an `async` delegated task, delivered back into the chat
+    /// the task was started from as a user-role row.
+    ///
+    /// A user row rather than an assistant one because the model has to react
+    /// to it: it is material that arrived, not something the assistant said.
+    /// The history walk keeps it (unlike the directive markers above, which
+    /// are request-scoped) so later turns can still see what came back.
+    TaskResult(ContentPartTaskResult),
+}
+
+/// A delivered task result, as it sits in the conversation.
+///
+/// `summary` is the child's own answer, already bounded to
+/// `delegation.result_max_chars`, and is the only untrusted field here: the
+/// rest is written by the server. It is stored RAW — the untrusted-data frame
+/// and the safety guidance are applied when the conversation is composed for
+/// the model, so the UI can render the answer plainly.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct ContentPartTaskResult {
+    /// The child chat that produced this result; the link the UI offers.
+    pub child_chat_id: Uuid,
+    /// The `delegate_task` call in the origin turn that started it.
+    pub parent_tool_call_id: String,
+    /// Terminal status of the run, from the D-K vocabulary.
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    /// The child's answer, bounded. Untrusted.
+    pub summary: String,
+    /// Whether `summary` was shortened to fit.
+    pub truncated: bool,
+    /// Which delivery for this task this is. `0` is the first; a later value
+    /// means the result was delivered again after the origin branched away
+    /// from the first one.
+    pub sequence: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -521,9 +601,12 @@ impl MessageSchema {
                 ContentPart::Image(_) => None,
                 // Markers are placeholders for the directive resolver and do
                 // not contribute to a message's full text representation.
-                ContentPart::ActionFacetMarker(_) | ContentPart::DelegationPreambleMarker(_) => {
-                    None
-                }
+                // A task result is likewise not the user's own words: it is a
+                // child's answer that arrived, and letting it through here
+                // would let a delegated run write the chat's title.
+                ContentPart::ActionFacetMarker(_)
+                | ContentPart::DelegationPreambleMarker(_)
+                | ContentPart::TaskResult(_) => None,
             })
             .collect::<Vec<&str>>()
             .join(" ")
@@ -1097,9 +1180,11 @@ impl InputMessage {
             ContentPart::ImageFilePointer(_) => String::new(),
             ContentPart::Image(_) => String::new(),
             // Markers are metadata-only; rendering happens in the resolver.
-            ContentPart::ActionFacetMarker(_) | ContentPart::DelegationPreambleMarker(_) => {
-                String::new()
-            }
+            // A task result renders there too, through the configured result
+            // template and inside the untrusted-data frame.
+            ContentPart::ActionFacetMarker(_)
+            | ContentPart::DelegationPreambleMarker(_)
+            | ContentPart::TaskResult(_) => String::new(),
         }
     }
 }

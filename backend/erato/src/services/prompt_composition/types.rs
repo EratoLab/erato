@@ -103,6 +103,18 @@ pub enum AbstractChatSequencePart {
         run_mode: Option<crate::models::message::DelegationRunMode>,
     },
 
+    /// The result of a finished `async` delegated task, delivered into this
+    /// chat as a user row.
+    ///
+    /// Unlike the two directive markers above, this is history: it stays in
+    /// every later turn's context, because the conversation genuinely contains
+    /// it. Rendered in the resolver step so the configured result template and
+    /// the untrusted-data frame are applied at request-build time rather than
+    /// baked into what was stored.
+    TaskResult {
+        part: crate::models::message::ContentPartTaskResult,
+    },
+
     /// File attached to the current user input
     UserFile { file_id: Uuid },
 

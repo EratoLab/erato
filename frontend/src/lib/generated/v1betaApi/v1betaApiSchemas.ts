@@ -747,6 +747,7 @@ export type ChatMessage = {
    * The unique ID of the message
    */
   id: string;
+  initiator?: GenerationInitiator;
   /**
    * The IDs of the files that were used to generate this message
    */
@@ -792,6 +793,7 @@ export type ChatMessage = {
    * The unique ID of the sibling message, if any
    */
   sibling_message_id?: string;
+  task_result?: TaskResultInput;
   /**
    * When the message was last updated
    *
@@ -937,6 +939,9 @@ export type ContentPart =
     })
   | (ContentPartDelegationPreambleMarker & {
       content_type: "delegation_preamble_marker";
+    })
+  | (ContentPartTaskResult & {
+      content_type: "task_result";
     });
 
 export type ContentPartActionFacetMarker = {
@@ -992,6 +997,50 @@ export type ContentPartReasoning = {
    * @default
    */
   text?: string;
+};
+
+/**
+ * A delivered task result, as it sits in the conversation.
+ *
+ * `summary` is the child's own answer, already bounded to
+ * `delegation.result_max_chars`, and is the only untrusted field here: the
+ * rest is written by the server. It is stored RAW — the untrusted-data frame
+ * and the safety guidance are applied when the conversation is composed for
+ * the model, so the UI can render the answer plainly.
+ */
+export type ContentPartTaskResult = {
+  /**
+   * The child chat that produced this result; the link the UI offers.
+   *
+   * @format uuid
+   */
+  child_chat_id: string;
+  /**
+   * The `delegate_task` call in the origin turn that started it.
+   */
+  parent_tool_call_id: string;
+  reason?: null | undefined;
+  /**
+   * Which delivery for this task this is. `0` is the first; a later value
+   * means the result was delivered again after the origin branched away
+   * from the first one.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  sequence: number;
+  /**
+   * Terminal status of the run, from the D-K vocabulary.
+   */
+  status: string;
+  /**
+   * The child's answer, bounded. Untrusted.
+   */
+  summary: string;
+  /**
+   * Whether `summary` was shortened to fit.
+   */
+  truncated: boolean;
 };
 
 export type ContentPartText = {
@@ -1621,6 +1670,43 @@ export type GenerationErrorType =
       error_description: string;
       error_type: "internal_error";
     };
+
+/**
+ * Who started a generation.
+ *
+ * Absent means a person did, so rows written before this existed keep their
+ * meaning without a migration.
+ */
+export type GenerationInitiator = "user" | "task_result";
+
+/**
+ * Body of the `409` a streaming route answers when the chat's generation
+ * lease is already held.
+ *
+ * `code` is what the client discriminates on: the same status is also used
+ * for archived chats and for live delegated runs, which stay plain text.
+ */
+export type GenerationRunningError = {
+  /**
+   * The chat whose lease is held.
+   *
+   * @format uuid
+   */
+  chat_id: string;
+  /**
+   * Always `generation_running`.
+   */
+  code: string;
+  /**
+   * Who started the generation holding the lease. Always `user` until
+   * system-initiated deliveries persist their own marker.
+   */
+  initiator: string;
+  /**
+   * When the holding generation started, RFC 3339, when the row records it.
+   */
+  started_at?: null | undefined;
+};
 
 export type GlobalFacetSettings = {
   /**
@@ -2561,6 +2647,45 @@ export type StartingAssistantResponse = {
  * Where a resolved starting assistant came from.
  */
 export type StartingAssistantSource = "user_pick" | "audience_pin";
+
+/**
+ * The marker on a delivered task result's user row.
+ *
+ * Deliberately not the same shape as `ContentPartTaskResult`: that one is the
+ * rendered artifact the UI shows, this one is the bookkeeping that ties the
+ * row back to the delivery record on the child chat.
+ */
+export type TaskResultInput = {
+  /**
+   * @format uuid
+   */
+  child_chat_id: string;
+  /**
+   * Matches `ResultDelivery::delivery_id`; the idempotency key that makes
+   * "has this already been delivered?" answerable with a query.
+   *
+   * @format uuid
+   */
+  delivery_id: string;
+  reason?: null | undefined;
+  /**
+   * The child's assistant row this result came from.
+   *
+   * @format uuid
+   */
+  result_message_id: string;
+  /**
+   * Whether the delivery was meant to provoke a reaction turn. A `silent`
+   * result is folded into the user's next message instead.
+   */
+  scheduling: string;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  sequence: number;
+  status: string;
+};
 
 export type TokenUsageFileInput = {
   /**
