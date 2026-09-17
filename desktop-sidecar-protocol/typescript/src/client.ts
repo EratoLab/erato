@@ -13,6 +13,8 @@ import {
   validateIndexingStopV1Result,
   validateSearchQueryV1Params,
   validateSearchQueryV1Result,
+  validateSearchMetadataFieldsV1Params,
+  validateSearchMetadataFieldsV1Result,
   validateIndexingResetV1Result,
   validateIndexingResetV1Params,
   validateIndexingStatusV1Result,
@@ -52,6 +54,8 @@ import type {
   IndexingStopV1Result,
   SearchQueryV1Params,
   SearchQueryV1Result,
+  SearchMetadataFieldsV1Params,
+  SearchMetadataFieldsV1Result,
   IndexingResetV1Result,
   IndexingResetV1Params,
   IndexingStatusV1Result,
@@ -229,6 +233,10 @@ const builtInContracts: Readonly<Record<string, SidecarMethodContract>> = {
     validateParams: validateSearchQueryV1Params,
     validateResult: validateSearchQueryV1Result,
   },
+  "search.metadata_fields.v1": {
+    validateParams: validateSearchMetadataFieldsV1Params,
+    validateResult: validateSearchMetadataFieldsV1Result,
+  },
   "indexing.reset.v1": {
     validateParams: validateIndexingResetV1Params,
     validateResult: validateIndexingResetV1Result,
@@ -370,6 +378,11 @@ export class DesktopSidecarClient {
     params: SearchQueryV1Params,
     options?: InvokeOptions,
   ): Promise<SearchQueryV1Result>;
+  async invoke(
+    method: "search.metadata_fields.v1",
+    params: SearchMetadataFieldsV1Params,
+    options?: InvokeOptions,
+  ): Promise<SearchMetadataFieldsV1Result>;
   async invoke(
     method: "indexing.reset.v1",
     params: IndexingResetV1Params,

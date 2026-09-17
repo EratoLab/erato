@@ -3,6 +3,7 @@
 export interface SearchQueryV1Params {
   text?: string;
   limit?: number;
+  metadata_filters?: SearchMetadataFilter[];
   filters?: {
     sender?: string;
     sourceId?: string;
@@ -12,4 +13,9 @@ export interface SearchQueryV1Params {
     fileType?: string;
     kind?: "email" | "file";
   };
+}
+export interface SearchMetadataFilter {
+  field: string;
+  operator: string;
+  value: unknown;
 }

@@ -24,6 +24,8 @@ export const validateIndexingStopV1Params: Validator;
 export const validateIndexingStopV1Result: Validator;
 export const validateSearchQueryV1Params: Validator;
 export const validateSearchQueryV1Result: Validator;
+export const validateSearchMetadataFieldsV1Params: Validator;
+export const validateSearchMetadataFieldsV1Result: Validator;
 export const validateIndexingResetV1Result: Validator;
 export const validateIndexingResetV1Params: Validator;
 export const validateIndexingStatusV1Result: Validator;

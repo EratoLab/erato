@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/search-metadata-fields-v1-result.schema.json",
+  "title": "SearchMetadataFieldsV1Result",
+  "type": "object",
+  "properties": {
+    "fields": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "field": { "type": "string", "minLength": 1 },
+          "operators": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "minItems": 1
+          },
+          "type": { "type": "string", "minLength": 1 },
+          "description": { "type": "string" },
+          "applicable_kinds": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "minItems": 1
+          }
+        },
+        "required": [
+          "field",
+          "operators",
+          "type",
+          "description",
+          "applicable_kinds"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["fields"],
+  "additionalProperties": false
+}

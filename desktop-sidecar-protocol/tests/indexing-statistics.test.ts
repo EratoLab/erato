@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   validateIndexingStartV1Params,
   validateSearchQueryV1Params,
+  validateSearchMetadataFieldsV1Params,
+  validateSearchMetadataFieldsV1Result,
   validateIndexingStartV1Result,
   validateIndexingStopV1Result,
   validateIndexingStatusV1Result,
@@ -217,4 +219,30 @@ it("validates rebuild bounds, search limits, and shared lifecycle statistics", (
   expect(validateSearchQueryV1Params({ filters: { kind: "thread" } })).toBe(
     false,
   );
+  expect(
+    validateSearchQueryV1Params({
+      metadata_filters: [
+        { field: "has_attachments", operator: "eq", value: true },
+        {
+          field: "source_kind",
+          operator: "in",
+          value: ["outlook", "teams"],
+        },
+      ],
+    }),
+  ).toBe(true);
+  expect(validateSearchMetadataFieldsV1Params({})).toBe(true);
+  expect(
+    validateSearchMetadataFieldsV1Result({
+      fields: [
+        {
+          field: "has_attachments",
+          operators: ["eq", "ne"],
+          type: "boolean",
+          description: "Whether the document has attachments.",
+          applicable_kinds: ["email"],
+        },
+      ],
+    }),
+  ).toBe(true);
 });
