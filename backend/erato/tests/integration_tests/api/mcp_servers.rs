@@ -1,6 +1,6 @@
 //! MCP server enumeration API tests.
 
-use axum::http;
+use axum::{Json, Router, http, routing::post};
 use erato::config::{
     McpServerAuthenticationConfig, McpServerConfig, McpServerOauth2AuthenticationConfig,
     McpServerPermissionRule, McpToolApprovalConfig, McpToolApprovalPreset,
@@ -8,12 +8,16 @@ use erato::config::{
 use erato::models::user::get_or_create_user;
 use erato::models::user_tool_approval_setting::{UserToolDecision, upsert_active};
 use erato::services::mcp_manager::McpRequestAuthContext;
-use mocktail::server::{MockServer, MockServerConfig};
 use serde_json::{Value, json};
 use sqlx::Pool;
 use sqlx::postgres::Postgres;
 use std::env;
-use std::net::{IpAddr, Ipv4Addr};
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
+use std::time::Duration;
+use tokio::sync::Semaphore;
 
 use crate::test_app_state;
 use crate::test_utils::{
@@ -199,36 +203,24 @@ async fn test_list_mcp_server_tools_is_gated_by_policy(pool: Pool<Postgres>) {
 async fn test_list_mcp_server_tools_reports_unconnected_oauth_server(pool: Pool<Postgres>) {
     let (mut app_config, _llm_server) = setup_mock_llm_server(None).await;
 
-    // The OAuth mock only serves authorization-server metadata: token
-    // resolution finds it and fails with AuthorizationRequired because no
-    // credentials are stored for the user, before any MCP request is made.
-    let mockserver_config = MockServerConfig {
-        listen_addr: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-        ..Default::default()
-    };
-    let oauth_server = MockServer::new_http("mcp-oauth-tools-mock").with_config(mockserver_config);
-    oauth_server
-        .start()
-        .await
-        .expect("Failed to start OAuth metadata mock server");
-    let oauth_server_base_url = oauth_server.url("").to_string();
-    let oauth_server_base_url = oauth_server_base_url.trim_end_matches('/');
-    oauth_server.mocks().mock(|when, then| {
-        when.get()
-            .path("/.well-known/oauth-authorization-server/oauth");
-        then.status(http::StatusCode::OK)
-            .headers([("Content-Type", "application/json")])
-            .json(json!({
-                "issuer": format!("{oauth_server_base_url}/oauth"),
-                "authorization_endpoint": "http://127.0.0.1:1/authorize",
-                "token_endpoint": "http://127.0.0.1:1/token",
-            }));
+    // An unavailable OAuth server must receive no discovery or MCP requests
+    // when the user has not granted access.
+    let requests = Arc::new(AtomicUsize::new(0));
+    let app = Router::new().fallback({
+        let requests = requests.clone();
+        move || {
+            requests.fetch_add(1, Ordering::SeqCst);
+            async { http::StatusCode::SERVICE_UNAVAILABLE }
+        }
     });
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let oauth_server_base_url = format!("http://{}", listener.local_addr().unwrap());
+    let oauth_server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
 
     app_config.mcp_servers.insert(
         "oauth-pending".to_string(),
         mcp_server_config(
-            oauth_server_base_url,
+            &oauth_server_base_url,
             "/oauth",
             McpServerAuthenticationConfig::Oauth2 {
                 oauth2: McpServerOauth2AuthenticationConfig {
@@ -259,6 +251,130 @@ async fn test_list_mcp_server_tools_reports_unconnected_oauth_server(pool: Pool<
     assert_eq!(body["allow_always"], false);
     assert_eq!(body["ask_available"], false);
     assert_eq!(body["tools"], json!([]));
+
+    let response = server
+        .get("/api/v1beta/me/mcp_servers")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status_ok();
+    let body: Value = response.json();
+    assert_eq!(
+        body["servers"][0]["connection_status"],
+        "NEEDS_AUTHENTICATION"
+    );
+    assert_eq!(requests.load(Ordering::SeqCst), 0);
+    oauth_server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_list_mcp_servers_bounds_parallel_probes_and_preserves_order(pool: Pool<Postgres>) {
+    let (mut config, _llm_server) = setup_mock_llm_server(None).await;
+    let entered = Arc::new(Semaphore::new(0));
+    let release = Arc::new(Semaphore::new(0));
+    let active = Arc::new(AtomicUsize::new(0));
+    let peak = Arc::new(AtomicUsize::new(0));
+    let app = Router::new()
+        .route(
+            "/mcp",
+            post({
+                let (entered, release, active, peak) = (
+                    entered.clone(),
+                    release.clone(),
+                    active.clone(),
+                    peak.clone(),
+                );
+                move |Json(request): Json<Value>| {
+                    let (entered, release, active, peak) = (
+                        entered.clone(),
+                        release.clone(),
+                        active.clone(),
+                        peak.clone(),
+                    );
+                    async move {
+                        let result = match request["method"].as_str() {
+                            Some("initialize") => json!({
+                                "protocolVersion": request["params"]["protocolVersion"],
+                                "capabilities": {"tools": {}},
+                                "serverInfo": {"name": "probe-test", "version": "1"},
+                            }),
+                            Some("tools/list") => {
+                                peak.fetch_max(
+                                    active.fetch_add(1, Ordering::SeqCst) + 1,
+                                    Ordering::SeqCst,
+                                );
+                                entered.add_permits(1);
+                                release.acquire().await.unwrap().forget();
+                                active.fetch_sub(1, Ordering::SeqCst);
+                                json!({"tools": []})
+                            }
+                            _ => return (http::StatusCode::ACCEPTED, Json(Value::Null)),
+                        };
+                        (
+                            http::StatusCode::OK,
+                            Json(json!({"jsonrpc": "2.0", "id": request["id"], "result": result})),
+                        )
+                    }
+                }
+            }),
+        )
+        .route(
+            "/failed",
+            post(|| async { http::StatusCode::SERVICE_UNAVAILABLE }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base_url = format!("http://{}", listener.local_addr().unwrap());
+    let mock = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    for id in ["f", "e", "d", "c", "b", "a"] {
+        config.mcp_servers.insert(
+            id.into(),
+            mcp_server_config(&base_url, "/mcp", McpServerAuthenticationConfig::None),
+        );
+    }
+    config.mcp_servers.insert(
+        "failed".into(),
+        mcp_server_config(&base_url, "/failed", McpServerAuthenticationConfig::None),
+    );
+    let app_state = test_app_state(config, pool).await;
+    let mcp = app_state.mcp_state().await;
+    let server = create_test_server(app_state);
+    let listing = async {
+        server
+            .get("/api/v1beta/me/mcp_servers")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .await
+    };
+    tokio::pin!(listing);
+    tokio::select! {
+        _ = &mut listing => panic!("listing must wait for the held probes"),
+        entered = tokio::time::timeout(Duration::from_secs(5), entered.acquire_many(4)) => {
+            entered.expect("four probes must start without waiting for another to finish")
+                .unwrap().forget();
+        }
+    }
+    release.add_permits(6);
+    let response = tokio::time::timeout(Duration::from_secs(5), listing)
+        .await
+        .unwrap();
+    response.assert_status_ok();
+    let body: Value = response.json();
+    let rows = body["servers"].as_array().unwrap();
+    assert_eq!(
+        rows.iter()
+            .map(|row| row["id"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["a", "b", "c", "d", "e", "f", "failed"]
+    );
+    assert!(
+        rows[..6]
+            .iter()
+            .all(|row| row["connection_status"] == "SUCCESS")
+    );
+    assert_eq!(rows[6]["connection_status"], "FAILURE");
+    assert_eq!(peak.load(Ordering::SeqCst), 4);
+    for id in ["a", "b", "c", "d", "e", "f", "failed"] {
+        assert_eq!(mcp.servers.active_session_count(id).await, 0);
+    }
+    mock.abort();
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
@@ -291,8 +407,7 @@ async fn test_list_mcp_server_tools_reuses_the_enumeration_session(pool: Pool<Po
     first.assert_status_ok();
     assert_eq!(mcp.servers.active_session_count("files").await, 1);
 
-    // The list probe opens and tears down its own session under a different
-    // key; the enumeration session must survive it.
+    // The list probe owns an uncached connection; enumeration must survive it.
     mcp.servers
         .probe_connection("files", &McpRequestAuthContext::default())
         .await;
