@@ -40,6 +40,12 @@ pub struct PromptCompositionUserInput {
     /// tool offer's wording so the model briefs a background delegate whose
     /// answer never comes back accordingly.
     pub delegation_run_mode: crate::models::message::DelegationRunMode,
+
+    /// Withhold the `erato/delegate_task` offer from this turn even where it
+    /// would otherwise be made. Set for a task-result reaction turn: it runs in
+    /// the ORIGIN chat, so the delegated-run suppression does not reach it, and
+    /// a reaction that plans its own tasks is a loop nothing bounds.
+    pub suppress_task_offer: bool,
 }
 
 /// Action facet input for prompt composition.

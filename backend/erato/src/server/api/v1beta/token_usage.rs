@@ -587,6 +587,8 @@ pub async fn token_usage_estimate(
             }),
             delegation_targets: Vec::new(),
             delegation_run_mode: Default::default(),
+            // An estimate mirrors a user turn, which may plan tasks.
+            suppress_task_offer: false,
         };
         let me_profile_input = MeProfileChatRequestInput::from_me_profile(&me_user);
 

@@ -23,6 +23,14 @@ pub mod policy;
 pub mod profiling;
 pub mod query_metrics;
 pub mod server;
+/// The request principal, re-exported for the integration test crate.
+///
+/// `server::api` stays `pub(crate)`: only this one type needs to cross the
+/// crate boundary, because a test that drives server-initiated work — a task
+/// result delivering itself into a chat — has to supply the identity such work
+/// runs under, and there is no request to take it from.
+#[doc(hidden)]
+pub use crate::server::api::v1beta::me_profile_middleware::{MeProfile, UserProfile};
 pub mod services;
 pub use erato_config::startup_log;
 pub mod state;

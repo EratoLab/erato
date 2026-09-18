@@ -875,6 +875,41 @@ pub enum DelegationRunReason {
     ApprovalPending,
     /// Hit a gated call it could not ask about, so it could not continue.
     ApprovalUnavailable,
+    /// The run finished but its answer row is gone - deleted, or never written
+    /// because the process died mid-run. Distinct from `no_answer`, which means
+    /// the delegate genuinely said nothing: here there is no row to read, and
+    /// telling the origin model "it said nothing" would invite it to move on
+    /// from a task that in fact never reported.
+    ResultMissing,
+}
+
+impl DelegationRunStatus {
+    /// The wire spelling, for a SQL literal or a stored envelope that is built
+    /// field by field rather than serialized whole.
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            DelegationRunStatus::Working => "working",
+            DelegationRunStatus::InputRequired => "input_required",
+            DelegationRunStatus::Completed => "completed",
+            DelegationRunStatus::Failed => "failed",
+            DelegationRunStatus::Cancelled => "cancelled",
+        }
+    }
+}
+
+impl DelegationRunReason {
+    /// The wire spelling; see [`DelegationRunStatus::as_str`].
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            DelegationRunReason::Timeout => "timeout",
+            DelegationRunReason::NoAnswer => "no_answer",
+            DelegationRunReason::ParentAbort => "parent_abort",
+            DelegationRunReason::CapExceeded => "cap_exceeded",
+            DelegationRunReason::ApprovalPending => "approval_pending",
+            DelegationRunReason::ApprovalUnavailable => "approval_unavailable",
+            DelegationRunReason::ResultMissing => "result_missing",
+        }
+    }
 }
 
 /// Key under which the child run's trace rides on the tool output. UI-only:
@@ -1219,46 +1254,76 @@ fn run_delegated_child(
             // from one that finished on its own.
             let deadline_hit = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
             let deadline_flag = std::sync::Arc::clone(&deadline_hit);
-            crate::server::api::v1beta::message_streaming::with_generation_task_lifecycle(
-                &app_state.background_tasks,
-                &child_task,
-                chat_id,
-                async {
-                    let run =
-                        crate::server::api::v1beta::message_streaming::run_message_submit_task(
-                            &child_task,
-                            &app_state,
-                            &policy,
-                            &me_user,
-                            &request,
-                            crate::models::message::GenerationRequestContext { platform: None },
-                            chat_id,
-                            true,
-                            Vec::new(),
-                        );
-                    tokio::pin!(run);
-                    tokio::select! {
-                        result = &mut run => result,
-                        // This timer is the run deadline's enforcement: it
-                        // lives in the child task itself, so it shares the
-                        // run's failure domain and bounds a run nothing
-                        // awaits. The dispatch loop keeps a second timer for
-                        // awaited runs purely to classify the envelope as
-                        // `timeout` for the parent; both request the same
-                        // idempotent abort. The run is then awaited to
-                        // completion — the abort is cooperative, and the
-                        // wind-down is what persists the partial answer
-                        // before the lifecycle tail records the outcome.
-                        _ = tokio::time::sleep(run_timeout) => {
-                            tracing::info!("Delegated child run hit its deadline; aborting");
-                            deadline_flag.store(true, std::sync::atomic::Ordering::Relaxed);
-                            child_task.request_abort();
-                            run.await
+            let result =
+                crate::server::api::v1beta::message_streaming::with_generation_task_lifecycle(
+                    &app_state.background_tasks,
+                    &child_task,
+                    chat_id,
+                    async {
+                        let run =
+                            crate::server::api::v1beta::message_streaming::run_message_submit_task(
+                                &child_task,
+                                &app_state,
+                                &policy,
+                                &me_user,
+                                &request,
+                                crate::models::message::GenerationRequestContext { platform: None },
+                                chat_id,
+                                true,
+                                Vec::new(),
+                            );
+                        tokio::pin!(run);
+                        tokio::select! {
+                            result = &mut run => result,
+                            // This timer is the run deadline's enforcement: it
+                            // lives in the child task itself, so it shares the
+                            // run's failure domain and bounds a run nothing
+                            // awaits. The dispatch loop keeps a second timer for
+                            // awaited runs purely to classify the envelope as
+                            // `timeout` for the parent; both request the same
+                            // idempotent abort. The run is then awaited to
+                            // completion — the abort is cooperative, and the
+                            // wind-down is what persists the partial answer
+                            // before the lifecycle tail records the outcome.
+                            _ = tokio::time::sleep(run_timeout) => {
+                                tracing::info!("Delegated child run hit its deadline; aborting");
+                                deadline_flag.store(true, std::sync::atomic::Ordering::Relaxed);
+                                child_task.request_abort();
+                                run.await
+                            }
                         }
-                    }
-                },
-            )
-            .await
+                    },
+                )
+                .await;
+
+            // The delivery lives here rather than inside the lifecycle wrapper
+            // because the wrapper holds no principal, and a delivery runs a
+            // whole turn in the origin chat under this request's identity.
+            // Recording is separate from draining on purpose: if this process
+            // dies between them, the result is still owed and the next tail on
+            // the origin chat finds it.
+            if run_mode == ProvenanceRunMode::Async
+                && let Some(origin_chat_id) =
+                    crate::services::task_delivery::record_pending_delivery(
+                        &app_state,
+                        chat_id,
+                        child_task.message_id(),
+                        deadline_hit.load(std::sync::atomic::Ordering::Relaxed),
+                        result.is_err(),
+                        child_task.tool_budget_exhausted(),
+                    )
+                    .await
+            {
+                crate::services::task_delivery::drain_pending_deliveries(
+                    &app_state,
+                    &policy,
+                    &me_user,
+                    origin_chat_id,
+                )
+                .await;
+            }
+
+            result
         }
         // The shared lifecycle logs a bare chat id, which reads the same for a
         // parent turn; the span is what tells a child's failure apart.
@@ -1280,7 +1345,7 @@ fn run_delegated_child(
 /// a result the origin model can reason about, while "failed" invites it to
 /// retry something that will say nothing again.
 #[allow(clippy::too_many_arguments)]
-async fn build_result_envelope(
+pub(crate) async fn build_result_envelope(
     app_state: &AppState,
     child_chat_id: Uuid,
     child_assistant_message_id: Uuid,
