@@ -866,3 +866,48 @@ async fn named_supervisor_derives_both_worker_names(pool: Pool<Postgres>) {
         "a tick addressed to the derived worker name must reach the cleanup worker"
     );
 }
+
+/// The relocation this PR exists for: the cleanup worker starts on a deployment
+/// that has never opted into deleting data, because the delivery backstop rides
+/// on its tick and a stranded result must be recoverable everywhere.
+///
+/// Asserted on the spawn predicate itself rather than on the sweep's effect,
+/// because a sweep test passes either way — it drives `run_cleanup_tick`
+/// directly and never reaches the supervisor.
+///
+/// # Test Categories
+/// - `uses-db`
+///
+/// # Test Behavior
+/// Spawns a named supervisor with `cleanup_enabled = false` and only the
+/// assistants delegation route on, and asserts the worker registered anyway.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn named_supervisor_spawns_cleanup_worker_when_only_delegation_is_on(pool: Pool<Postgres>) {
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+    app_config.cleanup_enabled = false;
+    app_config.delegation.assistants.enabled = true;
+
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+    let supervisor_name = format!("test_sup_{}", Uuid::new_v4());
+    let derived = WorkerNames::derived_from(&supervisor_name);
+    let _manager = erato::actors::manager::ActorManager::new_with_name(
+        db.clone(),
+        app_config,
+        Some(supervisor_name.clone()),
+    )
+    .await;
+
+    let registered = registry::where_is(derived.cleanup_worker.clone()).is_some();
+
+    // Stopped before the assertion so that a failure cannot leave a real
+    // `0 */5 * * * *` cron ticking against a pool this test is about to drop.
+    if let Some(supervisor) = registry::where_is(supervisor_name) {
+        supervisor.stop(Some("test finished".to_string()));
+    }
+
+    assert!(
+        registered,
+        "the cleanup worker must start for delegation alone: the delivery backstop \
+         deletes nothing and must not inherit the retention half's opt-in"
+    );
+}
