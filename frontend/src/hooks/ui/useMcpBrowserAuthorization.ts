@@ -10,14 +10,19 @@ export function useMcpBrowserAuthorization() {
   const queryClient = useQueryClient();
   return useCallback(
     (serverId: string) => {
-      watchMcpAuthorization(queryClient, serverId, () => {
-        // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal routing URL
-        const url = `/?preferencesDialog=open&preferencesTab=serversTools&mcpServerId=${encodeURIComponent(serverId)}`;
-        // noopener intentionally supplies no reliable window handle. A null
-        // return therefore cannot distinguish a blocked popup from a normal tab.
-        // eslint-disable-next-line lingui/no-unlocalized-strings -- Browser window features
-        window.open(url, "_blank", "noopener");
-      });
+      // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal routing URL
+      const url = `/?preferencesDialog=open&preferencesTab=serversTools&mcpServerId=${encodeURIComponent(serverId)}`;
+      watchMcpAuthorization(
+        queryClient,
+        serverId,
+        () => {
+          // noopener intentionally supplies no reliable window handle. A null
+          // return therefore cannot distinguish a blocked popup from a normal tab.
+          // eslint-disable-next-line lingui/no-unlocalized-strings -- Browser window features
+          window.open(url, "_blank", "noopener");
+        },
+        url,
+      );
     },
     [queryClient],
   );

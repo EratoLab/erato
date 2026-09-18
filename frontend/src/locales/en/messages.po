@@ -3161,6 +3161,11 @@ msgid "mcp.authorization.openSettings"
 msgstr "Open settings"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/McpAuthorizationNotice.tsx
+msgid "mcp.authorization.reopen"
+msgstr "Open authorization page again"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "mcp.authorization.rowPending"
 msgstr "Connection in progress…"

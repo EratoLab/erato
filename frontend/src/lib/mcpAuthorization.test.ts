@@ -144,6 +144,22 @@ describe("MCP authorization lifecycle", () => {
     expect(fetchListMcpServerTools).toHaveBeenCalledTimes(1);
   });
 
+  it("does not mistake HTTP-successful tools listing for a connected server", async () => {
+    vi.mocked(fetchCompleteMcpServerOauth).mockRejectedValue(
+      new Error("grant rejected"),
+    );
+    vi.mocked(fetchListMcpServerTools).mockResolvedValue(
+      tools("NEEDS_AUTHENTICATION"),
+    );
+    await completeMcpAuthorization(client, {
+      serverId: "sales",
+      code: "invalid",
+      state: "still-needs-auth",
+    });
+    expect(phase()).toBe("error");
+    expect(fetchListMcpServerTools).toHaveBeenCalledTimes(1);
+  });
+
   it("does not turn successful authorization with an unavailable MCP into success", async () => {
     vi.mocked(fetchCompleteMcpServerOauth).mockResolvedValue({
       connection_status: "FAILURE",

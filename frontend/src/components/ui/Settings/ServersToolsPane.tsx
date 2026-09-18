@@ -1,11 +1,13 @@
 import { t } from "@lingui/core/macro";
 import { skipToken, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 
 import { useListMcpServers } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import {
   isMcpAuthorizationPending,
   useMcpAuthorizationStore,
   checkMcpConnection,
+  clearMcpAuthorization,
 } from "@/lib/mcpAuthorization";
 
 import { DesktopSidecarRow } from "./DesktopSidecarTabContent";
@@ -156,6 +158,7 @@ export function ServersToolsPane({
     data: mcpServersResponse,
     error: mcpServersError,
     isLoading: isMcpServersLoading,
+    isFetching: isMcpServersFetching,
   } = useListMcpServers(isActive && mcp ? {} : skipToken, {
     retry: false,
     refetchOnWindowFocus: false,
@@ -164,13 +167,47 @@ export function ServersToolsPane({
     staleTime: 0,
   });
   const mcpServers = mcpServersResponse?.servers ?? [];
+  useEffect(() => {
+    if (
+      !isActive ||
+      !mcp ||
+      !mcpServersResponse ||
+      isMcpServersFetching ||
+      mcpServersError
+    )
+      return;
+    for (const [serverId, phase] of Object.entries(phases)) {
+      if (!phase) continue;
+      const server = mcpServersResponse.servers.find(
+        (entry) => entry.id === serverId,
+      );
+      if (
+        !server ||
+        (phase === "connected" && server.connection_status !== "SUCCESS")
+      ) {
+        clearMcpAuthorization(serverId);
+      }
+    }
+  }, [
+    isActive,
+    mcp,
+    mcpServersResponse,
+    isMcpServersFetching,
+    mcpServersError,
+    phases,
+  ]);
 
   return (
     <div className="space-y-4" data-testid="servers-tools-pane">
-      {mcp
-        ? Object.keys(phases)
-            .filter((serverId) => phases[serverId])
-            .map((serverId) => (
+      {mcp && isActive
+        ? mcpServers
+            .filter(
+              (server) =>
+                phases[server.id] &&
+                (phases[server.id] !== "connected" ||
+                  server.connection_status === "SUCCESS"),
+            )
+            .map(({ id: serverId }) => (
               <McpAuthorizationNotice
                 key={serverId}
                 serverId={serverId}

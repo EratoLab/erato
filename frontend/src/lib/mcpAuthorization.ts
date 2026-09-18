@@ -28,7 +28,8 @@ export const isMcpAuthorizationPending = (phase?: McpAuthorizationPhase) =>
 
 export const useMcpAuthorizationStore = create<{
   phases: Record<string, McpAuthorizationPhase | undefined>;
-}>(() => ({ phases: {} }));
+  browserUrls: Record<string, string | undefined>;
+}>(() => ({ phases: {}, browserUrls: {} }));
 
 interface Operation {
   controller: AbortController;
@@ -41,8 +42,12 @@ const operations = new Map<string, Operation>();
 const callbacks = new Map<string, Promise<void>>();
 
 function phase(serverId: string, value: McpAuthorizationPhase | undefined) {
-  useMcpAuthorizationStore.setState(({ phases }) => ({
+  useMcpAuthorizationStore.setState(({ phases, browserUrls }) => ({
     phases: { ...phases, [serverId]: value },
+    browserUrls:
+      value === "waiting"
+        ? browserUrls
+        : { ...browserUrls, [serverId]: undefined },
   }));
 }
 
@@ -242,9 +247,13 @@ export function watchMcpAuthorization(
   queryClient: QueryClient,
   serverId: string,
   openBrowser: () => void,
+  browserUrl?: string,
 ) {
   const operation = begin(serverId, "waiting");
   if (!operation) return;
+  useMcpAuthorizationStore.setState(({ browserUrls }) => ({
+    browserUrls: { ...browserUrls, [serverId]: browserUrl },
+  }));
   const deadline = Date.now() + 10 * 60_000;
   let timer: number | undefined;
   let inFlight = false;

@@ -1,4 +1,5 @@
 import { t } from "@lingui/core/macro";
+import { useEffect } from "react";
 
 import {
   clearMcpAuthorization,
@@ -7,6 +8,7 @@ import {
 } from "@/lib/mcpAuthorization";
 
 import { Button } from "../Controls/Button";
+import { Alert } from "../Feedback/Alert";
 import { SpinnerIcon } from "../Feedback/SpinnerIcon";
 
 import type { McpAuthorizationPhase } from "@/lib/mcpAuthorization";
@@ -69,23 +71,43 @@ export function McpAuthorizationNotice({
   onCheck: () => void;
 }) {
   const phase = useMcpAuthorizationStore((state) => state.phases[serverId]);
+  const browserUrl = useMcpAuthorizationStore(
+    (state) => state.browserUrls[serverId],
+  );
+  useEffect(() => {
+    if (phase !== "connected") return;
+    // The row retains its connection status after this transient confirmation.
+    const timer = window.setTimeout(() => {
+      if (useMcpAuthorizationStore.getState().phases[serverId] === "connected")
+        clearMcpAuthorization(serverId);
+    }, 10_000);
+    return () => window.clearTimeout(timer);
+  }, [phase, serverId]);
   if (!phase) return null;
   const pending = isMcpAuthorizationPending(phase);
   return (
-    <div className="alert-geometry space-y-2 border border-theme-border p-3">
-      <div
-        role="status"
-        aria-atomic="true"
-        className="flex items-start gap-2 text-sm"
-      >
-        {pending ? <SpinnerIcon size="sm" aria-hidden="true" /> : null}
-        <div>
-          <strong>{serverId}</strong>
-          <p>{mcpAuthorizationMessage(phase)}</p>
-        </div>
-      </div>
+    <Alert
+      type={pending ? "info" : phase === "connected" ? "success" : "warning"}
+      role="status"
+      title={serverId}
+      icon={pending ? <SpinnerIcon size="sm" aria-hidden="true" /> : undefined}
+    >
+      <p>{mcpAuthorizationMessage(phase)}</p>
       {phase === "waiting" || !pending ? (
-        <div className="flex flex-wrap gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {phase === "waiting" && browserUrl ? (
+            <a
+              href={browserUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="focus-ring-tight underline"
+            >
+              {t({
+                id: "mcp.authorization.reopen",
+                message: "Open authorization page again",
+              })}
+            </a>
+          ) : null}
           {!pending && phase !== "connected" && phase !== "denied" ? (
             <Button size="sm" variant="secondary" onClick={onCheck}>
               {t({
@@ -108,6 +130,6 @@ export function McpAuthorizationNotice({
           </Button>
         </div>
       ) : null}
-    </div>
+    </Alert>
   );
 }

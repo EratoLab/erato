@@ -28,6 +28,8 @@ interface AlertProps {
   icon?: ReactNode;
   /** Optional geometry variant for chat message surfaces */
   geometryVariant?: "default" | "message";
+  /** Use a polite live region for progress and non-urgent confirmations. */
+  role?: "alert" | "status";
   /** Test ID for e2e testing */
   "data-testid"?: string;
 }
@@ -44,6 +46,7 @@ export const Alert: React.FC<AlertProps> = ({
   className = "",
   icon,
   geometryVariant = "default",
+  role = "alert",
   "data-testid": dataTestId,
 }) => {
   // Get themed icon IDs for each alert type
@@ -90,7 +93,8 @@ export const Alert: React.FC<AlertProps> = ({
         styles[type].container,
         className,
       )}
-      role="alert"
+      role={role}
+      aria-atomic="true"
       data-ui="alert"
       data-tone={type}
       data-testid={dataTestId}

@@ -3123,72 +3123,77 @@ msgstr "Notificaciones"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpAuthorizationNotice.tsx
 msgid "mcp.authorization.check"
-msgstr ""
+msgstr "Comprobar conexión"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpAuthorizationNotice.tsx
 msgid "mcp.authorization.denied"
-msgstr ""
+msgstr "No se concedió la autorización. Puedes volver a intentarlo cuando quieras."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpAuthorizationNotice.tsx
 msgid "mcp.authorization.dismiss"
-msgstr ""
+msgstr "Cerrar"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpAuthorizationNotice.tsx
 msgid "mcp.authorization.error"
-msgstr ""
+msgstr "No se pudo completar la autorización. Comprueba la conexión o vuelve a intentar la autorización."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpAuthorizationNotice.tsx
 msgid "mcp.authorization.finishing"
-msgstr ""
+msgstr "Finalizando la conexión…"
 
 #. js-lingui-explicit-id
 #: src/components/providers/McpOauthCallbackBoundary.tsx
 msgid "mcp.authorization.finishingNamed"
-msgstr ""
+msgstr "Finalizando la conexión con {server}…"
 
 #. js-lingui-explicit-id
 #: src/components/providers/McpOauthCallbackBoundary.tsx
 msgid "mcp.authorization.missingReturn"
-msgstr ""
+msgstr "No se pudo asociar esta autorización con una conexión. Abre la configuración para comprobar el servidor o volver a intentarlo."
 
 #. js-lingui-explicit-id
 #: src/components/providers/McpOauthCallbackBoundary.tsx
 msgid "mcp.authorization.openSettings"
-msgstr ""
+msgstr "Abrir configuración"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpAuthorizationNotice.tsx
+msgid "mcp.authorization.reopen"
+msgstr "Volver a abrir la página de autorización"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "mcp.authorization.rowPending"
-msgstr ""
+msgstr "Conexión en curso…"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpAuthorizationNotice.tsx
 msgid "mcp.authorization.starting"
-msgstr ""
+msgstr "Abriendo la autorización…"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpAuthorizationNotice.tsx
 msgid "mcp.authorization.stopWaiting"
-msgstr ""
+msgstr "Dejar de esperar"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpAuthorizationNotice.tsx
 msgid "mcp.authorization.timeout"
-msgstr ""
+msgstr "La conexión aún no se ha confirmado. Vuelve a comprobarla antes de iniciar otra autorización."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpAuthorizationNotice.tsx
 msgid "mcp.authorization.unavailable"
-msgstr ""
+msgstr "No se pudo confirmar la conexión con el servidor. Vuelve a comprobar la conexión después de completar la autorización."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpAuthorizationNotice.tsx
 msgid "mcp.authorization.waiting"
-msgstr ""
+msgstr "Esperando la autorización. Completa los pasos en tu navegador con la misma cuenta."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/McpToolApprovalCard.tsx
