@@ -24,5 +24,8 @@ export const toast = {
   error: (input: Omit<ToastInput, "variant">) => emit("error", input),
   custom: (input: ToastInput) => useToastStore.getState().show(input),
   dismiss: (id: string) => useToastStore.getState().dismiss(id),
+  /** Retracts whatever currently occupies a `dedupeKey` slot, if anything. */
+  dismissKey: (dedupeKey: string) =>
+    useToastStore.getState().dismissKey(dedupeKey),
   clear: () => useToastStore.getState().clear(),
 };

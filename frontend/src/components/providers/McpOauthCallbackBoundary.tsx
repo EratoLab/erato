@@ -13,6 +13,7 @@ import {
 import { useUserPreferencesFeature } from "@/providers/FeatureConfigProvider";
 
 import { Button } from "../ui/Controls/Button";
+import { Alert } from "../ui/Feedback/Alert";
 import { SpinnerIcon } from "../ui/Feedback/SpinnerIcon";
 
 import type { PropsWithChildren } from "react";
@@ -91,14 +92,16 @@ export function McpOauthCallbackBoundary({ children }: PropsWithChildren) {
   if (invalidCallback) {
     return (
       <div className="m-auto max-w-md space-y-4 p-6">
-        <p role="alert">
+        <Alert type="error">
           {t({
-            id: "mcp.authorization.missingReturn",
+            id: "mcp.callback.missingReturn",
             message:
               "This authorization could not be matched to a connection. Open settings to check the server or try again.",
           })}
-        </p>
+        </Alert>
+        {/* The only way out of a dead end deserves the primary weight. */}
         <Button
+          variant="primary"
           onClick={() => {
             const next = new URLSearchParams(params);
             for (const key of [
@@ -117,7 +120,7 @@ export function McpOauthCallbackBoundary({ children }: PropsWithChildren) {
           }}
         >
           {t({
-            id: "mcp.authorization.openSettings",
+            id: "mcp.callback.openSettings",
             message: "Open settings",
           })}
         </Button>
@@ -127,18 +130,17 @@ export function McpOauthCallbackBoundary({ children }: PropsWithChildren) {
   /* eslint-enable lingui/no-unlocalized-strings */
   const server = callback.serverId;
   return (
-    <div
-      className="m-auto space-y-3 p-6 text-center"
-      role="status"
-      aria-atomic="true"
-    >
-      <SpinnerIcon size="lg" aria-hidden="true" />
-      <p>
-        {t({
-          id: "mcp.authorization.finishingNamed",
+    <div className="m-auto p-6 text-center">
+      {/* The ring's own caption slot: one component owns the pairing, so this
+          wait is spaced and typed like every other full-surface wait — and the
+          ring carries the live region, so nothing announces it twice. */}
+      <SpinnerIcon
+        size="lg"
+        label={t({
+          id: "mcp.callback.finishing",
           message: `Finishing connection to ${server}…`,
         })}
-      </p>
+      />
     </div>
   );
 }

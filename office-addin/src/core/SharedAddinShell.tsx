@@ -4,6 +4,7 @@ import {
   FeatureConfigProvider,
   GenerationStatusPoller,
   I18nProvider,
+  McpAuthorizationToasts,
   ThemeProvider,
   Toaster,
   type SidecarClientInfo,
@@ -111,6 +112,9 @@ export function SharedAddinShell({
             <ApiProvider enableDevtools={false}>
               {children}
               <Toaster placement="bottom-center" />
+              {/* The browser owns the OAuth round-trip, so its outcome can
+                  land long after the task pane's settings were closed. */}
+              <McpAuthorizationToasts />
             </ApiProvider>
           </FeatureConfigProvider>
         </ThemeProvider>

@@ -6,7 +6,15 @@ export interface ToastAction {
   /** Stable id used for `data-testid`-style hooks; not displayed. */
   id: string;
   label: string;
-  onClick: () => void;
+  onClick?: () => void;
+  /**
+   * Renders the action as a real link opening in a new tab, for a destination
+   * the browser must navigate itself — a popup blocker that already swallowed
+   * `window.open` will swallow it again, but it lets a link through. Such an
+   * action does NOT dismiss the toast: the user is leaving to do the work and
+   * comes back to the same waiting state.
+   */
+  href?: string;
   /** Visual emphasis. Defaults to `secondary`. */
   variant?: "primary" | "secondary";
 }

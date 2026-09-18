@@ -6,6 +6,12 @@ interface ToastStore {
   toasts: ToastDescriptor[];
   show: (input: ToastInput) => string;
   dismiss: (id: string) => void;
+  /**
+   * Retracts whatever currently occupies a dedupe slot. The counterpart to
+   * `dedupeKey` on `show`: a caller that owns a slot can take it back without
+   * having kept the generated id from whenever it last filled it.
+   */
+  dismissKey: (dedupeKey: string) => void;
   clear: () => void;
 }
 
@@ -49,6 +55,11 @@ export const useToastStore = create<ToastStore>((set, get) => ({
     set((state) => ({
       toasts: state.toasts.filter((toast) => toast.id !== id),
     }));
+  },
+  dismissKey: (dedupeKey) => {
+    const target = get().toasts.find((toast) => toast.dedupeKey === dedupeKey);
+    if (!target) return;
+    get().dismiss(target.id);
   },
   clear: () => {
     get().toasts.forEach((toast) => toast.onDismiss?.());

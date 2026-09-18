@@ -109,4 +109,27 @@ describe("EntityRow", () => {
       screen.getByRole("button", { name: "Retry connection" }),
     ).toBeInTheDocument();
   });
+
+  it("carries a pending status on the row itself, as a ring and a busy band", () => {
+    const { row, toggle } = renderRow({
+      status: { tone: "pending", label: "Connection in progress…" },
+    });
+
+    expect(toggle).toHaveTextContent("Connection in progress…");
+    // The ring is the pending tone's glyph, so progress is visible on the row
+    // rather than only wherever a notice happens to sit.
+    const ring = row.querySelector('[data-ui="spinner"]');
+    expect(ring).toBeInTheDocument();
+    expect(ring).toHaveAttribute("aria-hidden", "true");
+    // The band announces the wait once; the ring inside it must not repeat it.
+    expect(ring).not.toHaveAttribute("role");
+    expect(toggle.parentElement).toHaveAttribute("aria-busy", "true");
+  });
+
+  it("leaves a settled row unbusy", () => {
+    const { row, toggle } = renderRow();
+
+    expect(row.querySelector('[data-ui="spinner"]')).toBeNull();
+    expect(toggle.parentElement).not.toHaveAttribute("aria-busy");
+  });
 });

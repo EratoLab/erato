@@ -1,22 +1,21 @@
 import { t } from "@lingui/core/macro";
-import { skipToken, useQueryClient } from "@tanstack/react-query";
+import { skipToken } from "@tanstack/react-query";
 import { useEffect } from "react";
 
 import { useListMcpServers } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import {
   isMcpAuthorizationPending,
   useMcpAuthorizationStore,
-  checkMcpConnection,
   clearMcpAuthorization,
 } from "@/lib/mcpAuthorization";
 
 import { DesktopSidecarRow } from "./DesktopSidecarTabContent";
 import { EntityRow } from "./EntityRow";
-import { McpAuthorizationNotice } from "./McpAuthorizationNotice";
 import { McpToolApprovalSettings } from "./McpToolApprovalSettings";
 import { mcpServerDescription, mcpServerStatus } from "./mcpServerStatus";
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
+import { SpinnerIcon } from "../Feedback/SpinnerIcon";
 import { LinkIcon, LinkSlashIcon, ResolvedIcon } from "../icons";
 
 import type { McpServerStatus } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -64,16 +63,29 @@ function McpServerEntityRow({
         />
       }
       name={server.id}
-      status={isAuthorizing ? undefined : status}
-      defaultExpanded={mcp.selectedServerId === server.id}
-      caption={
+      // Work the row is waiting on outranks the connection state it is about
+      // to change — and carries the ring, so progress reads on the row itself
+      // rather than only in a notice somewhere above the list.
+      status={
         isAuthorizing
-          ? t({
-              id: "mcp.authorization.rowPending",
-              message: "Connection in progress…",
-            })
-          : undefined
+          ? {
+              tone: "pending",
+              label: t({
+                id: "preferences.dialog.mcpServers.oauth.rowPending",
+                message: "Connection in progress…",
+              }),
+            }
+          : isDisconnecting
+            ? {
+                tone: "pending",
+                label: t({
+                  id: "preferences.dialog.mcpServers.oauth.disconnecting",
+                  message: "Disconnecting...",
+                }),
+              }
+            : status
       }
+      defaultExpanded={mcp.selectedServerId === server.id}
       data-testid="servers-tools-mcp-row"
       action={
         server.connection_status === "NEEDS_AUTHENTICATION" || isAuthorizing ? (
@@ -81,19 +93,14 @@ function McpServerEntityRow({
             variant="primary"
             size="sm"
             icon={<LinkIcon className="size-4" />}
-            disabled={isAuthorizing}
+            loading={isAuthorizing}
             onClick={() => mcp.onAuthorize(server.id)}
           >
-            {isAuthorizing
-              ? t({
-                  id: "preferences.dialog.mcpServers.oauth.authorizing",
-                  message: "Authorizing...",
-                })
-              : (mcp.authorizeLabel ??
-                t({
-                  id: "preferences.dialog.mcpServers.oauth.authorize",
-                  message: "Authorize",
-                }))}
+            {mcp.authorizeLabel ??
+              t({
+                id: "preferences.dialog.mcpServers.oauth.authorize",
+                message: "Authorize",
+              })}
           </Button>
         ) : undefined
       }
@@ -108,18 +115,14 @@ function McpServerEntityRow({
           variant="secondary"
           size="sm"
           icon={<LinkSlashIcon className="size-4" />}
-          disabled={isDisconnecting || isAuthorizing}
+          loading={isDisconnecting}
+          disabled={isAuthorizing}
           onClick={() => mcp.onDisconnect(server.id)}
         >
-          {isDisconnecting
-            ? t({
-                id: "preferences.dialog.mcpServers.oauth.disconnecting",
-                message: "Disconnecting...",
-              })
-            : t({
-                id: "preferences.dialog.mcpServers.oauth.disconnect",
-                message: "Disconnect",
-              })}
+          {t({
+            id: "preferences.dialog.mcpServers.oauth.disconnect",
+            message: "Disconnect",
+          })}
         </Button>
       ) : null}
       {/* Details unmount on collapse, so this list fetches on expand only. */}
@@ -152,7 +155,6 @@ export function ServersToolsPane({
   showDesktopSidecar = false,
   children,
 }: ServersToolsPaneProps) {
-  const queryClient = useQueryClient();
   const phases = useMcpAuthorizationStore((state) => state.phases);
   const {
     data: mcpServersResponse,
@@ -199,22 +201,6 @@ export function ServersToolsPane({
 
   return (
     <div className="space-y-4" data-testid="servers-tools-pane">
-      {mcp && isActive
-        ? mcpServers
-            .filter(
-              (server) =>
-                phases[server.id] &&
-                (phases[server.id] !== "connected" ||
-                  server.connection_status === "SUCCESS"),
-            )
-            .map(({ id: serverId }) => (
-              <McpAuthorizationNotice
-                key={serverId}
-                serverId={serverId}
-                onCheck={() => void checkMcpConnection(queryClient, serverId)}
-              />
-            ))
-        : null}
       {mcp && mcpServersError ? (
         <Alert type="error">
           {t({
@@ -223,13 +209,18 @@ export function ServersToolsPane({
           })}
         </Alert>
       ) : null}
+      {/* Waiting is not a message about the list — it is the list, not there
+          yet. The ring says so without taking an alert's standing. */}
       {mcp && isMcpServersLoading ? (
-        <Alert type="info">
-          {t({
-            id: "preferences.dialog.mcpServers.loading",
-            message: "Loading MCP server status...",
-          })}
-        </Alert>
+        <div className="py-8 text-center">
+          <SpinnerIcon
+            size="xl"
+            label={t({
+              id: "preferences.dialog.mcpServers.loading",
+              message: "Loading MCP server status...",
+            })}
+          />
+        </div>
       ) : null}
 
       <div className="space-y-3">

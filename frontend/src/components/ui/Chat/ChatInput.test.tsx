@@ -2022,7 +2022,7 @@ describe("ChatInput", () => {
       ]);
 
       act(() => {
-        audioModeToast?.actions?.[0]?.onClick();
+        audioModeToast?.actions?.[0]?.onClick?.();
       });
 
       await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
@@ -2148,7 +2148,7 @@ describe("ChatInput", () => {
           (toast) => toast.id === "chat-input-audio-mode-selector-toast",
         );
       act(() => {
-        audioModeToast?.actions?.[1]?.onClick();
+        audioModeToast?.actions?.[1]?.onClick?.();
       });
 
       expect(toggleAudioRecording).toHaveBeenCalledTimes(1);
@@ -2640,7 +2640,7 @@ describe("ChatInput", () => {
           (toast) => toast.id === "chat-input-audio-mode-selector-toast",
         );
       act(() => {
-        audioModeToast?.actions?.[0]?.onClick();
+        audioModeToast?.actions?.[0]?.onClick?.();
       });
 
       expect(screen.queryByTestId("model-selector")).not.toBeInTheDocument();
@@ -2683,7 +2683,7 @@ describe("ChatInput", () => {
           (toast) => toast.id === "chat-input-audio-mode-selector-toast",
         );
       act(() => {
-        audioModeToast?.actions?.[0]?.onClick();
+        audioModeToast?.actions?.[0]?.onClick?.();
       });
 
       expect(screen.getByTestId("model-selector")).toBeInTheDocument();

@@ -19,7 +19,7 @@ export type ButtonVariant =
 // call sites already pass, so omitting the prop yields the common case rather
 // than an outlier — which is how md buttons ended up scattered among sm ones.
 // Reach for "md"/"lg" only as deliberate emphasis.
-type ButtonSize = "sm" | "md" | "lg";
+export type ButtonSize = "sm" | "md" | "lg";
 
 // Shape controls the corner geometry. "pill" yields a fully rounded button;
 // it replaces the ad-hoc `className="rounded-full"` overrides callers used to
@@ -108,6 +108,27 @@ const ICON_SIZE_STYLES = {
   md: "btn-geometry-icon-md",
   lg: "btn-geometry-icon-lg",
 } as const;
+
+/**
+ * The control skin on its own — variant colours plus text-button geometry —
+ * for the one case a `<Button>` cannot cover: an anchor the browser has to
+ * navigate natively (a popup-blocked recovery link, where `window.open` is the
+ * thing that failed). Everything else uses `<Button>`; this exists so such an
+ * anchor reads as the same control rather than growing its own styling.
+ */
+export const controlSurfaceClassName = ({
+  variant = "secondary",
+  size = "sm",
+}: {
+  variant?: Exclude<ButtonVariant, "icon-only" | "sidebar-icon">;
+  size?: ButtonSize;
+} = {}) =>
+  clsx(
+    "focus-ring flex touch-manipulation items-center gap-2",
+    VARIANT_STYLES[variant],
+    // Link is a text affordance — no control geometry, same as in Button.
+    variant === "link" ? "" : CONTROL_SIZE_STYLES[size],
+  );
 
 // The ring borrows the button's own label colour, so it reads on a filled
 // accent variant and on a light secondary one alike; the track is the same

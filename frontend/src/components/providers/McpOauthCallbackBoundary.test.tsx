@@ -21,6 +21,7 @@ import {
 } from "@/lib/mcpOauthCallback";
 
 import { McpOauthCallbackBoundary } from "./McpOauthCallbackBoundary";
+import { ThemeProvider } from "./ThemeProvider";
 
 const { mockServers } = vi.hoisted(() => ({
   mockServers: vi.fn(),
@@ -44,16 +45,20 @@ function LocationProbe() {
 function mount(search: string) {
   return render(
     <StrictMode>
-      <QueryClientProvider client={new QueryClient()}>
-        <MemoryRouter
-          initialEntries={[search.startsWith("/") ? search : `/${search}`]}
-        >
-          <McpOauthCallbackBoundary>
-            <div>Chat shell</div>
-          </McpOauthCallbackBoundary>
-          <LocationProbe />
-        </MemoryRouter>
-      </QueryClientProvider>
+      {/* The recovery state is a themed Alert, so it needs the theme the app
+          mounts around this boundary. */}
+      <ThemeProvider persistThemeMode={false} enableCustomTheme={false}>
+        <QueryClientProvider client={new QueryClient()}>
+          <MemoryRouter
+            initialEntries={[search.startsWith("/") ? search : `/${search}`]}
+          >
+            <McpOauthCallbackBoundary>
+              <div>Chat shell</div>
+            </McpOauthCallbackBoundary>
+            <LocationProbe />
+          </MemoryRouter>
+        </QueryClientProvider>
+      </ThemeProvider>
     </StrictMode>,
   );
 }

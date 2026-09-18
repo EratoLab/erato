@@ -3,11 +3,15 @@ import { useId, useState } from "react";
 
 import { Card } from "../Container/Card";
 import { DisclosureChevron } from "../Controls/DisclosureChevron";
+import { SpinnerIcon } from "../Feedback/SpinnerIcon";
 import { CheckCircleIcon, ErrorIcon, WarningCircleIcon } from "../icons";
 
 import type { ReactNode } from "react";
 
-export type EntityRowTone = "success" | "warning" | "error";
+// "pending" is work the row itself is waiting on (authorizing, disconnecting).
+// It reads as a neutral caption rather than an outcome colour, because nothing
+// has happened yet — the ring, not the tint, is what says "wait".
+export type EntityRowTone = "success" | "warning" | "error" | "pending";
 
 export interface EntityRowStatus {
   tone: EntityRowTone;
@@ -20,12 +24,16 @@ const toneIcon: Record<EntityRowTone, ReactNode> = {
   success: <CheckCircleIcon className="size-3.5 shrink-0" />,
   warning: <WarningCircleIcon className="size-3.5 shrink-0" />,
   error: <ErrorIcon className="size-3.5 shrink-0" />,
+  // The header band already announces the wait through `aria-busy`, so the
+  // ring must not add a second live region of its own.
+  pending: <SpinnerIcon size="sm" aria-hidden="true" className="shrink-0" />,
 };
 
 const toneText: Record<EntityRowTone, string> = {
   success: "text-theme-success-fg",
   warning: "text-theme-warning-fg",
   error: "text-theme-error-fg",
+  pending: "text-theme-fg-secondary",
 };
 
 export interface EntityRowProps {
@@ -92,7 +100,10 @@ export function EntityRow({
         // The band carries no inset of its own, so the row brings one — and
         // the action has to sit inside it, which is why it is not passed to
         // the card's own action slot.
-        <div className="flex items-center gap-2 p-3">
+        <div
+          className="flex items-center gap-2 p-3"
+          aria-busy={status?.tone === "pending" || undefined}
+        >
           <button
             type="button"
             aria-expanded={isExpanded}

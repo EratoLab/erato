@@ -29,12 +29,20 @@ import {
   useUserPreferencesFeature,
 } from "@/providers/FeatureConfigProvider";
 
+import { ServersToolsPane } from "./ServersToolsPane";
+import {
+  StartingAssistantSetting,
+  type StartingAssistantOption,
+  type StartingAssistantPick,
+  type StartScreenChoice,
+} from "./StartingAssistantSetting";
 import { ModelSelector } from "../Chat/ModelSelector";
 import { Button } from "../Controls/Button";
 import { TabRail } from "../Controls/TabRail";
 import { Alert } from "../Feedback/Alert";
 import { FormField, Input, Textarea } from "../Input";
 import { ModalBase } from "../Modal/ModalBase";
+import { toast } from "../Toast";
 import {
   LockIcon,
   MediaImageIcon,
@@ -44,14 +52,8 @@ import {
 } from "../icons";
 import { AppearanceTabContent } from "./AppearanceTabContent";
 import { AudioInputTabContent } from "./AudioInputTabContent";
-import { ServersToolsPane } from "./ServersToolsPane";
-import {
-  StartingAssistantSetting,
-  type StartingAssistantOption,
-  type StartingAssistantPick,
-  type StartScreenChoice,
-} from "./StartingAssistantSetting";
 import { TextSizeSetting } from "./TextSizeSetting";
+import { mcpAuthorizationToastKey } from "./mcpAuthorizationToasts";
 
 import type {
   ChatModel,
@@ -112,8 +114,6 @@ export function UserPreferencesDialog({
     useState<StartingAssistantPick | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [mcpError, setMcpError] = useState<string | null>(null);
-  const [mcpSuccess, setMcpSuccess] = useState<string | null>(null);
   const [disconnectingServerId, setDisconnectingServerId] = useState<
     string | null
   >(null);
@@ -233,8 +233,6 @@ export function UserPreferencesDialog({
 
     setActiveTab(requestedDefaultTab);
     setSaveError(null);
-    setMcpError(null);
-    setMcpSuccess(null);
     setArchiveError(null);
     setArchiveSuccess(null);
     setNickname(userProfile?.preference_nickname ?? "");
@@ -463,9 +461,10 @@ export function UserPreferencesDialog({
     }
   };
 
+  // Disconnecting reports the same way authorizing does: the row carries the
+  // wait, a toast states the outcome. The two halves of one connection must
+  // not answer in two different places.
   const handleDisconnectMcpOauth = async (serverId: string) => {
-    setMcpError(null);
-    setMcpSuccess(null);
     setDisconnectingServerId(serverId);
     clearMcpAuthorization(serverId);
 
@@ -480,19 +479,21 @@ export function UserPreferencesDialog({
           .queryKey,
       });
       await refetchMcpServers();
-      setMcpSuccess(
-        t({
+      toast.success({
+        dedupeKey: mcpAuthorizationToastKey(serverId),
+        title: t({
           id: "preferences.dialog.mcpServers.oauth.disconnectSuccess",
           message: "Disconnected successfully.",
         }),
-      );
+      });
     } catch {
-      setMcpError(
-        t({
+      toast.error({
+        dedupeKey: mcpAuthorizationToastKey(serverId),
+        title: t({
           id: "preferences.dialog.mcpServers.oauth.disconnectError",
           message: "Could not disconnect. Please try again.",
         }),
-      );
+      });
     } finally {
       setDisconnectingServerId(null);
     }
@@ -742,9 +743,6 @@ export function UserPreferencesDialog({
                   })}
                 </p>
               </div>
-
-              {mcpSuccess ? <Alert type="success">{mcpSuccess}</Alert> : null}
-              {mcpError ? <Alert type="error">{mcpError}</Alert> : null}
 
               {activeTab === "serversTools" ? (
                 <ServersToolsPane
