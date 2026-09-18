@@ -1,11 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import {
-  storeMcpOauthCallback,
-  getMcpOauthServerId,
-} from "@/lib/mcpOauthCallback";
+import { describe, expect, it, vi } from "vitest";
 
 import { UserProfileDropdown } from "./UserProfileDropdown";
 
@@ -24,8 +19,7 @@ vi.mock("../Settings/UserPreferencesDialog", () => ({
     props.isOpen ? (
       <div>
         <span>{props.initialTab}</span>
-        <span>{props.pendingMcpOauthCallback?.serverId}</span>
-        <button onClick={props.onMcpOauthCallbackHandled}>Complete</button>
+        <span>{props.selectedMcpServerId}</span>
         <button onClick={props.onClose}>Close</button>
       </div>
     ) : null,
@@ -44,42 +38,21 @@ function renderCallback(search: string) {
   );
 }
 
-describe("MCP OAuth settings callback", () => {
-  beforeEach(() => sessionStorage.clear());
-
-  it.each(["Complete", "Close"])(
-    "opens the server tab from state and clears on %s",
-    async (action) => {
-      storeMcpOauthCallback(
-        "https://auth.example/authorize?state=flow",
-        "sales",
-      );
-      renderCallback("?code=code&state=flow&iss=issuer&keep=value");
-      expect(await screen.findByText("serversTools")).toBeInTheDocument();
-      expect(screen.getByText("sales")).toBeInTheDocument();
-      fireEvent.click(screen.getByText(action));
-      await waitFor(() =>
-        expect(screen.getByTestId("search")).toHaveTextContent("?keep=value"),
-      );
-      expect(getMcpOauthServerId("flow")).toBeNull();
-      if (action === "Complete") {
-        expect(screen.getByText("serversTools")).toBeInTheDocument();
-      } else {
-        expect(screen.queryByText("serversTools")).not.toBeInTheDocument();
-      }
-    },
-  );
-
-  it("ignores callbacks with an unknown state", () => {
-    renderCallback("?code=code&state=unknown");
-    expect(screen.queryByText("serversTools")).not.toBeInTheDocument();
-  });
-
-  it("still handles legacy callbacks", async () => {
+describe("MCP settings handoff", () => {
+  it("opens the selected server and cleans only settings parameters on close", async () => {
     renderCallback(
-      "?preferencesDialog=open&preferencesTab=mcpServers&mcpOauthServerId=sales&code=code&state=legacy",
+      "?preferencesDialog=open&preferencesTab=serversTools&mcpServerId=sales&keep=value",
     );
     expect(await screen.findByText("serversTools")).toBeInTheDocument();
     expect(screen.getByText("sales")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Close"));
+    await waitFor(() =>
+      expect(screen.getByTestId("search")).toHaveTextContent("?keep=value"),
+    );
+    expect(screen.queryByText("serversTools")).not.toBeInTheDocument();
+  });
+  it("still opens the legacy MCP settings tab", async () => {
+    renderCallback("?preferencesDialog=open&preferencesTab=mcpServers");
+    expect(await screen.findByText("serversTools")).toBeInTheDocument();
   });
 });

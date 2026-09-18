@@ -6,6 +6,7 @@ import {
   TabRail,
   TextSizeSetting,
   useFeatureConfig,
+  useMcpBrowserAuthorization,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useId, useMemo, useState, type ReactNode } from "react";
@@ -41,6 +42,7 @@ export function AddinSettingsDialogCore({
   hostContribution,
 }: AddinSettingsDialogCoreProps) {
   const featureConfig = useFeatureConfig();
+  const authorizeInBrowser = useMcpBrowserAuthorization();
   const audioSettingsEnabled =
     featureConfig.audioTranscription.enabled ||
     featureConfig.audioDictation.enabled ||
@@ -244,13 +246,7 @@ export function AddinSettingsDialogCore({
                           // The OAuth round-trip is web-shaped (full-page IdP
                           // redirect; backend mints a web return URL), so the
                           // add-in hands authorization to the browser.
-                          onAuthorize: () => {
-                            window.open(
-                              "/?preferencesDialog=open&preferencesTab=serversTools",
-                              "_blank",
-                              "noopener",
-                            );
-                          },
+                          onAuthorize: authorizeInBrowser,
                           onDisconnect: () => {
                             window.open(
                               "/?preferencesDialog=open&preferencesTab=serversTools",
