@@ -696,6 +696,153 @@ impl From<&messages::Model> for Resource {
     }
 }
 
+/// The lineage write behind [`submit_message`], with authorization already
+/// settled by the caller.
+///
+/// Takes a transaction it does not own and does not commit, so a caller that
+/// must append a row and record the append in the same breath - the task-result
+/// delivery, which sets `result_delivery.state = delivered` on the child in the
+/// same transaction - cannot half-succeed. Without that the delivery's fence has
+/// nothing to bite on: the row commits before the state write, and a sweeper
+/// that requeued the claim in between double-inserts.
+///
+/// "Unchecked" is about authorization only: the schema is still validated here,
+/// so no caller can write a malformed row by skipping the public entry point.
+/// The only lawful callers are ones that have evaluated the `submit_message`
+/// rule themselves; that rule is ownership-only.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn append_message_unchecked(
+    txn: &sea_orm::DatabaseTransaction,
+    chat_id: &Uuid,
+    raw_message: JsonValue,
+    previous_message_id: Option<&Uuid>,
+    sibling_message_id: Option<&Uuid>,
+    generation_input_messages: Option<JsonValue>,
+    input_files_ids: &[Uuid],
+    generation_parameters_json: Option<JsonValue>,
+    generation_metadata_json: Option<JsonValue>,
+    input_parameters_json: Option<JsonValue>,
+) -> Result<messages::Model, Report> {
+    // Validated again here rather than trusted from the caller: one
+    // `from_value` plus a lifecycle loop is cheap, and it makes this safe for
+    // a caller that never went through the public entry point.
+    MessageSchema::validate(&raw_message)?;
+
+    if let Some(prev_msg_id) = previous_message_id {
+        // Find the previous message
+        let previous_message = Messages::find_by_id(*prev_msg_id)
+            .one(txn)
+            .await?
+            .ok_or_else(|| eyre!("Previous message with ID {} not found", prev_msg_id))?;
+
+        // Verify that the previous message belongs to the same chat
+        if previous_message.chat_id != *chat_id {
+            return Err(eyre!(
+                "Previous message does not belong to the specified chat"
+            ));
+        }
+    }
+
+    if let Some(sibling_id) = sibling_message_id {
+        // Find the sibling message
+        let sibling_message = Messages::find_by_id(*sibling_id)
+            .one(txn)
+            .await?
+            .ok_or_else(|| eyre!("Sibling message with ID {} not found", sibling_id))?;
+
+        // Verify that the sibling message belongs to the same chat
+        if sibling_message.chat_id != *chat_id {
+            return Err(eyre!(
+                "Sibling message does not belong to the specified chat"
+            ));
+        }
+    }
+
+    // Step 1: Set all existing thread messages as inactive by default.
+    let active_thread_update = messages::ActiveModel {
+        is_message_in_active_thread: ActiveValue::Set(false),
+        ..Default::default()
+    };
+
+    messages::Entity::update_many()
+        .set(active_thread_update)
+        .filter(messages::Column::ChatId.eq(*chat_id))
+        .exec(txn)
+        .await
+        .map_err(|e| eyre!("Failed to update active thread flags: {}", e))?;
+
+    // Step 2: Identify the lineage that should remain in the active thread.
+    let mut active_thread_ids = Vec::new();
+    if let Some(prev_msg_id) = previous_message_id {
+        let mut current_msg_id = *prev_msg_id;
+
+        // Keep track of visited message IDs to avoid infinite loops
+        let mut visited_ids = std::collections::HashSet::new();
+
+        while !visited_ids.contains(&current_msg_id) {
+            visited_ids.insert(current_msg_id);
+            active_thread_ids.push(current_msg_id);
+
+            // Get the previous message ID
+            let message = Messages::find_by_id(current_msg_id)
+                .one(txn)
+                .await
+                .map_err(|e| eyre!("Failed to find message {}: {}", current_msg_id, e))?
+                .ok_or_else(|| eyre!("Message with ID {} not found", current_msg_id))?;
+
+            // If there's no previous message, break the loop
+            if let Some(prev_id) = message.previous_message_id {
+                current_msg_id = prev_id;
+            } else {
+                break;
+            }
+        }
+    }
+
+    // Step 3: Create and insert the new message
+    let new_message = messages::ActiveModel {
+        chat_id: ActiveValue::Set(*chat_id),
+        raw_message: ActiveValue::Set(raw_message),
+        previous_message_id: ActiveValue::Set(previous_message_id.copied()),
+        sibling_message_id: ActiveValue::Set(sibling_message_id.copied()),
+        is_message_in_active_thread: ActiveValue::Set(true), // New messages are active by default
+        generation_input_messages: ActiveValue::Set(generation_input_messages),
+        input_file_uploads: ActiveValue::Set(if input_files_ids.is_empty() {
+            None
+        } else {
+            Some(input_files_ids.to_vec())
+        }),
+        generation_parameters: ActiveValue::Set(generation_parameters_json),
+        generation_metadata: ActiveValue::Set(generation_metadata_json),
+        input_parameters: ActiveValue::Set(input_parameters_json),
+        ..Default::default()
+    };
+
+    let created_message = messages::Entity::insert(new_message)
+        .exec_with_returning(txn)
+        .await
+        .map_err(|e| eyre!("Failed to insert new message: {}", e))?;
+
+    // Step 4: Reactivate this message and its active lineage.
+    active_thread_ids.push(created_message.id);
+
+    if !active_thread_ids.is_empty() {
+        let active_thread_update = messages::ActiveModel {
+            is_message_in_active_thread: ActiveValue::Set(true),
+            ..Default::default()
+        };
+
+        messages::Entity::update_many()
+            .set(active_thread_update)
+            .filter(messages::Column::Id.is_in(active_thread_ids))
+            .exec(txn)
+            .await
+            .map_err(|e| eyre!("Failed to reactivate target active thread messages: {}", e))?;
+    }
+
+    Ok(created_message)
+}
+
 /// Submit a new message to a chat.
 ///
 /// If `previous_message_id` is specified, the previous message will be queried,
@@ -735,125 +882,25 @@ pub async fn submit_message(
         Action::SubmitMessage
     )?;
 
-    if let Some(prev_msg_id) = previous_message_id {
-        // Find the previous message
-        let previous_message = Messages::find_by_id(*prev_msg_id)
-            .one(conn)
-            .await?
-            .ok_or_else(|| eyre!("Previous message with ID {} not found", prev_msg_id))?;
-
-        // Verify that the previous message belongs to the same chat
-        if previous_message.chat_id != *chat_id {
-            return Err(eyre!(
-                "Previous message does not belong to the specified chat"
-            ));
-        }
-    }
-
-    if let Some(sibling_id) = sibling_message_id {
-        // Find the sibling message
-        let sibling_message = Messages::find_by_id(*sibling_id)
-            .one(conn)
-            .await?
-            .ok_or_else(|| eyre!("Sibling message with ID {} not found", sibling_id))?;
-
-        // Verify that the sibling message belongs to the same chat
-        if sibling_message.chat_id != *chat_id {
-            return Err(eyre!(
-                "Sibling message does not belong to the specified chat"
-            ));
-        }
-    }
-
-    // Begin a transaction
     let txn = conn
         .begin()
         .await
         .map_err(|e| eyre!("Failed to begin transaction: {}", e))?;
 
-    // Step 1: Set all existing thread messages as inactive by default.
-    let active_thread_update = messages::ActiveModel {
-        is_message_in_active_thread: ActiveValue::Set(false),
-        ..Default::default()
-    };
+    let created_message = append_message_unchecked(
+        &txn,
+        chat_id,
+        raw_message,
+        previous_message_id,
+        sibling_message_id,
+        generation_input_messages,
+        input_files_ids,
+        generation_parameters_json,
+        generation_metadata_json,
+        input_parameters_json,
+    )
+    .await?;
 
-    messages::Entity::update_many()
-        .set(active_thread_update)
-        .filter(messages::Column::ChatId.eq(*chat_id))
-        .exec(&txn)
-        .await
-        .map_err(|e| eyre!("Failed to update active thread flags: {}", e))?;
-
-    // Step 2: Identify the lineage that should remain in the active thread.
-    let mut active_thread_ids = Vec::new();
-    if let Some(prev_msg_id) = previous_message_id {
-        let mut current_msg_id = *prev_msg_id;
-
-        // Keep track of visited message IDs to avoid infinite loops
-        let mut visited_ids = std::collections::HashSet::new();
-
-        while !visited_ids.contains(&current_msg_id) {
-            visited_ids.insert(current_msg_id);
-            active_thread_ids.push(current_msg_id);
-
-            // Get the previous message ID
-            let message = Messages::find_by_id(current_msg_id)
-                .one(&txn)
-                .await
-                .map_err(|e| eyre!("Failed to find message {}: {}", current_msg_id, e))?
-                .ok_or_else(|| eyre!("Message with ID {} not found", current_msg_id))?;
-
-            // If there's no previous message, break the loop
-            if let Some(prev_id) = message.previous_message_id {
-                current_msg_id = prev_id;
-            } else {
-                break;
-            }
-        }
-    }
-
-    // Step 3: Create and insert the new message
-    let new_message = messages::ActiveModel {
-        chat_id: ActiveValue::Set(*chat_id),
-        raw_message: ActiveValue::Set(raw_message),
-        previous_message_id: ActiveValue::Set(previous_message_id.copied()),
-        sibling_message_id: ActiveValue::Set(sibling_message_id.copied()),
-        is_message_in_active_thread: ActiveValue::Set(true), // New messages are active by default
-        generation_input_messages: ActiveValue::Set(generation_input_messages),
-        input_file_uploads: ActiveValue::Set(if input_files_ids.is_empty() {
-            None
-        } else {
-            Some(input_files_ids.to_vec())
-        }),
-        generation_parameters: ActiveValue::Set(generation_parameters_json),
-        generation_metadata: ActiveValue::Set(generation_metadata_json),
-        input_parameters: ActiveValue::Set(input_parameters_json),
-        ..Default::default()
-    };
-
-    let created_message = messages::Entity::insert(new_message)
-        .exec_with_returning(&txn)
-        .await
-        .map_err(|e| eyre!("Failed to insert new message: {}", e))?;
-
-    // Step 4: Reactivate this message and its active lineage.
-    active_thread_ids.push(created_message.id);
-
-    if !active_thread_ids.is_empty() {
-        let active_thread_update = messages::ActiveModel {
-            is_message_in_active_thread: ActiveValue::Set(true),
-            ..Default::default()
-        };
-
-        messages::Entity::update_many()
-            .set(active_thread_update)
-            .filter(messages::Column::Id.is_in(active_thread_ids))
-            .exec(&txn)
-            .await
-            .map_err(|e| eyre!("Failed to reactivate target active thread messages: {}", e))?;
-    }
-
-    // Commit the transaction
     txn.commit()
         .await
         .map_err(|e| eyre!("Failed to commit transaction: {}", e))?;
@@ -878,8 +925,8 @@ pub async fn submit_message(
 /// keeps the thread the user is looking at instead of resetting it to the new
 /// row alone. `id` is a uuidv7 default, so the secondary sort is a real
 /// tiebreaker for two rows written in the same instant.
-pub async fn get_active_thread_tip(
-    conn: &DatabaseConnection,
+pub async fn get_active_thread_tip<C: ConnectionTrait>(
+    conn: &C,
     chat_id: &Uuid,
 ) -> Result<Option<messages::Model>, Report> {
     Ok(Messages::find()

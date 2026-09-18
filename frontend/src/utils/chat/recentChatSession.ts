@@ -28,6 +28,18 @@ export const DELEGATION_PROVENANCE_KIND = "delegation";
 /** `provenance_run_mode` of a delegated run that detached from its origin turn. */
 export const BACKGROUND_RUN_MODE = "background";
 
+/**
+ * `provenance_run_mode` of a detached run whose answer is delivered back into
+ * the conversation that started it.
+ */
+export const ASYNC_RUN_MODE = "async";
+
+/** Every run mode that detaches from its origin turn. */
+export const DETACHED_RUN_MODES: readonly string[] = [
+  BACKGROUND_RUN_MODE,
+  ASYNC_RUN_MODE,
+];
+
 export function isDelegatedRun(
   chat: Pick<RecentChat, "provenance_kind">,
 ): boolean {
@@ -35,14 +47,23 @@ export function isDelegatedRun(
 }
 
 /**
- * A delegated run with a life of its own: it detached at dispatch, so its
- * outcome lands in its own chat rather than inline in the origin turn.
+ * A delegated run with a life of its own: it detached at dispatch, so the
+ * origin turn ended without it.
+ *
+ * Both detached modes count. A `background` run's answer only ever lives in
+ * its own chat; an `async` run's is also delivered back to the origin later.
+ * They are equally "not part of the turn that started them", which is what
+ * every caller here is asking about — so a sidebar that recognised only
+ * `background` would simply hide async runs.
  */
 export function isBackgroundRun(
   chat: Pick<RecentChat, "provenance_kind" | "provenance_run_mode">,
 ): boolean {
   return (
-    isDelegatedRun(chat) && chat.provenance_run_mode === BACKGROUND_RUN_MODE
+    isDelegatedRun(chat) &&
+    chat.provenance_run_mode !== undefined &&
+    chat.provenance_run_mode !== null &&
+    DETACHED_RUN_MODES.includes(chat.provenance_run_mode)
   );
 }
 

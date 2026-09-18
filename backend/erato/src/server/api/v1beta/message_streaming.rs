@@ -2058,11 +2058,27 @@ pub(crate) async fn bg_stream_save_user_row(
     .await
     .wrap_err("Failed to submit user message")?;
 
+    bg_stream_announce_user_row(task, app_state, &saved_user_message).await?;
+
+    Ok(saved_user_message)
+}
+
+/// Announce a user row that is already committed.
+///
+/// Split from the save so a caller that wrote the row inside its own
+/// transaction — the task-result delivery, which must append and record the
+/// append atomically — still emits the identical event, and only after its
+/// transaction has actually committed.
+pub(crate) async fn bg_stream_announce_user_row(
+    task: &Arc<StreamingTask>,
+    app_state: &AppState,
+    saved_user_message: &messages::Model,
+) -> Result<(), Report> {
     // Resolved here so the live event carries the same display pairs the read
     // API serves — the just-sent message highlights without a refetch.
     let saved_user_message_wrapped = ChatMessage::from_model(saved_user_message.clone())
         .wrap_err("Failed to convert user message")?
-        .with_mentioned_assistants(&app_state.db, &saved_user_message)
+        .with_mentioned_assistants(&app_state.db, saved_user_message)
         .await;
 
     task.send_event(StreamingEvent::UserMessageSaved {
@@ -2072,7 +2088,7 @@ pub(crate) async fn bg_stream_save_user_row(
     .await
     .map_err(Report::msg)?;
 
-    Ok(saved_user_message)
+    Ok(())
 }
 
 fn ensure_saved_assistant_content_for_abort(mut content: Vec<ContentPart>) -> Vec<ContentPart> {
@@ -10765,6 +10781,21 @@ pub(crate) async fn save_user_message_for_submit(
     .wrap_err("Failed to save user message")?;
 
     tracing::info!("User message saved, id: {}", saved_user_message.id);
+
+    // Submit re-anchors onto a delivered result rather than branching it away,
+    // but the walk stops at a user-authored row — and in that case this submit
+    // DOES branch the delivery off the active thread, exactly as an edit or a
+    // regenerate would. Reconciled here for the same reason and in the same
+    // shape as those two: after the save, because the active flags are not
+    // final until `submit_message` commits, and swallowed into a warning
+    // because a bookkeeping failure must not fail the user's turn.
+    if app_state.config.delegation.tasks.enabled
+        && let Err(error) =
+            crate::models::chat::requeue_or_supersede_branched_deliveries(&app_state.db, &chat.id)
+                .await
+    {
+        tracing::warn!(%error, "Failed to reconcile deliveries after a submit");
+    }
 
     Ok((chat, saved_user_message))
 }
