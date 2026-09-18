@@ -298,6 +298,17 @@ async fn set_delivery_state(
 /// The delivery runs its `claimed -> delivered` write inside the same
 /// transaction as the append it describes, so it needs to pass a
 /// `&DatabaseTransaction` here rather than reach for the pool.
+///
+/// Every write is fenced on the *identity* of the delivery it read, not only on
+/// its state, because this statement replaces the whole `result_delivery`
+/// subobject rather than merging into it. A branch requeue
+/// (`requeue_or_supersede_branched_deliveries`) mints a new `delivery_id` and
+/// returns the row to `pending` with a bumped `redeliveries`/`sequence`; a
+/// caller holding a copy read before that would otherwise match on the state
+/// alone and write the stale envelope back over it, silently swallowing the
+/// redelivery the user's branch asked for. No caller ever changes
+/// `delivery_id`, so fencing on the payload's own id is exactly "the row still
+/// holds the delivery I read".
 async fn set_delivery_state_in<C: ConnectionTrait>(
     conn: &C,
     child_chat_id: Uuid,
@@ -315,13 +326,18 @@ async fn set_delivery_state_in<C: ConnectionTrait>(
             "assistant_configuration", '{{provenance,result_delivery}}', $2::jsonb, true)
         WHERE "id" = $1
           AND ("assistant_configuration" #>> '{{provenance,result_delivery,state}}') = '{expect}'
+          AND ("assistant_configuration" #>> '{{provenance,result_delivery,delivery_id}}') = $3
         "#,
         expect = expect_state.as_str(),
     );
-    let mut values: Vec<sea_orm::Value> = vec![child_chat_id.into(), payload.into()];
+    let mut values: Vec<sea_orm::Value> = vec![
+        child_chat_id.into(),
+        payload.into(),
+        delivery.delivery_id.to_string().into(),
+    ];
     if let Some(token) = expect_claim_token {
         sql.push_str(
-            "          AND (\"assistant_configuration\" #>> '{provenance,result_delivery,claimed_by}') = $3\n",
+            "          AND (\"assistant_configuration\" #>> '{provenance,result_delivery,claimed_by}') = $4\n",
         );
         values.push(token.into());
     }
@@ -1270,6 +1286,34 @@ async fn deliver_one_child_db_only(
         return commit_terminal(txn, child_chat_id, &closed, ChildSweepStep::Failed).await;
     };
 
+    // 5b. Serialize against whoever is about to take the origin's generation
+    //     lease, on the same key `BackgroundTasks::claim_lease_in_txn` uses.
+    //
+    //     Without it the free-origin `EXISTS` below is not atomic with lease
+    //     acquisition: a user turn that takes the lease after the gate is
+    //     evaluated computes its anchor from a snapshot that predates this
+    //     transaction's insert, and then appends a *sibling* of the row we are
+    //     about to write. Either its chat-wide "deactivate the thread" UPDATE
+    //     lands last and pushes our just-delivered result off the active
+    //     thread while the delivery reads `delivered`, or it lands first and
+    //     the chat is left with two active leaves. 778's re-anchor recovers
+    //     the first case only while `redeliveries = 0`; past that the result is
+    //     lost to a pure race.
+    //
+    //     This is transaction-scoped and per-origin, so it is not the
+    //     sweep-wide lock this design rejected: it never blocks the batched
+    //     heartbeat (which takes no advisory lock and whose row UPDATE we do
+    //     not contend), and it is held only for the handful of statements
+    //     below. It is also why no `SELECT … FOR UPDATE` is needed — a row lock
+    //     on the origin is what would stall the heartbeat.
+    txn.query_one_raw(named_statement_from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        POSTGRES_QUERY_DELIVERY_SWEEP_CLAIM,
+        "SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))".to_string(),
+        [origin_chat_id.to_string().into()],
+    ))
+    .await?;
+
     // 6. The origin row itself is gone. Provenance ids are plain values, never
     //    foreign keys, so a dangling one is expected rather than exceptional.
     let Some(origin) = crate::db::entity::prelude::Chats::find_by_id(origin_chat_id)
@@ -1368,8 +1412,12 @@ async fn deliver_one_child_db_only(
         //     children whose origins are parked on an approval — which never
         //     ages out — would hide row 201 forever.
         //
-        //     Guarded on `pending`, which makes it a harmless no-op in the case
-        //     where the zero rows came from someone else claiming first.
+        //     Guarded on `pending` *and* on the delivery id we read, which
+        //     makes it a harmless no-op both when the zero rows came from
+        //     someone else claiming first and when a branch requeue minted a
+        //     new delivery while this transaction was rolling back — the whole
+        //     envelope is replaced here, so an unfenced write would revert that
+        //     requeue's id, `redeliveries` and `sequence` to our stale copy.
         let mut rotated = delivery.clone();
         rotated.attempts = delivery.attempts.saturating_add(1);
         rotated.at = sqlx::types::chrono::Utc::now().into();
@@ -1538,8 +1586,10 @@ async fn deliver_one_child_db_only(
 /// owns the row now.
 ///
 /// Guarded on `pending` with no claim token: these are the decisions the sweep
-/// reaches *before* claiming, so there is no token to fence on yet and the row
-/// must still be the one the scan saw.
+/// reaches *before* claiming, so there is no token to fence on yet. The
+/// delivery id [`set_delivery_state_in`] always carries is what makes "the row
+/// must still be the one the scan saw" true — the state alone would also match
+/// a *different*, freshly requeued delivery.
 async fn commit_terminal(
     txn: sea_orm::DatabaseTransaction,
     child_chat_id: Uuid,
@@ -1588,7 +1638,24 @@ mod tests {
         }
     }
 
+    fn pending_delivery() -> ResultDelivery {
+        let mut delivery = claimed_delivery("unused");
+        delivery.state = ResultDeliveryState::Pending;
+        delivery.claimed_by = None;
+        delivery.claimed_at = None;
+        delivery.attempts = 0;
+        delivery
+    }
+
     async fn insert_child_holding(db: &DatabaseConnection, delivery: &ResultDelivery) -> Uuid {
+        insert_child_holding_for(db, delivery, None).await
+    }
+
+    async fn insert_child_holding_for(
+        db: &DatabaseConnection,
+        delivery: &ResultDelivery,
+        origin_chat_id: Option<Uuid>,
+    ) -> Uuid {
         let id = Uuid::new_v4();
         let now: sea_orm::prelude::DateTimeWithTimeZone = sqlx::types::chrono::Utc::now().into();
         crate::db::entity::chats::Entity::insert(crate::db::entity::chats::ActiveModel {
@@ -1596,6 +1663,7 @@ mod tests {
             owner_user_id: ActiveValue::Set("owner".to_string()),
             assistant_configuration: ActiveValue::Set(Some(serde_json::json!({
                 "provenance": {
+                    "origin_chat_id": origin_chat_id,
                     "kind": ChatProvenanceKind::Delegation.as_str(),
                     "depth": 1,
                     "run_mode": ProvenanceRunMode::Async.as_str(),
@@ -1689,6 +1757,134 @@ mod tests {
         assert_eq!(
             stored_delivery(&db, child_chat_id).await.state,
             ResultDeliveryState::Delivered
+        );
+    }
+
+    /// The *identity* half of the same fence, on the writes that have no claim
+    /// token to fence on.
+    ///
+    /// `set_delivery_state_in` replaces the whole `result_delivery` subobject.
+    /// A branch requeue mints a new `delivery_id` and returns the row to
+    /// `pending`, so a caller holding an envelope read before that would match
+    /// on the state alone and write its stale copy back — reverting the new id,
+    /// the bumped `redeliveries` and the bumped `sequence`, and silently
+    /// swallowing the redelivery the user's branch asked for.
+    ///
+    /// # Test Categories
+    /// - `uses-db`
+    #[sqlx::test(migrator = "MIGRATOR")]
+    async fn state_write_refuses_a_delivery_that_was_requeued_underneath_it(pool: sqlx::PgPool) {
+        let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+
+        // What is actually stored: a *different*, freshly minted delivery that
+        // is `pending`, exactly as a branch requeue leaves it.
+        let mut current = pending_delivery();
+        current.redeliveries = 1;
+        current.sequence = 1;
+        let child_chat_id = insert_child_holding(&db, &current).await;
+
+        // What a slower writer still holds: the previous delivery, same state.
+        let mut stale = pending_delivery();
+        stale.attempts = 1;
+        assert_ne!(stale.delivery_id, current.delivery_id);
+
+        let won = set_delivery_state_in(
+            &db,
+            child_chat_id,
+            &stale,
+            ResultDeliveryState::Pending,
+            None,
+        )
+        .await;
+        assert!(
+            !won,
+            "the state alone must not be enough: it matches a different delivery just as well"
+        );
+        let after = stored_delivery(&db, child_chat_id).await;
+        assert_eq!(after.delivery_id, current.delivery_id);
+        assert_eq!(after.redeliveries, 1);
+        assert_eq!(after.sequence, 1);
+
+        // The control: the same write against the delivery it really read wins.
+        let mut rotated = current.clone();
+        rotated.attempts = 1;
+        assert!(
+            set_delivery_state_in(
+                &db,
+                child_chat_id,
+                &rotated,
+                ResultDeliveryState::Pending,
+                None,
+            )
+            .await,
+            "a writer holding the stored delivery must still be able to rotate it"
+        );
+        assert_eq!(stored_delivery(&db, child_chat_id).await.attempts, 1);
+    }
+
+    /// The sweep must be serialized against whoever is taking the origin's
+    /// generation lease, on the same advisory key `claim_lease_in_txn` uses.
+    ///
+    /// Otherwise its free-origin gate is not atomic with the append it guards:
+    /// a user turn that takes the lease in between anchors its own message
+    /// before the sweep's row exists and writes a sibling of it, which either
+    /// pushes the just-delivered result off the active thread or forks it.
+    ///
+    /// Asserted by holding that key from another connection and requiring the
+    /// child transaction to make no progress until it is released. The child is
+    /// staged with an origin that does not exist, so everything after the lock
+    /// is one terminal decision — the point is *when* the lock is taken, which
+    /// has to be before any origin decision at all.
+    ///
+    /// # Test Categories
+    /// - `uses-db`
+    #[sqlx::test(migrator = "MIGRATOR")]
+    async fn the_sweep_waits_for_the_origin_lease_key_before_deciding(pool: sqlx::PgPool) {
+        let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+
+        let origin_chat_id = Uuid::new_v4();
+        let delivery = pending_delivery();
+        let child_chat_id = insert_child_holding_for(&db, &delivery, Some(origin_chat_id)).await;
+
+        // Stand in for a turn that is claiming the origin's lease.
+        let holder = db.begin().await.unwrap();
+        holder
+            .query_one_raw(named_statement_from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                POSTGRES_QUERY_DELIVERY_SWEEP_CLAIM,
+                "SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))".to_string(),
+                [origin_chat_id.to_string().into()],
+            ))
+            .await
+            .unwrap();
+
+        let sweeping = tokio::spawn({
+            let db = db.clone();
+            async move { deliver_one_child_db_only(&db, child_chat_id, 4000, 30).await }
+        });
+
+        // No timeout to race: while the key is held the sweep cannot get past
+        // step 5b at all, so any completion here is the lock not being taken.
+        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+        assert!(
+            !sweeping.is_finished(),
+            "the sweep decided the origin's fate while a lease claimer held the chat's key"
+        );
+        assert_eq!(
+            stored_delivery(&db, child_chat_id).await.state,
+            ResultDeliveryState::Pending
+        );
+
+        holder.rollback().await.unwrap();
+        let step = tokio::time::timeout(std::time::Duration::from_secs(10), sweeping)
+            .await
+            .expect("the sweep must proceed once the key is free")
+            .unwrap()
+            .unwrap();
+        assert!(matches!(step, ChildSweepStep::Failed));
+        assert_eq!(
+            stored_delivery(&db, child_chat_id).await.state,
+            ResultDeliveryState::Failed
         );
     }
 }

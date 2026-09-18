@@ -7,8 +7,7 @@ use crate::{MIGRATOR, test_app_state};
 use axum_test::TestServer;
 use chrono::{Duration, Utc};
 use erato::actors::cleanup_worker::{CleanupWorkerArgs, cleanup_archived_chats, run_cleanup_tick};
-use erato::actors::cron_jobs::CleanupTickJob;
-use erato::actors::supervisor::WorkerNames;
+use erato::actors::supervisor::{WorkerNames, cleanup_tick_job};
 use erato::db::entity::chats;
 use erato::db::entity::{assistants, chat_file_uploads, file_uploads, messages, share_links};
 use erato::models::chat::auto_archive_stale_delegated_runs;
@@ -800,9 +799,10 @@ async fn named_supervisor_derives_both_worker_names(pool: Pool<Postgres>) {
     app_config.cleanup_archived_max_age_days = 30;
 
     let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
-    let me = erato::models::user::get_or_create_user(&db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
-        .await
-        .unwrap();
+    let me =
+        erato::models::user::get_or_create_user(&db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+            .await
+            .unwrap();
     let long_ago: DateTimeWithTimeZone = (Utc::now() - Duration::days(40)).into();
     let old_archived = insert_chat(&db, &me.id.to_string(), None, long_ago).await;
     set_chat_columns(
@@ -838,9 +838,13 @@ async fn named_supervisor_derives_both_worker_names(pool: Pool<Postgres>) {
     // The job's lookup key must resolve to the worker, not to the cron manager:
     // a swapped pair keeps both registry entries present and would pass the two
     // assertions above.
-    let mut job = CleanupTickJob {
-        worker_name: derived.cleanup_worker.clone(),
-    };
+    //
+    // Driven through `cleanup_tick_job`, the same constructor the supervisor
+    // schedules with, rather than a struct literal built here. A hand-built job
+    // pins only the registration half: the supervisor could hand the real cron
+    // the *cron manager's* name and this test would still deliver its tick to
+    // the worker and pass, while production ticked the cron manager forever.
+    let mut job = cleanup_tick_job(&derived);
     job.work().await.expect("tick job must dispatch");
 
     let mut deleted = false;
@@ -980,9 +984,10 @@ async fn delivery_state_of(db: &DatabaseConnection, child_chat_id: Uuid) -> Stri
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn cleanup_tick_sweeps_without_cleanup_enabled_and_archives_with_it(pool: Pool<Postgres>) {
     let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
-    let me = erato::models::user::get_or_create_user(&db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
-        .await
-        .unwrap();
+    let me =
+        erato::models::user::get_or_create_user(&db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+            .await
+            .unwrap();
     let me_id = me.id.to_string();
 
     let long_ago: DateTimeWithTimeZone = (Utc::now() - Duration::days(40)).into();

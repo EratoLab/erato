@@ -10428,9 +10428,8 @@ async fn sweep_requeues_stale_claimed_to_pending(pool: Pool<Postgres>) {
         let mut delivery = delivery_struct(&app_state, child).await;
         delivery.state = erato::models::chat::ResultDeliveryState::Claimed;
         delivery.claimed_by = Some(token.to_string());
-        delivery.claimed_at = Some(
-            (sqlx::types::chrono::Utc::now() - chrono::Duration::seconds(age_secs)).into(),
-        );
+        delivery.claimed_at =
+            Some((sqlx::types::chrono::Utc::now() - chrono::Duration::seconds(age_secs)).into());
         delivery.attempts = 1;
         write_delivery(&app_state, child, &delivery).await;
     }
@@ -10671,7 +10670,9 @@ async fn sweep_rotates_deferred_children_behind_fresh_pending_ones(pool: Pool<Po
 /// - `uses-db`
 /// - `auth-required`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn sweep_leaves_pending_when_origin_lease_is_fresh_or_awaiting_approval(pool: Pool<Postgres>) {
+async fn sweep_leaves_pending_when_origin_lease_is_fresh_or_awaiting_approval(
+    pool: Pool<Postgres>,
+) {
     let (app_state, _llm) = task_enabled_state_with_async(pool).await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
@@ -10848,16 +10849,9 @@ async fn sweep_owner_mismatch_marks_failed(pool: Pool<Postgres>) {
     .unwrap();
     let now: sea_orm::prelude::DateTimeWithTimeZone = sqlx::types::chrono::Utc::now().into();
 
-    let foreign_origin =
-        insert_plain_chat(&app_state.db, &stranger.id.to_string(), now).await;
-    let child = stage_owed_children(
-        &app_state.db,
-        &me.id.to_string(),
-        foreign_origin,
-        1,
-        now,
-    )
-    .await[0];
+    let foreign_origin = insert_plain_chat(&app_state.db, &stranger.id.to_string(), now).await;
+    let child =
+        stage_owed_children(&app_state.db, &me.id.to_string(), foreign_origin, 1, now).await[0];
 
     let outcome = sweep_once(&app_state).await;
     assert_eq!(outcome.failed, 1);
