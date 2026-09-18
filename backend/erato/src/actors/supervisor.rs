@@ -66,8 +66,18 @@ impl Actor for WorkerSupervisor {
             return Ok(WorkerSupervisorState { cleanup: None });
         };
 
-        if !config.cleanup_enabled {
-            tracing::info!("Cleanup worker is disabled via config. Supervisor will be idle.");
+        // The worker's tick has two halves with different gating. The retention
+        // half is the operator's opt-in to deleting data; the delivery backstop
+        // deletes nothing and exists so that a crashed replica cannot lose a
+        // finished task's result, which must not be behind that opt-in.
+        //
+        // `any_route_enabled` rather than `tasks.run_modes ∋ async`: facet
+        // overrides can widen list-valued keys at request time, so the config
+        // read here is not the last word on whether a run is async. The sweep
+        // self-gates cheaply instead — its scan matches nothing when nothing
+        // async was ever dispatched.
+        if !config.cleanup_enabled && !config.delegation.any_route_enabled() {
+            tracing::info!("Neither cleanup nor delegation is enabled. Supervisor will be idle.");
             return Ok(WorkerSupervisorState { cleanup: None });
         }
 
