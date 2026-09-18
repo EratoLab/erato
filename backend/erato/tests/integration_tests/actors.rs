@@ -7,8 +7,7 @@ use crate::{MIGRATOR, test_app_state};
 use axum_test::TestServer;
 use chrono::{Duration, Utc};
 use erato::actors::cleanup_worker::{CleanupWorkerArgs, cleanup_archived_chats, run_cleanup_tick};
-use erato::actors::cron_jobs::CleanupTickJob;
-use erato::actors::supervisor::WorkerNames;
+use erato::actors::supervisor::{WorkerNames, cleanup_tick_job};
 use erato::db::entity::chats;
 use erato::db::entity::{assistants, chat_file_uploads, file_uploads, messages, share_links};
 use erato::models::chat::auto_archive_stale_delegated_runs;
@@ -838,9 +837,13 @@ async fn named_supervisor_derives_both_worker_names(pool: Pool<Postgres>) {
     // The job's lookup key must resolve to the worker, not to the cron manager:
     // a swapped pair keeps both registry entries present and would pass the two
     // assertions above.
-    let mut job = CleanupTickJob {
-        worker_name: derived.cleanup_worker.clone(),
-    };
+    //
+    // Driven through `cleanup_tick_job`, the same constructor the supervisor
+    // schedules with, rather than a struct literal built here. A hand-built job
+    // pins only the registration half: the supervisor could hand the real cron
+    // the *cron manager's* name and this test would still deliver its tick to
+    // the worker and pass, while production ticked the cron manager forever.
+    let mut job = cleanup_tick_job(&derived);
     job.work().await.expect("tick job must dispatch");
 
     let mut deleted = false;
