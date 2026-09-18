@@ -50,4 +50,7 @@ export function injectFrontendEnv() {
   if (import.meta.env.VITE_DELEGATION_TASKS_ENABLED === "true") {
     window.DELEGATION_TASKS_ENABLED ??= true;
   }
+  if (import.meta.env.VITE_DELEGATION_TASKS_ALLOW_ASYNC === "true") {
+    window.DELEGATION_TASKS_ALLOW_ASYNC ??= true;
+  }
 }

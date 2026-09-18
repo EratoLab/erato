@@ -100,7 +100,7 @@ pub enum AbstractChatSequencePart {
     DelegationPreamble {
         expected_output: Option<String>,
         constraints: Option<String>,
-        run_mode: Option<crate::models::message::DelegationRunMode>,
+        run_mode: Option<crate::models::message::ProvenanceRunMode>,
     },
 
     /// The result of a finished `async` delegated task, delivered into this

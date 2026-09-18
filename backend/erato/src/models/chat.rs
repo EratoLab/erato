@@ -8,7 +8,7 @@ use crate::metrics_constants::{
     POSTGRES_QUERY_LIST_GENERATING_CHATS, POSTGRES_QUERY_LIST_RECENT_CHATS,
     POSTGRES_QUERY_REDELIVER_BRANCHED_RESULTS,
 };
-use crate::models::message::{DelegationRunMode, GenerationParameters};
+use crate::models::message::{GenerationParameters, ProvenanceRunMode};
 use crate::models::pagination;
 use crate::policy::prelude::*;
 use crate::query_metrics::named_statement_from_sql_and_values;
@@ -141,6 +141,12 @@ pub struct TaskSpec {
     /// branches on, rather than inferring the route from a null assistant.
     #[serde(default)]
     pub route: DelegateRoute,
+    /// The origin `delegate_task` / `delegate_to_assistant` call this run
+    /// answers. Persisted at launch because the delivery path, the backstop
+    /// sweep and a retry all need it, and the sweep runs on runs whose own
+    /// tail never got to write anything.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_tool_call_id: Option<String>,
 }
 
 /// The offer route a delegated run came from.
@@ -200,13 +206,14 @@ pub struct ChatProvenance {
     /// Legacy counterpart of `legacy_expected_output`.
     #[serde(rename = "constraints", default, skip_serializing)]
     pub legacy_constraints: Option<String>,
-    /// Delegation only: `Some(Background)` for a run the origin turn did not
-    /// await — its result never flowed back. Feeds the run's preamble wording
-    /// and, later, the accounting of concurrently running background runs.
-    /// Awaited runs store nothing, so their envelopes stay byte-identical to
-    /// those written before the field existed.
+    /// Delegation only: `Some(Background)` or `Some(Async)` for a run the
+    /// origin turn did not await. A background run's result never flows back;
+    /// an async run's is delivered into the origin chat as its own row later.
+    /// Feeds the run's preamble wording and the accounting of concurrently
+    /// running detached runs. Awaited runs store nothing, so their envelopes
+    /// stay byte-identical to those written before the field existed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub run_mode: Option<DelegationRunMode>,
+    pub run_mode: Option<ProvenanceRunMode>,
     /// Delegation only, `async` runs only: how this run's result is getting
     /// back to the chat it was started from.
     ///
@@ -1791,10 +1798,16 @@ pub async fn chat_generation_is_running(
     Ok(row.is_some_and(|row| row.running))
 }
 
-/// Number of the owner's delegated background runs whose generation is live:
-/// running with a fresh heartbeat. Read without locking, so two dispatches
-/// racing the count can both pass a cap built on it — accepted, because such
-/// a cap exists to stop runaway fan-out, not to be exact.
+/// Number of the owner's detached delegated runs whose generation is live:
+/// running with a fresh heartbeat. Both detached modes count — `background`,
+/// whose result never comes back, and `async`, whose result is delivered
+/// later — because the cap is about concurrent load, not about how the answer
+/// travels. Read without locking, so two dispatches racing the count can both
+/// pass a cap built on it — accepted, because such a cap exists to stop
+/// runaway fan-out, not to be exact.
+///
+/// Deliberately not renamed: the name matches the config key
+/// `max_concurrent_background_runs`, which is not renamed either.
 pub async fn count_running_background_delegated_runs(
     conn: &DatabaseConnection,
     owner_user_id: &str,
@@ -1813,7 +1826,7 @@ pub async fn count_running_background_delegated_runs(
         FROM "chats"
         WHERE "chats"."owner_user_id" = $1
             AND ("chats"."assistant_configuration" #>> '{provenance,kind}') = 'delegation'
-            AND ("chats"."assistant_configuration" #>> '{provenance,run_mode}') = 'background'
+            AND ("chats"."assistant_configuration" #>> '{provenance,run_mode}') IN ('background', 'async')
             AND "chats"."generation_state" = 'running'
             AND "chats"."generation_heartbeat_at" > now() - make_interval(secs => $2::double precision)
         "#,
