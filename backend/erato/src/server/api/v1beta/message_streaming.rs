@@ -1817,8 +1817,11 @@ async fn acquire_user_generation_lease(
             StreamRouteError::GenerationRunning(Box::new(GenerationRunningError {
                 code: "generation_running".to_string(),
                 chat_id,
-                // Only user turns take a lease today; 4.5 adds the marker that
-                // makes this answer "task_result" for a delivery.
+                // Always "user" today, even when a delivery holds the lease:
+                // the chats row records no initiator, so this handler cannot
+                // tell the two apart. Reporting it honestly needs a column of
+                // its own on the shared-generation row; tracked as a follow-up
+                // rather than smuggled into the delivery change.
                 initiator: "user".to_string(),
                 started_at: held.started_at,
             }))
@@ -1995,11 +1998,42 @@ async fn bg_stream_save_user_message(
     input_files_ids: &[Uuid],
     input_parameters: Option<crate::models::message::InputParameters>,
 ) -> Result<messages::Model, Report> {
-    let user_message_json = json!({
-        "role": "user",
-        "content": vec![json!({
+    bg_stream_save_user_row(
+        task,
+        app_state,
+        policy,
+        me_user,
+        chat,
+        previous_message_id,
+        vec![json!({
             "content_type": "text",
             "text": user_message.to_owned()})],
+        input_files_ids,
+        input_parameters,
+    )
+    .await
+}
+
+/// Persist one user-role row and announce it on the chat's stream.
+///
+/// Split out of [`bg_stream_save_user_message`] because a delivered task result
+/// is a user row whose content is not text: it takes the same lineage,
+/// authorization and `UserMessageSaved` event, and only the parts differ.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn bg_stream_save_user_row(
+    task: &Arc<StreamingTask>,
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    chat: &chats::Model,
+    previous_message_id: Option<&Uuid>,
+    content_parts: Vec<JsonValue>,
+    input_files_ids: &[Uuid],
+    input_parameters: Option<crate::models::message::InputParameters>,
+) -> Result<messages::Model, Report> {
+    let user_message_json = json!({
+        "role": "user",
+        "content": content_parts,
         "name": me_user.id
     });
 
@@ -2231,6 +2265,36 @@ impl MessageSubmitRequest {
             disabled_mcp_server_ids: None,
             disabled_mcp_tools: None,
             selected_facet_ids: Vec::new(),
+            action_facet: None,
+            mentioned_assistant_ids: None,
+            delegation_run_mode: None,
+        }
+    }
+
+    /// Synthetic request driving the reaction to a delivered task result
+    /// through the same generation machinery as a user submit.
+    ///
+    /// `user_message` is never read past the user-row save, and a delivery does
+    /// not do that save: its row is the `task_result` part, written before this
+    /// request exists.
+    pub(crate) fn for_result_delivery(
+        chat_id: Uuid,
+        chat_provider_id: Option<String>,
+        selected_facet_ids: Vec<String>,
+        previous_message_id: Option<Uuid>,
+    ) -> Self {
+        Self {
+            previous_message_id,
+            existing_chat_id: Some(chat_id),
+            user_message: String::new(),
+            input_files_ids: Vec::new(),
+            chat_provider_id,
+            assistant_id: None,
+            title_by_user_provided: None,
+            mcp_write_tools_enabled: None,
+            disabled_mcp_server_ids: None,
+            disabled_mcp_tools: None,
+            selected_facet_ids,
             action_facet: None,
             mentioned_assistant_ids: None,
             delegation_run_mode: None,
@@ -3033,13 +3097,18 @@ pub(crate) async fn prepare_chat_request_with_adapters(
             crate::services::delegation::DELEGATE_TO_ASSISTANT_TOOL_NAME
         );
     }
-    let offer_task_tool = synthetic_tool_offer_slot(
-        erato_config::config::DELEGATE_TASK_TOOL_NAME,
-        app_state.config.delegation.tasks.enabled,
-        &client_tool_allowlist,
-        &generation_mcp_tools,
-        is_delegated_run,
-    );
+    // The suppression check comes first and is not part of the slot decision:
+    // `synthetic_tool_offer_slot` withholds the tool from a delegated RUN, and
+    // a task-result reaction runs in the origin chat, where nothing there would
+    // have stopped it.
+    let offer_task_tool = !user_input.suppress_task_offer
+        && synthetic_tool_offer_slot(
+            erato_config::config::DELEGATE_TASK_TOOL_NAME,
+            app_state.config.delegation.tasks.enabled,
+            &client_tool_allowlist,
+            &generation_mcp_tools,
+            is_delegated_run,
+        );
 
     let mut delegation_offered_file_ids: Vec<Uuid> = Vec::new();
     let mut task_offer_scope: Option<crate::services::delegation::TaskOfferScope> = None;
@@ -9700,6 +9769,17 @@ pub async fn message_submit_sse(
                 ),
             )
             .await;
+
+            // After `remove_task`, which the lifecycle owns: the delivery takes
+            // this chat's lease for itself, and `RefuseParked` would refuse a
+            // lease this turn still held.
+            crate::services::task_delivery::drain_pending_deliveries(
+                &app_state_bg,
+                &policy_bg,
+                &me_user_bg,
+                chat_id,
+            )
+            .await;
         }
         .in_current_span(),
     );
@@ -10558,20 +10638,24 @@ mod generation_failure_diagnostic_tests {
     }
 }
 
-/// Run the message submission task in the background
+/// Emit `ChatCreated` if this request created the chat, load the chat, and
+/// persist + announce the user's message.
+///
+/// Split from [`run_generation_after_user_message`] because a delivered task
+/// result enters the generation half with a user row this function did not
+/// write: that row carries a `task_result` part rather than text, and it was
+/// saved under a lease the delivery took for itself.
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all, fields(%chat_id))]
-pub(crate) async fn run_message_submit_task(
+pub(crate) async fn save_user_message_for_submit(
     task: &Arc<StreamingTask>,
     app_state: &AppState,
     policy: &PolicyEngine,
     me_user: &MeProfile,
     request: &MessageSubmitRequest,
-    generation_request_context: GenerationRequestContext,
     chat_id: Uuid,
     chat_was_created: bool,
-    delegation_targets: Vec<crate::services::delegation::DelegationTarget>,
-) -> Result<(), Report> {
+) -> Result<(chats::Model, messages::Model), Report> {
     tracing::info!("run_message_submit_task started for chat_id: {}", chat_id);
 
     // The insert is committed before navigation. Other
@@ -10678,6 +10762,38 @@ pub(crate) async fn run_message_submit_task(
 
     tracing::info!("User message saved, id: {}", saved_user_message.id);
 
+    Ok((chat, saved_user_message))
+}
+
+/// What started this generation.
+///
+/// Decides the `initiator` recorded on the assistant row and whether the turn
+/// may plan delegated tasks of its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum GenerationOrigin {
+    /// A person wrote the message this turn answers.
+    UserTurn,
+    /// A finished `async` task's result was delivered into the chat.
+    TaskResultDelivery,
+}
+
+/// Everything a submit does once its user row is on disk: compose, prepare,
+/// create the assistant row and run the generation.
+#[allow(clippy::too_many_arguments)]
+#[instrument(skip_all, fields(chat_id = %chat.id))]
+pub(crate) async fn run_generation_after_user_message(
+    task: &Arc<StreamingTask>,
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    request: &MessageSubmitRequest,
+    generation_request_context: GenerationRequestContext,
+    chat: &chats::Model,
+    chat_was_created: bool,
+    delegation_targets: Vec<crate::services::delegation::DelegationTarget>,
+    saved_user_message: &messages::Model,
+    origin: GenerationOrigin,
+) -> Result<(), Report> {
     // Prepare chat request
     let me_profile_input = MeProfileChatRequestInput::from_me_profile(me_user);
     // No persisted fallback: this request just persisted its own value, so
@@ -10700,6 +10816,11 @@ pub(crate) async fn run_message_submit_task(
         }),
         delegation_targets,
         delegation_run_mode: effective_delegation_run_mode,
+        // LD-A9: a reaction turn may not plan tasks of its own. The offer is
+        // decided inside `prepare_chat_request`, which suppresses it only for a
+        // delegated RUN — and a reaction runs in the ORIGIN chat, so nothing
+        // there would have stopped it.
+        suppress_task_offer: origin == GenerationOrigin::TaskResultDelivery,
     };
     let PreparedChatRequest {
         chat_request,
@@ -10719,7 +10840,7 @@ pub(crate) async fn run_message_submit_task(
     } = prepare_chat_request(
         app_state,
         policy,
-        &chat,
+        chat,
         user_input,
         generation_request_context,
         &me_profile_input,
@@ -10727,11 +10848,25 @@ pub(crate) async fn run_message_submit_task(
     .await
     .wrap_err("Failed to prepare chat request")?;
 
+    // Recorded on the assistant row so a later reader can tell a turn a person
+    // asked for from one a delivered task result triggered. Built here rather
+    // than inside `prepare_chat_request`, which knows nothing about who asked.
+    // Absence still means a user, so user turns write nothing new.
+    let mut generation_parameters = generation_parameters;
+    if origin == GenerationOrigin::TaskResultDelivery {
+        generation_parameters.initiator =
+            Some(crate::models::message::GenerationInitiator::TaskResult);
+    }
+
     // Spawn chat summary generation if needed. Use the composed prompt input
     // so summary generation sees the same first-turn structure as chat
     // completion, then extracts only the actual user text from it.
+    //
+    // A delivery always passes a `previous_message_id` (the row it just wrote),
+    // so this gate is false for a reaction turn and no summary is generated
+    // from a delivered result.
     if (chat_was_created || request.previous_message_id.is_none())
-        && !crate::models::chat::chat_is_delegated_run(&chat)
+        && !crate::models::chat::chat_is_delegated_run(chat)
     {
         let app_state_clone = app_state.clone();
         let policy_clone = policy.clone();
@@ -10869,19 +11004,19 @@ pub(crate) async fn run_message_submit_task(
         Some(task),
         chat.assistant_id,
         vec![],
-        crate::models::chat::chat_is_delegated_run(&chat),
+        crate::models::chat::chat_is_delegated_run(chat),
         Some(DelegationDispatchContext {
             me_user,
             targets: &delegation_targets,
             offered_file_ids: &delegation_offered_file_ids,
-            origin_chat: &chat,
+            origin_chat: chat,
             origin_user_message_id: saved_user_message.id,
             run_mode: effective_delegation_run_mode,
             background_dispatches: std::sync::atomic::AtomicUsize::new(0),
             task_scope: task_offer_scope.clone(),
             tasks_this_turn: std::sync::atomic::AtomicUsize::new(0),
         }),
-        task_tool_budgets_for_chat(&chat),
+        task_tool_budgets_for_chat(chat),
     );
 
     let (end_content, generation_metadata) = match generation_task.await {
@@ -10967,6 +11102,46 @@ pub(crate) async fn run_message_submit_task(
     // Note: the stream_end event is sent by the spawning task lifecycle wrapper
 
     Ok(())
+}
+
+/// Run the message submission task in the background
+#[allow(clippy::too_many_arguments)]
+#[instrument(skip_all, fields(%chat_id))]
+pub(crate) async fn run_message_submit_task(
+    task: &Arc<StreamingTask>,
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    request: &MessageSubmitRequest,
+    generation_request_context: GenerationRequestContext,
+    chat_id: Uuid,
+    chat_was_created: bool,
+    delegation_targets: Vec<crate::services::delegation::DelegationTarget>,
+) -> Result<(), Report> {
+    let (chat, saved_user_message) = save_user_message_for_submit(
+        task,
+        app_state,
+        policy,
+        me_user,
+        request,
+        chat_id,
+        chat_was_created,
+    )
+    .await?;
+    run_generation_after_user_message(
+        task,
+        app_state,
+        policy,
+        me_user,
+        request,
+        generation_request_context,
+        &chat,
+        chat_was_created,
+        delegation_targets,
+        &saved_user_message,
+        GenerationOrigin::UserTurn,
+    )
+    .await
 }
 
 #[utoipa::path(
@@ -11177,6 +11352,8 @@ pub async fn regenerate_message_sse(
                     ),
                 delegation_targets: delegation_targets_for_offer,
                 delegation_run_mode: effective_delegation_run_mode,
+                // A user turn may plan tasks; only a task-result reaction may not.
+                suppress_task_offer: false,
             };
             let PreparedChatRequest {
                 chat_request,
@@ -11398,6 +11575,16 @@ pub async fn regenerate_message_sse(
             .background_tasks
             .remove_task(&chat_id_for_cleanup, task_for_stream.generation_id, outcome)
             .await;
+
+        // After `remove_task`: the delivery takes this chat's lease for
+        // itself, and `try_start_task` consults the in-process map first.
+        crate::services::task_delivery::drain_pending_deliveries(
+            &app_state,
+            &policy,
+            &me_user,
+            chat_id_for_cleanup,
+        )
+        .await;
     });
 
     // Convert the receiver into a stream and return it
@@ -11704,6 +11891,8 @@ pub async fn edit_message_sse(
                 }),
                 delegation_targets: delegation_targets_for_offer,
                 delegation_run_mode: effective_delegation_run_mode,
+                // A user turn may plan tasks; only a task-result reaction may not.
+                suppress_task_offer: false,
             };
             let PreparedChatRequest {
                 chat_request,
@@ -11925,6 +12114,16 @@ pub async fn edit_message_sse(
             .background_tasks
             .remove_task(&chat_id_for_cleanup, task_for_stream.generation_id, outcome)
             .await;
+
+        // After `remove_task`: the delivery takes this chat's lease for
+        // itself, and `try_start_task` consults the in-process map first.
+        crate::services::task_delivery::drain_pending_deliveries(
+            &app_state,
+            &policy,
+            &me_user,
+            chat_id_for_cleanup,
+        )
+        .await;
     });
 
     // Convert the receiver into a stream and return it
@@ -12242,6 +12441,16 @@ pub async fn continue_message_sse(
             .background_tasks
             .remove_task(&chat_id, task.generation_id, outcome)
             .await;
+
+        // After `remove_task`: the delivery takes this chat's lease for
+        // itself, and `try_start_task` consults the in-process map first.
+        crate::services::task_delivery::drain_pending_deliveries(
+            &app_state_for_worker,
+            &policy_for_worker,
+            &me_user,
+            chat_id,
+        )
+        .await;
     });
 
     let stream: SseEventStream = Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));

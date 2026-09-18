@@ -1966,6 +1966,15 @@ pub async fn auto_archive_stale_delegated_runs(
             AND NOT "chats"."is_pinned"
             AND ("chats"."assistant_configuration" #>> '{{provenance,kind}}') = 'delegation'
             AND ("chats"."assistant_configuration" #>> '{{provenance,adopted_at}}') IS NULL
+            -- A result still owed to its origin must outlive the retention
+            -- pass: archiving the child here would supersede a delivery the
+            -- origin chat is still going to receive. COALESCE because `#>>`
+            -- on a missing path is NULL and `NULL NOT IN (…)` is NULL, not
+            -- true, which would make every run without a delivery unarchivable.
+            AND COALESCE(
+                "chats"."assistant_configuration" #>> '{{provenance,result_delivery,state}}',
+                ''
+            ) NOT IN ('pending', 'claimed')
             AND NOT {unfinished}
             AND NOT EXISTS (
                 SELECT 1

@@ -2681,11 +2681,14 @@ export type TaskResultInput = {
   delivery_id: string;
   reason?: string;
   /**
-   * The child's assistant row this result came from.
+   * The child's assistant row this result came from. Absent when the run
+   * finished but its answer row is gone (`reason = "result_missing"`): the
+   * delivery still happens, because the origin model has to learn the task
+   * failed, but there is no row to point at.
    *
    * @format uuid
    */
-  result_message_id: string;
+  result_message_id?: string;
   /**
    * Whether the delivery was meant to provoke a reaction turn. A `silent`
    * result is folded into the user's next message instead.

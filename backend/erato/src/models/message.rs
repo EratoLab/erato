@@ -159,8 +159,13 @@ pub struct TaskResultInput {
     /// "has this already been delivered?" answerable with a query.
     pub delivery_id: Uuid,
     pub child_chat_id: Uuid,
-    /// The child's assistant row this result came from.
-    pub result_message_id: Uuid,
+    /// The child's assistant row this result came from. Absent when the run
+    /// finished but its answer row is gone (`reason = "result_missing"`): the
+    /// delivery still happens, because the origin model has to learn the task
+    /// failed, but there is no row to point at.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub result_message_id: Option<Uuid>,
     pub status: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
@@ -861,6 +866,25 @@ pub async fn submit_message(
 /// instead, and that reactivation then keeps them on the thread for free.
 ///
 /// `None` means "leave the anchor alone": either nothing is below it, or what
+/// The newest message on the chat's active thread.
+///
+/// The row a new message must hang off, so `submit_message`'s lineage walk
+/// keeps the thread the user is looking at instead of resetting it to the new
+/// row alone. `id` is a uuidv7 default, so the secondary sort is a real
+/// tiebreaker for two rows written in the same instant.
+pub async fn get_active_thread_tip(
+    conn: &DatabaseConnection,
+    chat_id: &Uuid,
+) -> Result<Option<messages::Model>, Report> {
+    Ok(Messages::find()
+        .filter(messages::Column::ChatId.eq(*chat_id))
+        .filter(messages::Column::IsMessageInActiveThread.eq(true))
+        .order_by_desc(messages::Column::CreatedAt)
+        .order_by_desc(messages::Column::Id)
+        .one(conn)
+        .await?)
+}
+
 /// is below it is a row the user wrote. Branching below a user's own later
 /// turn stays a feature.
 pub async fn resolve_system_delivered_tip(
