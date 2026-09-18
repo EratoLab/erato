@@ -6,7 +6,7 @@ use crate::test_utils::{
 use crate::{MIGRATOR, test_app_state};
 use axum_test::TestServer;
 use chrono::{Duration, Utc};
-use erato::actors::cleanup_worker::cleanup_archived_chats;
+use erato::actors::cleanup_worker::{CleanupWorkerArgs, cleanup_archived_chats, run_cleanup_tick};
 use erato::actors::cron_jobs::CleanupTickJob;
 use erato::actors::supervisor::WorkerNames;
 use erato::db::entity::chats;
@@ -909,5 +909,141 @@ async fn named_supervisor_spawns_cleanup_worker_when_only_delegation_is_on(pool:
         registered,
         "the cleanup worker must start for delegation alone: the delivery backstop \
          deletes nothing and must not inherit the retention half's opt-in"
+    );
+}
+
+/// Hand-stage a delegated `async` child of `origin_chat_id` whose result is
+/// recorded and still owed.
+///
+/// Written straight into the column rather than run through a dispatch: the
+/// sweep's whole reason to exist is the run whose own tail never got to finish,
+/// so what it must recover is a row, not a process.
+async fn stage_owed_delivery(
+    db: &DatabaseConnection,
+    owner_user_id: &str,
+    origin_chat_id: Uuid,
+) -> Uuid {
+    let now: DateTimeWithTimeZone = Utc::now().into();
+    let configuration = json!({
+        "provenance": {
+            "kind": "delegation",
+            "origin_chat_id": origin_chat_id,
+            "depth": 1,
+            "run_mode": "async",
+            "result_delivery": {
+                "state": "pending",
+                "delivery_id": Uuid::new_v4(),
+                "status": "failed",
+                "reason": "result_missing",
+                "attempts": 0,
+                "redeliveries": 0,
+                "sequence": 0,
+                "at": now,
+            },
+        },
+        "task": {
+            "scheduling": "silent",
+            "parent_tool_call_id": "call_staged",
+        },
+    });
+    insert_chat(db, owner_user_id, Some(configuration), now).await
+}
+
+async fn delivery_state_of(db: &DatabaseConnection, child_chat_id: Uuid) -> String {
+    chats::Entity::find_by_id(child_chat_id)
+        .one(db)
+        .await
+        .unwrap()
+        .expect("child should exist")
+        .assistant_configuration
+        .expect("configuration")["provenance"]["result_delivery"]["state"]
+        .as_str()
+        .expect("state")
+        .to_string()
+}
+
+/// The relocation, asserted on the tick rather than on the supervisor: the
+/// delivery backstop runs on a deployment that never opted into deleting data,
+/// and the retention half still does not.
+///
+/// `cleanup_enabled` defaults to `false`, so if the sweep sat behind it the
+/// backstop would be missing exactly where a stranded result is most likely to
+/// go unnoticed — which is every default deployment.
+///
+/// # Test Categories
+/// - `uses-db`
+///
+/// # Test Behavior
+/// Runs one tick with `cleanup_enabled = false` and asserts the owed result was
+/// delivered while an old archived chat survived, then one with it `true` and
+/// asserts the archived chat was finally deleted.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn cleanup_tick_sweeps_without_cleanup_enabled_and_archives_with_it(pool: Pool<Postgres>) {
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+    let me = erato::models::user::get_or_create_user(&db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .unwrap();
+    let me_id = me.id.to_string();
+
+    let long_ago: DateTimeWithTimeZone = (Utc::now() - Duration::days(40)).into();
+    let old_archived = insert_chat(&db, &me_id, None, long_ago).await;
+    set_chat_columns(
+        &db,
+        old_archived,
+        chats::ActiveModel {
+            archived_at: ActiveValue::Set(Some(long_ago)),
+            ..Default::default()
+        },
+    )
+    .await;
+
+    let origin = insert_chat(&db, &me_id, None, Utc::now().into()).await;
+    let child = stage_owed_delivery(&db, &me_id, origin).await;
+
+    let mut args = CleanupWorkerArgs {
+        db: db.clone(),
+        cleanup_enabled: false,
+        cleanup_archived_max_age_days: 30,
+        // Off: the retention pass must not be what decides this test.
+        delegated_run_auto_archive_after_days: 0,
+        generation_stale_after_secs: 30,
+        result_max_chars: 4000,
+    };
+    run_cleanup_tick(&args).await.expect("tick must not fail");
+
+    assert_eq!(
+        delivery_state_of(&db, child).await,
+        "delivered",
+        "the backstop must deliver a stranded result on a deployment that never \
+         opted into deleting data"
+    );
+    let delivered_rows = messages::Entity::find()
+        .filter(messages::Column::ChatId.eq(origin))
+        .all(&db)
+        .await
+        .unwrap();
+    assert_eq!(
+        delivered_rows.len(),
+        1,
+        "the origin must have received exactly one task result row"
+    );
+    assert!(
+        chats::Entity::find_by_id(old_archived)
+            .one(&db)
+            .await
+            .unwrap()
+            .is_some(),
+        "the retention half must stay behind its opt-in"
+    );
+
+    args.cleanup_enabled = true;
+    run_cleanup_tick(&args).await.expect("tick must not fail");
+    assert!(
+        chats::Entity::find_by_id(old_archived)
+            .one(&db)
+            .await
+            .unwrap()
+            .is_none(),
+        "with the opt-in set, the retention half must still run"
     );
 }

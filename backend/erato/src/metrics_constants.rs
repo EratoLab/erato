@@ -33,6 +33,9 @@ pub const POSTGRES_QUERY_DELIVERY_CLAIM: &str = "delivery_claim";
 pub const POSTGRES_QUERY_DELIVERY_STATE_SET: &str = "delivery_state_set";
 pub const POSTGRES_QUERY_DELIVERY_NEXT_PENDING: &str = "delivery_next_pending";
 pub const POSTGRES_QUERY_DELIVERY_DUPLICATE_PROBE: &str = "delivery_duplicate_probe";
+pub const POSTGRES_QUERY_DELIVERY_SWEEP_REQUEUE: &str = "delivery_sweep_requeue";
+pub const POSTGRES_QUERY_DELIVERY_SWEEP_SCAN: &str = "delivery_sweep_scan";
+pub const POSTGRES_QUERY_DELIVERY_SWEEP_CLAIM: &str = "delivery_sweep_claim";
 
 pub const KNOWN_POSTGRES_QUERY_IDS: &[&str] = &[
     POSTGRES_QUERY_VERIFY_LATEST_MIGRATION,
@@ -69,4 +72,7 @@ pub const KNOWN_POSTGRES_QUERY_IDS: &[&str] = &[
     POSTGRES_QUERY_DELIVERY_STATE_SET,
     POSTGRES_QUERY_DELIVERY_NEXT_PENDING,
     POSTGRES_QUERY_DELIVERY_DUPLICATE_PROBE,
+    POSTGRES_QUERY_DELIVERY_SWEEP_REQUEUE,
+    POSTGRES_QUERY_DELIVERY_SWEEP_SCAN,
+    POSTGRES_QUERY_DELIVERY_SWEEP_CLAIM,
 ];

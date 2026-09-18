@@ -87,6 +87,7 @@ impl Actor for WorkerSupervisor {
             cleanup_archived_max_age_days: config.cleanup_archived_max_age_days,
             delegated_run_auto_archive_after_days: config.delegation.auto_archive_after_days,
             generation_stale_after_secs: config.generation_status.stale_after_secs,
+            result_max_chars: config.delegation.result_max_chars,
         };
 
         // Start the cron manager
