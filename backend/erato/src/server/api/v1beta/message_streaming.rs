@@ -3555,6 +3555,7 @@ async fn settle_delegation_slot<
             assistant_id,
             assistant_name,
             delegate_chat_id,
+            run_mode,
         }) => {
             // A bare task child has no assistant to name. The
             // keys are omitted rather than sent null, so a reader
@@ -3569,18 +3570,39 @@ async fn settle_delegation_slot<
                     }
                 }
             };
+            // The background shape is left byte-identical - every shipped
+            // part has it, and the frontend's dispatch pill keys on
+            // `background`, which is true of both detached modes. `async`
+            // adds exactly one key, because a reader has to be able to tell
+            // a run whose answer is coming back from one whose never will.
+            // It is inert on replay: `frame_delegation_result` returns
+            // before touching an object with no string `result`.
+            let is_async = run_mode == crate::models::message::ProvenanceRunMode::Async;
             let mut ui_output = json!({
                 "delegate_chat_id": delegate_chat_id,
                 "child_run_id": delegate_chat_id,
                 "background": true,
             });
+            if is_async && let Some(object) = ui_output.as_object_mut() {
+                object.insert("run_mode".to_string(), json!("async"));
+            }
             identity(&mut ui_output);
             let mut model_output = json!({
                 "status": "dispatched",
                 "delegate_chat_id": delegate_chat_id,
                 "child_run_id": delegate_chat_id,
-                "note": "the result will not be returned to this conversation",
+                // The background note ("will not be returned") is false for
+                // async, and a model that believed it would never plan on the
+                // answer arriving.
+                "note": if is_async {
+                    "the result will be delivered into this conversation when the task finishes"
+                } else {
+                    "the result will not be returned to this conversation"
+                },
             });
+            if is_async && let Some(object) = model_output.as_object_mut() {
+                object.insert("run_mode".to_string(), json!("async"));
+            }
             identity(&mut model_output);
             (
                 ToolCallStatus::Success,
@@ -3813,13 +3835,23 @@ async fn launch_prepared_task<'a>(
     pending: PendingTask,
 ) -> (Option<JsonValue>, InFlightTask<'a>) {
     let PendingTask { meta, prepared } = pending;
+    let crate::services::delegation::PreparedTask {
+        target,
+        brief,
+        run_mode,
+        scheduling,
+    } = prepared;
     match crate::services::delegation::launch_delegation(
         app_state,
         policy,
         context,
-        prepared.target,
-        crate::models::message::DelegationRunMode::Wait,
-        prepared.brief,
+        target,
+        crate::services::delegation::LaunchRunSpec {
+            run_mode: run_mode.into(),
+            scheduling,
+            parent_tool_call_id: Some(meta.tool_call.call_id.clone()),
+        },
+        brief,
     )
     .await
     {
@@ -3848,13 +3880,14 @@ async fn launch_prepared_task<'a>(
                 }),
             )
         }
-        // Unreachable while `wait` is the only run mode a task may ask for,
-        // but a dispatch settles its own slot at once and needs no wait, so
-        // the shape is already right for the detached mode.
+        // An `async` task takes this arm: the dispatch settles its own slot at
+        // once and needs no wait, because its answer comes home later as its
+        // own row rather than as this call's result.
         Ok(crate::services::delegation::LaunchOutcome::Dispatched {
             assistant_id,
             assistant_name,
             delegate_chat_id,
+            run_mode,
         }) => (
             None,
             Box::pin(std::future::ready(SettledTask {
@@ -3864,6 +3897,7 @@ async fn launch_prepared_task<'a>(
                         assistant_id,
                         assistant_name,
                         delegate_chat_id,
+                        run_mode,
                     },
                 ),
             })),

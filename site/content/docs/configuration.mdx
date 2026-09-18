@@ -3764,7 +3764,7 @@ auto_archive_after_days = 7
 
 {/* erato_toml_config_key: delegation.preamble */}
 
-Directive rendered into the delegated chat's first turn, telling the delegate it runs as a delegated worker and where its final message ends up. The delegate's own system prompt is untouched; the directive is additive. The placeholder `{{result_disposition}}` is replaced with a sentence matching the run's mode — for an awaited run, that the final message is returned to the origin chat as the task result; for a background run, that the origin chat does not receive it and the user reads it in the run itself. The placeholders `{{expected_output_section}}` and `{{constraints_section}}` are replaced with formatted blocks when the origin model supplies the corresponding tool arguments, and with empty strings otherwise. A template that omits a placeholder simply renders without that part.
+Directive rendered into the delegated chat's first turn, telling the delegate it runs as a delegated worker and where its final message ends up. The delegate's own system prompt is untouched; the directive is additive. The placeholder `{{result_disposition}}` is replaced with a sentence matching the run's mode — for an awaited run, that the final message is returned to the origin chat as the task result; for a background run, that the origin chat does not receive it and the user reads it in the run itself; for an async run, that the final message is delivered back into the origin conversation when the run finishes and must therefore stand on its own. The placeholders `{{expected_output_section}}` and `{{constraints_section}}` are replaced with formatted blocks when the origin model supplies the corresponding tool arguments, and with empty strings otherwise. A template that omits a placeholder simply renders without that part.
 
 **Default value:** the built-in directive shown in the `erato.template.toml` reference block
 
@@ -4020,6 +4020,52 @@ This only takes effect when `delegation.tasks.enabled` is `true`.
 ```toml
 [delegation.tasks]
 multitask_strategy = "reject"
+```
+
+#### `delegation.tasks.run_modes`
+
+{/* erato_toml_config_key: delegation.tasks.run_modes.[] */}
+
+Which run modes the `erato/delegate_task` tool offers the model. `wait` returns the sub-task's answer as the result of the call, in the same turn. `async` settles the call at launch and the answer is delivered into the conversation later, as its own message the model then reacts to — use it for work that would otherwise keep the user waiting.
+
+Only the modes listed here appear in the tool schema, and a call naming a mode that is not offered is refused rather than quietly downgraded. `wait` is always available even if a facet override omits it: the offer would otherwise have an empty choice.
+
+The list must be non-empty and free of duplicates; a repeated entry is rejected at startup, because the list becomes an enum the model reads and a repetition reads as emphasis.
+
+This only takes effect when `delegation.tasks.enabled` is `true`.
+
+**Default value:** `["wait"]`
+
+**Type:** `list<string>` (each one of `wait`, `async`)
+
+**Example:**
+
+```toml
+[delegation.tasks]
+run_modes = ["wait", "async"]
+```
+
+#### `delegation.tasks.scheduling`
+
+{/* erato_toml_config_key: delegation.tasks.scheduling */}
+
+What happens when an `async` task's result is delivered back into the conversation that started it. `when_idle` runs a reaction turn as soon as that chat is free, so the answer is followed by the model's own response to it. `silent` stores the result without replying; the next message the user sends composes it into history.
+
+The model may ask for either per call through the tool's `scheduling` argument; this key is the default when it does not.
+
+`interrupt` is a reserved spelling with no implementation. Writing it is rejected at startup rather than silently treated as `when_idle`, because the name promises behaviour the deployment would not get.
+
+This only takes effect when `delegation.tasks.enabled` is `true` and `async` is in `delegation.tasks.run_modes`.
+
+**Default value:** `"when_idle"`
+
+**Type:** `string` (one of `when_idle`, `silent`, `interrupt`)
+
+**Example:**
+
+```toml
+[delegation.tasks]
+scheduling = "when_idle"
 ```
 
 ### `assistant_hub`
@@ -4310,6 +4356,8 @@ additional_system_prompt = "You are assisting inside the Outlook add-in. Keep re
 {/* erato_toml_config_key: facets.facets.<facet-id>.delegation.max_parallel */}
 {/* erato_toml_config_key: facets.facets.<facet-id>.delegation.persona */}
 {/* erato_toml_config_key: facets.facets.<facet-id>.delegation.child_facet_ids.[] */}
+{/* erato_toml_config_key: facets.facets.<facet-id>.delegation.run_modes.[] */}
+{/* erato_toml_config_key: facets.facets.<facet-id>.delegation.scheduling */}
 
 A facet may override the [`delegation.tasks`](#delegationtasks) runtime keys while it is selected, so a dedicated planning facet can budget differently from the deployment default. Every key is optional and falls back to the global value.
 
@@ -4332,6 +4380,8 @@ child_facet_ids = ["web_search"]
 - `max_client_tool_calls_per_task` - Overrides `delegation.tasks.max_client_tool_calls_per_task`. Raising this while leaving the server budget alone is the usual shape for a planning facet.
 - `persona` - Overrides `delegation.tasks.persona`.
 - `child_facet_ids` - Overrides `delegation.tasks.child_facet_ids`. Each entry must name a configured facet.
+- `run_modes` - Overrides `delegation.tasks.run_modes`. Unioned with the global list rather than replacing it, because a run mode is a capability the facet's author meant to grant; `wait` is always kept available.
+- `scheduling` - Overrides `delegation.tasks.scheduling`. The first selected facet that states one wins.
 
 #### `facets.priority_order`
 

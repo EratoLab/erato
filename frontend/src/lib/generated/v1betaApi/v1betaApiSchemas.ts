@@ -967,7 +967,7 @@ export type ContentPartActionFacetMarker = {
 export type ContentPartDelegationPreambleMarker = {
   constraints?: null | undefined;
   expected_output?: null | undefined;
-  run_mode?: null | DelegationRunMode;
+  run_mode?: null | ProvenanceRunMode;
 };
 
 export type ContentPartImage = {
@@ -2231,6 +2231,18 @@ export type PromptOptimizerResponse = {
    */
   optimized_prompt: string;
 };
+
+/**
+ * How a delegated run's result gets back to the turn that started it, as
+ * persisted on [`crate::models::chat::ChatProvenance`].
+ *
+ * A superset of [`DelegationRunMode`], deliberately kept as its own type: the
+ * request wire stays at two variants, so `"async"` in a submit, edit or
+ * regenerate body is a deserialization failure rather than a mode a client can
+ * ask for. `Wait` is never written - absence means it - so every envelope
+ * stored before this type existed deserializes unchanged.
+ */
+export type ProvenanceRunMode = "wait" | "background" | "async";
 
 export type RecentChat = {
   /**

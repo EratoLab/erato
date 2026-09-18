@@ -7,6 +7,7 @@ const FLAG_WINDOW_KEYS = [
   "ASSISTANTS_DELEGATION_ENABLED",
   "ASSISTANTS_DELEGATION_ALLOW_BACKGROUND",
   "DELEGATION_TASKS_ENABLED",
+  "DELEGATION_TASKS_ALLOW_ASYNC",
 ] as const;
 
 describe("injectFrontendEnv assistants flags", () => {
@@ -22,6 +23,7 @@ describe("injectFrontendEnv assistants flags", () => {
     vi.stubEnv("VITE_ASSISTANTS_DELEGATION_ENABLED", "true");
     vi.stubEnv("VITE_ASSISTANTS_DELEGATION_ALLOW_BACKGROUND", "true");
     vi.stubEnv("VITE_DELEGATION_TASKS_ENABLED", "true");
+    vi.stubEnv("VITE_DELEGATION_TASKS_ALLOW_ASYNC", "true");
 
     injectFrontendEnv();
 
@@ -29,6 +31,7 @@ describe("injectFrontendEnv assistants flags", () => {
     expect(window.ASSISTANTS_DELEGATION_ENABLED).toBe(true);
     expect(window.ASSISTANTS_DELEGATION_ALLOW_BACKGROUND).toBe(true);
     expect(window.DELEGATION_TASKS_ENABLED).toBe(true);
+    expect(window.DELEGATION_TASKS_ALLOW_ASYNC).toBe(true);
   });
 
   it("leaves flags unset when the env does not enable them", () => {
@@ -38,6 +41,7 @@ describe("injectFrontendEnv assistants flags", () => {
     vi.stubEnv("VITE_ASSISTANTS_DELEGATION_ENABLED", "");
     vi.stubEnv("VITE_ASSISTANTS_DELEGATION_ALLOW_BACKGROUND", "");
     vi.stubEnv("VITE_DELEGATION_TASKS_ENABLED", "");
+    vi.stubEnv("VITE_DELEGATION_TASKS_ALLOW_ASYNC", "");
 
     injectFrontendEnv();
 
