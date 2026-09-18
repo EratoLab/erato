@@ -22,6 +22,10 @@ pub struct CleanupWorkerArgs {
     pub cleanup_archived_max_age_days: u32,
     pub delegated_run_auto_archive_after_days: u32,
     pub generation_stale_after_secs: u64,
+    /// The bound the delivery backstop truncates a delivered result to. Read
+    /// here so the sweep reuses the awaited path's one truncation rule rather
+    /// than growing a second.
+    pub result_max_chars: usize,
 }
 
 pub struct CleanupWorker;
@@ -117,11 +121,27 @@ pub async fn cleanup_archived_chats(
 
 /// One cleanup tick, callable without an actor system.
 ///
-/// The body lives here rather than inside `Actor::handle` so that tests (and, in
-/// a later slice, the delivery backstop) can drive a tick directly: a tick that
-/// can only be reached by waiting five minutes for a cron actor is a tick nobody
-/// can assert on.
+/// The body lives here rather than inside `Actor::handle` so that tests can
+/// drive a tick directly: a tick that can only be reached by waiting five
+/// minutes for a cron actor is a tick nobody can assert on — and the delivery
+/// backstop it now carries is crash recovery, which has to be testable.
 pub async fn run_cleanup_tick(args: &CleanupWorkerArgs) -> Result<(), ActorProcessingErr> {
+    // FIRST, and unconditional. This is the crash-recovery half: it delivers
+    // any `async` task result whose live delivery a dying replica dropped, and
+    // it deletes nothing, so it must not sit behind the retention opt-in below.
+    // It returns no `Result` precisely so that the pre-existing `?`s further
+    // down can never skip it, and so that one unreachable child cannot take the
+    // retention pass with it.
+    let swept = crate::services::task_delivery::sweep_task_result_deliveries(
+        &args.db,
+        args.result_max_chars,
+        args.generation_stale_after_secs,
+    )
+    .await;
+    if swept.touched() {
+        tracing::info!(?swept, "Backstop swept task result deliveries");
+    }
+
     // The retention half is the operator's opt-in to deleting data. Anything in
     // this tick that deletes nothing belongs above this line.
     if !args.cleanup_enabled {
