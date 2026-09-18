@@ -24,7 +24,12 @@ use crate::test_utils::{
 };
 
 /// Mark a chat as having a running generation with the given heartbeat age.
-async fn mark_running(db: &DatabaseConnection, chat_id: Uuid, heartbeat_age_secs: u64) {
+///
+/// `pub(super)` so `api::delegation` can stage a held lease for `/react`
+/// (ERMAIN-781-B) instead of keeping a second copy of this UPDATE, which is how
+/// the two would drift the first time either the column set or the staleness
+/// clock changed.
+pub(super) async fn mark_running(db: &DatabaseConnection, chat_id: Uuid, heartbeat_age_secs: u64) {
     db.execute_raw(Statement::from_sql_and_values(
         sea_orm::DatabaseBackend::Postgres,
         r#"
