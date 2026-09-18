@@ -276,6 +276,7 @@ export const DEFAULT_STUBS = {
   ProfileProvider: StubPassthrough,
   SettingsIcon: StubNothing,
   Toaster: StubNothing,
+  McpAuthorizationToasts: StubNothing,
 
   // Class names and style records the add-in pastes into its own markup.
   // `sidebarInsetClassName` is the host's `ERATO_GEOMETRY_CLASS` entry, so the

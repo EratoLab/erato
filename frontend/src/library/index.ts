@@ -616,3 +616,8 @@ export type {
 } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 
 export { useMcpBrowserAuthorization } from "@/hooks/ui/useMcpBrowserAuthorization";
+
+// Mount beside the host's <Toaster />: a host that can authorize an MCP
+// server has to be able to report how that authorization ended, including
+// after the user has closed the settings surface they started it from.
+export { McpAuthorizationToasts } from "@/components/ui/Settings/mcpAuthorizationToasts";

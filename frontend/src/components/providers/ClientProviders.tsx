@@ -11,6 +11,7 @@ import {
 } from "../../providers/DesktopSidecarProvider";
 import { FeatureConfigProvider } from "../../providers/FeatureConfigProvider";
 import { I18nProvider } from "../../providers/I18nProvider";
+import { McpAuthorizationToasts } from "../ui/Settings/mcpAuthorizationToasts";
 import { Toaster } from "../ui/Toast/Toaster";
 
 import type { PropsWithChildren } from "react";
@@ -39,6 +40,10 @@ export function ClientProviders({ children }: PropsWithChildren) {
                   </McpOauthCallbackBoundary>
                 </div>
                 <Toaster placement="bottom-center" />
+                {/* An authorization outlives the settings dialog it starts
+                    in, so its outcome is announced from the app, not the
+                    pane. */}
+                <McpAuthorizationToasts />
               </>
             </I18nProvider>
           </FeatureConfigProvider>

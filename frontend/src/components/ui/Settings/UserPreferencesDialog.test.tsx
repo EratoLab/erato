@@ -24,6 +24,7 @@ import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 import { useAudioInputDeviceStore } from "@/state/audioInputDeviceStore";
 
 import { UserPreferencesDialog } from "./UserPreferencesDialog";
+import { toast, Toaster } from "../Toast";
 
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
@@ -162,6 +163,8 @@ function renderDialog({
               onClose={onClose}
               userProfile={profile}
             />
+            {/* Connection outcomes are toasts, as they are in the app. */}
+            <Toaster />
           </QueryClientProvider>
         </ThemeProvider>
       </StaticFeatureConfigProvider>
@@ -196,6 +199,7 @@ afterEach(() => {
   ))
     clearMcpAuthorization(serverId);
   cleanup();
+  toast.clear();
   vi.restoreAllMocks();
   vi.clearAllMocks();
   vi.unstubAllGlobals();

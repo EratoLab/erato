@@ -3122,78 +3122,93 @@ msgstr "Notifications"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpAuthorizationNotice.tsx
-msgid "mcp.authorization.check"
-msgstr "Vérifier la connexion"
+#~ msgid "mcp.authorization.check"
+#~ msgstr "Vérifier la connexion"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpAuthorizationNotice.tsx
-msgid "mcp.authorization.denied"
-msgstr "L’autorisation n’a pas été accordée. Vous pouvez réessayer quand vous le souhaitez."
+#~ msgid "mcp.authorization.denied"
+#~ msgstr "L’autorisation n’a pas été accordée. Vous pouvez réessayer quand vous le souhaitez."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpAuthorizationNotice.tsx
-msgid "mcp.authorization.dismiss"
-msgstr "Fermer"
+#~ msgid "mcp.authorization.dismiss"
+#~ msgstr "Fermer"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpAuthorizationNotice.tsx
-msgid "mcp.authorization.error"
-msgstr "L’autorisation n’a pas pu être finalisée. Vérifiez la connexion ou réessayez l’autorisation."
+#~ msgid "mcp.authorization.error"
+#~ msgstr "L’autorisation n’a pas pu être finalisée. Vérifiez la connexion ou réessayez l’autorisation."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpAuthorizationNotice.tsx
-msgid "mcp.authorization.finishing"
-msgstr "Finalisation de la connexion…"
+#~ msgid "mcp.authorization.finishing"
+#~ msgstr "Finalisation de la connexion…"
 
 #. js-lingui-explicit-id
 #: src/components/providers/McpOauthCallbackBoundary.tsx
-msgid "mcp.authorization.finishingNamed"
+#~ msgid "mcp.authorization.finishingNamed"
+#~ msgstr "Finalisation de la connexion à {server}…"
+
+#. js-lingui-explicit-id
+#: src/components/providers/McpOauthCallbackBoundary.tsx
+#~ msgid "mcp.authorization.missingReturn"
+#~ msgstr "Cette autorisation n’a pas pu être associée à une connexion. Ouvrez les paramètres pour vérifier le serveur ou réessayer."
+
+#. js-lingui-explicit-id
+#: src/components/providers/McpOauthCallbackBoundary.tsx
+#~ msgid "mcp.authorization.openSettings"
+#~ msgstr "Ouvrir les paramètres"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpAuthorizationNotice.tsx
+#~ msgid "mcp.authorization.reopen"
+#~ msgstr "Rouvrir la page d’autorisation"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/ServersToolsPane.tsx
+#~ msgid "mcp.authorization.rowPending"
+#~ msgstr "Connexion en cours…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpAuthorizationNotice.tsx
+#~ msgid "mcp.authorization.starting"
+#~ msgstr "Ouverture de l’autorisation…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpAuthorizationNotice.tsx
+#~ msgid "mcp.authorization.stopWaiting"
+#~ msgstr "Arrêter d’attendre"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpAuthorizationNotice.tsx
+#~ msgid "mcp.authorization.timeout"
+#~ msgstr "La connexion n’a pas encore été confirmée. Vérifiez à nouveau avant de lancer une autre autorisation."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpAuthorizationNotice.tsx
+#~ msgid "mcp.authorization.unavailable"
+#~ msgstr "La connexion au serveur n’a pas pu être confirmée. Vérifiez à nouveau la connexion après avoir terminé l’autorisation."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpAuthorizationNotice.tsx
+#~ msgid "mcp.authorization.waiting"
+#~ msgstr "En attente d’autorisation. Suivez les étapes dans votre navigateur avec le même compte."
+
+#. js-lingui-explicit-id
+#: src/components/providers/McpOauthCallbackBoundary.tsx
+msgid "mcp.callback.finishing"
 msgstr "Finalisation de la connexion à {server}…"
 
 #. js-lingui-explicit-id
 #: src/components/providers/McpOauthCallbackBoundary.tsx
-msgid "mcp.authorization.missingReturn"
+msgid "mcp.callback.missingReturn"
 msgstr "Cette autorisation n’a pas pu être associée à une connexion. Ouvrez les paramètres pour vérifier le serveur ou réessayer."
 
 #. js-lingui-explicit-id
 #: src/components/providers/McpOauthCallbackBoundary.tsx
-msgid "mcp.authorization.openSettings"
+msgid "mcp.callback.openSettings"
 msgstr "Ouvrir les paramètres"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/McpAuthorizationNotice.tsx
-msgid "mcp.authorization.reopen"
-msgstr "Rouvrir la page d’autorisation"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/ServersToolsPane.tsx
-msgid "mcp.authorization.rowPending"
-msgstr "Connexion en cours…"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/McpAuthorizationNotice.tsx
-msgid "mcp.authorization.starting"
-msgstr "Ouverture de l’autorisation…"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/McpAuthorizationNotice.tsx
-msgid "mcp.authorization.stopWaiting"
-msgstr "Arrêter d’attendre"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/McpAuthorizationNotice.tsx
-msgid "mcp.authorization.timeout"
-msgstr "La connexion n’a pas encore été confirmée. Vérifiez à nouveau avant de lancer une autre autorisation."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/McpAuthorizationNotice.tsx
-msgid "mcp.authorization.unavailable"
-msgstr "La connexion au serveur n’a pas pu être confirmée. Vérifiez à nouveau la connexion après avoir terminé l’autorisation."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/McpAuthorizationNotice.tsx
-msgid "mcp.authorization.waiting"
-msgstr "En attente d’autorisation. Suivez les étapes dans votre navigateur avec le même compte."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/McpToolApprovalCard.tsx
@@ -3940,13 +3955,38 @@ msgstr "Autoriser"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/ServersToolsPane.tsx
-msgid "preferences.dialog.mcpServers.oauth.authorizing"
-msgstr "Autorisation en cours..."
+#~ msgid "preferences.dialog.mcpServers.oauth.authorizing"
+#~ msgstr "Autorisation en cours..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/mcpAuthorizationToasts.ts
+msgid "preferences.dialog.mcpServers.oauth.check"
+msgstr "Vérifier la connexion"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 #~ msgid "preferences.dialog.mcpServers.oauth.closed"
 #~ msgstr "La fenêtre d’autorisation a été fermée avant la fin de la connexion."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/mcpAuthorizationToasts.ts
+msgid "preferences.dialog.mcpServers.oauth.connected.description"
+msgstr "Le serveur est prêt à être utilisé."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/mcpAuthorizationToasts.ts
+msgid "preferences.dialog.mcpServers.oauth.connected.title"
+msgstr "Autorisation terminée"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/mcpAuthorizationToasts.ts
+msgid "preferences.dialog.mcpServers.oauth.denied.description"
+msgstr "Vous pouvez réessayer quand vous le souhaitez."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/mcpAuthorizationToasts.ts
+msgid "preferences.dialog.mcpServers.oauth.denied.title"
+msgstr "L’autorisation n’a pas été accordée"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/ServersToolsPane.tsx
@@ -3969,6 +4009,16 @@ msgid "preferences.dialog.mcpServers.oauth.disconnectSuccess"
 msgstr "Déconnexion réussie."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/mcpAuthorizationToasts.ts
+msgid "preferences.dialog.mcpServers.oauth.error.description"
+msgstr "Vérifiez la connexion ou réessayez l’autorisation."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/mcpAuthorizationToasts.ts
+msgid "preferences.dialog.mcpServers.oauth.error.title"
+msgstr "L’autorisation n’a pas pu être finalisée"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 #~ msgid "preferences.dialog.mcpServers.oauth.failureAfterCallback"
 #~ msgstr "L'autorisation est terminée, mais le serveur est toujours indisponible. Rouvrez cet onglet pour vérifier à nouveau."
@@ -3984,14 +4034,59 @@ msgstr "Déconnexion réussie."
 #~ msgstr "Impossible d’ouvrir la fenêtre d’autorisation. Autorisez les pop-ups et réessayez."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/mcpAuthorizationToasts.ts
+msgid "preferences.dialog.mcpServers.oauth.reopen"
+msgstr "Rouvrir la page d’autorisation"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/ServersToolsPane.tsx
+msgid "preferences.dialog.mcpServers.oauth.rowPending"
+msgstr "Connexion en cours…"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 #~ msgid "preferences.dialog.mcpServers.oauth.startError"
 #~ msgstr "Impossible de démarrer l’autorisation. Veuillez réessayer."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/mcpAuthorizationToasts.ts
+msgid "preferences.dialog.mcpServers.oauth.stopWaiting"
+msgstr "Arrêter d’attendre"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/McpAuthorizationNotice.tsx
-msgid "preferences.dialog.mcpServers.oauth.success"
-msgstr "Autorisation terminée. Le serveur est prêt à être utilisé."
+#~ msgid "preferences.dialog.mcpServers.oauth.success"
+#~ msgstr "Autorisation terminée. Le serveur est prêt à être utilisé."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/mcpAuthorizationToasts.ts
+msgid "preferences.dialog.mcpServers.oauth.timeout.description"
+msgstr "Vérifiez à nouveau avant de lancer une autre autorisation."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/mcpAuthorizationToasts.ts
+msgid "preferences.dialog.mcpServers.oauth.timeout.title"
+msgstr "La connexion n’a pas encore été confirmée"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/mcpAuthorizationToasts.ts
+msgid "preferences.dialog.mcpServers.oauth.unavailable.description"
+msgstr "Vérifiez à nouveau la connexion après avoir terminé l’autorisation."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/mcpAuthorizationToasts.ts
+msgid "preferences.dialog.mcpServers.oauth.unavailable.title"
+msgstr "La connexion au serveur n’a pas pu être confirmée"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/mcpAuthorizationToasts.ts
+msgid "preferences.dialog.mcpServers.oauth.waiting.description"
+msgstr "Suivez les étapes dans votre navigateur avec le même compte."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/mcpAuthorizationToasts.ts
+msgid "preferences.dialog.mcpServers.oauth.waiting.title"
+msgstr "En attente d’autorisation"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

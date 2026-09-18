@@ -2,7 +2,7 @@ import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useEffect, useRef, useState } from "react";
 
-import { Button } from "../Controls/Button";
+import { Button, controlSurfaceClassName } from "../Controls/Button";
 import {
   CheckCircleIcon,
   CloseIcon,
@@ -159,20 +159,37 @@ export function ToastItem({ toast }: ToastItemProps) {
             ) : null}
             {toast.actions && toast.actions.length > 0 ? (
               <div className="mt-3 flex flex-wrap gap-2">
-                {toast.actions.map((action) => (
-                  <Button
-                    key={action.id}
-                    type="button"
-                    size="sm"
-                    variant={action.variant ?? "secondary"}
-                    onClick={() => {
-                      action.onClick();
-                      beginDismiss();
-                    }}
-                  >
-                    {action.label}
-                  </Button>
-                ))}
+                {toast.actions.map((action) =>
+                  action.href ? (
+                    <a
+                      key={action.id}
+                      href={action.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={controlSurfaceClassName({
+                        variant: action.variant ?? "secondary",
+                      })}
+                      // Navigating away is not finishing: the toast stays so
+                      // the user can come back to it.
+                      onClick={action.onClick}
+                    >
+                      {action.label}
+                    </a>
+                  ) : (
+                    <Button
+                      key={action.id}
+                      type="button"
+                      size="sm"
+                      variant={action.variant ?? "secondary"}
+                      onClick={() => {
+                        action.onClick?.();
+                        beginDismiss();
+                      }}
+                    >
+                      {action.label}
+                    </Button>
+                  ),
+                )}
               </div>
             ) : null}
           </div>

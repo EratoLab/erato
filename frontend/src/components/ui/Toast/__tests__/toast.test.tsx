@@ -69,4 +69,48 @@ describe("toast / Toaster", () => {
     expect(screen.queryByText("Original")).not.toBeInTheDocument();
     expect(screen.getByText("Replacement")).toBeInTheDocument();
   });
+
+  it("renders an href action as a link and keeps the toast open through it", () => {
+    render(<Toaster />);
+    act(() => {
+      toast.custom({
+        variant: "info",
+        title: "Still waiting",
+        actions: [
+          {
+            id: "open",
+            label: "Open again",
+            href: "https://example.test/auth",
+          },
+        ],
+      });
+    });
+    const link = screen.getByRole("link", { name: "Open again" });
+    expect(link).toHaveAttribute("href", "https://example.test/auth");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    // Leaving to finish the work elsewhere must not retract the toast that
+    // says the work is still outstanding.
+    act(() => link.click());
+    expect(screen.getByText("Still waiting")).toBeInTheDocument();
+  });
+
+  it("dismisses by dedupe key, running the descriptor's onDismiss", () => {
+    let dismissed = false;
+    render(<Toaster />);
+    act(() => {
+      toast.info({
+        title: "Occupying the slot",
+        dedupeKey: "slot",
+        onDismiss: () => {
+          dismissed = true;
+        },
+      });
+    });
+    act(() => toast.dismissKey("slot"));
+    expect(screen.queryByText("Occupying the slot")).not.toBeInTheDocument();
+    expect(dismissed).toBe(true);
+    // An empty slot is not an error.
+    expect(() => act(() => toast.dismissKey("slot"))).not.toThrow();
+  });
 });
