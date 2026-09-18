@@ -52,7 +52,11 @@ pub(super) async fn mark_running(db: &DatabaseConnection, chat_id: Uuid, heartbe
 }
 
 /// Park a chat on a tool approval.
-async fn mark_awaiting_approval(db: &DatabaseConnection, chat_id: Uuid) {
+///
+/// `pub(super)` for the same reason as `mark_running` above: `api::delegation`
+/// stages a parked chat with it to pin `/react`'s `RefuseParked` decision
+/// (ERMAIN-781-B), and a second copy of this UPDATE would drift.
+pub(super) async fn mark_awaiting_approval(db: &DatabaseConnection, chat_id: Uuid) {
     db.execute_raw(Statement::from_sql_and_values(
         sea_orm::DatabaseBackend::Postgres,
         r#"

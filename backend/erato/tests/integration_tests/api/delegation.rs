@@ -11308,6 +11308,63 @@ async fn react_409_generation_running_when_lease_held(pool: Pool<Postgres>) {
     );
 }
 
+/// T4b. A chat parked on a tool approval stays parked.
+///
+/// The half of the lease decision a held `running` lease cannot pin: with
+/// `Takeover::TakeParked` — what the user-initiated sibling passes — this
+/// request would succeed, because a parked chat is claimable by a person
+/// asking for the turn. `/react` asks for a SYSTEM turn over content the
+/// server wrote, and displacing a decision somebody is in the middle of is not
+/// its call to make, so it refuses and leaves the card where it is.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn react_409_leaves_a_chat_parked_on_an_approval(pool: Pool<Postgres>) {
+    let (app_state, _llm, recorder) = react_state(pool, "MUST-NOT-RUN").await;
+    let me = test_user(&app_state).await;
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+
+    let (child_id, result_row_id) = stage_delivered_result(
+        &app_state,
+        &me.id.to_string(),
+        origin_chat_id,
+        "PARKED-ANSWER",
+    )
+    .await;
+
+    // The person is mid-decision on a tool approval in this very chat.
+    crate::api::generating::mark_awaiting_approval(&app_state.db, origin_chat_id).await;
+
+    let response = post_react(&server, origin_chat_id, result_row_id).await;
+    assert_eq!(response.status_code(), axum::http::StatusCode::CONFLICT);
+    let body: Value = response.json();
+    assert_eq!(body["code"], "generation_running");
+
+    let origin_row = erato::db::entity::chats::Entity::find_by_id(origin_chat_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("origin chat");
+    assert_eq!(
+        origin_row.generation_state.as_deref(),
+        Some("awaiting_approval"),
+        "the approval the person is answering must survive the refused reaction"
+    );
+    assert_eq!(
+        delivery_struct(&app_state, child_id).await.state,
+        erato::models::chat::ResultDeliveryState::Delivered,
+        "a refused reaction must leave the ladder where it found it"
+    );
+    assert!(
+        recorder.bodies().is_empty(),
+        "the refused request must not have reached a model at all"
+    );
+}
+
 /// T5. A chat the caller does not own answers 404, and runs nothing.
 ///
 /// **The security test of this PR** — the ERMAIN-485 class. The caller here can
@@ -11316,6 +11373,14 @@ async fn react_409_generation_running_when_lease_held(pool: Pool<Postgres>) {
 /// rather than inheriting whatever gate some read helper happens to apply.
 /// Refused and "the authorizer broke" are both 404, never 403, so a prober
 /// cannot use the status to learn that the chat exists.
+///
+/// The read the share link grants is `Action::SharedRead` — "any logged-in
+/// user, while the link is enabled and the chat is not archived" — so that is
+/// the action this fixture discriminates against, and authorizing it here
+/// instead of `SubmitMessage` makes this test answer 200. `Action::Read` is
+/// denied to a non-owner too, so downgrading to it would NOT be caught here:
+/// `SharedRead` is the privilege a reader actually holds, and the one a
+/// mutation has to reach for.
 ///
 /// # Test Categories
 /// - `uses-db`
