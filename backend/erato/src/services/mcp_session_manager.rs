@@ -183,10 +183,11 @@ type SessionAuthKey = Option<String>;
 type SessionKey = (Uuid, String, SessionAuthKey);
 
 /// Chat id under which user-facing tool enumeration keeps its sessions. It is
-/// deliberately distinct from the nil id the connection probe uses and
-/// invalidates on every call, so a settings pane listing servers cannot churn
-/// the session a tool listing was just served from. Idle eviction reclaims it.
+/// separate from chat sessions; connection probes never enter this cache.
+/// Idle eviction reclaims it.
 pub const ENUMERATION_CHAT_ID: Uuid = Uuid::from_u128(0x0e5e_ba4f_7a0b_4c0e_9c0e_5e0e_5e0e_5e0e);
+
+const CONNECTION_PROBE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// The outcome of listing one server's tools on behalf of a user.
 #[derive(Debug, Clone)]
@@ -895,24 +896,28 @@ impl McpSessionManager {
         server_id: &str,
         auth_context: &McpRequestAuthContext<'_>,
     ) -> McpServerConnectionStatus {
-        let Ok(config) = self.server_config(server_id).await else {
-            return McpServerConnectionStatus::Failure;
+        let probe = async {
+            let config = self.server_config(server_id).await?;
+            // Own the connection instead of sharing a cached probe session. Auth
+            // is resolved only by the transport, and dropping this future also
+            // drops the service's cancellation guard.
+            let service = create_mcp_service(server_id, &config, auth_context).await?;
+            // Dropping the service cancels it without delaying the result for
+            // the transport's best-effort remote session deletion.
+            service
+                .peer()
+                .list_tools(Default::default())
+                .await
+                .map(|_| ())
+                .map_err(Report::new)
         };
-
-        let probe_chat_id = Uuid::nil();
-        let result = self
-            .get_or_create_session(probe_chat_id, server_id, auth_context)
-            .await;
-
-        let session_auth_key = Self::session_auth_key(server_id, &config, auth_context)
-            .await
-            .ok();
-        if let Some(session_auth_key) = session_auth_key {
-            self.invalidate_session(&(probe_chat_id, server_id.to_string(), session_auth_key))
-                .await;
+        match tokio::time::timeout(CONNECTION_PROBE_TIMEOUT, probe).await {
+            Ok(result) => Self::connection_status_from_session_result(result),
+            Err(_) => {
+                warn!(server_id, "MCP connection probe timed out");
+                McpServerConnectionStatus::Failure
+            }
         }
-
-        Self::connection_status_from_session_result(result)
     }
 
     /// List one server's tools for a user, keeping the session cached under
@@ -955,8 +960,8 @@ impl McpSessionManager {
             .count()
     }
 
-    fn connection_status_from_session_result(
-        result: Result<SessionKey, Report>,
+    fn connection_status_from_session_result<T>(
+        result: Result<T, Report>,
     ) -> McpServerConnectionStatus {
         match result {
             Ok(_) => McpServerConnectionStatus::Success,

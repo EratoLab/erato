@@ -157,6 +157,22 @@ pub async fn resolve_oauth_access_token(
     config: &McpServerConfig,
     oauth2: &McpServerOauth2AuthenticationConfig,
 ) -> Result<String, AuthError> {
+    // No grant can be resolved without stored credentials. In particular, an
+    // unavailable authorization server must not delay reporting this state.
+    let credentials = DatabaseCredentialStore {
+        app_state: app_state.clone(),
+        user_id,
+        mcp_server_id: mcp_server_id.to_string(),
+    }
+    .load()
+    .await?;
+    if credentials
+        .and_then(|stored| stored.token_response)
+        .is_none()
+    {
+        return Err(AuthError::AuthorizationRequired);
+    }
+
     let manager = configured_authorization_manager(
         app_state,
         user_id,

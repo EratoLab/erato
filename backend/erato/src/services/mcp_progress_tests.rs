@@ -58,6 +58,7 @@ struct WireServer {
     call_gate: Arc<Gate>,
     /// Parks the `tools/list` that a new session issues while connecting.
     list_gate: Arc<Gate>,
+    list_disconnected: Arc<tokio::sync::Notify>,
 }
 
 async fn sse_connect(State(state): State<WireServer>) -> Response {
@@ -150,7 +151,13 @@ async fn http_post_gated_list(
     let list_gate = state.list_gate.clone();
     tokio::spawn(async move {
         if parks {
-            list_gate.park().await;
+            tokio::select! {
+                _ = list_gate.park() => {},
+                _ = tx.closed() => {
+                    state.list_disconnected.notify_one();
+                    return;
+                }
+            }
         }
         emit(request, tx, state).await;
     });
@@ -423,5 +430,122 @@ async fn a_connect_in_flight_does_not_hold_the_configuration_lock() {
     );
     state.list_gate.release();
     connecting.await.unwrap().unwrap();
+    server.abort();
+}
+
+#[tokio::test]
+async fn connection_probe_timeout_and_cancellation_close_the_uncached_connection() {
+    for cancel in [false, true] {
+        let state = WireServer::default();
+        let (address, server) = serve(
+            Router::new()
+                .route("/mcp", post(http_post_gated_list))
+                .with_state(state.clone()),
+        )
+        .await;
+        let mut config = AppConfig::default();
+        config
+            .mcp_servers
+            .insert("probe".into(), streamable(address, "mcp"));
+        let manager = Arc::new(McpSessionManager::new(&config));
+        let probe = tokio::spawn({
+            let manager = manager.clone();
+            async move {
+                manager
+                    .probe_connection("probe", &McpRequestAuthContext::default())
+                    .await
+            }
+        });
+        tokio::time::timeout(Duration::from_secs(5), state.list_gate.wait_entered())
+            .await
+            .unwrap();
+        assert_eq!(manager.active_session_count("probe").await, 0);
+        if cancel {
+            probe.abort();
+            assert!(probe.await.unwrap_err().is_cancelled());
+        } else {
+            let result =
+                tokio::time::timeout(CONNECTION_PROBE_TIMEOUT + Duration::from_secs(2), probe)
+                    .await
+                    .unwrap()
+                    .unwrap();
+            assert_eq!(result, McpServerConnectionStatus::Failure);
+        }
+        tokio::time::timeout(Duration::from_secs(5), state.list_disconnected.notified())
+            .await
+            .expect("probe must close its outstanding tools/list stream");
+        assert_eq!(manager.active_session_count("probe").await, 0);
+        server.abort();
+    }
+}
+
+#[tokio::test]
+async fn connection_probe_deadline_includes_initialization() {
+    let (address, server) = serve(Router::new().route(
+        "/mcp",
+        post(|| async { std::future::pending::<StatusCode>().await }),
+    ))
+    .await;
+    let mut config = AppConfig::default();
+    config
+        .mcp_servers
+        .insert("probe".into(), streamable(address, "mcp"));
+    let manager = McpSessionManager::new(&config);
+    let auth = McpRequestAuthContext::default();
+    let result = tokio::time::timeout(
+        CONNECTION_PROBE_TIMEOUT + Duration::from_secs(2),
+        manager.probe_connection("probe", &auth),
+    )
+    .await
+    .expect("initialization must share the probe deadline");
+    assert_eq!(result, McpServerConnectionStatus::Failure);
+    assert_eq!(manager.active_session_count("probe").await, 0);
+    server.abort();
+}
+
+#[tokio::test]
+async fn successful_probe_does_not_wait_for_remote_session_deletion() {
+    let deletion = Arc::new(Gate::default());
+    let app = Router::new()
+        .route(
+            "/mcp",
+            post(|state: State<WireServer>, request: Json<Value>| async {
+                let mut response = http_post(state, request).await;
+                response
+                    .headers_mut()
+                    .insert("mcp-session-id", "probe-session".parse().unwrap());
+                response
+            })
+            .delete({
+                let deletion = deletion.clone();
+                move || {
+                    let deletion = deletion.clone();
+                    async move {
+                        deletion.park().await;
+                        StatusCode::OK
+                    }
+                }
+            }),
+        )
+        .with_state(WireServer::default());
+    let (address, server) = serve(app).await;
+    let mut config = AppConfig::default();
+    config
+        .mcp_servers
+        .insert("probe".into(), streamable(address, "mcp"));
+    let manager = McpSessionManager::new(&config);
+    let auth = McpRequestAuthContext::default();
+    let result = tokio::time::timeout(
+        Duration::from_secs(2),
+        manager.probe_connection("probe", &auth),
+    )
+    .await
+    .expect("successful readiness must not wait for remote cleanup");
+    assert_eq!(result, McpServerConnectionStatus::Success);
+    tokio::time::timeout(Duration::from_secs(2), deletion.wait_entered())
+        .await
+        .expect("dropping the probe must initiate session cleanup");
+    assert_eq!(manager.active_session_count("probe").await, 0);
+    deletion.release();
     server.abort();
 }

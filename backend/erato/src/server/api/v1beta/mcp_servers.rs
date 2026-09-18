@@ -19,6 +19,7 @@ use crate::state::AppState;
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::{Extension, Json};
+use futures::{StreamExt, stream};
 use sea_orm::prelude::Uuid;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -171,21 +172,26 @@ pub async fn list_mcp_servers(
     let auth_context = auth_context(&app_state, &me_user, user_id);
     let server_ids = authorized_server_ids(&mcp, &me_user, &policy).await?;
 
-    let mut servers = Vec::with_capacity(server_ids.len());
-    for server_id in server_ids {
-        let Some(config) = mcp.config.mcp_servers.get(&server_id) else {
-            continue;
-        };
-        let connection_status = mcp
-            .servers
-            .probe_connection(&server_id, &auth_context)
-            .await;
-        servers.push(McpServerStatus {
-            id: server_id,
-            authentication_mode: authentication_mode_name(&config.authentication).to_string(),
-            connection_status: map_status(connection_status),
-        });
-    }
+    let probes: Vec<_> = server_ids
+        .into_iter()
+        .filter_map(|server_id| {
+            let config = mcp.config.mcp_servers.get(&server_id)?;
+            let authentication_mode = authentication_mode_name(&config.authentication).to_string();
+            let servers = &mcp.servers;
+            let auth_context = &auth_context;
+            Some(async move {
+                let connection_status = servers.probe_connection(&server_id, auth_context).await;
+                McpServerStatus {
+                    id: server_id,
+                    authentication_mode,
+                    connection_status: map_status(connection_status),
+                }
+            })
+        })
+        .collect();
+    // A slow server must not prevent other checks from starting or completing.
+    let mut servers: Vec<_> = stream::iter(probes).buffer_unordered(4).collect().await;
+    servers.sort_by(|a, b| a.id.cmp(&b.id));
 
     Ok(Json(ListMcpServersResponse { servers }))
 }
