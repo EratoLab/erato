@@ -1,23 +1,29 @@
 //! Getting a finished `async` task's result back into the chat it was started
 //! from.
 //!
-//! Three independent steps, each idempotent, because any of them can be
+//! Four independent steps, each idempotent, because any of them can be
 //! interrupted by a process dying: record what is owed
 //! ([`record_pending_delivery`]), take it ([`deliver_task_result`], behind two
-//! compare-and-sets), and look for anything owed to a chat that just went idle
-//! ([`drain_pending_deliveries`]).
+//! compare-and-sets), look for anything owed to a chat that just went idle
+//! ([`drain_pending_deliveries`]), and — when no request ever comes back to do
+//! any of that — sweep ([`sweep_task_result_deliveries`]).
 //!
 //! The split is what makes a crash survivable. A run whose tail never got to
 //! deliver still has its result recorded, and the next tail on the origin chat
-//! — any tail, from any replica — finds it.
+//! — any tail, from any replica — finds it. The sweep is what covers the case
+//! where there is no next tail: it runs from the cleanup worker's five-minute
+//! tick, under nobody's request, with SQL and nothing else.
 
 use crate::metrics_constants::{
     POSTGRES_QUERY_DELIVERY_CLAIM, POSTGRES_QUERY_DELIVERY_DUPLICATE_PROBE,
     POSTGRES_QUERY_DELIVERY_NEXT_PENDING, POSTGRES_QUERY_DELIVERY_RECORD,
-    POSTGRES_QUERY_DELIVERY_STATE_SET,
+    POSTGRES_QUERY_DELIVERY_STATE_SET, POSTGRES_QUERY_DELIVERY_SWEEP_CLAIM,
+    POSTGRES_QUERY_DELIVERY_SWEEP_REQUEUE, POSTGRES_QUERY_DELIVERY_SWEEP_SCAN,
 };
 use crate::models::chat::{
-    ChatProvenanceKind, ResultDelivery, ResultDeliveryState, parse_chat_configuration,
+    ChatProvenanceKind, DELIVERY_REASON_CHILD_ARCHIVED, DELIVERY_REASON_ORIGIN_ARCHIVED,
+    DELIVERY_REASON_ORIGIN_MISSING, DELIVERY_REASON_OWNER_MISMATCH, ResultDelivery,
+    ResultDeliveryState, generation_unfinished_condition, parse_chat_configuration,
 };
 use crate::models::message::ProvenanceRunMode;
 use crate::policy::engine::PolicyEngine;
@@ -26,8 +32,9 @@ use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::services::background_tasks::Takeover;
 use crate::services::delegation::{DelegationRunReason, DelegationRunStatus};
 use crate::state::AppState;
+use eyre::Report;
 use sea_orm::prelude::Uuid;
-use sea_orm::{ConnectionTrait, EntityTrait, TransactionTrait, TryGetable};
+use sea_orm::{ConnectionTrait, DatabaseConnection, EntityTrait, TransactionTrait, TryGetable};
 
 /// How far one delivery attempt got.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -449,7 +456,7 @@ pub async fn deliver_task_result(
         Ok(None) => {
             let mut closed = claimed.clone();
             closed.state = ResultDeliveryState::Failed;
-            closed.reason = Some("origin_missing".to_string());
+            closed.reason = Some(DELIVERY_REASON_ORIGIN_MISSING.to_string());
             closed.at = sqlx::types::chrono::Utc::now().into();
             set_delivery_state(
                 app_state,
@@ -472,7 +479,7 @@ pub async fn deliver_task_result(
     if origin.owner_user_id != child.owner_user_id {
         let mut closed = claimed.clone();
         closed.state = ResultDeliveryState::Failed;
-        closed.reason = Some("owner_mismatch".to_string());
+        closed.reason = Some(DELIVERY_REASON_OWNER_MISMATCH.to_string());
         closed.at = sqlx::types::chrono::Utc::now().into();
         if !set_delivery_state(
             app_state,
@@ -493,7 +500,7 @@ pub async fn deliver_task_result(
     if origin.archived_at.is_some() {
         let mut closed = claimed.clone();
         closed.state = ResultDeliveryState::Superseded;
-        closed.reason = Some("origin_archived".to_string());
+        closed.reason = Some(DELIVERY_REASON_ORIGIN_ARCHIVED.to_string());
         closed.at = sqlx::types::chrono::Utc::now().into();
         if !set_delivery_state(
             app_state,
@@ -556,7 +563,7 @@ pub async fn deliver_task_result(
     {
         let mut closed = claimed.clone();
         closed.state = ResultDeliveryState::Superseded;
-        closed.reason = Some("origin_archived".to_string());
+        closed.reason = Some(DELIVERY_REASON_ORIGIN_ARCHIVED.to_string());
         closed.at = sqlx::types::chrono::Utc::now().into();
         set_delivery_state(
             app_state,
@@ -973,4 +980,717 @@ async fn selected_facets_of_tip(app_state: &AppState, origin_chat_id: Uuid) -> V
         .into_iter()
         .filter_map(|(id, selected)| selected.then_some(id))
         .collect()
+}
+
+// ---------------------------------------------------------------------------
+// The backstop sweep (ERMAIN-781-A)
+// ---------------------------------------------------------------------------
+//
+// Everything above runs under somebody's request. This half runs under nobody's:
+// it is the five-minute cleanup tick's first act, and it exists so that a
+// delivery no request ever comes back to finish still lands. It shares the
+// module deliberately — the state machine, the fence and the idempotency probe
+// are the same ones, and a second module would be a second place for them to
+// drift.
+
+/// Bounds one pass. A deeper backlog is the next tick's, five minutes later.
+///
+/// `pub` only so the integration tests can stage exactly this many rows; there
+/// is no runtime reason to read it from outside the crate.
+pub const SWEEP_BATCH_LIMIT: u64 = 200;
+
+/// What one pass did. Every counter but `requeued` is a terminal decision about
+/// one child, so they sum to the number of children the scan returned.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct SweepOutcome {
+    /// Phase (i): claims whose holder went away, put back to `pending`.
+    pub requeued: u64,
+    pub delivered: u64,
+    /// The origin was busy. Left `pending`, rotated to the back of the queue.
+    pub deferred: u64,
+    pub superseded: u64,
+    pub failed: u64,
+    /// Someone else had already moved it on, or the row is no longer a
+    /// delegated async run at all.
+    pub already_delivered: u64,
+    pub errored: u64,
+}
+
+impl SweepOutcome {
+    /// Whether this pass did anything worth a log line.
+    pub fn touched(&self) -> bool {
+        self.requeued
+            + self.delivered
+            + self.deferred
+            + self.superseded
+            + self.failed
+            + self.already_delivered
+            + self.errored
+            > 0
+    }
+}
+
+/// How far the sweep got with one child.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ChildSweepStep {
+    Delivered,
+    Deferred,
+    Superseded,
+    Failed,
+    AlreadyDelivered,
+    /// The row, its provenance or its delivery record was not there any more by
+    /// the time we re-read it. Benign: the scan is not in a transaction with the
+    /// per-child work, so a row can legitimately move between the two.
+    Gone,
+}
+
+/// Deliver anything the live path dropped.
+///
+/// Never returns `Result`. It runs from a cron tick whose other half deletes
+/// data behind `?`, and one unreachable child must not take the retention pass
+/// down with it — nor must a retention failure ever skip the recovery of a
+/// result. Per-child failures are a `warn!` and a counter.
+///
+/// Takes no generation lease and runs no model turn: it appends the result row
+/// and stops. Reacting to that row is `/react` (ERMAIN-781-B) or the user's own
+/// next message, which composes the result through history.
+pub async fn sweep_task_result_deliveries(
+    db: &DatabaseConnection,
+    result_max_chars: usize,
+    stale_after_secs: u64,
+) -> SweepOutcome {
+    let mut outcome = SweepOutcome::default();
+
+    // Phase (i) — requeue claims that went stale.
+    //
+    // One set-based statement, and the only place in this module that merges
+    // into the stored envelope rather than replacing it: there is no per-row
+    // struct to serialize when the whole point is to touch every stranded row
+    // at once. `COALESCE` is not optional — `x || jsonb_build_object(…)` is
+    // NULL when `x` is NULL and `jsonb_set(…, NULL, …)` returns NULL, which
+    // would blank the chat's whole `assistant_configuration` and with it its
+    // assistant binding and provenance.
+    //
+    // `claimed_at` is read here purely as a clock. The fence is `claimed_by`,
+    // and only `claimed_by`; keeping the two apart is what lets "is this claim
+    // stale" and "is this claim mine" be different questions.
+    //
+    // `claimed_by` and `claimed_at` are deliberately left in place: they name
+    // the process that stranded the row, which is the only diagnosis trail
+    // there is. Leaving them is safe because the stalled holder's own
+    // compare-and-set requires `state = 'claimed'` and now fails on the state
+    // alone, and because a sweep that goes on to take the row overwrites the
+    // whole envelope with a fresh token. This differs on purpose from
+    // `release_pending`, which clears both: a holder voluntarily releasing a
+    // claim it knows is dead is not the same act as an involuntary seizure.
+    let requeue = db
+        .query_all_raw(named_statement_from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            POSTGRES_QUERY_DELIVERY_SWEEP_REQUEUE,
+            format!(
+                r#"
+            UPDATE "chats"
+            SET "assistant_configuration" = jsonb_set(
+                "assistant_configuration",
+                '{{provenance,result_delivery}}',
+                COALESCE("assistant_configuration" #> '{{provenance,result_delivery}}', '{{}}'::jsonb)
+                    || jsonb_build_object('state', '{pending}'),
+                false)
+            WHERE ("assistant_configuration" #>> '{{provenance,kind}}') = '{delegation}'
+              AND ("assistant_configuration" #>> '{{provenance,run_mode}}') = '{async_mode}'
+              AND ("assistant_configuration" #>> '{{provenance,result_delivery,state}}') = '{claimed}'
+              AND COALESCE(
+                    "assistant_configuration" #>> '{{provenance,result_delivery,claimed_at}}',
+                    "assistant_configuration" #>> '{{provenance,result_delivery,at}}',
+                    'epoch'
+                  )::timestamptz < now() - make_interval(secs => $1::double precision)
+            RETURNING "id"
+            "#,
+                pending = ResultDeliveryState::Pending.as_str(),
+                claimed = ResultDeliveryState::Claimed.as_str(),
+                delegation = ChatProvenanceKind::Delegation.as_str(),
+                async_mode = ProvenanceRunMode::Async.as_str(),
+            ),
+            [(stale_after_secs as f64).into()],
+        ))
+        .await;
+    match requeue {
+        Ok(rows) => {
+            // Not bounded by the batch limit: `UPDATE … LIMIT` needs a
+            // subquery in Postgres, and a stranded claim is rare by
+            // construction — it takes a replica dying mid-delivery.
+            outcome.requeued = rows.len() as u64;
+            if outcome.requeued > 0 {
+                tracing::warn!(
+                    requeued = outcome.requeued,
+                    "Requeued task result deliveries whose claim went stale"
+                );
+            }
+        }
+        Err(error) => {
+            tracing::warn!(%error, "The delivery sweep could not requeue stale claims");
+            return SweepOutcome::default();
+        }
+    }
+
+    // Phase (ii) — deliver what is pending, in the same pass. Split across two
+    // ticks, the worst case for a stranded result would be ten minutes.
+    //
+    // The predicate is exactly `deliver_one_child_db_only`'s own re-read guard.
+    // A row this scan returns but that guard rejects is a no-op *without a
+    // state change*, so it would be re-selected on every pass and starve
+    // everything behind it.
+    //
+    // Deliberately no `updated_at > now() - <window>`: a pending row can sit
+    // unmodified for as long as its origin stays busy, and ageing it out would
+    // silently lose the result this sweep exists to save.
+    let scan = db
+        .query_all_raw(named_statement_from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            POSTGRES_QUERY_DELIVERY_SWEEP_SCAN,
+            format!(
+                r#"
+            SELECT "id" FROM "chats"
+            WHERE ("assistant_configuration" #>> '{{provenance,kind}}') = '{delegation}'
+              AND ("assistant_configuration" #>> '{{provenance,run_mode}}') = '{async_mode}'
+              AND ("assistant_configuration" #>> '{{provenance,result_delivery,state}}') = '{pending}'
+            ORDER BY "updated_at" ASC
+            LIMIT $1
+            "#,
+                pending = ResultDeliveryState::Pending.as_str(),
+                delegation = ChatProvenanceKind::Delegation.as_str(),
+                async_mode = ProvenanceRunMode::Async.as_str(),
+            ),
+            [(SWEEP_BATCH_LIMIT as i64).into()],
+        ))
+        .await;
+    let children: Vec<Uuid> = match scan {
+        Ok(rows) => rows
+            .iter()
+            .filter_map(|row| Uuid::try_get(row, "", "id").ok())
+            .collect(),
+        Err(error) => {
+            tracing::warn!(%error, "The delivery sweep could not scan for pending deliveries");
+            return SweepOutcome::default();
+        }
+    };
+
+    for child_chat_id in children {
+        match deliver_one_child_db_only(db, child_chat_id, result_max_chars, stale_after_secs).await
+        {
+            Ok(ChildSweepStep::Delivered) => outcome.delivered += 1,
+            Ok(ChildSweepStep::Deferred) => outcome.deferred += 1,
+            Ok(ChildSweepStep::Superseded) => outcome.superseded += 1,
+            Ok(ChildSweepStep::Failed) => outcome.failed += 1,
+            Ok(ChildSweepStep::AlreadyDelivered | ChildSweepStep::Gone) => {
+                outcome.already_delivered += 1
+            }
+            Err(error) => {
+                tracing::warn!(%error, %child_chat_id, "The delivery sweep could not deliver a task result");
+                outcome.errored += 1;
+            }
+        }
+    }
+
+    outcome
+}
+
+/// One child, start to finish, without an `AppState`, a policy engine, a
+/// profile, a generation lease or a model call.
+///
+/// The claim lives **inside** the transaction, which is where this path differs
+/// from [`deliver_task_result`] — and it can, precisely because it runs no turn:
+/// you cannot hold a Postgres transaction across a model call, but you can hold
+/// one across four statements. The stronger shape is worth taking. A crash
+/// anywhere below commits nothing, so the sweep can never strand a `claimed`
+/// row of its own, and the corollary is that phase (i) only ever requeues the
+/// live path's claims.
+async fn deliver_one_child_db_only(
+    db: &DatabaseConnection,
+    child_chat_id: Uuid,
+    result_max_chars: usize,
+    stale_after_secs: u64,
+) -> Result<ChildSweepStep, Report> {
+    let txn = db.begin().await?;
+
+    // 1-2. Re-read under the transaction. The scan is not in here with us, so
+    //      a row can legitimately have moved on; that is `Gone`, not an error.
+    let Some(child) = crate::db::entity::prelude::Chats::find_by_id(child_chat_id)
+        .one(&txn)
+        .await?
+    else {
+        return Ok(ChildSweepStep::Gone);
+    };
+    let Some(configuration) = parse_chat_configuration(&child)? else {
+        return Ok(ChildSweepStep::Gone);
+    };
+    let Some(provenance) = configuration.provenance.clone() else {
+        return Ok(ChildSweepStep::Gone);
+    };
+    if provenance.kind != ChatProvenanceKind::Delegation
+        || provenance.run_mode != Some(ProvenanceRunMode::Async)
+    {
+        return Ok(ChildSweepStep::Gone);
+    }
+    let Some(delivery) = provenance.result_delivery.clone() else {
+        return Ok(ChildSweepStep::Gone);
+    };
+    // 3. Another process took it between the scan and here.
+    if delivery.state != ResultDeliveryState::Pending {
+        return Ok(ChildSweepStep::AlreadyDelivered);
+    }
+
+    // Every terminal write below is fenced on the row still being `pending`,
+    // with no claim token, because the sweep has not claimed it yet. A lost
+    // fence means someone else owns the row now, which is `AlreadyDelivered`,
+    // never an error.
+    let close = |state: ResultDeliveryState, reason: &str| -> ResultDelivery {
+        let mut closed = delivery.clone();
+        closed.state = state;
+        closed.reason = Some(reason.to_string());
+        closed.at = sqlx::types::chrono::Utc::now().into();
+        closed
+    };
+
+    // 4. An archived child. New with the sweep, and terminal: the archive pass
+    //    skips runs whose generation has not finished, so an archived child IS
+    //    finished, yet its delivery can still read `pending`. Left that way it
+    //    would keep the origin's "runs in flight" indicator on forever, because
+    //    that query deliberately does not exclude archived children — this is
+    //    where that case is meant to be resolved.
+    if child.archived_at.is_some() {
+        let closed = close(
+            ResultDeliveryState::Superseded,
+            DELIVERY_REASON_CHILD_ARCHIVED,
+        );
+        return commit_terminal(txn, child_chat_id, &closed, ChildSweepStep::Superseded).await;
+    }
+
+    // 5. No origin recorded at all.
+    let Some(origin_chat_id) = provenance.origin_chat_id else {
+        let closed = close(ResultDeliveryState::Failed, DELIVERY_REASON_ORIGIN_MISSING);
+        return commit_terminal(txn, child_chat_id, &closed, ChildSweepStep::Failed).await;
+    };
+
+    // 6. The origin row itself is gone. Provenance ids are plain values, never
+    //    foreign keys, so a dangling one is expected rather than exceptional.
+    let Some(origin) = crate::db::entity::prelude::Chats::find_by_id(origin_chat_id)
+        .one(&txn)
+        .await?
+    else {
+        let closed = close(ResultDeliveryState::Failed, DELIVERY_REASON_ORIGIN_MISSING);
+        return commit_terminal(txn, child_chat_id, &closed, ChildSweepStep::Failed).await;
+    };
+
+    // 7. Archiving is the user saying they are done with that conversation.
+    //    Appending to it afterwards would raise it in the listing over work
+    //    they stopped caring about.
+    if origin.archived_at.is_some() {
+        let closed = close(
+            ResultDeliveryState::Superseded,
+            DELIVERY_REASON_ORIGIN_ARCHIVED,
+        );
+        return commit_terminal(txn, child_chat_id, &closed, ChildSweepStep::Superseded).await;
+    }
+
+    // 8. The inlined authorization rule. The sweep holds no `PolicyEngine` —
+    //    it has no request and no subject to evaluate one against — so the
+    //    `submit_message` rule is evaluated by hand. That rule is
+    //    ownership-only, so origin owner == child owner is exactly what it
+    //    would have decided. Writing into a chat whose owner differs is the
+    //    ERMAIN-485 class, and the refusal appending nothing is the point.
+    if origin.owner_user_id != child.owner_user_id {
+        let closed = close(ResultDeliveryState::Failed, DELIVERY_REASON_OWNER_MISMATCH);
+        return commit_terminal(txn, child_chat_id, &closed, ChildSweepStep::Failed).await;
+    }
+
+    // 9. CLAIM, `pending -> claimed`, fenced on the delivery id and gated on
+    //    the origin's lease being free.
+    //
+    //    The free-lease test is an `EXISTS` subquery rather than a
+    //    `SELECT … FOR UPDATE`: the heartbeat is one batched statement over all
+    //    of a replica's running chats, so a row lock held here would block that
+    //    whole statement, and past `stale_after_secs` another replica's reaper
+    //    would flip *every* generation in the batch to `errored`. This is also
+    //    why the sweep takes no lease of its own — it runs no turn and has
+    //    nothing to hold one for.
+    let claim_token = Uuid::new_v4().to_string();
+    let mut claimed = delivery.clone();
+    claimed.state = ResultDeliveryState::Claimed;
+    claimed.claimed_by = Some(claim_token.clone());
+    claimed.claimed_at = Some(sqlx::types::chrono::Utc::now().into());
+    claimed.attempts = delivery.attempts.saturating_add(1);
+    claimed.at = sqlx::types::chrono::Utc::now().into();
+    let claim_payload = serde_json::to_value(&claimed)?;
+    let claim_rows = txn
+        .query_all_raw(named_statement_from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            POSTGRES_QUERY_DELIVERY_SWEEP_CLAIM,
+            format!(
+                r#"
+            UPDATE "chats"
+            SET "assistant_configuration" = jsonb_set(
+                "assistant_configuration", '{{provenance,result_delivery}}', $3::jsonb, true)
+            WHERE "id" = $1
+              AND ("assistant_configuration" #>> '{{provenance,result_delivery,state}}') = '{pending}'
+              AND ("assistant_configuration" #>> '{{provenance,result_delivery,delivery_id}}') = $2
+              AND EXISTS (
+                SELECT 1 FROM "chats" AS "o"
+                WHERE "o"."id" = $4
+                  AND "o"."archived_at" IS NULL
+                  AND NOT {unfinished}
+              )
+            RETURNING "id"
+            "#,
+                pending = ResultDeliveryState::Pending.as_str(),
+                // Emits a *bound* `$5::double precision`, so it is the fifth
+                // parameter of this statement and not a literal.
+                unfinished = generation_unfinished_condition("\"o\"", 5),
+            ),
+            [
+                child_chat_id.into(),
+                delivery.delivery_id.to_string().into(),
+                claim_payload.into(),
+                origin_chat_id.into(),
+                (stale_after_secs as f64).into(),
+            ],
+        ))
+        .await?;
+    if claim_rows.is_empty() {
+        // The origin is running with a fresh heartbeat, or parked on an
+        // approval it is waiting for a person to answer, or it was archived
+        // under us, or another process claimed first. Nothing is written in
+        // this transaction.
+        txn.rollback().await?;
+
+        // 9b. Rotation — a separate, COMMITTED write, and load-bearing rather
+        //     than bookkeeping. The scan orders by `updated_at` under a LIMIT,
+        //     so a deferred child that wrote nothing keeps its old timestamp,
+        //     sorts to the front of every future pass, and `SWEEP_BATCH_LIMIT`
+        //     children whose origins are parked on an approval — which never
+        //     ages out — would hide row 201 forever.
+        //
+        //     Guarded on `pending`, which makes it a harmless no-op in the case
+        //     where the zero rows came from someone else claiming first.
+        let mut rotated = delivery.clone();
+        rotated.attempts = delivery.attempts.saturating_add(1);
+        rotated.at = sqlx::types::chrono::Utc::now().into();
+        set_delivery_state_in(
+            db,
+            child_chat_id,
+            &rotated,
+            ResultDeliveryState::Pending,
+            None,
+        )
+        .await;
+        return Ok(ChildSweepStep::Deferred);
+    }
+
+    // 10. Idempotency. A crash after the append but before the state write
+    //     leaves the row in the conversation and the delivery `claimed`; phase
+    //     (i) then requeues it and we arrive here with the row already there.
+    //     The error is NOT folded into `None`: "the query failed" read as "no
+    //     row exists" is precisely how the duplicate gets written.
+    let probe = txn
+        .query_all_raw(named_statement_from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            POSTGRES_QUERY_DELIVERY_DUPLICATE_PROBE,
+            r#"
+            SELECT "id" FROM "messages"
+            WHERE "chat_id" = $1
+              AND ("input_parameters" #>> '{task_result,delivery_id}') = $2
+            LIMIT 1
+            "#
+            .to_string(),
+            [
+                origin_chat_id.into(),
+                delivery.delivery_id.to_string().into(),
+            ],
+        ))
+        .await?;
+    let existing = probe
+        .first()
+        .and_then(|row| Uuid::try_get(row, "", "id").ok());
+
+    let delivered_message_id = match existing {
+        Some(id) => id,
+        None => {
+            // 11. The anchor. An `Err` here is NOT `None`: `None` means "no
+            //     anchor", which `append_message_unchecked` reads as "rebuild
+            //     no lineage" and which deactivates every other row in the
+            //     conversation.
+            let tip = crate::models::message::get_active_thread_tip(&txn, &origin_chat_id).await?;
+
+            // 12. Build and append. Everything describing the result is copied
+            //     off the stored envelope verbatim — the status was settled
+            //     when the delivery was recorded, and re-deriving it would let
+            //     a re-read change a result already promised to the origin
+            //     model by the run's `{{result_disposition}}` preamble. That is
+            //     also why a `failed` / `result_missing` delivery is appended
+            //     rather than closed: an empty summary is news, silence is not.
+            let task = configuration.task.as_ref();
+            let parent_tool_call_id = task
+                .and_then(|task| task.parent_tool_call_id.clone())
+                .unwrap_or_default();
+            let scheduling = task.map(|task| task.scheduling).unwrap_or_default();
+            let (summary, truncated) = child_answer_for_delivery(
+                &txn,
+                result_max_chars,
+                child_chat_id,
+                &child,
+                &delivery,
+                provenance.rebase_cutoff.unwrap_or(child.created_at),
+                parent_tool_call_id.clone(),
+            )
+            .await;
+            let part = crate::models::message::ContentPart::TaskResult(
+                crate::models::message::ContentPartTaskResult {
+                    child_chat_id,
+                    parent_tool_call_id,
+                    status: delivery.status.clone(),
+                    reason: delivery.reason.clone(),
+                    summary,
+                    truncated,
+                    // Verbatim: the sequence is 0-based and already correct on
+                    // the envelope.
+                    sequence: delivery.sequence,
+                },
+            );
+            let input_parameters = crate::models::message::InputParameters {
+                action_facet_id: None,
+                action_facet_args: None,
+                mentioned_assistant_ids: None,
+                delegation_run_mode: None,
+                task_result: Some(crate::models::message::TaskResultInput {
+                    delivery_id: delivery.delivery_id,
+                    child_chat_id,
+                    result_message_id: delivery.result_message_id,
+                    status: delivery.status.clone(),
+                    reason: delivery.reason.clone(),
+                    // The field stays a string on the wire; the enum is the
+                    // source of the spelling, never a literal.
+                    scheduling: scheduling.as_str().to_string(),
+                    sequence: delivery.sequence,
+                }),
+            };
+            // The live path writes the requesting profile's id here. The sweep
+            // has no profile, and does not need one: step 8 has just proved
+            // the origin and the child share an owner, and the live path's
+            // profile is always the origin's owner.
+            let raw_message = serde_json::json!({
+                "role": "user",
+                "content": [serde_json::to_value(&part)?],
+                "name": origin.owner_user_id,
+            });
+            // Nothing about a generation is recorded, because none happened:
+            // this row is material that arrived, not a turn that ran.
+            crate::models::message::append_message_unchecked(
+                &txn,
+                &origin_chat_id,
+                raw_message,
+                tip.as_ref().map(|row| &row.id),
+                None,
+                None,
+                &[],
+                None,
+                None,
+                Some(serde_json::to_value(&input_parameters)?),
+            )
+            .await?
+            .id
+        }
+    };
+
+    // 13. DELIVERED, fenced on our own claim token, in the same transaction as
+    //     the append.
+    //
+    //     Our own fence cannot lose: the claim above is in this transaction and
+    //     holds the row's lock, so no one else can be in between. It is the
+    //     other direction that matters and that this uniformity buys — a
+    //     stalled live delivery whose claim phase (i) requeued and this pass
+    //     re-took finds its own `claimed -> delivered` fenced on a `claimed_by`
+    //     that is no longer its token, and rolls its own insert back. That is
+    //     what closes sweeper-versus-live-delivery.
+    let mut delivered = claimed.clone();
+    delivered.state = ResultDeliveryState::Delivered;
+    delivered.message_id = Some(delivered_message_id);
+    delivered.at = sqlx::types::chrono::Utc::now().into();
+    if !set_delivery_state_in(
+        &txn,
+        child_chat_id,
+        &delivered,
+        ResultDeliveryState::Claimed,
+        Some(&claim_token),
+    )
+    .await
+    {
+        txn.rollback().await?;
+        return Err(eyre::eyre!(
+            "lost the delivery fence for child {child_chat_id}; the appended result was rolled back"
+        ));
+    }
+
+    // 14. One commit for the claim, the append and the state write together.
+    //     A failure here leaves the row `pending` for the next tick.
+    txn.commit().await?;
+    Ok(ChildSweepStep::Delivered)
+}
+
+/// Write one terminal delivery state and commit, or report that someone else
+/// owns the row now.
+///
+/// Guarded on `pending` with no claim token: these are the decisions the sweep
+/// reaches *before* claiming, so there is no token to fence on yet and the row
+/// must still be the one the scan saw.
+async fn commit_terminal(
+    txn: sea_orm::DatabaseTransaction,
+    child_chat_id: Uuid,
+    closed: &ResultDelivery,
+    step: ChildSweepStep,
+) -> Result<ChildSweepStep, Report> {
+    if !set_delivery_state_in(
+        &txn,
+        child_chat_id,
+        closed,
+        ResultDeliveryState::Pending,
+        None,
+    )
+    .await
+    {
+        txn.rollback().await?;
+        return Ok(ChildSweepStep::AlreadyDelivered);
+    }
+    txn.commit().await?;
+    Ok(step)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sea_orm::ActiveValue;
+
+    static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("../sqitch/deploy");
+
+    fn claimed_delivery(token: &str) -> ResultDelivery {
+        ResultDelivery {
+            state: ResultDeliveryState::Claimed,
+            delivery_id: Uuid::new_v4(),
+            result_message_id: None,
+            status: DelegationRunStatus::Completed.as_str().to_string(),
+            reason: None,
+            claimed_by: Some(token.to_string()),
+            claimed_at: Some(sqlx::types::chrono::Utc::now().into()),
+            message_id: None,
+            reaction_message_id: None,
+            attempts: 1,
+            redeliveries: 0,
+            redelivery_of: None,
+            sequence: 0,
+            at: sqlx::types::chrono::Utc::now().into(),
+        }
+    }
+
+    async fn insert_child_holding(db: &DatabaseConnection, delivery: &ResultDelivery) -> Uuid {
+        let id = Uuid::new_v4();
+        let now: sea_orm::prelude::DateTimeWithTimeZone = sqlx::types::chrono::Utc::now().into();
+        crate::db::entity::chats::Entity::insert(crate::db::entity::chats::ActiveModel {
+            id: ActiveValue::Set(id),
+            owner_user_id: ActiveValue::Set("owner".to_string()),
+            assistant_configuration: ActiveValue::Set(Some(serde_json::json!({
+                "provenance": {
+                    "kind": ChatProvenanceKind::Delegation.as_str(),
+                    "depth": 1,
+                    "run_mode": ProvenanceRunMode::Async.as_str(),
+                    "result_delivery": serde_json::to_value(delivery).unwrap(),
+                },
+            }))),
+            created_at: ActiveValue::Set(now),
+            updated_at: ActiveValue::Set(now),
+            ..Default::default()
+        })
+        .exec(db)
+        .await
+        .expect("insert child");
+        id
+    }
+
+    async fn stored_delivery(db: &DatabaseConnection, child_chat_id: Uuid) -> ResultDelivery {
+        let chat = crate::db::entity::prelude::Chats::find_by_id(child_chat_id)
+            .one(db)
+            .await
+            .unwrap()
+            .unwrap();
+        serde_json::from_value(
+            chat.assistant_configuration.unwrap()["provenance"]["result_delivery"].clone(),
+        )
+        .unwrap()
+    }
+
+    /// T9. The delivery fence, asserted directly on the write that carries it.
+    ///
+    /// `claimed_by` is the token, and this is the only test in the stack that
+    /// pins it. The case it protects is the one the backstop sweep creates:
+    /// a live delivery stalls, the sweep judges its claim stale, requeues it and
+    /// hands it to a later claimant — and the stalled holder then finishes its
+    /// append against a stale snapshot. Its `claimed -> delivered` write must
+    /// fail, which is what rolls its duplicate row back with it.
+    ///
+    /// Written here rather than in the integration suite because the fenced
+    /// write is private to this module, and going through a public entry point
+    /// would need a three-way interleaving to reach the same state.
+    ///
+    /// # Test Categories
+    /// - `uses-db`
+    #[sqlx::test(migrator = "MIGRATOR")]
+    async fn fenced_delivered_cas_refuses_a_stale_claim(pool: sqlx::PgPool) {
+        let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+
+        // Committed, and held by somebody else's token.
+        let held = claimed_delivery("token-b");
+        let child_chat_id = insert_child_holding(&db, &held).await;
+
+        let mut delivered = held.clone();
+        delivered.state = ResultDeliveryState::Delivered;
+        delivered.message_id = Some(Uuid::new_v4());
+
+        // The stalled holder, finishing under the token it was given.
+        let txn = db.begin().await.unwrap();
+        let won = set_delivery_state_in(
+            &txn,
+            child_chat_id,
+            &delivered,
+            ResultDeliveryState::Claimed,
+            Some("token-a"),
+        )
+        .await;
+        txn.rollback().await.unwrap();
+        assert!(
+            !won,
+            "a claim that was requeued and re-taken must not be able to finish; \
+             the state alone does not catch it, because the row is `claimed` either way"
+        );
+
+        let after = stored_delivery(&db, child_chat_id).await;
+        assert_eq!(after.state, ResultDeliveryState::Claimed);
+        assert_eq!(after.claimed_by.as_deref(), Some("token-b"));
+        assert!(after.message_id.is_none());
+
+        // The control: the same write, under the right token, wins. Without it
+        // this test would pass against a compare-and-set that never matches.
+        let txn = db.begin().await.unwrap();
+        let won = set_delivery_state_in(
+            &txn,
+            child_chat_id,
+            &delivered,
+            ResultDeliveryState::Claimed,
+            Some("token-b"),
+        )
+        .await;
+        assert!(won, "the holder of the claim must be able to finish it");
+        txn.commit().await.unwrap();
+        assert_eq!(
+            stored_delivery(&db, child_chat_id).await.state,
+            ResultDeliveryState::Delivered
+        );
+    }
 }
