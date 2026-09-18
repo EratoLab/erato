@@ -119,7 +119,7 @@ pub async fn record_pending_delivery(
         }
     } else {
         let envelope = crate::services::delegation::build_result_envelope(
-            app_state,
+            &app_state.db,
             child_chat_id,
             child_assistant_message_id,
             spawned_at,
@@ -641,7 +641,8 @@ pub async fn deliver_task_result(
             }
             None => {
                 let (summary, truncated) = child_answer_for_delivery(
-                    app_state,
+                    &app_state.db,
+                    app_state.config.delegation.result_max_chars,
                     child_chat_id,
                     &child,
                     &delivery,
@@ -914,8 +915,14 @@ async fn release_lease(
 /// the bound, the truncation flag and the "what counts as the answer" rule
 /// cannot drift from the awaited path's. A delivery with no answer row
 /// (`result_missing`) never reaches this: it has nothing to read.
-async fn child_answer_for_delivery(
-    app_state: &AppState,
+///
+/// Generic over the connection, and taking `result_max_chars` as an argument
+/// rather than reading it off an `AppState`, so the backstop sweep can call it
+/// with its own transaction. That reuse is the point: a second truncation rule
+/// for one field would drift from this one the first time either changed.
+async fn child_answer_for_delivery<C: ConnectionTrait>(
+    conn: &C,
+    result_max_chars: usize,
     child_chat_id: Uuid,
     child: &crate::db::entity::chats::Model,
     delivery: &ResultDelivery,
@@ -926,7 +933,7 @@ async fn child_answer_for_delivery(
         return (String::new(), false);
     };
     let envelope = crate::services::delegation::build_result_envelope(
-        app_state,
+        conn,
         child_chat_id,
         result_message_id,
         spawned_at,
@@ -939,7 +946,7 @@ async fn child_answer_for_delivery(
         DelegationRunStatus::Completed,
         None,
         false,
-        app_state.config.delegation.result_max_chars,
+        result_max_chars,
     )
     .await;
     (envelope.result.unwrap_or_default(), envelope.truncated)

@@ -1344,9 +1344,16 @@ fn run_delegated_child(
 /// `completed` with `no_answer`, because "the delegate had nothing to add" is
 /// a result the origin model can reason about, while "failed" invites it to
 /// retry something that will say nothing again.
+///
+/// Generic over the connection rather than taking an `AppState` because the
+/// delivery backstop sweep has neither: it runs inside the cleanup worker,
+/// which holds a bare `DatabaseConnection` and cannot hold an `AppState`
+/// (`AppState` owns the `ActorManager` that owns the worker). It passes its own
+/// `&DatabaseTransaction`, so the child's answer is read in the same snapshot
+/// as the append that carries it.
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn build_result_envelope(
-    app_state: &AppState,
+pub(crate) async fn build_result_envelope<C: sea_orm::ConnectionTrait>(
+    conn: &C,
     child_chat_id: Uuid,
     child_assistant_message_id: Uuid,
     spawned_at: sea_orm::prelude::DateTimeWithTimeZone,
@@ -1372,7 +1379,7 @@ pub(crate) async fn build_result_envelope(
     // result. Rows predating the spawn are seeded copies by construction.
     let assistant_row =
         match crate::db::entity::messages::Entity::find_by_id(child_assistant_message_id)
-            .one(&app_state.db)
+            .one(conn)
             .await
         {
             Ok(row) => row,
@@ -2046,7 +2053,7 @@ pub(crate) async fn await_delegation(
 
     DelegationDispatchOutcome::Completed {
         envelope: build_result_envelope(
-            app_state,
+            &app_state.db,
             child_chat_id,
             child_task.message_id(),
             spawned_at,
