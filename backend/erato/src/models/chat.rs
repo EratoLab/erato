@@ -2493,3 +2493,38 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod result_delivery_serde_tests {
+    use super::{ChatProvenance, ChatProvenanceKind};
+
+    /// An absent delivery must serialize as an ABSENT key, not as JSON `null`.
+    ///
+    /// The record compare-and-set is `(… #> '{provenance,result_delivery}') IS
+    /// NULL`. `#>` on a missing path returns SQL NULL and the predicate holds;
+    /// on a stored JSON `null` it returns jsonb `'null'`, which is not SQL
+    /// NULL, so the predicate fails and every delivery silently stops being
+    /// recorded behind a `debug!` line. Dropping `skip_serializing_if` from
+    /// the field is all it would take.
+    #[test]
+    fn an_absent_result_delivery_serializes_as_an_absent_key() {
+        let provenance = ChatProvenance {
+            kind: ChatProvenanceKind::Delegation,
+            origin_chat_id: None,
+            origin_message_id: None,
+            origin_assistant_id: None,
+            rebase_cutoff: None,
+            depth: 1,
+            adopted_at: None,
+            legacy_expected_output: None,
+            legacy_constraints: None,
+            run_mode: None,
+            result_delivery: None,
+        };
+        let value = serde_json::to_value(&provenance).expect("serializes");
+        assert!(
+            value.get("result_delivery").is_none(),
+            "the key must be absent, not null: {value}"
+        );
+    }
+}

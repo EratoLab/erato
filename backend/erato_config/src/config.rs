@@ -3801,6 +3801,19 @@ pub enum TaskScheduling {
     Interrupt,
 }
 
+impl TaskScheduling {
+    /// The spelling persisted on a task spec and stamped into the delivered
+    /// marker. Homed on the enum so the write site and any SQL literal cannot
+    /// drift apart.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TaskScheduling::Silent => "silent",
+            TaskScheduling::WhenIdle => "when_idle",
+            TaskScheduling::Interrupt => "interrupt",
+        }
+    }
+}
+
 fn default_delegation_tasks_max_tasks_per_turn() -> u32 {
     5
 }
