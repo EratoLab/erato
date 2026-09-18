@@ -1823,6 +1823,74 @@
         ]
       }
     },
+    "/api/v1beta/me/chats/{chat_id}/react": {
+      "post": {
+        "tags": [],
+        "summary": "Run the reaction turn a delivered task result is still owed.",
+        "description": "The explicit, client-driven equivalent of the second half of\n`deliver_task_result`: the `task_result` row is already in the conversation,\nnothing has answered it, and the caller wants that answer run now and\nstreamed back on the same socket.",
+        "operationId": "react_to_task_result_sse",
+        "parameters": [
+          {
+            "name": "chat_id",
+            "in": "path",
+            "description": "The chat holding the delivered task result",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReactToTaskResultRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageSubmitStreamingResponseMessage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid chat ID format"
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "404": {
+            "description": "When async task delivery is disabled, or the chat or message does not exist or is not accessible"
+          },
+          "409": {
+            "description": "When the chat is archived (plain text), the chat's generation lease is already held (JSON, code = generation_running), or there is nothing to react to (JSON, code = nothing_to_react, body = NothingToReactError)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationRunningError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "When an internal server error occurs"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/desktop-sidecar/organization-configuration": {
       "get": {
         "tags": [
@@ -8065,6 +8133,34 @@
           }
         }
       },
+      "NothingToReactError": {
+        "type": "object",
+        "description": "Body of the `409` `/react` answers when there is nothing to react to.\n\nDistinct from [`GenerationRunningError`] because the two are different\ndecisions: that one says \"not now\", this one says \"not this row, ever\".\n`code` is what the client discriminates on; `reason` is what it uses to\nchoose between suppressing the affordance and offering a re-anchor.",
+        "required": [
+          "code",
+          "chat_id",
+          "task_result_message_id",
+          "reason"
+        ],
+        "properties": {
+          "chat_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string",
+            "description": "Always `nothing_to_react`."
+          },
+          "reason": {
+            "type": "string",
+            "description": "One of `not_a_task_result`, `not_delivered`, `already_reacted`,\n`tip_moved`."
+          },
+          "task_result_message_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "OrganizationGroup": {
         "type": "object",
         "description": "An organization group",
@@ -8191,6 +8287,21 @@
           "background",
           "async"
         ]
+      },
+      "ReactToTaskResultRequest": {
+        "type": "object",
+        "description": "What a client asks `/react` to answer.",
+        "required": [
+          "task_result_message_id"
+        ],
+        "properties": {
+          "task_result_message_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The delivered `task_result` user row to react to.",
+            "example": "00000000-0000-0000-0000-000000000000"
+          }
+        }
       },
       "RecentChat": {
         "type": "object",

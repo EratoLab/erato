@@ -71,12 +71,13 @@ use crate::server::api::v1beta::mcp_servers::{
 use crate::server::api::v1beta::me_profile_middleware::{MeProfile, UserProfile};
 use crate::server::api::v1beta::message_streaming::{
     __path_abort_message_stream, __path_client_tool_result, __path_continue_message_sse,
-    __path_edit_message_sse, __path_message_submit_sse, __path_regenerate_message_sse,
-    __path_resume_message_sse, AbortStreamRequest, AbortStreamResponse, ActionFacetRequest,
-    ClientToolResultRequest, ClientToolResultResponse, EditMessageRequest,
-    EditMessageStreamingResponseMessage, GenerationRunningError, MessageSubmitRequest,
-    MessageSubmitStreamingResponseMessage, ResumeStreamRequest, abort_message_stream,
-    client_tool_result, continue_message_sse, edit_message_sse, message_submit_sse,
+    __path_edit_message_sse, __path_message_submit_sse, __path_react_to_task_result_sse,
+    __path_regenerate_message_sse, __path_resume_message_sse, AbortStreamRequest,
+    AbortStreamResponse, ActionFacetRequest, ClientToolResultRequest, ClientToolResultResponse,
+    EditMessageRequest, EditMessageStreamingResponseMessage, GenerationRunningError,
+    MessageSubmitRequest, MessageSubmitStreamingResponseMessage, NothingToReactError,
+    ReactToTaskResultRequest, ResumeStreamRequest, abort_message_stream, client_tool_result,
+    continue_message_sse, edit_message_sse, message_submit_sse, react_to_task_result_sse,
     regenerate_message_sse, resume_message_sse,
 };
 use crate::server::api::v1beta::share_grants::{
@@ -175,6 +176,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/frequent_assistants", get(frequent_assistants))
         .route("/chats", post(create_chat))
         .route("/chats/{chat_id}", get(chat_detail).put(update_chat))
+        .route("/chats/{chat_id}/react", post(react_to_task_result_sse))
         .route("/chats/archive_all", post(archive_all_chats_endpoint))
         .route("/files", post(upload_file))
         .route("/files/link", post(link_file))
@@ -411,6 +413,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         abort_message_stream,
         resume_message_sse,
         continue_message_sse,
+        react_to_task_result_sse,
         client_tool_result,
         list_user_tool_approval_settings,
         create_user_tool_approval_setting,
@@ -505,6 +508,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         AbortStreamRequest,
         AbortStreamResponse,
         GenerationRunningError,
+        ReactToTaskResultRequest,
+        NothingToReactError,
         crate::models::message::TaskResultInput,
         crate::models::message::GenerationInitiator,
         crate::models::message::ContentPartTaskResult,

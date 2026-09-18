@@ -354,6 +354,45 @@ async fn set_delivery_state_in<C: ConnectionTrait>(
     .unwrap_or(false)
 }
 
+/// Record that a turn has answered a delivered result.
+///
+/// The `delivered -> reacted` write for a caller that did not claim the row.
+/// `/react` (ERMAIN-781-B) is the only one: the delivering process took the
+/// claim, and that claim is finished by the time a client asks to react — so
+/// `expect_claim_token` is deliberately `None`, and there is no token anyone
+/// still holds to fence on.
+///
+/// It is still fenced, on two things. `state = 'delivered'` is the first: a row
+/// already `reacted`, requeued to `pending` or closed does not match, so a
+/// second `/react` cannot overwrite the first one's bookkeeping. The second is
+/// the delivery's own id, which [`set_delivery_state_in`] pins unconditionally
+/// — so a branch requeue that minted a new `delivery_id` between the caller's
+/// read and this write cannot be stamped back over with the stale envelope.
+///
+/// Deliberately a narrow helper rather than widening `set_delivery_state` to
+/// `pub(crate)`: the ladder's correctness is that only this module decides what
+/// transitions exist, and a public state-setter invites a caller outside it to
+/// invent one.
+pub(crate) async fn mark_delivery_reacted(
+    app_state: &AppState,
+    child_chat_id: Uuid,
+    delivered: &ResultDelivery,
+    reaction_message_id: Uuid,
+) -> bool {
+    let mut reacted = delivered.clone();
+    reacted.state = ResultDeliveryState::Reacted;
+    reacted.reaction_message_id = Some(reaction_message_id);
+    reacted.at = sqlx::types::chrono::Utc::now().into();
+    set_delivery_state(
+        app_state,
+        child_chat_id,
+        &reacted,
+        ResultDeliveryState::Delivered,
+        None,
+    )
+    .await
+}
+
 /// Deliver one child's recorded result. Never drains: see
 /// [`drain_pending_deliveries`].
 ///
@@ -975,7 +1014,15 @@ async fn child_answer_for_delivery<C: ConnectionTrait>(
 
 /// The facets the origin chat's own last turn ran with, so a reaction speaks
 /// with the same capabilities the conversation was using.
-async fn selected_facets_of_tip(app_state: &AppState, origin_chat_id: Uuid) -> Vec<String> {
+///
+/// `pub(crate)` for `/react` (ERMAIN-781-B), which runs the same reaction turn
+/// from a client request. Re-implementing the read there would be a second
+/// definition of "which facets does a reaction speak with", which is exactly
+/// the drift this helper exists to prevent.
+pub(crate) async fn selected_facets_of_tip(
+    app_state: &AppState,
+    origin_chat_id: Uuid,
+) -> Vec<String> {
     let Ok(Some(tip)) =
         crate::models::message::get_active_thread_tip(&app_state.db, &origin_chat_id).await
     else {

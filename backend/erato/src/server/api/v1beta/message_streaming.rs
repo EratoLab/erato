@@ -20,8 +20,8 @@ use crate::models::message::{
     update_message_content, update_message_generation_metadata,
 };
 use crate::models::user_tool_approval_setting::UserToolDecision;
-use crate::policy::engine::PolicyEngine;
-use crate::policy::types::Subject;
+use crate::policy::engine::{PolicyEngine, authorize};
+use crate::policy::types::{Action, Resource, Subject};
 use crate::server::api::v1beta::ChatMessage;
 use crate::server::api::v1beta::file_resolution::{
     resolve_directive_markers_in_generation_input, resolve_file_pointers_in_generation_input,
@@ -65,7 +65,7 @@ use crate::services::prompt_guardrails::{
 use crate::services::sentry::capture_report;
 use crate::services::template_rendering::contexts::chat_provider_headers::ChatProviderHeadersContext;
 use crate::state::{AppState, ChatProviderConfigWithId};
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::HeaderMap;
 use axum::response::Sse;
 use axum::response::sse::Event;
@@ -79,6 +79,7 @@ use genai::chat::{
     ContentPart as GenAiContentPart, MessageContent, ReasoningItem, ReasoningSummaryText,
     StreamChunk, StreamEnd,
 };
+use sea_orm::EntityTrait;
 use sea_orm::JsonValue;
 use sea_orm::prelude::Uuid;
 use serde::{Deserialize, Serialize};
@@ -1748,6 +1749,43 @@ pub struct GenerationRunningError {
     pub started_at: Option<String>,
 }
 
+/// What a client asks `/react` to answer.
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct ReactToTaskResultRequest {
+    #[schema(example = "00000000-0000-0000-0000-000000000000")]
+    /// The delivered `task_result` user row to react to.
+    task_result_message_id: Uuid,
+}
+
+/// Body of the `409` `/react` answers when there is nothing to react to.
+///
+/// Distinct from [`GenerationRunningError`] because the two are different
+/// decisions: that one says "not now", this one says "not this row, ever".
+/// `code` is what the client discriminates on; `reason` is what it uses to
+/// choose between suppressing the affordance and offering a re-anchor.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct NothingToReactError {
+    /// Always `nothing_to_react`.
+    pub code: String,
+    pub chat_id: Uuid,
+    pub task_result_message_id: Uuid,
+    /// One of `not_a_task_result`, `not_delivered`, `already_reacted`,
+    /// `tip_moved`.
+    pub reason: String,
+}
+
+/// The row a client named is not a delivered task result at all.
+pub(crate) const REACT_REASON_NOT_A_TASK_RESULT: &str = "not_a_task_result";
+/// It is one, but its delivery never reached `delivered` — or reached it under
+/// a different row than the one named.
+pub(crate) const REACT_REASON_NOT_DELIVERED: &str = "not_delivered";
+/// A turn has already answered it. The client suppresses the affordance.
+pub(crate) const REACT_REASON_ALREADY_REACTED: &str = "already_reacted";
+/// The conversation moved on past the row. The client offers a re-anchor.
+pub(crate) const REACT_REASON_TIP_MOVED: &str = "tip_moved";
+
 /// Error type of the streaming routes.
 ///
 /// Exists so one route can answer a machine-readable body without changing
@@ -1758,6 +1796,8 @@ pub struct GenerationRunningError {
 pub enum StreamRouteError {
     PlainText(axum::http::StatusCode, String),
     GenerationRunning(Box<GenerationRunningError>),
+    /// `/react` only: the named row cannot be reacted to, and never will be.
+    NothingToReact(Box<NothingToReactError>),
 }
 
 impl From<(axum::http::StatusCode, String)> for StreamRouteError {
@@ -1771,6 +1811,12 @@ impl axum::response::IntoResponse for StreamRouteError {
         match self {
             StreamRouteError::PlainText(status, message) => (status, message).into_response(),
             StreamRouteError::GenerationRunning(body) => {
+                (axum::http::StatusCode::CONFLICT, Json(*body)).into_response()
+            }
+            // The same status as `GenerationRunning`, deliberately: both are
+            // "the chat will not take this write". The client tells them apart
+            // on `code`, which is why neither is plain text.
+            StreamRouteError::NothingToReact(body) => {
                 (axum::http::StatusCode::CONFLICT, Json(*body)).into_response()
             }
         }
@@ -1823,6 +1869,56 @@ async fn acquire_user_generation_lease(
                 // its own on the shared-generation row; tracked as a follow-up
                 // rather than smuggled into the delivery change.
                 initiator: "user".to_string(),
+                started_at: held.started_at,
+            }))
+        })
+}
+
+/// Take the chat's generation lease for a turn a delivered task result
+/// triggered.
+///
+/// `RefuseParked`, unlike the user-initiated sibling above: a person parked on
+/// an approval card is mid-decision, and a reaction turn — whose content the
+/// server wrote — is not a good enough reason to move them off it.
+/// `deliver_task_result` refuses a parked chat for the same reason, and the two
+/// stay separate helpers rather than one with a `takeover` argument so the
+/// decision reads at the call site instead of at a bool six submits share.
+///
+/// There is no `!delegation.tasks.enabled` fallback branch, because `/react`'s
+/// first precondition 404s with the gate off: this is always the real
+/// compare-and-set.
+async fn acquire_task_result_generation_lease(
+    app_state: &AppState,
+    chat_id: Uuid,
+    message_id: Uuid,
+) -> Result<
+    (
+        tokio::sync::broadcast::Receiver<StreamingEvent>,
+        Arc<StreamingTask>,
+    ),
+    StreamRouteError,
+> {
+    app_state
+        .background_tasks
+        .try_start_task(
+            chat_id,
+            message_id,
+            Takeover::RefuseParked,
+            app_state.config.generation_status.stale_after_secs,
+        )
+        .await
+        .map_err(|held| {
+            StreamRouteError::GenerationRunning(Box::new(GenerationRunningError {
+                code: "generation_running".to_string(),
+                chat_id,
+                // The same honest-but-incomplete string the user helper
+                // reports: the chats row records no initiator, so this handler
+                // cannot tell a delivery's lease from a person's. Fixing that
+                // needs a column on the shared-generation row and belongs to
+                // the delivery change, not here.
+                initiator: "user".to_string(),
+                // Already RFC 3339 on `LeaseHeld`; re-formatting it here would
+                // be a second opinion about the wire shape.
                 started_at: held.started_at,
             }))
         })
@@ -12353,6 +12449,426 @@ pub async fn client_tool_result(
     Ok(Json(ClientToolResultResponse {
         delivered: matches!(delivery, ClientToolDelivery::Delivered),
     }))
+}
+
+/// Every "you may not have this" answer `/react` gives.
+///
+/// One status and one body for a disabled feature, an unknown chat, a chat
+/// somebody else owns and a row that is not in it — so a prober cannot use the
+/// difference to learn which chats exist.
+fn react_not_found() -> StreamRouteError {
+    StreamRouteError::PlainText(axum::http::StatusCode::NOT_FOUND, "Not found".to_string())
+}
+
+/// Build the typed `409` for a row that cannot be reacted to.
+fn nothing_to_react(chat_id: Uuid, task_result_message_id: Uuid, reason: &str) -> StreamRouteError {
+    StreamRouteError::NothingToReact(Box::new(NothingToReactError {
+        code: "nothing_to_react".to_string(),
+        chat_id,
+        task_result_message_id,
+        reason: reason.to_string(),
+    }))
+}
+
+/// Preconditions 9-11 of [`react_to_task_result_sse`], and the delivery
+/// envelope they validated.
+///
+/// Factored out because `/react` runs them twice: once before taking the
+/// generation lease, so the common refusal costs nothing, and once under it,
+/// because all three read state another writer can change in between.
+///
+/// `already_reacted` is tested BEFORE `tip_moved`, deliberately. Once a
+/// reaction has run the assistant row IS the tip, so both would fire — and the
+/// two mean opposite things to a client: `already_reacted` says suppress the
+/// affordance, `tip_moved` says offer a re-anchor. The reverse order silently
+/// degrades the UI to the wrong one of the two.
+///
+/// There is no `scheduling` check. `deliver_task_result` deliberately stops at
+/// `delivered` for a `silent` result, which is exactly the row a person is most
+/// likely to ask to answer explicitly; `/react` is a request, not a
+/// re-application of the task author's policy.
+async fn task_result_still_reactable(
+    app_state: &AppState,
+    chat_id: Uuid,
+    child_chat_id: Uuid,
+    task_result_message_id: Uuid,
+) -> Result<crate::models::chat::ResultDelivery, StreamRouteError> {
+    // 9. The child still says this exact row is the one it delivered.
+    //
+    //    `reacted` is accepted here and refused at step 10, not folded into
+    //    this check. Both are "the row was delivered"; only step 10 knows which
+    //    of the two answers a client can act on. Rejecting `reacted` here would
+    //    report `not_delivered` for a row that plainly was, and 779-B would
+    //    have no way to tell "suppress the affordance" from "this is not a task
+    //    result at all". Everything else — `pending`, `claimed`, `superseded`,
+    //    `failed`, or a delivery naming a different row — is `not_delivered`.
+    //
+    //    A delivery whose reaction ran but whose own bookkeeping write lost its
+    //    fence presents here as `delivered` with no reaction id, and falls out
+    //    at step 11 as `tip_moved` — the honest answer, because from the
+    //    outside the conversation has moved on.
+    let child = crate::db::entity::prelude::Chats::find_by_id(child_chat_id)
+        .one(&app_state.db)
+        .await
+        .map_err(|error| {
+            tracing::warn!(%error, %child_chat_id, "Failed to read the child chat of a task result");
+            StreamRouteError::PlainText(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to load chat".to_string(),
+            )
+        })?;
+    let delivery = child
+        .as_ref()
+        .and_then(|child| {
+            crate::models::chat::parse_chat_configuration(child)
+                .ok()
+                .flatten()
+        })
+        .and_then(|configuration| configuration.provenance)
+        .and_then(|provenance| provenance.result_delivery)
+        .filter(|delivery| {
+            matches!(
+                delivery.state,
+                crate::models::chat::ResultDeliveryState::Delivered
+                    | crate::models::chat::ResultDeliveryState::Reacted
+            ) && delivery.message_id == Some(task_result_message_id)
+        });
+    let Some(delivery) = delivery else {
+        return Err(nothing_to_react(
+            chat_id,
+            task_result_message_id,
+            REACT_REASON_NOT_DELIVERED,
+        ));
+    };
+
+    // 10. Nothing has answered it yet. `reacted` is the normal way a second
+    //     request lands here; a `delivered` row that already names a reaction
+    //     is the same answer from a bookkeeping write that half-landed.
+    if delivery.state == crate::models::chat::ResultDeliveryState::Reacted
+        || delivery.reaction_message_id.is_some()
+    {
+        return Err(nothing_to_react(
+            chat_id,
+            task_result_message_id,
+            REACT_REASON_ALREADY_REACTED,
+        ));
+    }
+
+    // 11. It is still what the conversation is sitting on. A failed read is
+    //     NOT `tip_moved`: `None` means "no anchor" and `Err` means "we do not
+    //     know", and telling a client the conversation moved on because of a
+    //     database hiccup fires its re-anchor affordance on a lie.
+    let tip = crate::models::message::get_active_thread_tip(&app_state.db, &chat_id)
+        .await
+        .map_err(|error| {
+            tracing::warn!(%error, %chat_id, "Failed to resolve the active thread tip for a reaction");
+            StreamRouteError::PlainText(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to load chat".to_string(),
+            )
+        })?;
+    if tip.map(|row| row.id) != Some(task_result_message_id) {
+        return Err(nothing_to_react(
+            chat_id,
+            task_result_message_id,
+            REACT_REASON_TIP_MOVED,
+        ));
+    }
+
+    Ok(delivery)
+}
+
+/// Run the reaction turn a delivered task result is still owed.
+///
+/// The explicit, client-driven equivalent of the second half of
+/// `deliver_task_result`: the `task_result` row is already in the conversation,
+/// nothing has answered it, and the caller wants that answer run now and
+/// streamed back on the same socket.
+#[utoipa::path(
+    post,
+    path = "/me/chats/{chat_id}/react",
+    params(
+        ("chat_id" = String, Path, description = "The chat holding the delivered task result")
+    ),
+    request_body = ReactToTaskResultRequest,
+    responses(
+        (status = OK, content_type = "text/event-stream", body = MessageSubmitStreamingResponseMessage),
+        (status = BAD_REQUEST, description = "Invalid chat ID format"),
+        (status = NOT_FOUND, description = "When async task delivery is disabled, or the chat or message does not exist or is not accessible"),
+        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), the chat's generation lease is already held (JSON, code = generation_running), or there is nothing to react to (JSON, code = nothing_to_react, body = NothingToReactError)"),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
+        (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn react_to_task_result_sse(
+    State(app_state): State<AppState>,
+    Extension(policy): Extension<PolicyEngine>,
+    Extension(me_user): Extension<MeProfile>,
+    Path(chat_id): Path<String>,
+    Json(request): Json<ReactToTaskResultRequest>,
+) -> Result<Sse<impl Stream<Item = Result<Event, Report>>>, StreamRouteError> {
+    // 1. The gate, the same shape `drain_pending_deliveries` uses. With async
+    //    delivery off there is no such thing as a delivered task result, so
+    //    the route does not exist rather than refusing with a reason.
+    if !app_state.config.delegation.tasks.enabled
+        || !app_state
+            .config
+            .delegation
+            .tasks
+            .run_modes
+            .contains(&erato_config::config::TaskRunMode::Async)
+    {
+        return Err(react_not_found());
+    }
+
+    // 2. A malformed id is the client's mistake, not a missing chat.
+    let chat_id = Uuid::parse_str(&chat_id).map_err(|_| {
+        StreamRouteError::PlainText(
+            axum::http::StatusCode::BAD_REQUEST,
+            "Invalid chat ID".to_string(),
+        )
+    })?;
+    let task_result_message_id = request.task_result_message_id;
+
+    // 3-4. The chat, through the policy engine's own loader.
+    policy
+        .rebuild_data_if_needed_req(&app_state.db, &app_state.config)
+        .await
+        .map_err(|status| StreamRouteError::PlainText(status, "Failed to load chat".to_string()))?;
+    let chat = policy
+        .load_chat_model(&app_state.db, chat_id)
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, %chat_id, "Failed to load the chat for a task result reaction");
+            StreamRouteError::PlainText(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to load chat".to_string(),
+            )
+        })?
+        .ok_or_else(react_not_found)?;
+
+    // 5. `SubmitMessage`, not `Read`: this route starts a turn, so read access
+    //    to a shared chat must not be enough to reach it. Refused and "the
+    //    authorizer broke" both answer 404, because a 500 here would tell a
+    //    prober the chat exists.
+    if let Err(error) = authorize!(
+        policy,
+        &me_user.to_subject(),
+        &Resource::Chat(chat_id.as_hyphenated().to_string()),
+        Action::SubmitMessage
+    ) {
+        tracing::warn!(%error, %chat_id, "Refused a task result reaction");
+        return Err(react_not_found());
+    }
+
+    // 6. Archived chats take no writes, reaction or otherwise.
+    reject_if_archived(&chat)?;
+
+    // 7. Read the row directly rather than through `get_message_by_id`: that
+    //    one authorizes at `Action::Read`, which is both redundant after step 5
+    //    and the wrong gate for a route that writes. Comparing `chat_id`
+    //    ourselves is what makes a foreign row indistinguishable from a
+    //    missing one.
+    let delivered_row = crate::db::entity::prelude::Messages::find_by_id(task_result_message_id)
+        .one(&app_state.db)
+        .await
+        .map_err(|error| {
+            tracing::warn!(%error, %chat_id, "Failed to read a task result row");
+            StreamRouteError::PlainText(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to load message".to_string(),
+            )
+        })?
+        .filter(|row| row.chat_id == chat_id)
+        .ok_or_else(react_not_found)?;
+
+    // 8. Only the server ever writes this marker, so the `child_chat_id` on it
+    //    is trustworthy in a way one taken from the request body would not be.
+    let child_chat_id = delivered_row
+        .input_parameters
+        .as_ref()
+        .and_then(|parameters| {
+            serde_json::from_value::<crate::models::message::InputParameters>(parameters.clone())
+                .ok()
+        })
+        .and_then(|parameters| parameters.task_result)
+        .map(|marker| marker.child_chat_id)
+        .ok_or_else(|| {
+            nothing_to_react(
+                chat_id,
+                task_result_message_id,
+                REACT_REASON_NOT_A_TASK_RESULT,
+            )
+        })?;
+
+    // 9-11, cheaply, before anything is taken.
+    task_result_still_reactable(&app_state, chat_id, child_chat_id, task_result_message_id).await?;
+
+    // Both reads are best-effort by construction, and both happen BEFORE the
+    // lease so that neither can put a `?` in the window between acquiring it
+    // and spawning the task that releases it. The facets come from the shared
+    // helper so a `/react` turn speaks with the same capabilities a
+    // delivery-driven reaction does.
+    let selected_facet_ids =
+        crate::services::task_delivery::selected_facets_of_tip(&app_state, chat_id).await;
+    let chat_provider_id = crate::models::chat::get_last_chat_provider_id(&app_state.db, &chat_id)
+        .await
+        .ok()
+        .flatten();
+
+    // 12. `RefuseParked`: the content this turn runs on was written by the
+    //     server, and what it would displace is an approval card the same
+    //     person is mid-decision on. The lease id is a fresh v4, not the row we
+    //     are answering — the generation overwrites it with the assistant row's
+    //     id, and that is what the `reacted` bookkeeping stores.
+    let (broadcast_rx, task) =
+        acquire_task_result_generation_lease(&app_state, chat_id, Uuid::new_v4()).await?;
+    // Armed the instant the lease is ours. Without it a panic before the spawn
+    // leaves the task un-completed in the manager's map, so the heartbeat
+    // refreshes the chats row forever, `stale_after_secs` never fires, and
+    // every later write into this chat 409s for the life of the process.
+    let mut lease_guard = TaskCleanupGuard::new(
+        app_state.background_tasks.clone(),
+        chat_id,
+        task.generation_id,
+    );
+
+    // 13. The same three checks again, now that nobody else can be writing.
+    //     Deliberately not a `?`: this window must release the lease itself,
+    //     through the lifecycle rather than by hand, so anyone already attached
+    //     gets the closing frame and `remove_task` stays identity-gated.
+    let delivered = match task_result_still_reactable(
+        &app_state,
+        chat_id,
+        child_chat_id,
+        task_result_message_id,
+    )
+    .await
+    {
+        Ok(delivered) => delivered,
+        Err(error) => {
+            lease_guard.disarm();
+            let _ = with_generation_task_lifecycle(
+                &app_state.background_tasks,
+                &task,
+                chat_id,
+                async { Ok(()) },
+            )
+            .await;
+            return Err(error);
+        }
+    };
+
+    // `run_generation_after_user_message`, never `save_user_message_for_submit`:
+    // the user row already exists. Saving one would emit a spurious
+    // `ChatCreated` and append a second row holding the empty `user_message`
+    // this synthetic request carries.
+    let request = MessageSubmitRequest::for_result_delivery(
+        chat_id,
+        chat_provider_id,
+        selected_facet_ids,
+        Some(task_result_message_id),
+    );
+
+    let app_state_bg = app_state.clone();
+    let policy_bg = policy.clone();
+    let me_user_bg = me_user.clone();
+    let task_bg = Arc::clone(&task);
+    // The lifecycle installs its own guard inside the spawned future; keeping
+    // ours armed as well would double-release.
+    lease_guard.disarm();
+    tokio::spawn(
+        async move {
+            let reaction = with_generation_task_lifecycle(
+                &app_state_bg.background_tasks,
+                &task_bg,
+                chat_id,
+                run_generation_after_user_message(
+                    &task_bg,
+                    &app_state_bg,
+                    &policy_bg,
+                    &me_user_bg,
+                    &request,
+                    GenerationRequestContext { platform: None },
+                    &chat,
+                    false,
+                    Vec::new(),
+                    &delivered_row,
+                    // Suppresses the task offer for this turn and stamps
+                    // `initiator = task_result` on the assistant row.
+                    GenerationOrigin::TaskResultDelivery,
+                ),
+            )
+            .await;
+            if let Err(error) = reaction {
+                tracing::warn!(%error, %chat_id, "The reaction to a delivered task result failed");
+            } else if !crate::services::task_delivery::mark_delivery_reacted(
+                &app_state_bg,
+                child_chat_id,
+                &delivered,
+                // The ASSISTANT row: the generation overwrote the lease's v4
+                // with it as soon as the row existed.
+                task_bg.message_id(),
+            )
+            .await
+            {
+                // Benign, and must not fail anything: the reaction is on disk
+                // either way and only the bookkeeping is stale. The delivery
+                // path's own CAS #4 warns and carries on for the same reason.
+                tracing::warn!(
+                    %child_chat_id,
+                    "Could not mark a delivered task result as reacted; the reaction itself is on disk"
+                );
+            }
+
+            // Last, and after `remove_task`, which the lifecycle owns: a
+            // delivery takes this chat's lease for itself, and `RefuseParked`
+            // would refuse a lease this turn still held.
+            crate::services::task_delivery::drain_pending_deliveries(
+                &app_state_bg,
+                &policy_bg,
+                &me_user_bg,
+                chat_id,
+            )
+            .await;
+        }
+        .in_current_span(),
+    );
+
+    // The same stream `message_submit_sse` answers with, and for the same
+    // reason: `run_generation_after_user_message` writes into no `tx` — it
+    // broadcasts through the `StreamingTask`, so the lease's own receiver is
+    // the only thing that carries this turn's tokens.
+    let event_stream = {
+        use futures::StreamExt;
+        let broadcast_stream = tokio_stream::wrappers::BroadcastStream::new(broadcast_rx);
+        futures::StreamExt::filter_map(broadcast_stream, |result| {
+            futures::future::ready(match result {
+                Ok(streaming_event) => match streaming_event_to_sse(&streaming_event) {
+                    Ok(sse_event) => Some(Ok(sse_event)),
+                    Err(e) => Some(Err(e)),
+                },
+                Err(tokio_stream::wrappers::errors::BroadcastStreamRecvError::Lagged(n)) => {
+                    tracing::warn!("Client lagged behind by {} events", n);
+                    None
+                }
+            })
+        })
+        .inspect(|event| {
+            if let Err(err) = event {
+                log_and_capture_error("react SSE serialization", err);
+            }
+        })
+    };
+
+    Ok(Sse::new(event_stream).keep_alive(
+        axum::response::sse::KeepAlive::new()
+            .interval(Duration::from_secs(1))
+            .text("keep-alive-text"),
+    ))
 }
 
 #[utoipa::path(
