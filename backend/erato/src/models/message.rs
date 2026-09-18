@@ -57,6 +57,62 @@ pub enum DelegationRunMode {
     Background,
 }
 
+/// How a delegated run's result gets back to the turn that started it, as
+/// persisted on [`crate::models::chat::ChatProvenance`].
+///
+/// A superset of [`DelegationRunMode`], deliberately kept as its own type: the
+/// request wire stays at two variants, so `"async"` in a submit, edit or
+/// regenerate body is a deserialization failure rather than a mode a client can
+/// ask for. `Wait` is never written - absence means it - so every envelope
+/// stored before this type existed deserializes unchanged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ProvenanceRunMode {
+    #[default]
+    Wait,
+    Background,
+    Async,
+}
+
+impl From<DelegationRunMode> for ProvenanceRunMode {
+    fn from(mode: DelegationRunMode) -> Self {
+        match mode {
+            DelegationRunMode::Wait => ProvenanceRunMode::Wait,
+            DelegationRunMode::Background => ProvenanceRunMode::Background,
+        }
+    }
+}
+
+impl From<erato_config::config::TaskRunMode> for ProvenanceRunMode {
+    fn from(mode: erato_config::config::TaskRunMode) -> Self {
+        match mode {
+            erato_config::config::TaskRunMode::Wait => ProvenanceRunMode::Wait,
+            erato_config::config::TaskRunMode::Async => ProvenanceRunMode::Async,
+        }
+    }
+}
+
+impl ProvenanceRunMode {
+    /// True for a run the origin turn does not await. Both detached modes
+    /// consume a `max_concurrent_background_runs` slot and both take the
+    /// dispatch branch; they differ only in whether the result comes back.
+    pub fn is_detached(self) -> bool {
+        matches!(
+            self,
+            ProvenanceRunMode::Background | ProvenanceRunMode::Async
+        )
+    }
+
+    /// The spelling persisted in provenance and used in tracing fields.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ProvenanceRunMode::Wait => "wait",
+            ProvenanceRunMode::Background => "background",
+            ProvenanceRunMode::Async => "async",
+        }
+    }
+}
+
 /// User-provided input context stored on user messages.
 ///
 /// Captures contextual information the user supplied alongside their message,
@@ -475,11 +531,11 @@ pub struct ContentPartDelegationPreambleMarker {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub constraints: Option<String>,
     /// How the run relates to its origin turn; the preamble tells a background
-    /// delegate its answer is read in place rather than returned. Absent means
-    /// awaited, so markers persisted before the field existed keep rendering
-    /// the same text.
+    /// delegate its answer is read in place rather than returned, and an async
+    /// one that its answer is delivered back later. Absent means awaited, so
+    /// markers persisted before the field existed keep rendering the same text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub run_mode: Option<DelegationRunMode>,
+    pub run_mode: Option<ProvenanceRunMode>,
 }
 
 /// Statistics for a list of messages
@@ -1629,6 +1685,49 @@ mod action_facet_filter_tests {
                 preview_url: None,
             })]
         );
+    }
+}
+
+#[cfg(test)]
+mod provenance_run_mode_tests {
+    use super::{DelegationRunMode, ProvenanceRunMode};
+
+    /// The persisted spellings, and what absence means.
+    ///
+    /// `run_mode` is stored inside a JSON envelope that predates this type, so
+    /// the wire strings are not free to change: `"background"` rows written
+    /// before `async` existed must still parse, and a row with no `run_mode` at
+    /// all must read as the awaited mode rather than failing. `Wait` is never
+    /// written, which is what keeps those old envelopes byte-identical.
+    #[test]
+    fn provenance_run_mode_round_trips_and_absence_means_wait() {
+        for (mode, wire) in [
+            (ProvenanceRunMode::Wait, "wait"),
+            (ProvenanceRunMode::Background, "background"),
+            (ProvenanceRunMode::Async, "async"),
+        ] {
+            let value = serde_json::to_value(mode).expect("serializes");
+            assert_eq!(value.as_str(), Some(wire), "{mode:?} must spell {wire}");
+            assert_eq!(
+                serde_json::from_value::<ProvenanceRunMode>(value).expect("parses"),
+                mode
+            );
+        }
+
+        // Absence is the awaited mode, which is why nothing writes `wait`.
+        let absent: Option<ProvenanceRunMode> =
+            serde_json::from_value(serde_json::json!(null)).expect("parses");
+        assert_eq!(absent, None);
+        assert_eq!(absent.unwrap_or_default(), ProvenanceRunMode::Wait);
+
+        // The request wire stays at two variants: a client cannot ask for a
+        // mode only the server may choose.
+        assert!(serde_json::from_value::<DelegationRunMode>(serde_json::json!("async")).is_err());
+
+        // Both detached modes take the dispatch branch and consume a slot.
+        assert!(!ProvenanceRunMode::Wait.is_detached());
+        assert!(ProvenanceRunMode::Background.is_detached());
+        assert!(ProvenanceRunMode::Async.is_detached());
     }
 }
 

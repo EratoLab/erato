@@ -453,6 +453,16 @@ chat_provider_ids = ["test-token-limit"]
 # # "interrupt" are reserved spellings with no implementation and are rejected
 # # at load (default: "reject")
 # multitask_strategy = "reject"
+# # Run modes the erato/delegate_task tool offers. "wait" returns the sub-task's
+# # answer as the call's result; "async" settles the call at launch and the
+# # answer is delivered into the conversation later. Non-empty, duplicate-free
+# # (default: ["wait"])
+# run_modes = ["wait"]
+# # How a delivered async result re-enters the origin chat. "when_idle" runs a
+# # reaction turn as soon as the chat is free; "silent" stores the result and
+# # lets the user's next message compose it. "interrupt" is a reserved spelling
+# # with no implementation and is rejected at load (default: "when_idle")
+# scheduling = "when_idle"
 
 # Starter prompts feature configuration
 # [starter_prompts]

@@ -27,6 +27,7 @@ export type Env = {
   assistantsDelegationEnabled: boolean;
   assistantsDelegationAllowBackground: boolean;
   delegationTasksEnabled: boolean;
+  delegationTasksAllowAsync: boolean;
   assistantsEnableEditSharing?: boolean;
   assistantsUsageViewEnabled?: boolean;
   assistantsShowRecentItems: boolean;
@@ -91,6 +92,7 @@ declare global {
     ASSISTANTS_DELEGATION_ENABLED?: boolean;
     ASSISTANTS_DELEGATION_ALLOW_BACKGROUND?: boolean;
     DELEGATION_TASKS_ENABLED?: boolean;
+    DELEGATION_TASKS_ALLOW_ASYNC?: boolean;
     ASSISTANTS_ENABLE_EDIT_SHARING?: boolean;
     ASSISTANTS_USAGE_VIEW_ENABLED?: boolean;
     ASSISTANTS_SHOW_RECENT_ITEMS?: boolean;
@@ -242,6 +244,10 @@ export const env = (): Env => {
     import.meta.env.VITE_DELEGATION_TASKS_ENABLED === "true"
       ? true
       : (window.DELEGATION_TASKS_ENABLED ?? false);
+  const delegationTasksAllowAsync =
+    import.meta.env.VITE_DELEGATION_TASKS_ALLOW_ASYNC === "true"
+      ? true
+      : (window.DELEGATION_TASKS_ALLOW_ASYNC ?? false);
   const assistantsUsageViewEnabled =
     import.meta.env.VITE_ASSISTANTS_USAGE_VIEW_ENABLED === "true" ||
     (window.ASSISTANTS_USAGE_VIEW_ENABLED ?? false);
@@ -430,6 +436,7 @@ export const env = (): Env => {
     assistantsDelegationEnabled,
     assistantsDelegationAllowBackground,
     delegationTasksEnabled,
+    delegationTasksAllowAsync,
     assistantsEnableEditSharing,
     assistantsUsageViewEnabled,
     assistantsShowRecentItems,

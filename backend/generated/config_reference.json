@@ -359,6 +359,8 @@
   "delegation.tasks.multitask_strategy": {},
   "delegation.tasks.persona": {},
   "delegation.tasks.result_template": {},
+  "delegation.tasks.run_modes.[]": {},
+  "delegation.tasks.scheduling": {},
   "desktop_sidecar.allowed_origins.[]": {},
   "desktop_sidecar.directory_suffix": {},
   "desktop_sidecar.display_name": {},
@@ -510,6 +512,20 @@
       "replacement_key": "facets.facets.<facet-id>.delegation.persona"
     }
   },
+  "experimental_facets.facets.<facet-id>.delegation.run_modes.[]": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.delegation.run_modes.[]` instead.",
+      "replacement_key": "facets.facets.<facet-id>.delegation.run_modes.[]"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.delegation.scheduling": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.delegation.scheduling` instead.",
+      "replacement_key": "facets.facets.<facet-id>.delegation.scheduling"
+    }
+  },
   "experimental_facets.facets.<facet-id>.disable_facet_prompt_template": {
     "hide_in_docs": true,
     "deprecated": {
@@ -644,6 +660,8 @@
   "facets.facets.<facet-id>.delegation.max_server_tool_calls_per_task": {},
   "facets.facets.<facet-id>.delegation.max_tasks_per_turn": {},
   "facets.facets.<facet-id>.delegation.persona": {},
+  "facets.facets.<facet-id>.delegation.run_modes.[]": {},
+  "facets.facets.<facet-id>.delegation.scheduling": {},
   "facets.facets.<facet-id>.disable_facet_prompt_template": {},
   "facets.facets.<facet-id>.display_name": {},
   "facets.facets.<facet-id>.hidden": {},

@@ -81,6 +81,24 @@ The new key is `delegation.tasks.multitask_strategy` (default `"reject"`, the on
 
 The visible consequence with the flag on: a double submit from two browser tabs now returns `409` to the second tab instead of appearing to work. Other `409`s on these routes — archived chat, live delegated run — are unchanged plain text, so only clients that read `code` see any difference.
 
+**The model can now dispatch a task it does not wait for (`run_mode = "async"`).** Off by default: the tool offers only `wait` unless a deployment says otherwise.
+
+```toml
+[delegation.tasks]
+enabled = true
+run_modes = ["wait", "async"]
+# What happens when an async result comes home. "silent" stores it without replying.
+scheduling = "when_idle"
+```
+
+An `async` call settles at launch and the origin turn finishes without the sub-task's answer, so a long lookup no longer keeps the user waiting. Only the modes listed in `run_modes` appear in the tool schema, and a call naming an unoffered mode is refused rather than quietly downgraded, so the model cannot come to believe it detached work that in fact ran inline. `wait` is always available, even if a facet override omits it.
+
+Both keys can be overridden per facet. `run_modes` is **unioned** with the global list rather than replacing it — a run mode is a capability the facet's author meant to grant — while `scheduling` takes the first selected facet that states one. The reserved spelling `scheduling = "interrupt"` is rejected at startup rather than silently treated as `"when_idle"`.
+
+An async run counts against `delegation.max_concurrent_background_runs` exactly as a background run does: the cap bounds concurrent load, and the two cost the same.
+
+On the wire, a dispatched async task's tool part carries `"run_mode": "async"` beside the existing `"background": true`, so a client can tell a run whose answer is coming back from one whose never will; `RecentChat.provenance_run_mode` may now read `"async"`; and the injected frontend environment gains `DELEGATION_TASKS_ALLOW_ASYNC`, derived from `run_modes` rather than configured separately. The request-side `delegation_run_mode` field is unchanged and still accepts only `wait` and `background` — `async` is a mode the server chooses for a delegated run, not one a client may ask for.
+
 **A finished background task's result can now re-enter the conversation it was started from.** This release adds the wire and composition half; nothing emits these yet, so there is no visible behaviour change.
 
 A delivered result arrives as a user-role message carrying a new `task_result` content part, and `ChatMessage` gains two derived fields: `task_result` (present on such a row) and `initiator` (`user` or `task_result`, absent meaning a user). Both are additive.

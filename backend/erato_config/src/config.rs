@@ -299,6 +299,7 @@ fn app_environment_source() -> Environment {
         .with_list_parse_key("facets.default_selected_facets")
         .with_list_parse_key("experimental_facets.default_selected_facets")
         .with_list_parse_key("delegation.tasks.child_facet_ids")
+        .with_list_parse_key("delegation.tasks.run_modes")
         .with_list_parse_key("frontend.extra_frame_ancestors")
         .with_list_parse_key("i18n.language.language_detection_priority")
         .with_list_parse_key("integrations.sharepoint.all_drives_sources")
@@ -1288,16 +1289,39 @@ impl AppConfig {
             let Some(overrides) = &facet.delegation else {
                 continue;
             };
-            let Some(ids) = &overrides.child_facet_ids else {
-                continue;
-            };
-            for id in ids {
-                if !config.facets.facets.contains_key(id) {
+            // Three independent rules over the same overrides. Deliberately not
+            // chained `let ... else { continue }`: an early exit on the first
+            // absent field would skip the checks below it.
+            if let Some(ids) = &overrides.child_facet_ids {
+                for id in ids {
+                    if !config.facets.facets.contains_key(id) {
+                        panic!(
+                            "facets.facets.{}.delegation.child_facet_ids references unknown facet '{}'.",
+                            facet_id, id
+                        );
+                    }
+                }
+            }
+            if let Some(modes) = &overrides.run_modes {
+                if modes.is_empty() {
                     panic!(
-                        "facets.facets.{}.delegation.child_facet_ids references unknown facet '{}'.",
-                        facet_id, id
+                        "facets.facets.{facet_id}.delegation.run_modes must list at least one mode."
                     );
                 }
+                for (index, mode) in modes.iter().enumerate() {
+                    if modes[..index].contains(mode) {
+                        panic!(
+                            "facets.facets.{}.delegation.run_modes contains \"{}\" more than once.",
+                            facet_id,
+                            mode.as_str()
+                        );
+                    }
+                }
+            }
+            if overrides.scheduling == Some(TaskScheduling::Interrupt) {
+                panic!(
+                    "facets.facets.{facet_id}.delegation.scheduling = \"interrupt\" is not supported yet."
+                );
             }
         }
 
@@ -3490,6 +3514,34 @@ impl DelegationConfig {
             ));
         }
 
+        if self.tasks.run_modes.is_empty() {
+            return Err(eyre!(
+                "delegation.tasks.run_modes must list at least one mode"
+            ));
+        }
+        // A duplicate is never harmless: `run_modes` becomes a JSON-schema
+        // `enum` the model reads, and a repeated member reads as emphasis.
+        for (index, mode) in self.tasks.run_modes.iter().enumerate() {
+            if self.tasks.run_modes[..index].contains(mode) {
+                return Err(eyre!(
+                    "delegation.tasks.run_modes contains \"{}\" more than once",
+                    mode.as_str()
+                ));
+            }
+        }
+
+        // Same mechanism as `multitask_strategy` below: serde would refuse an
+        // unknown variant, but this spelling carries a promise the deployment
+        // would otherwise believe.
+        match self.tasks.scheduling {
+            TaskScheduling::Silent | TaskScheduling::WhenIdle => {}
+            TaskScheduling::Interrupt => {
+                return Err(eyre!(
+                    "delegation.tasks.scheduling = \"interrupt\" is not supported yet"
+                ));
+            }
+        }
+
         // A reserved spelling fails loudly. Serde would already refuse an
         // unknown variant, but only these two names carry a promise the
         // deployment would otherwise believe: both would silently behave as
@@ -3607,6 +3659,22 @@ pub struct DelegationTasksConfig {
     // Defaults to the built-in wording.
     #[serde(default = "default_delegation_tasks_result_template")]
     pub result_template: String,
+
+    // Run modes the `erato/delegate_task` tool offers. "wait" returns the
+    // sub-task's answer as the call's result; "async" settles the call at
+    // launch and delivers the answer into the conversation later. Must be
+    // non-empty and duplicate-free.
+    // Defaults to ["wait"].
+    #[serde(default = "default_delegation_tasks_run_modes")]
+    pub run_modes: Vec<TaskRunMode>,
+
+    // How a delivered async result re-enters the origin chat. "when_idle"
+    // runs a reaction turn as soon as the chat is free; "silent" stores the
+    // result and lets the user's next message compose it. "interrupt" is a
+    // reserved spelling with no implementation and is rejected at load.
+    // Defaults to "when_idle".
+    #[serde(default)]
+    pub scheduling: TaskScheduling,
 }
 
 impl Default for DelegationTasksConfig {
@@ -3623,6 +3691,8 @@ impl Default for DelegationTasksConfig {
             child_facet_ids: Vec::new(),
             multitask_strategy: MultitaskStrategy::default(),
             result_template: default_delegation_tasks_result_template(),
+            run_modes: default_delegation_tasks_run_modes(),
+            scheduling: TaskScheduling::default(),
         }
     }
 }
@@ -3667,6 +3737,12 @@ pub struct FacetDelegationOverrides {
 
     #[serde(default)]
     pub child_facet_ids: Option<Vec<String>>,
+
+    #[serde(default)]
+    pub run_modes: Option<Vec<TaskRunMode>>,
+
+    #[serde(default)]
+    pub scheduling: Option<TaskScheduling>,
 }
 
 /// Whether a task child speaks as the origin chat's assistant or as the bare
@@ -3681,6 +3757,31 @@ pub enum TaskPersona {
     Bare,
 }
 
+/// A run mode the `delegate_task` tool may offer.
+///
+/// `wait` returns the child's answer as the call's result. `async` settles the
+/// call at launch and the answer is delivered into the conversation later, as
+/// a `task_result` row the model then reacts to.
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[facet(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+#[repr(C)]
+pub enum TaskRunMode {
+    #[default]
+    Wait,
+    Async,
+}
+
+impl TaskRunMode {
+    /// The spelling the tool schema offers and the model writes back.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TaskRunMode::Wait => "wait",
+            TaskRunMode::Async => "async",
+        }
+    }
+}
+
 /// How a completed async task result re-enters the origin chat. `interrupt` is
 /// a reserved spelling with no implementation; it is rejected at load rather
 /// than silently accepted.
@@ -3689,9 +3790,15 @@ pub enum TaskPersona {
 #[serde(rename_all = "snake_case")]
 #[repr(C)]
 pub enum TaskScheduling {
+    /// Store the result; do not run a turn over it. The next thing the user
+    /// sends composes it into history.
     Silent,
+    /// Run a reaction turn as soon as the origin chat is free.
     #[default]
     WhenIdle,
+    /// Reserved: interrupt a running origin turn to react. No implementation;
+    /// rejected at load.
+    Interrupt,
 }
 
 fn default_delegation_tasks_max_tasks_per_turn() -> u32 {
@@ -3708,6 +3815,10 @@ fn default_delegation_tasks_max_parallel() -> u32 {
 
 fn default_delegation_tasks_max_client_tool_calls_per_task() -> u32 {
     30
+}
+
+fn default_delegation_tasks_run_modes() -> Vec<TaskRunMode> {
+    vec![TaskRunMode::Wait]
 }
 
 /// Presentation only. The status line, the ids and the safety guidance are

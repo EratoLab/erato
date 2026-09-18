@@ -3036,7 +3036,7 @@ async fn test_background_dispatch_returns_at_launch(pool: Pool<Postgres>) {
     assert_eq!(child_chat.generation_state.as_deref(), Some("running"));
     assert_eq!(
         provenance_of(&child_chat).run_mode,
-        Some(erato::models::message::DelegationRunMode::Background)
+        Some(erato::models::message::ProvenanceRunMode::Background)
     );
 
     // The model heard a launch, never the answer.
@@ -3456,7 +3456,7 @@ async fn test_regenerate_replays_background_dispatch(pool: Pool<Postgres>) {
         .expect("second delegated child chat");
     assert_eq!(
         provenance_of(&second_child).run_mode,
-        Some(erato::models::message::DelegationRunMode::Background)
+        Some(erato::models::message::ProvenanceRunMode::Background)
     );
     wait_for_child_completion(&app_state.db, second_child_id, "CHILD-BG-REGEN-ANSWER").await;
 }
@@ -4369,10 +4369,14 @@ async fn test_listing_hides_delegated_runs_and_exposes_provenance(pool: Pool<Pos
                 adopted_at: None,
                 legacy_expected_output: None,
                 legacy_constraints: None,
-                // One detached run among awaited ones, so the listing's
-                // run-mode passthrough is exercised in both directions.
-                run_mode: (index == 0)
-                    .then_some(erato::models::message::DelegationRunMode::Background),
+                // One of each detached mode plus an awaited run, so the
+                // listing's run-mode passthrough is exercised in every
+                // direction it has.
+                run_mode: match index {
+                    0 => Some(erato::models::message::ProvenanceRunMode::Background),
+                    1 => Some(erato::models::message::ProvenanceRunMode::Async),
+                    _ => None,
+                },
                 result_delivery: None,
             },
             None,
@@ -4467,11 +4471,22 @@ async fn test_listing_hides_delegated_runs_and_exposes_provenance(pool: Pool<Pos
     // the listing must preserve that absence, since clients read presence of
     // `background` as "this run has a life of its own".
     assert_eq!(delegated_entry["provenance_run_mode"], "background");
-    let awaited_entry = listing["chats"]
+    let async_entry = listing["chats"]
         .as_array()
         .unwrap()
         .iter()
         .find(|chat| chat["id"] == delegated_ids[1].as_str())
+        .unwrap();
+    assert_eq!(
+        async_entry["provenance_run_mode"], "async",
+        "an async run is detached too, and a client reading only `background` \
+         would treat it as awaited"
+    );
+    let awaited_entry = listing["chats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|chat| chat["id"] == delegated_ids[2].as_str())
         .unwrap();
     assert!(
         !awaited_entry
@@ -8573,4 +8588,329 @@ fn approval_fixture_server() -> erato::config::McpServerConfig {
         authentication: erato::config::McpServerAuthenticationConfig::None,
         max_session_idle_seconds: None,
     }
+}
+
+/// An `async` task detaches: the slot settles at launch, and the origin turn
+/// finishes without the child's answer.
+///
+/// This is the whole difference between `async` and `wait` at dispatch time.
+/// Revert the run-mode threading in `launch_prepared_task` and the turn blocks
+/// on the child instead, with the awaited envelope on the part — which is
+/// exactly the case a reader could not tell apart from a slow `wait` call.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn async_task_dispatch_settles_the_slot_and_detaches(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    // The child's own turn, recognised by the brief.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["ASYNC-BRIEF-SENTINEL"],
+                &["async task question"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["ASYNC-CHILD-ANSWER"]),
+        );
+    });
+    // The parent's continuation. It sees the dispatch note, never the answer.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["async task question", "dispatched"],
+                &[],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["PARENT-ASYNC-FINAL"]),
+        );
+    });
+    // The parent's first turn: plans the sub-task and asks for `async`.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["async task question"],
+                &["ASYNC-BRIEF-SENTINEL", "dispatched"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_async_1",
+                "delegate_task",
+                json!({
+                    "task": "ASYNC-BRIEF-SENTINEL: count the figures",
+                    "run_mode": "async",
+                }),
+            )]),
+        );
+    });
+
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        config.delegation.tasks.run_modes = vec![
+            erato_config::config::TaskRunMode::Wait,
+            erato_config::config::TaskRunMode::Async,
+        ];
+    })
+    .await;
+
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, "async task question", &["plan"]).await;
+
+    let output = find_tool_call_update_output(&events, "delegate_task");
+    assert_eq!(
+        output["background"], true,
+        "an async dispatch keeps the detached marker the frontend pill reads: {output}"
+    );
+    assert_eq!(
+        output["run_mode"], "async",
+        "a reader must be able to tell a run whose answer is coming back from one whose never will: {output}"
+    );
+    assert!(output["child_run_id"].is_string());
+    assert!(
+        output["result"].is_null() && output["status"].is_null(),
+        "the part is frozen at the launch shape; the answer is not in this turn: {output}"
+    );
+    assert!(extract_full_text_answer(&events).contains("PARENT-ASYNC-FINAL"));
+
+    // The child is a real run, and it is recorded as the detached mode it is.
+    let child_chat = delegated_child_chat(&app_state.db, Uuid::parse_str(&chat).unwrap()).await;
+    let configuration = child_chat
+        .assistant_configuration
+        .expect("child configuration");
+    assert_eq!(configuration["provenance"]["run_mode"], "async");
+    assert_eq!(
+        configuration["task"]["parent_tool_call_id"], "call_async_1",
+        "the origin call is persisted at launch, for a delivery that may never see this turn"
+    );
+}
+
+/// A mode the deployment does not offer is refused, not quietly downgraded.
+///
+/// The schema's `enum` is advisory — a model can write anything — so the offer
+/// is re-checked at dispatch. Downgrading instead would leave the model
+/// believing it had detached work that in fact ran inline, which it cannot
+/// observe and cannot correct.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn async_run_mode_is_refused_when_it_is_not_offered(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    // The parent recovers in prose once the refusal comes back.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["unoffered mode question", "not available"],
+                &[],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["ASYNC-REFUSAL-RECOVERED"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["unoffered mode question"],
+                &["not available"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_unoffered",
+                "delegate_task",
+                json!({
+                    "task": "NEVER-DISPATCHED: count the figures",
+                    "run_mode": "async",
+                }),
+            )]),
+        );
+    });
+
+    // Default `run_modes`: wait only.
+    let (app_state, _llm) = task_enabled_state(pool, mocks, &["erato/delegate_task"]).await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, "unoffered mode question", &["plan"]).await;
+
+    let output = find_tool_call_update_output(&events, "delegate_task");
+    let error = output["error"]
+        .as_str()
+        .unwrap_or_else(|| panic!("the call must be refused: {output}"));
+    assert!(
+        error.contains("not available") && error.contains("wait"),
+        "the refusal must name what IS available so the model can retry correctly: {error}"
+    );
+    assert!(extract_full_text_answer(&events).contains("ASYNC-REFUSAL-RECOVERED"));
+
+    // A refusal is a refused CALL, not a refused turn — and nothing was created.
+    let children = erato::db::entity::prelude::Chats::find()
+        .filter(erato::db::entity::chats::Column::OriginChatId.eq(Uuid::parse_str(&chat).unwrap()))
+        .all(&app_state.db)
+        .await
+        .expect("query");
+    assert!(
+        children.is_empty(),
+        "a refused mode must not leave a child run behind"
+    );
+}
+
+/// The concurrency cap counts both detached modes.
+///
+/// The cap exists to bound concurrent load, and an `async` run costs exactly
+/// what a `background` one does. Leaving the SQL at `= 'background'` would
+/// make async runs uncapped — the one mode a model can start on its own
+/// initiative, repeatedly, within a single turn.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn count_running_background_delegated_runs_counts_async_runs(pool: Pool<Postgres>) {
+    use sea_orm::ConnectionTrait;
+
+    let app_state = test_app_state(delegation_enabled_config(), pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin_chat = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin_chat).unwrap();
+
+    for run_mode in [
+        erato::models::message::ProvenanceRunMode::Background,
+        erato::models::message::ProvenanceRunMode::Async,
+        // An awaited run is not detached and must not be counted.
+        erato::models::message::ProvenanceRunMode::Wait,
+    ] {
+        let child = erato::models::chat::create_delegated_chat(
+            &app_state.db,
+            &rebuilt_policy(&app_state).await,
+            &erato::policy::types::Subject::User(me.id.to_string()),
+            &me.id.to_string(),
+            None,
+            ChatProvenance {
+                kind: ChatProvenanceKind::Delegation,
+                origin_chat_id: Some(origin_chat_id),
+                origin_message_id: None,
+                origin_assistant_id: None,
+                rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
+                depth: 1,
+                adopted_at: None,
+                legacy_expected_output: None,
+                legacy_constraints: None,
+                run_mode: (run_mode != erato::models::message::ProvenanceRunMode::Wait)
+                    .then_some(run_mode),
+                result_delivery: None,
+            },
+            None,
+            format!("{run_mode:?} run"),
+            true,
+            Vec::new(),
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+
+        // Live generation with a fresh heartbeat: what "in flight" means here.
+        app_state
+            .db
+            .execute_raw(sea_orm::Statement::from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                r#"
+                UPDATE chats
+                SET active_generation_id = $1,
+                    generation_state = 'running',
+                    generation_started_at = now(),
+                    generation_heartbeat_at = now(),
+                    generation_ended_at = NULL
+                WHERE id = $2
+                "#,
+                [Uuid::new_v4().into(), child.id.into()],
+            ))
+            .await
+            .expect("mark running");
+    }
+
+    let in_flight = erato::models::chat::count_running_background_delegated_runs(
+        &app_state.db,
+        &me.id.to_string(),
+        app_state.config.generation_status.stale_after_secs,
+    )
+    .await
+    .expect("count");
+    assert_eq!(
+        in_flight, 2,
+        "both detached modes consume a slot; the awaited run does not"
+    );
+}
+
+/// `async` is not a mode a client may ask for.
+///
+/// The request wire keeps two variants on purpose, so the only way into the
+/// third is the server choosing it for a delegated run. Widening
+/// `DelegationRunMode` instead of adding a separate persisted type would let a
+/// submit body start a turn in a mode the request path cannot execute.
+///
+/// Asserts the status the server actually returns: axum's stock `Json`
+/// extractor answers a deserialization failure with 422, and nothing in this
+/// service remaps it.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn an_async_delegation_run_mode_on_a_submit_request_is_unprocessable(pool: Pool<Postgres>) {
+    let app_state = test_app_state(delegation_enabled_config(), pool).await;
+    erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "user_message": "run this detached",
+            "delegation_run_mode": "async",
+        }))
+        .await;
+    assert_eq!(
+        response.status_code(),
+        axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+        "an unknown run mode must not reach the turn"
+    );
+
+    let chats = erato::db::entity::prelude::Chats::find()
+        .all(&app_state.db)
+        .await
+        .expect("query");
+    assert!(
+        chats.is_empty(),
+        "a rejected request must not have created a chat"
+    );
 }
