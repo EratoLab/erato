@@ -63,6 +63,16 @@ export const mcpToolBadges = (tool: McpServerTool) => {
       toneClassName: NEUTRAL_PILL,
     });
   }
+  // Tells a standing decision apart from the policy reaching the same state.
+  if (tool.user_decision !== "none") {
+    badges.push({
+      label: t({
+        id: "preferences.dialog.mcpServers.tools.badge.setByYou",
+        message: "Set by you",
+      }),
+      toneClassName: NEUTRAL_PILL,
+    });
+  }
   return badges;
 };
 

@@ -18,7 +18,10 @@ import { ResolvedIcon } from "../icons";
 import { ActionConfirmationCard } from "./ActionConfirmationCard";
 
 import type { ToolApprovalStatus } from "../Trace/Trace";
-import type { ContentPartToolApprovalRequest } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  ContentPartToolApprovalRequest,
+  ToolApprovalDecision,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
  * The generated schema collapses `serde_json::Value` to `void`, which would
@@ -117,9 +120,7 @@ export const McpToolApprovalCard = ({
    * The fallback consumes the continuation here instead, which cannot release
    * this card until the whole answer has been generated.
    */
-  const submitDecision = async (
-    decision: "approve" | "reject" | "approve_always",
-  ) => {
+  const submitDecision = async (decision: ToolApprovalDecision) => {
     if (chatContext?.continueToolApproval) {
       await chatContext.continueToolApproval({
         messageId,
@@ -158,7 +159,7 @@ export const McpToolApprovalCard = ({
     await chatContext?.refetchMessages();
   };
 
-  const decide = async (decision: "approve" | "reject" | "approve_always") => {
+  const decide = async (decision: ToolApprovalDecision) => {
     setIsBusy(true);
     setError(null);
     try {
@@ -166,11 +167,16 @@ export const McpToolApprovalCard = ({
       if (chatContext?.continueToolApproval) {
         return;
       }
-      setLocalResolution(decision === "reject" ? "denied" : "approved");
-      if (decision === "approve_always") {
-        // The grant is account-wide, and the settings roster and the tool
-        // browser would otherwise keep serving it from their cached listing.
-        // (The streamed path drops them itself, once the grant is written.)
+      setLocalResolution(
+        decision === "reject" || decision === "reject_always"
+          ? "denied"
+          : "approved",
+      );
+      if (decision === "approve_always" || decision === "reject_always") {
+        // A standing decision is account-wide, and the settings roster and
+        // the tool browser would otherwise keep serving the old state from
+        // their cached listing. (The streamed path drops them itself, once
+        // the decision is written.)
         await Promise.all([
           queryClient.invalidateQueries({
             queryKey: listMcpServerToolsQuery({
@@ -245,6 +251,8 @@ export const McpToolApprovalCard = ({
               })
         }
         onDeny={() => void decide("reject")}
+        // eslint-disable-next-line lingui/no-unlocalized-strings -- API decision value
+        onNeverAllow={() => void decide("reject_always")}
         status={isArchived ? "dismissed" : "pending"}
         resolvedLabel={isArchived ? archivedNoticeText() : undefined}
         // Held while the chat is still settling the park's own completion

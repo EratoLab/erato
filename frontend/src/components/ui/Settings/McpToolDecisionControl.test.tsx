@@ -36,12 +36,12 @@ const radio = (decision: string) => {
 };
 
 describe("McpToolDecisionControl", () => {
-  it("is a labelled radio group of three named radios with the effective state checked", () => {
+  it("is a labelled radio group of three named radios, least permission first, with the effective state checked", () => {
     renderControl();
 
     const group = screen.getByRole("radiogroup", { name: "Get issue" });
     expect(within(group).getAllByRole("radio")).toHaveLength(3);
-    expect(radio("allow")).toHaveAccessibleName("Allow");
+    expect(radio("allow")).toHaveAccessibleName("Always allow");
     expect(radio("ask")).toHaveAccessibleName("Ask each time (policy default)");
     expect(radio("never")).toHaveAccessibleName("Never allow");
     expect(radio("ask")).toHaveAttribute("aria-checked", "true");
@@ -75,24 +75,24 @@ describe("McpToolDecisionControl", () => {
 
     radio("ask").focus();
     fireEvent.keyDown(radio("ask"), { key: "ArrowRight" });
-    expect(radio("never")).toHaveFocus();
+    expect(radio("allow")).toHaveFocus();
     // The tab stop follows the walk; the checked state does not.
-    expect(radio("never")).toHaveAttribute("tabindex", "0");
+    expect(radio("allow")).toHaveAttribute("tabindex", "0");
     expect(radio("ask")).toHaveAttribute("tabindex", "-1");
     expect(radio("ask")).toHaveAttribute("aria-checked", "true");
 
-    fireEvent.keyDown(radio("never"), { key: "ArrowRight" });
-    expect(radio("allow")).toHaveFocus();
-    fireEvent.keyDown(radio("allow"), { key: "ArrowLeft" });
+    fireEvent.keyDown(radio("allow"), { key: "ArrowRight" });
     expect(radio("never")).toHaveFocus();
-    fireEvent.keyDown(radio("never"), { key: "Home" });
+    fireEvent.keyDown(radio("never"), { key: "ArrowLeft" });
     expect(radio("allow")).toHaveFocus();
-    fireEvent.keyDown(radio("allow"), { key: "End" });
+    fireEvent.keyDown(radio("allow"), { key: "Home" });
     expect(radio("never")).toHaveFocus();
-    fireEvent.keyDown(radio("never"), { key: "ArrowUp" });
+    fireEvent.keyDown(radio("never"), { key: "End" });
+    expect(radio("allow")).toHaveFocus();
+    fireEvent.keyDown(radio("allow"), { key: "ArrowUp" });
     expect(radio("ask")).toHaveFocus();
     fireEvent.keyDown(radio("ask"), { key: "ArrowDown" });
-    expect(radio("never")).toHaveFocus();
+    expect(radio("allow")).toHaveFocus();
     expect(onChange).not.toHaveBeenCalled();
 
     // Space and Enter are the buttons' own activation, which jsdom does not
@@ -108,11 +108,11 @@ describe("McpToolDecisionControl", () => {
 
     radio("ask").focus();
     fireEvent.keyDown(radio("ask"), { key: "ArrowLeft" });
-    expect(radio("allow")).toHaveAttribute("tabindex", "0");
+    expect(radio("never")).toHaveAttribute("tabindex", "0");
 
-    fireEvent.blur(radio("allow"), { relatedTarget: elsewhere });
+    fireEvent.blur(radio("never"), { relatedTarget: elsewhere });
     expect(radio("ask")).toHaveAttribute("tabindex", "0");
-    expect(radio("allow")).toHaveAttribute("tabindex", "-1");
+    expect(radio("never")).toHaveAttribute("tabindex", "-1");
   });
 
   it("marks a state the deployment does not store as disabled, focusable and never selected", async () => {
@@ -131,7 +131,7 @@ describe("McpToolDecisionControl", () => {
 
     // The arrow still lands there so the reason can be read, but the
     // selection does not follow.
-    fireEvent.keyDown(radio("ask"), { key: "ArrowLeft" });
+    fireEvent.keyDown(radio("ask"), { key: "ArrowRight" });
     expect(radio("allow")).toHaveFocus();
     expect(onChange).not.toHaveBeenCalled();
 
@@ -149,7 +149,9 @@ describe("McpToolDecisionControl", () => {
     });
 
     expect(radio("ask")).toHaveAttribute("aria-disabled", "true");
-    expect(radio("allow")).toHaveAccessibleName("Allow (policy default)");
+    expect(radio("allow")).toHaveAccessibleName(
+      "Always allow (policy default)",
+    );
     expect(radio("allow")).toHaveAttribute("aria-checked", "true");
   });
 

@@ -36,9 +36,15 @@ interface ActionConfirmationCardProps {
   alwaysAllowDisabledReason?: string;
   /** Skip the action this one time; the card will ask again next time. */
   onDeny: () => void;
+  /**
+   * Persist the decision and refuse the action from now on. Omit to hide the
+   * button entirely, as `onAlwaysAllow` does.
+   */
+  onNeverAllow?: () => void;
   allowOnceLabel?: string;
   alwaysAllowLabel?: string;
   denyLabel?: string;
+  neverAllowLabel?: string;
   /**
    * Lifecycle state. `pending` renders the decision buttons;
    * `confirmed` / `dismissed` render a compact resolved row so the decision
@@ -80,11 +86,12 @@ const focusIfUnclaimed = (card: HTMLElement | null) => {
 /**
  * Inline, message-scoped permission step for an assistant-proposed action.
  *
- * Presents the same three-way decision every time — allow once, always
- * allow, deny — with browser-permission semantics: only "always allow"
- * persists; "allow once" and "deny" apply to this proposal and the card asks
- * again next time. A deployment can enforce per-use confirmation, in which
- * case "always allow" renders greyed out with the reason.
+ * Presents the same decision every time, in two pairs: allow once or always
+ * allow, deny once or never allow. The "once" answers apply to this proposal
+ * and the card asks again next time; the standing answers persist and are
+ * omitted by a consumer that cannot store them. A deployment can enforce
+ * per-use confirmation, in which case "always allow" renders greyed out with
+ * the reason.
  *
  * Unlike a modal, the card lives WITH the proposal in the conversation: it
  * never steals focus, multiple proposals can be pending independently, and a
@@ -100,9 +107,11 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
   onAlwaysAllow,
   alwaysAllowDisabledReason,
   onDeny,
+  onNeverAllow,
   allowOnceLabel,
   alwaysAllowLabel,
   denyLabel,
+  neverAllowLabel,
   status = "pending",
   resolvedLabel,
   isBusy = false,
@@ -243,9 +252,23 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
               {denyLabel ??
                 t({
                   id: "actionConfirmation.deny",
-                  message: "Deny",
+                  message: "Deny once",
                 })}
             </Button>
+            {onNeverAllow && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onNeverAllow}
+                disabled={isBusy}
+              >
+                {neverAllowLabel ??
+                  t({
+                    id: "actionConfirmation.neverAllow",
+                    message: "Never allow",
+                  })}
+              </Button>
+            )}
           </div>
           {alwaysAllowDisabledReason && (
             <p id={alwaysAllowReasonId} className="text-xs text-theme-fg-muted">

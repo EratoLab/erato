@@ -5816,11 +5816,22 @@
           "rejected_at"
         ],
         "properties": {
+          "never_allow": {
+            "type": "boolean",
+            "description": "Both fields default, so rejections stored before standing denials\nexisted still parse."
+          },
           "rejected_at": {
             "type": "string"
           },
           "tool_call_id": {
             "type": "string"
+          },
+          "user_tool_approval_setting_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -9135,11 +9146,12 @@
       },
       "ToolApprovalDecision": {
         "type": "string",
-        "description": "Decision submitted for a generation stopped at an MCP approval gate.",
+        "description": "Decision submitted for a generation stopped at an MCP approval gate.\n\n`RejectAlways` needs no policy flag the way `ApproveAlways` needs\n`allow_always`: a denial is more restrictive than anything the policy does.",
         "enum": [
           "approve",
           "reject",
-          "approve_always"
+          "approve_always",
+          "reject_always"
         ]
       },
       "ToolCallStatus": {

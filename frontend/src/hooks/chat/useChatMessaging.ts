@@ -70,6 +70,7 @@ import type {
   ContentPart,
   DelegationRunMode,
   MessageSubmitStreamingResponseMessage,
+  ToolApprovalDecision,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 import type { AssistantMention } from "@/utils/chat/assistantMentions";
@@ -88,11 +89,11 @@ const X_ERATO_PLATFORM_HEADER = "X-Erato-Platform";
  */
 export interface ContinueToolApprovalInput {
   messageId: string;
-  decision: "approve" | "reject" | "approve_always";
+  decision: ToolApprovalDecision;
   toolCallId: string;
   toolName: string;
   toolInput?: unknown;
-  /** Names the roster to drop after an `approve_always` grant is written. */
+  /** Names the roster to drop after a standing decision is written. */
   mcpServerId: string;
 }
 
@@ -2224,7 +2225,7 @@ export function useChatMessaging(
       }
 
       const now = new Date().toISOString();
-      const isApproved = decision !== "reject";
+      const isApproved = decision !== "reject" && decision !== "reject_always";
       const decisionPart: ContentPart = isApproved
         ? {
             content_type: "tool_approval",
@@ -2235,6 +2236,7 @@ export function useChatMessaging(
         : {
             content_type: "tool_rejection",
             tool_call_id: toolCallId,
+            never_allow: decision === "reject_always",
             rejected_at: now,
           };
       // The generated schema collapses `serde_json::Value` to `void`, which
@@ -2281,11 +2283,11 @@ export function useChatMessaging(
         useGenerationStatusStore.getState().seedRunningLocal(streamKey, now);
       }
 
-      // An account-wide grant is written by the continuation's worker, after
-      // it has rebuilt the tool set — so the rosters are dropped again once
-      // the stream is over, not only when the decision was accepted.
-      const dropGrantedRosters = () => {
-        if (decision !== "approve_always") {
+      // An account-wide decision is written by the continuation's worker,
+      // after it has rebuilt the tool set — so the rosters are dropped again
+      // once the stream is over, not only when the decision was accepted.
+      const dropDecidedRosters = () => {
+        if (decision !== "approve_always" && decision !== "reject_always") {
           return;
         }
         void queryClient.invalidateQueries({
@@ -2297,7 +2299,7 @@ export function useChatMessaging(
           queryKey: listUserToolApprovalSettingsQuery({}).queryKey,
         });
       };
-      dropGrantedRosters();
+      dropDecidedRosters();
 
       // The decision never took: put the transcript back the way it was and
       // let the park be the truth again. A seed never outranks an entry
@@ -2359,7 +2361,7 @@ export function useChatMessaging(
                 "[DEBUG_STREAMING] SSE error in continueToolApproval:",
                 connectionError,
               );
-              dropGrantedRosters();
+              dropDecidedRosters();
               if (
                 useMessagingStore.getState().getStreaming(activeStreamKey)
                   .isStreaming
@@ -2394,7 +2396,7 @@ export function useChatMessaging(
                 );
                 return;
               }
-              dropGrantedRosters();
+              dropDecidedRosters();
               const currentlyStreaming =
                 isStreamCurrentlyActive(activeStreamKey);
               setSubmittingForKey(activeStreamKey, false);

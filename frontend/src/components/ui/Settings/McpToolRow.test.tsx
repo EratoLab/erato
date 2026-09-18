@@ -52,6 +52,7 @@ describe("McpToolRow", () => {
     expect(within(row).getByText("Can modify")).toBeInTheDocument();
     expect(within(row).getByText("Reaches other systems")).toBeInTheDocument();
     expect(within(row).getByText("Asks before running")).toBeInTheDocument();
+    expect(within(row).queryByText("Set by you")).not.toBeInTheDocument();
 
     const button = screen.getByRole("button", {
       name: "Description of Create attachment",
@@ -215,4 +216,13 @@ describe("McpToolRow", () => {
 
     expect(screen.getByTestId("row").tagName).toBe("LI");
   });
+
+  it.each(["always_allow", "ask", "denied"] as const)(
+    "says a %s state is the user's own, not the policy's",
+    (userDecision) => {
+      renderRow({ user_decision: userDecision });
+
+      expect(screen.getByText("Set by you")).toBeInTheDocument();
+    },
+  );
 });

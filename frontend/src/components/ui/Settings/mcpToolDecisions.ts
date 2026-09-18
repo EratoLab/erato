@@ -9,11 +9,14 @@ import type {
 /** The three states a tool row offers; each is one effective state. */
 export type McpToolDecision = "allow" | "ask" | "never";
 
-/** Every decision, in the order the control shows them. */
+/**
+ * Every decision, in the order the control shows them: least permission
+ * first, so the keyboard walk starts at the safe end.
+ */
 export const MCP_TOOL_DECISIONS: readonly McpToolDecision[] = [
-  "allow",
-  "ask",
   "never",
+  "ask",
+  "allow",
 ];
 
 export const decisionOfEffective = (
