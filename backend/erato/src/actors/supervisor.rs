@@ -29,6 +29,21 @@ impl WorkerNames {
     }
 }
 
+/// The tick job the supervisor schedules, built in one place so a test can
+/// drive the *same* construction the supervisor uses.
+///
+/// Without this the coupling is untestable in the direction that matters: the
+/// `Box<dyn Job>` goes straight into `CronManagerMessage::Start` and is never
+/// retained, so a job handed `cleanup_worker_cron` instead of `cleanup_worker`
+/// would cast every tick at the `CronManager`'s cell — a `Some` from
+/// `where_is`, so not even the "Tick skipped" warning fires — and the backstop
+/// sweep would never run, silently.
+pub fn cleanup_tick_job(names: &WorkerNames) -> CleanupTickJob {
+    CleanupTickJob {
+        worker_name: names.cleanup_worker.clone(),
+    }
+}
+
 pub struct WorkerSupervisorArgs {
     pub db: DatabaseConnection,
     pub config: AppConfig,
@@ -106,12 +121,13 @@ impl Actor for WorkerSupervisor {
         // Schedule the cleanup tick job. The job is handed the worker's registry
         // name rather than looking up a literal: that turns a rename into a
         // compile error instead of a tick that is silently skipped forever.
+        // Built through `cleanup_tick_job` so that the name it carries is the
+        // one a test can observe — the boxed job itself is unobservable once it
+        // is inside the cron manager.
         let schedule = Schedule::from_str("0 */5 * * * *").expect("Failed to parse cron schedule");
         let settings = CronSettings {
             schedule,
-            job: Box::new(CleanupTickJob {
-                worker_name: names.cleanup_worker.clone(),
-            }),
+            job: Box::new(cleanup_tick_job(&names)),
         };
         cron_manager
             .call(|prt| CronManagerMessage::Start(settings, prt), None)
