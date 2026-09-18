@@ -10981,3 +10981,621 @@ async fn sweep_bounds_a_pass_to_the_batch_limit(pool: Pool<Postgres>) {
     let second = sweep_once(&app_state).await;
     assert_eq!(second.delivered, 3, "the rest is the next tick's work");
 }
+
+// ---------------------------------------------------------------------------
+// POST /me/chats/{chat_id}/react (ERMAIN-781-B)
+// ---------------------------------------------------------------------------
+
+/// A task-enabled, async-enabled state whose LLM answers everything with one
+/// sentence, plus the recorder that captured the request bodies.
+///
+/// `/react` runs the origin chat's normal generation machinery, so every one of
+/// these tests that gets past the preconditions needs a model to answer; the
+/// recorder is what lets the reaction's own request be told apart from the
+/// conversation around it.
+async fn react_state(
+    pool: Pool<Postgres>,
+    answer: &'static str,
+) -> (
+    erato::state::AppState,
+    mocktail::server::MockServer,
+    RequestBodyRecorder,
+) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post().path("/v1/chat/completions").matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&[answer]),
+            );
+        });
+    }
+    let (app_state, llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        config.delegation.tasks.run_modes = vec![
+            erato_config::config::TaskRunMode::Wait,
+            erato_config::config::TaskRunMode::Async,
+        ];
+    })
+    .await;
+    (app_state, llm, recorder)
+}
+
+/// Leave the origin chat holding exactly the state `/react` exists for: a
+/// `task_result` row on the active thread, its delivery `delivered`, and
+/// nothing having answered it.
+///
+/// Staged through 781-A's backstop sweep rather than by hand. The sweep is
+/// DB-only and stops at `delivered` for a `silent` result, which is precisely
+/// the row a client asks to react to — so this also exercises the A-to-B seam
+/// for free, and a fixture that agreed with itself would not.
+///
+/// Returns the child chat's id and the delivered `task_result` row's id.
+async fn stage_delivered_result(
+    app_state: &erato::state::AppState,
+    owner_user_id: &str,
+    origin_chat_id: Uuid,
+    answer: &str,
+) -> (Uuid, Uuid) {
+    let child_id = seed_child_owing_a_result(
+        app_state,
+        owner_user_id,
+        origin_chat_id,
+        Some(answer),
+        erato_config::config::TaskScheduling::Silent,
+    )
+    .await;
+    assert_eq!(
+        sweep_once(app_state).await.delivered,
+        1,
+        "the sweep must have delivered the seeded result"
+    );
+    let delivery = delivery_struct(app_state, child_id).await;
+    assert_eq!(
+        delivery.state,
+        erato::models::chat::ResultDeliveryState::Delivered
+    );
+    (
+        child_id,
+        delivery.message_id.expect("the delivery names its row"),
+    )
+}
+
+/// POST `/me/chats/{chat_id}/react` as the given bearer.
+async fn post_react_as(
+    server: &TestServer,
+    token: &str,
+    chat_id: Uuid,
+    task_result_message_id: Uuid,
+) -> axum_test::TestResponse {
+    server
+        .post(&format!("/api/v1beta/me/chats/{chat_id}/react"))
+        .with_bearer_token(token)
+        .json(&json!({ "task_result_message_id": task_result_message_id }))
+        .await
+}
+
+/// POST `/me/chats/{chat_id}/react` as the test user.
+async fn post_react(
+    server: &TestServer,
+    chat_id: Uuid,
+    task_result_message_id: Uuid,
+) -> axum_test::TestResponse {
+    post_react_as(server, TEST_JWT_TOKEN, chat_id, task_result_message_id).await
+}
+
+/// The test user, created.
+async fn test_user(app_state: &erato::state::AppState) -> erato::db::entity::users::Model {
+    erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap()
+}
+
+/// T1. The route runs the reaction turn the live delivery path would have run,
+/// and records that it did.
+///
+/// Three properties in one turn, because they are one decision: the turn is
+/// composed from the delivered result (the `task_result` part reaches the
+/// model), it is stamped as a reaction rather than as a person's turn
+/// (`initiator = task_result`, which is what 782 will read), and the delivery
+/// ladder is advanced to `reacted` against that very assistant row. Nothing
+/// else in the tree writes that last transition on this path, so without it the
+/// route is silently re-runnable forever.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn react_runs_reaction_under_request_profile_and_marks_reacted(pool: Pool<Postgres>) {
+    let (app_state, _llm, recorder) = react_state(pool, "REACT-ANSWER").await;
+    let me = test_user(&app_state).await;
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+
+    let (child_id, result_row_id) = stage_delivered_result(
+        &app_state,
+        &me.id.to_string(),
+        origin_chat_id,
+        "REACTABLE-ANSWER",
+    )
+    .await;
+
+    let response = post_react(&server, origin_chat_id, result_row_id).await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    assert!(
+        extract_full_text_answer(&events).contains("REACT-ANSWER"),
+        "the route must stream the reaction turn, not an empty socket: {events:?}"
+    );
+
+    // `StreamEnd` is broadcast BEFORE `remove_task`, so the bookkeeping can
+    // still be in flight when the stream closes. Poll, never chain off the end
+    // of the stream.
+    let state = wait_for_delivery_state(&app_state.db, child_id, &["reacted"]).await;
+    assert_eq!(state, "reacted");
+
+    let rows = active_thread_rows(&app_state.db, origin_chat_id).await;
+    let reaction = rows
+        .iter()
+        .find(|row| {
+            row.generation_parameters
+                .as_ref()
+                .is_some_and(|parameters| parameters["initiator"] == "task_result")
+        })
+        .expect("the reaction row must say a task result started the turn");
+    assert_eq!(
+        delivery_struct(&app_state, child_id)
+            .await
+            .reaction_message_id,
+        Some(reaction.id),
+        "the delivery must point at the assistant row that answered it, not at \
+         the lease's pre-generation id"
+    );
+    assert!(
+        rows.iter().position(|row| row.id == result_row_id)
+            < rows.iter().position(|row| row.id == reaction.id),
+        "the reaction must come after the result it answers"
+    );
+    assert!(
+        recorder
+            .bodies()
+            .iter()
+            .any(|body| body.contains("REACTABLE-ANSWER")),
+        "the delivered result must be composed into the reaction's own request"
+    );
+}
+
+/// T2. A second `/react` on an answered row is refused, and appends nothing.
+///
+/// `already_reacted` rather than `tip_moved`: once the reaction has run the
+/// assistant row IS the tip, so both preconditions would fire, and the two tell
+/// a client opposite things — suppress the affordance, or offer a re-anchor.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn react_409_nothing_to_react_when_already_reacted(pool: Pool<Postgres>) {
+    let (app_state, _llm, _recorder) = react_state(pool, "REACT-ONCE").await;
+    let me = test_user(&app_state).await;
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+
+    let (child_id, result_row_id) =
+        stage_delivered_result(&app_state, &me.id.to_string(), origin_chat_id, "ONCE-ANSWER").await;
+
+    post_react(&server, origin_chat_id, result_row_id)
+        .await
+        .assert_status_ok();
+    wait_for_delivery_state(&app_state.db, child_id, &["reacted"]).await;
+    let after_first = active_thread_rows(&app_state.db, origin_chat_id).await.len();
+
+    let second = post_react(&server, origin_chat_id, result_row_id).await;
+    assert_eq!(second.status_code(), axum::http::StatusCode::CONFLICT);
+    let body: Value = second.json();
+    assert_eq!(body["code"], "nothing_to_react");
+    assert_eq!(body["reason"], "already_reacted");
+    assert_eq!(body["chat_id"], origin_chat_id.to_string());
+    assert_eq!(body["task_result_message_id"], result_row_id.to_string());
+    assert_eq!(
+        active_thread_rows(&app_state.db, origin_chat_id).await.len(),
+        after_first,
+        "a refused second reaction must not write a second assistant row"
+    );
+}
+
+/// T3. A result the conversation has moved past is refused with `tip_moved`.
+///
+/// Appending a reaction behind a newer user row would put the model's answer to
+/// a finished task in the middle of a branch nobody is reading.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn react_409_nothing_to_react_when_the_tip_moved(pool: Pool<Postgres>) {
+    let (app_state, _llm, _recorder) = react_state(pool, "MOVED-ON").await;
+    let me = test_user(&app_state).await;
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+
+    let (_child_id, result_row_id) = stage_delivered_result(
+        &app_state,
+        &me.id.to_string(),
+        origin_chat_id,
+        "STALE-ANSWER",
+    )
+    .await;
+
+    // A second task finished before anyone pressed the affordance on the
+    // first, so its row is now what the conversation is sitting on. Staged this
+    // way rather than with a typed user message because a delivered result is
+    // a USER row, and the submit route refuses to anchor a new message on one.
+    stage_delivered_result(
+        &app_state,
+        &me.id.to_string(),
+        origin_chat_id,
+        "NEWER-ANSWER",
+    )
+    .await;
+
+    let response = post_react(&server, origin_chat_id, result_row_id).await;
+    assert_eq!(response.status_code(), axum::http::StatusCode::CONFLICT);
+    let body: Value = response.json();
+    assert_eq!(body["code"], "nothing_to_react");
+    assert_eq!(body["reason"], "tip_moved");
+}
+
+/// T4. A held generation lease refuses the reaction rather than displacing it.
+///
+/// `RefuseParked`, not the user helper's `TakeParked`: the content this turn
+/// runs on was written by the server, and what it would displace is a decision
+/// the person is in the middle of. The body is 776's, and `started_at` is
+/// passed through exactly as the lease reported it — it is already RFC 3339, so
+/// re-formatting it here would be a second opinion about the wire shape.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn react_409_generation_running_when_lease_held(pool: Pool<Postgres>) {
+    let (app_state, _llm, _recorder) = react_state(pool, "NEVER-RUNS").await;
+    let me = test_user(&app_state).await;
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+
+    let (child_id, result_row_id) =
+        stage_delivered_result(&app_state, &me.id.to_string(), origin_chat_id, "HELD-ANSWER").await;
+
+    // Somebody else is generating in this chat right now, with a fresh
+    // heartbeat, so the lease is not stale.
+    crate::api::generating::mark_running(&app_state.db, origin_chat_id, 0).await;
+
+    let response = post_react(&server, origin_chat_id, result_row_id).await;
+    assert_eq!(response.status_code(), axum::http::StatusCode::CONFLICT);
+    let body: Value = response.json();
+    assert_eq!(body["code"], "generation_running");
+    assert_eq!(body["chat_id"], origin_chat_id.to_string());
+    assert!(
+        body["started_at"]
+            .as_str()
+            .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+            .is_some(),
+        "the holder's start time must reach the client as the RFC 3339 string \
+         the lease already had: {body}"
+    );
+    assert_eq!(
+        delivery_struct(&app_state, child_id).await.state,
+        erato::models::chat::ResultDeliveryState::Delivered,
+        "a refused reaction must leave the ladder where it found it"
+    );
+}
+
+/// T5. A chat the caller does not own answers 404, and runs nothing.
+///
+/// **The security test of this PR** — the ERMAIN-485 class. The caller here can
+/// genuinely read the conversation, through an enabled share link, and still
+/// may not start a turn in it: the route authorizes `SubmitMessage` on its own
+/// rather than inheriting whatever gate some read helper happens to apply.
+/// Refused and "the authorizer broke" are both 404, never 403, so a prober
+/// cannot use the status to learn that the chat exists.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn react_404_for_a_chat_the_user_may_only_read(pool: Pool<Postgres>) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post().path("/v1/chat/completions").matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&["MUST-NOT-RUN"]),
+            );
+        });
+    }
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        config.delegation.tasks.run_modes = vec![
+            erato_config::config::TaskRunMode::Wait,
+            erato_config::config::TaskRunMode::Async,
+        ];
+        config.chat_sharing.enabled = true;
+    })
+    .await;
+
+    // The chat, and the delivered result in it, belong to somebody else.
+    let owner_subject = "react-foreign-chat-owner";
+    let owner = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        owner_subject,
+        None,
+    )
+    .await
+    .unwrap();
+    let _reader = test_user(&app_state).await;
+    let owner_token = JwtTokenBuilder::new()
+        .subject(owner_subject)
+        .email("owner@example.com")
+        .name("owner")
+        .build();
+    let server = app_server(app_state.clone());
+
+    let origin_response = server
+        .post("/api/v1beta/me/chats")
+        .with_bearer_token(&owner_token)
+        .json(&json!({}))
+        .await;
+    origin_response.assert_status_ok();
+    let origin = origin_response.json::<Value>()["chat_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+
+    let (child_id, result_row_id) = stage_delivered_result(
+        &app_state,
+        &owner.id.to_string(),
+        origin_chat_id,
+        "FOREIGN-ANSWER",
+    )
+    .await;
+
+    // The owner shares it for reading. That is read access, and nothing more.
+    server
+        .put("/api/v1beta/share-links")
+        .with_bearer_token(&owner_token)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&json!({
+            "resource_type": "chat",
+            "resource_id": origin,
+            "enabled": true,
+        }))
+        .await
+        .assert_status_ok();
+    app_state.global_policy_engine.invalidate_data().await;
+
+    let response = post_react(&server, origin_chat_id, result_row_id).await;
+    assert_eq!(
+        response.status_code(),
+        axum::http::StatusCode::NOT_FOUND,
+        "a reader must not be able to start a turn in somebody else's chat, \
+         and must not learn from the status that it exists"
+    );
+    assert_eq!(
+        delivery_struct(&app_state, child_id).await.state,
+        erato::models::chat::ResultDeliveryState::Delivered
+    );
+    assert!(
+        recorder.bodies().is_empty(),
+        "the refused request must not have reached a model at all"
+    );
+}
+
+/// T6. With async delivery off, the route does not exist — even over a row that
+/// genuinely is delivered.
+///
+/// The gate is the first precondition, before the lease, so a deployment that
+/// turns the feature off cannot have turns started through this door by a
+/// client that remembers it. The row is staged by a deployment that had the
+/// feature on, because that is the real migration story: the flag goes off
+/// while delivered results are already on disk.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn react_404_when_async_delivery_is_off(pool: Pool<Postgres>) {
+    let (staging_state, _staging_llm, _staging_recorder) =
+        react_state(pool.clone(), "STAGING-ONLY").await;
+    let me = test_user(&staging_state).await;
+    let staging_server = app_server(staging_state.clone());
+    let origin = create_chat(&staging_server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+    let (child_id, result_row_id) = stage_delivered_result(
+        &staging_state,
+        &me.id.to_string(),
+        origin_chat_id,
+        "GATED-ANSWER",
+    )
+    .await;
+
+    // The same database, served by a deployment that offers `wait` only.
+    let (gated_state, _llm) = task_state(pool, MockSet::new(), &["erato/delegate_task"], |config| {
+        config.delegation.tasks.run_modes = vec![erato_config::config::TaskRunMode::Wait];
+    })
+    .await;
+    let server = app_server(gated_state.clone());
+
+    let response = post_react(&server, origin_chat_id, result_row_id).await;
+    assert_eq!(response.status_code(), axum::http::StatusCode::NOT_FOUND);
+
+    let origin_row = erato::db::entity::chats::Entity::find_by_id(origin_chat_id)
+        .one(&gated_state.db)
+        .await
+        .unwrap()
+        .expect("origin chat");
+    assert_eq!(
+        origin_row.generation_state, None,
+        "the gate must refuse before the lease is taken, not after"
+    );
+    assert_eq!(
+        delivery_struct(&gated_state, child_id).await.state,
+        erato::models::chat::ResultDeliveryState::Delivered
+    );
+}
+
+/// T7. The fifth tail: `/react` drains what the origin is still owed.
+///
+/// A second result recorded while the origin was busy would otherwise wait for
+/// the five-minute sweep, or for the person's next message. It is one call at
+/// the end of the spawned future, placed after the lifecycle's `remove_task`
+/// because the delivery takes this chat's lease for itself and `RefuseParked`
+/// would refuse one this turn still held.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn react_tail_drains_further_pending_deliveries(pool: Pool<Postgres>) {
+    let (app_state, _llm, _recorder) = react_state(pool, "DRAINING-REACTION").await;
+    let me = test_user(&app_state).await;
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+
+    let (_first_child, result_row_id) = stage_delivered_result(
+        &app_state,
+        &me.id.to_string(),
+        origin_chat_id,
+        "FIRST-ANSWER",
+    )
+    .await;
+    // Recorded while the origin was busy, so nothing has delivered it yet.
+    // `silent`, so the drain stops at `delivered` and needs no second model
+    // turn of its own.
+    let second_child = seed_child_owing_a_result(
+        &app_state,
+        &me.id.to_string(),
+        origin_chat_id,
+        Some("SECOND-ANSWER"),
+        erato_config::config::TaskScheduling::Silent,
+    )
+    .await;
+    assert_eq!(
+        delivery_struct(&app_state, second_child).await.state,
+        erato::models::chat::ResultDeliveryState::Pending
+    );
+
+    post_react(&server, origin_chat_id, result_row_id)
+        .await
+        .assert_status_ok();
+
+    let state = wait_for_delivery_state(&app_state.db, second_child, &["delivered"]).await;
+    assert_eq!(
+        state, "delivered",
+        "the reaction's tail must drain what the chat is still owed"
+    );
+    assert_eq!(
+        task_result_rows(&app_state.db, origin_chat_id).await.len(),
+        2,
+        "both results must be in the conversation"
+    );
+}
+
+/// T8. A result the reaction turn answered is still in the conversation two
+/// turns later.
+///
+/// The composition walk drops every user row but the one just submitted, so
+/// without its dedicated `task_result` arm a delivered result would reach the
+/// model on exactly one turn and then vanish from the chat that contains it.
+/// That arm is 777/780's; this test pins it end to end over the row `/react`
+/// itself produced, because the reaction row is what a client anchors its next
+/// message on, and that anchor is the seam this PR creates. If this fails the
+/// bug is upstream, not in the route.
+///
+/// It deliberately asserts nothing about the delivery state after the fold.
+/// Nothing in the tree advances `delivered -> reacted` from the composition
+/// walk — it reads the row and writes no bookkeeping — so on a chat where no
+/// reaction ever ran the ladder simply stays at `delivered`.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn reacted_result_survives_into_the_next_user_turn(pool: Pool<Postgres>) {
+    let (app_state, _llm, recorder) = react_state(pool, "FOLDED-TURN-ANSWER").await;
+    let me = test_user(&app_state).await;
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+
+    let (child_id, result_row_id) = stage_delivered_result(
+        &app_state,
+        &me.id.to_string(),
+        origin_chat_id,
+        "FOLDED-ANSWER",
+    )
+    .await;
+
+    post_react(&server, origin_chat_id, result_row_id)
+        .await
+        .assert_status_ok();
+    wait_for_delivery_state(&app_state.db, child_id, &["reacted"]).await;
+    let reaction_id = delivery_struct(&app_state, child_id)
+        .await
+        .reaction_message_id
+        .expect("the reaction row");
+
+    // The person carries on from the reaction, exactly as a client does.
+    submit_message(
+        &server,
+        &origin,
+        Some(&reaction_id.to_string()),
+        "so what do you think",
+        Vec::new(),
+    )
+    .await;
+
+    assert!(
+        recorder.bodies().iter().any(|body| {
+            body.contains("so what do you think") && body.contains("FOLDED-ANSWER")
+        }),
+        "the delivered result must still be composed into the turn after the \
+         one that answered it"
+    );
+    let rows = active_thread_rows(&app_state.db, origin_chat_id).await;
+    assert!(
+        rows.iter().any(|row| row.id == result_row_id),
+        "the delivered result stays on the active thread"
+    );
+    assert_eq!(
+        task_result_rows(&app_state.db, origin_chat_id).await.len(),
+        1,
+        "the later turn composes the result, it does not re-deliver it"
+    );
+}
