@@ -10037,3 +10037,201 @@ async fn delivery_refuses_a_parked_origin_and_lands_once_it_is_free(pool: Pool<P
         "delivered"
     );
 }
+
+/// Two processes, one delivery: the claim decides, and only one believes it won.
+///
+/// The single-process version of this races two tasks through one manager,
+/// which the in-memory map alone could settle. Two managers on one pool is the
+/// case the compare-and-set exists for — a second replica, or the ~25 seconds
+/// of every rolling deploy when the old and new pods both hold the database.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn delivery_claim_is_single_winner_across_two_managers(pool: Pool<Postgres>) {
+    let (app_config_a, _llm_a) = crate::test_utils::setup_mock_llm_server(None).await;
+    let mut app_config_a = app_config_a;
+    app_config_a.delegation.tasks.enabled = true;
+    app_config_a.delegation.tasks.run_modes = vec![
+        erato_config::config::TaskRunMode::Wait,
+        erato_config::config::TaskRunMode::Async,
+    ];
+    let (app_config_b, _llm_b) = crate::test_utils::setup_mock_llm_server(None).await;
+    let mut app_config_b = app_config_b;
+    app_config_b.delegation.tasks.enabled = true;
+    app_config_b.delegation.tasks.run_modes = app_config_a.delegation.tasks.run_modes.clone();
+
+    // Two AppStates over one pool: two managers, two in-memory task maps, one
+    // database. Neither can see the other's map.
+    let replica_a = test_app_state(app_config_a, pool.clone()).await;
+    let replica_b = test_app_state(app_config_b, pool.clone()).await;
+
+    let me = erato::models::user::get_or_create_user(
+        &replica_a.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(replica_a.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+
+    let child_id = seed_child_owing_a_result(
+        &replica_a,
+        &me.id.to_string(),
+        origin_chat_id,
+        Some("TWO-MANAGER-ANSWER"),
+        erato_config::config::TaskScheduling::Silent,
+    )
+    .await;
+    replica_b.global_policy_engine.invalidate_data().await;
+
+    let policy_a = rebuilt_policy(&replica_a).await;
+    let policy_b = rebuilt_policy(&replica_b).await;
+    let profile = me_profile(&replica_a, &me).await;
+    let (first, second) = tokio::join!(
+        erato::services::task_delivery::deliver_task_result(
+            &replica_a, &policy_a, &profile, child_id
+        ),
+        erato::services::task_delivery::deliver_task_result(
+            &replica_b, &policy_b, &profile, child_id
+        ),
+    );
+
+    let mut outcomes = [first, second];
+    outcomes.sort_by_key(|outcome| format!("{outcome:?}"));
+    assert_eq!(
+        outcomes,
+        [
+            erato::services::task_delivery::DeliveryOutcome::Delivered,
+            erato::services::task_delivery::DeliveryOutcome::Skipped,
+        ],
+        "across replicas the claim must still admit exactly one winner"
+    );
+    let result_rows = active_thread_rows(&replica_a.db, origin_chat_id)
+        .await
+        .into_iter()
+        .filter(|row| {
+            row.input_parameters
+                .as_ref()
+                .is_some_and(|parameters| !parameters["task_result"].is_null())
+        })
+        .count();
+    assert_eq!(result_rows, 1, "one delivery, one row, two replicas");
+}
+
+/// The regenerate and edit tails drain too.
+///
+/// All five call sites were wired, and until now only three were tested —
+/// deleting either of these two left the whole suite green. A delivery owed to
+/// a chat whose user then regenerates or edits would simply wait for some other
+/// turn to come along.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn the_regenerate_and_edit_tails_drain_pending_deliveries(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post().path("/v1/chat/completions");
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["TAIL-DRAIN-ANSWER"]),
+        );
+    });
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        config.delegation.tasks.run_modes = vec![
+            erato_config::config::TaskRunMode::Wait,
+            erato_config::config::TaskRunMode::Async,
+        ];
+    })
+    .await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+
+    // A real turn, so there is an assistant row to regenerate and a user row to edit.
+    let chat = create_chat(&server, None).await;
+    let chat_id = Uuid::parse_str(&chat).unwrap();
+    let events = submit_with_facets(&server, &chat, "tail drain question", &[]).await;
+    let assistant_message_id = events
+        .iter()
+        .find_map(|event| {
+            serde_json::from_str::<Value>(&event.data)
+                .ok()
+                .filter(|json| json["message_type"] == "assistant_message_completed")
+                .and_then(|json| {
+                    json["message_id"]
+                        .as_str()
+                        .and_then(|id| Uuid::parse_str(id).ok())
+                })
+        })
+        .expect("an assistant row to regenerate");
+    let user_message_id = erato::db::entity::prelude::Messages::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap()
+        .previous_message_id
+        .expect("the user turn");
+
+    for (label, request) in [
+        (
+            "regenerate",
+            (
+                "/api/v1beta/me/messages/regeneratestream",
+                json!({ "current_message_id": assistant_message_id.to_string() }),
+            ),
+        ),
+        (
+            "edit",
+            (
+                "/api/v1beta/me/messages/editstream",
+                json!({
+                    "message_id": user_message_id.to_string(),
+                    "replace_user_message": "tail drain question, edited",
+                }),
+            ),
+        ),
+    ] {
+        let child_id = seed_child_owing_a_result(
+            &app_state,
+            &me.id.to_string(),
+            chat_id,
+            Some("TAIL-DRAIN-RESULT"),
+            erato_config::config::TaskScheduling::Silent,
+        )
+        .await;
+        assert_eq!(
+            delivery_of(&app_state, child_id).await["state"],
+            "pending",
+            "{label}: the delivery must start owed"
+        );
+
+        let (path, body) = request;
+        let response = server
+            .post(path)
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&body)
+            .await;
+        response.assert_status_ok();
+
+        assert_eq!(
+            delivery_of(&app_state, child_id).await["state"],
+            "delivered",
+            "{label}: its tail must drain what the chat is owed"
+        );
+    }
+}

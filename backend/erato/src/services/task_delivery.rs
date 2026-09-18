@@ -27,7 +27,7 @@ use crate::services::background_tasks::Takeover;
 use crate::services::delegation::{DelegationRunReason, DelegationRunStatus};
 use crate::state::AppState;
 use sea_orm::prelude::Uuid;
-use sea_orm::{ConnectionTrait, EntityTrait, TryGetable};
+use sea_orm::{ConnectionTrait, EntityTrait, TransactionTrait, TryGetable};
 
 /// How far one delivery attempt got.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -244,10 +244,19 @@ async fn next_pending_delivery(
             WHERE "origin_chat_id" = $1::uuid
               AND "owner_user_id" = $2
               AND ("assistant_configuration" #>> '{{provenance,result_delivery,state}}') = '{pending}'
+              -- Deliberately the same shape as `deliver_task_result`'s entry
+              -- guard. A row this scan returns but that guard rejects is
+              -- `Skipped` without a state change, so it would be re-selected
+              -- on every iteration of every drain and starve everything
+              -- behind it.
+              AND ("assistant_configuration" #>> '{{provenance,kind}}') = '{delegation}'
+              AND ("assistant_configuration" #>> '{{provenance,run_mode}}') = '{async_mode}'
             ORDER BY ("assistant_configuration" #>> '{{provenance,result_delivery,at}}') ASC
             LIMIT 1
             "#,
                 pending = ResultDeliveryState::Pending.as_str(),
+                delegation = ChatProvenanceKind::Delegation.as_str(),
+                async_mode = ProvenanceRunMode::Async.as_str(),
             ),
             [origin_chat_id.into(), owner_user_id.into()],
         ))
@@ -269,6 +278,28 @@ async fn set_delivery_state(
     expect_state: ResultDeliveryState,
     expect_claim_token: Option<&str>,
 ) -> bool {
+    set_delivery_state_in(
+        &app_state.db,
+        child_chat_id,
+        delivery,
+        expect_state,
+        expect_claim_token,
+    )
+    .await
+}
+
+/// As [`set_delivery_state`], against a caller-owned connection.
+///
+/// The delivery runs its `claimed -> delivered` write inside the same
+/// transaction as the append it describes, so it needs to pass a
+/// `&DatabaseTransaction` here rather than reach for the pool.
+async fn set_delivery_state_in<C: ConnectionTrait>(
+    conn: &C,
+    child_chat_id: Uuid,
+    delivery: &ResultDelivery,
+    expect_state: ResultDeliveryState,
+    expect_claim_token: Option<&str>,
+) -> bool {
     let Ok(payload) = serde_json::to_value(delivery) else {
         return false;
     };
@@ -285,23 +316,21 @@ async fn set_delivery_state(
     let mut values: Vec<sea_orm::Value> = vec![child_chat_id.into(), payload.into()];
     if let Some(token) = expect_claim_token {
         sql.push_str(
-            "          AND (\"assistant_configuration\" #>> '{provenance,result_delivery,claimed_at}') = $3\n",
+            "          AND (\"assistant_configuration\" #>> '{provenance,result_delivery,claimed_by}') = $3\n",
         );
         values.push(token.into());
     }
     sql.push_str("        RETURNING \"id\"\n");
 
-    app_state
-        .db
-        .query_all_raw(named_statement_from_sql_and_values(
-            sea_orm::DatabaseBackend::Postgres,
-            POSTGRES_QUERY_DELIVERY_STATE_SET,
-            sql,
-            values,
-        ))
-        .await
-        .map(|rows| !rows.is_empty())
-        .unwrap_or(false)
+    conn.query_all_raw(named_statement_from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        POSTGRES_QUERY_DELIVERY_STATE_SET,
+        sql,
+        values,
+    ))
+    .await
+    .map(|rows| !rows.is_empty())
+    .unwrap_or(false)
 }
 
 /// Deliver one child's recorded result. Never drains: see
@@ -359,9 +388,16 @@ pub async fn deliver_task_result(
         .unwrap_or_default();
 
     // 1. CAS #1 — CLAIM.
+    //
+    // `claimed_by` is a fresh v4 per attempt, not a replica id: two attempts
+    // from ONE process must not collide, which is exactly the case a pod name
+    // cannot distinguish. It is the fence for every later write here, which
+    // also leaves `claimed_at` free to mean only "when", so the backstop sweep
+    // can use it as a staleness clock without the two jobs interfering.
+    let claim_token = Uuid::new_v4().to_string();
     let mut claimed = delivery.clone();
     claimed.state = ResultDeliveryState::Claimed;
-    claimed.claimed_by = Some(crate::services::background_tasks::owner_pod());
+    claimed.claimed_by = Some(claim_token.clone());
     claimed.claimed_at = Some(sqlx::types::chrono::Utc::now().into());
     claimed.attempts = delivery.attempts.saturating_add(1);
     claimed.at = sqlx::types::chrono::Utc::now().into();
@@ -381,8 +417,7 @@ pub async fn deliver_task_result(
             WHERE "id" = $1
               AND ("assistant_configuration" #>> '{{provenance,result_delivery,state}}') = '{pending}'
               AND ("assistant_configuration" #>> '{{provenance,result_delivery,delivery_id}}') = $2
-            RETURNING ("assistant_configuration" #>> '{{provenance,result_delivery,claimed_at}}')
-                AS "claim_token"
+            RETURNING "id"
             "#,
                 pending = ResultDeliveryState::Pending.as_str(),
             ),
@@ -393,24 +428,17 @@ pub async fn deliver_task_result(
             ],
         ))
         .await;
-    // The fencing token is the bytes the database read back, used verbatim in
-    // every later compare-and-set. Never re-serialize the timestamp in Rust to
-    // rebuild the comparison: `#>>` returns exactly what serde wrote, and a
-    // `DateTimeWithTimeZone` -> String round trip is a formatting coin flip
-    // (offset spelling, sub-second digits).
-    let claim_token = match claim_rows {
-        Ok(rows) => match rows
-            .first()
-            .and_then(|row| String::try_get(row, "", "claim_token").ok())
-        {
-            Some(token) => token,
-            None => return DeliveryOutcome::Skipped,
-        },
+    // Winning the CAS is what makes the token ours; zero rows means another
+    // attempt got there first. The token itself never round-trips through the
+    // database, so there is no serialization format to disagree about.
+    match claim_rows {
+        Ok(rows) if !rows.is_empty() => {}
+        Ok(_) => return DeliveryOutcome::Skipped,
         Err(error) => {
             tracing::warn!(%error, %child_chat_id, "Failed to claim a task result delivery");
             return DeliveryOutcome::Skipped;
         }
-    };
+    }
 
     // 2. Origin checks, read once.
     let origin = match crate::db::entity::prelude::Chats::find_by_id(origin_chat_id)
@@ -446,14 +474,20 @@ pub async fn deliver_task_result(
         closed.state = ResultDeliveryState::Failed;
         closed.reason = Some("owner_mismatch".to_string());
         closed.at = sqlx::types::chrono::Utc::now().into();
-        set_delivery_state(
+        if !set_delivery_state(
             app_state,
             child_chat_id,
             &closed,
             ResultDeliveryState::Claimed,
             Some(&claim_token),
         )
-        .await;
+        .await
+        {
+            tracing::warn!(
+                %child_chat_id,
+                "Lost the fence closing a delivery; another holder owns it now"
+            );
+        }
         return DeliveryOutcome::Closed;
     }
     if origin.archived_at.is_some() {
@@ -461,14 +495,20 @@ pub async fn deliver_task_result(
         closed.state = ResultDeliveryState::Superseded;
         closed.reason = Some("origin_archived".to_string());
         closed.at = sqlx::types::chrono::Utc::now().into();
-        set_delivery_state(
+        if !set_delivery_state(
             app_state,
             child_chat_id,
             &closed,
             ResultDeliveryState::Claimed,
             Some(&claim_token),
         )
-        .await;
+        .await
+        {
+            tracing::warn!(
+                %child_chat_id,
+                "Lost the fence closing a delivery; another holder owns it now"
+            );
+        }
         return DeliveryOutcome::Closed;
     }
     // A chat parked on an approval belongs to the person who has to answer it.
@@ -495,140 +535,258 @@ pub async fn deliver_task_result(
         return DeliveryOutcome::Deferred;
     };
 
-    // 4. Duplicate probe, under the lease: a re-claim after a crash must not
-    //    append the same result twice.
-    let existing = app_state
-        .db
-        .query_all_raw(named_statement_from_sql_and_values(
-            sea_orm::DatabaseBackend::Postgres,
-            POSTGRES_QUERY_DELIVERY_DUPLICATE_PROBE,
-            r#"
+    // Armed the instant the lease is ours and disarmed only once something
+    // else owns the release. Without it a panic anywhere below leaves the task
+    // in the manager's map un-completed, so the heartbeat refreshes the row
+    // forever, `stale_after_secs` never fires, and every write into the origin
+    // chat 409s for the life of the process.
+    let mut lease_guard = crate::services::background_tasks::TaskCleanupGuard::new(
+        app_state.background_tasks.clone(),
+        origin_chat_id,
+        task.generation_id,
+    );
+
+    // Archiving never takes the lease, so the step-2 read can be stale by now.
+    // Re-checked here, under the lease, because the whole point of the earlier
+    // check is that nothing is appended to a chat the user has closed.
+    if let Ok(Some(fresh)) = crate::db::entity::prelude::Chats::find_by_id(origin_chat_id)
+        .one(&app_state.db)
+        .await
+        && fresh.archived_at.is_some()
+    {
+        let mut closed = claimed.clone();
+        closed.state = ResultDeliveryState::Superseded;
+        closed.reason = Some("origin_archived".to_string());
+        closed.at = sqlx::types::chrono::Utc::now().into();
+        set_delivery_state(
+            app_state,
+            child_chat_id,
+            &closed,
+            ResultDeliveryState::Claimed,
+            Some(&claim_token),
+        )
+        .await;
+        lease_guard.disarm();
+        release_lease(app_state, &task, origin_chat_id).await;
+        return DeliveryOutcome::Closed;
+    }
+
+    // 4-6. Probe, append and record — ONE transaction.
+    //
+    // They cannot be three. The fence on the `delivered` write only means
+    // anything if the row it describes is not yet visible to anyone else: if
+    // the append commits first, a sweeper that requeues this claim in between
+    // hands it to a second holder whose probe now misses, and the same result
+    // is appended twice — in the user's conversation. Committing all three
+    // together makes losing the fence roll the row back with it.
+    let (delivered_row, appended) = {
+        let txn = match app_state.db.begin().await {
+            Ok(txn) => txn,
+            Err(error) => {
+                tracing::warn!(%error, %origin_chat_id, "Failed to open the delivery transaction");
+                lease_guard.disarm();
+                release_lease(app_state, &task, origin_chat_id).await;
+                release_pending(app_state, child_chat_id, &claimed, &claim_token).await;
+                return DeliveryOutcome::Deferred;
+            }
+        };
+
+        // A re-claim after a crash must not append the same result twice. The
+        // error is NOT swallowed: "the query failed" read as "no row exists"
+        // is precisely how the duplicate gets written.
+        let probe = txn
+            .query_all_raw(named_statement_from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                POSTGRES_QUERY_DELIVERY_DUPLICATE_PROBE,
+                r#"
             SELECT "id" FROM "messages"
             WHERE "chat_id" = $1
               AND ("input_parameters" #>> '{task_result,delivery_id}') = $2
             LIMIT 1
             "#
-            .to_string(),
-            [
-                origin_chat_id.into(),
-                delivery.delivery_id.to_string().into(),
-            ],
-        ))
-        .await
-        .ok()
-        .and_then(|rows| {
-            rows.first()
-                .and_then(|row| Uuid::try_get(row, "", "id").ok())
-        });
-
-    // 5. Append the row, unless step 4 found it already there.
-    let delivered_row = match existing {
-        Some(id) => crate::db::entity::prelude::Messages::find_by_id(id)
-            .one(&app_state.db)
-            .await
-            .ok()
-            .flatten(),
-        None => {
-            let (summary, truncated) = child_answer_for_delivery(
-                app_state,
-                child_chat_id,
-                &child,
-                &delivery,
-                provenance.rebase_cutoff.unwrap_or(child.created_at),
-                parent_tool_call_id.clone(),
-            )
+                .to_string(),
+                [
+                    origin_chat_id.into(),
+                    delivery.delivery_id.to_string().into(),
+                ],
+            ))
             .await;
-            let part = crate::models::message::ContentPart::TaskResult(
-                crate::models::message::ContentPartTaskResult {
-                    child_chat_id,
-                    parent_tool_call_id: parent_tool_call_id.clone(),
-                    status: delivery.status.clone(),
-                    reason: delivery.reason.clone(),
-                    summary,
-                    truncated,
-                    sequence: delivery.sequence,
-                },
-            );
-            let tip = crate::models::message::get_active_thread_tip(&app_state.db, &origin_chat_id)
-                .await
-                .ok()
-                .flatten()
-                .map(|row| row.id);
-            let input_parameters = crate::models::message::InputParameters {
-                action_facet_id: None,
-                action_facet_args: None,
-                mentioned_assistant_ids: None,
-                delegation_run_mode: None,
-                task_result: Some(crate::models::message::TaskResultInput {
-                    delivery_id: delivery.delivery_id,
-                    child_chat_id,
-                    result_message_id: delivery.result_message_id,
-                    status: delivery.status.clone(),
-                    reason: delivery.reason.clone(),
-                    scheduling: scheduling_wire(scheduling).to_string(),
-                    sequence: delivery.sequence,
-                }),
-            };
-            match crate::server::api::v1beta::message_streaming::bg_stream_save_user_row(
-                &task,
-                app_state,
-                policy,
-                me_user,
-                &origin,
-                tip.as_ref(),
-                vec![serde_json::to_value(&part).unwrap_or_default()],
-                &[],
-                Some(input_parameters),
-            )
-            .await
-            {
-                Ok(row) => Some(row),
-                Err(error) => {
-                    tracing::warn!(%error, %origin_chat_id, "Failed to append a delivered task result");
-                    release_lease(app_state, &task, origin_chat_id).await;
-                    release_pending(app_state, child_chat_id, &claimed, &claim_token).await;
-                    return DeliveryOutcome::Deferred;
+        let existing = match probe {
+            Ok(rows) => rows
+                .first()
+                .and_then(|row| Uuid::try_get(row, "", "id").ok()),
+            Err(error) => {
+                tracing::warn!(%error, %origin_chat_id, "The delivery duplicate probe failed");
+                lease_guard.disarm();
+                release_lease(app_state, &task, origin_chat_id).await;
+                release_pending(app_state, child_chat_id, &claimed, &claim_token).await;
+                return DeliveryOutcome::Deferred;
+            }
+        };
+
+        let (row, appended) = match existing {
+            Some(id) => {
+                match crate::db::entity::prelude::Messages::find_by_id(id)
+                    .one(&txn)
+                    .await
+                {
+                    Ok(Some(row)) => (row, false),
+                    _ => {
+                        lease_guard.disarm();
+                        release_lease(app_state, &task, origin_chat_id).await;
+                        release_pending(app_state, child_chat_id, &claimed, &claim_token).await;
+                        return DeliveryOutcome::Deferred;
+                    }
                 }
             }
+            None => {
+                let (summary, truncated) = child_answer_for_delivery(
+                    app_state,
+                    child_chat_id,
+                    &child,
+                    &delivery,
+                    provenance.rebase_cutoff.unwrap_or(child.created_at),
+                    parent_tool_call_id.clone(),
+                )
+                .await;
+                let part = crate::models::message::ContentPart::TaskResult(
+                    crate::models::message::ContentPartTaskResult {
+                        child_chat_id,
+                        parent_tool_call_id: parent_tool_call_id.clone(),
+                        status: delivery.status.clone(),
+                        reason: delivery.reason.clone(),
+                        summary,
+                        truncated,
+                        sequence: delivery.sequence,
+                    },
+                );
+                // A failed read here is NOT `None`: `None` means "no anchor",
+                // and `submit_message` reads that as "rebuild no lineage",
+                // which deactivates every other row in the conversation.
+                let tip = match crate::models::message::get_active_thread_tip(&txn, &origin_chat_id)
+                    .await
+                {
+                    Ok(tip) => tip.map(|row| row.id),
+                    Err(error) => {
+                        tracing::warn!(%error, %origin_chat_id, "Failed to resolve the origin's active thread tip");
+                        lease_guard.disarm();
+                        release_lease(app_state, &task, origin_chat_id).await;
+                        release_pending(app_state, child_chat_id, &claimed, &claim_token).await;
+                        return DeliveryOutcome::Deferred;
+                    }
+                };
+                let input_parameters = crate::models::message::InputParameters {
+                    action_facet_id: None,
+                    action_facet_args: None,
+                    mentioned_assistant_ids: None,
+                    delegation_run_mode: None,
+                    task_result: Some(crate::models::message::TaskResultInput {
+                        delivery_id: delivery.delivery_id,
+                        child_chat_id,
+                        result_message_id: delivery.result_message_id,
+                        status: delivery.status.clone(),
+                        reason: delivery.reason.clone(),
+                        scheduling: scheduling.as_str().to_string(),
+                        sequence: delivery.sequence,
+                    }),
+                };
+                let raw_message = serde_json::json!({
+                    "role": "user",
+                    "content": [serde_json::to_value(&part).unwrap_or_default()],
+                    "name": me_user.id,
+                });
+                // `append_message_unchecked` skips only the authorization
+                // check, which this path has already made for itself: step 2
+                // refuses outright unless the origin and the child have the
+                // same owner, which is exactly what the `submit_message` rule
+                // evaluates.
+                match crate::models::message::append_message_unchecked(
+                    &txn,
+                    &origin_chat_id,
+                    raw_message,
+                    tip.as_ref(),
+                    None,
+                    None,
+                    &[],
+                    None,
+                    None,
+                    Some(serde_json::to_value(&input_parameters).unwrap_or_default()),
+                )
+                .await
+                {
+                    Ok(row) => (row, true),
+                    Err(error) => {
+                        tracing::warn!(%error, %origin_chat_id, "Failed to append a delivered task result");
+                        lease_guard.disarm();
+                        release_lease(app_state, &task, origin_chat_id).await;
+                        release_pending(app_state, child_chat_id, &claimed, &claim_token).await;
+                        return DeliveryOutcome::Deferred;
+                    }
+                }
+            }
+        };
+
+        // CAS #3 — DELIVERED, fenced on our own claim token, in the same
+        // transaction as the append above.
+        let mut delivered = claimed.clone();
+        delivered.state = ResultDeliveryState::Delivered;
+        delivered.message_id = Some(row.id);
+        delivered.at = sqlx::types::chrono::Utc::now().into();
+        let fenced = set_delivery_state_in(
+            &txn,
+            child_chat_id,
+            &delivered,
+            ResultDeliveryState::Claimed,
+            Some(&claim_token),
+        )
+        .await;
+        if !fenced {
+            // Reachable once the backstop sweep exists: it can requeue a claim
+            // it judged stale between our claim and here. Rolling back takes
+            // the appended row with it, so the next holder appends exactly one.
+            tracing::warn!(
+                %child_chat_id,
+                delivery_id = %delivery.delivery_id,
+                "Lost the delivery fence; rolling the appended result back"
+            );
+            let _ = txn.rollback().await;
+            lease_guard.disarm();
+            release_lease(app_state, &task, origin_chat_id).await;
+            return DeliveryOutcome::Skipped;
         }
-    };
-    let Some(delivered_row) = delivered_row else {
-        release_lease(app_state, &task, origin_chat_id).await;
-        release_pending(app_state, child_chat_id, &claimed, &claim_token).await;
-        return DeliveryOutcome::Deferred;
+
+        if let Err(error) = txn.commit().await {
+            tracing::warn!(%error, %origin_chat_id, "Failed to commit the delivery transaction");
+            lease_guard.disarm();
+            release_lease(app_state, &task, origin_chat_id).await;
+            release_pending(app_state, child_chat_id, &claimed, &claim_token).await;
+            return DeliveryOutcome::Deferred;
+        }
+        (row, appended)
     };
 
-    // 6. CAS #3 — DELIVERED, fenced on the claim token.
+    // Announced only after the commit, so nobody is told about a row that
+    // rolled back.
+    if appended
+        && let Err(error) =
+            crate::server::api::v1beta::message_streaming::bg_stream_announce_user_row(
+                &task,
+                app_state,
+                &delivered_row,
+            )
+            .await
+    {
+        tracing::warn!(%error, %origin_chat_id, "Failed to announce a delivered task result");
+    }
+
     let mut delivered = claimed.clone();
     delivered.state = ResultDeliveryState::Delivered;
     delivered.message_id = Some(delivered_row.id);
-    delivered.at = sqlx::types::chrono::Utc::now().into();
-    if !set_delivery_state(
-        app_state,
-        child_chat_id,
-        &delivered,
-        ResultDeliveryState::Claimed,
-        Some(&claim_token),
-    )
-    .await
-    {
-        // Reachable: the backstop sweep can requeue a claim it judged stale
-        // between the claim and here, and the row is already on disk. Do NOT
-        // react on a fence we lost — the next holder's duplicate probe finds
-        // the row, skips the insert, and reacts under a claim it owns.
-        tracing::warn!(
-            %child_chat_id,
-            delivery_id = %delivery.delivery_id,
-            %claim_token,
-            "Lost the delivery fence after appending the result row"
-        );
-        release_lease(app_state, &task, origin_chat_id).await;
-        return DeliveryOutcome::Skipped;
-    }
 
     // 7. A silent result is stored, not answered: the user's next message
     //    composes it through history.
     if scheduling == erato_config::config::TaskScheduling::Silent {
+        lease_guard.disarm();
         release_lease(app_state, &task, origin_chat_id).await;
         return DeliveryOutcome::Delivered;
     }
@@ -649,6 +807,8 @@ pub async fn deliver_task_result(
             selected_facet_ids,
             Some(delivered_row.id),
         );
+    // The lifecycle owns the release from here, and installs its own guard.
+    lease_guard.disarm();
     let reaction = crate::server::api::v1beta::message_streaming::with_generation_task_lifecycle(
         &app_state.background_tasks,
         &task,
@@ -673,10 +833,12 @@ pub async fn deliver_task_result(
         return DeliveryOutcome::Delivered;
     }
 
-    // 9. CAS #4 — REACTED. The claim token is gone by now (step 6 rewrote the
-    //    envelope), so this fences on the delivered row instead. A lost CAS
-    //    here is benign: the row and the reaction are both on disk and only
-    //    the bookkeeping is stale.
+    // 9. CAS #4 — REACTED, fenced on our claim token like every other write.
+    //    The token survives step 6 (that write carries it through), so an
+    //    unfenced write here could stamp our stale envelope over a newer
+    //    holder's — reverting `redeliveries` and re-arming the once-only
+    //    requeue cap. A lost CAS is benign: the row and the reaction are both
+    //    on disk and only the bookkeeping is stale.
     let mut reacted = delivered.clone();
     reacted.state = ResultDeliveryState::Reacted;
     reacted.reaction_message_id = Some(task.message_id());
@@ -686,7 +848,7 @@ pub async fn deliver_task_result(
         child_chat_id,
         &reacted,
         ResultDeliveryState::Delivered,
-        None,
+        Some(&claim_token),
     )
     .await
     {
@@ -804,13 +966,4 @@ async fn selected_facets_of_tip(app_state: &AppState, origin_chat_id: Uuid) -> V
         .into_iter()
         .filter_map(|(id, selected)| selected.then_some(id))
         .collect()
-}
-
-/// The wire spelling of a scheduling choice, for the stored marker.
-fn scheduling_wire(scheduling: erato_config::config::TaskScheduling) -> &'static str {
-    match scheduling {
-        erato_config::config::TaskScheduling::Silent => "silent",
-        erato_config::config::TaskScheduling::WhenIdle => "when_idle",
-        erato_config::config::TaskScheduling::Interrupt => "interrupt",
-    }
 }
