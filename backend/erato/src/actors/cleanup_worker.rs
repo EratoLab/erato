@@ -14,6 +14,11 @@ pub enum CleanupWorkerMessage {
 #[derive(Clone)]
 pub struct CleanupWorkerArgs {
     pub db: DatabaseConnection,
+    /// Whether the operator opted into the data-retention half of the tick.
+    /// Carried on the args rather than re-read from config because the tick has
+    /// halves with different gating: deleting data is opt-in, and the parts that
+    /// delete nothing must not inherit that opt-in.
+    pub cleanup_enabled: bool,
     pub cleanup_archived_max_age_days: u32,
     pub delegated_run_auto_archive_after_days: u32,
     pub generation_stale_after_secs: u64,
@@ -110,6 +115,38 @@ pub async fn cleanup_archived_chats(
     Ok(())
 }
 
+/// One cleanup tick, callable without an actor system.
+///
+/// The body lives here rather than inside `Actor::handle` so that tests (and, in
+/// a later slice, the delivery backstop) can drive a tick directly: a tick that
+/// can only be reached by waiting five minutes for a cron actor is a tick nobody
+/// can assert on.
+pub async fn run_cleanup_tick(args: &CleanupWorkerArgs) -> Result<(), ActorProcessingErr> {
+    // The retention half is the operator's opt-in to deleting data. Anything in
+    // this tick that deletes nothing belongs above this line.
+    if !args.cleanup_enabled {
+        return Ok(());
+    }
+
+    let archived = crate::models::chat::auto_archive_stale_delegated_runs(
+        &args.db,
+        args.delegated_run_auto_archive_after_days,
+        args.generation_stale_after_secs,
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to auto-archive stale delegated runs: {}", e);
+        ActorProcessingErr::from(e.to_string())
+    })?;
+    if archived > 0 {
+        tracing::info!("Auto-archived {} stale delegated runs.", archived);
+    }
+
+    cleanup_archived_chats(&args.db, args.cleanup_archived_max_age_days).await?;
+
+    Ok(())
+}
+
 impl Actor for CleanupWorker {
     type Msg = CleanupWorkerMessage;
     type State = CleanupWorkerArgs;
@@ -130,23 +167,7 @@ impl Actor for CleanupWorker {
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
-            CleanupWorkerMessage::Tick => {
-                let archived = crate::models::chat::auto_archive_stale_delegated_runs(
-                    &state.db,
-                    state.delegated_run_auto_archive_after_days,
-                    state.generation_stale_after_secs,
-                )
-                .await
-                .map_err(|e| {
-                    tracing::error!("Failed to auto-archive stale delegated runs: {}", e);
-                    ActorProcessingErr::from(e.to_string())
-                })?;
-                if archived > 0 {
-                    tracing::info!("Auto-archived {} stale delegated runs.", archived);
-                }
-
-                cleanup_archived_chats(&state.db, state.cleanup_archived_max_age_days).await?;
-            }
+            CleanupWorkerMessage::Tick => run_cleanup_tick(state).await?,
         }
         Ok(())
     }
