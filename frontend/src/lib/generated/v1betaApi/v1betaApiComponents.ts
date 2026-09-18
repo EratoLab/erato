@@ -3413,6 +3413,75 @@ export const useUpdateChat = (
   });
 };
 
+export type ReactToTaskResultSsePathParams = {
+  /**
+   * The chat holding the delivered task result
+   */
+  chatId: string;
+};
+
+export type ReactToTaskResultSseError = Fetcher.ErrorWrapper<{
+  status: 409;
+  payload: Schemas.GenerationRunningError;
+}>;
+
+export type ReactToTaskResultSseVariables = {
+  body: Schemas.ReactToTaskResultRequest;
+  pathParams: ReactToTaskResultSsePathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+/**
+ * The explicit, client-driven equivalent of the second half of
+ * `deliver_task_result`: the `task_result` row is already in the conversation,
+ * nothing has answered it, and the caller wants that answer run now and
+ * streamed back on the same socket.
+ */
+export const fetchReactToTaskResultSse = (
+  variables: ReactToTaskResultSseVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    ReactToTaskResultSseError,
+    Schemas.ReactToTaskResultRequest,
+    {},
+    {},
+    ReactToTaskResultSsePathParams
+  >({
+    url: "/api/v1beta/me/chats/{chatId}/react",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+/**
+ * The explicit, client-driven equivalent of the second half of
+ * `deliver_task_result`: the `task_result` row is already in the conversation,
+ * nothing has answered it, and the caller wants that answer run now and
+ * streamed back on the same socket.
+ */
+export const useReactToTaskResultSse = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      undefined,
+      ReactToTaskResultSseError,
+      ReactToTaskResultSseVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    undefined,
+    ReactToTaskResultSseError,
+    ReactToTaskResultSseVariables
+  >({
+    mutationFn: (variables: ReactToTaskResultSseVariables) =>
+      fetchReactToTaskResultSse(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type OrganizationConfigurationError = Fetcher.ErrorWrapper<undefined>;
 
 export type OrganizationConfigurationVariables =
