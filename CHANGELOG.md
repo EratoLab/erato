@@ -99,6 +99,16 @@ An async run counts against `delegation.max_concurrent_background_runs` exactly 
 
 On the wire, a dispatched async task's tool part carries `"run_mode": "async"` beside the existing `"background": true`, so a client can tell a run whose answer is coming back from one whose never will; `RecentChat.provenance_run_mode` may now read `"async"`; and the injected frontend environment gains `DELEGATION_TASKS_ALLOW_ASYNC`, derived from `run_modes` rather than configured separately. The request-side `delegation_run_mode` field is unchanged and still accepts only `wait` and `background` — `async` is a mode the server chooses for a delegated run, not one a client may ask for.
 
+**A finished async task's result now arrives in the conversation that started it, and the model answers it.** This is the half that makes `run_mode = "async"` worth using; it is behind the same `delegation.tasks.enabled` gate and only happens for runs dispatched as `async`.
+
+When the sub-task finishes, its result is recorded as owed and then delivered into the origin chat as a `task_result` message, and — unless the run asked for `scheduling = "silent"` — a reaction turn runs over it, so the conversation gets an answer rather than a raw dump. The reaction is marked as started by the delivery rather than by the user, and it is deliberately not offered the `delegate_task` tool: a reaction that could plan its own tasks is a loop with nothing to bound it.
+
+Recording and delivering are separate, idempotent steps, because either can be interrupted by a process dying. A result whose own run never got to deliver it is still owed, and the next turn to finish in the origin chat — from any replica — delivers it. A delivery into a chat that is busy is deferred rather than forced: the claim goes back in the queue and the origin turn's own tail drains it on the way out. A chat parked on a tool approval is left alone entirely. Re-delivering after a crash appends the result once, not twice, because the delivery id is the idempotency key.
+
+Terminal cases are reported rather than swallowed. An archived origin closes the delivery as `superseded`; an origin whose owner no longer matches the run's is refused outright and nothing is written; and a run whose answer row is gone delivers a `failed` result with reason `result_missing`, rather than an empty success that would invite the model to move on from work that never reported.
+
+A delegated run with a result still owed is exempt from the automatic retention pass, so the cleanup cannot archive a child out from under a delivery the origin is about to receive.
+
 **A finished background task's result can now re-enter the conversation it was started from.** This release adds the wire and composition half; nothing emits these yet, so there is no visible behaviour change.
 
 A delivered result arrives as a user-role message carrying a new `task_result` content part, and `ChatMessage` gains two derived fields: `task_result` (present on such a row) and `initiator` (`user` or `task_result`, absent meaning a user). Both are additive.

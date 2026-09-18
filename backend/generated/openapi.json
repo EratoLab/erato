@@ -9009,7 +9009,6 @@
         "required": [
           "delivery_id",
           "child_chat_id",
-          "result_message_id",
           "status",
           "scheduling",
           "sequence"
@@ -9030,7 +9029,7 @@
           "result_message_id": {
             "type": "string",
             "format": "uuid",
-            "description": "The child's assistant row this result came from."
+            "description": "The child's assistant row this result came from. Absent when the run\nfinished but its answer row is gone (`reason = \"result_missing\"`): the\ndelivery still happens, because the origin model has to learn the task\nfailed, but there is no row to point at."
           },
           "scheduling": {
             "type": "string",
