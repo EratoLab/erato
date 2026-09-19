@@ -4738,6 +4738,44 @@ async fn recent_chats_reports_delegated_runs_in_flight(pool: Pool<Postgres>) {
         "a live async child is in flight"
     );
 
+    // (b2) The EXISTS correlates on `child.origin_chat_id = chats.id`. Every
+    //      other case here asserts on the one origin that really does own the
+    //      child, so none of them can see that correlation go missing: a
+    //      predicate reduced to "this user has ANY async run in flight"
+    //      satisfies all of them. It is not a harmless reduction — the flag
+    //      seeds `awaitingDeliveryChatIds` from every row on the page, so one
+    //      live child anywhere would pin the poller at its fast cadence and
+    //      invalidate every cached listing variant on each run-end edge. A
+    //      second origin that owns nothing is what pins it.
+    let bystander_chat = create_chat(&server, None).await;
+    let bystander_chat_id = Uuid::parse_str(&bystander_chat).unwrap();
+    erato::models::message::submit_message(
+        &app_state.db,
+        &rebuilt_policy(&app_state).await,
+        &erato::policy::types::Subject::User(me_user_id.clone()),
+        &bystander_chat_id,
+        json!({
+            "role": "user",
+            "content": [{"content_type": "text", "text": "an unrelated chat"}],
+            "name": me_user_id,
+        }),
+        None,
+        None,
+        None,
+        &[],
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    app_state.global_policy_engine.invalidate_data().await;
+    assert!(
+        !origin_in_flight(&server, &bystander_chat).await,
+        "a chat that owns no delegated child owes nothing, even while another \
+         of this user's origins has one in flight"
+    );
+
     // (c) Parked on a tool approval. The heartbeat is NULL here, which is why
     //     the predicate needs the `awaiting_approval` arm and the
     //     COALESCE(..., FALSE) wrapper — a NULL heartbeat must read FALSE, not
