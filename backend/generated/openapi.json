@@ -1823,6 +1823,85 @@
         ]
       }
     },
+    "/api/v1beta/me/chats/{chat_id}/delegated_runs/{child_chat_id}/retry": {
+      "post": {
+        "tags": [],
+        "summary": "Re-dispatch a failed delegated task run as a new async child.",
+        "operationId": "retry_delegated_run",
+        "parameters": [
+          {
+            "name": "chat_id",
+            "in": "path",
+            "description": "The origin chat the run was dispatched from",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "child_chat_id",
+            "in": "path",
+            "description": "The failed delegated run to retry",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetryDelegatedRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "A replacement run was dispatched",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetryDelegatedRunResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid chat ID format"
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "404": {
+            "description": "When async tasks are disabled, or the origin chat or the run does not exist or is not accessible"
+          },
+          "409": {
+            "description": "When the origin chat is archived (plain text), the origin's generation lease is held (JSON, code = generation_running, body = GenerationRunningError), or the run cannot be retried (JSON, code = not_retryable)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotRetryableError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "When `kind` is not a kind this server retries"
+          },
+          "500": {
+            "description": "When an internal server error occurs"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/chats/{chat_id}/react": {
       "post": {
         "tags": [],
@@ -8137,6 +8216,48 @@
           }
         }
       },
+      "NotRetryableError": {
+        "type": "object",
+        "description": "Body of the `409` answers that mean \"not this run\".\n\nDistinct from [`GenerationRunningError`] for the reason 781-B's\n`NothingToReactError` is: that one says \"not now\", this one says \"not this\nrun\". `code` is what the client discriminates on.",
+        "required": [
+          "code",
+          "state",
+          "chat_id"
+        ],
+        "properties": {
+          "chat_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The child run the client asked to retry."
+          },
+          "code": {
+            "type": "string",
+            "description": "Always `not_retryable`."
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/NotRetryableState"
+          }
+        }
+      },
+      "NotRetryableState": {
+        "type": "string",
+        "description": "Why a run cannot be retried. A closed vocabulary, because the client\nswitches on it to choose between hiding the control, linking to the run\nthat already replaced this one, and showing a reason.",
+        "enum": [
+          "retry_in_flight",
+          "completed",
+          "working",
+          "not_a_task_run",
+          "brief_unavailable",
+          "concurrency_cap",
+          "launch_refused"
+        ]
+      },
       "NothingToReactError": {
         "type": "object",
         "description": "Body of the `409` `/react` answers when there is nothing to react to.\n\nDistinct from [`GenerationRunningError`] because the two are different\ndecisions: that one says \"not now\", this one says \"not this row, ever\".\n`code` is what the client discriminates on; `reason` is what it uses to\nchoose between suppressing the affordance and offering a re-anchor.",
@@ -8428,8 +8549,12 @@
           },
           "provenance_run_mode": {
             "type": "string",
-            "description": "How a delegated run was dispatched. Present only for delegation\nprovenance, and only as `background` — the mark of a detached run\nwhose result never flowed back to the origin turn. An awaited run\nomits it, since its answer already returned inline.",
+            "description": "How a delegated run was dispatched. Present only for delegation\nprovenance, and only for a detached run: `background`, whose result\nnever flows back to the origin turn, or `async`, whose result is\ndelivered into the origin chat later as its own row. An awaited run\nomits it, since its answer already returned inline.",
             "example": "background"
+          },
+          "retry_of": {
+            "type": "string",
+            "description": "The failed delegated run this one was started to replace. Present only\non a retry child. Clients use it to swap a failed run's retry button for\na link to the run that replaced it, durably - it survives a reload,\nwhere component state would not."
           },
           "title_by_summary": {
             "type": [
@@ -8791,6 +8916,37 @@
             "example": "00000000-0000-0000-0000-000000000000"
           }
         }
+      },
+      "RetryDelegatedRunRequest": {
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/RetryKind"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RetryDelegatedRunResponse": {
+        "type": "object",
+        "required": [
+          "child_chat_id"
+        ],
+        "properties": {
+          "child_chat_id": {
+            "type": "string",
+            "description": "The new child run started to replace the failed one."
+          }
+        }
+      },
+      "RetryKind": {
+        "type": "string",
+        "description": "What a client asks to have retried.\n\nExactly ONE variant, deliberately. The Foundations contract also describes\nretrying a stuck result *delivery*, but that half is not built, so\n`\"delivery\"` must be an unknown serde variant - a `422` the client can act\non - rather than a value this route accepts and then refuses with a `409`\nthat would read like a transient condition. Adding a variant here without\nthe rest of the work is what `retry_with_an_unknown_kind_is_422` exists to\ncatch.",
+        "enum": [
+          "task"
+        ]
       },
       "SetShareLinkRequest": {
         "type": "object",
