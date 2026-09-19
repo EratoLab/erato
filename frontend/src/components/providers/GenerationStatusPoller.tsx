@@ -218,7 +218,15 @@ export function GenerationStatusPoller({
         // predicate has to be re-evaluated against these rows or the missing
         // answer stays invisible until the chat is remounted.
         //
-        // BRANCH B is the wrong seam for this: it matches a task-result turn
+        // This is the FAST path only, and it can fire a beat early: the gate
+        // above is `delegated_runs_in_flight`, which goes false in the same
+        // transaction that appends the row, so on the last delivery this edge
+        // can be observed before the row exists and the gate is then disarmed
+        // for good. The delivery-settled effect below is the guarantee; this
+        // one still earns its keep while OTHER runs are in flight, where the
+        // gate never falls and that effect never fires.
+        //
+        // BRANCH B is the wrong seam for either: it matches a task-result turn
         // that has already RUN, by which point the reaction's assistant row is
         // the tip and the predicate is false.
         if (currentChatId) {
@@ -256,6 +264,48 @@ export function GenerationStatusPoller({
       }
     }
   }, [data, dataUpdatedAt, queryClient]);
+
+  /**
+   * The open chat's delivery flag falling is the one signal that says the row
+   * is on disk NOW.
+   *
+   * `delegated_runs_in_flight` is true while a child runs and while its
+   * delivery is `pending`/`claimed`; `deliver_task_result` appends the task
+   * result row and writes `delivered` in the same transaction, so the flag
+   * goes false exactly when — and never before — the row the react predicate
+   * needs exists. Everything the poll snapshot can see is earlier than that:
+   * the reaction runs after the commit, under a lease that can open and close
+   * between two ticks, and once the flag is false the poll driver it fed is
+   * gone and BRANCH A above cannot fire again.
+   *
+   * Driven by the store rather than by a snapshot, because the fetch that
+   * observes the fall is usually somebody else's — the sidebar listing, or the
+   * refetch BRANCH A just asked for — and by then this poll may already be
+   * disabled.
+   */
+  const awaitingDeliveryChatIds = useGenerationStatusStore(
+    (state) => state.awaitingDeliveryChatIds,
+  );
+  const previousAwaitingRef = useRef(awaitingDeliveryChatIds);
+
+  useEffect(() => {
+    const previous = previousAwaitingRef.current;
+    previousAwaitingRef.current = awaitingDeliveryChatIds;
+    // Read, not subscribed: this reacts to the flag falling for the chat the
+    // user is looking at, not to the user opening a different chat.
+    const { currentChatId } = useGenerationStatusStore.getState();
+    if (
+      !currentChatId ||
+      previous[currentChatId] !== true ||
+      awaitingDeliveryChatIds[currentChatId] === true
+    ) {
+      return;
+    }
+    void queryClient.invalidateQueries({
+      queryKey: chatMessagesQuery({ pathParams: { chatId: currentChatId } })
+        .queryKey,
+    });
+  }, [awaitingDeliveryChatIds, queryClient]);
 
   return null;
 }
