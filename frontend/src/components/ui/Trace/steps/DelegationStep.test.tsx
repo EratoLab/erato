@@ -6,6 +6,7 @@ import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusSto
 import { useSidecarLocalTraceStore } from "@/lib/desktopSidecar/localTraceStore";
 import { recentChatsQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { DelegatedRunOpenProvider } from "@/providers/DelegatedRunOpenProvider";
+import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 
 import { ToolUseStep } from "./ToolUseStep";
 
@@ -34,18 +35,38 @@ const part = (output: unknown, toolName = "delegate_to_assistant") =>
 // recent-chats rows, and tests seed them explicitly.
 let queryClient: QueryClient;
 
-const renderStep = (output: unknown, toolName?: string, streaming = true) =>
+/**
+ * The feature config is needed because a failed task slot mounts the retry
+ * control, which reads the deployment's async-task flag. Off by default, so
+ * every step that is not a failed task renders exactly as before.
+ */
+const renderStep = (
+  output: unknown,
+  toolName?: string,
+  streaming = true,
+  config: Parameters<typeof StaticFeatureConfigProvider>[0]["config"] = {},
+) =>
   render(
     <QueryClientProvider client={queryClient}>
-      <ToolUseStep
-        part={part(output, toolName)}
-        status={streaming ? "running" : "done"}
-        isStreaming={streaming}
-        isCollapsed={false}
-        isLastStep
-      />
+      <StaticFeatureConfigProvider config={config}>
+        <ToolUseStep
+          part={part(output, toolName)}
+          status={streaming ? "running" : "done"}
+          isStreaming={streaming}
+          isCollapsed={false}
+          isLastStep
+        />
+      </StaticFeatureConfigProvider>
     </QueryClientProvider>,
   );
+
+const RETRY_ON: Parameters<typeof StaticFeatureConfigProvider>[0]["config"] = {
+  assistants: {
+    enabled: true,
+    delegationEnabled: true,
+    delegationTasksAllowAsync: true,
+  },
+};
 
 /** Seed the origin-filtered delegated-runs listing the overlay resolves from. */
 const seedRunListing = (chats: Partial<RecentChat>[]) =>
@@ -77,6 +98,9 @@ describe("delegation step", () => {
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
+    // A trace is only ever read inside the chat that produced it, which is
+    // also the chat a retry is addressed through.
+    useGenerationStatusStore.getState().setCurrentChatId("origin-1");
   });
   afterEach(() => {
     useSidecarLocalTraceStore.setState({ traces: {} });
@@ -376,6 +400,45 @@ describe("delegation step", () => {
 
     expect(screen.getByText("Ran a task")).toBeInTheDocument();
     expect(screen.queryByText(/Delegated to Research/)).toBeNull();
+  });
+
+  it("offers to retry a failed task and says the answer will not return here", () => {
+    // The file's default tool name is the mention route, so the task route
+    // has to be named explicitly — the retry is a task-route affordance.
+    renderStep(
+      { ...IDENTITY, status: "failed" },
+      "delegate_task",
+      false,
+      RETRY_ON,
+    );
+
+    expect(screen.getByTestId("delegation-retry-action")).toBeInTheDocument();
+    // This slot was frozen at dispatch and the retry is always async, so the
+    // copy has to say where the answer will actually turn up. Without it the
+    // reader waits on a step that can never update.
+    expect(screen.getByTestId("delegation-retry")).toHaveTextContent(
+      /background task/i,
+    );
+    expect(screen.getByTestId("delegation-retry")).toHaveTextContent(
+      /not in this step/i,
+    );
+  });
+
+  it("offers no retry on a failed mention delegation or with the flag off", () => {
+    // A mention child is bound to the assistant it was addressed to; the
+    // endpoint answers `not_a_task_run`, so the control would be a dead end.
+    const { unmount } = renderStep(
+      { ...IDENTITY, status: "failed" },
+      undefined,
+      false,
+      RETRY_ON,
+    );
+    expect(screen.queryByTestId("delegation-retry")).toBeNull();
+    unmount();
+
+    // And with async tasks off the route itself is a 404.
+    renderStep({ ...IDENTITY, status: "failed" }, "delegate_task", false);
+    expect(screen.queryByTestId("delegation-retry")).toBeNull();
   });
 
   it("says a delegate_task step is running while it streams", () => {

@@ -1,7 +1,10 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { TaskResultCard } from "@/components/ui/Message/TaskResultCard";
+import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
+import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 
 import type { ContentPartTaskResult } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
@@ -17,7 +20,48 @@ const part = (
   ...overrides,
 });
 
+/**
+ * Providers only where a failed result needs them.
+ *
+ * The card renders bare everywhere else — including in `MessageContent`, which
+ * supplies a feature config but no query client — so the retry control is
+ * mounted on the failed branch alone. These wrappers are the cost of that
+ * branch, not of the card.
+ */
+const renderFailedCard = (
+  overrides: Partial<ContentPartTaskResult> = {},
+  config: Parameters<typeof StaticFeatureConfigProvider>[0]["config"] = {},
+) =>
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <StaticFeatureConfigProvider config={config}>
+        <TaskResultCard part={part({ status: "failed", ...overrides })} />
+      </StaticFeatureConfigProvider>
+    </QueryClientProvider>,
+  );
+
+const RETRY_ON: Parameters<typeof StaticFeatureConfigProvider>[0]["config"] = {
+  assistants: {
+    enabled: true,
+    delegationEnabled: true,
+    delegationTasksAllowAsync: true,
+  },
+};
+
 describe("TaskResultCard", () => {
+  // The retry is addressed through the chat the result was delivered into,
+  // which is the chat this card is read in.
+  beforeEach(() => {
+    useGenerationStatusStore.getState().setCurrentChatId("origin-1");
+  });
+  afterEach(() => {
+    useGenerationStatusStore.getState().reset();
+  });
+
   it("shows the answer and a way into the run that produced it", () => {
     render(<TaskResultCard part={part()} />);
 
@@ -34,13 +78,35 @@ describe("TaskResultCard", () => {
   });
 
   it("says so when the run did not simply succeed", () => {
-    render(<TaskResultCard part={part({ status: "failed" })} />);
+    renderFailedCard();
 
     expect(screen.getByTestId("task-result-status")).toBeInTheDocument();
     expect(screen.getByTestId("task-result-card")).toHaveAttribute(
       "data-task-result-status",
       "failed",
     );
+  });
+
+  it("offers to retry only a failed run", () => {
+    // A completed result must never offer to re-run the task: the answer is
+    // already here, however disappointing, and a second run would be started
+    // behind the user's back.
+    const { unmount } = renderFailedCard({ status: "completed" }, RETRY_ON);
+    expect(screen.queryByTestId("task-result-retry")).toBeNull();
+    unmount();
+
+    renderFailedCard({}, RETRY_ON);
+    expect(screen.getByTestId("task-result-retry-action")).toBeInTheDocument();
+    // This card records one delivery and is never rewritten, so the copy has
+    // to say the retry's answer arrives as its own result instead.
+    expect(screen.getByTestId("task-result-retry")).toHaveTextContent(
+      /background task/i,
+    );
+  });
+
+  it("offers no retry where the deployment cannot run an async task", () => {
+    renderFailedCard();
+    expect(screen.queryByTestId("task-result-retry")).toBeNull();
   });
 
   /// The reason vocabulary is shared with the trace step so the two cannot

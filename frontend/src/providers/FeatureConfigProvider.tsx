@@ -88,6 +88,13 @@ interface AssistantsFeatureConfig {
   delegationEnabled: boolean;
   /** Whether the deployment lets a delegated run be sent to the background */
   delegationAllowBackground: boolean;
+  /**
+   * Whether the deployment can run a delegated task asynchronously — which is
+   * the only run mode a retry starts, so this is what gates the retry
+   * affordance. The backend derives it from the same predicate the retry
+   * endpoint gates on, so a hidden control and a 404 route cannot disagree.
+   */
+  delegationTasksAllowAsync: boolean;
   /** Whether assistants may be shared with edit access */
   enableEditSharing: boolean;
   usageViewEnabled: boolean;
@@ -274,6 +281,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
     enabled: false,
     delegationEnabled: false,
     delegationAllowBackground: false,
+    delegationTasksAllowAsync: false,
     enableEditSharing: true,
     usageViewEnabled: false,
     showRecentItems: false,
@@ -388,6 +396,10 @@ function createFeatureConfig(
       delegationAllowBackground: Boolean(
         environment.assistantsDelegationAllowBackground,
       ),
+      // The Env field carries no `assistants` prefix, unlike its neighbour
+      // above: it is the backend's own `DELEGATION_TASKS_ALLOW_ASYNC`, named
+      // after the config it derives from rather than after this section.
+      delegationTasksAllowAsync: Boolean(environment.delegationTasksAllowAsync),
       enableEditSharing: environment.assistantsEnableEditSharing ?? true,
       usageViewEnabled: environment.assistantsUsageViewEnabled ?? false,
       showRecentItems: environment.assistantsShowRecentItems,

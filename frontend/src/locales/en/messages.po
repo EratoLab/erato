@@ -1582,6 +1582,21 @@ msgstr "Dismiss run"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/DelegatedRunsSection.tsx
+msgid "chat.history.delegatedRuns.retried"
+msgstr "Retried"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegatedRunsSection.tsx
+msgid "chat.history.delegatedRuns.retry"
+msgstr "Retry task"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegatedRunsSection.tsx
+msgid "chat.history.delegatedRuns.retryFailed"
+msgstr "This task cannot be retried"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegatedRunsSection.tsx
 msgid "chat.history.delegatedRuns.toggle"
 msgstr "Delegated runs ({runCount})"
 
@@ -3267,6 +3282,26 @@ msgstr "Open the task's run"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.retried"
+msgstr "Retried as a background task."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.retry"
+msgstr "Retry task"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.retry.background"
+msgstr "The retry runs as a background task; its answer arrives as its own result, not in this card."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.retry.failed"
+msgstr "This task cannot be retried"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
 msgid "message.taskResult.sequence"
 msgstr "Delivered again"
 
@@ -4786,6 +4821,26 @@ msgstr "The run took too long"
 #: src/components/ui/Trace/steps/DelegationStep.tsx
 msgid "trace.delegation.result.truncated"
 msgstr "Result truncated"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.retried"
+msgstr "Retried as a background task."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.retry"
+msgstr "Retry task"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.retry.background"
+msgstr "The retry runs as a background task; its answer arrives separately, not in this step."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.retry.failed"
+msgstr "This task cannot be retried"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
