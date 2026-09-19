@@ -7,6 +7,7 @@ import {
   seedGenerationStatusFromListing,
   useGenerationStatusStore,
 } from "@/hooks/chat/store/generationStatusStore";
+import { useDelegatedRunRetry } from "@/hooks/chat/useDelegatedRunRetry";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { useRecentChats } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useAssistantsFeature } from "@/providers/FeatureConfigProvider";
@@ -70,11 +71,100 @@ const parseDismissedRunIds = (value: unknown): readonly string[] | null =>
 // stable identity across renders.
 const DISMISSED_RUN_IDS_OPTIONS = { parse: parseDismissedRunIds };
 
+/**
+ * Retry affordance for a run that failed, or a way into the run that already
+ * replaced it.
+ *
+ * Its own component, mounted only on the error branch, because the hook it
+ * calls needs both a feature-config provider and a query client. Called from
+ * the row unconditionally it would make every surface that renders any run row
+ * — and every test that renders one — owe both providers for a control almost
+ * no row shows.
+ *
+ * The replacement is reached through a button rather than an anchor: the row
+ * itself is already the anchor, and a nested one is invalid. The dismiss
+ * control beside it makes the same trade for the same reason.
+ */
+const DelegatedRunRetryControl = ({
+  chat,
+  originChatId,
+  onOpenChatId,
+}: {
+  chat: RecentChat;
+  originChatId: string;
+  onOpenChatId: (chatId: string) => void;
+}) => {
+  const { enabled, retriedByChatId, isRetrying, refusal, retry } =
+    useDelegatedRunRetry(chat.id, originChatId);
+
+  if (!enabled) {
+    return null;
+  }
+
+  if (retriedByChatId !== undefined) {
+    // Driven by the listing's `retry_of`, never by anything remembered here:
+    // a reload must not offer to retry a run that has already been retried.
+    const retriedLabel = t({
+      id: "chat.history.delegatedRuns.retried",
+      message: "Retried",
+    });
+    return (
+      <Button
+        variant="link"
+        size="sm"
+        onClick={() => onOpenChatId(retriedByChatId)}
+        title={retriedLabel}
+        data-testid="delegated-run-retried"
+        data-retried-chat-id={retriedByChatId}
+      >
+        {retriedLabel}
+      </Button>
+    );
+  }
+
+  const retryLabel = t({
+    id: "chat.history.delegatedRuns.retry",
+    message: "Retry task",
+  });
+  return (
+    <>
+      <Button
+        variant="link"
+        size="sm"
+        loading={isRetrying}
+        onClick={retry}
+        title={retryLabel}
+        data-testid="delegated-run-retry"
+      >
+        {retryLabel}
+      </Button>
+      {refusal !== null && (
+        <span
+          className="text-xs text-theme-fg-muted"
+          data-testid="delegated-run-retry-refused"
+        >
+          {t({
+            id: "chat.history.delegatedRuns.retryFailed",
+            message: "This task cannot be retried",
+          })}
+        </span>
+      )}
+    </>
+  );
+};
+
 const DelegatedRunRow = memo<{
   chat: RecentChat;
+  /**
+   * The chat this run was dispatched from — the retry endpoint is addressed
+   * through it. Internal to this file: `DelegatedRunsSectionProps` is public
+   * and consumed by the add-in, so the section passes its own `chatId` down
+   * rather than growing a required prop on the kit's surface.
+   */
+  originChatId: string;
   onDismiss: (chatId: string) => void;
   onOpen?: (chat: RecentChat) => void;
-}>(({ chat, onDismiss, onOpen }) => {
+}>(({ chat, originChatId, onDismiss, onOpen }) => {
   const navigate = useNavigate();
   const storeStatus = useGenerationStatusStore(
     (state) => state.statusByChatId[chat.id],
@@ -106,6 +196,23 @@ const DelegatedRunRow = memo<{
     ? `${name}, ${chatAttentionStatusLabel(status)}`
     : name;
 
+  // Opening any chat the row points at — itself or the run that replaced it —
+  // through the same seam the row's own click uses, so a host without the web
+  // app's chat routes never lands on one.
+  const openChatId = useCallback(
+    (targetChatId: string) => {
+      if (onOpen) {
+        // The host opener reads the id off the row it is handed; a retry
+        // child of this same origin is listed here too, so the row it would
+        // find differs from this one only in identity.
+        onOpen({ ...chat, id: targetChatId });
+        return;
+      }
+      navigate(getChatUrl(targetChatId));
+    },
+    [chat, navigate, onOpen],
+  );
+
   const rowContent = (
     <>
       {status && <ChatAttentionStatusDot status={status} />}
@@ -122,6 +229,22 @@ const DelegatedRunRow = memo<{
         className="size-3.5 shrink-0 text-theme-fg-muted opacity-0 group-hover/run:opacity-100 group-focus-visible/run:opacity-100"
         aria-hidden="true"
       />
+      {status === "error" && (
+        /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent bubbling */
+        <div
+          className="flex shrink-0 items-center gap-1"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+        >
+          <DelegatedRunRetryControl
+            chat={chat}
+            originChatId={originChatId}
+            onOpenChatId={openChatId}
+          />
+        </div>
+      )}
       {isSettled && (
         /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent bubbling */
         <div
@@ -293,6 +416,11 @@ export const DelegatedRunsSection = memo<DelegatedRunsSectionProps>(
       return null;
     }
 
+    // A row can only exist once the listing ran, and the listing only runs
+    // with a chat id — so this is a real id here. The empty fallback keeps the
+    // narrowing honest without an assertion; a retry addressed to it would be
+    // refused by the hook rather than sent.
+    const originChatId = chatId ?? "";
     const runCount = runs.length;
     const attentionLabel = attentionStatus
       ? chatAttentionStatusLabel(attentionStatus)
@@ -360,6 +488,7 @@ export const DelegatedRunsSection = memo<DelegatedRunsSectionProps>(
                   <DelegatedRunRow
                     key={chat.id}
                     chat={chat}
+                    originChatId={originChatId}
                     onDismiss={dismissRun}
                     onOpen={onOpenRun}
                   />

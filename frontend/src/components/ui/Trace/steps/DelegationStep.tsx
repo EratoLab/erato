@@ -1,7 +1,9 @@
 import { t } from "@lingui/core/macro";
 
+import { Button } from "@/components/ui/Controls/Button";
 import { OpenNewWindowIcon } from "@/components/ui/icons";
 import { useDelegatedRunLiveStatus } from "@/hooks/chat/useDelegatedRunLiveStatus";
+import { useDelegatedRunRetry } from "@/hooks/chat/useDelegatedRunRetry";
 import { DELEGATE_TASK_TOOL_NAME } from "@/lib/delegation/delegationEnvelope";
 import { delegationReasonLabel } from "@/lib/delegation/delegationLabels";
 import { useSidecarLocalTrace } from "@/lib/desktopSidecar/localTraceStore";
@@ -247,6 +249,73 @@ const resultPreview = (result: string | undefined): string | undefined => {
     : text;
 };
 
+/**
+ * Offer to run a failed task again, from the slot where it failed.
+ *
+ * Its own component, mounted only on the failed branch, because the hook it
+ * calls needs a feature-config provider and a query client; called
+ * unconditionally it would make every surface that renders any delegation step
+ * owe both for a control almost no step shows.
+ *
+ * The copy has to state the retry's shape, not just offer it. This slot was
+ * frozen at dispatch and will never be rewritten, and the retry is always an
+ * async task — so its answer arrives as a delivered result later, not here.
+ * Left unsaid, the reader waits on a step that can never update.
+ */
+const RetryTaskControl = ({ childChatId }: { childChatId: string }) => {
+  // The origin is the chat this trace is being read in, which is where the
+  // run was dispatched from — so the hook's default is exactly right here.
+  const { enabled, retriedByChatId, isRetrying, refusal, retry } =
+    useDelegatedRunRetry(childChatId);
+
+  if (!enabled) {
+    return null;
+  }
+
+  if (retriedByChatId !== undefined) {
+    return (
+      <p data-testid="delegation-retried">
+        {t({
+          id: "trace.delegation.retried",
+          message: "Retried as a background task.",
+        })}
+      </p>
+    );
+  }
+
+  return (
+    <div
+      className="flex flex-wrap items-center gap-x-2"
+      data-testid="delegation-retry"
+    >
+      <Button
+        variant="link"
+        size="sm"
+        loading={isRetrying}
+        onClick={retry}
+        data-testid="delegation-retry-action"
+      >
+        {t({ id: "trace.delegation.retry", message: "Retry task" })}
+      </Button>
+      <span>
+        {t({
+          id: "trace.delegation.retry.background",
+          message:
+            "The retry runs as a background task; its answer arrives separately, not in this step.",
+        })}
+      </span>
+      {refusal !== null && (
+        <span data-testid="delegation-retry-refused">
+          {t({
+            id: "trace.delegation.retry.failed",
+            message: "This task cannot be retried",
+          })}
+        </span>
+      )}
+    </div>
+  );
+};
+
 const OpenDelegatedRunLink = ({
   chatId,
   assistantId,
@@ -337,11 +406,21 @@ export const DelegationStep = ({
     envelope.reason !== undefined
       ? delegationReasonLabel(envelope.reason)
       : undefined;
+  // Only the task route can be retried — a mention child is bound to the
+  // assistant it was addressed to, and the endpoint refuses it. The failure
+  // may be stated by the frozen envelope itself, or, for a detached dispatch
+  // whose slot says nothing, only by what this client knows of the run.
+  const retryableChildChatId =
+    part.tool_name === DELEGATE_TASK_TOOL_NAME &&
+    (envelope.status === "failed" || liveStatus === "error")
+      ? envelope.delegateChatId
+      : undefined;
   const hasSummary =
     preview !== undefined ||
     envelope.truncated ||
     why !== undefined ||
-    brief !== undefined;
+    brief !== undefined ||
+    retryableChildChatId !== undefined;
 
   const body =
     nested !== undefined || hasSummary ? (
@@ -378,6 +457,9 @@ export const DelegationStep = ({
                   message: "Result truncated",
                 })}
               </p>
+            )}
+            {retryableChildChatId !== undefined && (
+              <RetryTaskControl childChatId={retryableChildChatId} />
             )}
           </div>
         )}
