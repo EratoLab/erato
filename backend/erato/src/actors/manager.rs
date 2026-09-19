@@ -1,4 +1,4 @@
-use crate::actors::supervisor::WorkerSupervisor;
+use crate::actors::supervisor::{WorkerNames, WorkerSupervisor, WorkerSupervisorArgs};
 use crate::config::AppConfig;
 use ractor::Actor;
 use sea_orm::DatabaseConnection;
@@ -16,7 +16,16 @@ impl ActorManager {
         config: AppConfig,
         supervisor_name: Option<String>,
     ) -> Self {
-        let args = (db, config);
+        // The supervisor's own name is the derivation root for its children's
+        // registry names. An unnamed supervisor gets no names, and therefore
+        // starts no timed children: the registry is process-global and never
+        // unregisters, so many managers in one process (tests) must not
+        // register anything at all.
+        let args = WorkerSupervisorArgs {
+            workers: supervisor_name.as_deref().map(WorkerNames::derived_from),
+            db,
+            config,
+        };
         // Spawn the top-level supervisor
         let (_supervisor, supervisor_handle) =
             Actor::spawn(supervisor_name, WorkerSupervisor, args)

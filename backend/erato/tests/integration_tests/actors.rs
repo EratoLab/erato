@@ -6,10 +6,13 @@ use crate::test_utils::{
 use crate::{MIGRATOR, test_app_state};
 use axum_test::TestServer;
 use chrono::{Duration, Utc};
-use erato::actors::cleanup_worker::cleanup_archived_chats;
+use erato::actors::cleanup_worker::{CleanupWorkerArgs, cleanup_archived_chats, run_cleanup_tick};
+use erato::actors::supervisor::{WorkerNames, cleanup_tick_job};
 use erato::db::entity::chats;
 use erato::db::entity::{assistants, chat_file_uploads, file_uploads, messages, share_links};
 use erato::models::chat::auto_archive_stale_delegated_runs;
+use ractor::registry;
+use ractor_actors::time::cron::Job;
 use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
 use sea_orm::{
     ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter,
@@ -682,4 +685,368 @@ async fn test_delegated_run_auto_archive_age_boundary(pool: Pool<Postgres>) {
     );
     assert!(archived_at_of(db, run).await.is_some());
     assert!(archived_at_of(db, never_ran).await.is_some());
+}
+
+/// The registry `ractor` keeps is process-global and nothing ever unregisters,
+/// so a supervisor that registers timed children under hardcoded literals can
+/// only ever exist once per process. Tests build one `ActorManager` per test —
+/// hundreds of them in one binary under `cargo test` — so an unnamed supervisor
+/// must register nothing at all. Uniquifying the names instead would also start
+/// a real `0 */5 * * * *` cron inside a process whose sqlx database is dropped
+/// when the test ends.
+///
+/// # Test Categories
+/// - `uses-db`
+///
+/// # Test Behavior
+/// Builds an `AppState` (whose supervisor is unnamed) with cleanup *and* both
+/// delegation routes enabled, and asserts that it added no timed worker to the
+/// registry.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn unnamed_supervisor_starts_no_timed_workers(pool: Pool<Postgres>) {
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+    // Everything that could possibly gate the spawn is on: the only thing left
+    // to keep the registry empty is the supervisor being unnamed.
+    app_config.cleanup_enabled = true;
+    app_config.delegation.assistants.enabled = true;
+    app_config.delegation.tasks.enabled = true;
+
+    // Compared as a diff rather than against the whole registry so that a
+    // sibling test which legitimately registers a named supervisor's workers
+    // cannot make this one flaky under the single-process `cargo test` runner.
+    let before = registry::registered();
+    let _app_state = test_app_state(app_config, pool).await;
+    let added: Vec<String> = registry::registered()
+        .into_iter()
+        .filter(|name| !before.contains(name))
+        .collect();
+
+    for name in &added {
+        assert!(
+            !name.ends_with("cleanup_worker") && !name.ends_with("cleanup_worker_cron"),
+            "an unnamed supervisor must start no timed children, but registered '{name}'"
+        );
+    }
+    assert!(
+        registry::where_is("cleanup_worker".to_string()).is_none(),
+        "the bare literal must never be registered again: it is what made a second manager panic"
+    );
+    assert!(
+        registry::where_is("cleanup_worker_cron".to_string()).is_none(),
+        "the bare literal must never be registered again: it is what made a second manager panic"
+    );
+}
+
+/// Two `AppState`s over one pool is the in-process shape of the two-replica
+/// delivery tests. It is also the only assertion in this file that survives
+/// nextest's process-per-test isolation, so it is the real guard on the
+/// registry hazard: a duplicate registration is `SpawnErr::ActorAlreadyRegistered`,
+/// which the supervisor's `.expect()` turns into a panic.
+///
+/// # Test Categories
+/// - `uses-db`
+///
+/// # Test Behavior
+/// Builds two managers over one pool with cleanup and delegated tasks enabled,
+/// and asserts that neither panics and neither registers a timed worker.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn two_managers_in_one_process_do_not_panic(pool: Pool<Postgres>) {
+    let (mut app_config_a, _llm_a) = setup_mock_llm_server(None).await;
+    app_config_a.cleanup_enabled = true;
+    app_config_a.delegation.tasks.enabled = true;
+    let (mut app_config_b, _llm_b) = setup_mock_llm_server(None).await;
+    app_config_b.cleanup_enabled = true;
+    app_config_b.delegation.tasks.enabled = true;
+
+    let before = registry::registered();
+    let _replica_a = test_app_state(app_config_a, pool.clone()).await;
+    let _replica_b = test_app_state(app_config_b, pool.clone()).await;
+
+    let added: Vec<String> = registry::registered()
+        .into_iter()
+        .filter(|name| !before.contains(name))
+        .collect();
+    assert!(
+        added.is_empty(),
+        "two unnamed managers in one process must register nothing, but added {added:?}"
+    );
+}
+
+/// The cron manager looks the worker up by name at tick time, so the name the
+/// worker registers under and the name the job looks up are two halves of one
+/// contract. If they drift the tick is not an error: `where_is` simply returns
+/// `None` forever and the tick is skipped behind a `warn!`.
+///
+/// # Test Categories
+/// - `uses-db`
+///
+/// # Test Behavior
+/// Spawns a *named* supervisor, asserts both children registered under exactly
+/// the derived names, then drives a tick through the derived worker name and
+/// asserts the retention pass actually ran — which is what a swapped pair would
+/// break while leaving the registry contents looking correct.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn named_supervisor_derives_both_worker_names(pool: Pool<Postgres>) {
+    let names = WorkerNames::derived_from("worker_supervisor");
+    assert_eq!(names.cleanup_worker, "worker_supervisor.cleanup_worker");
+    assert_eq!(
+        names.cleanup_worker_cron,
+        "worker_supervisor.cleanup_worker_cron"
+    );
+
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+    app_config.cleanup_enabled = true;
+    app_config.cleanup_archived_max_age_days = 30;
+
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+    let me = erato::models::user::get_or_create_user(&db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .unwrap();
+    let long_ago: DateTimeWithTimeZone = (Utc::now() - Duration::days(40)).into();
+    let old_archived = insert_chat(&db, &me.id.to_string(), None, long_ago).await;
+    set_chat_columns(
+        &db,
+        old_archived,
+        chats::ActiveModel {
+            archived_at: ActiveValue::Set(Some(long_ago)),
+            ..Default::default()
+        },
+    )
+    .await;
+
+    // Unique per test so that the single-process runner cannot collide with a
+    // sibling test's supervisor.
+    let supervisor_name = format!("test_sup_{}", Uuid::new_v4());
+    let derived = WorkerNames::derived_from(&supervisor_name);
+    let _manager = erato::actors::manager::ActorManager::new_with_name(
+        db.clone(),
+        app_config,
+        Some(supervisor_name.clone()),
+    )
+    .await;
+
+    assert!(
+        registry::where_is(derived.cleanup_worker.clone()).is_some(),
+        "the worker must register under the supervisor-derived name"
+    );
+    assert!(
+        registry::where_is(derived.cleanup_worker_cron.clone()).is_some(),
+        "the cron manager must register under the supervisor-derived name"
+    );
+
+    // The job's lookup key must resolve to the worker, not to the cron manager:
+    // a swapped pair keeps both registry entries present and would pass the two
+    // assertions above.
+    //
+    // Driven through `cleanup_tick_job`, the same constructor the supervisor
+    // schedules with, rather than a struct literal built here. A hand-built job
+    // pins only the registration half: the supervisor could hand the real cron
+    // the *cron manager's* name and this test would still deliver its tick to
+    // the worker and pass, while production ticked the cron manager forever.
+    let mut job = cleanup_tick_job(&derived);
+    job.work().await.expect("tick job must dispatch");
+
+    let mut deleted = false;
+    for _ in 0..100 {
+        if chats::Entity::find_by_id(old_archived)
+            .one(&db)
+            .await
+            .unwrap()
+            .is_none()
+        {
+            deleted = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+
+    if let Some(supervisor) = registry::where_is(supervisor_name) {
+        supervisor.stop(Some("test finished".to_string()));
+    }
+
+    assert!(
+        deleted,
+        "a tick addressed to the derived worker name must reach the cleanup worker"
+    );
+}
+
+/// The relocation this PR exists for: the cleanup worker starts on a deployment
+/// that has never opted into deleting data, because the delivery backstop rides
+/// on its tick and a stranded result must be recoverable everywhere.
+///
+/// Asserted on the spawn predicate itself rather than on the sweep's effect,
+/// because a sweep test passes either way — it drives `run_cleanup_tick`
+/// directly and never reaches the supervisor.
+///
+/// # Test Categories
+/// - `uses-db`
+///
+/// # Test Behavior
+/// Spawns a named supervisor with `cleanup_enabled = false` and only the
+/// assistants delegation route on, and asserts the worker registered anyway.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn named_supervisor_spawns_cleanup_worker_when_only_delegation_is_on(pool: Pool<Postgres>) {
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+    app_config.cleanup_enabled = false;
+    app_config.delegation.assistants.enabled = true;
+
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+    let supervisor_name = format!("test_sup_{}", Uuid::new_v4());
+    let derived = WorkerNames::derived_from(&supervisor_name);
+    let _manager = erato::actors::manager::ActorManager::new_with_name(
+        db.clone(),
+        app_config,
+        Some(supervisor_name.clone()),
+    )
+    .await;
+
+    let registered = registry::where_is(derived.cleanup_worker.clone()).is_some();
+
+    // Stopped before the assertion so that a failure cannot leave a real
+    // `0 */5 * * * *` cron ticking against a pool this test is about to drop.
+    if let Some(supervisor) = registry::where_is(supervisor_name) {
+        supervisor.stop(Some("test finished".to_string()));
+    }
+
+    assert!(
+        registered,
+        "the cleanup worker must start for delegation alone: the delivery backstop \
+         deletes nothing and must not inherit the retention half's opt-in"
+    );
+}
+
+/// Hand-stage a delegated `async` child of `origin_chat_id` whose result is
+/// recorded and still owed.
+///
+/// Written straight into the column rather than run through a dispatch: the
+/// sweep's whole reason to exist is the run whose own tail never got to finish,
+/// so what it must recover is a row, not a process.
+async fn stage_owed_delivery(
+    db: &DatabaseConnection,
+    owner_user_id: &str,
+    origin_chat_id: Uuid,
+) -> Uuid {
+    let now: DateTimeWithTimeZone = Utc::now().into();
+    let configuration = json!({
+        "provenance": {
+            "kind": "delegation",
+            "origin_chat_id": origin_chat_id,
+            "depth": 1,
+            "run_mode": "async",
+            "result_delivery": {
+                "state": "pending",
+                "delivery_id": Uuid::new_v4(),
+                "status": "failed",
+                "reason": "result_missing",
+                "attempts": 0,
+                "redeliveries": 0,
+                "sequence": 0,
+                "at": now,
+            },
+        },
+        "task": {
+            "scheduling": "silent",
+            "parent_tool_call_id": "call_staged",
+        },
+    });
+    insert_chat(db, owner_user_id, Some(configuration), now).await
+}
+
+async fn delivery_state_of(db: &DatabaseConnection, child_chat_id: Uuid) -> String {
+    chats::Entity::find_by_id(child_chat_id)
+        .one(db)
+        .await
+        .unwrap()
+        .expect("child should exist")
+        .assistant_configuration
+        .expect("configuration")["provenance"]["result_delivery"]["state"]
+        .as_str()
+        .expect("state")
+        .to_string()
+}
+
+/// The relocation, asserted on the tick rather than on the supervisor: the
+/// delivery backstop runs on a deployment that never opted into deleting data,
+/// and the retention half still does not.
+///
+/// `cleanup_enabled` defaults to `false`, so if the sweep sat behind it the
+/// backstop would be missing exactly where a stranded result is most likely to
+/// go unnoticed — which is every default deployment.
+///
+/// # Test Categories
+/// - `uses-db`
+///
+/// # Test Behavior
+/// Runs one tick with `cleanup_enabled = false` and asserts the owed result was
+/// delivered while an old archived chat survived, then one with it `true` and
+/// asserts the archived chat was finally deleted.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn cleanup_tick_sweeps_without_cleanup_enabled_and_archives_with_it(pool: Pool<Postgres>) {
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+    let me = erato::models::user::get_or_create_user(&db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .unwrap();
+    let me_id = me.id.to_string();
+
+    let long_ago: DateTimeWithTimeZone = (Utc::now() - Duration::days(40)).into();
+    let old_archived = insert_chat(&db, &me_id, None, long_ago).await;
+    set_chat_columns(
+        &db,
+        old_archived,
+        chats::ActiveModel {
+            archived_at: ActiveValue::Set(Some(long_ago)),
+            ..Default::default()
+        },
+    )
+    .await;
+
+    let origin = insert_chat(&db, &me_id, None, Utc::now().into()).await;
+    let child = stage_owed_delivery(&db, &me_id, origin).await;
+
+    let mut args = CleanupWorkerArgs {
+        db: db.clone(),
+        cleanup_enabled: false,
+        cleanup_archived_max_age_days: 30,
+        // Off: the retention pass must not be what decides this test.
+        delegated_run_auto_archive_after_days: 0,
+        generation_stale_after_secs: 30,
+        result_max_chars: 4000,
+    };
+    run_cleanup_tick(&args).await.expect("tick must not fail");
+
+    assert_eq!(
+        delivery_state_of(&db, child).await,
+        "delivered",
+        "the backstop must deliver a stranded result on a deployment that never \
+         opted into deleting data"
+    );
+    let delivered_rows = messages::Entity::find()
+        .filter(messages::Column::ChatId.eq(origin))
+        .all(&db)
+        .await
+        .unwrap();
+    assert_eq!(
+        delivered_rows.len(),
+        1,
+        "the origin must have received exactly one task result row"
+    );
+    assert!(
+        chats::Entity::find_by_id(old_archived)
+            .one(&db)
+            .await
+            .unwrap()
+            .is_some(),
+        "the retention half must stay behind its opt-in"
+    );
+
+    args.cleanup_enabled = true;
+    run_cleanup_tick(&args).await.expect("tick must not fail");
+    assert!(
+        chats::Entity::find_by_id(old_archived)
+            .one(&db)
+            .await
+            .unwrap()
+            .is_none(),
+        "with the opt-in set, the retention half must still run"
+    );
 }
