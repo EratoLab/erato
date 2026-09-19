@@ -10,6 +10,7 @@ use erato::config::{
     McpServerOauth2AuthenticationConfig, ModelSettings, PromptSourceSpecification,
     SecretConfigString,
 };
+use erato::db::entity::prelude::Messages;
 use erato::db::entity::{chat_file_uploads, chats, file_uploads};
 use erato::models::message::{GenerationInputMessages, GenerationParameters};
 use erato::models::user::get_or_create_user;
@@ -8311,4 +8312,664 @@ async fn test_always_allow_bypasses_a_policy_ask_tool(pool: Pool<Postgres>) {
         generation_state(&db, chat_id).await.as_deref(),
         Some("completed")
     );
+}
+
+// ---------------------------------------------------------------------------
+// Re-anchoring submits onto system-delivered rows (ERMAIN-778)
+// ---------------------------------------------------------------------------
+
+/// Insert a message row directly, so a delivered task result and its reaction
+/// can be staged without running the delivery path (which does not exist yet).
+async fn seed_row(
+    db: &sea_orm::DatabaseConnection,
+    chat_id: Uuid,
+    previous: Option<Uuid>,
+    role: &str,
+    input_parameters: Option<Value>,
+    generation_parameters: Option<Value>,
+) -> Uuid {
+    use erato::db::entity::messages;
+    let id = Uuid::new_v4();
+    messages::ActiveModel {
+        id: ActiveValue::Set(id),
+        chat_id: ActiveValue::Set(chat_id),
+        previous_message_id: ActiveValue::Set(previous),
+        is_message_in_active_thread: ActiveValue::Set(true),
+        raw_message: ActiveValue::Set(json!({
+            "role": role,
+            "content": [{ "content_type": "text", "text": "x" }],
+        })),
+        input_parameters: ActiveValue::Set(input_parameters),
+        generation_parameters: ActiveValue::Set(generation_parameters),
+        ..Default::default()
+    }
+    .insert(db)
+    .await
+    .expect("Failed to seed message")
+    .id
+}
+
+fn task_result_input_parameters() -> Value {
+    json!({
+        "task_result": {
+            "delivery_id": Uuid::new_v4(),
+            "child_chat_id": Uuid::new_v4(),
+            "result_message_id": Uuid::new_v4(),
+            "status": "completed",
+            "scheduling": "when_idle",
+            "sequence": 0,
+        }
+    })
+}
+
+async fn seed_origin_chat(db: &sea_orm::DatabaseConnection) -> Uuid {
+    let user = get_or_create_user(db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    chats::ActiveModel {
+        owner_user_id: ActiveValue::Set(user.id.to_string()),
+        ..Default::default()
+    }
+    .insert(db)
+    .await
+    .expect("Failed to insert chat")
+    .id
+}
+
+/// Nothing below the anchor, or only the user's own rows: leave it alone.
+///
+/// Branching below a user's own later turn is a feature, not a bug to fix.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn resolving_the_delivered_tip_is_a_noop_without_system_rows(pool: Pool<Postgres>) {
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool.clone());
+    let chat_id = seed_origin_chat(&db).await;
+
+    let user_row = seed_row(&db, chat_id, None, "user", None, None).await;
+    let assistant_row = seed_row(&db, chat_id, Some(user_row), "assistant", None, None).await;
+
+    assert_eq!(
+        erato::models::message::resolve_system_delivered_tip(&db, &chat_id, &assistant_row)
+            .await
+            .expect("resolves"),
+        None,
+        "an anchor with nothing below it must not move"
+    );
+
+    // A row the user wrote below the anchor also stops the walk.
+    seed_row(&db, chat_id, Some(assistant_row), "user", None, None).await;
+    assert_eq!(
+        erato::models::message::resolve_system_delivered_tip(&db, &chat_id, &assistant_row)
+            .await
+            .expect("resolves"),
+        None,
+        "a user-authored row below the anchor must not be walked past"
+    );
+}
+
+/// The walk stops on the deepest system row, through several deliveries.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn resolving_the_delivered_tip_walks_past_results_and_reactions(pool: Pool<Postgres>) {
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool.clone());
+    let chat_id = seed_origin_chat(&db).await;
+    let reaction_params = json!({ "initiator": "task_result" });
+
+    let user_row = seed_row(&db, chat_id, None, "user", None, None).await;
+    let anchor = seed_row(&db, chat_id, Some(user_row), "assistant", None, None).await;
+
+    // A delivered result with no reaction yet is itself a legal anchor: that
+    // is the steady state for a `silent` delivery.
+    let tr1 = seed_row(
+        &db,
+        chat_id,
+        Some(anchor),
+        "user",
+        Some(task_result_input_parameters()),
+        None,
+    )
+    .await;
+    assert_eq!(
+        erato::models::message::resolve_system_delivered_tip(&db, &chat_id, &anchor)
+            .await
+            .expect("resolves"),
+        Some(tr1)
+    );
+
+    let a2 = seed_row(
+        &db,
+        chat_id,
+        Some(tr1),
+        "assistant",
+        None,
+        Some(reaction_params.clone()),
+    )
+    .await;
+    let tr2 = seed_row(
+        &db,
+        chat_id,
+        Some(a2),
+        "user",
+        Some(task_result_input_parameters()),
+        None,
+    )
+    .await;
+    let a3 = seed_row(
+        &db,
+        chat_id,
+        Some(tr2),
+        "assistant",
+        None,
+        Some(reaction_params),
+    )
+    .await;
+
+    assert_eq!(
+        erato::models::message::resolve_system_delivered_tip(&db, &chat_id, &anchor)
+            .await
+            .expect("resolves"),
+        Some(a3),
+        "the walk must reach the deepest system row, not the first"
+    );
+}
+
+/// A REGENERATED reaction carries no `initiator` marker, and must still be
+/// walked past.
+///
+/// Regenerating rebuilds the turn's generation parameters through the ordinary
+/// request path, which writes no initiator. Keying on the marker alone stops
+/// the walk one row short, and the submit then deactivates the answer the user
+/// just pressed regenerate for. Mutation: drop the
+/// `is_task_result AND role = 'assistant'` clause from the CTE's recursive
+/// term and this fails.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn resolving_the_delivered_tip_walks_past_a_regenerated_reaction(pool: Pool<Postgres>) {
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool.clone());
+    let chat_id = seed_origin_chat(&db).await;
+
+    let user_row = seed_row(&db, chat_id, None, "user", None, None).await;
+    let anchor = seed_row(&db, chat_id, Some(user_row), "assistant", None, None).await;
+    let tr1 = seed_row(
+        &db,
+        chat_id,
+        Some(anchor),
+        "user",
+        Some(task_result_input_parameters()),
+        None,
+    )
+    .await;
+    // No `initiator`: exactly what regenerate writes.
+    let regenerated = seed_row(
+        &db,
+        chat_id,
+        Some(tr1),
+        "assistant",
+        None,
+        Some(json!({ "generation_chat_provider_id": "mock" })),
+    )
+    .await;
+
+    assert_eq!(
+        erato::models::message::resolve_system_delivered_tip(&db, &chat_id, &anchor)
+            .await
+            .expect("resolves"),
+        Some(regenerated),
+        "a regenerated reaction has no initiator marker and would otherwise be branched away"
+    );
+}
+
+/// The walk stops expanding at a user's own turn.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn resolving_the_delivered_tip_stops_at_a_user_turn(pool: Pool<Postgres>) {
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool.clone());
+    let chat_id = seed_origin_chat(&db).await;
+
+    let user_row = seed_row(&db, chat_id, None, "user", None, None).await;
+    let anchor = seed_row(&db, chat_id, Some(user_row), "assistant", None, None).await;
+    let tr1 = seed_row(
+        &db,
+        chat_id,
+        Some(anchor),
+        "user",
+        Some(task_result_input_parameters()),
+        None,
+    )
+    .await;
+    let a2 = seed_row(
+        &db,
+        chat_id,
+        Some(tr1),
+        "assistant",
+        None,
+        Some(json!({ "initiator": "task_result" })),
+    )
+    .await;
+    let u2 = seed_row(&db, chat_id, Some(a2), "user", None, None).await;
+    seed_row(&db, chat_id, Some(u2), "assistant", None, None).await;
+
+    assert_eq!(
+        erato::models::message::resolve_system_delivered_tip(&db, &chat_id, &anchor)
+            .await
+            .expect("resolves"),
+        Some(a2),
+        "the walk must stop at the user's own later turn, branching it as today"
+    );
+}
+
+/// Submit through the real endpoint and prove the handler USES the walk.
+///
+/// The tests above pin `resolve_system_delivered_tip` itself; this one pins the
+/// wiring, which is a separate failure. Deleting the call in
+/// `run_message_submit_task` leaves every one of them green while a stale
+/// client silently branches away a delivered result.
+///
+/// Also pins the gate: with `delegation.tasks.enabled` off the anchor must not
+/// move, because the walk must not run in a deployment that never delivers.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn submit_reanchors_onto_a_delivered_task_result_only_when_enabled(pool: Pool<Postgres>) {
+    for tasks_enabled in [true, false] {
+        let (mut app_config, _mock) = setup_mock_llm_server(None).await;
+        app_config.delegation.tasks.enabled = tasks_enabled;
+        let app_state = test_app_state(app_config, pool.clone()).await;
+        let db = app_state.db.clone();
+
+        let user = get_or_create_user(&db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+            .await
+            .expect("Failed to create user");
+        let chat_id = chats::ActiveModel {
+            owner_user_id: ActiveValue::Set(user.id.to_string()),
+            ..Default::default()
+        }
+        .insert(&db)
+        .await
+        .expect("Failed to insert chat")
+        .id;
+
+        // U1 -> A1 (the row a stale client last saw) -> TR1 -> A2
+        let u1 = seed_row(&db, chat_id, None, "user", None, None).await;
+        let a1 = seed_row(&db, chat_id, Some(u1), "assistant", None, None).await;
+        let tr1 = seed_row(
+            &db,
+            chat_id,
+            Some(a1),
+            "user",
+            Some(task_result_input_parameters()),
+            None,
+        )
+        .await;
+        let a2 = seed_row(
+            &db,
+            chat_id,
+            Some(tr1),
+            "assistant",
+            None,
+            Some(json!({ "initiator": "task_result" })),
+        )
+        .await;
+
+        let app: Router = router(app_state.clone())
+            .split_for_parts()
+            .0
+            .with_state(app_state);
+        let server =
+            TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+        let response = server
+            .post("/api/v1beta/me/messages/submitstream")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&json!({
+                "user_message": "a reply from a client that has not caught up",
+                "previous_message_id": a1.to_string(),
+            }))
+            .await;
+        response.assert_status_ok();
+
+        let saved: Value = parse_sse_events(&response)
+            .into_iter()
+            .find(|event| event.event_type == "user_message_saved")
+            .map(|event| {
+                serde_json::from_str(&event.data).expect("user_message_saved data is JSON")
+            })
+            .expect("expected a user_message_saved event");
+
+        let reported_anchor = saved["message"]["previous_message_id"]
+            .as_str()
+            .expect("the saved user message must report its anchor");
+
+        if tasks_enabled {
+            assert_eq!(
+                reported_anchor,
+                a2.to_string(),
+                "the submit must be re-anchored below the delivered result and its reaction"
+            );
+            for (label, id) in [("task result", tr1), ("reaction", a2)] {
+                let row = Messages::find_by_id(id)
+                    .one(&db)
+                    .await
+                    .expect("query")
+                    .expect("row");
+                assert!(
+                    row.is_message_in_active_thread,
+                    "the {label} row must stay on the active thread"
+                );
+            }
+        } else {
+            assert_eq!(
+                reported_anchor,
+                a1.to_string(),
+                "with the gate off the client's own anchor must be honoured exactly as before"
+            );
+        }
+    }
+}
+
+/// Seed a delegated child of `origin_chat_id` whose result was already
+/// delivered into the `delivered_into` row of that origin chat.
+///
+/// Hand-written because nothing in the tree writes a `result_delivery` yet —
+/// the writer is ERMAIN-780 — so the reconciler below has no other way to meet
+/// a realistic row. Built through `ChatConfiguration` rather than raw JSON, so
+/// what is stored is the shape the writer will actually produce.
+async fn seed_delivered_child(
+    db: &sea_orm::DatabaseConnection,
+    origin_chat_id: Uuid,
+    origin_message_id: Uuid,
+    delivered_into: Uuid,
+    redeliveries: u32,
+) -> Uuid {
+    use erato::models::chat::{
+        ChatConfiguration, ChatProvenance, ChatProvenanceKind, ResultDelivery, ResultDeliveryState,
+    };
+
+    let user = get_or_create_user(db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let configuration = ChatConfiguration {
+        assistant_id: None,
+        provenance: Some(ChatProvenance {
+            kind: ChatProvenanceKind::Delegation,
+            origin_chat_id: Some(origin_chat_id),
+            origin_message_id: Some(origin_message_id),
+            origin_assistant_id: None,
+            rebase_cutoff: None,
+            depth: 1,
+            adopted_at: None,
+            legacy_expected_output: None,
+            legacy_constraints: None,
+            run_mode: None,
+            result_delivery: Some(ResultDelivery {
+                state: ResultDeliveryState::Delivered,
+                delivery_id: Uuid::new_v4(),
+                result_message_id: Some(Uuid::new_v4()),
+                status: "completed".to_string(),
+                reason: None,
+                claimed_by: Some("a-replica-that-has-gone".to_string()),
+                claimed_at: Some(Utc::now().into()),
+                message_id: Some(delivered_into),
+                reaction_message_id: Some(Uuid::new_v4()),
+                attempts: 1,
+                redeliveries,
+                redelivery_of: None,
+                sequence: redeliveries,
+                at: Utc::now().into(),
+            }),
+        }),
+        task: None,
+    };
+
+    chats::ActiveModel {
+        owner_user_id: ActiveValue::Set(user.id.to_string()),
+        assistant_configuration: ActiveValue::Set(Some(
+            configuration.to_json().expect("configuration serializes"),
+        )),
+        ..Default::default()
+    }
+    .insert(db)
+    .await
+    .expect("Failed to insert delegated child chat")
+    .id
+}
+
+/// Take a row off the active thread, the way a branch write does.
+async fn deactivate_row(db: &sea_orm::DatabaseConnection, message_id: Uuid) {
+    let row = Messages::find_by_id(message_id)
+        .one(db)
+        .await
+        .expect("query")
+        .expect("row");
+    let mut active: erato::db::entity::messages::ActiveModel = row.into();
+    active.is_message_in_active_thread = ActiveValue::Set(false);
+    active.update(db).await.expect("row deactivates");
+}
+
+async fn read_result_delivery(db: &sea_orm::DatabaseConnection, chat_id: Uuid) -> Value {
+    let row = chats::Entity::find_by_id(chat_id)
+        .one(db)
+        .await
+        .expect("query")
+        .expect("chat");
+    row.assistant_configuration.expect("configuration")["provenance"]["result_delivery"].clone()
+}
+
+/// The first branch re-queues a delivered result; a second one closes it.
+///
+/// `requeue_or_supersede_branched_deliveries` and both its call sites are
+/// deletable with the whole suite green today, because nothing writes a
+/// `result_delivery` until ERMAIN-780 lands. That leaves the requeue/supersede
+/// branch, the `redeliveries = 0` cap, the `NOT EXISTS` recheck and the
+/// `RETURNING` classification entirely unexercised. Hand-seeded here so the
+/// rule is pinned before its writer arrives rather than after.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_branched_delivery_requeues_once_and_is_superseded_after_that(pool: Pool<Postgres>) {
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool.clone());
+    let origin_chat_id = seed_origin_chat(&db).await;
+
+    // U1 -> A1 -> TR1 (the delivered result) -> A2 (the reaction to it)
+    let u1 = seed_row(&db, origin_chat_id, None, "user", None, None).await;
+    let a1 = seed_row(&db, origin_chat_id, Some(u1), "assistant", None, None).await;
+    let tr1 = seed_row(
+        &db,
+        origin_chat_id,
+        Some(a1),
+        "user",
+        Some(task_result_input_parameters()),
+        None,
+    )
+    .await;
+    let a2 = seed_row(
+        &db,
+        origin_chat_id,
+        Some(tr1),
+        "assistant",
+        None,
+        Some(json!({ "initiator": "task_result" })),
+    )
+    .await;
+
+    let first_branch = seed_delivered_child(&db, origin_chat_id, u1, tr1, 0).await;
+    let already_redelivered = seed_delivered_child(&db, origin_chat_id, u1, tr1, 1).await;
+
+    // A third child on its OWN origin turn, which the branch write also removes.
+    // Both children above hang off `u1`, and `u1` stays on the active thread, so
+    // without this row the origin-liveness half of `requeue_cond` is never the
+    // discriminator — the requeue/supersede split is decided purely by
+    // `redeliveries`. Delete the whole `AND EXISTS (… om.is_message_in_active_thread)`
+    // clause and every other assertion here still holds, while in production a
+    // result from a turn the user rewrote is re-delivered onto the new branch
+    // instead of being closed as superseded.
+    let u2 = seed_row(&db, origin_chat_id, Some(a2), "user", None, None).await;
+    let branched_origin = seed_delivered_child(&db, origin_chat_id, u2, tr1, 0).await;
+
+    // While the result is still on the active thread there is nothing to fix.
+    let quiet = erato::models::chat::requeue_or_supersede_branched_deliveries(&db, &origin_chat_id)
+        .await
+        .expect("reconciles");
+    assert!(
+        quiet.requeued.is_empty() && quiet.superseded.is_empty(),
+        "a delivery still on the active thread must be left alone"
+    );
+
+    // The branch write: everything below A1 leaves the active thread.
+    for row in [tr1, a2, u2] {
+        deactivate_row(&db, row).await;
+    }
+
+    let outcome =
+        erato::models::chat::requeue_or_supersede_branched_deliveries(&db, &origin_chat_id)
+            .await
+            .expect("reconciles");
+    assert_eq!(
+        outcome.requeued,
+        vec![first_branch],
+        "a result branched away for the first time must be queued again"
+    );
+    let mut superseded_ids = outcome.superseded.clone();
+    superseded_ids.sort();
+    let mut expected_superseded = vec![already_redelivered, branched_origin];
+    expected_superseded.sort();
+    assert_eq!(
+        superseded_ids, expected_superseded,
+        "both a spent redelivery budget and a dead origin turn close a delivery"
+    );
+
+    let requeued = read_result_delivery(&db, first_branch).await;
+    assert_eq!(requeued["state"], "pending");
+    assert_eq!(requeued["redeliveries"], 1);
+    assert_eq!(
+        requeued["sequence"], 1,
+        "the next delivery is the second one the reader sees"
+    );
+    assert!(
+        requeued["message_id"].is_null(),
+        "the row that was branched away must be forgotten, or the recheck would skip it forever"
+    );
+    assert!(
+        requeued["reaction_message_id"].is_null(),
+        "its reaction went with it"
+    );
+    assert!(
+        requeued["claimed_by"].is_null() && requeued["claimed_at"].is_null(),
+        "a requeued delivery is unclaimed, or no replica could take it"
+    );
+    assert!(
+        requeued["redelivery_of"].is_string(),
+        "the attempt being replaced is recorded"
+    );
+
+    // The discriminator: this one still had its full redelivery budget, so the
+    // only thing that can have closed it is that its origin turn is gone.
+    let branched = read_result_delivery(&db, branched_origin).await;
+    assert_eq!(branched["state"], "superseded");
+    assert_eq!(branched["reason"], "origin_branched");
+    assert_eq!(
+        branched["redeliveries"], 0,
+        "closed by the rewritten origin turn, not by a spent redelivery budget"
+    );
+
+    let superseded = read_result_delivery(&db, already_redelivered).await;
+    assert_eq!(superseded["state"], "superseded");
+    assert_eq!(superseded["reason"], "origin_branched");
+    assert_eq!(
+        superseded["message_id"].as_str(),
+        Some(tr1.to_string().as_str()),
+        "a superseded record keeps pointing at what it delivered, for diagnosis"
+    );
+}
+
+/// The regenerate route must actually call the reconciler.
+///
+/// The test above pins the SQL. Deleting the call site leaves it green while a
+/// real branch strands the delivery forever, so the wiring is its own test:
+/// one child, one real regenerate, one state change.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_regenerate_reconciles_the_delivery_it_branched_away(pool: Pool<Postgres>) {
+    let (mut app_config, _mock) = setup_mock_llm_server(None).await;
+    app_config.delegation.tasks.enabled = true;
+    let app_state = test_app_state(app_config, pool).await;
+    let db = app_state.db.clone();
+
+    let _user = get_or_create_user(&db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let submit = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "the turn a task was dispatched from" }))
+        .await;
+    submit.assert_status_ok();
+
+    let assistant_message_id = parse_sse_events(&submit)
+        .iter()
+        .find_map(|event| {
+            if let Ok(json) = serde_json::from_str::<Value>(&event.data)
+                && json["message_type"] == "assistant_message_completed"
+            {
+                return json["message_id"]
+                    .as_str()
+                    .and_then(|id| Uuid::parse_str(id).ok());
+            }
+            None
+        })
+        .expect("Expected assistant_message_completed event with message_id");
+
+    let assistant_row = Messages::find_by_id(assistant_message_id)
+        .one(&db)
+        .await
+        .expect("query")
+        .expect("the assistant row");
+    let origin_chat_id = assistant_row.chat_id;
+    let origin_message_id = assistant_row
+        .previous_message_id
+        .expect("the assistant row answers a user turn");
+
+    // The task's result landed below that answer, and was reacted to.
+    let tr1 = seed_row(
+        &db,
+        origin_chat_id,
+        Some(assistant_message_id),
+        "user",
+        Some(task_result_input_parameters()),
+        None,
+    )
+    .await;
+    seed_row(
+        &db,
+        origin_chat_id,
+        Some(tr1),
+        "assistant",
+        None,
+        Some(json!({ "initiator": "task_result" })),
+    )
+    .await;
+
+    let child = seed_delivered_child(&db, origin_chat_id, origin_message_id, tr1, 0).await;
+
+    let regenerate = server
+        .post("/api/v1beta/me/messages/regeneratestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "current_message_id": assistant_message_id.to_string() }))
+        .await;
+    regenerate.assert_status_ok();
+
+    assert!(
+        !Messages::find_by_id(tr1)
+            .one(&db)
+            .await
+            .expect("query")
+            .expect("the task result row")
+            .is_message_in_active_thread,
+        "the regenerate must have branched the delivered result away, or this test proves nothing"
+    );
+
+    let delivery = read_result_delivery(&db, child).await;
+    assert_eq!(
+        delivery["state"], "pending",
+        "the route must re-queue the delivery it just branched away"
+    );
+    assert_eq!(delivery["redeliveries"], 1);
 }
