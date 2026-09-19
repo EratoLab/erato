@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render } from "@testing-library/react";
+import { act, render } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
@@ -318,6 +318,118 @@ describe("GenerationStatusPoller effects", () => {
       </QueryClientProvider>,
     );
     expect(invalidationsFor(listingKey)).toBe(3);
+  });
+
+  it("refetches the open chat on the run-ended edge so a landed delivery is visible", () => {
+    // A delivery whose reaction failed writes a `task_result` row and starts
+    // no further generation, so `/me/generating` never mentions it again. The
+    // origin leaving the live set at the end of the delivery is the only
+    // signal left, and the react predicate can only see the row if the open
+    // chat's messages are refetched on it.
+    const messagesKey = chatMessagesQuery({
+      pathParams: { chatId: "origin" },
+    }).queryKey;
+    useGenerationStatusStore.getState().setAwaitingDelivery("origin", true);
+    useGenerationStatusStore.getState().setCurrentChatId("origin");
+
+    // 1. The delivery is running under the origin's own lease.
+    emit({ chats: [generatingEntry({ chat_id: "origin" })] });
+    const view = renderPoller();
+    const rerender = () =>
+      view.rerender(
+        <QueryClientProvider client={queryClient}>
+          <GenerationStatusPoller />
+        </QueryClientProvider>,
+      );
+    // The mount bootstraps the backstop, which also pulls the open chat.
+    expect(invalidationsFor(messagesKey)).toBe(1);
+
+    // 2. Inside the throttle window with nothing moving: no extra refetch.
+    vi.setSystemTime(new Date("2026-08-19T12:00:10.000Z"));
+    emit({ chats: [generatingEntry({ chat_id: "origin" })] });
+    rerender();
+    expect(invalidationsFor(messagesKey)).toBe(1);
+
+    // 3. The origin left the live set: the delivered row is on disk now.
+    emit({
+      chats: [
+        generatingEntry({
+          chat_id: "origin",
+          state: "completed",
+          ended_at: "2026-08-19T12:00:11.000Z",
+        }),
+      ],
+    });
+    rerender();
+    expect(invalidationsFor(messagesKey)).toBe(2);
+  });
+
+  it("refetches the open chat when its own delivery flag finally falls", () => {
+    // The run-ended gate above is armed by `delegated_runs_in_flight` and
+    // `deliver_task_result` clears that flag in the SAME transaction that
+    // appends the task result row — so the gate is armed only while there is
+    // nothing to fetch, and disarms the moment there is. The flag falling is
+    // therefore the only signal that means "the row is on disk now", and it
+    // arrives from whichever listing fetch happens to observe it, long after
+    // this poll may have been disabled.
+    const messagesKey = chatMessagesQuery({
+      pathParams: { chatId: "origin" },
+    }).queryKey;
+    const status = useGenerationStatusStore.getState();
+    status.setAwaitingDelivery("origin", true);
+    status.setCurrentChatId("origin");
+
+    emit({ chats: [] });
+    renderPoller();
+    // The mount's backstop pull, before anything has been delivered.
+    expect(invalidationsFor(messagesKey)).toBe(1);
+
+    act(() => {
+      useGenerationStatusStore
+        .getState()
+        .setAwaitingDelivery("origin", false);
+    });
+
+    expect(invalidationsFor(messagesKey)).toBe(2);
+  });
+
+  it("ignores a delivery settling for a chat the user is not looking at", () => {
+    const messagesKey = chatMessagesQuery({
+      pathParams: { chatId: "other" },
+    }).queryKey;
+    const status = useGenerationStatusStore.getState();
+    status.setAwaitingDelivery("other", true);
+    status.setCurrentChatId("origin");
+
+    emit({ chats: [] });
+    renderPoller();
+    const before = invalidationsFor(
+      chatMessagesQuery({ pathParams: { chatId: "origin" } }).queryKey,
+    );
+
+    act(() => {
+      useGenerationStatusStore.getState().setAwaitingDelivery("other", false);
+    });
+
+    expect(invalidationsFor(messagesKey)).toBe(0);
+    expect(
+      invalidationsFor(
+        chatMessagesQuery({ pathParams: { chatId: "origin" } }).queryKey,
+      ),
+    ).toBe(before);
+  });
+
+  it("does not refetch an open chat on the run-ended edge when none is open", () => {
+    const messagesKey = chatMessagesQuery({
+      pathParams: { chatId: "origin" },
+    }).queryKey;
+    useGenerationStatusStore.getState().setAwaitingDelivery("origin", true);
+
+    emit({ chats: [generatingEntry({ chat_id: "origin" })] });
+    renderPoller();
+
+    expect(invalidationsFor(recentChatsQuery({}).queryKey)).toBe(1);
+    expect(invalidationsFor(messagesKey)).toBe(0);
   });
 
   it("refetches the open chat once when a task-result turn lands in it", () => {

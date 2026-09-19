@@ -22,6 +22,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { getIdToken } from "@/auth/tokenStore";
 import { useChatHistory } from "@/hooks";
 import { BUDGET_QUERY_KEY } from "@/hooks/budget/useBudgetStatus";
+import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import {
   chatMessagesQuery as buildChatMessagesQuery,
   fetchChatMessages,
@@ -42,6 +43,7 @@ import { createLogger } from "@/utils/debugLogger";
 import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
 
 import { abortClientToolCalls } from "./clientToolExecutors";
+import { readConflictRefusal } from "./conflictRefusal";
 import { handleAssistantMessageStarted } from "./handlers/handleAssistantMessageStarted";
 import { handleChatCreated } from "./handlers/handleChatCreated";
 import { handleClientToolCall } from "./handlers/handleClientToolCall";
@@ -51,7 +53,13 @@ import { handleTextDelta } from "./handlers/handleTextDelta";
 import { handleToolCallProposed } from "./handlers/handleToolCallProposed";
 import { handleToolCallUpdate } from "./handlers/handleToolCallUpdate";
 import { handleUserMessageSaved } from "./handlers/handleUserMessageSaved";
+import { serverAttachKey } from "./serverAttachKey";
+import { useComposeSessionStore } from "./store/composeSessionStore";
 import { useGenerationStatusStore } from "./store/generationStatusStore";
+import {
+  useMessageQueueStore,
+  type QueuedMessageState,
+} from "./store/messageQueueStore";
 import {
   getStreamKey,
   NEW_CHAT_STREAM_KEY,
@@ -64,6 +72,7 @@ import {
   useChatHistoryStore,
 } from "./useChatHistory";
 import { useExplicitNavigation } from "./useExplicitNavigation";
+import { useReactToTaskResult } from "./useReactToTaskResult";
 
 import type {
   ActionFacetRequest,
@@ -279,6 +288,26 @@ export function useChatMessaging(
   const recentlyCompletedByKeyRef = useRef<Record<string, number>>({});
   const resumeAttemptsByKeyRef = useRef<Record<string, number>>({});
   const lastResumeAttemptedChatIdRef = useRef<string | null>(null);
+  /**
+   * Stream key whose refused submit is now watching a server-started turn.
+   *
+   * The submit lock itself is a ref (`isSubmittingByKeyRef`), so clearing it
+   * renders nothing — and `isPendingResponse` falling is precisely the edge
+   * the composer's queue drain arms on. This is the render-visible half of
+   * that lock for the handoff path: set when a 409 hands the turn over,
+   * cleared when the socket it handed to closes.
+   */
+  const [handoffSubmitKey, setHandoffSubmitKey] = useState<string | null>(null);
+  /**
+   * The server-started generation this client has already opened (or tried to
+   * open) a socket for. `force: true` switches off BOTH of
+   * `attemptResumeStream`'s own guards, and after this file's changes four
+   * things can force one for the same generation: entering the chat, the chat
+   * flipping to running underneath us, the `/react` trigger, and a 409
+   * `generation_running` on a submit. They all go through
+   * `attachToServerGeneration`, which is the only writer of this ref.
+   */
+  const serverAttachKeyRef = useRef<string | null>(null);
   const isUnmountingRef = useRef(false); // Track if we're unmounting to skip unnecessary refetch
   const [newlyCreatedChatId, setNewlyCreatedChatId] = useState<string | null>(
     null,
@@ -1219,6 +1248,30 @@ export function useChatMessaging(
     ],
   );
 
+  /**
+   * A submit whose 409 handed its turn to a resume socket keeps the submit
+   * lock, so the composer stays disabled for the turn it is now watching. The
+   * socket closing (or failing to open) is what ends that wait — and the
+   * store write is also what produces the falling edge of `isPendingResponse`
+   * that arms the composer's queue drain.
+   *
+   * A no-op for every other resume: in those paths the submit lock is already
+   * clear by the time a resume socket is opened.
+   */
+  const releaseHandedOffSubmit = useCallback(
+    (resumeStreamKey: string) => {
+      if (!isSubmittingForKey(resumeStreamKey)) {
+        return;
+      }
+      setSubmittingForKey(resumeStreamKey, false);
+      setHandoffSubmitKey((current) =>
+        current === resumeStreamKey ? null : current,
+      );
+      resetStreaming(resumeStreamKey);
+    },
+    [isSubmittingForKey, resetStreaming, setSubmittingForKey],
+  );
+
   const attemptResumeStream = useCallback(
     (options: {
       reason: string;
@@ -1321,6 +1374,7 @@ export function useChatMessaging(
 
             setSSECleanupForKey(resumeStreamKey, null);
             setSSEAbortCallback(null, resumeStreamKey);
+            releaseHandedOffSubmit(resumeStreamKey);
             // Not gated on stillStreaming: the placeholder can leak past the
             // point where streaming state was already reset, and clearing is
             // idempotent and scoped to this stream's chat.
@@ -1343,6 +1397,7 @@ export function useChatMessaging(
             );
             setSSECleanupForKey(resumeStreamKey, null);
             setSSEAbortCallback(null, resumeStreamKey);
+            releaseHandedOffSubmit(resumeStreamKey);
             // Not gated on stillStreaming: by the time a resume socket
             // closes normally, streaming state is usually already reset, and
             // a placeholder leaked earlier in the stream would otherwise
@@ -1379,11 +1434,138 @@ export function useChatMessaging(
       newlyCreatedChatId,
       platform,
       processStreamEvent,
+      releaseHandedOffSubmit,
       resetStreaming,
       setError,
       setSSEAbortCallback,
       setSSECleanupForKey,
       streamKey,
+    ],
+  );
+
+  /**
+   * The one door every forced attach to a generation this client did not
+   * start goes through.
+   *
+   * `force: true` disables both of `attemptResumeStream`'s own guards, so each
+   * forced caller would otherwise need its own — and three of them firing for
+   * the same generation would open three sockets. The live-connection check is
+   * the primary guard; the key ref only stops a repeating trigger from
+   * re-entering during the window before a socket has registered its cleanup.
+   *
+   * `dedupe: false` is for one-shot, user-initiated callers (a refused submit):
+   * a second refusal is a second intent, not a repeat of the first.
+   */
+  const attachToServerGeneration = useCallback(
+    (options: {
+      reason: string;
+      chatId: string;
+      startedAt?: string | null;
+      dedupe?: boolean;
+      /**
+       * Opens the socket and reports whether it did. Defaults to a forced
+       * resumestream; the `/react` trigger passes its own so that it takes
+       * this same guard rather than inventing a second one.
+       */
+      open?: (chatId: string) => boolean;
+    }) => {
+      const { dedupe = true, open } = options;
+      const key = serverAttachKey(options.chatId, options.startedAt);
+      if (dedupe && serverAttachKeyRef.current === key) {
+        return false;
+      }
+      // `getStreamKey(chatId)` is the same lookup `attemptResumeStream` does
+      // for its own non-forced guard, and the same one the enter-chat effect
+      // used to do inline.
+      if (
+        useMessagingStore.getState().sseAbortCallbacksByKey[
+          getStreamKey(options.chatId)
+        ] !== undefined
+      ) {
+        return false;
+      }
+      serverAttachKeyRef.current = key;
+      return open
+        ? open(options.chatId)
+        : attemptResumeStream({
+            reason: options.reason,
+            chatIdHint: options.chatId,
+            force: true,
+          });
+    },
+    [attemptResumeStream],
+  );
+
+  /**
+   * A `409 generation_running`: someone else's turn — usually a delivered task
+   * result's reaction — holds this chat's lease. Attach to it instead of
+   * erroring, and hand the refused draft to the composer's queue so it sends
+   * when that turn ends.
+   *
+   * No `startedAt`. The 409 body's own is unreadable (`started_at?: null |
+   * undefined` in the generated type), and the status store's is worse than
+   * useless here: `sendMessage` seeds `running` with the CLIENT clock just
+   * before the POST that was refused, so at this point the store holds this
+   * tab's submit instant, not the holding generation's start. `dedupe: false`
+   * because a second refusal is a second intent, and because the `:enter` key
+   * this produces is the one the enter-chat attach already claimed.
+   *
+   * The bridge to the composer is `resolveSessionId`, not the chat id: the
+   * queue is keyed by `composeSessionId` (so it survives the new-chat
+   * null->real-id rename), and that lookup is idempotent per chat key, so the
+   * hook can resolve the very session `ChatInput` is using. The existing
+   * arm/drain effects then do the rest — there is no second drain here.
+   */
+  const handleGenerationRunningRefusal = useCallback(
+    (
+      refusedChatId: string,
+      handoff?: {
+        streamKeyForDraft: string;
+        draft: QueuedMessageState;
+        optimisticMessageId: string;
+      },
+    ): boolean => {
+      if (handoff) {
+        // The refused socket registered its cleanup synchronously when
+        // `createSSEConnection` returned; this 409 came back later, on the
+        // detached fetch. Clear the slots first or the attach guard reads the
+        // dead submit's callback and opens nothing.
+        setSSECleanupForKey(handoff.streamKeyForDraft, null);
+        setSSEAbortCallback(null, handoff.streamKeyForDraft);
+      }
+      const attached = attachToServerGeneration({
+        reason: "409-generation-running",
+        chatId: refusedChatId,
+        dedupe: false,
+      });
+      if (!attached) {
+        return false;
+      }
+      if (handoff) {
+        setHandoffSubmitKey(handoff.streamKeyForDraft);
+        useMessageQueueStore
+          .getState()
+          .setQueued(
+            useComposeSessionStore.getState().resolveSessionId(refusedChatId),
+            handoff.draft,
+          );
+        // The optimistic row was never saved: the send was refused before it
+        // reached the database. Leaving it would show the draft twice — once
+        // as a ghost, once when the queue drains it.
+        removeUserMessages(
+          [handoff.optimisticMessageId],
+          handoff.streamKeyForDraft,
+        );
+        resetStreaming(handoff.streamKeyForDraft);
+      }
+      return true;
+    },
+    [
+      attachToServerGeneration,
+      removeUserMessages,
+      resetStreaming,
+      setSSEAbortCallback,
+      setSSECleanupForKey,
     ],
   );
 
@@ -1393,22 +1575,76 @@ export function useChatMessaging(
       return;
     }
 
+    // Kept as the "have we tried this chat at all" latch: it is what makes
+    // entering a chat a one-shot, independent of which generation (if any) is
+    // running. The attach key cannot do that job — on enter we do not know
+    // the generation, so its key is `${chatId}:enter` for every visit.
     if (lastResumeAttemptedChatIdRef.current === chatId) {
       return;
     }
     lastResumeAttemptedChatIdRef.current = chatId;
 
-    const store = useMessagingStore.getState();
-    const hasExistingConnection = !!store.sseAbortCallbacksByKey[chatId];
-    if (hasExistingConnection) {
+    attachToServerGeneration({ reason: "enter-chat", chatId });
+  }, [attachToServerGeneration, chatId]);
+
+  /**
+   * A generation this client did not start — a delivered task result's
+   * reaction turn, or the same chat running in another tab — becomes visible
+   * here only through the generation-status store, which the poller feeds.
+   * Attach so its tokens stream into the open conversation too.
+   */
+  const openChatGenerationStatus = useGenerationStatusStore((state) =>
+    chatId ? state.statusByChatId[chatId] : undefined,
+  );
+
+  useEffect(() => {
+    if (!chatId) {
       return;
     }
-    void attemptResumeStream({
-      reason: "enter-chat",
-      chatIdHint: chatId,
-      force: true,
+    // Only "running". A parked chat reports `generation_ended_at` as its
+    // `started_at` (the parked-at moment, not the generation's start), and
+    // there is nothing streaming to attach to anyway.
+    if (openChatGenerationStatus?.kind !== "running") {
+      return;
+    }
+    // This tab's own send seeds `running` BEFORE its POST goes out, and
+    // registers the socket's cleanup only after `createSSEConnection` returns
+    // — with an awaited teardown delay in between. In that window the store
+    // says running and no cleanup is registered yet, so the connection
+    // pre-check would wave us through and we would open a second socket for
+    // our own turn. `isSubmittingForKey` is set before the seed and cleared
+    // only when the turn ends, so it covers exactly that window.
+    if (isSubmittingForKey(getStreamKey(chatId))) {
+      return;
+    }
+    attachToServerGeneration({
+      reason: "server-attach",
+      chatId,
+      startedAt: openChatGenerationStatus.startedAt,
     });
-  }, [attemptResumeStream, chatId]);
+  }, [
+    attachToServerGeneration,
+    chatId,
+    isSubmittingForKey,
+    openChatGenerationStatus,
+  ]);
+
+  useReactToTaskResult({
+    chatId,
+    platform,
+    messages,
+    messageOrder,
+    processStreamEvent,
+    attachToServerGeneration,
+    setSSECleanupForKey,
+    setSSEAbortCallback,
+    // The reaction socket streams into this chat like any other turn, so it
+    // owes the same tail: nothing else in this file resets streaming state for
+    // a socket it did not open itself.
+    clearPendingChat,
+    handleRefetchAndClear,
+    onGenerationRunningRefusal: handleGenerationRunningRefusal,
+  });
 
   // Find the most recent assistant message ID, including temporary ones
   const findMostRecentAssistantMessageId = useCallback(() => {
@@ -1664,6 +1900,54 @@ export function useChatMessaging(
               if (resumed) {
                 logger.warn(
                   "[DEBUG_STREAMING] SSE onError: attempted resumestream instead of resetting active stream.",
+                );
+                return;
+              }
+            }
+
+            // A 409 `generation_running` arrives BEFORE any streaming starts,
+            // so the resume branch above is skipped and the refusal would fall
+            // straight through to a red error. It is not an error: another
+            // turn — usually a delivery's reaction — holds this chat's lease.
+            // Attach to it and queue the draft instead.
+            //
+            // Only the composer path is wired. The edit, regenerate and
+            // facet streams have structurally identical `onError`s, but they
+            // carry no composer draft to hand off, so attaching there would
+            // swallow the error and leave the user's edit silently undone.
+            const refusal = readConflictRefusal(connectionError);
+            const refusedFiles = (inputFileIds ?? []).map((fileId) =>
+              useFileUploadStore
+                .getState()
+                .uploadedFiles.find((file) => file.id === fileId),
+            );
+            if (
+              refusal?.status === 409 &&
+              refusal.code === "generation_running" &&
+              effectiveChatIdForRequest !== undefined &&
+              // An attachment we can no longer name would be dropped from the
+              // queued draft. Better a visible error the user can retry than
+              // a silently shortened message.
+              refusedFiles.every((file) => file !== undefined)
+            ) {
+              const handed = handleGenerationRunningRefusal(
+                effectiveChatIdForRequest,
+                {
+                  streamKeyForDraft: activeStreamKey,
+                  optimisticMessageId: userMessage.id,
+                  draft: {
+                    message: content,
+                    attachedFiles: refusedFiles.filter(
+                      (file) => file !== undefined,
+                    ),
+                    mentionedAssistants: mentionedAssistants ?? [],
+                    ...(delegationRunMode ? { delegationRunMode } : {}),
+                  },
+                },
+              );
+              if (handed) {
+                logger.warn(
+                  "[DEBUG_STREAMING] SSE onError: the chat's lease is held elsewhere; attached to that turn and queued the draft.",
                 );
                 return;
               }
@@ -2475,6 +2759,7 @@ export function useChatMessaging(
   // This is different from isStreaming which only becomes true after the first chunk arrives
   const isPendingResponse =
     isSubmittingForKey(streamKey) ||
+    handoffSubmitKey === streamKey ||
     streaming.isStreaming ||
     streaming.isFinalizing;
 
