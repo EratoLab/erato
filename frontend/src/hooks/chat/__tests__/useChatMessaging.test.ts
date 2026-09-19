@@ -725,6 +725,55 @@ describe("useChatMessaging", () => {
       );
     });
 
+    it("does not let an abandoned branch's row stand in for the thread tip", async () => {
+      // `useReactToTaskResult` reads the LAST row and applies no active-thread
+      // filter of its own, because both ingestion paths into the message
+      // record already drop `is_message_in_active_thread === false`. That is a
+      // guarantee this file makes and the trigger consumes, so it is pinned
+      // here rather than restated there: an edited-away branch can easily
+      // carry a later `created_at` than the delivered result, and if one of
+      // those rows reached the record it would become the tip and the reaction
+      // would never be asked for.
+      resetReactAttemptsForTest();
+      const byUrl = captureSse();
+      withMessages(mockMessages);
+
+      const { rerender } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/resumestream"].onClose();
+      });
+      mockCreateSSEConnection.mockClear();
+
+      withMessages([
+        ...mockMessages,
+        deliveredTip,
+        {
+          ...deliveredTip,
+          id: "abandoned-1",
+          role: "assistant",
+          content: [
+            { content_type: "text" as const, text: "An edited-away reply" },
+          ],
+          created_at: "2023-01-01T12:09:00.000Z",
+          updated_at: "2023-01-01T12:09:00.000Z",
+          is_message_in_active_thread: false,
+          task_result: undefined,
+        },
+      ]);
+      await act(async () => {
+        rerender();
+      });
+
+      expect(mockCreateSSEConnection).toHaveBeenCalledWith(
+        "/api/v1beta/me/chats/chat1/react",
+        expect.objectContaining({
+          body: JSON.stringify({ task_result_message_id: "delivered-1" }),
+        }),
+      );
+    });
+
     it("attaches and queues the draft when the chat's lease is held elsewhere", async () => {
       resetReactAttemptsForTest();
       const byUrl = captureSse();
