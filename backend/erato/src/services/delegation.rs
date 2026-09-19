@@ -1798,6 +1798,7 @@ pub(crate) async fn launch_delegation(
         legacy_constraints: None,
         run_mode: (run.run_mode != ProvenanceRunMode::Wait).then_some(run.run_mode),
         result_delivery: None,
+        retry_of: None,
     };
     // Every field is written explicitly rather than spread from `default()`:
     // the struct grows as later parts of the level land, and a spread would
