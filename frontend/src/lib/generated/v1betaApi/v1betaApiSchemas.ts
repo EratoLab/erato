@@ -1576,6 +1576,7 @@ export type GeneratingChat = {
    * @format date-time
    */
   ended_at?: string;
+  initiator?: GenerationInitiator;
   /**
    * When the generation started
    *
@@ -2325,6 +2326,13 @@ export type RecentChat = {
    * @example completed
    */
   delegated_run_outcome?: string;
+  /**
+   * Whether any async delegated run spawned from this chat is still owed
+   * back to it — unfinished, or holding an undelivered result. Clients use
+   * this to keep the generation-status poll alive while a detached run is
+   * outstanding. Always present.
+   */
+  delegated_runs_in_flight: boolean;
   /**
    * MCP servers the user switched off for this chat; their tools are not
    * offered to the model.
