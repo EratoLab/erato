@@ -8786,6 +8786,17 @@ async fn a_branched_delivery_requeues_once_and_is_superseded_after_that(pool: Po
     let first_branch = seed_delivered_child(&db, origin_chat_id, u1, tr1, 0).await;
     let already_redelivered = seed_delivered_child(&db, origin_chat_id, u1, tr1, 1).await;
 
+    // A third child on its OWN origin turn, which the branch write also removes.
+    // Both children above hang off `u1`, and `u1` stays on the active thread, so
+    // without this row the origin-liveness half of `requeue_cond` is never the
+    // discriminator — the requeue/supersede split is decided purely by
+    // `redeliveries`. Delete the whole `AND EXISTS (… om.is_message_in_active_thread)`
+    // clause and every other assertion here still holds, while in production a
+    // result from a turn the user rewrote is re-delivered onto the new branch
+    // instead of being closed as superseded.
+    let u2 = seed_row(&db, origin_chat_id, Some(a2), "user", None, None).await;
+    let branched_origin = seed_delivered_child(&db, origin_chat_id, u2, tr1, 0).await;
+
     // While the result is still on the active thread there is nothing to fix.
     let quiet = erato::models::chat::requeue_or_supersede_branched_deliveries(&db, &origin_chat_id)
         .await
@@ -8796,7 +8807,7 @@ async fn a_branched_delivery_requeues_once_and_is_superseded_after_that(pool: Po
     );
 
     // The branch write: everything below A1 leaves the active thread.
-    for row in [tr1, a2] {
+    for row in [tr1, a2, u2] {
         deactivate_row(&db, row).await;
     }
 
@@ -8809,10 +8820,13 @@ async fn a_branched_delivery_requeues_once_and_is_superseded_after_that(pool: Po
         vec![first_branch],
         "a result branched away for the first time must be queued again"
     );
+    let mut superseded_ids = outcome.superseded.clone();
+    superseded_ids.sort();
+    let mut expected_superseded = vec![already_redelivered, branched_origin];
+    expected_superseded.sort();
     assert_eq!(
-        outcome.superseded,
-        vec![already_redelivered],
-        "one that has already been redelivered once must be closed, not chased"
+        superseded_ids, expected_superseded,
+        "both a spent redelivery budget and a dead origin turn close a delivery"
     );
 
     let requeued = read_result_delivery(&db, first_branch).await;
@@ -8837,6 +8851,16 @@ async fn a_branched_delivery_requeues_once_and_is_superseded_after_that(pool: Po
     assert!(
         requeued["redelivery_of"].is_string(),
         "the attempt being replaced is recorded"
+    );
+
+    // The discriminator: this one still had its full redelivery budget, so the
+    // only thing that can have closed it is that its origin turn is gone.
+    let branched = read_result_delivery(&db, branched_origin).await;
+    assert_eq!(branched["state"], "superseded");
+    assert_eq!(branched["reason"], "origin_branched");
+    assert_eq!(
+        branched["redeliveries"], 0,
+        "closed by the rewritten origin turn, not by a spent redelivery budget"
     );
 
     let superseded = read_result_delivery(&db, already_redelivered).await;
