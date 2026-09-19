@@ -26,9 +26,9 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::{Extension, Json};
+use sea_orm::prelude::Uuid;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
-use sea_orm::prelude::Uuid;
 
 /// What a client asks to have retried.
 ///
@@ -117,7 +117,9 @@ impl IntoResponse for RetryRouteError {
             // Both JSON bodies share `409` deliberately: both are "the server
             // will not start this run". The client tells them apart on `code`,
             // which is why neither is plain text.
-            RetryRouteError::NotRetryable(body) => (StatusCode::CONFLICT, Json(*body)).into_response(),
+            RetryRouteError::NotRetryable(body) => {
+                (StatusCode::CONFLICT, Json(*body)).into_response()
+            }
             RetryRouteError::GenerationRunning(body) => {
                 (StatusCode::CONFLICT, Json(*body)).into_response()
             }
@@ -152,6 +154,78 @@ fn not_retryable_with_message(
         chat_id,
         message: Some(message),
     }))
+}
+
+/// How far back a retry chain is walked before the route gives up on it.
+///
+/// A chain grows by one only when a user retries a replacement that failed
+/// again, so anything near this is already pathological; the bound exists so a
+/// corrupted envelope - a `retry_of` pointing at itself, or at a cycle - costs
+/// a fixed number of reads rather than wedging the request.
+const MAX_RETRY_CHAIN_HOPS: usize = 32;
+
+/// The run the ORIGIN chat actually recorded a dispatch for.
+///
+/// The brief is recovered by probing the origin for a `tool_use` part whose
+/// `output.delegate_chat_id` names the run, and that marker is written only by
+/// the live dispatch path, when the origin's assistant message is persisted at
+/// the end of its turn. `launch_delegation` never backfills it - its own
+/// comment says so - so a child started by THIS route is named nowhere in the
+/// origin.
+///
+/// Without this walk that would make every retry of a retry answer
+/// `brief_unavailable`: the first replica crash would be recoverable and the
+/// second one - the same failure, on the run started to recover from it -
+/// would not, which is precisely the case this endpoint exists for. So the
+/// chain is followed back through `provenance.retry_of` to the run the origin
+/// does name. The inherited `parent_tool_call_id` already points at the same
+/// call, so the root id is the only thing the probe was missing.
+///
+/// A hop whose chat is gone or unreadable stops the walk and leaves the probe
+/// to fail honestly with `brief_unavailable`, rather than guessing.
+async fn origin_recorded_run(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    origin_chat_id: Uuid,
+    owner_user_id: &str,
+    child_chat_id: Uuid,
+    child_provenance: &crate::models::chat::ChatProvenance,
+) -> Uuid {
+    let mut recorded = child_chat_id;
+    let mut next = child_provenance.retry_of;
+
+    for _ in 0..MAX_RETRY_CHAIN_HOPS {
+        let Some(ancestor_id) = next else {
+            break;
+        };
+        if ancestor_id == recorded {
+            break;
+        }
+        let Ok(Some(ancestor)) = policy.load_chat_model(&app_state.db, ancestor_id).await else {
+            break;
+        };
+        // The same parentage and ownership the requested child had to satisfy.
+        // A chain is only ever built by this route, which writes both, so a
+        // hop that fails either is a corrupted envelope and not something to
+        // read a brief through.
+        if ancestor.owner_user_id != owner_user_id {
+            break;
+        }
+        let Ok(Some(configuration)) = crate::models::chat::parse_chat_configuration(&ancestor)
+        else {
+            break;
+        };
+        let Some(provenance) = configuration.provenance else {
+            break;
+        };
+        if provenance.origin_chat_id != Some(origin_chat_id) {
+            break;
+        }
+        recorded = ancestor_id;
+        next = provenance.retry_of;
+    }
+
+    recorded
 }
 
 /// Re-dispatch a failed delegated task run as a new async child.
@@ -315,21 +389,40 @@ pub async fn retry_delegated_run(
         None => return Err(not_retryable(child_chat_id, NotRetryableState::Working)),
     }
 
-    // 10. One live retry per failed run. This is the whole bound on a retry
-    //     storm, and it is read from the database rather than from the client
-    //     so that a reload cannot reopen the button.
-    if crate::models::chat::find_working_retry_child(&app_state.db, &child_chat_id, stale_after_secs)
-        .await
-        .map_err(|error| {
-            tracing::warn!(%error, %child_chat_id, "Failed to look for a working retry child");
-            RetryRouteError::PlainText(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to load chat".to_string(),
-            )
-        })?
-        .is_some()
+    // 10. One live retry per failed run. This is the bound on a retry storm,
+    //     and it is read from the database rather than from the client so that
+    //     a reload cannot reopen the button. It matches a replacement from the
+    //     moment its chat row exists, not from the moment it takes a lease,
+    //     because the lease is claimed after the child's lineage is seeded and
+    //     its write is explicitly best-effort.
+    //
+    //     It is ADVISORY, not atomic, in exactly the way the cap pre-check at
+    //     step 12 is: nothing serializes this read against the INSERT the
+    //     launch below performs, so two requests that overlap inside the server
+    //     can both pass and start two replacements for one failure. Serializing
+    //     it would mean holding a lock across a dispatch, which the two
+    //     advisory locks in this codebase deliberately do not do; the cost of
+    //     losing is a second run against the same brief, bounded by the
+    //     owner's concurrency cap, and not a bad write.
+    if crate::models::chat::find_working_retry_child(
+        &app_state.db,
+        &child_chat_id,
+        stale_after_secs,
+    )
+    .await
+    .map_err(|error| {
+        tracing::warn!(%error, %child_chat_id, "Failed to look for a working retry child");
+        RetryRouteError::PlainText(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to load chat".to_string(),
+        )
+    })?
+    .is_some()
     {
-        return Err(not_retryable(child_chat_id, NotRetryableState::RetryInFlight));
+        return Err(not_retryable(
+            child_chat_id,
+            NotRetryableState::RetryInFlight,
+        ));
     }
 
     // 11. The ORIGIN's lease, read-only. NO lease is taken here, deliberately,
@@ -395,10 +488,24 @@ pub async fn retry_delegated_run(
     //     call is a real refusal: there is deliberately no reconstruction from
     //     the child's own rows, which are the run's output rather than the
     //     request that produced it.
+    //
+    //     Probed for the run the ORIGIN recorded, which is this child only
+    //     until the first retry: nothing backfills the origin's frozen tool
+    //     part for a child this route starts, so a replacement's own
+    //     replacement has to read the brief through the chain.
+    let recorded_run_id = origin_recorded_run(
+        &app_state,
+        &policy,
+        chat_id,
+        &origin_chat.owner_user_id,
+        child_chat_id,
+        provenance,
+    )
+    .await;
     let recovered = crate::models::message::find_delegation_tool_call(
         &app_state.db,
         &chat_id,
-        &child_chat_id,
+        &recorded_run_id,
         spec.parent_tool_call_id.as_deref(),
     )
     .await

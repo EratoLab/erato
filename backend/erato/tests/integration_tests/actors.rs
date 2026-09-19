@@ -799,9 +799,10 @@ async fn named_supervisor_derives_both_worker_names(pool: Pool<Postgres>) {
     app_config.cleanup_archived_max_age_days = 30;
 
     let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
-    let me = erato::models::user::get_or_create_user(&db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
-        .await
-        .unwrap();
+    let me =
+        erato::models::user::get_or_create_user(&db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+            .await
+            .unwrap();
     let long_ago: DateTimeWithTimeZone = (Utc::now() - Duration::days(40)).into();
     let old_archived = insert_chat(&db, &me.id.to_string(), None, long_ago).await;
     set_chat_columns(
@@ -983,9 +984,10 @@ async fn delivery_state_of(db: &DatabaseConnection, child_chat_id: Uuid) -> Stri
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn cleanup_tick_sweeps_without_cleanup_enabled_and_archives_with_it(pool: Pool<Postgres>) {
     let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
-    let me = erato::models::user::get_or_create_user(&db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
-        .await
-        .unwrap();
+    let me =
+        erato::models::user::get_or_create_user(&db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+            .await
+            .unwrap();
     let me_id = me.id.to_string();
 
     let long_ago: DateTimeWithTimeZone = (Utc::now() - Duration::days(40)).into();
