@@ -276,6 +276,48 @@ describe("GenerationStatusPoller effects", () => {
       </QueryClientProvider>,
     );
     expect(invalidationsFor(listingKey)).toBe(2);
+
+    // 5. Nothing moves for more than the backstop window: the refresh fires
+    //    again on its own. This is the only path that discovers a delivery
+    //    for a client that never saw the child's live -> terminal edge (a tab
+    //    mounted after the child ended sees `previouslyLive` empty), so the
+    //    window has to be pinned by crossing it — steps 2-4 all sit inside
+    //    it and would hold green with the constant raised tenfold.
+    vi.setSystemTime(new Date("2026-08-19T12:01:15.000Z"));
+    emit({
+      chats: [
+        generatingEntry({
+          chat_id: "child",
+          state: "completed",
+          ended_at: "2026-08-19T12:00:11.000Z",
+        }),
+      ],
+    });
+    second.rerender(
+      <QueryClientProvider client={queryClient}>
+        <GenerationStatusPoller />
+      </QueryClientProvider>,
+    );
+    expect(invalidationsFor(listingKey)).toBe(3);
+
+    // 6. ...and then goes quiet again until the next window elapses, rather
+    //    than refreshing every listing variant on every poll tick.
+    vi.setSystemTime(new Date("2026-08-19T12:01:20.000Z"));
+    emit({
+      chats: [
+        generatingEntry({
+          chat_id: "child",
+          state: "completed",
+          ended_at: "2026-08-19T12:00:11.000Z",
+        }),
+      ],
+    });
+    second.rerender(
+      <QueryClientProvider client={queryClient}>
+        <GenerationStatusPoller />
+      </QueryClientProvider>,
+    );
+    expect(invalidationsFor(listingKey)).toBe(3);
   });
 
   it("refetches the open chat once when a task-result turn lands in it", () => {
@@ -354,5 +396,25 @@ describe("GenerationStatusPoller effects", () => {
     });
     rerender();
     expect(invalidationsFor(messagesKey)).toBe(1);
+
+    // 6. A SECOND async task delivers into the same chat. `/me/generating`
+    //    returns one row per chat, so this is the same `chat_id` with a new
+    //    `started_at` — the dedupe has to be per generation, not once ever.
+    //    Without this case the guard could be "only ever react once", or key
+    //    on `chat_id` alone, and every assertion above would still pass while
+    //    the second answer never appeared without a reload.
+    emit({
+      chats: [
+        generatingEntry({
+          chat_id: "origin",
+          state: "completed",
+          initiator: "task_result",
+          started_at: "2026-08-19T12:00:50.000Z",
+          ended_at: "2026-08-19T12:00:51.000Z",
+        }),
+      ],
+    });
+    rerender();
+    expect(invalidationsFor(messagesKey)).toBe(2);
   });
 });
