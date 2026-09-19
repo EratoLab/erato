@@ -1,6 +1,8 @@
 import { t } from "@lingui/core/macro";
 
+import { Button } from "@/components/ui/Controls/Button";
 import { OpenNewWindowIcon } from "@/components/ui/icons";
+import { useDelegatedRunRetry } from "@/hooks/chat/useDelegatedRunRetry";
 import { delegationReasonLabel } from "@/lib/delegation/delegationLabels";
 import { useDelegatedRunOpener } from "@/providers/DelegatedRunOpenProvider";
 import { getChatUrl } from "@/utils/chat/urlUtils";
@@ -27,6 +29,73 @@ const statusLabel = (status: string): string | undefined => {
     default:
       return status;
   }
+};
+
+/**
+ * Offer to run a failed task again, from the card that reported the failure.
+ *
+ * Its own component, mounted only when the delivered result says the run
+ * failed, because the hook it calls needs a feature-config provider and a
+ * query client. This card is rendered bare in several places — including its
+ * own tests — and a card for a result that succeeded must not start owing
+ * providers for a control it never shows.
+ *
+ * Like the trace's control, the copy states what a retry actually is: a new
+ * background task whose answer is delivered as its own result later. This card
+ * is a record of one delivery and is never rewritten.
+ */
+const RetryTaskControl = ({ childChatId }: { childChatId: string }) => {
+  // The result was delivered into the origin conversation, which is the chat
+  // this card is being read in — so the hook's default origin is right.
+  const { enabled, retriedByChatId, isRetrying, refusal, retry } =
+    useDelegatedRunRetry(childChatId);
+
+  if (!enabled) {
+    return null;
+  }
+
+  if (retriedByChatId !== undefined) {
+    return (
+      <div className="mt-2 text-xs" data-testid="task-result-retried">
+        {t({
+          id: "message.taskResult.retried",
+          message: "Retried as a background task.",
+        })}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="mt-2 flex flex-wrap items-center gap-x-2 text-xs"
+      data-testid="task-result-retry"
+    >
+      <Button
+        variant="link"
+        size="sm"
+        loading={isRetrying}
+        onClick={retry}
+        data-testid="task-result-retry-action"
+      >
+        {t({ id: "message.taskResult.retry", message: "Retry task" })}
+      </Button>
+      <span>
+        {t({
+          id: "message.taskResult.retry.background",
+          message:
+            "The retry runs as a background task; its answer arrives as its own result, not in this card.",
+        })}
+      </span>
+      {refusal !== null && (
+        <span data-testid="task-result-retry-refused">
+          {t({
+            id: "message.taskResult.retry.failed",
+            message: "This task cannot be retried",
+          })}
+        </span>
+      )}
+    </div>
+  );
 };
 
 /**
@@ -126,6 +195,12 @@ export const TaskResultCard = ({ part }: { part: ContentPartTaskResult }) => {
             message: "This answer was shortened to fit.",
           })}
         </div>
+      )}
+
+      {/* Only a failed run may be retried — a completed one, however
+          disappointing its answer, would be re-run behind the user's back. */}
+      {part.status === "failed" && (
+        <RetryTaskControl childChatId={part.child_chat_id} />
       )}
     </div>
   );

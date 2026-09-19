@@ -1554,7 +1554,8 @@ async fn generating_chats_reports_task_result_initiator(pool: Pool<Postgres>) {
     );
 
     assert_eq!(
-        entry_for(chat_c.id)["initiator"], "user",
+        entry_for(chat_c.id)["initiator"],
+        "user",
         "the latest ACTIVE-thread generation wins, not the newest row and not the oldest"
     );
 

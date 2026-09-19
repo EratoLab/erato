@@ -3068,6 +3068,7 @@ mod test_cases {
                 legacy_constraints: None,
                 run_mode: None,
                 result_delivery: None,
+                retry_of: None,
             }),
             task: Some(crate::models::chat::TaskSpec {
                 expected_output: expected_output.map(str::to_string),
@@ -3119,6 +3120,7 @@ mod test_cases {
                 legacy_constraints: None,
                 run_mode: None,
                 result_delivery: None,
+                retry_of: None,
             }),
             task: Some(crate::models::chat::TaskSpec {
                 expected_output: Some("A single number.".to_string()),

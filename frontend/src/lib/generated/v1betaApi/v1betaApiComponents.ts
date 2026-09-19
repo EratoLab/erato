@@ -3413,6 +3413,67 @@ export const useUpdateChat = (
   });
 };
 
+export type RetryDelegatedRunPathParams = {
+  /**
+   * The origin chat the run was dispatched from
+   */
+  chatId: string;
+  /**
+   * The failed delegated run to retry
+   */
+  childChatId: string;
+};
+
+export type RetryDelegatedRunError = Fetcher.ErrorWrapper<{
+  status: 409;
+  payload: Schemas.NotRetryableError;
+}>;
+
+export type RetryDelegatedRunVariables = {
+  body: Schemas.RetryDelegatedRunRequest;
+  pathParams: RetryDelegatedRunPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchRetryDelegatedRun = (
+  variables: RetryDelegatedRunVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.RetryDelegatedRunResponse,
+    RetryDelegatedRunError,
+    Schemas.RetryDelegatedRunRequest,
+    {},
+    {},
+    RetryDelegatedRunPathParams
+  >({
+    url: "/api/v1beta/me/chats/{chatId}/delegated_runs/{childChatId}/retry",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useRetryDelegatedRun = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.RetryDelegatedRunResponse,
+      RetryDelegatedRunError,
+      RetryDelegatedRunVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.RetryDelegatedRunResponse,
+    RetryDelegatedRunError,
+    RetryDelegatedRunVariables
+  >({
+    mutationFn: (variables: RetryDelegatedRunVariables) =>
+      fetchRetryDelegatedRun(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type ReactToTaskResultSsePathParams = {
   /**
    * The chat holding the delivered task result
