@@ -273,6 +273,8 @@ const backgroundRun = (id: string) =>
     provenance_kind: "delegation",
     provenance_run_mode: "background",
     origin_chat_id: "origin-1",
+    // This row IS the delegated run, not an origin awaiting one.
+    delegated_runs_in_flight: false,
   }) as RecentChat;
 
 const mockRuns = (chats: RecentChat[]) => {
