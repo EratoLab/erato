@@ -1654,6 +1654,10 @@ pub(crate) struct LaunchRunSpec {
     /// crash-recovery sweep that never saw the launch - can name it without
     /// walking the origin chat's messages.
     pub parent_tool_call_id: Option<String>,
+    /// The failed run this one replaces, when it was started by a retry.
+    /// Lands in the child's provenance INSERT, so nothing has to reopen the
+    /// document afterwards.
+    pub retry_of: Option<Uuid>,
 }
 
 /// Start a delegated child run and return without awaiting it.
@@ -1798,7 +1802,7 @@ pub(crate) async fn launch_delegation(
         legacy_constraints: None,
         run_mode: (run.run_mode != ProvenanceRunMode::Wait).then_some(run.run_mode),
         result_delivery: None,
-        retry_of: None,
+        retry_of: run.retry_of,
     };
     // Every field is written explicitly rather than spread from `default()`:
     // the struct grows as later parts of the level land, and a spread would
@@ -2123,6 +2127,7 @@ pub(crate) async fn dispatch_delegate_tool_call(
             run_mode: context.run_mode.into(),
             scheduling: erato_config::config::TaskScheduling::default(),
             parent_tool_call_id: Some(tool_call.call_id.clone()),
+            retry_of: None,
         },
         brief,
     )
@@ -2163,6 +2168,32 @@ struct DelegateTaskArgs {
     file_ids: Option<Vec<String>>,
     #[serde(default)]
     include_conversation_context: bool,
+}
+
+/// Rebuild a task brief from the origin model's persisted tool-call input.
+///
+/// `run_mode`, `facet_ids` and `scheduling` in the recorded arguments are
+/// deliberately ignored: a retry inherits the run parameters the OLD CHILD was
+/// actually launched with - its persisted `TaskSpec`, already
+/// authorization-filtered and already clamped by the offer that turn - not
+/// whatever the model once asked for. Re-reading the model's request would
+/// silently un-clamp a facet the offer narrowed, and would restore a
+/// `scheduling` the launch had overridden.
+pub(crate) fn brief_from_persisted_task_args(
+    input: &serde_json::Value,
+) -> Result<DelegateBrief, String> {
+    let args: DelegateTaskArgs = serde_json::from_value(input.clone())
+        .map_err(|error| format!("Invalid recorded delegate_task arguments: {error}"))?;
+    if args.task.trim().is_empty() {
+        return Err("The recorded 'task' argument is empty.".to_string());
+    }
+    Ok(DelegateBrief {
+        task: args.task,
+        expected_output: args.expected_output,
+        constraints: args.constraints,
+        file_ids: args.file_ids,
+        include_conversation_context: args.include_conversation_context,
+    })
 }
 
 /// The placeholder output a reserved task slot carries while its child runs.
