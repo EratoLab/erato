@@ -3429,7 +3429,10 @@ mod tests {
         let brief = brief_from_persisted_task_args(&recorded).expect("a recorded call parses");
         assert_eq!(brief.task, "count the figures in the appendix");
         assert_eq!(brief.expected_output.as_deref(), Some("a single number"));
-        assert_eq!(brief.constraints.as_deref(), Some("do not open the network"));
+        assert_eq!(
+            brief.constraints.as_deref(),
+            Some("do not open the network")
+        );
         assert_eq!(
             brief.file_ids.as_deref(),
             Some(["11111111-1111-1111-1111-111111111111".to_string()].as_slice())

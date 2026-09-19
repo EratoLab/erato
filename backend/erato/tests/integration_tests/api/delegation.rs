@@ -12350,14 +12350,18 @@ async fn retry_child_configuration(
 /// - `uses-mocked-llm`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn retry_failed_task_dispatches_a_new_async_child_with_retry_of(pool: Pool<Postgres>) {
-    let (app_state, _llm) =
-        task_state(pool, retry_child_mocks(), &["erato/delegate_task"], |config| {
+    let (app_state, _llm) = task_state(
+        pool,
+        retry_child_mocks(),
+        &["erato/delegate_task"],
+        |config| {
             config.delegation.tasks.run_modes = vec![
                 erato_config::config::TaskRunMode::Wait,
                 erato_config::config::TaskRunMode::Async,
             ];
-        })
-        .await;
+        },
+    )
+    .await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
         TEST_USER_ISSUER,
@@ -12380,7 +12384,13 @@ async fn retry_failed_task_dispatches_a_new_async_child_with_retry_of(pool: Pool
 
     let before = retry_child_configuration(&app_state, seeded.child_chat_id).await;
 
-    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    let response = retry_run(
+        &server,
+        &origin,
+        seeded.child_chat_id,
+        json!({"kind": "task"}),
+    )
+    .await;
     response.assert_status(http::StatusCode::ACCEPTED);
     let new_child_id = Uuid::parse_str(response.json::<Value>()["child_chat_id"].as_str().unwrap())
         .expect("the response names the new run");
@@ -12449,8 +12459,11 @@ async fn retry_failed_task_dispatches_a_new_async_child_with_retry_of(pool: Pool
 /// - `uses-mocked-llm`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn retry_uses_the_synthetic_scope_budgets_and_persona(pool: Pool<Postgres>) {
-    let (app_state, _llm) =
-        task_state(pool, retry_child_mocks(), &["erato/delegate_task"], |config| {
+    let (app_state, _llm) = task_state(
+        pool,
+        retry_child_mocks(),
+        &["erato/delegate_task"],
+        |config| {
             config.delegation.tasks.run_modes = vec![
                 erato_config::config::TaskRunMode::Wait,
                 erato_config::config::TaskRunMode::Async,
@@ -12459,8 +12472,9 @@ async fn retry_uses_the_synthetic_scope_budgets_and_persona(pool: Pool<Postgres>
             // retry that fell back to the config would be visible.
             config.delegation.tasks.max_server_tool_calls_per_task = 99;
             config.delegation.tasks.max_client_tool_calls_per_task = 99;
-        })
-        .await;
+        },
+    )
+    .await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
         TEST_USER_ISSUER,
@@ -12480,10 +12494,16 @@ async fn retry_uses_the_synthetic_scope_budgets_and_persona(pool: Pool<Postgres>
     )
     .await;
 
-    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    let response = retry_run(
+        &server,
+        &origin,
+        seeded.child_chat_id,
+        json!({"kind": "task"}),
+    )
+    .await;
     response.assert_status(http::StatusCode::ACCEPTED);
-    let new_child_id = Uuid::parse_str(response.json::<Value>()["child_chat_id"].as_str().unwrap())
-        .unwrap();
+    let new_child_id =
+        Uuid::parse_str(response.json::<Value>()["child_chat_id"].as_str().unwrap()).unwrap();
 
     let configuration = retry_child_configuration(&app_state, new_child_id).await;
     assert_eq!(
@@ -12515,14 +12535,18 @@ async fn retry_uses_the_synthetic_scope_budgets_and_persona(pool: Pool<Postgres>
 /// - `uses-mocked-llm`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn retry_carries_the_runs_scheduling(pool: Pool<Postgres>) {
-    let (app_state, _llm) =
-        task_state(pool, retry_child_mocks(), &["erato/delegate_task"], |config| {
+    let (app_state, _llm) = task_state(
+        pool,
+        retry_child_mocks(),
+        &["erato/delegate_task"],
+        |config| {
             config.delegation.tasks.run_modes = vec![
                 erato_config::config::TaskRunMode::Wait,
                 erato_config::config::TaskRunMode::Async,
             ];
-        })
-        .await;
+        },
+    )
+    .await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
         TEST_USER_ISSUER,
@@ -12546,10 +12570,16 @@ async fn retry_carries_the_runs_scheduling(pool: Pool<Postgres>) {
     )
     .await;
 
-    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    let response = retry_run(
+        &server,
+        &origin,
+        seeded.child_chat_id,
+        json!({"kind": "task"}),
+    )
+    .await;
     response.assert_status(http::StatusCode::ACCEPTED);
-    let new_child_id = Uuid::parse_str(response.json::<Value>()["child_chat_id"].as_str().unwrap())
-        .unwrap();
+    let new_child_id =
+        Uuid::parse_str(response.json::<Value>()["child_chat_id"].as_str().unwrap()).unwrap();
 
     let configuration = retry_child_configuration(&app_state, new_child_id).await;
     assert_eq!(
@@ -12575,8 +12605,11 @@ async fn retry_carries_the_runs_scheduling(pool: Pool<Postgres>) {
 /// - `uses-mocked-llm`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn retry_reauthorizes_facets_for_the_owner(pool: Pool<Postgres>) {
-    let (app_state, _llm) =
-        task_state(pool, retry_child_mocks(), &["erato/delegate_task"], |config| {
+    let (app_state, _llm) = task_state(
+        pool,
+        retry_child_mocks(),
+        &["erato/delegate_task"],
+        |config| {
             config.delegation.tasks.run_modes = vec![
                 erato_config::config::TaskRunMode::Wait,
                 erato_config::config::TaskRunMode::Async,
@@ -12613,8 +12646,9 @@ async fn retry_reauthorizes_facets_for_the_owner(pool: Pool<Postgres>) {
                     groups: vec!["a-group-this-user-is-not-in".to_string()],
                 },
             );
-        })
-        .await;
+        },
+    )
+    .await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
         TEST_USER_ISSUER,
@@ -12638,10 +12672,16 @@ async fn retry_reauthorizes_facets_for_the_owner(pool: Pool<Postgres>) {
     )
     .await;
 
-    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    let response = retry_run(
+        &server,
+        &origin,
+        seeded.child_chat_id,
+        json!({"kind": "task"}),
+    )
+    .await;
     response.assert_status(http::StatusCode::ACCEPTED);
-    let new_child_id = Uuid::parse_str(response.json::<Value>()["child_chat_id"].as_str().unwrap())
-        .unwrap();
+    let new_child_id =
+        Uuid::parse_str(response.json::<Value>()["child_chat_id"].as_str().unwrap()).unwrap();
 
     let configuration = retry_child_configuration(&app_state, new_child_id).await;
     let facets = configuration["task"]["facet_ids"]
@@ -12693,7 +12733,13 @@ async fn retry_of_a_completed_child_is_409_not_retryable(pool: Pool<Postgres>) {
     )
     .await;
 
-    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    let response = retry_run(
+        &server,
+        &origin,
+        seeded.child_chat_id,
+        json!({"kind": "task"}),
+    )
+    .await;
     response.assert_status(http::StatusCode::CONFLICT);
     let body = response.json::<Value>();
     assert_eq!(body["code"], "not_retryable");
@@ -12770,7 +12816,13 @@ async fn retry_while_a_retry_child_is_working_is_409(pool: Pool<Postgres>) {
     set_generation_lease(&app_state.db, replacement.id, Some("running"), 0).await;
     app_state.global_policy_engine.invalidate_data().await;
 
-    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    let response = retry_run(
+        &server,
+        &origin,
+        seeded.child_chat_id,
+        json!({"kind": "task"}),
+    )
+    .await;
     response.assert_status(http::StatusCode::CONFLICT);
     let body = response.json::<Value>();
     assert_eq!(body["code"], "not_retryable");
@@ -12794,18 +12846,13 @@ async fn retry_while_a_retry_child_is_working_is_409(pool: Pool<Postgres>) {
 /// - `auth-required`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn retry_counts_against_the_background_concurrency_cap(pool: Pool<Postgres>) {
-    let (app_state, _llm) = task_state(
-        pool,
-        MockSet::new(),
-        &["erato/delegate_task"],
-        |config| {
-            config.delegation.tasks.run_modes = vec![
-                erato_config::config::TaskRunMode::Wait,
-                erato_config::config::TaskRunMode::Async,
-            ];
-            config.delegation.max_concurrent_background_runs = 1;
-        },
-    )
+    let (app_state, _llm) = task_state(pool, MockSet::new(), &["erato/delegate_task"], |config| {
+        config.delegation.tasks.run_modes = vec![
+            erato_config::config::TaskRunMode::Wait,
+            erato_config::config::TaskRunMode::Async,
+        ];
+        config.delegation.max_concurrent_background_runs = 1;
+    })
     .await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
@@ -12838,7 +12885,13 @@ async fn retry_counts_against_the_background_concurrency_cap(pool: Pool<Postgres
     .await;
     set_generation_lease(&app_state.db, occupant.child_chat_id, Some("running"), 0).await;
 
-    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    let response = retry_run(
+        &server,
+        &origin,
+        seeded.child_chat_id,
+        json!({"kind": "task"}),
+    )
+    .await;
     response.assert_status(http::StatusCode::CONFLICT);
     let body = response.json::<Value>();
     assert_eq!(body["code"], "not_retryable");
@@ -12862,14 +12915,18 @@ async fn retry_counts_against_the_background_concurrency_cap(pool: Pool<Postgres
 /// - `uses-mocked-llm`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn retry_of_a_reaped_child_after_a_replica_crash_is_allowed(pool: Pool<Postgres>) {
-    let (app_state, _llm) =
-        task_state(pool, retry_child_mocks(), &["erato/delegate_task"], |config| {
+    let (app_state, _llm) = task_state(
+        pool,
+        retry_child_mocks(),
+        &["erato/delegate_task"],
+        |config| {
             config.delegation.tasks.run_modes = vec![
                 erato_config::config::TaskRunMode::Wait,
                 erato_config::config::TaskRunMode::Async,
             ];
-        })
-        .await;
+        },
+    )
+    .await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
         TEST_USER_ISSUER,
@@ -12892,7 +12949,13 @@ async fn retry_of_a_reaped_child_after_a_replica_crash_is_allowed(pool: Pool<Pos
     // replica that died mid-run leaves behind.
     set_generation_lease(&app_state.db, seeded.child_chat_id, Some("errored"), 86_400).await;
 
-    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    let response = retry_run(
+        &server,
+        &origin,
+        seeded.child_chat_id,
+        json!({"kind": "task"}),
+    )
+    .await;
     response.assert_status(http::StatusCode::ACCEPTED);
 }
 
@@ -12931,7 +12994,13 @@ async fn retry_of_a_mention_route_child_is_409_not_a_task_run(pool: Pool<Postgre
     )
     .await;
 
-    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    let response = retry_run(
+        &server,
+        &origin,
+        seeded.child_chat_id,
+        json!({"kind": "task"}),
+    )
+    .await;
     response.assert_status(http::StatusCode::CONFLICT);
     let body = response.json::<Value>();
     assert_eq!(body["state"], "not_a_task_run", "{body}");
@@ -12971,10 +13040,176 @@ async fn retry_without_the_origin_tool_call_is_409_brief_unavailable(pool: Pool<
     )
     .await;
 
-    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    let response = retry_run(
+        &server,
+        &origin,
+        seeded.child_chat_id,
+        json!({"kind": "task"}),
+    )
+    .await;
     response.assert_status(http::StatusCode::CONFLICT);
     let body = response.json::<Value>();
     assert_eq!(body["state"], "brief_unavailable", "{body}");
+}
+
+/// A replacement run, seeded exactly as the retry route creates one: parented
+/// to the same origin, carrying the inherited spec and the inherited
+/// `parent_tool_call_id`, naming the run it replaces - and named NOWHERE in the
+/// origin, because nothing backfills the origin's frozen tool part.
+///
+/// Returns the new run's id. With only a user message of its own and no lease,
+/// the listing's outcome expression reads it as `failed`.
+async fn seed_retry_child(
+    app_state: &erato::state::AppState,
+    owner_user_id: &str,
+    origin_chat_id: Uuid,
+    retry_of: Uuid,
+) -> Uuid {
+    let policy = rebuilt_policy(app_state).await;
+    let subject = erato::policy::types::Subject::User(owner_user_id.to_string());
+
+    let child = erato::models::chat::create_delegated_chat(
+        &app_state.db,
+        &policy,
+        &subject,
+        owner_user_id,
+        None,
+        ChatProvenance {
+            kind: ChatProvenanceKind::Delegation,
+            origin_chat_id: Some(origin_chat_id),
+            origin_message_id: None,
+            origin_assistant_id: None,
+            rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
+            depth: 1,
+            adopted_at: None,
+            legacy_expected_output: None,
+            legacy_constraints: None,
+            run_mode: Some(erato::models::message::ProvenanceRunMode::Async),
+            result_delivery: None,
+            retry_of: Some(retry_of),
+        },
+        Some(retry_task_spec()),
+        "Seeded replacement run".to_string(),
+        true,
+        Vec::new(),
+        Vec::new(),
+    )
+    .await
+    .expect("replacement chat");
+
+    erato::models::message::submit_message(
+        &app_state.db,
+        &policy,
+        &subject,
+        &child.id,
+        json!({
+            "role": "user",
+            "content": [{"content_type": "text", "text": format!("{RETRY_BRIEF_SENTINEL}: count the figures")}],
+            "name": owner_user_id,
+        }),
+        None,
+        None,
+        None,
+        &[],
+        None,
+        None,
+        None,
+    )
+    .await
+    .expect("replacement brief row");
+
+    app_state.global_policy_engine.invalidate_data().await;
+    child.id
+}
+
+/// A replacement that failed is itself retryable, and its brief is recovered
+/// through the chain.
+///
+/// This is the second occurrence of the very failure the endpoint exists for: a
+/// replica crash reaps the run, the user retries, and the replacement is reaped
+/// too. The origin names only the FIRST child - `launch_delegation` writes
+/// nothing back into the origin, and the assistant message holding the
+/// `tool_use` part was frozen at the end of its turn - so probing the origin
+/// for the replacement finds nothing at all.
+///
+/// Without the walk back through `provenance.retry_of` this answers
+/// `brief_unavailable` every time, and the crash-recovery story is
+/// single-use. Worse, the client offers exactly that dead button: the runs bar
+/// swaps the FIRST child's control for a "Retried" link as soon as a
+/// replacement exists, so the replacement's own control is the only one left.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn retry_of_a_retry_child_recovers_the_brief_through_the_chain(pool: Pool<Postgres>) {
+    let (app_state, _llm) = task_state(
+        pool,
+        retry_child_mocks(),
+        &["erato/delegate_task"],
+        |config| {
+            config.delegation.tasks.run_modes = vec![
+                erato_config::config::TaskRunMode::Wait,
+                erato_config::config::TaskRunMode::Async,
+            ];
+        },
+    )
+    .await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_id = Uuid::parse_str(&origin).unwrap();
+    let seeded = seed_failed_task_run(
+        &app_state,
+        &me.id.to_string(),
+        origin_id,
+        retry_task_spec(),
+        true,
+    )
+    .await;
+    let replacement = seed_retry_child(
+        &app_state,
+        &me.id.to_string(),
+        origin_id,
+        seeded.child_chat_id,
+    )
+    .await;
+    // The replacement died the same way the run it replaced did.
+    set_generation_lease(&app_state.db, replacement, Some("errored"), 86_400).await;
+
+    let response = retry_run(&server, &origin, replacement, json!({"kind": "task"})).await;
+    response.assert_status(http::StatusCode::ACCEPTED);
+    let new_child_id = Uuid::parse_str(response.json::<Value>()["child_chat_id"].as_str().unwrap())
+        .expect("the response names the new run");
+
+    let configuration = retry_child_configuration(&app_state, new_child_id).await;
+    assert_eq!(
+        configuration["provenance"]["retry_of"],
+        json!(replacement),
+        "the new run replaces the run that was retried, not the root of the chain: {configuration}"
+    );
+
+    let new_child_row = erato::db::entity::chats::Entity::find_by_id(new_child_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("the retry child must exist");
+    assert!(
+        new_child_row
+            .title_by_user_provided
+            .as_deref()
+            .is_some_and(|title| title.contains(RETRY_BRIEF_SENTINEL)),
+        "the brief came from the origin call that started the CHAIN: {:?}",
+        new_child_row.title_by_user_provided
+    );
 }
 
 /// A child retried through a chat that is not its origin is a 404, even when
@@ -13053,7 +13288,13 @@ async fn retry_while_the_origin_generation_is_running_is_409_generation_running(
     .await;
     set_generation_lease(&app_state.db, origin_id, Some("running"), 0).await;
 
-    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    let response = retry_run(
+        &server,
+        &origin,
+        seeded.child_chat_id,
+        json!({"kind": "task"}),
+    )
+    .await;
     response.assert_status(http::StatusCode::CONFLICT);
     let body = response.json::<Value>();
     assert_eq!(
@@ -13142,7 +13383,13 @@ async fn retry_from_an_archived_origin_is_refused(pool: Pool<Postgres>) {
     archive_chat_via_api(&server, &origin).await;
     app_state.global_policy_engine.invalidate_data().await;
 
-    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    let response = retry_run(
+        &server,
+        &origin,
+        seeded.child_chat_id,
+        json!({"kind": "task"}),
+    )
+    .await;
     response.assert_status(http::StatusCode::CONFLICT);
 }
 
@@ -13158,14 +13405,18 @@ async fn retry_from_an_archived_origin_is_refused(pool: Pool<Postgres>) {
 /// - `uses-mocked-llm`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn recent_chats_exposes_retry_of(pool: Pool<Postgres>) {
-    let (app_state, _llm) =
-        task_state(pool, retry_child_mocks(), &["erato/delegate_task"], |config| {
+    let (app_state, _llm) = task_state(
+        pool,
+        retry_child_mocks(),
+        &["erato/delegate_task"],
+        |config| {
             config.delegation.tasks.run_modes = vec![
                 erato_config::config::TaskRunMode::Wait,
                 erato_config::config::TaskRunMode::Async,
             ];
-        })
-        .await;
+        },
+    )
+    .await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
         TEST_USER_ISSUER,
@@ -13185,7 +13436,13 @@ async fn recent_chats_exposes_retry_of(pool: Pool<Postgres>) {
     )
     .await;
 
-    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    let response = retry_run(
+        &server,
+        &origin,
+        seeded.child_chat_id,
+        json!({"kind": "task"}),
+    )
+    .await;
     response.assert_status(http::StatusCode::ACCEPTED);
     let new_child_id = response.json::<Value>()["child_chat_id"]
         .as_str()

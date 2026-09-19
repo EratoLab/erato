@@ -13,6 +13,7 @@ import { useRecentChats } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useAssistantsFeature } from "@/providers/FeatureConfigProvider";
 import { delegatedRunsListingParams } from "@/utils/chat/delegatedRunDispatch";
 import {
+  ASYNC_RUN_MODE,
   isBackgroundRun,
   resolveRecentChatTitle,
 } from "@/utils/chat/recentChatSession";
@@ -94,8 +95,19 @@ const DelegatedRunRetryControl = ({
   originChatId: string;
   onOpenChatId: (chatId: string) => void;
 }) => {
+  // Only a planned task run is retryable, and `provenance_run_mode` is the
+  // exact discriminator for one: a task run is launched `wait` or `async` and
+  // never `background`, while an @-mention run is launched `wait` or
+  // `background` and never `async`. This bar lists every DETACHED run, so a
+  // mention delegation sent to the background is a row here too — and the
+  // endpoint refuses it with `not_a_task_run` unconditionally. Without this
+  // test the bar would mount a button that can only ever fail, which the
+  // trace's own carrier avoids by gating on the task tool's name. The listing
+  // carries no route field to gate on, and adding one is out of this stack's
+  // scope; the run mode answers the same question from what is already there.
+  const isTaskRun = chat.provenance_run_mode === ASYNC_RUN_MODE;
   const { enabled, retriedByChatId, isRetrying, refusal, retry } =
-    useDelegatedRunRetry(chat.id, originChatId);
+    useDelegatedRunRetry(isTaskRun ? chat.id : undefined, originChatId);
 
   if (!enabled) {
     return null;
