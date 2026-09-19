@@ -36,6 +36,12 @@ pub const POSTGRES_QUERY_DELIVERY_DUPLICATE_PROBE: &str = "delivery_duplicate_pr
 pub const POSTGRES_QUERY_DELIVERY_SWEEP_REQUEUE: &str = "delivery_sweep_requeue";
 pub const POSTGRES_QUERY_DELIVERY_SWEEP_SCAN: &str = "delivery_sweep_scan";
 pub const POSTGRES_QUERY_DELIVERY_SWEEP_CLAIM: &str = "delivery_sweep_claim";
+/// Terminal outcome of ONE delegated run, using the listing's own expression.
+pub const POSTGRES_QUERY_DELEGATED_RUN_OUTCOME: &str = "delegated_run_outcome";
+/// Whether a retry of a given failed run is already working.
+pub const POSTGRES_QUERY_DELEGATION_RETRY_IN_FLIGHT: &str = "delegation_retry_in_flight";
+/// The origin `delegate_task` call a child run answers.
+pub const POSTGRES_QUERY_DELEGATION_TOOL_CALL: &str = "delegation_tool_call";
 
 pub const KNOWN_POSTGRES_QUERY_IDS: &[&str] = &[
     POSTGRES_QUERY_VERIFY_LATEST_MIGRATION,
@@ -75,4 +81,7 @@ pub const KNOWN_POSTGRES_QUERY_IDS: &[&str] = &[
     POSTGRES_QUERY_DELIVERY_SWEEP_REQUEUE,
     POSTGRES_QUERY_DELIVERY_SWEEP_SCAN,
     POSTGRES_QUERY_DELIVERY_SWEEP_CLAIM,
+    POSTGRES_QUERY_DELEGATED_RUN_OUTCOME,
+    POSTGRES_QUERY_DELEGATION_RETRY_IN_FLIGHT,
+    POSTGRES_QUERY_DELEGATION_TOOL_CALL,
 ];

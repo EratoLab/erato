@@ -163,6 +163,7 @@ async fn write_delegation_provenance(
             legacy_constraints: None,
             run_mode: None,
             result_delivery: None,
+            retry_of: None,
         }),
         task: None,
     };
@@ -4288,6 +4289,7 @@ async fn spawn_listed_delegated_run(
             legacy_constraints: None,
             run_mode: None,
             result_delivery: None,
+            retry_of: None,
         },
         None,
         title.to_string(),
@@ -4378,6 +4380,7 @@ async fn test_listing_hides_delegated_runs_and_exposes_provenance(pool: Pool<Pos
                     _ => None,
                 },
                 result_delivery: None,
+                retry_of: None,
             },
             None,
             format!("Delegated run {index}"),
@@ -4598,6 +4601,7 @@ async fn stage_in_flight_child(
             sequence: 0,
             at: now,
         }),
+        retry_of: None,
     };
     let provenance = serde_json::to_value(&provenance).expect("serialize provenance");
     erato::db::entity::chats::Entity::insert(erato::db::entity::chats::ActiveModel {
@@ -5469,6 +5473,7 @@ async fn test_delegated_run_outcome_reports_failures(pool: Pool<Postgres>) {
             legacy_constraints: None,
             run_mode: None,
             result_delivery: None,
+            retry_of: None,
         },
         None,
         "Seeded only".to_string(),
@@ -5574,6 +5579,7 @@ async fn test_parked_delegated_chat_stays_reachable(pool: Pool<Postgres>) {
             legacy_constraints: None,
             run_mode: None,
             result_delivery: None,
+            retry_of: None,
         },
         None,
         "Parked delegated run".to_string(),
@@ -6155,6 +6161,7 @@ async fn spawn_delegated_run(
             legacy_constraints: None,
             run_mode: None,
             result_delivery: None,
+            retry_of: None,
         },
         None,
         title.to_string(),
@@ -6193,6 +6200,7 @@ async fn spawn_handoff_branch(
             legacy_constraints: None,
             run_mode: None,
             result_delivery: None,
+            retry_of: None,
         },
         None,
         "Handoff branch".to_string(),
@@ -6616,6 +6624,7 @@ async fn test_submit_into_live_delegated_run_conflicts(pool: Pool<Postgres>) {
             legacy_constraints: None,
             run_mode: None,
             result_delivery: None,
+            retry_of: None,
         },
         None,
         "Continuable run".to_string(),
@@ -6969,6 +6978,7 @@ async fn test_chat_detail_carries_provenance_and_run_parameters(pool: Pool<Postg
             legacy_constraints: None,
             run_mode: None,
             result_delivery: None,
+            retry_of: None,
         },
         Some(erato::models::chat::TaskSpec {
             expected_output: Some("One number per line.".to_string()),
@@ -7136,6 +7146,7 @@ async fn bare_child_row_has_null_assistant_and_resolves_no_assistant(pool: Pool<
             legacy_constraints: None,
             run_mode: None,
             result_delivery: None,
+            retry_of: None,
         },
         Some(erato::models::chat::TaskSpec {
             expected_output: Some("A single number.".to_string()),
@@ -7259,6 +7270,7 @@ async fn test_chat_detail_reports_adopted_and_archived_runs(pool: Pool<Postgres>
             legacy_constraints: None,
             run_mode: None,
             result_delivery: None,
+            retry_of: None,
         },
         None,
         "Adoptable run".to_string(),
@@ -9174,6 +9186,7 @@ async fn count_running_background_delegated_runs_counts_async_runs(pool: Pool<Po
                 run_mode: (run_mode != erato::models::message::ProvenanceRunMode::Wait)
                     .then_some(run_mode),
                 result_delivery: None,
+                retry_of: None,
             },
             None,
             format!("{run_mode:?} run"),
@@ -9542,6 +9555,7 @@ async fn seed_child_owing_a_result(
             legacy_constraints: None,
             run_mode: Some(erato::models::message::ProvenanceRunMode::Async),
             result_delivery: None,
+            retry_of: None,
         },
         Some(erato::models::chat::TaskSpec {
             expected_output: None,

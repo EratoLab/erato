@@ -8710,6 +8710,7 @@ async fn seed_delivered_child(
                 sequence: redeliveries,
                 at: Utc::now().into(),
             }),
+            retry_of: None,
         }),
         task: None,
     };
