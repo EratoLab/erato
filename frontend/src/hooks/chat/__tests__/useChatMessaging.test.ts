@@ -108,6 +108,7 @@ import { useGenerationStatusStore } from "../store/generationStatusStore";
 import { useMessagingStore } from "../store/messagingStore";
 import { useChatHistoryStore } from "../useChatHistory";
 import { useChatMessaging } from "../useChatMessaging";
+import { resetReactAttemptsForTest } from "../useReactToTaskResult";
 
 import type { ReactNode } from "react";
 import type { StateCreator } from "zustand";
@@ -649,6 +650,121 @@ describe("useChatMessaging", () => {
       });
 
       expect(mockCreateSSEConnection).not.toHaveBeenCalled();
+    });
+
+    const deliveredTip = {
+      id: "delivered-1",
+      content: [{ content_type: "text" as const, text: "Task finished" }],
+      role: "user",
+      created_at: "2023-01-01T12:05:00.000Z",
+      chat_id: "chat1",
+      updated_at: "2023-01-01T12:05:00.000Z",
+      is_message_in_active_thread: true,
+      task_result: {
+        child_chat_id: "child-1",
+        delivery_id: "delivery-1",
+        scheduling: "when_idle",
+        sequence: 0,
+        status: "completed",
+      },
+    };
+
+    const withMessages = (messages: unknown[]) => {
+      mockUseChatMessages.mockReturnValue({
+        data: { messages },
+        isLoading: false,
+        error: null,
+        refetch: vi.fn(),
+      });
+    };
+
+    it("does not let the react trigger open a second socket for one generation", () => {
+      resetReactAttemptsForTest();
+      captureSse();
+      withMessages([...mockMessages, deliveredTip]);
+
+      renderHook(() => useChatMessaging("chat1"), { wrapper: TestWrapper });
+
+      // The enter-chat resume holds the chat's socket. The trigger goes
+      // through `attachToServerGeneration`, so it is refused rather than
+      // opening a `/react` stream alongside it.
+      expect(mockCreateSSEConnection.mock.calls.map((call) => call[0])).toEqual(
+        ["/api/v1beta/me/messages/resumestream"],
+      );
+    });
+
+    it("asks for the missing reaction once the chat holds no socket", async () => {
+      resetReactAttemptsForTest();
+      const byUrl = captureSse();
+      withMessages(mockMessages);
+
+      const { rerender } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/resumestream"].onClose();
+      });
+      mockCreateSSEConnection.mockClear();
+
+      // The poller's run-ended edge refetched the open chat and a delivered
+      // task result is now the tip.
+      withMessages([...mockMessages, deliveredTip]);
+      await act(async () => {
+        rerender();
+      });
+
+      expect(mockCreateSSEConnection).toHaveBeenCalledWith(
+        "/api/v1beta/me/chats/chat1/react",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ task_result_message_id: "delivered-1" }),
+        }),
+      );
+    });
+
+    it("renders assistant deltas that arrive with no user_message_saved ahead of them", async () => {
+      resetReactAttemptsForTest();
+      const byUrl = captureSse();
+      withMessages(mockMessages);
+
+      const { result, rerender } = renderHook(
+        () => useChatMessaging("chat1"),
+        { wrapper: TestWrapper },
+      );
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/resumestream"].onClose();
+      });
+      withMessages([...mockMessages, deliveredTip]);
+      await act(async () => {
+        rerender();
+      });
+
+      // `/react` calls `run_generation_after_user_message` directly, so the
+      // stream opens on assistant deltas with no `user_message_saved` and no
+      // `chat_created` — exactly as `resumestream` does.
+      const reactStream = byUrl["/api/v1beta/me/chats/chat1/react"];
+      await act(async () => {
+        reactStream.onMessage({
+          data: JSON.stringify({
+            message_type: "assistant_message_started",
+            message_id: "reaction-1",
+          }),
+          type: "message",
+        });
+        reactStream.onMessage({
+          data: JSON.stringify({
+            message_type: "text_delta",
+            message_id: "reaction-1",
+            content_index: 0,
+            new_text: "Here is what the task found",
+          }),
+          type: "message",
+        });
+      });
+
+      expect(result.current.streamingContent).toEqual([
+        { content_type: "text", text: "Here is what the task found" },
+      ]);
     });
   });
 

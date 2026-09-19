@@ -65,6 +65,7 @@ import {
   useChatHistoryStore,
 } from "./useChatHistory";
 import { useExplicitNavigation } from "./useExplicitNavigation";
+import { useReactToTaskResult } from "./useReactToTaskResult";
 
 import type {
   ActionFacetRequest,
@@ -1511,6 +1512,17 @@ export function useChatMessaging(
     isSubmittingForKey,
     openChatGenerationStatus,
   ]);
+
+  useReactToTaskResult({
+    chatId,
+    platform,
+    messages,
+    messageOrder,
+    processStreamEvent,
+    attachToServerGeneration,
+    setSSECleanupForKey,
+    setSSEAbortCallback,
+  });
 
   // Find the most recent assistant message ID, including temporary ones
   const findMostRecentAssistantMessageId = useCallback(() => {
