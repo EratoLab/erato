@@ -62,7 +62,6 @@ export function isBackgroundRun(
   return (
     isDelegatedRun(chat) &&
     chat.provenance_run_mode !== undefined &&
-    chat.provenance_run_mode !== null &&
     DETACHED_RUN_MODES.includes(chat.provenance_run_mode)
   );
 }

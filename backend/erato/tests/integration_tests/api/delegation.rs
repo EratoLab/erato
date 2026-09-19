@@ -4546,6 +4546,309 @@ async fn test_listing_hides_delegated_runs_and_exposes_provenance(pool: Pool<Pos
     assert_eq!(usage, None, "delegated runs must not feed the ranking");
 }
 
+/// Stage one delegated child of `origin_chat_id`, straight into the row.
+///
+/// The provenance JSON is what populates `chats.origin_chat_id`: the column is
+/// `GENERATED ALWAYS AS (assistant_configuration #>> '{provenance,origin_chat_id}')
+/// STORED`, so writing the envelope is the only way to set it — assigning the
+/// column directly is a Postgres error.
+///
+/// Serialized from the real `ChatProvenance` / `ResultDelivery` structs rather
+/// than hand-written JSON, and driven by the real enums rather than by string
+/// literals. That is what stops the test agreeing with itself: the listing's
+/// `EXISTS` compares the stored JSON against `ChatProvenanceKind::as_str`,
+/// `ProvenanceRunMode::as_str` and `ResultDeliveryState::as_str`, which are a
+/// separate hand-written mapping from the serde spellings these fixtures get.
+/// A drift on either side — the enum's wire spelling, or the nesting of
+/// `result_delivery` under `provenance` the SQL path `{provenance,
+/// result_delivery,state}` assumes — now fails the test instead of passing it.
+async fn stage_in_flight_child(
+    db: &sea_orm::DatabaseConnection,
+    owner_user_id: &str,
+    origin_chat_id: Uuid,
+    run_mode: erato::models::message::ProvenanceRunMode,
+    delivery_state: Option<erato::models::chat::ResultDeliveryState>,
+) -> Uuid {
+    let id = Uuid::new_v4();
+    let now: sea_orm::prelude::DateTimeWithTimeZone = sqlx::types::chrono::Utc::now().into();
+    let provenance = ChatProvenance {
+        kind: ChatProvenanceKind::Delegation,
+        origin_chat_id: Some(origin_chat_id),
+        origin_message_id: None,
+        origin_assistant_id: None,
+        rebase_cutoff: None,
+        depth: 1,
+        adopted_at: None,
+        legacy_expected_output: None,
+        legacy_constraints: None,
+        run_mode: Some(run_mode),
+        result_delivery: delivery_state.map(|state| erato::models::chat::ResultDelivery {
+            state,
+            delivery_id: Uuid::new_v4(),
+            result_message_id: None,
+            status: "completed".to_string(),
+            reason: None,
+            claimed_by: None,
+            claimed_at: None,
+            message_id: None,
+            reaction_message_id: None,
+            attempts: 0,
+            redeliveries: 0,
+            redelivery_of: None,
+            sequence: 0,
+            at: now,
+        }),
+    };
+    let provenance = serde_json::to_value(&provenance).expect("serialize provenance");
+    erato::db::entity::chats::Entity::insert(erato::db::entity::chats::ActiveModel {
+        id: ActiveValue::Set(id),
+        owner_user_id: ActiveValue::Set(owner_user_id.to_string()),
+        assistant_configuration: ActiveValue::Set(Some(json!({ "provenance": provenance }))),
+        created_at: ActiveValue::Set(now),
+        updated_at: ActiveValue::Set(now),
+        ..Default::default()
+    })
+    .exec(db)
+    .await
+    .expect("stage delegated child");
+    id
+}
+
+/// Set a staged child's generation lease directly.
+///
+/// `heartbeat_age_secs` of `None` leaves the heartbeat NULL, which is what a
+/// chat parked on a tool approval really looks like.
+async fn set_child_lease(
+    db: &sea_orm::DatabaseConnection,
+    child_chat_id: Uuid,
+    state: &str,
+    heartbeat_age_secs: Option<u64>,
+) {
+    use sea_orm::ConnectionTrait;
+    db.execute_raw(sea_orm::Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        r#"
+        UPDATE chats
+        SET generation_state = $1,
+            generation_started_at = now(),
+            generation_heartbeat_at = CASE
+                WHEN $2::double precision IS NULL THEN NULL
+                ELSE now() - make_interval(secs => $2::double precision)
+            END
+        WHERE id = $3
+        "#,
+        [
+            state.into(),
+            heartbeat_age_secs.map(|secs| secs as f64).into(),
+            child_chat_id.into(),
+        ],
+    ))
+    .await
+    .expect("set child lease");
+}
+
+/// Read the origin row's `delegated_runs_in_flight` out of a fresh listing.
+///
+/// Always off the ORIGIN row: the listing hides delegated children by default,
+/// and the flag is the origin's answer about its children, never a child's own.
+async fn origin_in_flight(server: &TestServer, origin_chat_id: &str) -> bool {
+    let listing = recent_chats(server, "").await;
+    listing["chats"]
+        .as_array()
+        .expect("chats array")
+        .iter()
+        .find(|chat| chat["id"] == origin_chat_id)
+        .expect("origin chat listed")["delegated_runs_in_flight"]
+        .as_bool()
+        .expect("delegated_runs_in_flight is a required bool")
+}
+
+/// `RecentChat.delegated_runs_in_flight` is true exactly while an async
+/// delegated child still owes the origin something.
+///
+/// Two independent arms, and the point of the test is that each is really
+/// load-bearing: an unfinished lease (running with a fresh heartbeat, or
+/// parked on an approval — which has NO heartbeat at all), or a delivery
+/// sitting in `pending` / `claimed`. `delivered` is excluded on purpose: a
+/// `silent` result parks there until the user's next turn and the origin is
+/// not waiting on it, which is exactly the acceptance criterion. An archived
+/// child still holding `pending` stays true — `task_delivery`'s sweep is
+/// where that resolves, and filtering archived rows here would make that code
+/// dead and hide a genuinely stuck delivery.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn recent_chats_reports_delegated_runs_in_flight(pool: Pool<Postgres>) {
+    use erato::models::chat::ResultDeliveryState as DeliveryState;
+    use erato::models::message::ProvenanceRunMode as RunMode;
+
+    let app_state = test_app_state(delegation_enabled_config(), pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let me_user_id = me.id.to_string();
+    let server = app_server(app_state.clone());
+
+    // `get_recent_chats` joins each chat's latest message with an INNER JOIN
+    // LATERAL, so an origin without a message never appears at all.
+    let origin_chat = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin_chat).unwrap();
+    erato::models::message::submit_message(
+        &app_state.db,
+        &rebuilt_policy(&app_state).await,
+        &erato::policy::types::Subject::User(me_user_id.clone()),
+        &origin_chat_id,
+        json!({
+            "role": "user",
+            "content": [{"content_type": "text", "text": "kick off a task"}],
+            "name": me_user_id,
+        }),
+        None,
+        None,
+        None,
+        &[],
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    app_state.global_policy_engine.invalidate_data().await;
+
+    // (a) No children at all.
+    assert!(
+        !origin_in_flight(&server, &origin_chat).await,
+        "an origin with no delegated children owes nothing"
+    );
+
+    // (b) Async child running with a fresh heartbeat.
+    let child =
+        stage_in_flight_child(&app_state.db, &me_user_id, origin_chat_id, RunMode::Async, None)
+            .await;
+    set_child_lease(&app_state.db, child, "running", Some(1)).await;
+    assert!(
+        origin_in_flight(&server, &origin_chat).await,
+        "a live async child is in flight"
+    );
+
+    // (c) Parked on a tool approval. The heartbeat is NULL here, which is why
+    //     the predicate needs the `awaiting_approval` arm and the
+    //     COALESCE(..., FALSE) wrapper — a NULL heartbeat must read FALSE, not
+    //     NULL, or the OR with the delivery arm propagates NULL.
+    set_child_lease(&app_state.db, child, "awaiting_approval", None).await;
+    assert!(
+        origin_in_flight(&server, &origin_chat).await,
+        "a child parked on a tool approval is still in flight"
+    );
+
+    // (d) Stale heartbeat and no delivery recorded: nothing is owed and
+    //     nothing is running.
+    set_child_lease(&app_state.db, child, "running", Some(86_400)).await;
+    assert!(
+        !origin_in_flight(&server, &origin_chat).await,
+        "a run whose lease went stale with no delivery owes nothing"
+    );
+
+    // (e)-(k) The delivery arm, with the lease provably finished so it is the
+    //         only thing under test. Every variant of the ladder, not a
+    //         sample of it.
+    set_child_lease(&app_state.db, child, "completed", None).await;
+    for state in [
+        DeliveryState::Pending,
+        DeliveryState::Claimed,
+        DeliveryState::Delivered,
+        DeliveryState::Reacted,
+        DeliveryState::Superseded,
+        DeliveryState::Failed,
+    ] {
+        // Matched rather than tabulated so that a seventh delivery state is a
+        // compile error here instead of a silent omission: whoever adds one
+        // has to decide whether the origin is still waiting on it.
+        let expected = match state {
+            DeliveryState::Pending | DeliveryState::Claimed => true,
+            // The acceptance criterion: a `silent` result sits in `delivered`
+            // until the user's next turn, and the origin is not waiting on it.
+            DeliveryState::Delivered
+            | DeliveryState::Reacted
+            | DeliveryState::Superseded
+            | DeliveryState::Failed => false,
+        };
+        let staged = stage_in_flight_child(
+            &app_state.db,
+            &me_user_id,
+            origin_chat_id,
+            RunMode::Async,
+            Some(state),
+        )
+        .await;
+        set_child_lease(&app_state.db, staged, "completed", None).await;
+        assert_eq!(
+            origin_in_flight(&server, &origin_chat).await,
+            expected,
+            "delivery state {} should read in_flight={expected}",
+            state.as_str()
+        );
+        erato::db::entity::chats::Entity::delete_by_id(staged)
+            .exec(&app_state.db)
+            .await
+            .expect("drop staged child");
+    }
+
+    // (h) A `background` run is out of scope: it never records a delivery, so
+    //     scoping the predicate to `async` is what keeps the origin from
+    //     waiting forever on a result that is not coming.
+    let background = stage_in_flight_child(
+        &app_state.db,
+        &me_user_id,
+        origin_chat_id,
+        RunMode::Background,
+        None,
+    )
+    .await;
+    set_child_lease(&app_state.db, background, "running", Some(1)).await;
+    assert!(
+        !origin_in_flight(&server, &origin_chat).await,
+        "a live background run owes the origin nothing"
+    );
+    erato::db::entity::chats::Entity::delete_by_id(background)
+        .exec(&app_state.db)
+        .await
+        .expect("drop background child");
+
+    // (l) An archived child still holding `pending`. Deliberately still true:
+    //     the backstop sweep supersedes it with `child_archived`, and that is
+    //     the code path this flag's staying-on is meant to drive.
+    let archived = stage_in_flight_child(
+        &app_state.db,
+        &me_user_id,
+        origin_chat_id,
+        RunMode::Async,
+        Some(DeliveryState::Pending),
+    )
+    .await;
+    set_child_lease(&app_state.db, archived, "completed", None).await;
+    let mut active: erato::db::entity::chats::ActiveModel =
+        erato::db::entity::chats::Entity::find_by_id(archived)
+            .one(&app_state.db)
+            .await
+            .unwrap()
+            .expect("archived child")
+            .into();
+    active.archived_at = ActiveValue::Set(Some(sqlx::types::chrono::Utc::now().into()));
+    active.update(&app_state.db).await.expect("archive child");
+    assert!(
+        origin_in_flight(&server, &origin_chat).await,
+        "an archived child still owing a delivery keeps the origin's indicator on"
+    );
+}
+
 /// The `origin_chat_id` filter narrows a listing to the runs spawned from one
 /// chat. It composes with `include_delegated` rather than overriding it (the
 /// filter alone matches nothing for delegated children), with the type

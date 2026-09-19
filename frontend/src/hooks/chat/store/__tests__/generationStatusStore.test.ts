@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   seedGenerationStatusFromListing,
   selectAttentionCount,
+  selectAwaitingDeliveryCount,
   selectPollDriverCount,
   selectRunningCount,
   useGenerationStatusStore,
@@ -40,6 +41,7 @@ describe("generationStatusStore", () => {
     useGenerationStatusStore.setState({
       statusByChatId: {},
       currentChatId: null,
+      awaitingDeliveryChatIds: {},
     });
   });
 
@@ -401,17 +403,27 @@ describe("generationStatusStore", () => {
   describe("seedGenerationStatusFromListing", () => {
     it("seeds running and parked rows but never an archived one", () => {
       seedGenerationStatusFromListing([
-        { id: "running", active_generation_started_at: iso(0) },
-        { id: "parked", pending_tool_approval_at: iso(0) },
+        {
+          id: "running",
+          active_generation_started_at: iso(0),
+          delegated_runs_in_flight: false,
+        },
+        {
+          id: "parked",
+          pending_tool_approval_at: iso(0),
+          delegated_runs_in_flight: false,
+        },
         {
           id: "archived-running",
           active_generation_started_at: iso(0),
           archived_at: iso(1000),
+          delegated_runs_in_flight: false,
         },
         {
           id: "archived-parked",
           pending_tool_approval_at: iso(0),
           archived_at: iso(1000),
+          delegated_runs_in_flight: false,
         },
       ]);
 
@@ -419,6 +431,53 @@ describe("generationStatusStore", () => {
       expect(statusOf("parked")?.kind).toBe("action_required");
       expect(statusOf("archived-running")).toBeUndefined();
       expect(statusOf("archived-parked")).toBeUndefined();
+    });
+
+    it("counts an awaited delivery as a poll driver without touching the run state", () => {
+      // An origin can be running its own turn while a delegated run still
+      // owes it a result: two reasons to poll, but one chat.
+      seedGenerationStatusFromListing([
+        {
+          id: "origin",
+          active_generation_started_at: iso(0),
+          delegated_runs_in_flight: true,
+        },
+      ]);
+      expect(selectPollDriverCount(store())).toBe(1);
+      expect(statusOf("origin")?.kind).toBe("running");
+      expect(store().awaitingDeliveryChatIds.origin).toBe(true);
+
+      // The false edge really clears, and clearing it leaves the generation
+      // state alone — the two state spaces are orthogonal.
+      seedGenerationStatusFromListing([
+        {
+          id: "origin",
+          active_generation_started_at: iso(0),
+          delegated_runs_in_flight: false,
+        },
+      ]);
+      expect(store().awaitingDeliveryChatIds.origin).toBeUndefined();
+      expect(statusOf("origin")?.kind).toBe("running");
+      expect(selectPollDriverCount(store())).toBe(1);
+
+      // A chat with no generation markers at all still drives the poll while
+      // it is owed a result, and gains no generation status for it.
+      seedGenerationStatusFromListing([
+        { id: "other", delegated_runs_in_flight: true },
+      ]);
+      expect(selectPollDriverCount(store())).toBe(2);
+      expect(selectAwaitingDeliveryCount(store())).toBe(1);
+      expect(statusOf("other")).toBeUndefined();
+
+      // A row from a cached page written before the field existed carries
+      // `undefined`, which must read as "not in flight".
+      seedGenerationStatusFromListing([
+        { id: "legacy" } as Parameters<
+          typeof seedGenerationStatusFromListing
+        >[0][number],
+      ]);
+      expect(store().awaitingDeliveryChatIds.legacy).toBeUndefined();
+      expect(selectPollDriverCount(store())).toBe(2);
     });
   });
 

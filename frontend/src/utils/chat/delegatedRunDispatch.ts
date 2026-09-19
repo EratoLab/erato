@@ -97,6 +97,8 @@ export function seedDispatchedDelegatedRun(
       last_message_at: new Date().toISOString(),
       can_edit: true,
       is_pinned: false,
+      // This row IS the delegated run, not an origin awaiting one.
+      delegated_runs_in_flight: false,
       // Inherited from the origin chat on the server; like the title, the
       // real value arrives with the refetched listing.
       mcp_write_tools_enabled: true,

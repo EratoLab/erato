@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import {
   selectPollDriverCount,
@@ -11,6 +11,7 @@ import {
   type RecentChatsCacheEntry,
 } from "@/hooks/chat/useChatHistory";
 import {
+  chatMessagesQuery,
   recentChatsQuery,
   useGeneratingChats,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
@@ -25,20 +26,34 @@ import type {
 const YOUNG_GENERATION_MS = 2 * 60 * 1000;
 const FAST_POLL_INTERVAL_MS = 3_000;
 const SLOW_POLL_INTERVAL_MS = 10_000;
+/**
+ * Backstop cadence for refreshing the chat listings while a delivery is
+ * outstanding. The edge is what normally fires the refresh; this only bounds
+ * how long a missed edge can hide an arrived result.
+ */
+const DELIVERY_LISTING_REFRESH_MS = 60_000;
 
-const pollInterval = (): number | false => {
-  const { statusByChatId } = useGenerationStatusStore.getState();
+/**
+ * Exported for unit testing: `refetchInterval` is a second gate on the same
+ * query as `enabled`, and it has to know about the same drivers or teaching
+ * only the selector fires exactly one request and then stops.
+ */
+export const pollInterval = (): number | false => {
+  const { statusByChatId, awaitingDeliveryChatIds } =
+    useGenerationStatusStore.getState();
   const statuses = Object.values(statusByChatId);
   const running = statuses.filter(
     (status): status is Extract<ChatGenerationStatus, { kind: "running" }> =>
       status?.kind === "running",
   );
   if (running.length === 0) {
-    // A parked approval can sit for a long time; poll slowly just to observe
-    // a decision made on another device or tab.
-    return statuses.some((status) => status?.kind === "action_required")
-      ? SLOW_POLL_INTERVAL_MS
-      : false;
+    // A parked approval can sit for a long time, and an outstanding delivery
+    // can land at any moment; poll slowly to observe either.
+    const parked = statuses.some(
+      (status) => status?.kind === "action_required",
+    );
+    const awaiting = Object.keys(awaitingDeliveryChatIds).length > 0;
+    return parked || awaiting ? SLOW_POLL_INTERVAL_MS : false;
   }
   const now = Date.now();
   const hasYoungRun = running.some(
@@ -131,6 +146,12 @@ export function GenerationStatusPoller({
 } = {}) {
   const pollDriverCount = useGenerationStatusStore(selectPollDriverCount);
   const queryClient = useQueryClient();
+  /** Chat ids that were running or parked in the PREVIOUS snapshot. */
+  const liveChatIdsRef = useRef<Set<string>>(new Set());
+  /** When the listing backstop last fired, as `Date.now()`. */
+  const lastListingRefreshRef = useRef(0);
+  /** `chatId:startedAt` of the task-result turn already reacted to. */
+  const reactedRef = useRef<string | null>(null);
 
   const { data, dataUpdatedAt } = useGeneratingChats(
     {},
@@ -153,6 +174,64 @@ export function GenerationStatusPoller({
     }
     useGenerationStatusStore.getState().applyPollSnapshot(data.chats);
     patchTerminalChats(queryClient, data.chats);
+
+    // Read once per snapshot rather than subscribing: this reacts to polled
+    // data arriving, not to every store change.
+    const { awaitingDeliveryChatIds, currentChatId } =
+      useGenerationStatusStore.getState();
+
+    // --- BRANCH A: the in-flight -> not-in-flight edge. ------------------
+    // A delegated child leaving the live set is the moment its result may
+    // have been recorded, and the listing is where `delegated_runs_in_flight`
+    // (and the origin's new answer) is read from. Refresh it on that edge,
+    // with a slow backstop for the edges this client never observed — never
+    // on every tick, which would refetch every cached listing variant every
+    // three seconds for the length of the task.
+    const previouslyLive = liveChatIdsRef.current;
+    const live = new Set<string>();
+    for (const entry of data.chats) {
+      if (entry.state === "running" || entry.state === "action_required") {
+        live.add(entry.chat_id);
+      }
+    }
+    liveChatIdsRef.current = live;
+    if (Object.keys(awaitingDeliveryChatIds).length > 0) {
+      const aRunEnded = [...previouslyLive].some((id) => !live.has(id));
+      const backstopDue =
+        Date.now() - lastListingRefreshRef.current >=
+        DELIVERY_LISTING_REFRESH_MS;
+      if (aRunEnded || backstopDue) {
+        lastListingRefreshRef.current = Date.now();
+        void queryClient.invalidateQueries({
+          queryKey: recentChatsQuery({}).queryKey,
+        });
+      }
+    }
+
+    // --- BRANCH B: a task-result turn landing in the open chat. ----------
+    // The delivery reaction is server-initiated, so the client is told about
+    // it only by this poll. Refetch the open conversation once per such turn
+    // — keyed on the generation, so a snapshot repeated every tick for the
+    // rest of the retention window does not refetch again.
+    if (currentChatId) {
+      const reaction = data.chats.find(
+        (entry) =>
+          entry.chat_id === currentChatId &&
+          entry.initiator === "task_result" &&
+          entry.state !== "running" &&
+          entry.state !== "action_required",
+      );
+      if (reaction) {
+        const reactionKey = `${reaction.chat_id}:${reaction.started_at}`;
+        if (reactedRef.current !== reactionKey) {
+          reactedRef.current = reactionKey;
+          const messagesKey = chatMessagesQuery({
+            pathParams: { chatId: currentChatId },
+          }).queryKey;
+          void queryClient.invalidateQueries({ queryKey: messagesKey });
+        }
+      }
+    }
   }, [data, dataUpdatedAt, queryClient]);
 
   return null;
