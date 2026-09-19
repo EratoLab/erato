@@ -398,6 +398,34 @@ describe("generationStatusStore", () => {
       expect(store().statusByChatId).toEqual({});
       expect(store().currentChatId).toBeNull();
     });
+
+    // Both halves below were added by this PR and neither was pinned: the only
+    // clearStatus test used a chat with no delivery entry, and `beforeEach`
+    // resets through `setState` rather than `reset()`, so the new field in
+    // `reset` was unreachable from any test. Reverting `clearStatus` to its old
+    // body and dropping `awaitingDeliveryChatIds: {}` from `reset` left the
+    // whole frontend suite green.
+    //
+    // Most callers self-heal, because `seedGenerationStatusFromListing` clears
+    // the flag for every row it sees. The case that cannot is a chat archived
+    // under a non-"all" status filter: it is dropped from every listing, so no
+    // later seed can ever reach it, and a stale entry holds the poll open at its
+    // fast cadence forever for a chat the store has otherwise forgotten.
+    it("takes the delivery flag with it, per chat and on reset", () => {
+      store().seedRunning("chat-1", iso(0));
+      store().setAwaitingDelivery("chat-1", true);
+      expect(selectAwaitingDeliveryCount(store())).toBe(1);
+
+      store().clearStatus("chat-1");
+      expect(statusOf("chat-1")).toBeUndefined();
+      expect(selectAwaitingDeliveryCount(store())).toBe(0);
+
+      store().setAwaitingDelivery("chat-2", true);
+      expect(selectAwaitingDeliveryCount(store())).toBe(1);
+
+      store().reset();
+      expect(store().awaitingDeliveryChatIds).toEqual({});
+    });
   });
 
   describe("seedGenerationStatusFromListing", () => {

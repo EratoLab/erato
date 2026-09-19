@@ -4777,9 +4777,16 @@ async fn recent_chats_reports_delegated_runs_in_flight(pool: Pool<Postgres>) {
     );
 
     // (c) Parked on a tool approval. The heartbeat is NULL here, which is why
-    //     the predicate needs the `awaiting_approval` arm and the
-    //     COALESCE(..., FALSE) wrapper — a NULL heartbeat must read FALSE, not
-    //     NULL, or the OR with the delivery arm propagates NULL.
+    //     the predicate needs the `awaiting_approval` arm at all: delete that
+    //     arm and this assertion flips.
+    //
+    //     The COALESCE(..., FALSE) beside it is NOT pinned by this case, and
+    //     saying otherwise would be a trap for the next reader. It sits as a
+    //     top-level conjunct of the EXISTS, where NULL and FALSE both simply
+    //     fail to qualify the row, and case (c) cannot reach it anyway because
+    //     `awaiting_approval` already makes the first disjunct TRUE. It is kept
+    //     for explicitness. (The sibling COALESCE in the retry gate IS
+    //     load-bearing, because `NULL NOT IN (...)` is NULL.)
     set_child_lease(&app_state.db, child, "awaiting_approval", None).await;
     assert!(
         origin_in_flight(&server, &origin_chat).await,
