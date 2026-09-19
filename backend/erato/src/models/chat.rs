@@ -2026,8 +2026,8 @@ pub(crate) fn generation_unfinished_condition(alias: &str, param_index: u8) -> S
     )
 }
 
-/// The newest retry child of `retried_chat_id` whose generation has not
-/// finished, if one exists.
+/// The newest retry child of `retried_chat_id` that has not finished, if one
+/// exists.
 ///
 /// One live retry per failed run is the whole bound on a retry storm: a
 /// client that offers the button again while the replacement is still running
@@ -2036,7 +2036,23 @@ pub(crate) fn generation_unfinished_condition(alias: &str, param_index: u8) -> S
 ///
 /// The predicate comes from [`generation_unfinished_condition`] rather than
 /// being spelled again here, for the reason that function's own doc gives: a
-/// second spelling is only a second thing to keep in step.
+/// second spelling is only a second thing to keep in step. It is widened by
+/// the same arm [`archive_delegated_descendants`] uses, and for the same
+/// reason: a run's chat row is created a moment BEFORE its generation takes a
+/// lease, and that lease write is best-effort - it is deliberately allowed to
+/// fail without failing the run. A child matched only by the lease would
+/// therefore be invisible here for the whole of `prepare_delegated_chat`'s
+/// lineage seeding, and invisible forever if the lease write lost its race
+/// with a restart, which would let a second retry through on a run that
+/// already has a live replacement. Bounding the extra arm by the staleness
+/// window keeps a child stranded by a crashed dispatch from blocking its run's
+/// retry for good.
+///
+/// The check remains ADVISORY, not atomic: nothing serializes this read
+/// against the replacement's own INSERT, so two genuinely simultaneous
+/// requests can both pass it. That is the same class - and the same accepted
+/// trade - as the concurrency-cap pre-check on the retry route, and it is why
+/// this is a bound on retry storms rather than a lock.
 pub async fn find_working_retry_child(
     conn: &DatabaseConnection,
     retried_chat_id: &Uuid,
@@ -2053,7 +2069,13 @@ pub async fn find_working_retry_child(
         SELECT "chats"."id"
         FROM "chats"
         WHERE ("chats"."assistant_configuration" #>> '{{provenance,retry_of}}') = $1
-            AND {unfinished}
+            AND (
+                {unfinished}
+                OR (
+                    "chats"."generation_state" IS NULL
+                    AND "chats"."created_at" > now() - make_interval(secs => $2::double precision)
+                )
+            )
         ORDER BY "chats"."created_at" DESC
         LIMIT 1
         "#

@@ -62,9 +62,15 @@ export interface DelegatedRunRetry {
   enabled: boolean;
   /**
    * The run that already replaced this one, read off the listing's `retry_of`
-   * rather than remembered here. That is the whole reason the field is on the
-   * wire: a reload must not bring the retry button back on a run that has
+   * whenever the listing carries it. That is the whole reason the field is on
+   * the wire: a reload must not bring the retry button back on a run that has
    * already been retried.
+   *
+   * The id this client was just handed by the `202` is a FALLBACK for the
+   * window before the listing catches up, never a substitute. The two are not
+   * interchangeable: remembering the dispatch instead of reading `retry_of`
+   * would put the button back on the next reload, which is the retry storm the
+   * wire field bounds.
    */
   retriedByChatId: string | undefined;
   isRetrying: boolean;
@@ -109,10 +115,27 @@ export function useDelegatedRunRetry(
   // rather than left to fail again.
   const [isUnsupported, setIsUnsupported] = useState(false);
   const [refusal, setRefusal] = useState<DelegatedRunRetryRefusal | null>(null);
+  /**
+   * The replacement this client just started, held only until the listing
+   * names it.
+   *
+   * The listing cannot always name it straight away: a brief dispatched
+   * without conversation context seeds no messages, and the listing
+   * inner-joins each chat's latest message, so the refetch this success
+   * triggers can come back before the child's own first row exists. Nothing
+   * would invalidate it a second time — the status poller only refreshes the
+   * listing for runs it already knows about — so the control would sit on
+   * "Retry task" until a window focus, and a second click would be answered
+   * `retry_in_flight` while a replacement was in fact running.
+   */
+  const [dispatchedChildId, setDispatchedChildId] = useState<
+    string | undefined
+  >(undefined);
 
   const mutation = useRetryDelegatedRunMutation({
-    onSuccess: () => {
+    onSuccess: (response) => {
       setRefusal(null);
+      setDispatchedChildId(response.child_chat_id);
       if (origin) {
         // The new child is server-side state this client has never seen; only
         // the origin-filtered listing coming back carries its `retry_of`, and
@@ -127,7 +150,16 @@ export function useDelegatedRunRetry(
     onError: (error) => {
       const parsed = readRefusal(error);
       setRefusal(parsed);
-      if (parsed.status === 404 || parsed.status === 422) {
+      // A refusal that can never turn into a yes for this run withdraws the
+      // control instead of leaving a button that only ever fails again: a
+      // route this server does not serve (404), a `kind` it does not
+      // understand (422), and `not_a_task_run`, which is a property of how the
+      // run was dispatched and cannot change afterwards.
+      if (
+        parsed.status === 404 ||
+        parsed.status === 422 ||
+        parsed.state === "not_a_task_run"
+      ) {
         setIsUnsupported(true);
       }
     },
@@ -170,11 +202,19 @@ export function useDelegatedRunRetry(
   return useMemo(
     () => ({
       enabled,
-      retriedByChatId: retriedBy?.id,
+      // The wire first, this client's memory only while the wire is silent.
+      retriedByChatId: retriedBy?.id ?? dispatchedChildId,
       isRetrying: mutation.isPending,
       refusal,
       retry,
     }),
-    [enabled, mutation.isPending, refusal, retriedBy?.id, retry],
+    [
+      dispatchedChildId,
+      enabled,
+      mutation.isPending,
+      refusal,
+      retriedBy?.id,
+      retry,
+    ],
   );
 }

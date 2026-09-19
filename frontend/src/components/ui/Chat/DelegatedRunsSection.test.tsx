@@ -573,12 +573,28 @@ describe("DelegatedRunsSection retry", () => {
       },
     };
 
+  /**
+   * A failed run of the kind this control is for.
+   *
+   * `async` is the run mode of a planned task, and the only one the endpoint
+   * retries; the file's default row is a `background` mention delegation,
+   * which the bar lists too and the endpoint refuses.
+   */
+  const failedTaskRun = (overrides: Partial<RecentChat> & { id: string }) =>
+    recentChat({
+      provenance_run_mode: "async",
+      delegated_run_outcome: "failed",
+      ...overrides,
+    });
+
   /** Drives the generated mutation's callbacks the way the real one would. */
-  const mockRetryMutation = (outcome: { error?: unknown } = {}) => {
+  const mockRetryMutation = (
+    outcome: { error?: unknown; childChatId?: string } = {},
+  ) => {
     const mutate = vi.fn();
     (useRetryDelegatedRun as Mock).mockImplementation(
       (options: {
-        onSuccess?: () => void;
+        onSuccess?: (response: { child_chat_id: string }) => void;
         onError?: (error: unknown) => void;
       }) => ({
         mutate: (variables: unknown) => {
@@ -586,7 +602,9 @@ describe("DelegatedRunsSection retry", () => {
           if ("error" in outcome) {
             options.onError?.(outcome.error);
           } else {
-            options.onSuccess?.();
+            options.onSuccess?.({
+              child_chat_id: outcome.childChatId ?? "run-dispatched",
+            });
           }
         },
         isPending: false,
@@ -606,8 +624,8 @@ describe("DelegatedRunsSection retry", () => {
   it("offers retry on a failed run only where the deployment allows async tasks", () => {
     mockRetryMutation();
     mockRuns([
-      recentChat({ id: "run-failed", delegated_run_outcome: "failed" }),
-      recentChat({ id: "run-done", delegated_run_outcome: "completed" }),
+      failedTaskRun({ id: "run-failed" }),
+      failedTaskRun({ id: "run-done", delegated_run_outcome: "completed" }),
     ]);
 
     // The endpoint 404s when async tasks are off, so the control must not be
@@ -627,9 +645,7 @@ describe("DelegatedRunsSection retry", () => {
 
   it("asks for a task retry and refetches the listing the new child lands in", () => {
     const mutate = mockRetryMutation();
-    mockRuns([
-      recentChat({ id: "run-failed", delegated_run_outcome: "failed" }),
-    ]);
+    mockRuns([failedTaskRun({ id: "run-failed" })]);
     const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
 
     renderSection("origin-1", RETRY_ON);
@@ -654,7 +670,7 @@ describe("DelegatedRunsSection retry", () => {
   it("swaps the button for the replacement once a retry child is listed", () => {
     mockRetryMutation();
     const rows = [
-      recentChat({ id: "run-failed", delegated_run_outcome: "failed" }),
+      failedTaskRun({ id: "run-failed" }),
       recentChat({ id: "run-retry", retry_of: "run-failed" }),
     ];
     mockRuns(rows);
@@ -683,11 +699,54 @@ describe("DelegatedRunsSection retry", () => {
     expect(screen.queryByTestId("delegated-run-retry")).toBeNull();
   });
 
+  it("offers no retry on a failed mention delegation sent to the background", () => {
+    mockRetryMutation();
+    // A mention delegation dispatched to the background: `delegation`
+    // provenance, `background` run mode, and a failure the bar shows exactly
+    // like a task's. The endpoint refuses it unconditionally with
+    // `not_a_task_run`, so a button here could only ever fail - the trace
+    // carrier gates on the task tool's name for the same reason.
+    mockRuns([
+      recentChat({
+        id: "run-mention",
+        provenance_run_mode: "background",
+        delegated_run_outcome: "failed",
+      }),
+    ]);
+
+    renderSection("origin-1", RETRY_ON);
+    expandRuns();
+
+    expect(screen.getByTestId("delegated-run-item")).toBeInTheDocument();
+    expect(screen.queryByTestId("delegated-run-retry")).toBeNull();
+    expect(screen.queryByTestId("delegated-run-retried")).toBeNull();
+  });
+
+  it("names the replacement straight from the dispatch when the listing has not caught up", () => {
+    mockRetryMutation({ childChatId: "run-dispatched" });
+    // The listing comes back WITHOUT the new child, which is what happens when
+    // its brief seeded no messages: the listing inner-joins each chat's latest
+    // message, so a message-less child is invisible until its own turn writes
+    // one. Nothing invalidates the listing a second time.
+    mockRuns([failedTaskRun({ id: "run-failed" })]);
+
+    renderSection("origin-1", RETRY_ON);
+    expandRuns();
+    fireEvent.click(screen.getByTestId("delegated-run-retry"));
+
+    // Without the dispatched id the control would sit on "Retry task", and a
+    // second click would be answered `retry_in_flight` - "cannot be retried" -
+    // while a replacement was in fact running.
+    expect(screen.getByTestId("delegated-run-retried")).toHaveAttribute(
+      "data-retried-chat-id",
+      "run-dispatched",
+    );
+    expect(screen.queryByTestId("delegated-run-retry")).toBeNull();
+  });
+
   it("says so when the server refuses, without opening the run", () => {
     mockRetryMutation({ error: { code: "not_retryable", state: "completed" } });
-    mockRuns([
-      recentChat({ id: "run-failed", delegated_run_outcome: "failed" }),
-    ]);
+    mockRuns([failedTaskRun({ id: "run-failed" })]);
 
     renderSection("origin-1", RETRY_ON);
     expandRuns();
