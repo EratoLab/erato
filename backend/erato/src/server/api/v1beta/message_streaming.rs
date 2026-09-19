@@ -4035,6 +4035,7 @@ async fn launch_prepared_task<'a>(
             run_mode: run_mode.into(),
             scheduling,
             parent_tool_call_id: Some(meta.tool_call.call_id.clone()),
+            retry_of: None,
         },
         brief,
     )

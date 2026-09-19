@@ -1,6 +1,8 @@
 use crate::db::entity::messages;
 use crate::db::entity::prelude::*;
-use crate::metrics_constants::POSTGRES_QUERY_RESOLVE_SYSTEM_DELIVERED_TIP;
+use crate::metrics_constants::{
+    POSTGRES_QUERY_DELEGATION_TOOL_CALL, POSTGRES_QUERY_RESOLVE_SYSTEM_DELIVERED_TIP,
+};
 use crate::models::file_upload::proxied_preview_url_for_file;
 use crate::models::pagination;
 use crate::policy::prelude::*;
@@ -1008,6 +1010,111 @@ pub async fn resolve_system_delivered_tip(
     .await?;
 
     Ok(row.map(|row| row.id))
+}
+
+/// The origin-side `delegate_*` call a delegated child run answers, recovered
+/// from the origin chat's persisted messages.
+pub struct RecoveredDelegationCall {
+    pub message_id: Uuid,
+    pub previous_message_id: Option<Uuid>,
+    pub tool_call_id: String,
+    pub tool_name: String,
+    /// The arguments the origin model actually sent. A retry rebuilds its
+    /// brief from these rather than from the child, because the child's own
+    /// rows are the run's output, not the request that produced it.
+    pub input: JsonValue,
+}
+
+/// Find the origin message whose tool call dispatched `child_chat_id`.
+///
+/// The primary key is a JSONB containment probe on the persisted
+/// `output.delegate_chat_id`: that marker is written by the server at dispatch
+/// and is present on every delegated run ever launched, including runs from
+/// before `TaskSpec.parent_tool_call_id` existed.
+///
+/// `expected_tool_call_id` is the child's own record of which call it answers,
+/// when it has one. Supplying it turns a best-effort "newest matching row"
+/// pick into an exact match, which matters when one turn dispatched several
+/// children and their tool parts live on the same message.
+///
+/// Active-thread rows are preferred over rows an edit has branched away from,
+/// because the live conversation is the one a retry should be parented to.
+pub async fn find_delegation_tool_call(
+    conn: &DatabaseConnection,
+    origin_chat_id: &Uuid,
+    child_chat_id: &Uuid,
+    expected_tool_call_id: Option<&str>,
+) -> Result<Option<RecoveredDelegationCall>, Report> {
+    #[derive(Debug, FromQueryResult)]
+    struct DelegationCallRow {
+        id: Uuid,
+        previous_message_id: Option<Uuid>,
+        raw_message: JsonValue,
+    }
+
+    // Bound as text and cast, rather than handed over as a JSON value: the
+    // probe is a literal this function builds, and text is the one binding
+    // every driver path agrees about.
+    let probe = serde_json::json!([{
+        "content_type": "tool_use",
+        "output": { "delegate_chat_id": child_chat_id },
+    }])
+    .to_string();
+
+    let row = DelegationCallRow::find_by_statement(named_statement_from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        POSTGRES_QUERY_DELEGATION_TOOL_CALL,
+        r#"
+        SELECT "id", "previous_message_id", "raw_message"
+        FROM "messages"
+        WHERE "chat_id" = $1::uuid
+          AND "raw_message" -> 'content' @> $2::jsonb
+        ORDER BY "is_message_in_active_thread" DESC, "created_at" DESC
+        LIMIT 1
+        "#,
+        [(*origin_chat_id).into(), probe.into()],
+    ))
+    .one(conn)
+    .await?;
+
+    let Some(row) = row else {
+        return Ok(None);
+    };
+
+    // Validated rather than plucked straight out of the JSON: the containment
+    // probe already proved a matching part exists, and going through the
+    // schema means a retry reads the call exactly as the rest of the system
+    // does.
+    let message = MessageSchema::validate(&row.raw_message)?;
+    let recovered = message.content.iter().find_map(|part| {
+        let ContentPart::ToolUse(tool_use) = part else {
+            return None;
+        };
+        let delegate_chat_id = tool_use
+            .output
+            .as_ref()
+            .and_then(|output| output.get("delegate_chat_id"))
+            .and_then(JsonValue::as_str)
+            .and_then(|id| Uuid::parse_str(id).ok())?;
+        if delegate_chat_id != *child_chat_id {
+            return None;
+        }
+        if let Some(expected) = expected_tool_call_id
+            && tool_use.tool_call_id != expected
+        {
+            return None;
+        }
+        let input = tool_use.input.clone()?;
+        Some(RecoveredDelegationCall {
+            message_id: row.id,
+            previous_message_id: row.previous_message_id,
+            tool_call_id: tool_use.tool_call_id.clone(),
+            tool_name: tool_use.tool_name.clone(),
+            input,
+        })
+    });
+
+    Ok(recovered)
 }
 
 /// Get messages for a chat with pagination support.
