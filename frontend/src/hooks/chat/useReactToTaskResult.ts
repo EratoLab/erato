@@ -5,7 +5,7 @@ import { createLogger } from "@/utils/debugLogger";
 import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
 
 import { readConflictRefusal } from "./conflictRefusal";
-import { getStreamKey } from "./store/messagingStore";
+import { getStreamKey, useMessagingStore } from "./store/messagingStore";
 
 import type { Message } from "@/types/chat";
 
@@ -14,7 +14,7 @@ const logger = createLogger("HOOK", "useReactToTaskResult");
 const X_ERATO_PLATFORM_HEADER = "X-Erato-Platform";
 
 /**
- * `(chatId, task_result_message_id)` pairs this session has already asked
+ * `(chatId, task_result_message_id)` pairs this session has actually ASKED
  * about, module-scoped rather than per-mount on purpose.
  *
  * The commonest reason a delivered result has no answer is a reaction the
@@ -24,6 +24,12 @@ const X_ERATO_PLATFORM_HEADER = "X-Erato-Platform";
  * and the predicate stays true — so a per-mount set would fire a fresh
  * generation on every remount and every re-open of the chat, against a
  * provider that has already failed twice. One attempt per row per session.
+ *
+ * Written only when a socket was really opened (inside the `open` callback).
+ * A request that was never made is not an attempt: entering a chat opens a
+ * resumestream first, and that socket holds the chat until it 404s, so a mark
+ * taken before the attach was accepted would burn the row's single ask on a
+ * refusal — permanently, since this set outlives the mount.
  */
 const attemptedByRow = new Set<string>();
 
@@ -55,6 +61,14 @@ export interface UseReactToTaskResultOptions {
   }) => boolean;
   setSSECleanupForKey: (key: string, cleanup: (() => void) | null) => void;
   setSSEAbortCallback: (cleanup: (() => void) | null, key: string) => void;
+  /**
+   * Drops the chat's optimistic "a turn is coming" placeholder. Part of the
+   * tail every other streaming socket in `useChatMessaging` runs; see the
+   * reconciliation comment on the handlers below.
+   */
+  clearPendingChat: (streamKey: string) => void;
+  /** Re-reads the conversation from the server and clears local stream state. */
+  handleRefetchAndClear: (options: { logContext: string }) => unknown;
   /** Wired in the commit that adds the handoff; absent means "log only". */
   onGenerationRunningRefusal?: (chatId: string) => void;
 }
@@ -80,8 +94,27 @@ export function useReactToTaskResult({
   attachToServerGeneration,
   setSSECleanupForKey,
   setSSEAbortCallback,
+  clearPendingChat,
+  handleRefetchAndClear,
   onGenerationRunningRefusal,
 }: UseReactToTaskResultOptions): void {
+  /**
+   * Whether this client already holds a socket for the chat — the same lock
+   * `attachToServerGeneration` takes, subscribed rather than read once.
+   *
+   * It is a dependency, not just a guard: entering a chat opens a forced
+   * resumestream before the fetched rows reach the store, so the trigger's
+   * first look at a delivered tip is always refused. Without a dep that moves
+   * when that socket is released, the effect would never look again, and the
+   * refusal would be the only thing the feature ever did for that chat.
+   */
+  const hasOpenSocket = useMessagingStore(
+    (state) =>
+      // `in`, not `!== undefined`: the store DELETES the entry on release, and
+      // the record's type says a lookup is always defined.
+      chatId !== null && getStreamKey(chatId) in state.sseAbortCallbacksByKey,
+  );
+
   useEffect(() => {
     if (!chatId) {
       return;
@@ -120,10 +153,16 @@ export function useReactToTaskResult({
     if (attemptedByRow.has(attemptKey)) {
       return;
     }
-    // Marked before the attempt, not after: a refused attach (a socket for
-    // this chat is already open) or a failed request must not re-enter on the
-    // next render. One ask per row per session, win or lose.
-    attemptedByRow.add(attemptKey);
+    if (hasOpenSocket) {
+      // Someone is already streaming into this chat — usually the enter-chat
+      // resume, which is about to 404 because nothing is running. Wait for it
+      // rather than spending the row's one ask on a refusal: this effect
+      // re-runs when that socket is released.
+      logger.log(
+        `[DEBUG_STREAMING] Not asking for a reaction in ${chatId} yet: a socket is open for it`,
+      );
+      return;
+    }
 
     const streamKey = getStreamKey(chatId);
     const streamKeyRef = { current: streamKey };
@@ -138,6 +177,10 @@ export function useReactToTaskResult({
       // suppress the trigger outright.
       dedupe: false,
       open: (targetChatId) => {
+        // The ask is real from here on, so this is where the row is marked —
+        // and before the socket exists, so the store update that registering
+        // it causes cannot re-enter this effect into a second request.
+        attemptedByRow.add(attemptKey);
         logger.log(
           `[DEBUG_STREAMING] Asking for the reaction to ${targetMessageId} in chat ${targetChatId}`,
         );
@@ -158,6 +201,12 @@ export function useReactToTaskResult({
             onError: (errorEvent) => {
               setSSECleanupForKey(streamKey, null);
               setSSEAbortCallback(null, streamKey);
+              reconcileAbandonedStream(
+                streamKey,
+                clearPendingChat,
+                handleRefetchAndClear,
+                "react stream error",
+              );
               handleReactError(
                 errorEvent,
                 targetChatId,
@@ -168,6 +217,12 @@ export function useReactToTaskResult({
             onClose: () => {
               setSSECleanupForKey(streamKey, null);
               setSSEAbortCallback(null, streamKey);
+              reconcileAbandonedStream(
+                streamKey,
+                clearPendingChat,
+                handleRefetchAndClear,
+                "react stream closed without completion",
+              );
             },
           },
         );
@@ -185,6 +240,9 @@ export function useReactToTaskResult({
   }, [
     attachToServerGeneration,
     chatId,
+    clearPendingChat,
+    handleRefetchAndClear,
+    hasOpenSocket,
     messageOrder,
     messages,
     onGenerationRunningRefusal,
@@ -194,6 +252,38 @@ export function useReactToTaskResult({
     setSSECleanupForKey,
   ]);
 }
+
+/**
+ * The tail every streaming socket in `useChatMessaging` runs, mirrored here.
+ *
+ * `processStreamEvent` sets `isStreaming` for this key on the first assistant
+ * delta, and `resetStreaming` is called from nowhere but these tails. A react
+ * turn that ends without a terminal event — a dropped connection, or a close
+ * after the backend's broadcast filter swallowed `Error`/`StreamEnd` — would
+ * otherwise leave `isPendingResponse` true, which disables the composer until
+ * the user leaves the chat and comes back. Deliberately no `setError`: the
+ * whole route is silent by design (a 404 means the feature is simply off), so
+ * it reconciles from the server instead of painting an error the user did not
+ * ask for.
+ */
+const reconcileAbandonedStream = (
+  streamKey: string,
+  clearPendingChat: (streamKey: string) => void,
+  handleRefetchAndClear: (options: { logContext: string }) => unknown,
+  logContext: string,
+): void => {
+  // Not gated on `isStreaming`: a placeholder can leak past the point where
+  // streaming state was already reset, and clearing it is idempotent.
+  clearPendingChat(streamKey);
+  if (!useMessagingStore.getState().getStreaming(streamKey).isStreaming) {
+    return;
+  }
+  logger.warn(
+    `[DEBUG_STREAMING] The reaction stream ended while still streaming — reconciling from server (${logContext})`,
+  );
+  useMessagingStore.getState().resetStreaming(streamKey);
+  void handleRefetchAndClear({ logContext });
+};
 
 /**
  * Every refusal this route can give, and why none of them reaches the user.
