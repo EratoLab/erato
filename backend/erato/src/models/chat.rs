@@ -768,6 +768,9 @@ pub struct RecentChat {
     /// `silent` result sits in `delivered` until the user's next turn, and the
     /// origin is not waiting on it.
     pub delegated_runs_in_flight: bool,
+    /// The failed delegated run this one was started to replace; present only
+    /// on a retry child. Read out of the provenance envelope by the listing.
+    pub retry_of: Option<Uuid>,
 }
 
 /// Statistics for a list of chats
@@ -814,6 +817,7 @@ struct ChatWithLatestMessage {
     origin_assistant_id: Option<Uuid>,
     delegated_run_outcome: Option<String>,
     delegated_runs_in_flight: bool,
+    retry_of: Option<Uuid>,
     // Latest message fields
     latest_message_at: DateTimeWithTimeZone,
 }
@@ -1032,6 +1036,7 @@ pub async fn get_recent_chats(
             ("chats"."assistant_configuration" #>> '{{provenance,run_mode}}') AS "provenance_run_mode",
             "chats"."origin_chat_id",
             (("chats"."assistant_configuration" #>> '{{provenance,origin_assistant_id}}'))::uuid AS "origin_assistant_id",
+            (("chats"."assistant_configuration" #>> '{{provenance,retry_of}}'))::uuid AS "retry_of",
             {outcome_expression} AS "delegated_run_outcome",
             EXISTS (
                 SELECT 1
@@ -1348,6 +1353,7 @@ pub async fn get_recent_chats(
                 origin_assistant_id: chat_with_msg.origin_assistant_id,
                 delegated_run_outcome: chat_with_msg.delegated_run_outcome.clone(),
                 delegated_runs_in_flight: chat_with_msg.delegated_runs_in_flight,
+                retry_of: chat_with_msg.retry_of,
             }
         })
         .collect();
@@ -2018,6 +2024,57 @@ pub(crate) fn generation_unfinished_condition(alias: &str, param_index: u8) -> S
             FALSE
         )"#
     )
+}
+
+/// The newest retry child of `retried_chat_id` whose generation has not
+/// finished, if one exists.
+///
+/// One live retry per failed run is the whole bound on a retry storm: a
+/// client that offers the button again while the replacement is still running
+/// would otherwise let a user fan out arbitrarily many children off one
+/// failure.
+///
+/// The predicate comes from [`generation_unfinished_condition`] rather than
+/// being spelled again here, for the reason that function's own doc gives: a
+/// second spelling is only a second thing to keep in step.
+pub async fn find_working_retry_child(
+    conn: &DatabaseConnection,
+    retried_chat_id: &Uuid,
+    generation_stale_after_secs: u64,
+) -> Result<Option<Uuid>, Report> {
+    #[derive(Debug, FromQueryResult)]
+    struct RetryChildRow {
+        id: Uuid,
+    }
+
+    let unfinished = generation_unfinished_condition("\"chats\"", 2);
+    let sql = format!(
+        r#"
+        SELECT "chats"."id"
+        FROM "chats"
+        WHERE ("chats"."assistant_configuration" #>> '{{provenance,retry_of}}') = $1
+            AND {unfinished}
+        ORDER BY "chats"."created_at" DESC
+        LIMIT 1
+        "#
+    );
+
+    let row = RetryChildRow::find_by_statement(named_statement_from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        POSTGRES_QUERY_DELEGATION_RETRY_IN_FLIGHT,
+        sql,
+        // Bound as TEXT, not as a uuid: `#>>` yields text and the stored value
+        // is a JSON string, so a `::uuid` cast on either side would only add a
+        // way for the comparison to fail on a malformed envelope.
+        [
+            retried_chat_id.to_string().into(),
+            (generation_stale_after_secs as f64).into(),
+        ],
+    ))
+    .one(conn)
+    .await?;
+
+    Ok(row.map(|row| row.id))
 }
 
 /// Archive the delegated runs spawned from `chat_id`, and their delegated

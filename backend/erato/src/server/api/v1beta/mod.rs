@@ -1389,8 +1389,9 @@ pub struct RecentChat {
     #[schema(nullable = false)]
     provenance_kind: Option<String>,
     /// How a delegated run was dispatched. Present only for delegation
-    /// provenance, and only as `background` — the mark of a detached run
-    /// whose result never flowed back to the origin turn. An awaited run
+    /// provenance, and only for a detached run: `background`, whose result
+    /// never flows back to the origin turn, or `async`, whose result is
+    /// delivered into the origin chat later as its own row. An awaited run
     /// omits it, since its answer already returned inline.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false, example = "background")]
@@ -1423,6 +1424,13 @@ pub struct RecentChat {
     /// this to keep the generation-status poll alive while a detached run is
     /// outstanding. Always present.
     delegated_runs_in_flight: bool,
+    /// The failed delegated run this one was started to replace. Present only
+    /// on a retry child. Clients use it to swap a failed run's retry button for
+    /// a link to the run that replaced it, durably - it survives a reload,
+    /// where component state would not.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    retry_of: Option<String>,
 }
 
 /// A single chat, for surfaces that open one directly rather than picking it
@@ -3288,6 +3296,7 @@ async fn extend_recent_chats_to_api_model(
             origin_assistant_id: chat.origin_assistant_id.map(|id| id.to_string()),
             delegated_run_outcome: chat.delegated_run_outcome,
             delegated_runs_in_flight: chat.delegated_runs_in_flight,
+            retry_of: chat.retry_of.map(|id| id.to_string()),
         });
     }
 
