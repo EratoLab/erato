@@ -11477,6 +11477,72 @@ async fn react_404_for_a_chat_the_user_may_only_read(pool: Pool<Postgres>) {
     );
 }
 
+/// T5b. A row that lives in another chat is as unreachable as a row that does
+/// not exist anywhere.
+///
+/// Precondition 7 compares the row's own `chat_id` with the one in the path
+/// before anything else looks at the row. Without that comparison the route
+/// answers 404 only for an id no row has, and a typed 409 `nothing_to_react`
+/// for any id that exists anywhere in the `messages` table — an existence
+/// oracle over every chat in the deployment, and, for a genuinely delivered
+/// result, a read of that foreign row's child chat on top of it. The path id
+/// is the only thing that scopes the lookup, so this pins the comparison
+/// itself with two chats of the caller's own; the ownership half of the same
+/// story is T5's.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn react_404_for_a_task_result_row_in_another_chat(pool: Pool<Postgres>) {
+    let (app_state, _llm, recorder) = react_state(pool, "MUST-NOT-RUN").await;
+    let me = test_user(&app_state).await;
+    let server = app_server(app_state.clone());
+
+    // The chat that genuinely holds a delivered result.
+    let holder = create_chat(&server, None).await;
+    let holder_chat_id = Uuid::parse_str(&holder).unwrap();
+    let (child_id, result_row_id) = stage_delivered_result(
+        &app_state,
+        &me.id.to_string(),
+        holder_chat_id,
+        "OTHER-CHAT-ANSWER",
+    )
+    .await;
+
+    // A second chat of the same person's, with nothing delivered into it.
+    let target = create_chat(&server, None).await;
+    let target_chat_id = Uuid::parse_str(&target).unwrap();
+
+    let response = post_react(&server, target_chat_id, result_row_id).await;
+    assert_eq!(
+        response.status_code(),
+        axum::http::StatusCode::NOT_FOUND,
+        "a row that is not in this chat must be answered exactly like a row \
+         that does not exist, never with a 409 that confirms it exists"
+    );
+
+    let target_row = erato::db::entity::chats::Entity::find_by_id(target_chat_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("target chat");
+    assert_eq!(
+        target_row.generation_state, None,
+        "the comparison runs before the lease, so nothing may have been taken"
+    );
+    assert!(
+        recorder.bodies().is_empty(),
+        "the refused request must not have reached a model at all"
+    );
+    assert_eq!(
+        delivery_struct(&app_state, child_id).await.state,
+        erato::models::chat::ResultDeliveryState::Delivered,
+        "and the other chat's delivery must be left exactly as it was"
+    );
+}
+
 /// T6. With async delivery off, the route does not exist — even over a row that
 /// genuinely is delivered.
 ///
