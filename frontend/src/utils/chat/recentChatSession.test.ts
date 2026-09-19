@@ -26,6 +26,7 @@ const recentChat = (id: string, assistantId?: string): RecentChat => ({
   mcp_write_tools_enabled: true,
   disabled_mcp_server_ids: [],
   disabled_mcp_tools: [],
+  delegated_runs_in_flight: false,
   assistant_id: assistantId,
 });
 

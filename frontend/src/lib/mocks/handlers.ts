@@ -101,6 +101,7 @@ export const handlers = [
           disabled_mcp_tools: [],
           file_uploads: [],
           can_edit: true,
+          delegated_runs_in_flight: false,
         },
       ],
       stats: {

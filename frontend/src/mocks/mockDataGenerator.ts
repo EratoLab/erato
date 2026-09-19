@@ -121,6 +121,7 @@ export class MockDataGenerator {
       disabled_mcp_tools: overrides?.disabled_mcp_tools ?? [],
       file_uploads: overrides?.file_uploads ?? [],
       can_edit: overrides?.can_edit ?? true,
+      delegated_runs_in_flight: overrides?.delegated_runs_in_flight ?? false,
     };
   }
 

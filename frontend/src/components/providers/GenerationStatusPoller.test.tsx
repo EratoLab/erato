@@ -1,10 +1,29 @@
-import { QueryClient } from "@tanstack/react-query";
-import { describe, expect, it } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { buildInfiniteChatsQueryKey } from "@/hooks/chat/useChatHistory";
-import { recentChatsQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import {
+  chatMessagesQuery,
+  recentChatsQuery,
+  useGeneratingChats,
+} from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
-import { patchTerminalChats } from "./GenerationStatusPoller";
+import {
+  GenerationStatusPoller,
+  patchTerminalChats,
+  pollInterval,
+} from "./GenerationStatusPoller";
+
+// Spread the real module: the component imports `recentChatsQuery` and
+// `chatMessagesQuery` from it too, and a bare mock would make both undefined.
+vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/lib/generated/v1betaApi/v1betaApiComponents")
+  >()),
+  useGeneratingChats: vi.fn(),
+}));
 
 import type {
   GeneratingChat,
@@ -24,6 +43,7 @@ const recentChat = (
   disabled_mcp_server_ids: [],
   disabled_mcp_tools: [],
   last_message_at: "2026-08-19T12:00:00.000Z",
+  delegated_runs_in_flight: false,
   ...overrides,
 });
 
@@ -129,5 +149,210 @@ describe("patchTerminalChats", () => {
     ]);
 
     expect(queryClient.getQueryData(plainKey)).toBe(data);
+  });
+});
+
+describe("pollInterval", () => {
+  beforeEach(() => {
+    useGenerationStatusStore.getState().reset();
+  });
+
+  it("polls at the slow cadence while a delivery is outstanding and nothing is running", () => {
+    // `refetchInterval` is a SECOND gate beside `enabled`. Teaching only the
+    // poll-driver selector about deliveries fires exactly one request and
+    // then stops, because this function would still return false.
+    expect(pollInterval()).toBe(false);
+
+    useGenerationStatusStore.getState().setAwaitingDelivery("origin", true);
+    expect(pollInterval()).toBe(10_000);
+
+    // A live generation still wins the cadence.
+    useGenerationStatusStore
+      .getState()
+      .seedRunning("other", new Date().toISOString());
+    expect(pollInterval()).toBe(3_000);
+
+    useGenerationStatusStore.getState().setAwaitingDelivery("origin", false);
+    useGenerationStatusStore.getState().clearStatus("other");
+    expect(pollInterval()).toBe(false);
+  });
+});
+
+describe("GenerationStatusPoller effects", () => {
+  const generatingEntry = (
+    overrides: Partial<GeneratingChat> & { chat_id: string },
+  ): GeneratingChat => ({
+    state: "running",
+    started_at: "2026-08-19T12:00:00.000Z",
+    ...overrides,
+  });
+
+  let queryClient: QueryClient;
+  let invalidateSpy: ReturnType<typeof vi.spyOn>;
+  let updatedAt: number;
+
+  const renderPoller = () =>
+    render(
+      <QueryClientProvider client={queryClient}>
+        <GenerationStatusPoller />
+      </QueryClientProvider>,
+    );
+
+  /**
+   * Mirrors React Query's structural sharing: the SAME `data` reference with
+   * a bumped `dataUpdatedAt` is what a repeated identical response looks
+   * like. Returning a fresh object instead would make the "same snapshot
+   * again" cases pass without the effect ever re-running.
+   */
+  const emit = (data: { chats: GeneratingChat[] }) => {
+    updatedAt += 1;
+    (useGeneratingChats as unknown as ReturnType<typeof vi.fn>).mockReturnValue(
+      { data, dataUpdatedAt: updatedAt },
+    );
+  };
+
+  const invalidationsFor = (queryKey: readonly unknown[]) =>
+    invalidateSpy.mock.calls.filter(
+      (call: unknown[]) =>
+        JSON.stringify((call[0] as { queryKey: unknown }).queryKey) ===
+        JSON.stringify(queryKey),
+    ).length;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-19T12:00:00.000Z"));
+    useGenerationStatusStore.getState().reset();
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    invalidateSpy = vi
+      .spyOn(queryClient, "invalidateQueries")
+      .mockResolvedValue(undefined);
+    updatedAt = 0;
+    vi.mocked(useGeneratingChats).mockReset();
+  });
+
+  it("refreshes the chat listings when a run ends while a delivery is outstanding", () => {
+    const listingKey = recentChatsQuery({}).queryKey;
+    const running = { chats: [generatingEntry({ chat_id: "child" })] };
+
+    // 1. Nothing is owed: an ordinary turn running elsewhere must not
+    //    refresh every cached listing variant.
+    emit(running);
+    const first = renderPoller();
+    expect(invalidationsFor(listingKey)).toBe(0);
+    first.unmount();
+
+    // 2. A delivery is outstanding: bootstrap the backstop once.
+    useGenerationStatusStore.getState().setAwaitingDelivery("origin", true);
+    emit(running);
+    const second = renderPoller();
+    expect(invalidationsFor(listingKey)).toBe(1);
+
+    // 3. The same snapshot inside the throttle window changes nothing.
+    vi.setSystemTime(new Date("2026-08-19T12:00:10.000Z"));
+    emit(running);
+    second.rerender(
+      <QueryClientProvider client={queryClient}>
+        <GenerationStatusPoller />
+      </QueryClientProvider>,
+    );
+    expect(invalidationsFor(listingKey)).toBe(1);
+
+    // 4. The child left the live set: the edge fires THROUGH the throttle,
+    //    so the result is observed now rather than up to 60s later.
+    emit({
+      chats: [
+        generatingEntry({
+          chat_id: "child",
+          state: "completed",
+          ended_at: "2026-08-19T12:00:11.000Z",
+        }),
+      ],
+    });
+    second.rerender(
+      <QueryClientProvider client={queryClient}>
+        <GenerationStatusPoller />
+      </QueryClientProvider>,
+    );
+    expect(invalidationsFor(listingKey)).toBe(2);
+  });
+
+  it("refetches the open chat once when a task-result turn lands in it", () => {
+    const messagesKey = chatMessagesQuery({
+      pathParams: { chatId: "origin" },
+    }).queryKey;
+    useGenerationStatusStore.getState().setCurrentChatId("origin");
+
+    const delivered = {
+      chats: [
+        generatingEntry({
+          chat_id: "origin",
+          state: "completed",
+          initiator: "task_result",
+          started_at: "2026-08-19T12:00:05.000Z",
+          ended_at: "2026-08-19T12:00:06.000Z",
+        }),
+      ],
+    };
+
+    // 1. The server-initiated reaction turn landed: pull it in.
+    emit(delivered);
+    const view = renderPoller();
+    expect(invalidationsFor(messagesKey)).toBe(1);
+
+    const rerender = () =>
+      view.rerender(
+        <QueryClientProvider client={queryClient}>
+          <GenerationStatusPoller />
+        </QueryClientProvider>,
+      );
+
+    // 2. The same generation stays in the snapshot for the whole retention
+    //    window; refetching on every tick of it would be a refetch loop.
+    emit(delivered);
+    rerender();
+    expect(invalidationsFor(messagesKey)).toBe(1);
+
+    // 3. An ordinary user turn in the open chat is already on screen.
+    emit({
+      chats: [
+        generatingEntry({
+          chat_id: "origin",
+          state: "completed",
+          initiator: "user",
+          started_at: "2026-08-19T12:00:20.000Z",
+        }),
+      ],
+    });
+    rerender();
+    expect(invalidationsFor(messagesKey)).toBe(1);
+
+    // 4. A task-result turn in a chat the user is not looking at.
+    emit({
+      chats: [
+        generatingEntry({
+          chat_id: "other",
+          state: "completed",
+          initiator: "task_result",
+          started_at: "2026-08-19T12:00:30.000Z",
+        }),
+      ],
+    });
+    rerender();
+    expect(invalidationsFor(messagesKey)).toBe(1);
+
+    // 5. Still running: the turn is not there to fetch yet.
+    emit({
+      chats: [
+        generatingEntry({
+          chat_id: "origin",
+          initiator: "task_result",
+          started_at: "2026-08-19T12:00:40.000Z",
+        }),
+      ],
+    });
+    rerender();
+    expect(invalidationsFor(messagesKey)).toBe(1);
   });
 });
