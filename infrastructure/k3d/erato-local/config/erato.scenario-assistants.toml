@@ -22,6 +22,11 @@ enabled = true
 # actually offers `erato/delegate_task`.
 [delegation.tasks]
 enabled = true
+# `async` too, so the scenario can drive a task whose result is delivered back
+# into the origin chat rather than returned inline. `wait` stays first and stays
+# the default, so dynamic-tasks.assistants.spec.ts is unaffected: its mock writes
+# no `run_mode`.
+run_modes = ["wait", "async"]
 
 # A delegated child run carries no provider of its own, so the first entry here
 # is what both the origin chat and its delegate talk to; the mock server is the

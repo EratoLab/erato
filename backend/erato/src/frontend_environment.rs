@@ -47,6 +47,7 @@ const FRONTEND_ENV_KEY_ASSISTANTS_DELEGATION_ENABLED: &str = "ASSISTANTS_DELEGAT
 const FRONTEND_ENV_KEY_ASSISTANTS_DELEGATION_ALLOW_BACKGROUND: &str =
     "ASSISTANTS_DELEGATION_ALLOW_BACKGROUND";
 const FRONTEND_ENV_KEY_DELEGATION_TASKS_ENABLED: &str = "DELEGATION_TASKS_ENABLED";
+const FRONTEND_ENV_KEY_DELEGATION_TASKS_ALLOW_ASYNC: &str = "DELEGATION_TASKS_ALLOW_ASYNC";
 const FRONTEND_ENV_KEY_STARTER_PROMPTS_ENABLED: &str = "STARTER_PROMPTS_ENABLED";
 const FRONTEND_ENV_KEY_PROMPT_OPTIMIZER_ENABLED: &str = "PROMPT_OPTIMIZER_ENABLED";
 const FRONTEND_ENV_KEY_USER_PREFERENCES_ENABLED: &str = "USER_PREFERENCES_ENABLED";
@@ -381,6 +382,19 @@ fn build_frontend_environment(
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_DELEGATION_TASKS_ENABLED.to_string(),
         Value::Bool(config.delegation.tasks.enabled),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_DELEGATION_TASKS_ALLOW_ASYNC.to_string(),
+        // Derived, not a config leaf of its own: the flag is exactly "may the
+        // model offer async", which `run_modes` already says.
+        Value::Bool(
+            config.delegation.tasks.enabled
+                && config
+                    .delegation
+                    .tasks
+                    .run_modes
+                    .contains(&erato_config::config::TaskRunMode::Async),
+        ),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_STARTER_PROMPTS_ENABLED.to_string(),
@@ -1253,6 +1267,45 @@ mod tests {
                 .get(FRONTEND_ENV_KEY_CHAT_INPUT_EMPTY_STATE_LAYOUT),
             Some(&Value::String("bottom".to_string()))
         );
+    }
+
+    /// The async gate is derived, so it must track `run_modes` rather than
+    /// being a flag of its own that a deployment can set inconsistently.
+    ///
+    /// Both halves matter: a deployment with `async` configured but the whole
+    /// task route off must not advertise it, and one with the route on but
+    /// only `wait` offered must not either.
+    #[test]
+    fn delegation_tasks_allow_async_follows_run_modes() {
+        let cases = [
+            (false, false, false),
+            (true, false, false),
+            (false, true, false),
+            (true, true, true),
+        ];
+        for (tasks_enabled, offers_async, expected) in cases {
+            let mut config = AppConfig::default();
+            config.delegation.tasks.enabled = tasks_enabled;
+            config.delegation.tasks.run_modes = if offers_async {
+                vec![
+                    erato_config::config::TaskRunMode::Wait,
+                    erato_config::config::TaskRunMode::Async,
+                ]
+            } else {
+                vec![erato_config::config::TaskRunMode::Wait]
+            };
+
+            for frontend_kind in [FrontendKind::Web, FrontendKind::OfficeAddin] {
+                let environment = build_frontend_environment(&config, frontend_kind);
+                assert_eq!(
+                    environment
+                        .additional_environment
+                        .get(FRONTEND_ENV_KEY_DELEGATION_TASKS_ALLOW_ASYNC),
+                    Some(&Value::Bool(expected)),
+                    "enabled={tasks_enabled} offers_async={offers_async} on {frontend_kind:?}"
+                );
+            }
+        }
     }
 
     #[test]

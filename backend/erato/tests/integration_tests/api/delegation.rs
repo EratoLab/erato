@@ -3036,7 +3036,7 @@ async fn test_background_dispatch_returns_at_launch(pool: Pool<Postgres>) {
     assert_eq!(child_chat.generation_state.as_deref(), Some("running"));
     assert_eq!(
         provenance_of(&child_chat).run_mode,
-        Some(erato::models::message::DelegationRunMode::Background)
+        Some(erato::models::message::ProvenanceRunMode::Background)
     );
 
     // The model heard a launch, never the answer.
@@ -3456,7 +3456,7 @@ async fn test_regenerate_replays_background_dispatch(pool: Pool<Postgres>) {
         .expect("second delegated child chat");
     assert_eq!(
         provenance_of(&second_child).run_mode,
-        Some(erato::models::message::DelegationRunMode::Background)
+        Some(erato::models::message::ProvenanceRunMode::Background)
     );
     wait_for_child_completion(&app_state.db, second_child_id, "CHILD-BG-REGEN-ANSWER").await;
 }
@@ -4369,10 +4369,14 @@ async fn test_listing_hides_delegated_runs_and_exposes_provenance(pool: Pool<Pos
                 adopted_at: None,
                 legacy_expected_output: None,
                 legacy_constraints: None,
-                // One detached run among awaited ones, so the listing's
-                // run-mode passthrough is exercised in both directions.
-                run_mode: (index == 0)
-                    .then_some(erato::models::message::DelegationRunMode::Background),
+                // One of each detached mode plus an awaited run, so the
+                // listing's run-mode passthrough is exercised in every
+                // direction it has.
+                run_mode: match index {
+                    0 => Some(erato::models::message::ProvenanceRunMode::Background),
+                    1 => Some(erato::models::message::ProvenanceRunMode::Async),
+                    _ => None,
+                },
                 result_delivery: None,
             },
             None,
@@ -4467,11 +4471,22 @@ async fn test_listing_hides_delegated_runs_and_exposes_provenance(pool: Pool<Pos
     // the listing must preserve that absence, since clients read presence of
     // `background` as "this run has a life of its own".
     assert_eq!(delegated_entry["provenance_run_mode"], "background");
-    let awaited_entry = listing["chats"]
+    let async_entry = listing["chats"]
         .as_array()
         .unwrap()
         .iter()
         .find(|chat| chat["id"] == delegated_ids[1].as_str())
+        .unwrap();
+    assert_eq!(
+        async_entry["provenance_run_mode"], "async",
+        "an async run is detached too, and a client reading only `background` \
+         would treat it as awaited"
+    );
+    let awaited_entry = listing["chats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|chat| chat["id"] == delegated_ids[2].as_str())
         .unwrap();
     assert!(
         !awaited_entry
@@ -8572,5 +8587,1651 @@ fn approval_fixture_server() -> erato::config::McpServerConfig {
         wait_tools: vec![],
         authentication: erato::config::McpServerAuthenticationConfig::None,
         max_session_idle_seconds: None,
+    }
+}
+
+/// An `async` task detaches: the slot settles at launch, and the origin turn
+/// finishes without the child's answer.
+///
+/// This is the whole difference between `async` and `wait` at dispatch time.
+/// Revert the run-mode threading in `launch_prepared_task` and the turn blocks
+/// on the child instead, with the awaited envelope on the part — which is
+/// exactly the case a reader could not tell apart from a slow `wait` call.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn async_task_dispatch_settles_the_slot_and_detaches(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    // The child's own turn, recognised by the brief.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["ASYNC-BRIEF-SENTINEL"],
+                &["async task question"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["ASYNC-CHILD-ANSWER"]),
+        );
+    });
+    // The parent's continuation. It sees the dispatch note, never the answer.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["async task question", "dispatched"],
+                &[],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["PARENT-ASYNC-FINAL"]),
+        );
+    });
+    // The parent's first turn: plans the sub-task and asks for `async`.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["async task question"],
+                &["ASYNC-BRIEF-SENTINEL", "dispatched"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_async_1",
+                "delegate_task",
+                json!({
+                    "task": "ASYNC-BRIEF-SENTINEL: count the figures",
+                    "run_mode": "async",
+                }),
+            )]),
+        );
+    });
+
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        config.delegation.tasks.run_modes = vec![
+            erato_config::config::TaskRunMode::Wait,
+            erato_config::config::TaskRunMode::Async,
+        ];
+    })
+    .await;
+
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, "async task question", &["plan"]).await;
+
+    let output = find_tool_call_update_output(&events, "delegate_task");
+    assert_eq!(
+        output["background"], true,
+        "an async dispatch keeps the detached marker the frontend pill reads: {output}"
+    );
+    assert_eq!(
+        output["run_mode"], "async",
+        "a reader must be able to tell a run whose answer is coming back from one whose never will: {output}"
+    );
+    assert!(output["child_run_id"].is_string());
+    assert!(
+        output["result"].is_null() && output["status"].is_null(),
+        "the part is frozen at the launch shape; the answer is not in this turn: {output}"
+    );
+    assert!(extract_full_text_answer(&events).contains("PARENT-ASYNC-FINAL"));
+
+    // The child is a real run, and it is recorded as the detached mode it is.
+    let child_chat = delegated_child_chat(&app_state.db, Uuid::parse_str(&chat).unwrap()).await;
+    let configuration = child_chat
+        .assistant_configuration
+        .expect("child configuration");
+    assert_eq!(configuration["provenance"]["run_mode"], "async");
+    assert_eq!(
+        configuration["task"]["parent_tool_call_id"], "call_async_1",
+        "the origin call is persisted at launch, for a delivery that may never see this turn"
+    );
+}
+
+/// A mode the deployment does not offer is refused, not quietly downgraded.
+///
+/// The schema's `enum` is advisory — a model can write anything — so the offer
+/// is re-checked at dispatch. Downgrading instead would leave the model
+/// believing it had detached work that in fact ran inline, which it cannot
+/// observe and cannot correct.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn async_run_mode_is_refused_when_it_is_not_offered(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    // The parent recovers in prose once the refusal comes back.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["unoffered mode question", "not available"],
+                &[],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["ASYNC-REFUSAL-RECOVERED"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["unoffered mode question"],
+                &["not available"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_unoffered",
+                "delegate_task",
+                json!({
+                    "task": "NEVER-DISPATCHED: count the figures",
+                    "run_mode": "async",
+                }),
+            )]),
+        );
+    });
+
+    // Default `run_modes`: wait only.
+    let (app_state, _llm) = task_enabled_state(pool, mocks, &["erato/delegate_task"]).await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, "unoffered mode question", &["plan"]).await;
+
+    let output = find_tool_call_update_output(&events, "delegate_task");
+    let error = output["error"]
+        .as_str()
+        .unwrap_or_else(|| panic!("the call must be refused: {output}"));
+    assert!(
+        error.contains("not available") && error.contains("wait"),
+        "the refusal must name what IS available so the model can retry correctly: {error}"
+    );
+    assert!(extract_full_text_answer(&events).contains("ASYNC-REFUSAL-RECOVERED"));
+
+    // A refusal is a refused CALL, not a refused turn — and nothing was created.
+    let children = erato::db::entity::prelude::Chats::find()
+        .filter(erato::db::entity::chats::Column::OriginChatId.eq(Uuid::parse_str(&chat).unwrap()))
+        .all(&app_state.db)
+        .await
+        .expect("query");
+    assert!(
+        children.is_empty(),
+        "a refused mode must not leave a child run behind"
+    );
+}
+
+/// The concurrency cap counts both detached modes.
+///
+/// The cap exists to bound concurrent load, and an `async` run costs exactly
+/// what a `background` one does. Leaving the SQL at `= 'background'` would
+/// make async runs uncapped — the one mode a model can start on its own
+/// initiative, repeatedly, within a single turn.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn count_running_background_delegated_runs_counts_async_runs(pool: Pool<Postgres>) {
+    use sea_orm::ConnectionTrait;
+
+    let app_state = test_app_state(delegation_enabled_config(), pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin_chat = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin_chat).unwrap();
+
+    for run_mode in [
+        erato::models::message::ProvenanceRunMode::Background,
+        erato::models::message::ProvenanceRunMode::Async,
+        // An awaited run is not detached and must not be counted.
+        erato::models::message::ProvenanceRunMode::Wait,
+    ] {
+        let child = erato::models::chat::create_delegated_chat(
+            &app_state.db,
+            &rebuilt_policy(&app_state).await,
+            &erato::policy::types::Subject::User(me.id.to_string()),
+            &me.id.to_string(),
+            None,
+            ChatProvenance {
+                kind: ChatProvenanceKind::Delegation,
+                origin_chat_id: Some(origin_chat_id),
+                origin_message_id: None,
+                origin_assistant_id: None,
+                rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
+                depth: 1,
+                adopted_at: None,
+                legacy_expected_output: None,
+                legacy_constraints: None,
+                run_mode: (run_mode != erato::models::message::ProvenanceRunMode::Wait)
+                    .then_some(run_mode),
+                result_delivery: None,
+            },
+            None,
+            format!("{run_mode:?} run"),
+            true,
+            Vec::new(),
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+
+        // Live generation with a fresh heartbeat: what "in flight" means here.
+        app_state
+            .db
+            .execute_raw(sea_orm::Statement::from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                r#"
+                UPDATE chats
+                SET active_generation_id = $1,
+                    generation_state = 'running',
+                    generation_started_at = now(),
+                    generation_heartbeat_at = now(),
+                    generation_ended_at = NULL
+                WHERE id = $2
+                "#,
+                [Uuid::new_v4().into(), child.id.into()],
+            ))
+            .await
+            .expect("mark running");
+    }
+
+    let in_flight = erato::models::chat::count_running_background_delegated_runs(
+        &app_state.db,
+        &me.id.to_string(),
+        app_state.config.generation_status.stale_after_secs,
+    )
+    .await
+    .expect("count");
+    assert_eq!(
+        in_flight, 2,
+        "both detached modes consume a slot; the awaited run does not"
+    );
+}
+
+/// `async` is not a mode a client may ask for.
+///
+/// The request wire keeps two variants on purpose, so the only way into the
+/// third is the server choosing it for a delegated run. Widening
+/// `DelegationRunMode` instead of adding a separate persisted type would let a
+/// submit body start a turn in a mode the request path cannot execute.
+///
+/// Asserts the status the server actually returns: axum's stock `Json`
+/// extractor answers a deserialization failure with 422, and nothing in this
+/// service remaps it.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn an_async_delegation_run_mode_on_a_submit_request_is_unprocessable(pool: Pool<Postgres>) {
+    let app_state = test_app_state(delegation_enabled_config(), pool).await;
+    erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "user_message": "run this detached",
+            "delegation_run_mode": "async",
+        }))
+        .await;
+    assert_eq!(
+        response.status_code(),
+        axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+        "an unknown run mode must not reach the turn"
+    );
+
+    let chats = erato::db::entity::prelude::Chats::find()
+        .all(&app_state.db)
+        .await
+        .expect("query");
+    assert!(
+        chats.is_empty(),
+        "a rejected request must not have created a chat"
+    );
+}
+
+/// Wait for a child's recorded delivery to reach one of the given states.
+async fn wait_for_delivery_state(
+    db: &sea_orm::DatabaseConnection,
+    child_chat_id: Uuid,
+    wanted: &[&str],
+) -> String {
+    for _ in 0..100 {
+        if let Some(chat) = erato::db::entity::chats::Entity::find_by_id(child_chat_id)
+            .one(db)
+            .await
+            .unwrap()
+            && let Some(state) = chat
+                .assistant_configuration
+                .as_ref()
+                .and_then(|configuration| {
+                    configuration["provenance"]["result_delivery"]["state"].as_str()
+                })
+            && wanted.contains(&state)
+        {
+            return state.to_string();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+    let observed = erato::db::entity::chats::Entity::find_by_id(child_chat_id)
+        .one(db)
+        .await
+        .unwrap()
+        .and_then(|chat| chat.assistant_configuration)
+        .map(|configuration| configuration["provenance"]["result_delivery"].clone());
+    panic!("delivery for child {child_chat_id} never reached {wanted:?}; observed {observed:?}");
+}
+
+/// The rows of a chat's active thread, oldest first.
+async fn active_thread_rows(
+    db: &sea_orm::DatabaseConnection,
+    chat_id: Uuid,
+) -> Vec<erato::db::entity::messages::Model> {
+    chat_messages_by_created_at(db, chat_id)
+        .await
+        .into_iter()
+        .filter(|row| row.is_message_in_active_thread)
+        .collect()
+}
+
+/// The whole point of the level: a task the turn did not wait for comes back.
+///
+/// End to end through the real routes — dispatch, detached child, delivery,
+/// reaction — because each half is individually plausible and only the seam
+/// between them is the feature. Skip the child tail's drain and this is the
+/// only test that notices: the run finishes, its answer sits in its own chat,
+/// and the conversation that asked for it never hears.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn async_child_completion_delivers_task_result_and_reacts(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    // The reaction turn: recognised by the delivered answer plus the origin
+    // conversation around it. Registered first so it wins over the parent's
+    // continuation, whose matcher is a subset of this one's context.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["ASYNC-CHILD-ANSWER", "delivery question"],
+                &[],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["REACTION-TO-RESULT"]),
+        );
+    });
+    // The child's own turn.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["DELIVERY-BRIEF-SENTINEL"],
+                &["delivery question"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["ASYNC-CHILD-ANSWER"]),
+        );
+    });
+    // The parent's continuation, once the dispatch has settled its slot.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["delivery question", "dispatched"],
+                &["ASYNC-CHILD-ANSWER"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["PARENT-DISPATCH-FINAL"]),
+        );
+    });
+    // The parent's first turn: plans the sub-task as `async`.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["delivery question"],
+                &[
+                    "DELIVERY-BRIEF-SENTINEL",
+                    "dispatched",
+                    "ASYNC-CHILD-ANSWER",
+                ],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_delivery_1",
+                "delegate_task",
+                json!({
+                    "task": "DELIVERY-BRIEF-SENTINEL: count the figures",
+                    "run_mode": "async",
+                }),
+            )]),
+        );
+    });
+
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        config.delegation.tasks.run_modes = vec![
+            erato_config::config::TaskRunMode::Wait,
+            erato_config::config::TaskRunMode::Async,
+        ];
+    })
+    .await;
+
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let chat_id = Uuid::parse_str(&chat).unwrap();
+    let events = submit_with_facets(&server, &chat, "delivery question", &["plan"]).await;
+    assert!(extract_full_text_answer(&events).contains("PARENT-DISPATCH-FINAL"));
+
+    let child_chat = delegated_child_chat(&app_state.db, chat_id).await;
+    wait_for_child_completion(&app_state.db, child_chat.id, "ASYNC-CHILD-ANSWER").await;
+    let state = wait_for_delivery_state(&app_state.db, child_chat.id, &["reacted"]).await;
+    assert_eq!(state, "reacted");
+
+    // The result is a user-role row on the active thread, carrying the child's
+    // answer as a `task_result` part rather than as text.
+    let rows = active_thread_rows(&app_state.db, chat_id).await;
+    let result_row = rows
+        .iter()
+        .find(|row| {
+            row.input_parameters
+                .as_ref()
+                .is_some_and(|parameters| !parameters["task_result"].is_null())
+        })
+        .expect("a task_result row must be on the origin's active thread");
+    assert_eq!(result_row.raw_message["role"], "user");
+    let part = &result_row.raw_message["content"][0];
+    assert_eq!(part["content_type"], "task_result");
+    assert_eq!(part["child_chat_id"], child_chat.id.to_string());
+    assert_eq!(part["parent_tool_call_id"], "call_delivery_1");
+    assert_eq!(part["status"], "completed");
+    assert!(
+        part["summary"]
+            .as_str()
+            .is_some_and(|summary| summary.contains("ASYNC-CHILD-ANSWER")),
+        "the child's answer must ride the part: {part}"
+    );
+
+    // …and the model reacted to it, on a row that says who started the turn.
+    let reaction = rows
+        .iter()
+        .find(|row| {
+            row.generation_parameters
+                .as_ref()
+                .is_some_and(|parameters| parameters["initiator"] == "task_result")
+        })
+        .expect("the delivery must have run a reaction turn");
+    assert!(
+        reaction.raw_message["content"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|part| part["text"]
+                .as_str()
+                .is_some_and(|text| text.contains("REACTION-TO-RESULT"))),
+        "the reaction must be the model's answer to the result: {:?}",
+        reaction.raw_message
+    );
+    assert!(
+        rows.iter().position(|row| row.id == result_row.id)
+            < rows.iter().position(|row| row.id == reaction.id),
+        "the reaction must come after the result it answers"
+    );
+}
+
+/// A task-enabled state that also offers `async`.
+async fn task_enabled_state_with_async(
+    pool: Pool<Postgres>,
+) -> (erato::state::AppState, mocktail::server::MockServer) {
+    task_state(pool, MockSet::new(), &["erato/delegate_task"], |config| {
+        config.delegation.tasks.run_modes = vec![
+            erato_config::config::TaskRunMode::Wait,
+            erato_config::config::TaskRunMode::Async,
+        ];
+    })
+    .await
+}
+
+/// The principal a delivery runs under.
+///
+/// Written out rather than deserialized: the profile has no `Default` and few
+/// serde defaults, so a JSON stub would break on the next field added without
+/// saying which one.
+async fn me_profile(
+    _app_state: &erato::state::AppState,
+    user: &erato::db::entity::users::Model,
+) -> erato::MeProfile {
+    erato::MeProfile {
+        profile: erato::UserProfile {
+            id: user.id.to_string(),
+            email: None,
+            name: None,
+            picture: None,
+            preferred_language: "en".to_string(),
+            groups: Vec::new(),
+            organization_user_id: None,
+            organization_group_ids: Vec::new(),
+            preference_nickname: None,
+            preference_job_title: None,
+            preference_assistant_custom_instructions: None,
+            preference_assistant_additional_information: None,
+            preference_default_chat_provider: None,
+            preference_starting_hub_assistant_id: None,
+            preference_starting_assistant_id: None,
+            preference_starting_assistant_cleared: false,
+        },
+        oidc_token: TEST_JWT_TOKEN.to_string(),
+        id_token_claims: json!({}),
+        access_token: None,
+    }
+}
+
+/// Hand-seed a delegated `async` child of `origin_chat_id` whose result is
+/// recorded and owed.
+///
+/// The recording half is exercised end to end by the test above; these tests
+/// need to reach one specific branch of the delivery half without also running
+/// a child, so they write the state that branch reads.
+async fn seed_child_owing_a_result(
+    app_state: &erato::state::AppState,
+    owner_user_id: &str,
+    origin_chat_id: Uuid,
+    answer: Option<&str>,
+    scheduling: erato_config::config::TaskScheduling,
+) -> Uuid {
+    let child = erato::models::chat::create_delegated_chat(
+        &app_state.db,
+        &rebuilt_policy(app_state).await,
+        &erato::policy::types::Subject::User(owner_user_id.to_string()),
+        owner_user_id,
+        None,
+        ChatProvenance {
+            kind: ChatProvenanceKind::Delegation,
+            origin_chat_id: Some(origin_chat_id),
+            origin_message_id: None,
+            origin_assistant_id: None,
+            rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
+            depth: 1,
+            adopted_at: None,
+            legacy_expected_output: None,
+            legacy_constraints: None,
+            run_mode: Some(erato::models::message::ProvenanceRunMode::Async),
+            result_delivery: None,
+        },
+        Some(erato::models::chat::TaskSpec {
+            expected_output: None,
+            constraints: None,
+            facet_ids: Vec::new(),
+            max_server_tool_calls_per_task: None,
+            max_client_tool_calls_per_task: None,
+            persona: Default::default(),
+            scheduling,
+            parent_tool_call_id: Some("call_seeded".to_string()),
+            route: erato::models::chat::DelegateRoute::Task,
+        }),
+        "Seeded async run".to_string(),
+        true,
+        Vec::new(),
+        Vec::new(),
+    )
+    .await
+    .expect("child chat");
+    app_state.global_policy_engine.invalidate_data().await;
+
+    // The child's own answer row, when the test wants one. `None` stands in for
+    // a run whose answer is gone.
+    let answer_message_id = match answer {
+        Some(text) => {
+            let user_row = erato::models::message::submit_message(
+                &app_state.db,
+                &rebuilt_policy(app_state).await,
+                &erato::policy::types::Subject::User(owner_user_id.to_string()),
+                &child.id,
+                json!({
+                    "role": "user",
+                    "content": [{"content_type": "text", "text": "seeded brief"}],
+                    "name": owner_user_id,
+                }),
+                None,
+                None,
+                None,
+                &[],
+                None,
+                None,
+                None,
+            )
+            .await
+            .expect("child user row");
+            erato::models::message::submit_message(
+                &app_state.db,
+                &rebuilt_policy(app_state).await,
+                &erato::policy::types::Subject::User(owner_user_id.to_string()),
+                &child.id,
+                json!({
+                    "role": "assistant",
+                    "content": [{"content_type": "text", "text": text}],
+                }),
+                Some(&user_row.id),
+                None,
+                None,
+                &[],
+                None,
+                None,
+                None,
+            )
+            .await
+            .expect("child answer row")
+            .id
+        }
+        None => Uuid::new_v4(),
+    };
+
+    erato::services::task_delivery::record_pending_delivery(
+        app_state,
+        child.id,
+        answer_message_id,
+        false,
+        false,
+        false,
+    )
+    .await
+    .expect("the run must record a delivery it owes");
+    child.id
+}
+
+/// Read a child's stored delivery envelope.
+async fn delivery_of(app_state: &erato::state::AppState, child_chat_id: Uuid) -> Value {
+    erato::db::entity::chats::Entity::find_by_id(child_chat_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap()
+        .assistant_configuration
+        .expect("configuration")["provenance"]["result_delivery"]
+        .clone()
+}
+
+/// An archived origin closes the delivery instead of writing into it.
+///
+/// Archiving is the user saying they are done with that conversation. Appending
+/// a result to it afterwards would resurrect it in the listing over work they
+/// stopped caring about, so the delivery is closed and says why.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn archived_origin_supersedes_the_delivery(pool: Pool<Postgres>) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+
+    let child_id = seed_child_owing_a_result(
+        &app_state,
+        &me.id.to_string(),
+        origin_chat_id,
+        Some("SEEDED-ANSWER"),
+        erato_config::config::TaskScheduling::WhenIdle,
+    )
+    .await;
+
+    archive_chat_via_api(&server, &origin).await;
+    app_state.global_policy_engine.invalidate_data().await;
+
+    let outcome = erato::services::task_delivery::deliver_task_result(
+        &app_state,
+        &rebuilt_policy(&app_state).await,
+        &me_profile(&app_state, &me).await,
+        child_id,
+    )
+    .await;
+    assert_eq!(
+        outcome,
+        erato::services::task_delivery::DeliveryOutcome::Closed
+    );
+
+    let delivery = delivery_of(&app_state, child_id).await;
+    assert_eq!(delivery["state"], "superseded");
+    assert_eq!(delivery["reason"], "origin_archived");
+    assert!(
+        active_thread_rows(&app_state.db, origin_chat_id)
+            .await
+            .iter()
+            .all(|row| row
+                .input_parameters
+                .as_ref()
+                .is_none_or(|parameters| parameters["task_result"].is_null())),
+        "nothing may be appended to an archived chat"
+    );
+}
+
+/// A run whose answer row is gone delivers a failure, not an empty success.
+///
+/// `build_result_envelope` maps a missing answer to `completed` / `no_answer`,
+/// which is right for the awaited path — the delegate genuinely said nothing —
+/// and wrong here, where the row is gone because the process died. Telling the
+/// origin model the task finished with nothing to say invites it to move on
+/// from work that never reported.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_child_without_an_answer_row_delivers_failed_result_missing(pool: Pool<Postgres>) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+
+    let child_id = seed_child_owing_a_result(
+        &app_state,
+        &me.id.to_string(),
+        origin_chat_id,
+        None,
+        erato_config::config::TaskScheduling::Silent,
+    )
+    .await;
+
+    let recorded = delivery_of(&app_state, child_id).await;
+    assert_eq!(recorded["status"], "failed");
+    assert_eq!(recorded["reason"], "result_missing");
+    assert!(
+        recorded["result_message_id"].is_null(),
+        "there is no answer row to point at"
+    );
+
+    let outcome = erato::services::task_delivery::deliver_task_result(
+        &app_state,
+        &rebuilt_policy(&app_state).await,
+        &me_profile(&app_state, &me).await,
+        child_id,
+    )
+    .await;
+    assert_eq!(
+        outcome,
+        erato::services::task_delivery::DeliveryOutcome::Delivered,
+        "a failed task is still news the origin model needs"
+    );
+
+    let rows = active_thread_rows(&app_state.db, origin_chat_id).await;
+    let part = rows
+        .iter()
+        .find_map(|row| {
+            row.input_parameters
+                .as_ref()
+                .filter(|parameters| !parameters["task_result"].is_null())
+                .map(|_| row.raw_message["content"][0].clone())
+        })
+        .expect("the failure must still reach the conversation");
+    assert_eq!(part["status"], "failed");
+    assert_eq!(part["reason"], "result_missing");
+}
+
+/// A `silent` result is stored, not answered.
+///
+/// The model asked for a result it did not want interrupted by; the user's own
+/// next message composes it through history instead. A reaction here would be
+/// the conversation talking to itself.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn silent_scheduling_delivers_without_a_reaction(pool: Pool<Postgres>) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+
+    let child_id = seed_child_owing_a_result(
+        &app_state,
+        &me.id.to_string(),
+        origin_chat_id,
+        Some("SILENT-ANSWER"),
+        erato_config::config::TaskScheduling::Silent,
+    )
+    .await;
+
+    let before = active_thread_rows(&app_state.db, origin_chat_id)
+        .await
+        .len();
+    let outcome = erato::services::task_delivery::deliver_task_result(
+        &app_state,
+        &rebuilt_policy(&app_state).await,
+        &me_profile(&app_state, &me).await,
+        child_id,
+    )
+    .await;
+    assert_eq!(
+        outcome,
+        erato::services::task_delivery::DeliveryOutcome::Delivered
+    );
+
+    let delivery = delivery_of(&app_state, child_id).await;
+    assert_eq!(
+        delivery["state"], "delivered",
+        "a silent delivery stops at delivered; nothing reacted"
+    );
+
+    let rows = active_thread_rows(&app_state.db, origin_chat_id).await;
+    assert_eq!(
+        rows.len(),
+        before + 1,
+        "exactly one row - the result - and no reaction turn"
+    );
+    assert!(
+        rows.iter()
+            .all(|row| row.raw_message["role"] != "assistant"),
+        "a silent delivery must not produce an assistant turn"
+    );
+}
+
+/// Re-delivering after a crash appends the same result once, not twice.
+///
+/// A process that dies between the claim and the state write leaves a `claimed`
+/// envelope and a row already on disk. The backstop forces such a claim back to
+/// `pending`, and without the duplicate probe the retry would append the
+/// child's answer a second time — in the conversation, where the user sees it.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn delivery_reclaim_after_a_crash_does_not_duplicate_the_task_result(pool: Pool<Postgres>) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+
+    let child_id = seed_child_owing_a_result(
+        &app_state,
+        &me.id.to_string(),
+        origin_chat_id,
+        Some("RECLAIM-ANSWER"),
+        erato_config::config::TaskScheduling::Silent,
+    )
+    .await;
+
+    let policy = rebuilt_policy(&app_state).await;
+    let me_profile = me_profile(&app_state, &me).await;
+    assert_eq!(
+        erato::services::task_delivery::deliver_task_result(
+            &app_state,
+            &policy,
+            &me_profile,
+            child_id
+        )
+        .await,
+        erato::services::task_delivery::DeliveryOutcome::Delivered
+    );
+
+    // The crash: the envelope is forced back to `pending` under the same
+    // delivery id, exactly as a stale-claim requeue leaves it.
+    let mut delivery = delivery_of(&app_state, child_id).await;
+    delivery["state"] = json!("pending");
+    let chat = erato::db::entity::chats::Entity::find_by_id(child_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut configuration = chat.assistant_configuration.clone().unwrap();
+    configuration["provenance"]["result_delivery"] = delivery;
+    let mut active: erato::db::entity::chats::ActiveModel = chat.into();
+    active.assistant_configuration = ActiveValue::Set(Some(configuration));
+    active.update(&app_state.db).await.unwrap();
+
+    assert_eq!(
+        erato::services::task_delivery::deliver_task_result(
+            &app_state,
+            &policy,
+            &me_profile,
+            child_id
+        )
+        .await,
+        erato::services::task_delivery::DeliveryOutcome::Delivered
+    );
+
+    let result_rows = active_thread_rows(&app_state.db, origin_chat_id)
+        .await
+        .into_iter()
+        .filter(|row| {
+            row.input_parameters
+                .as_ref()
+                .is_some_and(|parameters| !parameters["task_result"].is_null())
+        })
+        .count();
+    assert_eq!(
+        result_rows, 1,
+        "the delivery id is the idempotency key; a retry must find its own row"
+    );
+}
+
+/// A busy origin defers the delivery rather than queueing behind the user.
+///
+/// The lease is admission control now, so a delivery that ignored it would put
+/// two writers in one chat. Deferring costs nothing: the claim goes back to
+/// `pending`, and the origin turn's own tail drains it on the way out.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn delivery_defers_while_the_origin_lease_is_held(pool: Pool<Postgres>) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+
+    let child_id = seed_child_owing_a_result(
+        &app_state,
+        &me.id.to_string(),
+        origin_chat_id,
+        Some("DEFERRED-ANSWER"),
+        erato_config::config::TaskScheduling::Silent,
+    )
+    .await;
+
+    // Someone is already generating in the origin chat.
+    let (_rx, holder) = app_state
+        .background_tasks
+        .try_start_task(
+            origin_chat_id,
+            Uuid::new_v4(),
+            erato::services::background_tasks::Takeover::TakeParked,
+            app_state.config.generation_status.stale_after_secs,
+        )
+        .await
+        .expect("the origin lease must be free to start with");
+
+    let policy = rebuilt_policy(&app_state).await;
+    let me_profile = me_profile(&app_state, &me).await;
+    assert_eq!(
+        erato::services::task_delivery::deliver_task_result(
+            &app_state,
+            &policy,
+            &me_profile,
+            child_id
+        )
+        .await,
+        erato::services::task_delivery::DeliveryOutcome::Deferred
+    );
+    let delivery = delivery_of(&app_state, child_id).await;
+    assert_eq!(
+        delivery["state"], "pending",
+        "a deferred delivery goes back in the queue, it is not lost"
+    );
+    assert!(
+        delivery["claimed_by"].is_null(),
+        "a released claim must not look held"
+    );
+    assert_eq!(
+        delivery["attempts"], 1,
+        "the attempt is still counted, so a delivery that can never land is visible"
+    );
+    assert!(
+        active_thread_rows(&app_state.db, origin_chat_id)
+            .await
+            .is_empty(),
+        "nothing may be written into a chat someone else is generating in"
+    );
+
+    // Once the turn ends, the same delivery lands.
+    app_state
+        .background_tasks
+        .remove_task(
+            &origin_chat_id,
+            holder.generation_id,
+            erato::services::background_tasks::TaskOutcome::Completed,
+        )
+        .await;
+    erato::services::task_delivery::drain_pending_deliveries(
+        &app_state,
+        &policy,
+        &me_profile,
+        origin_chat_id,
+    )
+    .await;
+    assert_eq!(
+        delivery_of(&app_state, child_id).await["state"],
+        "delivered"
+    );
+}
+
+/// LD-A9: a reaction turn may not plan tasks of its own.
+///
+/// The offer is normally withheld from a delegated RUN, and a reaction runs in
+/// the ORIGIN chat, where that rule does not reach. Without the explicit
+/// suppression a reaction could dispatch another async task, whose result would
+/// trigger another reaction — a loop nothing in the system bounds.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_reaction_turn_does_not_offer_delegate_task(pool: Pool<Postgres>) {
+    let reaction_recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let reaction_recorder = reaction_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &["LOOPGUARD-CHILD-ANSWER", "loopguard question"],
+                    &[],
+                ))
+                .matcher(reaction_recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&["LOOPGUARD-REACTION"]),
+            );
+        });
+    }
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["LOOPGUARD-BRIEF"],
+                &["loopguard question"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["LOOPGUARD-CHILD-ANSWER"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["loopguard question", "dispatched"],
+                &["LOOPGUARD-CHILD-ANSWER"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["LOOPGUARD-PARENT-FINAL"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["loopguard question"],
+                &["LOOPGUARD-BRIEF", "dispatched", "LOOPGUARD-CHILD-ANSWER"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_loopguard",
+                "delegate_task",
+                json!({ "task": "LOOPGUARD-BRIEF: count", "run_mode": "async" }),
+            )]),
+        );
+    });
+
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        config.delegation.tasks.run_modes = vec![
+            erato_config::config::TaskRunMode::Wait,
+            erato_config::config::TaskRunMode::Async,
+        ];
+    })
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let chat_id = Uuid::parse_str(&chat).unwrap();
+    submit_with_facets(&server, &chat, "loopguard question", &["plan"]).await;
+
+    let child_chat = delegated_child_chat(&app_state.db, chat_id).await;
+    wait_for_child_completion(&app_state.db, child_chat.id, "LOOPGUARD-CHILD-ANSWER").await;
+    wait_for_delivery_state(&app_state.db, child_chat.id, &["reacted"]).await;
+
+    let bodies = reaction_recorder.bodies();
+    assert!(
+        !bodies.is_empty(),
+        "the reaction turn must have reached the provider"
+    );
+    // Asserted against the OFFER, not the raw body: the reaction replays the
+    // turn that planned the task, so the name appears in its history — and has
+    // to, or the model could not see what it already did.
+    for body in &bodies {
+        let request: Value = serde_json::from_str(body).expect("request body is JSON");
+        let offered: Vec<String> = request["tools"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|tool| tool["function"]["name"].as_str())
+            .map(str::to_string)
+            .collect();
+        assert!(
+            !offered.iter().any(|name| name == "delegate_task"),
+            "a reaction turn must not be offered the task tool; offered: {offered:?}"
+        );
+    }
+    // The planning turn WAS offered it, so this is a suppression and not a
+    // configuration that never offered the tool at all.
+    assert!(
+        active_thread_rows(&app_state.db, chat_id)
+            .await
+            .iter()
+            .any(|row| row.raw_message["content"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|part| part["content_type"] == "tool_use")),
+        "the origin turn must have actually planned a task"
+    );
+}
+
+/// The owner opening the child chat must not erase what it still owes.
+///
+/// The first user write into a delegated run marks it adopted by rewriting the
+/// whole `assistant_configuration` column from a row this process read earlier.
+/// A recorded delivery written in between would go with it, and the result
+/// would be lost silently — the run looks finished and nothing is owed.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn adopted_child_still_delivers_the_recorded_result(pool: Pool<Postgres>) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+
+    let child_id = seed_child_owing_a_result(
+        &app_state,
+        &me.id.to_string(),
+        origin_chat_id,
+        Some("ADOPTED-ANSWER"),
+        erato_config::config::TaskScheduling::Silent,
+    )
+    .await;
+
+    // The owner writes into the child chat themselves.
+    let child = erato::db::entity::chats::Entity::find_by_id(child_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    erato::models::chat::mark_delegated_run_adopted(&app_state.db, &child)
+        .await
+        .expect("adoption");
+
+    let delivery = delivery_of(&app_state, child_id).await;
+    assert_eq!(
+        delivery["state"], "pending",
+        "adoption must not erase a delivery the origin is still owed: {delivery}"
+    );
+
+    // And it still lands.
+    erato::services::task_delivery::drain_pending_deliveries(
+        &app_state,
+        &rebuilt_policy(&app_state).await,
+        &me_profile(&app_state, &me).await,
+        origin_chat_id,
+    )
+    .await;
+    assert_eq!(
+        delivery_of(&app_state, child_id).await["state"],
+        "delivered"
+    );
+}
+
+/// Two processes racing one delivery produce one row, and only one of them
+/// believes it delivered.
+///
+/// The claim is the compare-and-set that decides. Drop its `state = 'pending'`
+/// predicate and both callers proceed: the row count stays at one, because the
+/// duplicate probe catches it downstream, so the outcomes are the only
+/// observable that moves — which is what this asserts.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn delivery_claim_is_single_winner_under_concurrency(pool: Pool<Postgres>) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+
+    let child_id = seed_child_owing_a_result(
+        &app_state,
+        &me.id.to_string(),
+        origin_chat_id,
+        Some("RACED-ANSWER"),
+        erato_config::config::TaskScheduling::Silent,
+    )
+    .await;
+
+    let policy = rebuilt_policy(&app_state).await;
+    let me_profile = me_profile(&app_state, &me).await;
+    let (first, second) = tokio::join!(
+        erato::services::task_delivery::deliver_task_result(
+            &app_state,
+            &policy,
+            &me_profile,
+            child_id
+        ),
+        erato::services::task_delivery::deliver_task_result(
+            &app_state,
+            &policy,
+            &me_profile,
+            child_id
+        ),
+    );
+
+    let mut outcomes = [first, second];
+    outcomes.sort_by_key(|outcome| format!("{outcome:?}"));
+    assert_eq!(
+        outcomes,
+        [
+            erato::services::task_delivery::DeliveryOutcome::Delivered,
+            erato::services::task_delivery::DeliveryOutcome::Skipped,
+        ],
+        "exactly one caller may take a delivery; the loser must not also report success"
+    );
+
+    let result_rows = active_thread_rows(&app_state.db, origin_chat_id)
+        .await
+        .into_iter()
+        .filter(|row| {
+            row.input_parameters
+                .as_ref()
+                .is_some_and(|parameters| !parameters["task_result"].is_null())
+        })
+        .count();
+    assert_eq!(result_rows, 1, "one delivery, one row");
+}
+
+/// A chat parked on a tool approval belongs to the person who has to answer it.
+///
+/// `RefuseParked` is the whole difference from a user write, which may abandon
+/// an approval the user has stopped answering. A delivery may not: dropping a
+/// result under a mounted approval card moves the card the user is looking at,
+/// and nobody asked for that.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn delivery_refuses_a_parked_origin_and_lands_once_it_is_free(pool: Pool<Postgres>) {
+    use sea_orm::ConnectionTrait;
+
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+
+    let child_id = seed_child_owing_a_result(
+        &app_state,
+        &me.id.to_string(),
+        origin_chat_id,
+        Some("PARKED-ANSWER"),
+        erato_config::config::TaskScheduling::Silent,
+    )
+    .await;
+
+    // The origin is parked on an approval nobody has answered.
+    app_state
+        .db
+        .execute_raw(sea_orm::Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            r#"
+            UPDATE chats
+            SET active_generation_id = $1,
+                generation_state = 'awaiting_approval',
+                generation_started_at = now(),
+                generation_heartbeat_at = NULL,
+                generation_ended_at = NULL
+            WHERE id = $2
+            "#,
+            [Uuid::new_v4().into(), origin_chat_id.into()],
+        ))
+        .await
+        .expect("park the origin");
+
+    let policy = rebuilt_policy(&app_state).await;
+    let me_profile = me_profile(&app_state, &me).await;
+    assert_eq!(
+        erato::services::task_delivery::deliver_task_result(
+            &app_state,
+            &policy,
+            &me_profile,
+            child_id
+        )
+        .await,
+        erato::services::task_delivery::DeliveryOutcome::Deferred
+    );
+    assert_eq!(delivery_of(&app_state, child_id).await["state"], "pending");
+    assert!(
+        active_thread_rows(&app_state.db, origin_chat_id)
+            .await
+            .is_empty(),
+        "nothing may be written under a mounted approval card"
+    );
+
+    // The approval is answered and the chat goes idle; the same delivery lands.
+    app_state
+        .db
+        .execute_raw(sea_orm::Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            r#"
+            UPDATE chats
+            SET generation_state = 'completed', generation_ended_at = now()
+            WHERE id = $1
+            "#,
+            [origin_chat_id.into()],
+        ))
+        .await
+        .expect("unpark the origin");
+
+    erato::services::task_delivery::drain_pending_deliveries(
+        &app_state,
+        &policy,
+        &me_profile,
+        origin_chat_id,
+    )
+    .await;
+    assert_eq!(
+        delivery_of(&app_state, child_id).await["state"],
+        "delivered"
+    );
+}
+
+/// Two processes, one delivery: the claim decides, and only one believes it won.
+///
+/// The single-process version of this races two tasks through one manager,
+/// which the in-memory map alone could settle. Two managers on one pool is the
+/// case the compare-and-set exists for — a second replica, or the ~25 seconds
+/// of every rolling deploy when the old and new pods both hold the database.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn delivery_claim_is_single_winner_across_two_managers(pool: Pool<Postgres>) {
+    let (app_config_a, _llm_a) = crate::test_utils::setup_mock_llm_server(None).await;
+    let mut app_config_a = app_config_a;
+    app_config_a.delegation.tasks.enabled = true;
+    app_config_a.delegation.tasks.run_modes = vec![
+        erato_config::config::TaskRunMode::Wait,
+        erato_config::config::TaskRunMode::Async,
+    ];
+    let (app_config_b, _llm_b) = crate::test_utils::setup_mock_llm_server(None).await;
+    let mut app_config_b = app_config_b;
+    app_config_b.delegation.tasks.enabled = true;
+    app_config_b.delegation.tasks.run_modes = app_config_a.delegation.tasks.run_modes.clone();
+
+    // Two AppStates over one pool: two managers, two in-memory task maps, one
+    // database. Neither can see the other's map.
+    let replica_a = test_app_state(app_config_a, pool.clone()).await;
+    let replica_b = test_app_state(app_config_b, pool.clone()).await;
+
+    let me = erato::models::user::get_or_create_user(
+        &replica_a.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(replica_a.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+
+    let child_id = seed_child_owing_a_result(
+        &replica_a,
+        &me.id.to_string(),
+        origin_chat_id,
+        Some("TWO-MANAGER-ANSWER"),
+        erato_config::config::TaskScheduling::Silent,
+    )
+    .await;
+    replica_b.global_policy_engine.invalidate_data().await;
+
+    let policy_a = rebuilt_policy(&replica_a).await;
+    let policy_b = rebuilt_policy(&replica_b).await;
+    let profile = me_profile(&replica_a, &me).await;
+    let (first, second) = tokio::join!(
+        erato::services::task_delivery::deliver_task_result(
+            &replica_a, &policy_a, &profile, child_id
+        ),
+        erato::services::task_delivery::deliver_task_result(
+            &replica_b, &policy_b, &profile, child_id
+        ),
+    );
+
+    let mut outcomes = [first, second];
+    outcomes.sort_by_key(|outcome| format!("{outcome:?}"));
+    assert_eq!(
+        outcomes,
+        [
+            erato::services::task_delivery::DeliveryOutcome::Delivered,
+            erato::services::task_delivery::DeliveryOutcome::Skipped,
+        ],
+        "across replicas the claim must still admit exactly one winner"
+    );
+    let result_rows = active_thread_rows(&replica_a.db, origin_chat_id)
+        .await
+        .into_iter()
+        .filter(|row| {
+            row.input_parameters
+                .as_ref()
+                .is_some_and(|parameters| !parameters["task_result"].is_null())
+        })
+        .count();
+    assert_eq!(result_rows, 1, "one delivery, one row, two replicas");
+}
+
+/// The regenerate and edit tails drain too.
+///
+/// All five call sites were wired, and until now only three were tested —
+/// deleting either of these two left the whole suite green. A delivery owed to
+/// a chat whose user then regenerates or edits would simply wait for some other
+/// turn to come along.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn the_regenerate_and_edit_tails_drain_pending_deliveries(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post().path("/v1/chat/completions");
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["TAIL-DRAIN-ANSWER"]),
+        );
+    });
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        config.delegation.tasks.run_modes = vec![
+            erato_config::config::TaskRunMode::Wait,
+            erato_config::config::TaskRunMode::Async,
+        ];
+    })
+    .await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+
+    // A real turn, so there is an assistant row to regenerate and a user row to edit.
+    let chat = create_chat(&server, None).await;
+    let chat_id = Uuid::parse_str(&chat).unwrap();
+    let events = submit_with_facets(&server, &chat, "tail drain question", &[]).await;
+    let assistant_message_id = events
+        .iter()
+        .find_map(|event| {
+            serde_json::from_str::<Value>(&event.data)
+                .ok()
+                .filter(|json| json["message_type"] == "assistant_message_completed")
+                .and_then(|json| {
+                    json["message_id"]
+                        .as_str()
+                        .and_then(|id| Uuid::parse_str(id).ok())
+                })
+        })
+        .expect("an assistant row to regenerate");
+    let user_message_id = erato::db::entity::prelude::Messages::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap()
+        .previous_message_id
+        .expect("the user turn");
+
+    for (label, request) in [
+        (
+            "regenerate",
+            (
+                "/api/v1beta/me/messages/regeneratestream",
+                json!({ "current_message_id": assistant_message_id.to_string() }),
+            ),
+        ),
+        (
+            "edit",
+            (
+                "/api/v1beta/me/messages/editstream",
+                json!({
+                    "message_id": user_message_id.to_string(),
+                    "replace_user_message": "tail drain question, edited",
+                }),
+            ),
+        ),
+    ] {
+        let child_id = seed_child_owing_a_result(
+            &app_state,
+            &me.id.to_string(),
+            chat_id,
+            Some("TAIL-DRAIN-RESULT"),
+            erato_config::config::TaskScheduling::Silent,
+        )
+        .await;
+        assert_eq!(
+            delivery_of(&app_state, child_id).await["state"],
+            "pending",
+            "{label}: the delivery must start owed"
+        );
+
+        let (path, body) = request;
+        let response = server
+            .post(path)
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&body)
+            .await;
+        response.assert_status_ok();
+
+        assert_eq!(
+            delivery_of(&app_state, child_id).await["state"],
+            "delivered",
+            "{label}: its tail must drain what the chat is owed"
+        );
     }
 }

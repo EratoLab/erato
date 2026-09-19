@@ -5069,6 +5069,68 @@ model_name = "gpt-4o"
     );
 }
 
+/// An empty offer would leave the tool schema with an empty `enum`, which no
+/// model can satisfy, and the refusal message naming what is "available"
+/// would list nothing.
+#[test]
+#[should_panic(expected = "delegation.tasks.run_modes must list at least one mode")]
+fn test_delegation_tasks_empty_run_modes_is_rejected() {
+    build_and_migrate_delegation_config(
+        r#"
+[delegation.tasks]
+enabled = true
+run_modes = []
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
+
+/// A duplicate is never harmless: the list becomes a JSON-schema `enum` the
+/// model reads, and a repeated member reads as emphasis for that mode.
+#[test]
+#[should_panic(expected = "delegation.tasks.run_modes contains \"wait\" more than once")]
+fn test_delegation_tasks_duplicate_run_modes_is_rejected() {
+    build_and_migrate_delegation_config(
+        r#"
+[delegation.tasks]
+enabled = true
+run_modes = ["wait", "async", "wait"]
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
+
+/// The reserved spelling must fail with its own message, not with serde's
+/// unknown-variant text: the variant exists precisely so the deployment is
+/// told the name is recognised and unimplemented, rather than misspelled.
+#[test]
+#[should_panic(expected = "delegation.tasks.scheduling = \"interrupt\" is not supported yet")]
+fn test_delegation_tasks_reserved_scheduling_is_rejected() {
+    build_and_migrate_delegation_config(
+        r#"
+[delegation.tasks]
+enabled = true
+scheduling = "interrupt"
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
+
 #[test]
 #[should_panic(expected = "delegation.tasks.multitask_strategy = \"enqueue\" is not supported yet")]
 fn test_delegation_tasks_reserved_multitask_strategy_is_rejected() {

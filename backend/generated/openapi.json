@@ -5708,8 +5708,8 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/DelegationRunMode",
-                "description": "How the run relates to its origin turn; the preamble tells a background\ndelegate its answer is read in place rather than returned. Absent means\nawaited, so markers persisted before the field existed keep rendering\nthe same text."
+                "$ref": "#/components/schemas/ProvenanceRunMode",
+                "description": "How the run relates to its origin turn; the preamble tells a background\ndelegate its answer is read in place rather than returned, and an async\none that its answer is delivered back later. Absent means awaited, so\nmarkers persisted before the field existed keep rendering the same text."
               }
             ]
           }
@@ -8183,6 +8183,15 @@
           }
         }
       },
+      "ProvenanceRunMode": {
+        "type": "string",
+        "description": "How a delegated run's result gets back to the turn that started it, as\npersisted on [`crate::models::chat::ChatProvenance`].\n\nA superset of [`DelegationRunMode`], deliberately kept as its own type: the\nrequest wire stays at two variants, so `\"async\"` in a submit, edit or\nregenerate body is a deserialization failure rather than a mode a client can\nask for. `Wait` is never written - absence means it - so every envelope\nstored before this type existed deserializes unchanged.",
+        "enum": [
+          "wait",
+          "background",
+          "async"
+        ]
+      },
       "RecentChat": {
         "type": "object",
         "required": [
@@ -8989,7 +8998,6 @@
         "required": [
           "delivery_id",
           "child_chat_id",
-          "result_message_id",
           "status",
           "scheduling",
           "sequence"
@@ -9010,7 +9018,7 @@
           "result_message_id": {
             "type": "string",
             "format": "uuid",
-            "description": "The child's assistant row this result came from."
+            "description": "The child's assistant row this result came from. Absent when the run\nfinished but its answer row is gone (`reason = \"result_missing\"`): the\ndelivery still happens, because the origin model has to learn the task\nfailed, but there is no row to point at."
           },
           "scheduling": {
             "type": "string",

@@ -57,6 +57,62 @@ pub enum DelegationRunMode {
     Background,
 }
 
+/// How a delegated run's result gets back to the turn that started it, as
+/// persisted on [`crate::models::chat::ChatProvenance`].
+///
+/// A superset of [`DelegationRunMode`], deliberately kept as its own type: the
+/// request wire stays at two variants, so `"async"` in a submit, edit or
+/// regenerate body is a deserialization failure rather than a mode a client can
+/// ask for. `Wait` is never written - absence means it - so every envelope
+/// stored before this type existed deserializes unchanged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ProvenanceRunMode {
+    #[default]
+    Wait,
+    Background,
+    Async,
+}
+
+impl From<DelegationRunMode> for ProvenanceRunMode {
+    fn from(mode: DelegationRunMode) -> Self {
+        match mode {
+            DelegationRunMode::Wait => ProvenanceRunMode::Wait,
+            DelegationRunMode::Background => ProvenanceRunMode::Background,
+        }
+    }
+}
+
+impl From<erato_config::config::TaskRunMode> for ProvenanceRunMode {
+    fn from(mode: erato_config::config::TaskRunMode) -> Self {
+        match mode {
+            erato_config::config::TaskRunMode::Wait => ProvenanceRunMode::Wait,
+            erato_config::config::TaskRunMode::Async => ProvenanceRunMode::Async,
+        }
+    }
+}
+
+impl ProvenanceRunMode {
+    /// True for a run the origin turn does not await. Both detached modes
+    /// consume a `max_concurrent_background_runs` slot and both take the
+    /// dispatch branch; they differ only in whether the result comes back.
+    pub fn is_detached(self) -> bool {
+        matches!(
+            self,
+            ProvenanceRunMode::Background | ProvenanceRunMode::Async
+        )
+    }
+
+    /// The spelling persisted in provenance and used in tracing fields.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ProvenanceRunMode::Wait => "wait",
+            ProvenanceRunMode::Background => "background",
+            ProvenanceRunMode::Async => "async",
+        }
+    }
+}
+
 /// User-provided input context stored on user messages.
 ///
 /// Captures contextual information the user supplied alongside their message,
@@ -103,8 +159,13 @@ pub struct TaskResultInput {
     /// "has this already been delivered?" answerable with a query.
     pub delivery_id: Uuid,
     pub child_chat_id: Uuid,
-    /// The child's assistant row this result came from.
-    pub result_message_id: Uuid,
+    /// The child's assistant row this result came from. Absent when the run
+    /// finished but its answer row is gone (`reason = "result_missing"`): the
+    /// delivery still happens, because the origin model has to learn the task
+    /// failed, but there is no row to point at.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub result_message_id: Option<Uuid>,
     pub status: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
@@ -475,11 +536,11 @@ pub struct ContentPartDelegationPreambleMarker {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub constraints: Option<String>,
     /// How the run relates to its origin turn; the preamble tells a background
-    /// delegate its answer is read in place rather than returned. Absent means
-    /// awaited, so markers persisted before the field existed keep rendering
-    /// the same text.
+    /// delegate its answer is read in place rather than returned, and an async
+    /// one that its answer is delivered back later. Absent means awaited, so
+    /// markers persisted before the field existed keep rendering the same text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub run_mode: Option<DelegationRunMode>,
+    pub run_mode: Option<ProvenanceRunMode>,
 }
 
 /// Statistics for a list of messages
@@ -629,6 +690,153 @@ impl From<&messages::Model> for Resource {
     }
 }
 
+/// The lineage write behind [`submit_message`], with authorization already
+/// settled by the caller.
+///
+/// Takes a transaction it does not own and does not commit, so a caller that
+/// must append a row and record the append in the same breath - the task-result
+/// delivery, which sets `result_delivery.state = delivered` on the child in the
+/// same transaction - cannot half-succeed. Without that the delivery's fence has
+/// nothing to bite on: the row commits before the state write, and a sweeper
+/// that requeued the claim in between double-inserts.
+///
+/// "Unchecked" is about authorization only: the schema is still validated here,
+/// so no caller can write a malformed row by skipping the public entry point.
+/// The only lawful callers are ones that have evaluated the `submit_message`
+/// rule themselves; that rule is ownership-only.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn append_message_unchecked(
+    txn: &sea_orm::DatabaseTransaction,
+    chat_id: &Uuid,
+    raw_message: JsonValue,
+    previous_message_id: Option<&Uuid>,
+    sibling_message_id: Option<&Uuid>,
+    generation_input_messages: Option<JsonValue>,
+    input_files_ids: &[Uuid],
+    generation_parameters_json: Option<JsonValue>,
+    generation_metadata_json: Option<JsonValue>,
+    input_parameters_json: Option<JsonValue>,
+) -> Result<messages::Model, Report> {
+    // Validated again here rather than trusted from the caller: one
+    // `from_value` plus a lifecycle loop is cheap, and it makes this safe for
+    // a caller that never went through the public entry point.
+    MessageSchema::validate(&raw_message)?;
+
+    if let Some(prev_msg_id) = previous_message_id {
+        // Find the previous message
+        let previous_message = Messages::find_by_id(*prev_msg_id)
+            .one(txn)
+            .await?
+            .ok_or_else(|| eyre!("Previous message with ID {} not found", prev_msg_id))?;
+
+        // Verify that the previous message belongs to the same chat
+        if previous_message.chat_id != *chat_id {
+            return Err(eyre!(
+                "Previous message does not belong to the specified chat"
+            ));
+        }
+    }
+
+    if let Some(sibling_id) = sibling_message_id {
+        // Find the sibling message
+        let sibling_message = Messages::find_by_id(*sibling_id)
+            .one(txn)
+            .await?
+            .ok_or_else(|| eyre!("Sibling message with ID {} not found", sibling_id))?;
+
+        // Verify that the sibling message belongs to the same chat
+        if sibling_message.chat_id != *chat_id {
+            return Err(eyre!(
+                "Sibling message does not belong to the specified chat"
+            ));
+        }
+    }
+
+    // Step 1: Set all existing thread messages as inactive by default.
+    let active_thread_update = messages::ActiveModel {
+        is_message_in_active_thread: ActiveValue::Set(false),
+        ..Default::default()
+    };
+
+    messages::Entity::update_many()
+        .set(active_thread_update)
+        .filter(messages::Column::ChatId.eq(*chat_id))
+        .exec(txn)
+        .await
+        .map_err(|e| eyre!("Failed to update active thread flags: {}", e))?;
+
+    // Step 2: Identify the lineage that should remain in the active thread.
+    let mut active_thread_ids = Vec::new();
+    if let Some(prev_msg_id) = previous_message_id {
+        let mut current_msg_id = *prev_msg_id;
+
+        // Keep track of visited message IDs to avoid infinite loops
+        let mut visited_ids = std::collections::HashSet::new();
+
+        while !visited_ids.contains(&current_msg_id) {
+            visited_ids.insert(current_msg_id);
+            active_thread_ids.push(current_msg_id);
+
+            // Get the previous message ID
+            let message = Messages::find_by_id(current_msg_id)
+                .one(txn)
+                .await
+                .map_err(|e| eyre!("Failed to find message {}: {}", current_msg_id, e))?
+                .ok_or_else(|| eyre!("Message with ID {} not found", current_msg_id))?;
+
+            // If there's no previous message, break the loop
+            if let Some(prev_id) = message.previous_message_id {
+                current_msg_id = prev_id;
+            } else {
+                break;
+            }
+        }
+    }
+
+    // Step 3: Create and insert the new message
+    let new_message = messages::ActiveModel {
+        chat_id: ActiveValue::Set(*chat_id),
+        raw_message: ActiveValue::Set(raw_message),
+        previous_message_id: ActiveValue::Set(previous_message_id.copied()),
+        sibling_message_id: ActiveValue::Set(sibling_message_id.copied()),
+        is_message_in_active_thread: ActiveValue::Set(true), // New messages are active by default
+        generation_input_messages: ActiveValue::Set(generation_input_messages),
+        input_file_uploads: ActiveValue::Set(if input_files_ids.is_empty() {
+            None
+        } else {
+            Some(input_files_ids.to_vec())
+        }),
+        generation_parameters: ActiveValue::Set(generation_parameters_json),
+        generation_metadata: ActiveValue::Set(generation_metadata_json),
+        input_parameters: ActiveValue::Set(input_parameters_json),
+        ..Default::default()
+    };
+
+    let created_message = messages::Entity::insert(new_message)
+        .exec_with_returning(txn)
+        .await
+        .map_err(|e| eyre!("Failed to insert new message: {}", e))?;
+
+    // Step 4: Reactivate this message and its active lineage.
+    active_thread_ids.push(created_message.id);
+
+    if !active_thread_ids.is_empty() {
+        let active_thread_update = messages::ActiveModel {
+            is_message_in_active_thread: ActiveValue::Set(true),
+            ..Default::default()
+        };
+
+        messages::Entity::update_many()
+            .set(active_thread_update)
+            .filter(messages::Column::Id.is_in(active_thread_ids))
+            .exec(txn)
+            .await
+            .map_err(|e| eyre!("Failed to reactivate target active thread messages: {}", e))?;
+    }
+
+    Ok(created_message)
+}
+
 /// Submit a new message to a chat.
 ///
 /// If `previous_message_id` is specified, the previous message will be queried,
@@ -668,125 +876,25 @@ pub async fn submit_message(
         Action::SubmitMessage
     )?;
 
-    if let Some(prev_msg_id) = previous_message_id {
-        // Find the previous message
-        let previous_message = Messages::find_by_id(*prev_msg_id)
-            .one(conn)
-            .await?
-            .ok_or_else(|| eyre!("Previous message with ID {} not found", prev_msg_id))?;
-
-        // Verify that the previous message belongs to the same chat
-        if previous_message.chat_id != *chat_id {
-            return Err(eyre!(
-                "Previous message does not belong to the specified chat"
-            ));
-        }
-    }
-
-    if let Some(sibling_id) = sibling_message_id {
-        // Find the sibling message
-        let sibling_message = Messages::find_by_id(*sibling_id)
-            .one(conn)
-            .await?
-            .ok_or_else(|| eyre!("Sibling message with ID {} not found", sibling_id))?;
-
-        // Verify that the sibling message belongs to the same chat
-        if sibling_message.chat_id != *chat_id {
-            return Err(eyre!(
-                "Sibling message does not belong to the specified chat"
-            ));
-        }
-    }
-
-    // Begin a transaction
     let txn = conn
         .begin()
         .await
         .map_err(|e| eyre!("Failed to begin transaction: {}", e))?;
 
-    // Step 1: Set all existing thread messages as inactive by default.
-    let active_thread_update = messages::ActiveModel {
-        is_message_in_active_thread: ActiveValue::Set(false),
-        ..Default::default()
-    };
+    let created_message = append_message_unchecked(
+        &txn,
+        chat_id,
+        raw_message,
+        previous_message_id,
+        sibling_message_id,
+        generation_input_messages,
+        input_files_ids,
+        generation_parameters_json,
+        generation_metadata_json,
+        input_parameters_json,
+    )
+    .await?;
 
-    messages::Entity::update_many()
-        .set(active_thread_update)
-        .filter(messages::Column::ChatId.eq(*chat_id))
-        .exec(&txn)
-        .await
-        .map_err(|e| eyre!("Failed to update active thread flags: {}", e))?;
-
-    // Step 2: Identify the lineage that should remain in the active thread.
-    let mut active_thread_ids = Vec::new();
-    if let Some(prev_msg_id) = previous_message_id {
-        let mut current_msg_id = *prev_msg_id;
-
-        // Keep track of visited message IDs to avoid infinite loops
-        let mut visited_ids = std::collections::HashSet::new();
-
-        while !visited_ids.contains(&current_msg_id) {
-            visited_ids.insert(current_msg_id);
-            active_thread_ids.push(current_msg_id);
-
-            // Get the previous message ID
-            let message = Messages::find_by_id(current_msg_id)
-                .one(&txn)
-                .await
-                .map_err(|e| eyre!("Failed to find message {}: {}", current_msg_id, e))?
-                .ok_or_else(|| eyre!("Message with ID {} not found", current_msg_id))?;
-
-            // If there's no previous message, break the loop
-            if let Some(prev_id) = message.previous_message_id {
-                current_msg_id = prev_id;
-            } else {
-                break;
-            }
-        }
-    }
-
-    // Step 3: Create and insert the new message
-    let new_message = messages::ActiveModel {
-        chat_id: ActiveValue::Set(*chat_id),
-        raw_message: ActiveValue::Set(raw_message),
-        previous_message_id: ActiveValue::Set(previous_message_id.copied()),
-        sibling_message_id: ActiveValue::Set(sibling_message_id.copied()),
-        is_message_in_active_thread: ActiveValue::Set(true), // New messages are active by default
-        generation_input_messages: ActiveValue::Set(generation_input_messages),
-        input_file_uploads: ActiveValue::Set(if input_files_ids.is_empty() {
-            None
-        } else {
-            Some(input_files_ids.to_vec())
-        }),
-        generation_parameters: ActiveValue::Set(generation_parameters_json),
-        generation_metadata: ActiveValue::Set(generation_metadata_json),
-        input_parameters: ActiveValue::Set(input_parameters_json),
-        ..Default::default()
-    };
-
-    let created_message = messages::Entity::insert(new_message)
-        .exec_with_returning(&txn)
-        .await
-        .map_err(|e| eyre!("Failed to insert new message: {}", e))?;
-
-    // Step 4: Reactivate this message and its active lineage.
-    active_thread_ids.push(created_message.id);
-
-    if !active_thread_ids.is_empty() {
-        let active_thread_update = messages::ActiveModel {
-            is_message_in_active_thread: ActiveValue::Set(true),
-            ..Default::default()
-        };
-
-        messages::Entity::update_many()
-            .set(active_thread_update)
-            .filter(messages::Column::Id.is_in(active_thread_ids))
-            .exec(&txn)
-            .await
-            .map_err(|e| eyre!("Failed to reactivate target active thread messages: {}", e))?;
-    }
-
-    // Commit the transaction
     txn.commit()
         .await
         .map_err(|e| eyre!("Failed to commit transaction: {}", e))?;
@@ -805,6 +913,25 @@ pub async fn submit_message(
 /// instead, and that reactivation then keeps them on the thread for free.
 ///
 /// `None` means "leave the anchor alone": either nothing is below it, or what
+/// The newest message on the chat's active thread.
+///
+/// The row a new message must hang off, so `submit_message`'s lineage walk
+/// keeps the thread the user is looking at instead of resetting it to the new
+/// row alone. `id` is a uuidv7 default, so the secondary sort is a real
+/// tiebreaker for two rows written in the same instant.
+pub async fn get_active_thread_tip<C: ConnectionTrait>(
+    conn: &C,
+    chat_id: &Uuid,
+) -> Result<Option<messages::Model>, Report> {
+    Ok(Messages::find()
+        .filter(messages::Column::ChatId.eq(*chat_id))
+        .filter(messages::Column::IsMessageInActiveThread.eq(true))
+        .order_by_desc(messages::Column::CreatedAt)
+        .order_by_desc(messages::Column::Id)
+        .one(conn)
+        .await?)
+}
+
 /// is below it is a row the user wrote. Branching below a user's own later
 /// turn stays a feature.
 pub async fn resolve_system_delivered_tip(
@@ -1629,6 +1756,49 @@ mod action_facet_filter_tests {
                 preview_url: None,
             })]
         );
+    }
+}
+
+#[cfg(test)]
+mod provenance_run_mode_tests {
+    use super::{DelegationRunMode, ProvenanceRunMode};
+
+    /// The persisted spellings, and what absence means.
+    ///
+    /// `run_mode` is stored inside a JSON envelope that predates this type, so
+    /// the wire strings are not free to change: `"background"` rows written
+    /// before `async` existed must still parse, and a row with no `run_mode` at
+    /// all must read as the awaited mode rather than failing. `Wait` is never
+    /// written, which is what keeps those old envelopes byte-identical.
+    #[test]
+    fn provenance_run_mode_round_trips_and_absence_means_wait() {
+        for (mode, wire) in [
+            (ProvenanceRunMode::Wait, "wait"),
+            (ProvenanceRunMode::Background, "background"),
+            (ProvenanceRunMode::Async, "async"),
+        ] {
+            let value = serde_json::to_value(mode).expect("serializes");
+            assert_eq!(value.as_str(), Some(wire), "{mode:?} must spell {wire}");
+            assert_eq!(
+                serde_json::from_value::<ProvenanceRunMode>(value).expect("parses"),
+                mode
+            );
+        }
+
+        // Absence is the awaited mode, which is why nothing writes `wait`.
+        let absent: Option<ProvenanceRunMode> =
+            serde_json::from_value(serde_json::json!(null)).expect("parses");
+        assert_eq!(absent, None);
+        assert_eq!(absent.unwrap_or_default(), ProvenanceRunMode::Wait);
+
+        // The request wire stays at two variants: a client cannot ask for a
+        // mode only the server may choose.
+        assert!(serde_json::from_value::<DelegationRunMode>(serde_json::json!("async")).is_err());
+
+        // Both detached modes take the dispatch branch and consume a slot.
+        assert!(!ProvenanceRunMode::Wait.is_detached());
+        assert!(ProvenanceRunMode::Background.is_detached());
+        assert!(ProvenanceRunMode::Async.is_detached());
     }
 }
 
