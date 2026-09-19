@@ -510,6 +510,148 @@ describe("useChatMessaging", () => {
     );
   });
 
+  describe("server-started generation attach guard", () => {
+    /**
+     * The default mock swallows resumestream callbacks; these tests need to
+     * close the enter-chat socket so the next trigger is not simply blocked by
+     * the live-connection pre-check.
+     */
+    const captureSse = () => {
+      const byUrl: Record<string, Record<string, (arg?: unknown) => void>> = {};
+      mockCreateSSEConnection.mockImplementation(
+        (url: string, callbacks: Record<string, (arg?: unknown) => void>) => {
+          byUrl[url] = callbacks;
+          return vi.fn();
+        },
+      );
+      return byUrl;
+    };
+
+    const runningEntry = (startedAt: string) => ({
+      kind: "running" as const,
+      startedAt,
+      localSeenAt: Date.now(),
+    });
+
+    beforeEach(() => {
+      useGenerationStatusStore.setState({
+        statusByChatId: {},
+        currentChatId: null,
+      });
+    });
+
+    it("attaches once when the open chat flips to running underneath this client", async () => {
+      const byUrl = captureSse();
+      renderHook(() => useChatMessaging("chat1"), { wrapper: TestWrapper });
+      expect(mockCreateSSEConnection).toHaveBeenCalledTimes(1);
+
+      // The enter-chat resume found nothing running and closed.
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/resumestream"].onClose();
+      });
+      mockCreateSSEConnection.mockClear();
+
+      // The poll now reports a server-started turn for the open chat.
+      await act(async () => {
+        useGenerationStatusStore.setState({
+          statusByChatId: {
+            chat1: runningEntry("2026-09-19T12:00:00.123456+00:00"),
+          },
+        });
+      });
+
+      expect(mockCreateSSEConnection).toHaveBeenCalledTimes(1);
+      expect(mockCreateSSEConnection).toHaveBeenCalledWith(
+        "/api/v1beta/me/messages/resumestream",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ chat_id: "chat1" }),
+        }),
+      );
+    });
+
+    it("does not re-attach when the same generation is re-reported in another serialization", async () => {
+      const byUrl = captureSse();
+      renderHook(() => useChatMessaging("chat1"), { wrapper: TestWrapper });
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/resumestream"].onClose();
+      });
+      await act(async () => {
+        useGenerationStatusStore.setState({
+          statusByChatId: {
+            chat1: runningEntry("2026-09-19T12:00:00.123456+00:00"),
+          },
+        });
+      });
+      // That attach registered a socket; close it so only the key ref can
+      // stand between us and a second connection.
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/resumestream"].onClose();
+      });
+      mockCreateSSEConnection.mockClear();
+
+      // The 409/lease spelling of the SAME instant: truncated to the second.
+      await act(async () => {
+        useGenerationStatusStore.setState({
+          statusByChatId: { chat1: runningEntry("2026-09-19T12:00:00Z") },
+        });
+      });
+
+      expect(mockCreateSSEConnection).not.toHaveBeenCalled();
+    });
+
+    it("attaches again once a genuinely newer generation starts", async () => {
+      const byUrl = captureSse();
+      renderHook(() => useChatMessaging("chat1"), { wrapper: TestWrapper });
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/resumestream"].onClose();
+      });
+      await act(async () => {
+        useGenerationStatusStore.setState({
+          statusByChatId: { chat1: runningEntry("2026-09-19T12:00:00Z") },
+        });
+      });
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/resumestream"].onClose();
+      });
+      mockCreateSSEConnection.mockClear();
+
+      await act(async () => {
+        useGenerationStatusStore.setState({
+          statusByChatId: { chat1: runningEntry("2026-09-19T12:00:05Z") },
+        });
+      });
+
+      expect(mockCreateSSEConnection).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not attach to a generation this client is itself submitting", async () => {
+      captureSse();
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      await act(async () => {
+        await result.current.sendMessage("hello");
+      });
+      mockCreateSSEConnection.mockClear();
+
+      // Reproduce the window a browser can hit but `act` cannot schedule into:
+      // a send seeds "running" BEFORE its POST goes out and tears down any
+      // previous socket with an awaited delay in between, so the status store
+      // can say running while no abort callback is registered. Without the
+      // submitting guard the attach effect opens a second socket for this
+      // client's own turn.
+      await act(async () => {
+        useMessagingStore.getState().setSSEAbortCallback(null, "chat1");
+        useGenerationStatusStore.setState({
+          statusByChatId: { chat1: runningEntry("2026-09-19T13:00:00Z") },
+        });
+      });
+
+      expect(mockCreateSSEConnection).not.toHaveBeenCalled();
+    });
+  });
+
   // Skip this test for now
   it.skip("should handle empty chat ID", () => {
     // Override the mock for this test to return no messages for null chatId

@@ -51,6 +51,7 @@ import { handleTextDelta } from "./handlers/handleTextDelta";
 import { handleToolCallProposed } from "./handlers/handleToolCallProposed";
 import { handleToolCallUpdate } from "./handlers/handleToolCallUpdate";
 import { handleUserMessageSaved } from "./handlers/handleUserMessageSaved";
+import { serverAttachKey } from "./serverAttachKey";
 import { useGenerationStatusStore } from "./store/generationStatusStore";
 import {
   getStreamKey,
@@ -280,6 +281,16 @@ export function useChatMessaging(
   const recentlyCompletedByKeyRef = useRef<Record<string, number>>({});
   const resumeAttemptsByKeyRef = useRef<Record<string, number>>({});
   const lastResumeAttemptedChatIdRef = useRef<string | null>(null);
+  /**
+   * The server-started generation this client has already opened (or tried to
+   * open) a socket for. `force: true` switches off BOTH of
+   * `attemptResumeStream`'s own guards, and after this file's changes four
+   * things can force one for the same generation: entering the chat, the chat
+   * flipping to running underneath us, the `/react` trigger, and a 409
+   * `generation_running` on a submit. They all go through
+   * `attachToServerGeneration`, which is the only writer of this ref.
+   */
+  const serverAttachKeyRef = useRef<string | null>(null);
   const isUnmountingRef = useRef(false); // Track if we're unmounting to skip unnecessary refetch
   const [newlyCreatedChatId, setNewlyCreatedChatId] = useState<string | null>(
     null,
@@ -1388,28 +1399,118 @@ export function useChatMessaging(
     ],
   );
 
+  /**
+   * The one door every forced attach to a generation this client did not
+   * start goes through.
+   *
+   * `force: true` disables both of `attemptResumeStream`'s own guards, so each
+   * forced caller would otherwise need its own — and three of them firing for
+   * the same generation would open three sockets. The live-connection check is
+   * the primary guard; the key ref only stops a repeating trigger from
+   * re-entering during the window before a socket has registered its cleanup.
+   *
+   * `dedupe: false` is for one-shot, user-initiated callers (a refused submit):
+   * a second refusal is a second intent, not a repeat of the first.
+   */
+  const attachToServerGeneration = useCallback(
+    (options: {
+      reason: string;
+      chatId: string;
+      startedAt?: string | null;
+      dedupe?: boolean;
+      /**
+       * Opens the socket and reports whether it did. Defaults to a forced
+       * resumestream; the `/react` trigger passes its own so that it takes
+       * this same guard rather than inventing a second one.
+       */
+      open?: (chatId: string) => boolean;
+    }) => {
+      const { dedupe = true, open } = options;
+      const key = serverAttachKey(options.chatId, options.startedAt);
+      if (dedupe && serverAttachKeyRef.current === key) {
+        return false;
+      }
+      // `getStreamKey(chatId)` is the same lookup `attemptResumeStream` does
+      // for its own non-forced guard, and the same one the enter-chat effect
+      // used to do inline.
+      if (
+        useMessagingStore.getState().sseAbortCallbacksByKey[
+          getStreamKey(options.chatId)
+        ] !== undefined
+      ) {
+        return false;
+      }
+      serverAttachKeyRef.current = key;
+      return open
+        ? open(options.chatId)
+        : attemptResumeStream({
+            reason: options.reason,
+            chatIdHint: options.chatId,
+            force: true,
+          });
+    },
+    [attemptResumeStream],
+  );
+
   useEffect(() => {
     if (!chatId) {
       lastResumeAttemptedChatIdRef.current = null;
       return;
     }
 
+    // Kept as the "have we tried this chat at all" latch: it is what makes
+    // entering a chat a one-shot, independent of which generation (if any) is
+    // running. The attach key cannot do that job — on enter we do not know
+    // the generation, so its key is `${chatId}:enter` for every visit.
     if (lastResumeAttemptedChatIdRef.current === chatId) {
       return;
     }
     lastResumeAttemptedChatIdRef.current = chatId;
 
-    const store = useMessagingStore.getState();
-    const hasExistingConnection = !!store.sseAbortCallbacksByKey[chatId];
-    if (hasExistingConnection) {
+    attachToServerGeneration({ reason: "enter-chat", chatId });
+  }, [attachToServerGeneration, chatId]);
+
+  /**
+   * A generation this client did not start — a delivered task result's
+   * reaction turn, or the same chat running in another tab — becomes visible
+   * here only through the generation-status store, which the poller feeds.
+   * Attach so its tokens stream into the open conversation too.
+   */
+  const openChatGenerationStatus = useGenerationStatusStore((state) =>
+    chatId ? state.statusByChatId[chatId] : undefined,
+  );
+
+  useEffect(() => {
+    if (!chatId) {
       return;
     }
-    void attemptResumeStream({
-      reason: "enter-chat",
-      chatIdHint: chatId,
-      force: true,
+    // Only "running". A parked chat reports `generation_ended_at` as its
+    // `started_at` (the parked-at moment, not the generation's start), and
+    // there is nothing streaming to attach to anyway.
+    if (openChatGenerationStatus?.kind !== "running") {
+      return;
+    }
+    // This tab's own send seeds `running` BEFORE its POST goes out, and
+    // registers the socket's cleanup only after `createSSEConnection` returns
+    // — with an awaited teardown delay in between. In that window the store
+    // says running and no cleanup is registered yet, so the connection
+    // pre-check would wave us through and we would open a second socket for
+    // our own turn. `isSubmittingForKey` is set before the seed and cleared
+    // only when the turn ends, so it covers exactly that window.
+    if (isSubmittingForKey(getStreamKey(chatId))) {
+      return;
+    }
+    attachToServerGeneration({
+      reason: "server-attach",
+      chatId,
+      startedAt: openChatGenerationStatus.startedAt,
     });
-  }, [attemptResumeStream, chatId]);
+  }, [
+    attachToServerGeneration,
+    chatId,
+    isSubmittingForKey,
+    openChatGenerationStatus,
+  ]);
 
   // Find the most recent assistant message ID, including temporary ones
   const findMostRecentAssistantMessageId = useCallback(() => {
