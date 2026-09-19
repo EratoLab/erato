@@ -1,5 +1,5 @@
 import { renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FrontendRequestError } from "@/utils/errorReport";
 import { createSSEConnection } from "@/utils/sse/sseClient";
@@ -102,6 +102,23 @@ const refusal = (status: number, body: string) =>
     { status, statusText: "Conflict", body },
   );
 
+/**
+ * `logger.warn` and `logger.error` reach the console unconditionally — unlike
+ * `logger.log`, they are not behind the DEBUG flag. They are therefore the
+ * observable difference between "suppressed" and "reported", which is the
+ * distinction the refusal table is made of.
+ */
+const restoreSpies: (() => void)[] = [];
+const spyOnComplaints = () => {
+  const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  restoreSpies.push(() => {
+    error.mockRestore();
+    warn.mockRestore();
+  });
+  return { error, warn };
+};
+
 const lastOptions = () => {
   const call = mockCreateSSEConnection.mock.calls.at(-1);
   expect(call).toBeDefined();
@@ -113,6 +130,10 @@ describe("useReactToTaskResult", () => {
     vi.clearAllMocks();
     resetReactAttemptsForTest();
     mockCreateSSEConnection.mockImplementation(() => vi.fn());
+  });
+
+  afterEach(() => {
+    restoreSpies.splice(0).forEach((restore) => restore());
   });
 
   it("asks for the reaction when a delivered task result is the thread tip", () => {
@@ -288,12 +309,69 @@ describe("useReactToTaskResult", () => {
 
     it("says nothing on a 404", () => {
       // The route 404s identically when async delivery is off, when the chat
-      // is unknown, and when the row is not ours.
+      // is unknown, and when the row is not ours — the anti-prober shape. A
+      // deployment running `run_modes = ["wait"]` answers this way for EVERY
+      // delivered tip, so the 404 must not reach any channel a user or an
+      // on-call engineer reads as "something went wrong".
       const { onGenerationRunningRefusal } = renderTrigger();
+      const { error, warn } = spyOnComplaints();
+
       expect(() =>
         lastOptions().onError?.(refusal(404, "Not found")),
       ).not.toThrow();
+
       expect(onGenerationRunningRefusal).not.toHaveBeenCalled();
+      expect(error).not.toHaveBeenCalled();
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("complains only about the reason that means this client picked the wrong row", () => {
+      // `not_a_task_result` is a client bug: the predicate named a row the
+      // server does not consider a delivery at all. `not_delivered` is not —
+      // it collapses "a drain will get to it shortly" with "never", and the
+      // recoverable half resolves by itself, so it is suppressed at debug.
+      renderTrigger();
+      const onError = lastOptions().onError;
+      const { warn } = spyOnComplaints();
+
+      onError?.(
+        refusal(
+          409,
+          JSON.stringify({ code: "nothing_to_react", reason: "not_delivered" }),
+        ),
+      );
+      expect(warn).not.toHaveBeenCalled();
+
+      onError?.(
+        refusal(
+          409,
+          JSON.stringify({
+            code: "nothing_to_react",
+            reason: "not_a_task_result",
+          }),
+        ),
+      );
+      expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not ask again after a refusal", () => {
+      // The commonest reason a delivered row has no answer is a reaction the
+      // server already ran and lost, so the refused row stays the tip and the
+      // predicate stays true. Re-asking would be a retry loop against a
+      // provider that has already failed — which is why the row is marked
+      // before the attempt, not after it.
+      const { rerender } = renderTrigger();
+      expect(mockCreateSSEConnection).toHaveBeenCalledTimes(1);
+
+      lastOptions().onError?.(
+        refusal(
+          409,
+          JSON.stringify({ code: "nothing_to_react", reason: "tip_moved" }),
+        ),
+      );
+      rerender({});
+
+      expect(mockCreateSSEConnection).toHaveBeenCalledTimes(1);
     });
 
     it("survives a plain-text 409 from an archived chat", () => {
