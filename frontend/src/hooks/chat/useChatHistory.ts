@@ -371,6 +371,8 @@ export function useChatHistory({
       origin_chat_title: undefined,
       origin_assistant_id: undefined,
       delegated_run_outcome: undefined,
+      // A just-created chat replaces nothing.
+      retry_of: undefined,
     };
     return [placeholder, ...listedChats];
   }, [listedChats, pendingChat, isPendingChatListed, typeFilter]);

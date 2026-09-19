@@ -9640,7 +9640,9 @@ async fn validate_file_uploads_for_message_submit(
 /// archived chat is rejected with a clean HTTP status before any stream opens.
 /// Reads (get_chat_messages), abort, client_tool_result and resume are out of
 /// scope and must not call this.
-fn reject_if_archived(chat: &chats::Model) -> Result<(), (axum::http::StatusCode, String)> {
+pub(crate) fn reject_if_archived(
+    chat: &chats::Model,
+) -> Result<(), (axum::http::StatusCode, String)> {
     if chat.archived_at.is_some() {
         return Err((
             axum::http::StatusCode::CONFLICT,
