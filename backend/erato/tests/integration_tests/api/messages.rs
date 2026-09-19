@@ -7670,6 +7670,29 @@ async fn approval_policy_app_config(
 
 /// Mocks for a turn that calls `tool` once and then answers `answer` after
 /// the tool's result reached the model.
+/// `one_tool_call_then_answer` for a refused call, which never produces a
+/// tool result: the second turn keys on the refusal instead.
+fn one_tool_call_then_answer_after_refusal(tool: &'static str, answer: &'static str) -> MockSet {
+    const REFUSAL: &str = "denied this tool call";
+    let mut mocks = MockSet::new();
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[REFUSAL], &[]));
+        mock_llm_sse_response(then, build_openai_text_streaming_response(&[answer]));
+    });
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &[REFUSAL]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[("call_probe", tool, json!({}))]),
+        );
+    });
+    mocks
+}
+
 fn one_tool_call_then_answer(
     tool: &'static str,
     tool_result: &'static str,
@@ -7834,6 +7857,170 @@ async fn test_ask_decision_parks_a_policy_auto_tool(pool: Pool<Postgres>) {
         .await;
     let settings: Value = settings.json();
     assert_eq!(settings["settings"][0]["decision"], "ask");
+}
+
+/// "Never allow" refuses this call and stores the denial, without needing
+/// `allow_always`.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_reject_always_stores_a_standing_denial(pool: Pool<Postgres>) {
+    let (app_config, _llm) = approval_policy_app_config(
+        one_tool_call_then_answer_after_refusal(
+            "publish_approval_probe",
+            "REFUSED-CONTINUED-ANSWER",
+        ),
+        erato::config::McpToolApprovalConfig {
+            enabled: true,
+            preset: erato::config::McpToolApprovalPreset::Restrictive,
+            // Off on purpose: the standing refusal must not depend on it.
+            allow_always: false,
+        },
+    )
+    .await;
+    let app_state = test_app_state(app_config, pool).await;
+    let user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let db = app_state.db.clone();
+    let server = app_server(app_state);
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "read the fixture" }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let assistant_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+
+    let continued = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": assistant_message_id,
+            "decision": "reject_always",
+        }))
+        .await;
+    continued.assert_status_ok();
+    assert_eq!(
+        extract_full_text(&parse_sse_events(&continued)),
+        "REFUSED-CONTINUED-ANSWER"
+    );
+
+    let resumed = erato::db::entity::messages::Entity::find_by_id(assistant_message_id)
+        .one(&db)
+        .await
+        .unwrap()
+        .expect("Expected the resumed assistant message");
+    assert_eq!(
+        content_types(&resumed),
+        vec![
+            "tool_approval_request",
+            "tool_rejection",
+            "tool_use",
+            "text"
+        ]
+    );
+    assert_eq!(resumed.raw_message["content"][1]["never_allow"], true);
+    assert_eq!(
+        erato::models::user_tool_approval_setting::find_active_decision(
+            &db,
+            user.id,
+            "mock_mcp_approval",
+            "publish_approval_probe"
+        )
+        .await
+        .unwrap(),
+        Some(erato::models::user_tool_approval_setting::UserToolDecision::Denied)
+    );
+
+    // The settings roster agrees with the decision taken in the chat.
+    let tools = server
+        .get("/api/v1beta/me/mcp_servers/mock_mcp_approval/tools")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    tools.assert_status_ok();
+    let tools: Value = tools.json();
+    let denied = tools["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["name"] == "publish_approval_probe")
+        .expect("Expected the fixture tool on the roster");
+    assert_eq!(denied["user_decision"], "denied");
+    assert_eq!(denied["effective"], "denied");
+}
+
+/// A one-off refusal leaves nothing behind: the next call asks again.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_reject_once_stores_nothing(pool: Pool<Postgres>) {
+    let (app_config, _llm) = approval_policy_app_config(
+        one_tool_call_then_answer_after_refusal("publish_approval_probe", "REFUSED-ONCE-ANSWER"),
+        erato::config::McpToolApprovalConfig {
+            enabled: true,
+            preset: erato::config::McpToolApprovalPreset::Restrictive,
+            allow_always: false,
+        },
+    )
+    .await;
+    let app_state = test_app_state(app_config, pool).await;
+    let user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let db = app_state.db.clone();
+    let server = app_server(app_state);
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "read the fixture" }))
+        .await;
+    response.assert_status_ok();
+    let assistant_message_id = Uuid::parse_str(&assistant_message_id_from_events(
+        &parse_sse_events(&response),
+    ))
+    .unwrap();
+
+    let continued = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": assistant_message_id,
+            "decision": "reject",
+        }))
+        .await;
+    continued.assert_status_ok();
+
+    let resumed = erato::db::entity::messages::Entity::find_by_id(assistant_message_id)
+        .one(&db)
+        .await
+        .unwrap()
+        .expect("Expected the resumed assistant message");
+    assert_eq!(resumed.raw_message["content"][1]["never_allow"], false);
+    assert_eq!(
+        erato::models::user_tool_approval_setting::find_active_decision(
+            &db,
+            user.id,
+            "mock_mcp_approval",
+            "publish_approval_probe"
+        )
+        .await
+        .unwrap(),
+        None
+    );
 }
 
 /// "Always allow" on the card of a tool the user had put on ask replaces the

@@ -39,12 +39,17 @@ msgstr "Potwierdzono"
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ActionConfirmationCard.tsx
 msgid "actionConfirmation.deny"
-msgstr "Odmów"
+msgstr "Odmów raz"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ActionConfirmationCard.tsx
 msgid "actionConfirmation.dismissed"
 msgstr "Odrzucono"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ActionConfirmationCard.tsx
+msgid "actionConfirmation.neverAllow"
+msgstr "Nigdy nie zezwalaj"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ActionConfirmationCard.tsx
@@ -3769,7 +3774,7 @@ msgstr "Jak asystent powinien się do Ciebie zwracać? np. Max Mustermann"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.allow.defaultLabel"
-msgstr "Zezwól (domyślnie wg zasad)"
+msgstr "Zawsze zezwalaj (domyślnie wg zasad)"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
@@ -3779,7 +3784,7 @@ msgstr "Zezwól (domyślnie wg zasad)"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.allow.label"
-msgstr "Zezwól"
+msgstr "Zawsze zezwalaj"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolDecisionControl.tsx
@@ -4152,6 +4157,11 @@ msgstr "Sięga do innych systemów"
 #: src/components/ui/Settings/McpToolRow.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.readsOnly"
 msgstr "Tylko odczyt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolRow.tsx
+msgid "preferences.dialog.mcpServers.tools.badge.setByYou"
+msgstr "Ustawione przez Ciebie"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx

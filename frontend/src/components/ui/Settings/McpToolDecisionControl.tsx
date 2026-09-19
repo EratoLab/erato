@@ -27,9 +27,10 @@ const ICONS: Record<McpToolDecision, ReactNode> = {
 export const mcpToolDecisionLabel = (decision: McpToolDecision): string => {
   switch (decision) {
     case "allow":
+      // Named as the in-chat card names it: the same standing grant.
       return t({
         id: "preferences.dialog.mcpServers.approvals.allow.label",
-        message: "Allow",
+        message: "Always allow",
       });
     case "ask":
       return t({
@@ -73,7 +74,7 @@ const defaultLabel = (decision: McpToolDecision): string =>
   decision === "allow"
     ? t({
         id: "preferences.dialog.mcpServers.approvals.allow.defaultLabel",
-        message: "Allow (policy default)",
+        message: "Always allow (policy default)",
       })
     : t({
         id: "preferences.dialog.mcpServers.approvals.ask.defaultLabel",

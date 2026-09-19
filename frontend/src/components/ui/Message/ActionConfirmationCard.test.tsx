@@ -13,7 +13,7 @@ vi.mock("../Controls/Button", () => ({
 }));
 
 describe("ActionConfirmationCard", () => {
-  it("renders the generic frame with all three decisions", () => {
+  it("renders the generic frame with the once decisions, and standing ones on request", () => {
     const onAllowOnce = vi.fn();
     const onAlwaysAllow = vi.fn();
     const onDeny = vi.fn();
@@ -36,8 +36,42 @@ describe("ActionConfirmationCard", () => {
     expect(onAllowOnce).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByText("Always allow"));
     expect(onAlwaysAllow).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByText("Deny"));
+    fireEvent.click(screen.getByText("Deny once"));
     expect(onDeny).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Never allow")).not.toBeInTheDocument();
+  });
+
+  it("offers the standing refusal only to a consumer that can store one", () => {
+    const onNeverAllow = vi.fn();
+    const { rerender } = render(
+      <ActionConfirmationCard onAllowOnce={vi.fn()} onDeny={vi.fn()} />,
+    );
+    expect(screen.queryByText("Never allow")).not.toBeInTheDocument();
+
+    rerender(
+      <ActionConfirmationCard
+        onAllowOnce={vi.fn()}
+        onDeny={vi.fn()}
+        onNeverAllow={onNeverAllow}
+      />,
+    );
+    fireEvent.click(screen.getByText("Never allow"));
+    expect(onNeverAllow).toHaveBeenCalledTimes(1);
+  });
+
+  it("pairs each once answer with its standing one, in permission order", () => {
+    render(
+      <ActionConfirmationCard
+        onAllowOnce={vi.fn()}
+        onAlwaysAllow={vi.fn()}
+        onDeny={vi.fn()}
+        onNeverAllow={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getAllByRole("button").map((button) => button.textContent),
+    ).toEqual(["Allow once", "Always allow", "Deny once", "Never allow"]);
   });
 
   it("hides Always allow when no persistence callback is given", () => {
@@ -100,7 +134,7 @@ describe("ActionConfirmationCard", () => {
     );
     expect(screen.getByText("Allow once")).toBeDisabled();
     expect(screen.getByText("Always allow")).toBeDisabled();
-    expect(screen.getByText("Deny")).toBeDisabled();
+    expect(screen.getByText("Deny once")).toBeDisabled();
   });
 
   it("renders a compact resolved row instead of buttons once resolved", () => {
@@ -151,7 +185,7 @@ describe("ActionConfirmationCard", () => {
       "data-testid": "card",
     };
     const { rerender } = render(<ActionConfirmationCard {...props} />);
-    screen.getByText("Deny").focus();
+    screen.getByText("Deny once").focus();
     rerender(<ActionConfirmationCard {...props} status="dismissed" />);
     expect(screen.getByTestId("card")).toHaveFocus();
   });

@@ -287,6 +287,12 @@ pub struct ContentPartToolApproval {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ContentPartToolRejection {
     pub tool_call_id: String,
+    /// Both fields default, so rejections stored before standing denials
+    /// existed still parse.
+    #[serde(default)]
+    pub never_allow: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_tool_approval_setting_id: Option<Uuid>,
     pub rejected_at: String,
 }
 

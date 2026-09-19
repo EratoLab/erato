@@ -1040,8 +1040,17 @@ export type ContentPartToolApprovalRequest = {
  * Records a user rejection in the assistant message lifecycle.
  */
 export type ContentPartToolRejection = {
+  /**
+   * Both fields default, so rejections stored before standing denials
+   * existed still parse.
+   */
+  never_allow?: boolean;
   rejected_at: string;
   tool_call_id: string;
+  /**
+   * @format uuid
+   */
+  user_tool_approval_setting_id?: null | undefined;
 };
 
 /**
@@ -2774,8 +2783,15 @@ export type ToolApprovalAnnotations = {
 
 /**
  * Decision submitted for a generation stopped at an MCP approval gate.
+ *
+ * `RejectAlways` needs no policy flag the way `ApproveAlways` needs
+ * `allow_always`: a denial is more restrictive than anything the policy does.
  */
-export type ToolApprovalDecision = "approve" | "reject" | "approve_always";
+export type ToolApprovalDecision =
+  | "approve"
+  | "reject"
+  | "approve_always"
+  | "reject_always";
 
 export type ToolCallStatus = "in_progress" | "success" | "error";
 

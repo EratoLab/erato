@@ -39,12 +39,17 @@ msgstr "Confirmado"
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ActionConfirmationCard.tsx
 msgid "actionConfirmation.deny"
-msgstr "Denegar"
+msgstr "Denegar una vez"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ActionConfirmationCard.tsx
 msgid "actionConfirmation.dismissed"
 msgstr "Descartado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ActionConfirmationCard.tsx
+msgid "actionConfirmation.neverAllow"
+msgstr "No permitir nunca"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ActionConfirmationCard.tsx
@@ -3769,7 +3774,7 @@ msgstr "¿Cómo debería llamarte el asistente? p. ej. Max Mustermann"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.allow.defaultLabel"
-msgstr "Permitir (predeterminado por la política)"
+msgstr "Permitir siempre (predeterminado por la política)"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
@@ -3779,7 +3784,7 @@ msgstr "Permitir (predeterminado por la política)"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.allow.label"
-msgstr "Permitir"
+msgstr "Permitir siempre"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolDecisionControl.tsx
@@ -4152,6 +4157,11 @@ msgstr "Accede a otros sistemas"
 #: src/components/ui/Settings/McpToolRow.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.readsOnly"
 msgstr "Solo lee"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolRow.tsx
+msgid "preferences.dialog.mcpServers.tools.badge.setByYou"
+msgstr "Establecido por ti"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx

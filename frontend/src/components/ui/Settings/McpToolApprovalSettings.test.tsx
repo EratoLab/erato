@@ -439,7 +439,7 @@ describe("McpToolApprovalSettings", () => {
     const listTeams = await rowFor("list_teams");
     await expectChecked(listTeams, "ask");
     expect(radioByValue(listTeams, "allow")).toHaveAccessibleName(
-      "Allow (policy default)",
+      "Always allow (policy default)",
     );
     expect(radioByValue(listTeams, "allow")).not.toHaveAttribute(
       "aria-disabled",
@@ -589,7 +589,7 @@ describe("McpToolApprovalSettings", () => {
     await expectChecked(await rowFor("get_issue"), "never");
 
     // Allow is the policy default for one tool and a grant for the other.
-    await chooseForGroup("readOnly", /^Allow/);
+    await chooseForGroup("readOnly", /^Always allow/);
     await expectChecked(await rowFor("get_issue"), "allow");
     await expectChecked(await rowFor("list_teams"), "allow");
     await waitFor(() => {
@@ -668,7 +668,7 @@ describe("McpToolApprovalSettings", () => {
       renderSection();
       await rowFor("get_issue");
 
-      await chooseForGroup("readOnly", /^Allow/);
+      await chooseForGroup("readOnly", /^Always allow/);
 
       // The asking tool cannot be granted; the others go back to allowing.
       await expectChecked(await rowFor("list_teams"), "allow");
@@ -708,7 +708,9 @@ describe("McpToolApprovalSettings", () => {
     await rowFor("get_issue");
 
     fireEvent.click(groupTrigger("readOnly"));
-    const allow = await screen.findByRole("menuitem", { name: /^Allow/ });
+    const allow = await screen.findByRole("menuitem", {
+      name: /^Always allow/,
+    });
     expect(allow).toBeDisabled();
     expect(allow).toHaveTextContent(
       "Always allow is switched off by the approval policy.",

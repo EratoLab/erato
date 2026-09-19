@@ -1697,12 +1697,16 @@ pub struct ResumeStreamRequest {
 }
 
 /// Decision submitted for a generation stopped at an MCP approval gate.
+///
+/// `RejectAlways` needs no policy flag the way `ApproveAlways` needs
+/// `allow_always`: a denial is more restrictive than anything the policy does.
 #[derive(Debug, Clone, Copy, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolApprovalDecision {
     Approve,
     Reject,
     ApproveAlways,
+    RejectAlways,
 }
 
 /// Rehydrates a generation that was deliberately stopped for MCP tool approval.
@@ -12093,7 +12097,10 @@ async fn run_continue_message_task(
 
     let user_id = Uuid::parse_str(&me_user.id)
         .map_err(|_| eyre!("MCP approvals require a UUID-backed user"))?;
-    let is_approved = !matches!(request.decision, ToolApprovalDecision::Reject);
+    let is_approved = !matches!(
+        request.decision,
+        ToolApprovalDecision::Reject | ToolApprovalDecision::RejectAlways
+    );
 
     let generation_parameters: GenerationParameters = serde_json::from_value(
         message
@@ -12182,6 +12189,23 @@ async fn run_continue_message_task(
     } else {
         None
     };
+    // Unconditional, unlike the grant above: a denial is worth storing even
+    // for a call that can no longer run, and nothing it could overwrite is
+    // more restrictive.
+    let never_allow_setting = if matches!(request.decision, ToolApprovalDecision::RejectAlways) {
+        Some(
+            crate::models::user_tool_approval_setting::upsert_active(
+                &app_state.db,
+                user_id,
+                &approval_request.mcp_server_id,
+                &approval_request.tool_name,
+                crate::models::user_tool_approval_setting::UserToolDecision::Denied,
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
 
     if is_approved {
         parsed
@@ -12199,6 +12223,10 @@ async fn run_continue_message_task(
             .content
             .push(ContentPart::ToolRejection(ContentPartToolRejection {
                 tool_call_id: approval_request.tool_call_id.clone(),
+                never_allow: never_allow_setting.is_some(),
+                user_tool_approval_setting_id: never_allow_setting
+                    .as_ref()
+                    .map(|setting| setting.id),
                 rejected_at: now_timestamp(),
             }));
     }

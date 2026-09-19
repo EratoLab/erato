@@ -39,12 +39,17 @@ msgstr "Confirmed"
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ActionConfirmationCard.tsx
 msgid "actionConfirmation.deny"
-msgstr "Deny"
+msgstr "Deny once"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ActionConfirmationCard.tsx
 msgid "actionConfirmation.dismissed"
 msgstr "Dismissed"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ActionConfirmationCard.tsx
+msgid "actionConfirmation.neverAllow"
+msgstr "Never allow"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ActionConfirmationCard.tsx
@@ -3769,7 +3774,7 @@ msgstr "What should the assistant call you? e.g. Max Mustermann"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.allow.defaultLabel"
-msgstr "Allow (policy default)"
+msgstr "Always allow (policy default)"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
@@ -3779,7 +3784,7 @@ msgstr "Allow (policy default)"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.allow.label"
-msgstr "Allow"
+msgstr "Always allow"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolDecisionControl.tsx
@@ -4152,6 +4157,11 @@ msgstr "Reaches other systems"
 #: src/components/ui/Settings/McpToolRow.tsx
 msgid "preferences.dialog.mcpServers.tools.badge.readsOnly"
 msgstr "Reads only"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/McpToolRow.tsx
+msgid "preferences.dialog.mcpServers.tools.badge.setByYou"
+msgstr "Set by you"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx

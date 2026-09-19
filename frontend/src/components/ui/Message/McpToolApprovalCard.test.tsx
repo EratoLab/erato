@@ -133,6 +133,38 @@ describe("McpToolApprovalCard", () => {
     });
   });
 
+  it("posts a standing refusal, so a tool can be settled from the chat", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response("event: done\\ndata: {}\\n\\n", { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={approvalRequest}
+        resolution={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Never allow"));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1beta/me/messages/continuestream",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            message_id: "message-1",
+            decision: "reject_always",
+          }),
+        }),
+      );
+    });
+  });
+
   it("drops the cached tool rosters after an Always allow, not after a one-off", async () => {
     const fetchMock = vi
       .fn()
@@ -222,7 +254,7 @@ describe("McpToolApprovalCard", () => {
       ),
     );
 
-    fireEvent.click(screen.getByText("Deny"));
+    fireEvent.click(screen.getByText("Deny once"));
 
     await waitFor(() => {
       expect(useConfirmationRegistryStore.getState().hasPending("chat-1")).toBe(
