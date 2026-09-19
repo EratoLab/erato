@@ -1,6 +1,10 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
-import { skipToken } from "@tanstack/react-query";
+import {
+  QueryClient,
+  QueryClientProvider,
+  skipToken,
+} from "@tanstack/react-query";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -10,9 +14,14 @@ import {
   selectPollDriverCount,
   useGenerationStatusStore,
 } from "@/hooks/chat/store/generationStatusStore";
-import { useRecentChats } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import {
+  recentChatsQuery,
+  useRecentChats,
+  useRetryDelegatedRun,
+} from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { messages as enMessages } from "@/locales/en/messages.json";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
+import { delegatedRunsListingParams } from "@/utils/chat/delegatedRunDispatch";
 import { resolveDelegatedRunStatus } from "@/utils/chatHistoryGrouping";
 
 import { DelegatedRunsSection } from "./DelegatedRunsSection";
@@ -20,9 +29,19 @@ import { DelegatedRunsSection } from "./DelegatedRunsSection";
 import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Messages } from "@lingui/core";
 
-vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
-  useRecentChats: vi.fn(() => ({ data: undefined, isLoading: false })),
-}));
+// Spread the real module rather than replacing it: the retry affordance reads
+// listing rows straight out of the query cache under `recentChatsQuery`'s own
+// key, so a fabricated key would never match what a test seeds.
+vi.mock(
+  "@/lib/generated/v1betaApi/v1betaApiComponents",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@/lib/generated/v1betaApi/v1betaApiComponents")
+    >()),
+    useRecentChats: vi.fn(() => ({ data: undefined, isLoading: false })),
+    useRetryDelegatedRun: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  }),
+);
 
 const navigateMock = vi.fn();
 vi.mock("react-router-dom", async () => {
@@ -68,6 +87,10 @@ const mockRuns = (chats: RecentChat[]) => {
   );
 };
 
+// A fresh client per test: the retry affordance resolves "already retried"
+// from cached listing rows, and tests seed those explicitly.
+let queryClient: QueryClient;
+
 const renderSection = (
   chatId: string | null,
   config: Parameters<typeof StaticFeatureConfigProvider>[0]["config"] = {
@@ -76,13 +99,32 @@ const renderSection = (
   onOpenRun?: (chat: RecentChat) => void,
 ) =>
   render(
-    <StaticFeatureConfigProvider config={config}>
-      <I18nProvider i18n={i18n}>
-        <MemoryRouter>
-          <DelegatedRunsSection chatId={chatId} onOpenRun={onOpenRun} />
-        </MemoryRouter>
-      </I18nProvider>
-    </StaticFeatureConfigProvider>,
+    <QueryClientProvider client={queryClient}>
+      <StaticFeatureConfigProvider config={config}>
+        <I18nProvider i18n={i18n}>
+          <MemoryRouter>
+            <DelegatedRunsSection chatId={chatId} onOpenRun={onOpenRun} />
+          </MemoryRouter>
+        </I18nProvider>
+      </StaticFeatureConfigProvider>
+    </QueryClientProvider>,
+  );
+
+/** Seed the origin-filtered listing the retry swap resolves `retry_of` from. */
+const seedListingCache = (originChatId: string, chats: Partial<RecentChat>[]) =>
+  queryClient.setQueryData(
+    recentChatsQuery({
+      queryParams: delegatedRunsListingParams(originChatId),
+    }).queryKey,
+    {
+      chats,
+      stats: {
+        current_offset: 0,
+        has_more: false,
+        returned_count: chats.length,
+        total_count: chats.length,
+      },
+    },
   );
 
 const DELEGATION_ON: Parameters<
@@ -94,6 +136,12 @@ const DELEGATION_ON: Parameters<
 /** The bar starts collapsed; row-level assertions unfold it first. */
 const expandRuns = () =>
   fireEvent.click(screen.getByTestId("delegated-runs-toggle"));
+
+beforeEach(() => {
+  queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+});
 
 describe("DelegatedRunsSection", () => {
   beforeEach(() => {
@@ -512,6 +560,145 @@ describe("DelegatedRunsSection check-off", () => {
     fireEvent.click(within(rows[0]).getByTestId("delegated-run-dismiss"));
     expect(navigateMock).not.toHaveBeenCalled();
     expect(screen.getAllByTestId("delegated-run-item")).toHaveLength(1);
+  });
+});
+
+describe("DelegatedRunsSection retry", () => {
+  const RETRY_ON: Parameters<typeof StaticFeatureConfigProvider>[0]["config"] =
+    {
+      assistants: {
+        enabled: true,
+        delegationEnabled: true,
+        delegationTasksAllowAsync: true,
+      },
+    };
+
+  /** Drives the generated mutation's callbacks the way the real one would. */
+  const mockRetryMutation = (outcome: { error?: unknown } = {}) => {
+    const mutate = vi.fn();
+    (useRetryDelegatedRun as Mock).mockImplementation(
+      (options: {
+        onSuccess?: () => void;
+        onError?: (error: unknown) => void;
+      }) => ({
+        mutate: (variables: unknown) => {
+          mutate(variables);
+          if ("error" in outcome) {
+            options.onError?.(outcome.error);
+          } else {
+            options.onSuccess?.();
+          }
+        },
+        isPending: false,
+      }),
+    );
+    return mutate;
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    useGenerationStatusStore.getState().reset();
+    i18n.load("en", enMessages as unknown as Messages);
+    i18n.activate("en");
+  });
+
+  it("offers retry on a failed run only where the deployment allows async tasks", () => {
+    mockRetryMutation();
+    mockRuns([
+      recentChat({ id: "run-failed", delegated_run_outcome: "failed" }),
+      recentChat({ id: "run-done", delegated_run_outcome: "completed" }),
+    ]);
+
+    // The endpoint 404s when async tasks are off, so the control must not be
+    // offered at all — a refusal the user cannot act on is worse than silence.
+    const { unmount } = renderSection("origin-1");
+    expandRuns();
+    expect(screen.queryByTestId("delegated-run-retry")).toBeNull();
+    unmount();
+
+    renderSection("origin-1", RETRY_ON);
+    expandRuns();
+    const retries = screen.getAllByTestId("delegated-run-retry");
+    expect(retries).toHaveLength(1);
+    // A run that finished is not a candidate; only a failed one is.
+    expect(retries[0].closest('[data-chat-id="run-failed"]')).not.toBeNull();
+  });
+
+  it("asks for a task retry and refetches the listing the new child lands in", () => {
+    const mutate = mockRetryMutation();
+    mockRuns([
+      recentChat({ id: "run-failed", delegated_run_outcome: "failed" }),
+    ]);
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+
+    renderSection("origin-1", RETRY_ON);
+    expandRuns();
+    fireEvent.click(screen.getByTestId("delegated-run-retry"));
+
+    // `kind` is the whole body: the server rejects an unknown variant with a
+    // 422, so sending anything else would be a silently different action.
+    expect(mutate).toHaveBeenCalledWith({
+      body: { kind: "task" },
+      pathParams: { chatId: "origin-1", childChatId: "run-failed" },
+    });
+    // Without this the retry child exists server-side and shows up nowhere
+    // until the user reloads.
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: recentChatsQuery({
+        queryParams: delegatedRunsListingParams("origin-1"),
+      }).queryKey,
+    });
+  });
+
+  it("swaps the button for the replacement once a retry child is listed", () => {
+    mockRetryMutation();
+    const rows = [
+      recentChat({ id: "run-failed", delegated_run_outcome: "failed" }),
+      recentChat({ id: "run-retry", retry_of: "run-failed" }),
+    ];
+    mockRuns(rows);
+    seedListingCache("origin-1", rows);
+
+    const { unmount } = renderSection("origin-1", RETRY_ON);
+    expandRuns();
+
+    const failedRow = screen
+      .getByTestId("delegated-run-retried")
+      .closest('[data-chat-id="run-failed"]');
+    expect(failedRow).not.toBeNull();
+    expect(screen.getByTestId("delegated-run-retried")).toHaveAttribute(
+      "data-retried-chat-id",
+      "run-retry",
+    );
+    expect(screen.queryByTestId("delegated-run-retry")).toBeNull();
+
+    // The swap rides `retry_of` off the wire, not component memory: a remount
+    // against the same listing must not offer the retry again. Anything less
+    // reopens the retry storm the bounded-retry rule exists to close.
+    unmount();
+    renderSection("origin-1", RETRY_ON);
+    expandRuns();
+    expect(screen.getByTestId("delegated-run-retried")).toBeInTheDocument();
+    expect(screen.queryByTestId("delegated-run-retry")).toBeNull();
+  });
+
+  it("says so when the server refuses, without opening the run", () => {
+    mockRetryMutation({ error: { code: "not_retryable", state: "completed" } });
+    mockRuns([
+      recentChat({ id: "run-failed", delegated_run_outcome: "failed" }),
+    ]);
+
+    renderSection("origin-1", RETRY_ON);
+    expandRuns();
+    fireEvent.click(screen.getByTestId("delegated-run-retry"));
+
+    expect(
+      screen.getByTestId("delegated-run-retry-refused"),
+    ).toBeInTheDocument();
+    // The control sits inside the row's anchor; a click that reached it would
+    // navigate away from the refusal the user just earned.
+    expect(navigateMock).not.toHaveBeenCalled();
   });
 });
 

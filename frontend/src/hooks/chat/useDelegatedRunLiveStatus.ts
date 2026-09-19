@@ -17,14 +17,13 @@
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useCallback, useSyncExternalStore } from "react";
 
-import { recentChatsQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import {
   resolveDelegatedRunStatus,
   type ChatAttentionStatus,
 } from "@/utils/chatHistoryGrouping";
 
+import { findListedChat } from "./listedDelegatedRun";
 import { useGenerationStatusStore } from "./store/generationStatusStore";
-import { isPaginated, type RecentChatsCacheEntry } from "./useChatHistory";
 
 import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
@@ -40,23 +39,11 @@ const NO_LISTED_ROW: Pick<
   | "pending_tool_approval_at"
 > = {};
 
-function findListedRun(
+const findListedRun = (
   queryClient: QueryClient,
   chatId: string,
-): RecentChat | undefined {
-  const entries = queryClient.getQueriesData<RecentChatsCacheEntry>({
-    queryKey: recentChatsQuery({}).queryKey,
-  });
-  for (const [, entry] of entries) {
-    if (!entry) continue;
-    const pages = isPaginated(entry) ? entry.pages : [entry];
-    for (const page of pages) {
-      const row = page.chats.find((chat) => chat.id === chatId);
-      if (row) return row;
-    }
-  }
-  return undefined;
-}
+): RecentChat | undefined =>
+  findListedChat(queryClient, (chat) => chat.id === chatId);
 
 export function useDelegatedRunLiveStatus(
   chatId: string | undefined,
