@@ -85,7 +85,6 @@ pub async fn record_pending_delivery(
     let parent_tool_call_id = task
         .and_then(|task| task.parent_tool_call_id.clone())
         .unwrap_or_default();
-    let scheduling = task.map(|task| task.scheduling).unwrap_or_default();
     let spawned_at = provenance.rebase_cutoff.unwrap_or(chat.created_at);
 
     // Probe the answer row before asking for an envelope. `build_result_envelope`
@@ -156,7 +155,6 @@ pub async fn record_pending_delivery(
         }
     };
 
-    let _ = scheduling;
     let payload = serde_json::to_value(&delivery).ok()?;
     // Path-scoped rather than a whole-envelope rewrite: the adoption path
     // replaces `assistant_configuration` wholesale from a possibly stale

@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import enMessages from "@/locales/en/messages.json";
 import {
+  isBackgroundRun,
   isDelegatedRun,
   mapRecentChatToSession,
 } from "@/utils/chat/recentChatSession";
@@ -110,5 +111,43 @@ describe("isDelegatedRun", () => {
     expect(isDelegatedRun({ provenance_kind: "handoff_branch" })).toBe(false);
     expect(isDelegatedRun({ provenance_kind: "handoff_move" })).toBe(false);
     expect(isDelegatedRun({})).toBe(false);
+  });
+});
+
+describe("isBackgroundRun", () => {
+  // `async` is the arm this PR added, and it was the whole point of the
+  // change: the sidebar recognised only `background`, so async children were
+  // hidden. Nothing else on the branch constructs an async row, so reverting
+  // the predicate to `=== BACKGROUND_RUN_MODE` made every async child vanish
+  // from the delegated-runs section with the suite still green.
+  it("counts both detached run modes, not just background", () => {
+    expect(
+      isBackgroundRun({
+        provenance_kind: "delegation",
+        provenance_run_mode: "async",
+      }),
+    ).toBe(true);
+    expect(
+      isBackgroundRun({
+        provenance_kind: "delegation",
+        provenance_run_mode: "background",
+      }),
+    ).toBe(true);
+  });
+
+  it("ignores a run that never detached, and anything not delegated", () => {
+    expect(
+      isBackgroundRun({
+        provenance_kind: "delegation",
+        provenance_run_mode: "wait",
+      }),
+    ).toBe(false);
+    expect(isBackgroundRun({ provenance_kind: "delegation" })).toBe(false);
+    expect(
+      isBackgroundRun({
+        provenance_kind: "handoff_branch",
+        provenance_run_mode: "async",
+      }),
+    ).toBe(false);
   });
 });
