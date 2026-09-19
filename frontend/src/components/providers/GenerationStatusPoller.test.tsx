@@ -320,6 +320,63 @@ describe("GenerationStatusPoller effects", () => {
     expect(invalidationsFor(listingKey)).toBe(3);
   });
 
+  it("refetches the open chat on the run-ended edge so a landed delivery is visible", () => {
+    // A delivery whose reaction failed writes a `task_result` row and starts
+    // no further generation, so `/me/generating` never mentions it again. The
+    // origin leaving the live set at the end of the delivery is the only
+    // signal left, and the react predicate can only see the row if the open
+    // chat's messages are refetched on it.
+    const messagesKey = chatMessagesQuery({
+      pathParams: { chatId: "origin" },
+    }).queryKey;
+    useGenerationStatusStore.getState().setAwaitingDelivery("origin", true);
+    useGenerationStatusStore.getState().setCurrentChatId("origin");
+
+    // 1. The delivery is running under the origin's own lease.
+    emit({ chats: [generatingEntry({ chat_id: "origin" })] });
+    const view = renderPoller();
+    const rerender = () =>
+      view.rerender(
+        <QueryClientProvider client={queryClient}>
+          <GenerationStatusPoller />
+        </QueryClientProvider>,
+      );
+    // The mount bootstraps the backstop, which also pulls the open chat.
+    expect(invalidationsFor(messagesKey)).toBe(1);
+
+    // 2. Inside the throttle window with nothing moving: no extra refetch.
+    vi.setSystemTime(new Date("2026-08-19T12:00:10.000Z"));
+    emit({ chats: [generatingEntry({ chat_id: "origin" })] });
+    rerender();
+    expect(invalidationsFor(messagesKey)).toBe(1);
+
+    // 3. The origin left the live set: the delivered row is on disk now.
+    emit({
+      chats: [
+        generatingEntry({
+          chat_id: "origin",
+          state: "completed",
+          ended_at: "2026-08-19T12:00:11.000Z",
+        }),
+      ],
+    });
+    rerender();
+    expect(invalidationsFor(messagesKey)).toBe(2);
+  });
+
+  it("does not refetch an open chat on the run-ended edge when none is open", () => {
+    const messagesKey = chatMessagesQuery({
+      pathParams: { chatId: "origin" },
+    }).queryKey;
+    useGenerationStatusStore.getState().setAwaitingDelivery("origin", true);
+
+    emit({ chats: [generatingEntry({ chat_id: "origin" })] });
+    renderPoller();
+
+    expect(invalidationsFor(recentChatsQuery({}).queryKey)).toBe(1);
+    expect(invalidationsFor(messagesKey)).toBe(0);
+  });
+
   it("refetches the open chat once when a task-result turn lands in it", () => {
     const messagesKey = chatMessagesQuery({
       pathParams: { chatId: "origin" },

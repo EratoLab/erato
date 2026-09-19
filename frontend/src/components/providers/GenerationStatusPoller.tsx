@@ -195,6 +195,11 @@ export function GenerationStatusPoller({
       }
     }
     liveChatIdsRef.current = live;
+    // The gate is the store's view of `delegated_runs_in_flight`, which goes
+    // false once the delivery reaches `delivered` — i.e. for exactly the case
+    // below. It survives because the store is only re-seeded by the NEXT
+    // listing fetch, the one this branch is about to ask for; read here, it
+    // still carries the `claimed` state the delivery ran under.
     if (Object.keys(awaitingDeliveryChatIds).length > 0) {
       const aRunEnded = [...previouslyLive].some((id) => !live.has(id));
       const backstopDue =
@@ -205,6 +210,24 @@ export function GenerationStatusPoller({
         void queryClient.invalidateQueries({
           queryKey: recentChatsQuery({}).queryKey,
         });
+        // 779-B: the same edge is when a delivered `task_result` row may have
+        // appeared in the OPEN chat. `deliver_task_result` holds the origin's
+        // own lease for the whole delivery, so the origin is what leaves the
+        // live set here — and it wrote the row before releasing. A delivery
+        // whose reaction failed leaves no further signal at all, so the react
+        // predicate has to be re-evaluated against these rows or the missing
+        // answer stays invisible until the chat is remounted.
+        //
+        // BRANCH B is the wrong seam for this: it matches a task-result turn
+        // that has already RUN, by which point the reaction's assistant row is
+        // the tip and the predicate is false.
+        if (currentChatId) {
+          void queryClient.invalidateQueries({
+            queryKey: chatMessagesQuery({
+              pathParams: { chatId: currentChatId },
+            }).queryKey,
+          });
+        }
       }
     }
 
