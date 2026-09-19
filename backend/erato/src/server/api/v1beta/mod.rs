@@ -4,6 +4,7 @@ pub mod assistant_usage;
 pub mod assistants;
 pub mod audio_transcription;
 pub mod budget;
+pub mod delegated_run_retry;
 pub mod desktop_sidecar;
 pub mod entra_id;
 mod file_resolution;
@@ -67,6 +68,10 @@ use crate::server::api::v1beta::mcp_servers::{
     McpServerToolAnnotations, McpServerToolPolicy, McpServerToolUserDecision,
     StartMcpServerOauthResponse, complete_mcp_server_oauth, disconnect_mcp_server_oauth,
     list_mcp_server_tools, list_mcp_servers, start_mcp_server_oauth,
+};
+use crate::server::api::v1beta::delegated_run_retry::{
+    __path_retry_delegated_run, NotRetryableError, NotRetryableState, RetryDelegatedRunRequest,
+    RetryDelegatedRunResponse, RetryKind,
 };
 use crate::server::api::v1beta::me_profile_middleware::{MeProfile, UserProfile};
 use crate::server::api::v1beta::message_streaming::{
@@ -177,6 +182,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/chats", post(create_chat))
         .route("/chats/{chat_id}", get(chat_detail).put(update_chat))
         .route("/chats/{chat_id}/react", post(react_to_task_result_sse))
+        .route(
+            "/chats/{chat_id}/delegated_runs/{child_chat_id}/retry",
+            post(delegated_run_retry::retry_delegated_run),
+        )
         .route("/chats/archive_all", post(archive_all_chats_endpoint))
         .route("/files", post(upload_file))
         .route("/files/link", post(link_file))
@@ -414,6 +423,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         resume_message_sse,
         continue_message_sse,
         react_to_task_result_sse,
+        retry_delegated_run,
         client_tool_result,
         list_user_tool_approval_settings,
         create_user_tool_approval_setting,
@@ -510,6 +520,11 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         GenerationRunningError,
         ReactToTaskResultRequest,
         NothingToReactError,
+        RetryDelegatedRunRequest,
+        RetryDelegatedRunResponse,
+        RetryKind,
+        NotRetryableError,
+        NotRetryableState,
         crate::models::message::TaskResultInput,
         crate::models::message::GenerationInitiator,
         crate::models::message::ContentPartTaskResult,
