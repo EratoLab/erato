@@ -185,34 +185,6 @@ fn framed_untrusted_block(value: &str) -> String {
     value.replace('<', "&lt;").replace('>', "&gt;")
 }
 
-/// Wraps the `result` of a serialized delegation envelope in an
-/// untrusted-data frame, leaving the rest of the object alone.
-///
-/// The child's answer is text the origin model did not write and cannot
-/// vouch for: it is whatever a delegate — steered by its own facets, files
-/// and tool results — chose to say. The status, the reason and the ids stay
-/// OUTSIDE the frame so the response remains machine-readable.
-///
-/// This is the single funnel BOTH model-facing seams pass through: the live
-/// tool response ([`DelegationResultEnvelope::model_response_text`]) and the
-/// replay of the stored part on every later turn (`strip_ui_only_tool_output`
-/// in `prompt_composition`). Framing only the live one would contain the
-/// answer for exactly one turn and hand it over raw from turn N+1 — which is
-/// the turn an injected instruction would be waiting for. The stored
-/// `output` itself is never framed: it is what the UI renders.
-///
-/// Because it is one funnel, the framed CONTENT cannot diverge between the
-/// two. The bytes can: the stored part round-trips through a `jsonb` column,
-/// which normalizes key order, so the live object and the replayed one may
-/// serialize their keys in a different order.
-///
-/// The guidance rides here too, as a sibling of `result` rather than inside
-/// the frame. It has the same lifetime requirement as the frame it explains —
-/// the tool description that carries the offer-side guidance is absent from
-/// continuations and from any later turn that does not re-offer the tool,
-/// while the result replays for the life of the conversation. Keeping it
-/// OUTSIDE the block also keeps it unforgeable: a child writing the same
-/// sentence writes it into the region the model is told to distrust.
 /// Render a delivered task result for the model that has to react to it.
 ///
 /// The split here is the whole point. `template` is operator-tunable prose and
@@ -264,6 +236,34 @@ pub fn render_task_result(
     )
 }
 
+/// Wraps the `result` of a serialized delegation envelope in an
+/// untrusted-data frame, leaving the rest of the object alone.
+///
+/// The child's answer is text the origin model did not write and cannot
+/// vouch for: it is whatever a delegate — steered by its own facets, files
+/// and tool results — chose to say. The status, the reason and the ids stay
+/// OUTSIDE the frame so the response remains machine-readable.
+///
+/// This is the single funnel BOTH model-facing seams pass through: the live
+/// tool response ([`DelegationResultEnvelope::model_response_text`]) and the
+/// replay of the stored part on every later turn (`strip_ui_only_tool_output`
+/// in `prompt_composition`). Framing only the live one would contain the
+/// answer for exactly one turn and hand it over raw from turn N+1 — which is
+/// the turn an injected instruction would be waiting for. The stored
+/// `output` itself is never framed: it is what the UI renders.
+///
+/// Because it is one funnel, the framed CONTENT cannot diverge between the
+/// two. The bytes can: the stored part round-trips through a `jsonb` column,
+/// which normalizes key order, so the live object and the replayed one may
+/// serialize their keys in a different order.
+///
+/// The guidance rides here too, as a sibling of `result` rather than inside
+/// the frame. It has the same lifetime requirement as the frame it explains —
+/// the tool description that carries the offer-side guidance is absent from
+/// continuations and from any later turn that does not re-offer the tool,
+/// while the result replays for the life of the conversation. Keeping it
+/// OUTSIDE the block also keeps it unforgeable: a child writing the same
+/// sentence writes it into the region the model is told to distrust.
 pub fn frame_delegation_result(value: &mut serde_json::Value) {
     let Some(object) = value.as_object_mut() else {
         return;
