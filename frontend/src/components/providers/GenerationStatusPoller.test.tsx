@@ -18,12 +18,15 @@ import {
 
 // Spread the real module: the component imports `recentChatsQuery` and
 // `chatMessagesQuery` from it too, and a bare mock would make both undefined.
-vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import("@/lib/generated/v1betaApi/v1betaApiComponents")
-  >()),
-  useGeneratingChats: vi.fn(),
-}));
+vi.mock(
+  "@/lib/generated/v1betaApi/v1betaApiComponents",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@/lib/generated/v1betaApi/v1betaApiComponents")
+    >()),
+    useGeneratingChats: vi.fn(),
+  }),
+);
 
 import type {
   GeneratingChat,

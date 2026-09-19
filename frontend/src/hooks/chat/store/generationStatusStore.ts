@@ -410,8 +410,7 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
         set(
           (prev) => {
             const hadStatus = prev.statusByChatId[chatId] !== undefined;
-            const hadDelivery =
-              prev.awaitingDeliveryChatIds[chatId] === true;
+            const hadDelivery = prev.awaitingDeliveryChatIds[chatId] === true;
             // Forgetting the chat has to forget both facts about it: a
             // leftover delivery entry would keep the poll alive for a chat
             // the store no longer knows anything else about.
