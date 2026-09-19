@@ -4,7 +4,9 @@
 
 import type {
   ContentPart,
+  GenerationInitiator,
   MentionedAssistant,
+  TaskResultInput,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 export type ContentFilterCategory =
@@ -227,6 +229,14 @@ export interface Message {
    * round-trip.
    */
   mentioned_assistants?: MentionedAssistant[];
+  /** Who started the generation this message belongs to. Server-derived, so
+   *  absent on optimistic rows and on anything written before delegated task
+   *  results existed. */
+  initiator?: GenerationInitiator;
+  /** Set on a user row the server appended to deliver a delegated task's
+   *  result. The row's own `task_result` content part is what renders; this is
+   *  the marker the `/react` trigger keys on. */
+  task_result?: TaskResultInput;
   /**
    * Set on assistant messages produced under a host action facet — drives
    * insert/replace artifact rendering in {@link Message} content regardless

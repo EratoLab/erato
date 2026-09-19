@@ -85,6 +85,10 @@ export function mapApiMessageToUiMessage(
     action_facet_id: apiMessage.action_facet_id ?? undefined,
     action_facet_args: apiMessage.action_facet_args ?? undefined,
     mentioned_assistants: apiMessage.mentioned_assistants ?? undefined,
+    // The adapter is an explicit whitelist: a field the server derives is
+    // dropped unless it is named here. The `/react` trigger reads both.
+    initiator: apiMessage.initiator ?? undefined,
+    task_result: apiMessage.task_result ?? undefined,
   };
 }
 
