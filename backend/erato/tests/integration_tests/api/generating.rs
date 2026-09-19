@@ -1394,3 +1394,173 @@ async fn a_held_lease_answers_a_submit_with_the_typed_409(pool: Pool<Postgres>) 
         "a refused write must leave the generation already holding the chat alone"
     );
 }
+
+/// Insert one assistant row carrying `generation_parameters`.
+///
+/// Chained through `previous_message_id`, and a branched-away row is given its
+/// own `sibling_message_id`: `ensure_single_active_message_in_thread` is a
+/// DEFERRABLE INITIALLY DEFERRED constraint trigger that fires per sibling
+/// group (`COALESCE(sibling_message_id, id)`), not per chat. Several active
+/// rows in one chat are legal; two active rows in one sibling group are not,
+/// and the violation surfaces at COMMIT rather than at insert.
+#[allow(clippy::too_many_arguments)]
+async fn insert_generation_row(
+    db: &DatabaseConnection,
+    chat_id: Uuid,
+    created_at: chrono::DateTime<chrono::FixedOffset>,
+    previous_message_id: Option<Uuid>,
+    sibling_message_id: Option<Uuid>,
+    in_active_thread: bool,
+    generation_parameters: Option<Value>,
+) -> Uuid {
+    let id = Uuid::new_v4();
+    erato::db::entity::messages::ActiveModel {
+        id: ActiveValue::Set(id),
+        chat_id: ActiveValue::Set(chat_id),
+        raw_message: ActiveValue::Set(json!({
+            "role": "assistant",
+            "content": [{"content_type": "text", "text": "answer"}],
+        })),
+        created_at: ActiveValue::Set(created_at),
+        updated_at: ActiveValue::Set(created_at),
+        previous_message_id: ActiveValue::Set(previous_message_id),
+        sibling_message_id: ActiveValue::Set(sibling_message_id),
+        is_message_in_active_thread: ActiveValue::Set(in_active_thread),
+        generation_parameters: ActiveValue::Set(generation_parameters),
+        ..Default::default()
+    }
+    .insert(db)
+    .await
+    .expect("Failed to insert generation row");
+    id
+}
+
+/// `/me/generating` reports who started the generation it is describing.
+///
+/// The initiator is read from the LATEST ACTIVE-THREAD generation, not from
+/// "any row that ever said task_result" — an origin that has since taken a
+/// user turn, or branched away from a delivered result, must report the turn
+/// the user is actually watching. Absence is the contract for "a person did
+/// it": an ordinary user turn writes no `initiator` key at all, so the wire
+/// field must be omitted rather than defaulted to `"user"`. And the LATERAL
+/// is LEFT, so a chat with no generation-parameters row still lists.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn generating_chats_reports_task_result_initiator(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+    let me = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let owner = me.id.to_string();
+    let now: chrono::DateTime<chrono::FixedOffset> = Utc::now().into();
+
+    // A: a delivered task result's reaction turn.
+    let chat_a = insert_chat(&app_state.db, &owner).await;
+    insert_generation_row(
+        &app_state.db,
+        chat_a.id,
+        now,
+        None,
+        None,
+        true,
+        Some(json!({"initiator": "task_result", "chat_provider_id": "mock"})),
+    )
+    .await;
+
+    // B: an ordinary user turn — the real production shape, which carries
+    //    generation parameters but no `initiator` key.
+    let chat_b = insert_chat(&app_state.db, &owner).await;
+    insert_generation_row(
+        &app_state.db,
+        chat_b.id,
+        now,
+        None,
+        None,
+        true,
+        Some(json!({"chat_provider_id": "mock"})),
+    )
+    .await;
+
+    // C: the discriminating chat. An older active row says `task_result`, a
+    //    newer active row says `user`, and a row newer still that was branched
+    //    out of the active thread says `task_result`. Only the newest ACTIVE
+    //    row may win.
+    let chat_c = insert_chat(&app_state.db, &owner).await;
+    let older = insert_generation_row(
+        &app_state.db,
+        chat_c.id,
+        now - chrono::Duration::seconds(30),
+        None,
+        None,
+        true,
+        Some(json!({"initiator": "task_result"})),
+    )
+    .await;
+    let newer = insert_generation_row(
+        &app_state.db,
+        chat_c.id,
+        now - chrono::Duration::seconds(10),
+        Some(older),
+        None,
+        true,
+        Some(json!({"initiator": "user"})),
+    )
+    .await;
+    insert_generation_row(
+        &app_state.db,
+        chat_c.id,
+        now,
+        Some(older),
+        Some(newer),
+        false,
+        Some(json!({"initiator": "task_result"})),
+    )
+    .await;
+
+    // D: no generation-parameters row at all. Must still list — an INNER
+    //    LATERAL here would make the chat vanish from the poll entirely.
+    let chat_d = insert_chat(&app_state.db, &owner).await;
+
+    for chat in [&chat_a, &chat_b, &chat_c, &chat_d] {
+        mark_running(&app_state.db, chat.id, 1).await;
+    }
+    app_state.global_policy_engine.invalidate_data().await;
+
+    let server = create_test_server(app_state.clone());
+    let response = server
+        .get("/api/v1beta/me/generating")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status_ok();
+    let body: Value = response.json();
+    let entries = body["chats"].as_array().expect("chats array");
+    let entry_for = |chat_id: Uuid| -> &Value {
+        entries
+            .iter()
+            .find(|entry| entry["chat_id"] == chat_id.to_string())
+            .unwrap_or_else(|| panic!("chat {chat_id} missing from /me/generating"))
+    };
+
+    assert_eq!(entry_for(chat_a.id)["initiator"], "task_result");
+
+    let b = entry_for(chat_b.id).as_object().expect("entry object");
+    assert!(
+        !b.contains_key("initiator"),
+        "a user turn writes no initiator key, so the wire field must be absent, not \"user\""
+    );
+
+    assert_eq!(
+        entry_for(chat_c.id)["initiator"], "user",
+        "the latest ACTIVE-thread generation wins, not the newest row and not the oldest"
+    );
+
+    let d = entry_for(chat_d.id).as_object().expect("entry object");
+    assert!(
+        !d.contains_key("initiator"),
+        "a chat with no generation parameters still lists, with no initiator"
+    );
+}
