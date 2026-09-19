@@ -117,23 +117,28 @@ pub(crate) async fn resolve_file_pointers_in_generation_input(
 const DIRECTIVE_SENTINEL_OPEN: &str = "<system-reminder>";
 const DIRECTIVE_SENTINEL_CLOSE: &str = "</system-reminder>";
 
-/// Resolve the per-turn directive markers — `ContentPart::ActionFacetMarker`
-/// and `ContentPart::DelegationPreambleMarker` — by rendering their templates
-/// against the current `AppConfig`, using the arguments captured on the marker
-/// at composition time.
+/// Resolve the directive markers — `ContentPart::ActionFacetMarker`,
+/// `ContentPart::DelegationPreambleMarker` and `ContentPart::TaskResult` — by
+/// rendering their templates against the current `AppConfig`, using the
+/// arguments captured on the marker at composition time.
 ///
 /// Mirrors `resolve_file_pointers_in_generation_input` — the saved
 /// `generation_input_messages` carries metadata-only markers; rendering
 /// happens lazily here, immediately before the chat-request hits the LLM.
 ///
-/// Prior-turn markers are stripped earlier in `compose_prompt_messages`'s
-/// historical-replay step, so any marker that reaches this resolver belongs to
-/// the current turn and gets rendered. A marker whose template has gone
-/// missing (a renamed or deleted facet) is dropped with a warning rather than
-/// rendered as empty text.
+/// The two per-turn markers are stripped earlier in `compose_prompt_messages`'s
+/// historical-replay step, so one that reaches this resolver belongs to the
+/// current turn. `TaskResult` is the exception and is deliberately
+/// history-resident: `transforms.rs` pushes it for every prior user row,
+/// outside the current-row gate, because a delivered result has to keep
+/// replaying for the life of the conversation. A marker whose template has
+/// gone missing (a renamed or deleted facet) is dropped with a warning rather
+/// than rendered as empty text.
 ///
-/// Output is wrapped in a `<system-reminder>` sentinel in the user turn (both
-/// markers carry `MessageRole::User`); see that comment for reasoning.
+/// Output of the two per-turn markers is wrapped in a `<system-reminder>`
+/// sentinel in the user turn (both carry `MessageRole::User`); see that
+/// comment for reasoning. `TaskResult` returns unwrapped — it carries its own
+/// untrusted-data frame instead, for the lifetime reason above.
 pub(crate) fn resolve_directive_markers_in_generation_input(
     app_state: &AppState,
     generation_input_messages: GenerationInputMessages,
