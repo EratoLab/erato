@@ -356,6 +356,7 @@
   "delegation.tasks.max_parallel": {},
   "delegation.tasks.max_server_tool_calls_per_task": {},
   "delegation.tasks.max_tasks_per_turn": {},
+  "delegation.tasks.multitask_strategy": {},
   "delegation.tasks.persona": {},
   "desktop_sidecar.allowed_origins.[]": {},
   "desktop_sidecar.directory_suffix": {},

@@ -73,6 +73,14 @@ Concurrency is bounded by the new `delegation.tasks.max_parallel` (default `3`, 
 
 The model is still answered in the order it asked, whatever order the tasks finish in. A task is written to the conversation as soon as it settles rather than at the end of the turn, so a reload mid-turn shows the work that is already done.
 
+**A second write into a chat that is already generating is now refused instead of silently taking over** — only when `delegation.tasks.enabled` is `true`. Submitting, editing or regenerating while a turn is running answers `409` with a JSON body `{ "code": "generation_running", "chat_id", "initiator", "started_at" }`, and the client holds the draft until the turn ends. The same applies to an approval continuation, which previously assumed it could only ever resume the generation it had parked.
+
+Before, the later write replaced the running generation's lease and both kept writing to the same chat. That was survivable while a person was the only writer; it stops being survivable once a delegated task can deliver its own result into the conversation.
+
+The new key is `delegation.tasks.multitask_strategy` (default `"reject"`, the only implemented value). `"enqueue"` and `"interrupt"` are reserved spellings and are **rejected at startup** rather than silently treated as `"reject"`.
+
+The visible consequence with the flag on: a double submit from two browser tabs now returns `409` to the second tab instead of appearing to work. Other `409`s on these routes — archived chat, live delegated run — are unchanged plain text, so only clients that read `code` see any difference.
+
 #### Deprecations
 
 **`[assistants.delegation]` is deprecated; use `[delegation]` and `[delegation.assistants]`.**

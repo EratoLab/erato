@@ -2517,6 +2517,7 @@ mod tests {
             max_parallel: 3,
             persona: erato_config::config::TaskPersona::Inherit,
             child_facet_ids: vec!["web_search".to_string()],
+            multitask_strategy: Default::default(),
         }
     }
 

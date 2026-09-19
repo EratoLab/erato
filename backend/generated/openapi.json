@@ -2593,7 +2593,14 @@
             "description": "When the chat does not exist or is not accessible"
           },
           "409": {
-            "description": "When the chat is archived"
+            "description": "When the chat is archived (plain text), or the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationRunningError"
+                }
+              }
+            }
           },
           "500": {
             "description": "When an internal server error occurs"
@@ -2641,7 +2648,14 @@
             "description": "When the chat does not exist or is not accessible"
           },
           "409": {
-            "description": "When the chat is archived, or is a delegated run that is still in progress"
+            "description": "When the chat is archived, or is a delegated run that is still in progress (plain text), or the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationRunningError"
+                }
+              }
+            }
           },
           "500": {
             "description": "When an internal server error occurs"
@@ -2689,7 +2703,14 @@
             "description": "When the chat does not exist or is not accessible"
           },
           "409": {
-            "description": "When the chat is archived, or is a delegated run that is still in progress"
+            "description": "When the chat is archived, or is a delegated run that is still in progress (plain text), or the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationRunningError"
+                }
+              }
+            }
           },
           "500": {
             "description": "When an internal server error occurs"
@@ -2779,7 +2800,14 @@
             "description": "When the chat does not exist or is not accessible"
           },
           "409": {
-            "description": "When the chat is archived, or is a delegated run that is still in progress"
+            "description": "When the chat is archived, or is a delegated run that is still in progress (plain text), or the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationRunningError"
+                }
+              }
+            }
           },
           "500": {
             "description": "When an internal server error occurs"
@@ -6997,6 +7025,37 @@
           }
         ],
         "description": "Represents different types of errors that can occur during message generation."
+      },
+      "GenerationRunningError": {
+        "type": "object",
+        "description": "Body of the `409` a streaming route answers when the chat's generation\nlease is already held.\n\n`code` is what the client discriminates on: the same status is also used\nfor archived chats and for live delegated runs, which stay plain text.",
+        "required": [
+          "code",
+          "chat_id",
+          "initiator"
+        ],
+        "properties": {
+          "chat_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The chat whose lease is held."
+          },
+          "code": {
+            "type": "string",
+            "description": "Always `generation_running`."
+          },
+          "initiator": {
+            "type": "string",
+            "description": "Who started the generation holding the lease. Always `user` until\nsystem-initiated deliveries persist their own marker."
+          },
+          "started_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the holding generation started, RFC 3339, when the row records it."
+          }
+        }
       },
       "GlobalFacetSettings": {
         "type": "object",
