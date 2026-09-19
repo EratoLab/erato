@@ -1639,6 +1639,11 @@ export function useChatMessaging(
     attachToServerGeneration,
     setSSECleanupForKey,
     setSSEAbortCallback,
+    // The reaction socket streams into this chat like any other turn, so it
+    // owes the same tail: nothing else in this file resets streaming state for
+    // a socket it did not open itself.
+    clearPendingChat,
+    handleRefetchAndClear,
     onGenerationRunningRefusal: handleGenerationRunningRefusal,
   });
 

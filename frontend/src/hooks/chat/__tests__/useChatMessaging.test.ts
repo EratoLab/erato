@@ -681,18 +681,32 @@ describe("useChatMessaging", () => {
       });
     };
 
-    it("does not let the react trigger open a second socket for one generation", () => {
+    it("waits for the enter-chat resume rather than opening a second socket", async () => {
       resetReactAttemptsForTest();
-      captureSse();
+      const byUrl = captureSse();
       withMessages([...mockMessages, deliveredTip]);
 
       renderHook(() => useChatMessaging("chat1"), { wrapper: TestWrapper });
 
-      // The enter-chat resume holds the chat's socket. The trigger goes
-      // through `attachToServerGeneration`, so it is refused rather than
-      // opening a `/react` stream alongside it.
+      // The enter-chat resume holds the chat's socket, so the trigger does not
+      // open a `/react` stream alongside it.
       expect(mockCreateSSEConnection.mock.calls.map((call) => call[0])).toEqual(
         ["/api/v1beta/me/messages/resumestream"],
+      );
+
+      // ...and it did not spend the row's single ask on that refusal. This is
+      // the brief's own primary case — a delivered, unreacted row already on
+      // disk when the chat is opened — and the resume is not a competitor for
+      // the generation: nothing is running, which is why it 404s and closes.
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/resumestream"].onClose();
+      });
+
+      expect(mockCreateSSEConnection).toHaveBeenCalledWith(
+        "/api/v1beta/me/chats/chat1/react",
+        expect.objectContaining({
+          body: JSON.stringify({ task_result_message_id: "delivered-1" }),
+        }),
       );
     });
 

@@ -1,4 +1,4 @@
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FrontendRequestError } from "@/utils/errorReport";
@@ -8,6 +8,7 @@ vi.mock("@/utils/sse/sseClient", () => ({
   createSSEConnection: vi.fn(() => vi.fn()),
 }));
 
+import { getStreamKey, useMessagingStore } from "../store/messagingStore";
 import {
   resetReactAttemptsForTest,
   useReactToTaskResult,
@@ -67,6 +68,8 @@ const renderTrigger = (overrides: TriggerOverrides = {}) => {
   const processStreamEvent = vi.fn();
   const onGenerationRunningRefusal = vi.fn();
   const attachToServerGeneration = vi.fn(passThroughAttach);
+  const clearPendingChat = vi.fn();
+  const handleRefetchAndClear = vi.fn();
   const result = renderHook((props: TriggerOverrides) =>
     useReactToTaskResult({
       chatId: "chat-1",
@@ -81,6 +84,8 @@ const renderTrigger = (overrides: TriggerOverrides = {}) => {
       attachToServerGeneration,
       setSSECleanupForKey: vi.fn(),
       setSSEAbortCallback: vi.fn(),
+      clearPendingChat,
+      handleRefetchAndClear,
       onGenerationRunningRefusal,
       ...overrides,
       ...props,
@@ -91,6 +96,8 @@ const renderTrigger = (overrides: TriggerOverrides = {}) => {
     processStreamEvent,
     onGenerationRunningRefusal,
     attachToServerGeneration,
+    clearPendingChat,
+    handleRefetchAndClear,
   };
 };
 
@@ -119,6 +126,12 @@ const spyOnComplaints = () => {
   return { error, warn };
 };
 
+/** The module store is shared across tests; only two slices are touched. */
+const resetMessagingStore = () => {
+  useMessagingStore.getState().clearAllStreaming();
+  useMessagingStore.setState({ sseAbortCallbacksByKey: {} });
+};
+
 const lastOptions = () => {
   const call = mockCreateSSEConnection.mock.calls.at(-1);
   expect(call).toBeDefined();
@@ -130,10 +143,12 @@ describe("useReactToTaskResult", () => {
     vi.clearAllMocks();
     resetReactAttemptsForTest();
     mockCreateSSEConnection.mockImplementation(() => vi.fn());
+    resetMessagingStore();
   });
 
   afterEach(() => {
     restoreSpies.splice(0).forEach((restore) => restore());
+    resetMessagingStore();
   });
 
   it("asks for the reaction when a delivered task result is the thread tip", () => {
@@ -206,6 +221,83 @@ describe("useReactToTaskResult", () => {
       expect.objectContaining({ chatId: "chat-1" }),
     );
     expect(mockCreateSSEConnection).not.toHaveBeenCalled();
+  });
+
+  it("waits for the chat's own socket instead of spending the ask on it", () => {
+    // Entering a chat opens a forced resumestream before the fetched rows
+    // reach the store, so the trigger's FIRST look at a delivered tip always
+    // finds that socket. Asking anyway is refused; marking the row as asked
+    // anyway loses it for the rest of the session.
+    useMessagingStore
+      .getState()
+      .setSSEAbortCallback(vi.fn(), getStreamKey("chat-1"));
+
+    const { attachToServerGeneration } = renderTrigger();
+
+    expect(attachToServerGeneration).not.toHaveBeenCalled();
+    expect(mockCreateSSEConnection).not.toHaveBeenCalled();
+  });
+
+  it("asks as soon as that socket is released", () => {
+    // The enter-chat resume 404s (nothing is running — that is the whole
+    // point) and releases the chat. The row's one ask is still unspent, and
+    // the released socket is what re-runs the effect.
+    useMessagingStore
+      .getState()
+      .setSSEAbortCallback(vi.fn(), getStreamKey("chat-1"));
+    renderTrigger();
+    expect(mockCreateSSEConnection).not.toHaveBeenCalled();
+
+    act(() => {
+      useMessagingStore
+        .getState()
+        .setSSEAbortCallback(null, getStreamKey("chat-1"));
+    });
+
+    expect(mockCreateSSEConnection).toHaveBeenCalledWith(
+      "/api/v1beta/me/chats/chat-1/react",
+      expect.objectContaining({
+        body: JSON.stringify({ task_result_message_id: "m2" }),
+      }),
+    );
+  });
+
+  it("reconciles a reaction stream that ends without a terminal event", () => {
+    // `processStreamEvent` sets `isStreaming` on the first assistant delta and
+    // nothing but a socket's own tail ever resets it, so a dropped connection
+    // would leave `isPendingResponse` true and the composer disabled until the
+    // user left the chat and came back.
+    const { clearPendingChat, handleRefetchAndClear } = renderTrigger();
+    const { warn } = spyOnComplaints();
+    act(() => {
+      useMessagingStore
+        .getState()
+        .setStreaming({ isStreaming: true }, getStreamKey("chat-1"));
+    });
+
+    act(() => {
+      lastOptions().onClose?.();
+    });
+
+    expect(
+      useMessagingStore.getState().getStreaming(getStreamKey("chat-1"))
+        .isStreaming,
+    ).toBe(false);
+    expect(clearPendingChat).toHaveBeenCalledWith(getStreamKey("chat-1"));
+    expect(handleRefetchAndClear).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a reaction stream that ended properly alone", () => {
+    // The terminal event already reset streaming; re-reconciling would refetch
+    // the conversation a second time for every reaction that worked.
+    const { handleRefetchAndClear } = renderTrigger();
+
+    act(() => {
+      lastOptions().onClose?.();
+    });
+
+    expect(handleRefetchAndClear).not.toHaveBeenCalled();
   });
 
   it("asks once per row per session, across remounts", () => {
