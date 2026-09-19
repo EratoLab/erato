@@ -4,6 +4,7 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
 import { setIdToken } from "@/auth/tokenStore";
+import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import {
   chatMessagesQuery,
   fetchChatMessages,
@@ -104,6 +105,7 @@ vi.mock("@/utils/sse/sseClient", () => {
     }),
   };
 });
+
 
 import { useComposeSessionStore } from "../store/composeSessionStore";
 import { useGenerationStatusStore } from "../store/generationStatusStore";
@@ -843,6 +845,53 @@ describe("useChatMessaging", () => {
         byUrl["/api/v1beta/me/messages/resumestream"].onClose();
       });
       expect(result.current.isPendingResponse).toBe(false);
+    });
+
+    // The `refusedFiles.every(...)` conjunct on the handoff is not a dead
+    // defensive check. Audio-recording attachments reach the composer through
+    // `upsertAudioTranscriptionAttachment` and never enter `useFileUploadStore`,
+    // so `refusedFiles` genuinely contains `undefined` on a shipping path. The
+    // test above sends with no `inputFileIds` at all, which leaves `.every`
+    // vacuously true — delete the conjunct and a 409 on a send whose attachment
+    // is no longer in the store queues and later re-sends the message WITHOUT
+    // the attachment, silently and with no error. Nothing failed.
+    it("refuses to queue a draft whose attachment it can no longer name", async () => {
+      resetReactAttemptsForTest();
+      const byUrl = captureSse();
+      withMessages(mockMessages);
+      useFileUploadStore.setState({ uploadedFiles: [] });
+
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      await act(async () => {
+        await result.current.sendMessage("Anything new?", ["file-gone"]);
+      });
+
+      const refusal = new FrontendRequestError(
+        "SSE request failed",
+        { method: "POST", url: "/api/v1beta/me/messages/submitstream" },
+        {
+          status: 409,
+          statusText: "Conflict",
+          body: JSON.stringify({
+            code: "generation_running",
+            chat_id: "chat1",
+            initiator: "user",
+          }),
+        },
+      );
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/submitstream"].onError(refusal);
+      });
+
+      // A visible error the user can retry, rather than a silently shortened
+      // message sent later without its attachment.
+      expect(result.current.error).not.toBeNull();
+      const sessionId = useComposeSessionStore
+        .getState()
+        .resolveSessionId("chat1");
+      expect(useMessageQueueStore.getState().getQueued(sessionId)).toBeNull();
     });
 
     it("renders assistant deltas that arrive with no user_message_saved ahead of them", async () => {

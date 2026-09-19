@@ -257,8 +257,7 @@ export function useReactToTaskResult({
  * The tail every streaming socket in `useChatMessaging` runs, mirrored here.
  *
  * `processStreamEvent` sets `isStreaming` for this key on the first assistant
- * delta, and `resetStreaming` is called from nowhere but these tails. A react
- * turn that ends without a terminal event — a dropped connection, or a close
+ * delta. A react turn that ends without a terminal event — a dropped connection, or a close
  * after the backend's broadcast filter swallowed `Error`/`StreamEnd` — would
  * otherwise leave `isPendingResponse` true, which disables the composer until
  * the user leaves the chat and comes back. Deliberately no `setError`: the
