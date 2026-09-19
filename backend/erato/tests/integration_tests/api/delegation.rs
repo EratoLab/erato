@@ -12092,3 +12092,1107 @@ async fn reacted_result_survives_into_the_next_user_turn(pool: Pool<Postgres>) {
         "the later turn composes the result, it does not re-deliver it"
     );
 }
+
+// ---------------------------------------------------------------------------
+// ERMAIN-783: retrying a failed delegated task run.
+// ---------------------------------------------------------------------------
+
+/// A hand-seeded failed task run, and the origin turn that dispatched it.
+struct SeededFailedRun {
+    origin_user_message_id: Uuid,
+    child_chat_id: Uuid,
+}
+
+/// The `TaskSpec` a seeded run carries unless a test says otherwise.
+fn retry_task_spec() -> erato::models::chat::TaskSpec {
+    erato::models::chat::TaskSpec {
+        expected_output: Some("a number".to_string()),
+        constraints: Some("be brief".to_string()),
+        facet_ids: Vec::new(),
+        max_server_tool_calls_per_task: Some(7),
+        max_client_tool_calls_per_task: Some(3),
+        persona: erato_config::config::TaskPersona::Bare,
+        scheduling: erato_config::config::TaskScheduling::WhenIdle,
+        parent_tool_call_id: Some(RETRY_CALL_ID.to_string()),
+        route: erato::models::chat::DelegateRoute::Task,
+    }
+}
+
+const RETRY_CALL_ID: &str = "call_retry_me";
+const RETRY_BRIEF_SENTINEL: &str = "RETRY-BRIEF-SENTINEL";
+
+/// Seed an origin turn whose assistant row carries a `delegate_task` call, plus
+/// the child that call dispatched.
+///
+/// Hand-written rather than driven through a real turn because these tests need
+/// to reach one specific state of a FINISHED run - failed, completed, reaped -
+/// without also running the origin's model twice to get there.
+async fn seed_failed_task_run(
+    app_state: &erato::state::AppState,
+    owner_user_id: &str,
+    origin_chat_id: Uuid,
+    spec: erato::models::chat::TaskSpec,
+    write_origin_call: bool,
+) -> SeededFailedRun {
+    let policy = rebuilt_policy(app_state).await;
+    let subject = erato::policy::types::Subject::User(owner_user_id.to_string());
+
+    let origin_user_row = erato::models::message::submit_message(
+        &app_state.db,
+        &policy,
+        &subject,
+        &origin_chat_id,
+        json!({
+            "role": "user",
+            "content": [{"content_type": "text", "text": "count the figures"}],
+            "name": owner_user_id,
+        }),
+        None,
+        None,
+        None,
+        &[],
+        None,
+        None,
+        None,
+    )
+    .await
+    .expect("origin user row");
+
+    let child = erato::models::chat::create_delegated_chat(
+        &app_state.db,
+        &policy,
+        &subject,
+        owner_user_id,
+        None,
+        ChatProvenance {
+            kind: ChatProvenanceKind::Delegation,
+            origin_chat_id: Some(origin_chat_id),
+            origin_message_id: Some(origin_user_row.id),
+            origin_assistant_id: None,
+            rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
+            depth: 1,
+            adopted_at: None,
+            legacy_expected_output: None,
+            legacy_constraints: None,
+            run_mode: Some(erato::models::message::ProvenanceRunMode::Async),
+            result_delivery: None,
+            retry_of: None,
+        },
+        Some(spec),
+        "Seeded failed run".to_string(),
+        true,
+        Vec::new(),
+        Vec::new(),
+    )
+    .await
+    .expect("child chat");
+
+    // The child's own brief row. Without a message the chat is invisible to the
+    // listing's lateral join and so, deliberately, unretryable too.
+    erato::models::message::submit_message(
+        &app_state.db,
+        &policy,
+        &subject,
+        &child.id,
+        json!({
+            "role": "user",
+            "content": [{"content_type": "text", "text": format!("{RETRY_BRIEF_SENTINEL}: count the figures")}],
+            "name": owner_user_id,
+        }),
+        None,
+        None,
+        None,
+        &[],
+        None,
+        None,
+        None,
+    )
+    .await
+    .expect("child brief row");
+
+    if write_origin_call {
+        erato::models::message::submit_message(
+            &app_state.db,
+            &policy,
+            &subject,
+            &origin_chat_id,
+            json!({
+                "role": "assistant",
+                "content": [{
+                    "content_type": "tool_use",
+                    "tool_call_id": RETRY_CALL_ID,
+                    "status": "success",
+                    "tool_name": "delegate_task",
+                    "progress_message": null,
+                    "input": {
+                        "task": format!("{RETRY_BRIEF_SENTINEL}: count the figures"),
+                        "expected_output": "a number",
+                        "constraints": "be brief",
+                        // Deliberately at odds with the run that was launched:
+                        // a retry must inherit the CHILD's parameters, not the
+                        // model's original request.
+                        "run_mode": "wait",
+                        "scheduling": "silent",
+                        "facet_ids": ["never-offered"],
+                    },
+                    "output": {
+                        "status": "working",
+                        "child_run_id": child.id,
+                        "delegate_chat_id": child.id,
+                    },
+                }],
+            }),
+            Some(&origin_user_row.id),
+            None,
+            None,
+            &[],
+            None,
+            None,
+            None,
+        )
+        .await
+        .expect("origin tool call row");
+    }
+
+    app_state.global_policy_engine.invalidate_data().await;
+    SeededFailedRun {
+        origin_user_message_id: origin_user_row.id,
+        child_chat_id: child.id,
+    }
+}
+
+/// POST the retry route.
+async fn retry_run(
+    server: &TestServer,
+    origin_chat_id: &str,
+    child_chat_id: Uuid,
+    body: Value,
+) -> axum_test::TestResponse {
+    server
+        .post(&format!(
+            "/api/v1beta/me/chats/{origin_chat_id}/delegated_runs/{child_chat_id}/retry"
+        ))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&body)
+        .await
+}
+
+/// The mock a retried child's own turn answers with.
+fn retry_child_mocks() -> MockSet {
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[RETRY_BRIEF_SENTINEL], &[]));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["RETRIED-CHILD-ANSWER"]),
+        );
+    });
+    mocks
+}
+
+/// Wait until a chat has a message of its own.
+///
+/// The recent-chats listing inner-joins each chat's latest message, so a run
+/// whose detached generation has not yet written its brief row is invisible
+/// there - by design, and the same reason the retry gate treats it as still
+/// working.
+async fn wait_for_first_message(db: &sea_orm::DatabaseConnection, chat_id: Uuid) {
+    for _ in 0..100 {
+        if !chat_messages_by_created_at(db, chat_id).await.is_empty() {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+    panic!("chat {chat_id} never got a message of its own");
+}
+
+/// The configuration envelope of the run started to replace `retried`.
+async fn retry_child_configuration(
+    app_state: &erato::state::AppState,
+    new_child_chat_id: Uuid,
+) -> Value {
+    erato::db::entity::chats::Entity::find_by_id(new_child_chat_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("the retry child must exist")
+        .assistant_configuration
+        .expect("the retry child must carry a configuration")
+}
+
+/// The happy path, end to end: a failed task run is re-dispatched as a NEW
+/// async child that records what it replaces, and the failed run is left
+/// exactly as it was.
+///
+/// The last half is the one worth stating. Writing `retry_of` onto the run
+/// being retried would have been the smaller change, and it would have erased
+/// the only durable record that the first attempt failed.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn retry_failed_task_dispatches_a_new_async_child_with_retry_of(pool: Pool<Postgres>) {
+    let (app_state, _llm) =
+        task_state(pool, retry_child_mocks(), &["erato/delegate_task"], |config| {
+            config.delegation.tasks.run_modes = vec![
+                erato_config::config::TaskRunMode::Wait,
+                erato_config::config::TaskRunMode::Async,
+            ];
+        })
+        .await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_id = Uuid::parse_str(&origin).unwrap();
+    let seeded = seed_failed_task_run(
+        &app_state,
+        &me.id.to_string(),
+        origin_id,
+        retry_task_spec(),
+        true,
+    )
+    .await;
+
+    let before = retry_child_configuration(&app_state, seeded.child_chat_id).await;
+
+    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    response.assert_status(http::StatusCode::ACCEPTED);
+    let new_child_id = Uuid::parse_str(response.json::<Value>()["child_chat_id"].as_str().unwrap())
+        .expect("the response names the new run");
+    assert_ne!(
+        new_child_id, seeded.child_chat_id,
+        "a retry starts a new run; it does not restart the old one"
+    );
+
+    let configuration = retry_child_configuration(&app_state, new_child_id).await;
+    assert_eq!(
+        configuration["provenance"]["retry_of"],
+        json!(seeded.child_chat_id),
+        "the NEW child records what it replaces: {configuration}"
+    );
+    assert_eq!(
+        configuration["provenance"]["run_mode"], "async",
+        "a retry is always detached; nothing is waiting on this turn"
+    );
+    assert_eq!(
+        configuration["provenance"]["origin_chat_id"],
+        json!(origin_id)
+    );
+    assert_eq!(
+        configuration["provenance"]["origin_message_id"],
+        json!(seeded.origin_user_message_id),
+        "the replacement is anchored at the turn that made the original call, not at whatever the conversation's tip is now: {configuration}"
+    );
+
+    // The brief travelled. Read off the chat row, which dispatch writes
+    // synchronously from the brief, rather than off the child's first message:
+    // that one is written by the detached generation at its own pace, and
+    // racing it would make this assertion about timing instead of about the
+    // brief.
+    let new_child_row = erato::db::entity::chats::Entity::find_by_id(new_child_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("the retry child must exist");
+    assert!(
+        new_child_row
+            .title_by_user_provided
+            .as_deref()
+            .is_some_and(|title| title.contains(RETRY_BRIEF_SENTINEL)),
+        "the retry runs the ORIGINAL brief, recovered from the origin's own recorded call: {:?}",
+        new_child_row.title_by_user_provided
+    );
+
+    let after = retry_child_configuration(&app_state, seeded.child_chat_id).await;
+    assert_eq!(
+        before["provenance"], after["provenance"],
+        "the retried run's own envelope is never touched - its failure stays on the record"
+    );
+}
+
+/// A retry inherits the OLD RUN's budgets and persona, through a synthetic
+/// offer scope built for the occasion.
+///
+/// `task_scope: None` would compile and dispatch. It would also leave both
+/// per-task budgets `None` on the child, which switches off the graceful cap
+/// arm in `task_tool_budgets_for_chat` - so the retry would fail harder than
+/// the run it was started to replace.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn retry_uses_the_synthetic_scope_budgets_and_persona(pool: Pool<Postgres>) {
+    let (app_state, _llm) =
+        task_state(pool, retry_child_mocks(), &["erato/delegate_task"], |config| {
+            config.delegation.tasks.run_modes = vec![
+                erato_config::config::TaskRunMode::Wait,
+                erato_config::config::TaskRunMode::Async,
+            ];
+            // Deliberately different from the seeded run's own budgets, so a
+            // retry that fell back to the config would be visible.
+            config.delegation.tasks.max_server_tool_calls_per_task = 99;
+            config.delegation.tasks.max_client_tool_calls_per_task = 99;
+        })
+        .await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let seeded = seed_failed_task_run(
+        &app_state,
+        &me.id.to_string(),
+        Uuid::parse_str(&origin).unwrap(),
+        retry_task_spec(),
+        true,
+    )
+    .await;
+
+    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    response.assert_status(http::StatusCode::ACCEPTED);
+    let new_child_id = Uuid::parse_str(response.json::<Value>()["child_chat_id"].as_str().unwrap())
+        .unwrap();
+
+    let configuration = retry_child_configuration(&app_state, new_child_id).await;
+    assert_eq!(
+        configuration["task"]["max_server_tool_calls_per_task"], 7,
+        "the retry is bounded by what the ORIGINAL run was allowed: {configuration}"
+    );
+    assert_eq!(
+        configuration["task"]["max_client_tool_calls_per_task"], 3,
+        "both budgets travel, and neither falls back to the config: {configuration}"
+    );
+    assert_eq!(
+        configuration["task"]["persona"], "bare",
+        "a run that spoke as the bare model must not come back wearing the origin's assistant"
+    );
+    assert_eq!(configuration["task"]["route"], "task");
+}
+
+/// A run dispatched `silent` comes back `silent`.
+///
+/// Scheduling reaches the child's `TaskSpec` through `LaunchRunSpec`, NOT
+/// through the offer scope - the scope's copy is read only when validating a
+/// model's own argument, which this path never does. Setting it in the wrong
+/// place compiles, dispatches, and quietly turns a silent run into one that
+/// interrupts the user with an unrequested reaction turn.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn retry_carries_the_runs_scheduling(pool: Pool<Postgres>) {
+    let (app_state, _llm) =
+        task_state(pool, retry_child_mocks(), &["erato/delegate_task"], |config| {
+            config.delegation.tasks.run_modes = vec![
+                erato_config::config::TaskRunMode::Wait,
+                erato_config::config::TaskRunMode::Async,
+            ];
+        })
+        .await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let spec = erato::models::chat::TaskSpec {
+        scheduling: erato_config::config::TaskScheduling::Silent,
+        ..retry_task_spec()
+    };
+    let seeded = seed_failed_task_run(
+        &app_state,
+        &me.id.to_string(),
+        Uuid::parse_str(&origin).unwrap(),
+        spec,
+        true,
+    )
+    .await;
+
+    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    response.assert_status(http::StatusCode::ACCEPTED);
+    let new_child_id = Uuid::parse_str(response.json::<Value>()["child_chat_id"].as_str().unwrap())
+        .unwrap();
+
+    let configuration = retry_child_configuration(&app_state, new_child_id).await;
+    assert_eq!(
+        configuration["task"]["scheduling"], "silent",
+        "the retry runs the way the original run was asked to run: {configuration}"
+    );
+    assert_eq!(
+        configuration["task"]["parent_tool_call_id"], RETRY_CALL_ID,
+        "the replacement names the same origin call, so a delivery or the backstop sweep can find it without walking the chat"
+    );
+}
+
+/// A facet the owner has lost since dispatch is DROPPED, not refused.
+///
+/// The run is still worth retrying without it; refusing would leave the user
+/// with a failed run and no way forward. The re-authorization itself is not
+/// optional - without it a retry would re-grant a capability the deployment has
+/// since taken away.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn retry_reauthorizes_facets_for_the_owner(pool: Pool<Postgres>) {
+    let (app_state, _llm) =
+        task_state(pool, retry_child_mocks(), &["erato/delegate_task"], |config| {
+            config.delegation.tasks.run_modes = vec![
+                erato_config::config::TaskRunMode::Wait,
+                erato_config::config::TaskRunMode::Async,
+            ];
+            for facet_id in ["kept", "withdrawn"] {
+                config.facets.facets.insert(
+                    facet_id.to_string(),
+                    erato::config::FacetConfig {
+                        display_name: facet_id.to_string(),
+                        icon: None,
+                        additional_system_prompt: None,
+                        tool_call_allowlist: Vec::new(),
+                        model_settings: Default::default(),
+                        disable_facet_prompt_template: true,
+                        hidden: false,
+                        hidden_always_active_for_platform: None,
+                        delegation: None,
+                    },
+                );
+            }
+            // What a capability withdrawn since dispatch looks like from here:
+            // the facet still exists, but this owner is no longer in the group
+            // that may reach it.
+            config.facet_permissions.rules.insert(
+                "allow-kept".to_string(),
+                erato::config::FacetPermissionRule::AllowAll {
+                    facet_ids: vec!["kept".to_string(), "plan".to_string()],
+                },
+            );
+            config.facet_permissions.rules.insert(
+                "allow-withdrawn-to-a-group-the-owner-left".to_string(),
+                erato::config::FacetPermissionRule::AllowForGroupMembers {
+                    facet_ids: vec!["withdrawn".to_string()],
+                    groups: vec!["a-group-this-user-is-not-in".to_string()],
+                },
+            );
+        })
+        .await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let spec = erato::models::chat::TaskSpec {
+        facet_ids: vec!["kept".to_string(), "withdrawn".to_string()],
+        ..retry_task_spec()
+    };
+    let seeded = seed_failed_task_run(
+        &app_state,
+        &me.id.to_string(),
+        Uuid::parse_str(&origin).unwrap(),
+        spec,
+        true,
+    )
+    .await;
+
+    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    response.assert_status(http::StatusCode::ACCEPTED);
+    let new_child_id = Uuid::parse_str(response.json::<Value>()["child_chat_id"].as_str().unwrap())
+        .unwrap();
+
+    let configuration = retry_child_configuration(&app_state, new_child_id).await;
+    let facets = configuration["task"]["facet_ids"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    assert!(
+        facets.contains(&json!("kept")),
+        "a facet the owner still has survives the retry: {configuration}"
+    );
+    assert!(
+        !facets.contains(&json!("withdrawn")),
+        "a facet the owner has lost is dropped, not re-granted: {configuration}"
+    );
+}
+
+/// A run that produced an answer is not retryable, and says so by name.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn retry_of_a_completed_child_is_409_not_retryable(pool: Pool<Postgres>) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let seeded = seed_failed_task_run(
+        &app_state,
+        &me.id.to_string(),
+        Uuid::parse_str(&origin).unwrap(),
+        retry_task_spec(),
+        true,
+    )
+    .await;
+    append_assistant_answer(
+        &app_state,
+        &me.id.to_string(),
+        seeded.child_chat_id,
+        "the answer the run was asked for",
+        None,
+    )
+    .await;
+
+    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    response.assert_status(http::StatusCode::CONFLICT);
+    let body = response.json::<Value>();
+    assert_eq!(body["code"], "not_retryable");
+    assert_eq!(
+        body["state"], "completed",
+        "the reason is named, so a client can hide the control rather than guess: {body}"
+    );
+    assert_eq!(body["chat_id"], json!(seeded.child_chat_id));
+}
+
+/// One live retry per failed run.
+///
+/// This is the whole bound on a retry storm, and it is read from the database
+/// rather than remembered by the client - a reload must not reopen the button.
+///
+/// The replacement is hand-seeded rather than dispatched, so what is under test
+/// is the predicate and not how fast a mocked child answers.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn retry_while_a_retry_child_is_working_is_409(pool: Pool<Postgres>) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_id = Uuid::parse_str(&origin).unwrap();
+    let seeded = seed_failed_task_run(
+        &app_state,
+        &me.id.to_string(),
+        origin_id,
+        retry_task_spec(),
+        true,
+    )
+    .await;
+
+    // A replacement already working.
+    let replacement = erato::models::chat::create_delegated_chat(
+        &app_state.db,
+        &rebuilt_policy(&app_state).await,
+        &erato::policy::types::Subject::User(me.id.to_string()),
+        &me.id.to_string(),
+        None,
+        ChatProvenance {
+            kind: ChatProvenanceKind::Delegation,
+            origin_chat_id: Some(origin_id),
+            origin_message_id: None,
+            origin_assistant_id: None,
+            rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
+            depth: 1,
+            adopted_at: None,
+            legacy_expected_output: None,
+            legacy_constraints: None,
+            run_mode: Some(erato::models::message::ProvenanceRunMode::Async),
+            result_delivery: None,
+            retry_of: Some(seeded.child_chat_id),
+        },
+        Some(retry_task_spec()),
+        "The replacement".to_string(),
+        true,
+        Vec::new(),
+        Vec::new(),
+    )
+    .await
+    .expect("replacement chat");
+    set_generation_lease(&app_state.db, replacement.id, Some("running"), 0).await;
+    app_state.global_policy_engine.invalidate_data().await;
+
+    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    response.assert_status(http::StatusCode::CONFLICT);
+    let body = response.json::<Value>();
+    assert_eq!(body["code"], "not_retryable");
+    assert_eq!(
+        body["state"], "retry_in_flight",
+        "a second retry while the first is working is refused by name: {body}"
+    );
+}
+
+/// A retry counts against the owner's concurrent detached-run cap, and is
+/// refused with the cap's own discriminator rather than a generic launch
+/// refusal.
+///
+/// Asserting the state - not just the status - is what makes this test mean
+/// something: delete the handler's pre-check and the launch seam still refuses,
+/// but the answer degrades to `launch_refused` and the client loses the one
+/// reason it can explain to a user.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn retry_counts_against_the_background_concurrency_cap(pool: Pool<Postgres>) {
+    let (app_state, _llm) = task_state(
+        pool,
+        MockSet::new(),
+        &["erato/delegate_task"],
+        |config| {
+            config.delegation.tasks.run_modes = vec![
+                erato_config::config::TaskRunMode::Wait,
+                erato_config::config::TaskRunMode::Async,
+            ];
+            config.delegation.max_concurrent_background_runs = 1;
+        },
+    )
+    .await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_id = Uuid::parse_str(&origin).unwrap();
+    let seeded = seed_failed_task_run(
+        &app_state,
+        &me.id.to_string(),
+        origin_id,
+        retry_task_spec(),
+        true,
+    )
+    .await;
+
+    // Another detached run of the same owner, live: the one slot is taken.
+    let occupant = seed_failed_task_run(
+        &app_state,
+        &me.id.to_string(),
+        origin_id,
+        retry_task_spec(),
+        false,
+    )
+    .await;
+    set_generation_lease(&app_state.db, occupant.child_chat_id, Some("running"), 0).await;
+
+    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    response.assert_status(http::StatusCode::CONFLICT);
+    let body = response.json::<Value>();
+    assert_eq!(body["code"], "not_retryable");
+    assert_eq!(
+        body["state"], "concurrency_cap",
+        "the cap is reported as the cap, not as a generic launch refusal: {body}"
+    );
+}
+
+/// The failure this endpoint exists for: a child reaped after a replica crash.
+///
+/// Nothing else can recover it. No result was written and no delivery record
+/// exists, so the backstop sweep - which scans `pending` and `claimed`
+/// deliveries - has nothing to requeue, and the origin's dispatch slot still
+/// reads "dispatched". The runs-list badge is the only signal left, and this is
+/// the request it makes.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn retry_of_a_reaped_child_after_a_replica_crash_is_allowed(pool: Pool<Postgres>) {
+    let (app_state, _llm) =
+        task_state(pool, retry_child_mocks(), &["erato/delegate_task"], |config| {
+            config.delegation.tasks.run_modes = vec![
+                erato_config::config::TaskRunMode::Wait,
+                erato_config::config::TaskRunMode::Async,
+            ];
+        })
+        .await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let seeded = seed_failed_task_run(
+        &app_state,
+        &me.id.to_string(),
+        Uuid::parse_str(&origin).unwrap(),
+        retry_task_spec(),
+        true,
+    )
+    .await;
+    // A run the reaper marked errored, its heartbeat long cold: exactly what a
+    // replica that died mid-run leaves behind.
+    set_generation_lease(&app_state.db, seeded.child_chat_id, Some("errored"), 86_400).await;
+
+    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    response.assert_status(http::StatusCode::ACCEPTED);
+}
+
+/// Only a planned task run is retryable. A run started by an @-mention is not.
+///
+/// A mention run is bound to an assistant this route would have to re-resolve
+/// and re-authorize; re-dispatching it as a bare task would silently drop that
+/// binding and answer as somebody else.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn retry_of_a_mention_route_child_is_409_not_a_task_run(pool: Pool<Postgres>) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let spec = erato::models::chat::TaskSpec {
+        route: erato::models::chat::DelegateRoute::Assistant,
+        ..retry_task_spec()
+    };
+    let seeded = seed_failed_task_run(
+        &app_state,
+        &me.id.to_string(),
+        Uuid::parse_str(&origin).unwrap(),
+        spec,
+        true,
+    )
+    .await;
+
+    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    response.assert_status(http::StatusCode::CONFLICT);
+    let body = response.json::<Value>();
+    assert_eq!(body["state"], "not_a_task_run", "{body}");
+}
+
+/// Without the origin's own record of the call, a retry refuses.
+///
+/// There is deliberately no reconstruction from the child's own rows: those are
+/// the run's OUTPUT, not the request that produced it, and a re-dispatch built
+/// from them would quietly lose the brief's lineage while looking like a
+/// success.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn retry_without_the_origin_tool_call_is_409_brief_unavailable(pool: Pool<Postgres>) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let seeded = seed_failed_task_run(
+        &app_state,
+        &me.id.to_string(),
+        Uuid::parse_str(&origin).unwrap(),
+        retry_task_spec(),
+        // The origin turn's tool call is gone - edited away, or never persisted
+        // because the replica died before the turn ended.
+        false,
+    )
+    .await;
+
+    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    response.assert_status(http::StatusCode::CONFLICT);
+    let body = response.json::<Value>();
+    assert_eq!(body["state"], "brief_unavailable", "{body}");
+}
+
+/// A child retried through a chat that is not its origin is a 404, even when
+/// the caller owns both chats.
+///
+/// Parentage is not decoration: without the check the replacement would be
+/// created under the wrong origin, and its result delivered into a
+/// conversation that never asked for it.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn retry_from_a_foreign_origin_is_404(pool: Pool<Postgres>) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let other_origin = create_chat(&server, None).await;
+    let seeded = seed_failed_task_run(
+        &app_state,
+        &me.id.to_string(),
+        Uuid::parse_str(&origin).unwrap(),
+        retry_task_spec(),
+        true,
+    )
+    .await;
+
+    let response = retry_run(
+        &server,
+        &other_origin,
+        seeded.child_chat_id,
+        json!({"kind": "task"}),
+    )
+    .await;
+    response.assert_status(http::StatusCode::NOT_FOUND);
+}
+
+/// While the origin chat's own generation holds its lease, a retry is refused
+/// with the generation-running body - JSON, and discriminated on `code`, not
+/// the plain text every other conflict on this route uses.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn retry_while_the_origin_generation_is_running_is_409_generation_running(
+    pool: Pool<Postgres>,
+) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_id = Uuid::parse_str(&origin).unwrap();
+    let seeded = seed_failed_task_run(
+        &app_state,
+        &me.id.to_string(),
+        origin_id,
+        retry_task_spec(),
+        true,
+    )
+    .await;
+    set_generation_lease(&app_state.db, origin_id, Some("running"), 0).await;
+
+    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    response.assert_status(http::StatusCode::CONFLICT);
+    let body = response.json::<Value>();
+    assert_eq!(
+        body["code"], "generation_running",
+        "this conflict is the chat's lease, not the run's state, and the client tells them apart on code: {body}"
+    );
+    assert_eq!(body["chat_id"], json!(origin_id));
+}
+
+/// `kind` accepts exactly one value today, and the serde enum IS the rejection
+/// mechanism for every other one.
+///
+/// Retrying a stuck result *delivery* is described by the contract but not
+/// built, so `"delivery"` must be an unknown variant - a 422 a client can act
+/// on - rather than a value the route accepts and then refuses with a 409 that
+/// reads like a transient condition. Add a `Delivery` variant without the rest
+/// of that work and this test is what notices.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn retry_with_an_unknown_kind_is_422(pool: Pool<Postgres>) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let seeded = seed_failed_task_run(
+        &app_state,
+        &me.id.to_string(),
+        Uuid::parse_str(&origin).unwrap(),
+        retry_task_spec(),
+        true,
+    )
+    .await;
+
+    let response = retry_run(
+        &server,
+        &origin,
+        seeded.child_chat_id,
+        json!({"kind": "delivery"}),
+    )
+    .await;
+    response.assert_status(http::StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+/// An archived origin takes no new runs.
+///
+/// Not in any plan document, and the hole it closes is silent: the archive
+/// cascade reaches an origin's delegated descendants, so a retry from an
+/// archived chat would create a child the cascade archives moments later, whose
+/// delivery the sweep then supersedes as `origin_archived`. A retry that can
+/// never land, reported to the user as accepted.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn retry_from_an_archived_origin_is_refused(pool: Pool<Postgres>) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let seeded = seed_failed_task_run(
+        &app_state,
+        &me.id.to_string(),
+        Uuid::parse_str(&origin).unwrap(),
+        retry_task_spec(),
+        true,
+    )
+    .await;
+    archive_chat_via_api(&server, &origin).await;
+    app_state.global_policy_engine.invalidate_data().await;
+
+    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    response.assert_status(http::StatusCode::CONFLICT);
+}
+
+/// `retry_of` reaches the client on the listing row, which is what lets the
+/// "already retried" swap survive a reload.
+///
+/// Component state cannot do this job: it comes back empty on remount, and the
+/// retry button with it.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn recent_chats_exposes_retry_of(pool: Pool<Postgres>) {
+    let (app_state, _llm) =
+        task_state(pool, retry_child_mocks(), &["erato/delegate_task"], |config| {
+            config.delegation.tasks.run_modes = vec![
+                erato_config::config::TaskRunMode::Wait,
+                erato_config::config::TaskRunMode::Async,
+            ];
+        })
+        .await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let seeded = seed_failed_task_run(
+        &app_state,
+        &me.id.to_string(),
+        Uuid::parse_str(&origin).unwrap(),
+        retry_task_spec(),
+        true,
+    )
+    .await;
+
+    let response = retry_run(&server, &origin, seeded.child_chat_id, json!({"kind": "task"})).await;
+    response.assert_status(http::StatusCode::ACCEPTED);
+    let new_child_id = response.json::<Value>()["child_chat_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    wait_for_first_message(&app_state.db, Uuid::parse_str(&new_child_id).unwrap()).await;
+    let listing = recent_chats(
+        &server,
+        &format!("?origin_chat_id={origin}&include_delegated=true&limit=50"),
+    )
+    .await;
+    let retried = listed_chat(&listing, &new_child_id);
+    assert_eq!(
+        retried["retry_of"],
+        json!(seeded.child_chat_id.to_string()),
+        "the replacement row names what it replaced: {retried}"
+    );
+    let failed = listed_chat(&listing, &seeded.child_chat_id.to_string());
+    assert!(
+        failed["retry_of"].is_null(),
+        "the failed run itself records nothing - only the replacement does: {failed}"
+    );
+}

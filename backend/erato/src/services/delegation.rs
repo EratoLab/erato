@@ -3396,4 +3396,67 @@ mod tests {
             "an absent note must leave exactly one space, not two: {whole}"
         );
     }
+
+    /// Every brief-bearing argument of a recorded `delegate_task` call survives
+    /// the round trip, and the three run-parameter arguments are ignored.
+    ///
+    /// The ignored three are the point. A retry inherits what the OLD CHILD was
+    /// launched with - its persisted `TaskSpec`, already authorization-filtered
+    /// and already clamped by that turn's offer - not what the model once
+    /// asked for. Reading `facet_ids` back would un-clamp a capability the
+    /// offer narrowed; reading `scheduling` back would restore a value the
+    /// launch had overridden; `run_mode` is chosen by the retry itself.
+    ///
+    /// Compared field by field rather than against `validate_task_tool_call`'s
+    /// output directly: that function needs an `AppState` and a live dispatch
+    /// context, which would turn a parser test into an integration one. The
+    /// five fields below are the whole of `DelegateBrief`, so a field added to
+    /// `DelegateTaskArgs` and forgotten here still shows up as a failure.
+    #[test]
+    fn brief_from_persisted_task_args_round_trips_a_recorded_call() {
+        let recorded = serde_json::json!({
+            "task": "count the figures in the appendix",
+            "expected_output": "a single number",
+            "constraints": "do not open the network",
+            "file_ids": ["11111111-1111-1111-1111-111111111111"],
+            "include_conversation_context": true,
+            // Run parameters the retry must NOT read back.
+            "run_mode": "wait",
+            "scheduling": "silent",
+            "facet_ids": ["a-facet-the-offer-narrowed-away"],
+        });
+
+        let brief = brief_from_persisted_task_args(&recorded).expect("a recorded call parses");
+        assert_eq!(brief.task, "count the figures in the appendix");
+        assert_eq!(brief.expected_output.as_deref(), Some("a single number"));
+        assert_eq!(brief.constraints.as_deref(), Some("do not open the network"));
+        assert_eq!(
+            brief.file_ids.as_deref(),
+            Some(["11111111-1111-1111-1111-111111111111".to_string()].as_slice())
+        );
+        assert!(brief.include_conversation_context);
+
+        // `DelegateBrief` has no field for any of the three, which is how they
+        // are ignored; this asserts that stays true as the struct grows.
+        let brief_json = serde_json::json!({
+            "task": brief.task,
+            "expected_output": brief.expected_output,
+            "constraints": brief.constraints,
+            "file_ids": brief.file_ids,
+            "include_conversation_context": brief.include_conversation_context,
+        });
+        let rendered = brief_json.to_string();
+        assert!(
+            !rendered.contains("silent") && !rendered.contains("a-facet-the-offer-narrowed-away"),
+            "the recorded run parameters must not travel with the brief: {rendered}"
+        );
+    }
+
+    /// A recorded call with nothing to do is refused rather than dispatched as
+    /// an empty run - the same rule the live path applies to a fresh call.
+    #[test]
+    fn brief_from_persisted_task_args_refuses_an_empty_task() {
+        assert!(brief_from_persisted_task_args(&serde_json::json!({ "task": "   " })).is_err());
+        assert!(brief_from_persisted_task_args(&serde_json::json!({ "not_a_call": 1 })).is_err());
+    }
 }
