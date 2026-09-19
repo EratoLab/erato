@@ -4546,38 +4546,60 @@ async fn test_listing_hides_delegated_runs_and_exposes_provenance(pool: Pool<Pos
     assert_eq!(usage, None, "delegated runs must not feed the ranking");
 }
 
-/// Stage one async delegated child of `origin_chat_id`, straight into the row.
+/// Stage one delegated child of `origin_chat_id`, straight into the row.
 ///
 /// The provenance JSON is what populates `chats.origin_chat_id`: the column is
 /// `GENERATED ALWAYS AS (assistant_configuration #>> '{provenance,origin_chat_id}')
 /// STORED`, so writing the envelope is the only way to set it — assigning the
 /// column directly is a Postgres error.
+///
+/// Serialized from the real `ChatProvenance` / `ResultDelivery` structs rather
+/// than hand-written JSON, and driven by the real enums rather than by string
+/// literals. That is what stops the test agreeing with itself: the listing's
+/// `EXISTS` compares the stored JSON against `ChatProvenanceKind::as_str`,
+/// `ProvenanceRunMode::as_str` and `ResultDeliveryState::as_str`, which are a
+/// separate hand-written mapping from the serde spellings these fixtures get.
+/// A drift on either side — the enum's wire spelling, or the nesting of
+/// `result_delivery` under `provenance` the SQL path `{provenance,
+/// result_delivery,state}` assumes — now fails the test instead of passing it.
 async fn stage_in_flight_child(
     db: &sea_orm::DatabaseConnection,
     owner_user_id: &str,
     origin_chat_id: Uuid,
-    run_mode: &str,
-    delivery_state: Option<&str>,
+    run_mode: erato::models::message::ProvenanceRunMode,
+    delivery_state: Option<erato::models::chat::ResultDeliveryState>,
 ) -> Uuid {
     let id = Uuid::new_v4();
     let now: sea_orm::prelude::DateTimeWithTimeZone = sqlx::types::chrono::Utc::now().into();
-    let mut provenance = json!({
-        "kind": "delegation",
-        "origin_chat_id": origin_chat_id,
-        "depth": 1,
-        "run_mode": run_mode,
-    });
-    if let Some(state) = delivery_state {
-        provenance["result_delivery"] = json!({
-            "state": state,
-            "delivery_id": Uuid::new_v4(),
-            "status": "completed",
-            "attempts": 0,
-            "redeliveries": 0,
-            "sequence": 0,
-            "at": now,
-        });
-    }
+    let provenance = ChatProvenance {
+        kind: ChatProvenanceKind::Delegation,
+        origin_chat_id: Some(origin_chat_id),
+        origin_message_id: None,
+        origin_assistant_id: None,
+        rebase_cutoff: None,
+        depth: 1,
+        adopted_at: None,
+        legacy_expected_output: None,
+        legacy_constraints: None,
+        run_mode: Some(run_mode),
+        result_delivery: delivery_state.map(|state| erato::models::chat::ResultDelivery {
+            state,
+            delivery_id: Uuid::new_v4(),
+            result_message_id: None,
+            status: "completed".to_string(),
+            reason: None,
+            claimed_by: None,
+            claimed_at: None,
+            message_id: None,
+            reaction_message_id: None,
+            attempts: 0,
+            redeliveries: 0,
+            redelivery_of: None,
+            sequence: 0,
+            at: now,
+        }),
+    };
+    let provenance = serde_json::to_value(&provenance).expect("serialize provenance");
     erato::db::entity::chats::Entity::insert(erato::db::entity::chats::ActiveModel {
         id: ActiveValue::Set(id),
         owner_user_id: ActiveValue::Set(owner_user_id.to_string()),
@@ -4659,6 +4681,9 @@ async fn origin_in_flight(server: &TestServer, origin_chat_id: &str) -> bool {
 /// - `auth-required`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn recent_chats_reports_delegated_runs_in_flight(pool: Pool<Postgres>) {
+    use erato::models::chat::ResultDeliveryState as DeliveryState;
+    use erato::models::message::ProvenanceRunMode as RunMode;
+
     let app_state = test_app_state(delegation_enabled_config(), pool).await;
     let me = erato::models::user::get_or_create_user(
         &app_state.db,
@@ -4704,8 +4729,9 @@ async fn recent_chats_reports_delegated_runs_in_flight(pool: Pool<Postgres>) {
     );
 
     // (b) Async child running with a fresh heartbeat.
-    let child = stage_in_flight_child(&app_state.db, &me_user_id, origin_chat_id, "async", None)
-        .await;
+    let child =
+        stage_in_flight_child(&app_state.db, &me_user_id, origin_chat_id, RunMode::Async, None)
+            .await;
     set_child_lease(&app_state.db, child, "running", Some(1)).await;
     assert!(
         origin_in_flight(&server, &origin_chat).await,
@@ -4731,23 +4757,34 @@ async fn recent_chats_reports_delegated_runs_in_flight(pool: Pool<Postgres>) {
     );
 
     // (e)-(k) The delivery arm, with the lease provably finished so it is the
-    //         only thing under test.
+    //         only thing under test. Every variant of the ladder, not a
+    //         sample of it.
     set_child_lease(&app_state.db, child, "completed", None).await;
-    for (state, expected) in [
-        ("pending", true),
-        ("claimed", true),
-        // The acceptance criterion: a `silent` result sits in `delivered`
-        // until the user's next turn, and the origin is not waiting on it.
-        ("delivered", false),
-        ("reacted", false),
-        ("superseded", false),
-        ("failed", false),
+    for state in [
+        DeliveryState::Pending,
+        DeliveryState::Claimed,
+        DeliveryState::Delivered,
+        DeliveryState::Reacted,
+        DeliveryState::Superseded,
+        DeliveryState::Failed,
     ] {
+        // Matched rather than tabulated so that a seventh delivery state is a
+        // compile error here instead of a silent omission: whoever adds one
+        // has to decide whether the origin is still waiting on it.
+        let expected = match state {
+            DeliveryState::Pending | DeliveryState::Claimed => true,
+            // The acceptance criterion: a `silent` result sits in `delivered`
+            // until the user's next turn, and the origin is not waiting on it.
+            DeliveryState::Delivered
+            | DeliveryState::Reacted
+            | DeliveryState::Superseded
+            | DeliveryState::Failed => false,
+        };
         let staged = stage_in_flight_child(
             &app_state.db,
             &me_user_id,
             origin_chat_id,
-            "async",
+            RunMode::Async,
             Some(state),
         )
         .await;
@@ -4755,7 +4792,8 @@ async fn recent_chats_reports_delegated_runs_in_flight(pool: Pool<Postgres>) {
         assert_eq!(
             origin_in_flight(&server, &origin_chat).await,
             expected,
-            "delivery state {state} should read in_flight={expected}"
+            "delivery state {} should read in_flight={expected}",
+            state.as_str()
         );
         erato::db::entity::chats::Entity::delete_by_id(staged)
             .exec(&app_state.db)
@@ -4766,8 +4804,14 @@ async fn recent_chats_reports_delegated_runs_in_flight(pool: Pool<Postgres>) {
     // (h) A `background` run is out of scope: it never records a delivery, so
     //     scoping the predicate to `async` is what keeps the origin from
     //     waiting forever on a result that is not coming.
-    let background =
-        stage_in_flight_child(&app_state.db, &me_user_id, origin_chat_id, "background", None).await;
+    let background = stage_in_flight_child(
+        &app_state.db,
+        &me_user_id,
+        origin_chat_id,
+        RunMode::Background,
+        None,
+    )
+    .await;
     set_child_lease(&app_state.db, background, "running", Some(1)).await;
     assert!(
         !origin_in_flight(&server, &origin_chat).await,
@@ -4785,8 +4829,8 @@ async fn recent_chats_reports_delegated_runs_in_flight(pool: Pool<Postgres>) {
         &app_state.db,
         &me_user_id,
         origin_chat_id,
-        "async",
-        Some("pending"),
+        RunMode::Async,
+        Some(DeliveryState::Pending),
     )
     .await;
     set_child_lease(&app_state.db, archived, "completed", None).await;
