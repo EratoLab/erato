@@ -4,7 +4,8 @@ use crate::db::entity_ext::prelude::*;
 use crate::metrics_constants::{
     POSTGRES_QUERY_ARCHIVE_DELEGATED_DESCENDANTS, POSTGRES_QUERY_ARCHIVE_STALE_DELEGATED_RUNS,
     POSTGRES_QUERY_CHAT_GENERATION_IS_RUNNING, POSTGRES_QUERY_COUNT_BACKGROUND_DELEGATED_RUNS,
-    POSTGRES_QUERY_COUNT_RECENT_CHATS, POSTGRES_QUERY_FREQUENT_ASSISTANTS,
+    POSTGRES_QUERY_COUNT_RECENT_CHATS, POSTGRES_QUERY_DELEGATED_RUN_OUTCOME,
+    POSTGRES_QUERY_DELEGATION_RETRY_IN_FLIGHT, POSTGRES_QUERY_FREQUENT_ASSISTANTS,
     POSTGRES_QUERY_LIST_GENERATING_CHATS, POSTGRES_QUERY_LIST_RECENT_CHATS,
     POSTGRES_QUERY_REDELIVER_BRANCHED_RESULTS,
 };
@@ -857,6 +858,67 @@ pub struct RecentChatsFilter<'a> {
 /// - chats: Vec<RecentChat> - The list of recent chats
 /// - stats: ChatListStats - Statistics about the chat list
 #[instrument(skip_all)]
+/// SQL expression deriving a delegated run's terminal outcome from the chat's
+/// own messages. Shared verbatim by the recent-chats listing and the
+/// single-chat read below, so a runs-list badge and a retry gate can never
+/// disagree about one run.
+///
+/// Reads `latest_msg`, so every caller must also join
+/// [`latest_message_lateral`].
+///
+/// `generation_stale_after_secs` is interpolated rather than bound, matching
+/// the listing this was lifted from. The parameter keeps that exact name
+/// because the literal interpolates it by name; renaming it silently breaks
+/// the copy.
+fn delegated_run_outcome_expression(generation_stale_after_secs: u64) -> String {
+    format!(
+        r#"CASE
+                WHEN ("chats"."assistant_configuration" #>> '{{provenance,kind}}') IS DISTINCT FROM 'delegation'
+                    OR ("chats"."generation_state" = 'running'
+                        AND "chats"."generation_heartbeat_at" > now() - make_interval(secs => {generation_stale_after_secs}))
+                    OR "chats"."generation_state" = 'awaiting_approval'
+                THEN NULL
+                WHEN "chats"."generation_state" IS DISTINCT FROM 'errored'
+                    AND "latest_msg"."role" = 'assistant'
+                    AND NOT "latest_msg"."has_generation_error"
+                    AND "latest_msg"."has_text_answer"
+                    AND "latest_msg"."created_at" >= "chats"."created_at"
+                THEN 'completed'
+                ELSE 'failed'
+            END"#
+    )
+}
+
+/// The lateral join [`delegated_run_outcome_expression`] reads `latest_msg`
+/// from.
+///
+/// `INNER`, not `LEFT`, on purpose: a chat with no messages at all is invisible
+/// in the listing, so it must also be unretryable, or the badge and the gate
+/// would disagree about a run that never started. It contains no braces, so
+/// unlike the expression above it is a plain literal with nothing to escape.
+fn latest_message_lateral() -> &'static str {
+    r#"INNER JOIN LATERAL (
+            SELECT m.chat_id, m.id, m.created_at,
+                m.raw_message ->> 'role' AS "role",
+                ((m.generation_metadata -> 'error') IS NOT NULL
+                    AND m.generation_metadata -> 'error' <> 'null'::jsonb) AS "has_generation_error",
+                EXISTS (
+                    SELECT 1
+                    FROM jsonb_array_elements(
+                        CASE WHEN jsonb_typeof(m.raw_message -> 'content') = 'array'
+                            THEN m.raw_message -> 'content'
+                        END
+                    ) AS part
+                    WHERE part ->> 'content_type' = 'text'
+                        AND btrim(coalesce(part ->> 'text', '')) <> ''
+                ) AS "has_text_answer"
+            FROM messages m
+            WHERE m.chat_id = chats.id
+            ORDER BY m.created_at DESC
+            LIMIT 1
+        ) latest_msg ON true"#
+}
+
 pub async fn get_recent_chats(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,
@@ -970,20 +1032,7 @@ pub async fn get_recent_chats(
             ("chats"."assistant_configuration" #>> '{{provenance,run_mode}}') AS "provenance_run_mode",
             "chats"."origin_chat_id",
             (("chats"."assistant_configuration" #>> '{{provenance,origin_assistant_id}}'))::uuid AS "origin_assistant_id",
-            CASE
-                WHEN ("chats"."assistant_configuration" #>> '{{provenance,kind}}') IS DISTINCT FROM 'delegation'
-                    OR ("chats"."generation_state" = 'running'
-                        AND "chats"."generation_heartbeat_at" > now() - make_interval(secs => {generation_stale_after_secs}))
-                    OR "chats"."generation_state" = 'awaiting_approval'
-                THEN NULL
-                WHEN "chats"."generation_state" IS DISTINCT FROM 'errored'
-                    AND "latest_msg"."role" = 'assistant'
-                    AND NOT "latest_msg"."has_generation_error"
-                    AND "latest_msg"."has_text_answer"
-                    AND "latest_msg"."created_at" >= "chats"."created_at"
-                THEN 'completed'
-                ELSE 'failed'
-            END AS "delegated_run_outcome",
+            {outcome_expression} AS "delegated_run_outcome",
             EXISTS (
                 SELECT 1
                 FROM "chats" AS "child"
@@ -1006,26 +1055,7 @@ pub async fn get_recent_chats(
             ) AS "delegated_runs_in_flight",
             "latest_msg"."created_at" AS "latest_message_at"
         FROM "chats"
-        INNER JOIN LATERAL (
-            SELECT m.chat_id, m.id, m.created_at,
-                m.raw_message ->> 'role' AS "role",
-                ((m.generation_metadata -> 'error') IS NOT NULL
-                    AND m.generation_metadata -> 'error' <> 'null'::jsonb) AS "has_generation_error",
-                EXISTS (
-                    SELECT 1
-                    FROM jsonb_array_elements(
-                        CASE WHEN jsonb_typeof(m.raw_message -> 'content') = 'array'
-                            THEN m.raw_message -> 'content'
-                        END
-                    ) AS part
-                    WHERE part ->> 'content_type' = 'text'
-                        AND btrim(coalesce(part ->> 'text', '')) <> ''
-                ) AS "has_text_answer"
-            FROM messages m
-            WHERE m.chat_id = chats.id
-            ORDER BY m.created_at DESC
-            LIMIT 1
-        ) latest_msg ON true
+        {latest_message_lateral}
         WHERE "chats"."owner_user_id" = $1
             {}
             {}
@@ -1051,6 +1081,8 @@ pub async fn get_recent_chats(
         async_mode = ProvenanceRunMode::Async.as_str(),
         pending = ResultDeliveryState::Pending.as_str(),
         claimed = ResultDeliveryState::Claimed.as_str(),
+        outcome_expression = delegated_run_outcome_expression(generation_stale_after_secs),
+        latest_message_lateral = latest_message_lateral(),
     );
 
     let mut query_values = vec![
@@ -1843,6 +1875,46 @@ fn dedup_keep_order(values: Vec<String>) -> Vec<String> {
         .into_iter()
         .filter(|value| seen.insert(value.clone()))
         .collect()
+}
+
+/// Terminal outcome of ONE delegated run, using the listing's own expression.
+///
+/// `None` means the question has no answer yet: the run is live (running with
+/// a fresh heartbeat, or parked on an approval), or the chat has no messages
+/// at all and so never started. The listing hides that second case too - the
+/// join is `INNER` in both - which is deliberate: a badge and a retry gate
+/// that read the same run must never disagree about it.
+pub async fn delegated_run_outcome_for_chat(
+    conn: &DatabaseConnection,
+    chat_id: &Uuid,
+    generation_stale_after_secs: u64,
+) -> Result<Option<String>, Report> {
+    #[derive(Debug, FromQueryResult)]
+    struct OutcomeRow {
+        delegated_run_outcome: Option<String>,
+    }
+
+    let sql = format!(
+        r#"
+        SELECT {outcome_expression} AS "delegated_run_outcome"
+        FROM "chats"
+        {latest_message_lateral}
+        WHERE "chats"."id" = $1
+        "#,
+        outcome_expression = delegated_run_outcome_expression(generation_stale_after_secs),
+        latest_message_lateral = latest_message_lateral(),
+    );
+
+    let row = OutcomeRow::find_by_statement(named_statement_from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        POSTGRES_QUERY_DELEGATED_RUN_OUTCOME,
+        sql,
+        [(*chat_id).into()],
+    ))
+    .one(conn)
+    .await?;
+
+    Ok(row.and_then(|row| row.delegated_run_outcome))
 }
 
 /// True while a generation is actively writing to the chat: state `running`
