@@ -14,6 +14,7 @@ import {
   useArchiveChatEndpoint,
   useUpdateChat,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { FrontendRequestError } from "@/utils/errorReport";
 import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
 
 // Mock Zustand for testing
@@ -104,7 +105,9 @@ vi.mock("@/utils/sse/sseClient", () => {
   };
 });
 
+import { useComposeSessionStore } from "../store/composeSessionStore";
 import { useGenerationStatusStore } from "../store/generationStatusStore";
+import { useMessageQueueStore } from "../store/messageQueueStore";
 import { useMessagingStore } from "../store/messagingStore";
 import { useChatHistoryStore } from "../useChatHistory";
 import { useChatMessaging } from "../useChatMessaging";
@@ -720,6 +723,63 @@ describe("useChatMessaging", () => {
           body: JSON.stringify({ task_result_message_id: "delivered-1" }),
         }),
       );
+    });
+
+    it("attaches and queues the draft when the chat's lease is held elsewhere", async () => {
+      resetReactAttemptsForTest();
+      const byUrl = captureSse();
+      withMessages(mockMessages);
+
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      await act(async () => {
+        await result.current.sendMessage("Anything new?");
+      });
+
+      const refusal = new FrontendRequestError(
+        "SSE request failed",
+        { method: "POST", url: "/api/v1beta/me/messages/submitstream" },
+        {
+          status: 409,
+          statusText: "Conflict",
+          body: JSON.stringify({
+            code: "generation_running",
+            chat_id: "chat1",
+            initiator: "user",
+          }),
+        },
+      );
+      mockCreateSSEConnection.mockClear();
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/submitstream"].onError(refusal);
+      });
+
+      // Not an error: another turn holds the lease, so attach to it.
+      expect(result.current.error).toBeNull();
+      expect(mockCreateSSEConnection).toHaveBeenCalledWith(
+        "/api/v1beta/me/messages/resumestream",
+        expect.objectContaining({
+          body: JSON.stringify({ chat_id: "chat1" }),
+        }),
+      );
+
+      // The queue is keyed by composeSessionId, which is what ChatInput's
+      // existing drain reads; a chatId-keyed handoff would never be seen.
+      const sessionId = useComposeSessionStore
+        .getState()
+        .resolveSessionId("chat1");
+      expect(
+        useMessageQueueStore.getState().getQueued(sessionId)?.message,
+      ).toBe("Anything new?");
+
+      // The turn this client is now watching ends: the composer unlocks, which
+      // is the falling edge ChatInput's drain arms on.
+      expect(result.current.isPendingResponse).toBe(true);
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/resumestream"].onClose();
+      });
+      expect(result.current.isPendingResponse).toBe(false);
     });
 
     it("renders assistant deltas that arrive with no user_message_saved ahead of them", async () => {
