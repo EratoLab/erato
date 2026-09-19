@@ -222,6 +222,11 @@ pub struct ChatProvenance {
     /// and the listing reports whether an origin still has work in flight.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub result_delivery: Option<ResultDelivery>,
+    /// Delegation only: the failed run this one was started to replace.
+    /// Written once, at creation, on the NEW child - a retried run's own
+    /// envelope is never touched, so the failure stays on the record.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_of: Option<Uuid>,
 }
 
 /// Where a finished `async` task's result has got to on its way back to the
@@ -2606,6 +2611,7 @@ mod result_delivery_serde_tests {
             legacy_constraints: None,
             run_mode: None,
             result_delivery: None,
+            retry_of: None,
         };
         let value = serde_json::to_value(&provenance).expect("serializes");
         assert!(
