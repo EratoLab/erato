@@ -388,9 +388,7 @@ describe("GenerationStatusPoller effects", () => {
     expect(invalidationsFor(messagesKey)).toBe(1);
 
     act(() => {
-      useGenerationStatusStore
-        .getState()
-        .setAwaitingDelivery("origin", false);
+      useGenerationStatusStore.getState().setAwaitingDelivery("origin", false);
     });
 
     expect(invalidationsFor(messagesKey)).toBe(2);

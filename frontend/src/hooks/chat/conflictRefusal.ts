@@ -28,9 +28,7 @@ export interface ConflictRefusal {
  * yields a status with no code, which every caller treats as "log and
  * suppress" rather than a crash.
  */
-export const readConflictRefusal = (
-  error: unknown,
-): ConflictRefusal | null => {
+export const readConflictRefusal = (error: unknown): ConflictRefusal | null => {
   if (!(error instanceof FrontendRequestError)) {
     return null;
   }
