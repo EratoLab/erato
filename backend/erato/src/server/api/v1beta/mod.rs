@@ -1418,6 +1418,11 @@ pub struct RecentChat {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false, example = "completed")]
     delegated_run_outcome: Option<String>,
+    /// Whether any async delegated run spawned from this chat is still owed
+    /// back to it — unfinished, or holding an undelivered result. Clients use
+    /// this to keep the generation-status poll alive while a detached run is
+    /// outstanding. Always present.
+    delegated_runs_in_flight: bool,
 }
 
 /// A single chat, for surfaces that open one directly rather than picking it
@@ -1730,6 +1735,11 @@ pub struct GeneratingChat {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     title: Option<String>,
+    /// Who started the generation this row describes. Absent means a person
+    /// did — including every generation written before the field existed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    initiator: Option<crate::models::message::GenerationInitiator>,
 }
 
 /// Response for the generating_chats endpoint
@@ -3163,12 +3173,23 @@ pub async fn generating_chats(
                 .title_by_summary
                 .filter(|title| !title.trim().is_empty()));
 
+        // Absent means a person did — and an unrecognised spelling is reported
+        // as nothing rather than guessed at. The `task_result` spelling is
+        // pinned by `task_result_initiator_wire_spelling_matches_the_sql_predicate`
+        // against `TASK_RESULT_INITIATOR_WIRE` in `models::message`.
+        let initiator = match row.initiator.as_deref() {
+            Some("user") => Some(crate::models::message::GenerationInitiator::User),
+            Some("task_result") => Some(crate::models::message::GenerationInitiator::TaskResult),
+            _ => None,
+        };
+
         chats.push(GeneratingChat {
             chat_id: row.id.to_string(),
             state,
             started_at,
             ended_at,
             title,
+            initiator,
         });
     }
 
@@ -3266,6 +3287,7 @@ async fn extend_recent_chats_to_api_model(
             origin_chat_title: chat.origin_chat_title,
             origin_assistant_id: chat.origin_assistant_id.map(|id| id.to_string()),
             delegated_run_outcome: chat.delegated_run_outcome,
+            delegated_runs_in_flight: chat.delegated_runs_in_flight,
         });
     }
 

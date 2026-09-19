@@ -6952,6 +6952,10 @@
             "format": "date-time",
             "description": "When the generation reached its terminal state"
           },
+          "initiator": {
+            "$ref": "#/components/schemas/GenerationInitiator",
+            "description": "Who started the generation this row describes. Absent means a person\ndid — including every generation written before the field existed."
+          },
           "started_at": {
             "type": "string",
             "format": "date-time",
@@ -8314,7 +8318,8 @@
           "mcp_write_tools_enabled",
           "disabled_mcp_server_ids",
           "disabled_mcp_tools",
-          "can_edit"
+          "can_edit",
+          "delegated_runs_in_flight"
         ],
         "properties": {
           "active_generation_started_at": {
@@ -8343,6 +8348,10 @@
             "type": "string",
             "description": "Terminal outcome of a delegated run: `completed` when the run landed a\nclean assistant answer, `failed` when it did not (unanswered, errored,\nor killed). Absent while the run is live and for chats that are not\ndelegated runs. Derived from the chat's own content, so it stays\naccurate long after the live generation status expires — a fresh\nclient sees the terminal state without ever having observed the run.",
             "example": "completed"
+          },
+          "delegated_runs_in_flight": {
+            "type": "boolean",
+            "description": "Whether any async delegated run spawned from this chat is still owed\nback to it — unfinished, or holding an undelivered result. Clients use\nthis to keep the generation-status poll alive while a detached run is\noutstanding. Always present."
           },
           "disabled_mcp_server_ids": {
             "type": "array",

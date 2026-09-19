@@ -755,6 +755,13 @@ pub struct RecentChat {
     /// columns, which retention clears shortly after a run ends — a
     /// background run's completion must stay reportable indefinitely.
     pub delegated_run_outcome: Option<String>,
+    /// Whether any async delegated run spawned from this chat is still owed
+    /// back to it: a child whose generation has not finished (running with a
+    /// fresh heartbeat, or parked on a tool approval), or whose result is
+    /// pending or claimed delivery. `delivered` is deliberately excluded — a
+    /// `silent` result sits in `delivered` until the user's next turn, and the
+    /// origin is not waiting on it.
+    pub delegated_runs_in_flight: bool,
 }
 
 /// Statistics for a list of chats
@@ -800,6 +807,7 @@ struct ChatWithLatestMessage {
     origin_chat_id: Option<Uuid>,
     origin_assistant_id: Option<Uuid>,
     delegated_run_outcome: Option<String>,
+    delegated_runs_in_flight: bool,
     // Latest message fields
     latest_message_at: DateTimeWithTimeZone,
 }
@@ -971,6 +979,26 @@ pub async fn get_recent_chats(
                 THEN 'completed'
                 ELSE 'failed'
             END AS "delegated_run_outcome",
+            EXISTS (
+                SELECT 1
+                FROM "chats" AS "child"
+                WHERE "child"."origin_chat_id" = "chats"."id"
+                    AND "child"."owner_user_id" = "chats"."owner_user_id"
+                    AND ("child"."assistant_configuration" #>> '{{provenance,kind}}') = '{delegation}'
+                    AND ("child"."assistant_configuration" #>> '{{provenance,run_mode}}') = '{async_mode}'
+                    AND (
+                        COALESCE(
+                            "child"."generation_state" = 'awaiting_approval'
+                            OR (
+                                "child"."generation_state" = 'running'
+                                AND "child"."generation_heartbeat_at" > now() - make_interval(secs => {generation_stale_after_secs})
+                            ),
+                            FALSE
+                        )
+                        OR ("child"."assistant_configuration" #>> '{{provenance,result_delivery,state}}')
+                            IN ('{pending}', '{claimed}')
+                    )
+            ) AS "delegated_runs_in_flight",
             "latest_msg"."created_at" AS "latest_message_at"
         FROM "chats"
         INNER JOIN LATERAL (
@@ -1009,7 +1037,15 @@ pub async fn get_recent_chats(
         origin_condition(4 + search_param_count),
         pinned_condition,
         chat_type_condition,
-        delegated_condition
+        delegated_condition,
+        // The typed spellings rather than bare literals, for the same reason
+        // `ResultDeliveryState::as_str` exists: this predicate and the delivery
+        // writers compare the same strings, and a literal in one of the two is
+        // how they drift.
+        delegation = ChatProvenanceKind::Delegation.as_str(),
+        async_mode = ProvenanceRunMode::Async.as_str(),
+        pending = ResultDeliveryState::Pending.as_str(),
+        claimed = ResultDeliveryState::Claimed.as_str(),
     );
 
     let mut query_values = vec![
@@ -1274,6 +1310,7 @@ pub async fn get_recent_chats(
                     .and_then(|origin_id| origin_titles_map.get(&origin_id).cloned()),
                 origin_assistant_id: chat_with_msg.origin_assistant_id,
                 delegated_run_outcome: chat_with_msg.delegated_run_outcome.clone(),
+                delegated_runs_in_flight: chat_with_msg.delegated_runs_in_flight,
             }
         })
         .collect();
@@ -1422,6 +1459,11 @@ pub struct GeneratingChatRow {
     pub generation_ended_at: Option<DateTimeWithTimeZone>,
     pub title_by_user_provided: Option<String>,
     pub title_by_summary: Option<String>,
+    /// Wire spelling of `GenerationParameters.initiator` on the chat's latest
+    /// active-thread generation. None for a generation that predates the
+    /// field, and for every ordinary user turn — which writes nothing, because
+    /// the field is `skip_serializing_if = "Option::is_none"`.
+    pub initiator: Option<String>,
 }
 
 /// Get the chats of a user whose generation is currently running (with a
@@ -1443,7 +1485,17 @@ pub async fn get_generating_chats(
             "chats"."generation_ended_at",
             "chats"."title_by_user_provided",
             "chats"."title_by_summary"
+            ,"latest_gen"."initiator"
         FROM "chats"
+        LEFT JOIN LATERAL (
+            SELECT m.generation_parameters ->> 'initiator' AS "initiator"
+            FROM messages m
+            WHERE m.chat_id = "chats"."id"
+                AND m.is_message_in_active_thread
+                AND m.generation_parameters IS NOT NULL
+            ORDER BY m.created_at DESC
+            LIMIT 1
+        ) latest_gen ON true
         WHERE "chats"."owner_user_id" = $1
             AND "chats"."archived_at" IS NULL
             AND "chats"."generation_started_at" IS NOT NULL
