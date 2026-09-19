@@ -856,12 +856,6 @@ pub struct RecentChatsFilter<'a> {
     pub origin_chat_id: Option<Uuid>,
 }
 
-/// Get the most recent chats for a user.
-///
-/// Returns a tuple of (chats, stats) where:
-/// - chats: Vec<RecentChat> - The list of recent chats
-/// - stats: ChatListStats - Statistics about the chat list
-#[instrument(skip_all)]
 /// SQL expression deriving a delegated run's terminal outcome from the chat's
 /// own messages. Shared verbatim by the recent-chats listing and the
 /// single-chat read below, so a runs-list badge and a retry gate can never
@@ -923,6 +917,12 @@ fn latest_message_lateral() -> &'static str {
         ) latest_msg ON true"#
 }
 
+/// Get the most recent chats for a user.
+///
+/// Returns a tuple of (chats, stats) where:
+/// - chats: Vec<RecentChat> - The list of recent chats
+/// - stats: ChatListStats - Statistics about the chat list
+#[instrument(skip_all)]
 pub async fn get_recent_chats(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,

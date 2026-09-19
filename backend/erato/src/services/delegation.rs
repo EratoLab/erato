@@ -3439,20 +3439,19 @@ mod tests {
         );
         assert!(brief.include_conversation_context);
 
-        // `DelegateBrief` has no field for any of the three, which is how they
-        // are ignored; this asserts that stays true as the struct grows.
-        let brief_json = serde_json::json!({
-            "task": brief.task,
-            "expected_output": brief.expected_output,
-            "constraints": brief.constraints,
-            "file_ids": brief.file_ids,
-            "include_conversation_context": brief.include_conversation_context,
-        });
-        let rendered = brief_json.to_string();
-        assert!(
-            !rendered.contains("silent") && !rendered.contains("a-facet-the-offer-narrowed-away"),
-            "the recorded run parameters must not travel with the brief: {rendered}"
-        );
+        // The five fields above are the whole of `DelegateBrief`, which is why
+        // `run_mode`, `scheduling` and `facet_ids` cannot travel with it: there
+        // is nowhere to put them. That exhaustiveness is enforced by the
+        // compiler, at the struct literal in `brief_from_persisted_task_args` —
+        // add a field there and omit it and the build fails.
+        //
+        // An assertion here cannot add to that. The obvious one (serialise the
+        // brief and grep for "silent") would have to hand-build the JSON from
+        // the same five fields it just checked, so it could only ever confirm
+        // itself: add a sixth field that wrongly reads `args.scheduling` and
+        // such a check stays green. `DelegateBrief` derives no `Serialize`, so
+        // there is no honest way to write it, and a test that cannot fail is
+        // worse than no test - it reads as coverage.
     }
 
     /// A recorded call with nothing to do is refused rather than dispatched as
