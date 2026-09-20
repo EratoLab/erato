@@ -35,7 +35,7 @@ const MAX_EVENT_HISTORY: usize = 10_000;
 const SHARED_COMMAND_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const DRAIN_POLL_INTERVAL: Duration = Duration::from_millis(200);
 
-fn owner_pod() -> String {
+pub(crate) fn owner_pod() -> String {
     std::env::var("POD_NAME")
         .or_else(|_| std::env::var("HOSTNAME"))
         .unwrap_or_else(|_| "local".to_string())

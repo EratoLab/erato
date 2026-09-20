@@ -8,6 +8,7 @@ interface ImportMetaEnv {
   readonly VITE_ASSISTANTS_DELEGATION_ENABLED?: string;
   readonly VITE_ASSISTANTS_DELEGATION_ALLOW_BACKGROUND?: string;
   readonly VITE_DELEGATION_TASKS_ENABLED?: string;
+  readonly VITE_DELEGATION_TASKS_ALLOW_ASYNC?: string;
 }
 
 interface OfficeAddinDefaultSettings {

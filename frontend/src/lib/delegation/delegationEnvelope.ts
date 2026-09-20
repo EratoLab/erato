@@ -90,6 +90,12 @@ export interface DelegationEnvelope {
    * frozen as-is, and the run's outcome will never arrive here.
    */
   background: boolean;
+  /**
+   * Which detached mode a `background` part actually is. `"async"` means the
+   * run's answer does come home, as its own message in this conversation;
+   * absent means it never will. Only ever set alongside `background`.
+   */
+  runMode?: string;
   /** Whether the backend clipped `result` before sending it. */
   truncated: boolean;
 }
@@ -150,6 +156,7 @@ export function parseDelegationEnvelope(
       record.background === true &&
       status === undefined &&
       delegateChatId !== undefined,
+    runMode: boundedString(record.run_mode, MAX_NAME_CHARS),
     truncated: record.truncated === true,
   };
 }

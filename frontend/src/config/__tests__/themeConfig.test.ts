@@ -48,6 +48,7 @@ describe("themeConfig", () => {
     assistantsDelegationEnabled: false,
     assistantsDelegationAllowBackground: false,
     delegationTasksEnabled: false,
+    delegationTasksAllowAsync: false,
     assistantsShowRecentItems: false,
     assistantsShowRecentItemsCollapsible: false,
     assistantContextWarningThreshold: 0.5,
