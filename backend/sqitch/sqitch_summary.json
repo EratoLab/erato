@@ -45,7 +45,8 @@
     "deploy/0043_add_mcp_write_tools_enabled_to_chats.sql",
     "deploy/0044_add_disabled_mcp_server_ids_to_chats.sql",
     "deploy/0045_add_disabled_mcp_tools_to_chats.sql",
-    "deploy/0046_widen_user_tool_approval_decisions.sql"
+    "deploy/0046_widen_user_tool_approval_decisions.sql",
+    "deploy/0047_add_async_delivery_and_latest_generation_indexes.sql"
   ],
-  "latest_change": "a96c8e167a4d12c01a074a658f09099a640ed0b5"
+  "latest_change": "b9e2282e30cb2d63d094e61fe3b4f1c81194d818"
 }

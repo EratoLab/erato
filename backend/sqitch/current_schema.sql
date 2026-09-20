@@ -963,6 +963,13 @@ CREATE INDEX idx_chats_assistant_configuration ON public.chats USING btree (((as
 
 
 --
+-- Name: idx_chats_async_delivery_in_flight; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_chats_async_delivery_in_flight ON public.chats USING btree (origin_chat_id) WHERE (((assistant_configuration #>> '{provenance,kind}'::text[]) = 'delegation'::text) AND ((assistant_configuration #>> '{provenance,run_mode}'::text[]) = 'async'::text) AND ((assistant_configuration #>> '{provenance,result_delivery,state}'::text[]) = ANY (ARRAY['pending'::text, 'claimed'::text])));
+
+
+--
 -- Name: idx_chats_delegated_runs; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1023,6 +1030,13 @@ CREATE INDEX idx_messages_active_thread ON public.messages USING btree (is_messa
 --
 
 CREATE INDEX idx_messages_chat_id ON public.messages USING btree (chat_id);
+
+
+--
+-- Name: idx_messages_latest_generation; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_messages_latest_generation ON public.messages USING btree (chat_id, created_at DESC) WHERE (is_message_in_active_thread AND (generation_parameters IS NOT NULL));
 
 
 --

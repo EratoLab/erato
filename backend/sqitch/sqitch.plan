@@ -47,3 +47,4 @@
 0044_add_disabled_mcp_server_ids_to_chats 2026-09-14T00:00:00Z bdart <dfiebig@bdart.de> # Add per-chat disabled MCP server list
 0045_add_disabled_mcp_tools_to_chats 2026-09-14T00:00:00Z bdart <dfiebig@bdart.de> # Add per-chat disabled MCP tool list
 0046_widen_user_tool_approval_decisions 2026-09-14T00:00:00Z bdart <dfiebig@bdart.de> # Allow a per-user ask decision for MCP tools
+0047_add_async_delivery_and_latest_generation_indexes 2026-09-20T00:00:00Z bdart <dfiebig@bdart.de> # Index the async delivery lookups and the latest-generation probe
