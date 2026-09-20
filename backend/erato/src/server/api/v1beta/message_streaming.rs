@@ -1848,6 +1848,17 @@ pub struct ApprovalDecisionsError {
 
 pub(crate) const DECISIONS_MISMATCH_CODE: &str = "decisions_mismatch";
 
+/// Body of the `409` `continuestream` answers when the named row has nothing
+/// left to decide: a duplicate resume, not a decision the server refused.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct AlreadyContinuedError {
+    /// Always `already_continued`.
+    pub code: String,
+}
+
+pub(crate) const ALREADY_CONTINUED_CODE: &str = "already_continued";
+
 /// `ContentPartToolRejection.reason` for a call the user took back rather than
 /// answered. The only value the field has.
 pub(crate) const REJECTION_REASON_WITHDRAWN: &str = "withdrawn";
@@ -1876,6 +1887,8 @@ pub enum StreamRouteError {
     NothingToReact(Box<NothingToReactError>),
     /// `continuestream` only: the decisions do not cover the open approvals.
     DecisionsMismatch(Box<ApprovalDecisionsError>),
+    /// `continuestream` only: every approval this row opened is already decided.
+    AlreadyContinued(Box<AlreadyContinuedError>),
 }
 
 impl From<(axum::http::StatusCode, String)> for StreamRouteError {
@@ -1901,6 +1914,11 @@ impl axum::response::IntoResponse for StreamRouteError {
             // body just does not answer it.
             StreamRouteError::DecisionsMismatch(body) => {
                 (axum::http::StatusCode::BAD_REQUEST, Json(*body)).into_response()
+            }
+            // Nothing about this request is malformed — the row just has nothing
+            // left to decide.
+            StreamRouteError::AlreadyContinued(body) => {
+                (axum::http::StatusCode::CONFLICT, Json(*body)).into_response()
             }
         }
     }
@@ -3335,67 +3353,14 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         }
 
         if offer_task_tool {
-            // Which of the SELECTED facets asked for the tool. The allowlist
-            // the slot tested is the union of all of them, so it can say
-            // "selected" but never "by which facet" — and the overrides that
-            // decide what a task may spend are per facet.
-            let planning_facet_ids: Vec<String> = effective_selected_facet_ids
-                .iter()
-                .filter(|facet_id| {
-                    app_state
-                        .config
-                        .facets
-                        .facets
-                        .get(*facet_id)
-                        .is_some_and(|facet| {
-                            erato_config::config::allowlist_selects_reserved_tool(
-                                &facet.tool_call_allowlist,
-                                erato_config::config::DELEGATE_TASK_TOOL_NAME,
-                            )
-                        })
-                })
-                .cloned()
-                .collect();
-            let effective = crate::services::delegation::effective_tasks_config(
-                &app_state.config.delegation.tasks,
-                &app_state.config.facets,
-                &planning_facet_ids,
-            );
-
-            // What a task may be scoped to: what this turn already has, plus
-            // what the planning facets and the global config say a child may
-            // reach for. Hidden facets are deliberately excluded — they are
-            // always-on platform baselines appended after the authorization
-            // filter, not capabilities the model chooses between.
-            let mut candidate_facet_ids: Vec<String> = Vec::new();
-            for facet_id in effective_selected_facet_ids
-                .iter()
-                .filter(|facet_id| {
-                    app_state
-                        .config
-                        .facets
-                        .facets
-                        .get(*facet_id)
-                        .is_some_and(|facet| !facet.hidden)
-                })
-                .chain(effective.child_facet_ids.iter())
-            {
-                if !candidate_facet_ids.contains(facet_id) {
-                    candidate_facet_ids.push(facet_id.clone());
-                }
-            }
-            let facet_enum = policy
-                .filter_authorized_facet_ids(
-                    &me_profile_input.subject,
-                    me_profile_input.user_groups,
-                    &candidate_facet_ids,
-                )
-                .await?;
-
-            let scope = crate::services::delegation::TaskOfferScope {
-                facet_enum,
-                effective,
-            };
+            let scope = resolve_task_offer_scope(
+                app_state,
+                policy,
+                &me_profile_input.subject,
+                me_profile_input.user_groups,
+                &effective_selected_facet_ids,
+            )
+            .await?;
             chat_request_tools.push(crate::services::delegation::build_delegate_task_tool(
                 &scope,
                 &delegation_offered_file_ids,
@@ -4219,6 +4184,10 @@ async fn stream_generate_chat_completion<
     // for every ordinary turn and for a mention run, which stay bounded by
     // `generation.max_tool_calls_per_message` as before.
     task_tool_budgets: Option<crate::services::delegation::TaskToolBudgets>,
+    // Set only by the approval continuation: the calls a parked batch never
+    // reached, so the first turn dispatches them instead of going straight to
+    // the model. `None` for a generation that starts from a user message.
+    resume: Option<ParkedTurnResume>,
 ) -> Result<(Vec<ContentPart>, Option<GenerationMetadata>), Report> {
     let mcp = app_state.mcp_state().await;
     // Record the real assistant message id on the streaming task. `start_task`
@@ -4305,8 +4274,10 @@ async fn stream_generate_chat_completion<
         tool_call_parent_observation_id: Option<String>,
         error: Option<String>,
     }
-    let mut unfinished_tool_calls: std::collections::VecDeque<genai::chat::ToolCall> =
-        std::collections::VecDeque::new();
+    let mut unfinished_tool_calls: std::collections::VecDeque<genai::chat::ToolCall> = resume
+        .map_or_else(std::collections::VecDeque::new, |resume| {
+            resume.initial_unfinished_tool_calls.into()
+        });
     let mut current_turn = 0;
     let mut current_tool_call_count = 0;
     // Charged per class and never summed: a run that has spent its server
@@ -4421,6 +4392,10 @@ async fn stream_generate_chat_completion<
                         .then(|| mcp_servers_disabled_by_user.clone()),
                     mcp_tools_disabled_by_user: (!mcp_tools_disabled_by_user.is_empty())
                         .then(|| mcp_tools_disabled_by_user.clone()),
+                    // A generation that reaches this builder has ended, so
+                    // whatever a continuation owed this message it no longer
+                    // does.
+                    continuation_in_flight: None,
                 })
             } else {
                 None
@@ -5458,13 +5433,25 @@ async fn stream_generate_chat_completion<
                     ))
                 }
                 McpToolCallGate::Ask(approval_request) => {
+                    let mut approval_request = *approval_request;
+                    // The rest of the batch lives only in this local queue: the
+                    // park abandons it, so without recording it here every call
+                    // the model made after the gated one is lost for good.
+                    approval_request.pending_tool_calls = unfinished_tool_calls
+                        .drain(..)
+                        .map(|call| crate::models::message::PendingToolCall {
+                            call_id: call.call_id,
+                            fn_name: call.fn_name,
+                            fn_arguments: call.fn_arguments,
+                        })
+                        .collect();
                     // Held back rather than pushed: the join below commits the
                     // whole part list every time a task settles, and an
                     // approval part sitting at the tail makes the row look
                     // parked while the turn is still running — which is enough
                     // for a continuation to start a second generation on it.
                     // It goes on after the join, still last.
-                    pending_approval_part = Some(*approval_request);
+                    pending_approval_part = Some(approval_request);
                     let generation_metadata = build_generation_metadata(
                         total_prompt_tokens,
                         total_completion_tokens,
@@ -8391,6 +8378,78 @@ pub(crate) fn synthetic_tool_offer_slot(
     true
 }
 
+/// What a `delegate_task` offer on this turn may scope a child to.
+///
+/// One derivation for the user path and for a continuation that re-offers the
+/// tool: a facet override or a hidden-facet rule added here must not be able to
+/// apply to a fresh turn and not to a resumed one, and the difference would
+/// only ever surface as a child dispatched with the wrong budgets or reach.
+pub(crate) async fn resolve_task_offer_scope(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    user_groups: &[String],
+    effective_selected_facet_ids: &[String],
+) -> Result<crate::services::delegation::TaskOfferScope, Report> {
+    // Which of the SELECTED facets asked for the tool. The allowlist the slot
+    // tested is the union of all of them, so it can say "selected" but never
+    // "by which facet" — and the overrides that decide what a task may spend
+    // are per facet.
+    let planning_facet_ids: Vec<String> = effective_selected_facet_ids
+        .iter()
+        .filter(|facet_id| {
+            app_state
+                .config
+                .facets
+                .facets
+                .get(*facet_id)
+                .is_some_and(|facet| {
+                    erato_config::config::allowlist_selects_reserved_tool(
+                        &facet.tool_call_allowlist,
+                        erato_config::config::DELEGATE_TASK_TOOL_NAME,
+                    )
+                })
+        })
+        .cloned()
+        .collect();
+    let effective = crate::services::delegation::effective_tasks_config(
+        &app_state.config.delegation.tasks,
+        &app_state.config.facets,
+        &planning_facet_ids,
+    );
+
+    // What a task may be scoped to: what this turn already has, plus what the
+    // planning facets and the global config say a child may reach for. Hidden
+    // facets are deliberately excluded — they are always-on platform baselines
+    // appended after the authorization filter, not capabilities the model
+    // chooses between.
+    let mut candidate_facet_ids: Vec<String> = Vec::new();
+    for facet_id in effective_selected_facet_ids
+        .iter()
+        .filter(|facet_id| {
+            app_state
+                .config
+                .facets
+                .facets
+                .get(*facet_id)
+                .is_some_and(|facet| !facet.hidden)
+        })
+        .chain(effective.child_facet_ids.iter())
+    {
+        if !candidate_facet_ids.contains(facet_id) {
+            candidate_facet_ids.push(facet_id.clone());
+        }
+    }
+    let facet_enum = policy
+        .filter_authorized_facet_ids(subject, user_groups, &candidate_facet_ids)
+        .await?;
+
+    Ok(crate::services::delegation::TaskOfferScope {
+        facet_enum,
+        effective,
+    })
+}
+
 /// Expand facet tool patterns (e.g. `server/*`) into concrete discovered tool names
 /// for improved facet prompt template rendering.
 fn build_facet_tool_template_expansions(
@@ -8595,9 +8654,10 @@ mod tests {
     use super::{
         ApprovalDecisionItem, ContinueStreamRequest, MAX_DISPLAY_NAME_CHARS, McpToolCallGate,
         ReservedSelection, StreamRouteError, ToolApprovalDecision, apply_assistant_server_filter,
-        derive_requested_server_ids_from_allowlist, effective_client_tool_allowlist,
-        expand_tool_patterns_with_discovered_tools, filter_mcp_tools_by_disabled_patterns,
-        filter_mcp_tools_by_disabled_servers, filter_mcp_tools_by_write_access, gate_mcp_tool_call,
+        derive_requested_server_ids_from_allowlist, detached_generation_event_sink,
+        effective_client_tool_allowlist, expand_tool_patterns_with_discovered_tools,
+        filter_mcp_tools_by_disabled_patterns, filter_mcp_tools_by_disabled_servers,
+        filter_mcp_tools_by_write_access, gate_mcp_tool_call,
         merge_action_facet_into_mcp_allowlist, reserved_tool_selected, resolve_submitted_decisions,
     };
     use crate::config::{McpToolApprovalConfig, McpToolApprovalPreset};
@@ -9087,6 +9147,72 @@ mod tests {
             }
             other => panic!("expected a decisions mismatch, got {other:?}"),
         }
+    }
+
+    /// The in-process arm of `run_continuation` has no reader on its channel, so
+    /// nothing but the spawned drain keeps it moving. If that task ended with the
+    /// call that spawned it, a continuation started by a turn rather than by a
+    /// client would stall the moment it had emitted a channel's worth of events.
+    #[tokio::test]
+    async fn a_detached_event_sink_outlives_its_channels_capacity() {
+        let tx = detached_generation_event_sink();
+        for index in 0..250u32 {
+            let sent = tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                tx.send(Ok(axum::response::sse::Event::default()
+                    .event("test")
+                    .data(index.to_string()))),
+            )
+            .await
+            .expect("the sink keeps draining");
+            assert!(sent.is_ok(), "the sink stays open at event {index}");
+        }
+        // A forwarded failure is logged, not fatal: the next event still lands.
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            tx.send(Err(color_eyre::eyre::eyre!("a forwarded generation error"))),
+        )
+        .await
+        .expect("an error event does not block")
+        .expect("an error event does not close the sink");
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            tx.send(Ok(axum::response::sse::Event::default().data("after"))),
+        )
+        .await
+        .expect("the sink survives an error event")
+        .expect("the sink stays open after an error event");
+    }
+
+    /// `withdraw` is a decision value like any other: the single-value form
+    /// carries no `approval_id`, so taking it for a multi-item park would be the
+    /// one body that decides calls it never named.
+    #[test]
+    fn a_withdrawal_of_a_multi_item_park_is_submitted_per_item() {
+        let open = [open_approval("call-1"), open_approval("call-2")];
+        assert!(matches!(
+            resolve_submitted_decisions(&legacy_request(ToolApprovalDecision::Withdraw), &open),
+            Err(StreamRouteError::PlainText(
+                axum::http::StatusCode::BAD_REQUEST,
+                _
+            ))
+        ));
+
+        let resolved = resolve_submitted_decisions(
+            &batch_request(vec![
+                ("call-1", ToolApprovalDecision::Withdraw),
+                ("call-2", ToolApprovalDecision::Withdraw),
+            ]),
+            &open,
+        )
+        .expect("a withdrawal naming every open approval answers the whole turn");
+        assert_eq!(
+            resolved,
+            vec![
+                ("call-1".to_string(), ToolApprovalDecision::Withdraw),
+                ("call-2".to_string(), ToolApprovalDecision::Withdraw),
+            ]
+        );
     }
 
     #[test]
@@ -10277,6 +10403,7 @@ mod reasoning_replay_tests {
             mcp_servers_needing_auth: None,
             mcp_servers_disabled_by_user: None,
             mcp_tools_disabled_by_user: None,
+            continuation_in_flight: None,
         }
     }
 
@@ -10933,6 +11060,7 @@ fn generation_metadata_for_error(error: GenerationErrorType) -> GenerationMetada
         mcp_servers_needing_auth: None,
         mcp_servers_disabled_by_user: None,
         mcp_tools_disabled_by_user: None,
+        continuation_in_flight: None,
     }
 }
 
@@ -11424,6 +11552,7 @@ pub(crate) async fn run_generation_after_user_message(
             tasks_this_turn: std::sync::atomic::AtomicUsize::new(0),
         }),
         task_tool_budgets_for_chat(chat),
+        None,
     );
 
     let (end_content, generation_metadata) = match generation_task.await {
@@ -11911,6 +12040,7 @@ pub async fn regenerate_message_sse(
                         tasks_this_turn: std::sync::atomic::AtomicUsize::new(0),
                     }),
                     task_tool_budgets_for_chat(&chat),
+                    None,
                 )
                 .await;
             let (end_content, generation_metadata) = match generation_result {
@@ -12450,6 +12580,7 @@ pub async fn edit_message_sse(
                         tasks_this_turn: std::sync::atomic::AtomicUsize::new(0),
                     }),
                     task_tool_budgets_for_chat(&chat),
+                    None,
                 )
                 .await;
             let (end_content, generation_metadata) = match generation_result {
@@ -13151,6 +13282,137 @@ pub async fn react_to_task_result_sse(
     ))
 }
 
+/// What a parked turn still has open.
+struct ParkedApprovalState {
+    request: ContentPartToolApprovalRequest,
+    /// The approvals no decision part after the request answers.
+    open: Vec<ApprovalItem>,
+    /// Whether the row shows nothing but decisions and tool output after the
+    /// request. Sufficient to admit a crash retry, not necessary: a turn that
+    /// says something before its next tool call commits that text mid-turn, so
+    /// a `text` part is no proof of an answer. That case is admitted by
+    /// `GenerationMetadata::continuation_in_flight` instead.
+    unanswered: bool,
+}
+
+/// Derive the open set from the whole row rather than from its tail part.
+///
+/// `last()` cannot answer this any more: a row whose continuation crashed
+/// between persisting the outcome and finishing the turn carries the same
+/// approval request as one nobody has decided yet, and answering the first with
+/// a `400` is what makes a `continuestream` retry after a restart impossible.
+fn parked_approval_state(content: &[ContentPart]) -> Option<ParkedApprovalState> {
+    let (request_index, request) =
+        content
+            .iter()
+            .enumerate()
+            .rev()
+            .find_map(|(index, part)| match part {
+                ContentPart::ToolApprovalRequest(request) => Some((index, request.clone())),
+                _ => None,
+            })?;
+    let items = request.approval_items();
+    // Only parts AFTER the request count: an earlier park of the same turn has
+    // its own decision parts, and they answer nothing this one asked.
+    let settled = &content[request_index + 1..];
+    let decided = |item: &ApprovalItem| {
+        settled.iter().any(|part| {
+            // Rows written before approvals were addressable carry no
+            // `approval_id`; for them the tool call id is the identity.
+            let (approval_id, tool_call_id) = match part {
+                ContentPart::ToolApproval(approval) => (
+                    approval.approval_id.as_deref(),
+                    approval.tool_call_id.as_str(),
+                ),
+                ContentPart::ToolRejection(rejection) => (
+                    rejection.approval_id.as_deref(),
+                    rejection.tool_call_id.as_str(),
+                ),
+                _ => return false,
+            };
+            match approval_id {
+                Some(approval_id) => approval_id == item.approval_id,
+                None => tool_call_id == item.tool_call_id,
+            }
+        })
+    };
+    let open = items
+        .iter()
+        .filter(|item| !decided(item))
+        .cloned()
+        .collect();
+    let unanswered = settled.iter().all(|part| {
+        matches!(
+            part,
+            ContentPart::ToolApproval(_)
+                | ContentPart::ToolRejection(_)
+                | ContentPart::ToolUse(_)
+                // A tool's file output, which answers nothing on its own.
+                | ContentPart::TextFilePointer(_)
+                | ContentPart::ImageFilePointer(_)
+        )
+    });
+    Some(ParkedApprovalState {
+        request,
+        open,
+        unanswered,
+    })
+}
+
+/// Read the marker a running continuation leaves on the message it is
+/// answering.
+///
+/// Unreadable metadata is treated as no marker: an unparseable column must not
+/// be the reason a turn is resumed a second time.
+fn continuation_owes_an_answer(message: &messages::Model) -> bool {
+    message
+        .generation_metadata
+        .as_ref()
+        .and_then(|metadata| {
+            serde_json::from_value::<crate::models::message::GenerationMetadata>(metadata.clone())
+                .ok()
+        })
+        .is_some_and(|metadata| metadata.continuation_in_flight == Some(true))
+}
+
+/// Claim this message for the continuation that is about to run, so a retry
+/// after a crash can tell "the answer was never written" from "the answer is
+/// already on the row".
+///
+/// Written before the decisions are: a crash between the two must leave the
+/// turn retryable, and the decisions are what make the open set empty.
+async fn mark_continuation_in_flight(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    message: &messages::Model,
+) -> Result<(), Report> {
+    let mut metadata = message
+        .generation_metadata
+        .as_ref()
+        .and_then(|metadata| {
+            serde_json::from_value::<crate::models::message::GenerationMetadata>(metadata.clone())
+                .ok()
+        })
+        .unwrap_or_default();
+    metadata.continuation_in_flight = Some(true);
+    update_message_generation_metadata(
+        &app_state.db,
+        policy,
+        &me_user.to_subject(),
+        &message.id,
+        metadata,
+    )
+    .await?;
+    Ok(())
+}
+
+fn already_continued() -> StreamRouteError {
+    StreamRouteError::AlreadyContinued(Box::new(AlreadyContinuedError {
+        code: ALREADY_CONTINUED_CODE.to_string(),
+    }))
+}
+
 /// Pair every approval a parked turn has open with the decision submitted for
 /// it, refusing any body that does not answer the turn exactly.
 ///
@@ -13249,7 +13511,7 @@ fn resolve_submitted_decisions(
         (status = OK, content_type = "text/event-stream", body = MessageSubmitStreamingResponseMessage),
         (status = BAD_REQUEST, body = ApprovalDecisionsError, description = "The message has no pending approval, the decision is invalid, or the submitted decisions do not cover the open approvals (JSON, code = decisions_mismatch)"),
         (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
-        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), or the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running)"),
+        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), or every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError)"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -13276,31 +13538,10 @@ pub async fn continue_message_sse(
     .map_err(|error| (axum::http::StatusCode::NOT_FOUND, error.to_string()))?;
     let parsed = MessageSchema::validate(&message.raw_message)
         .map_err(|error| (axum::http::StatusCode::BAD_REQUEST, error.to_string()))?;
-    let Some(ContentPart::ToolApprovalRequest(approval_request)) = parsed.content.last() else {
-        return Err((
-            axum::http::StatusCode::BAD_REQUEST,
-            "Message generation is not awaiting tool approval".to_string(),
-        )
-            .into());
-    };
-    // Validated here as well as in the worker: a body that does not answer the
-    // turn should be an HTTP status, not a stream that opens and dies.
-    let submitted_decisions =
-        resolve_submitted_decisions(&request, &approval_request.approval_items())?;
-    if submitted_decisions
-        .iter()
-        .any(|(_, decision)| matches!(decision, ToolApprovalDecision::ApproveAlways))
-        && !mcp.config.mcp_servers_global.approval.allow_always
-    {
-        return Err((
-            axum::http::StatusCode::BAD_REQUEST,
-            "Always allow is disabled by MCP approval policy".to_string(),
-        )
-            .into());
-    }
-
     // The message load above authorized reads on this chat, so a missing or
     // foreign chat has already 404'd and only a database fault reaches here.
+    // Read before the approval guard, because the guard needs the generation
+    // state to tell a crashed continuation from a finished one.
     let chat = get_chat_by_message_id(
         &app_state.db,
         &policy,
@@ -13315,6 +13556,43 @@ pub async fn continue_message_sse(
         )
     })?;
     reject_if_archived(&chat)?;
+    let Some(state) = parked_approval_state(&parsed.content) else {
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            "Message generation is not awaiting tool approval".to_string(),
+        )
+            .into());
+    };
+    let entry = if state.open.is_empty() {
+        // Only a continuation that died before the model answered may run
+        // again, and `chats.generation_state` alone cannot say which those are:
+        // it is written by every generation on the chat, so a later turn that
+        // failed would otherwise reopen a settled row and append a second
+        // answer to a message that already has one. Either the row shows no
+        // answer or the message still carries a continuation's claim on it.
+        let crashed = (state.unanswered || continuation_owes_an_answer(&message))
+            && chat.generation_state.as_deref() == Some("errored");
+        if !crashed {
+            return Err(already_continued());
+        }
+        ContinuationEntry::ResumeCrashed
+    } else {
+        // Validated here as well as in the worker: a body that does not answer
+        // the turn should be an HTTP status, not a stream that opens and dies.
+        let submitted_decisions = resolve_submitted_decisions(&request, &state.open)?;
+        if submitted_decisions
+            .iter()
+            .any(|(_, decision)| matches!(decision, ToolApprovalDecision::ApproveAlways))
+            && !mcp.config.mcp_servers_global.approval.allow_always
+        {
+            return Err((
+                axum::http::StatusCode::BAD_REQUEST,
+                "Always allow is disabled by MCP approval policy".to_string(),
+            )
+                .into());
+        }
+        ContinuationEntry::Decide
+    };
 
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
     let app_state_for_worker = app_state.clone();
@@ -13340,13 +13618,14 @@ pub async fn continue_message_sse(
             chat_id,
             task.generation_id,
         );
-        let result = run_continue_message_task(
-            tx.clone(),
+        let result = run_continuation(
+            &task,
+            Some(tx.clone()),
             &app_state_for_worker,
             &policy_for_worker,
             &me_user,
             request,
-            &task,
+            entry,
         )
         .await;
         let generation_failed = result.is_err();
@@ -13381,14 +13660,107 @@ pub async fn continue_message_sse(
     ))
 }
 
-async fn run_continue_message_task(
-    tx: Sender<Result<Event, Report>>,
+/// Seeding a parked turn's abandoned calls through the tool-dispatch loop rather
+/// than beside it is what makes them obey the same filtered tool set, approval
+/// gate and budgets as any other call.
+pub(crate) struct ParkedTurnResume {
+    pub initial_unfinished_tool_calls: Vec<genai::chat::ToolCall>,
+}
+
+/// How a continuation reached the worker, decided before the generation lease
+/// was taken.
+///
+/// A row with nothing open reaches neither variant unless its turn never
+/// answered: a duplicate resume is answered `409 already_continued`, a conflict
+/// rather than a malformed body, because neither the row nor the body is wrong
+/// and a client that retried a request it never saw the answer to has to tell
+/// that apart from a decision the server refused.
+///
+/// The worker cannot re-derive this: taking the lease rewrites
+/// `chats.generation_state` to `running`, so by the time the row is read again
+/// the fingerprint of the crashed predecessor is gone. Carrying the entry
+/// decision through is what lets the worker refuse a continuation whose
+/// predecessor settled the approvals, or answered the turn, while it was
+/// queued. Two continuations that start together are not ordered by it — only
+/// the chat's generation lease can do that, and it only does while
+/// `delegation.tasks.enabled` makes it a compare-and-set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ContinuationEntry {
+    /// The caller found approvals open and is submitting decisions for them.
+    Decide,
+    /// The caller found every approval already decided on a generation that had
+    /// been swept to `errored`: the outcomes are on the row and the only thing
+    /// missing is the model call.
+    ResumeCrashed,
+}
+
+/// The `Sender` a continuation with no SSE client of its own writes to.
+///
+/// Drained for its whole life rather than dropped: the channel is bounded, so a
+/// sink nobody reads would stall the generation as soon as it had emitted a
+/// channel's worth of events.
+fn detached_generation_event_sink() -> Sender<Result<Event, Report>> {
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
+    tokio::spawn(async move {
+        while let Some(event) = rx.recv().await {
+            if let Err(error) = event {
+                log_and_capture_error("in-process continuation SSE bridge", &error);
+            }
+        }
+    });
+    tx
+}
+
+/// Raising it would abandon the row half-settled (see `run_continuation`).
+/// Losing the preference is the smaller harm, and the part written for this
+/// item says truthfully that nothing was stored.
+async fn store_standing_tool_decision(
+    app_state: &AppState,
+    user_id: Uuid,
+    server_id: &str,
+    tool_name: &str,
+    decision: crate::models::user_tool_approval_setting::UserToolDecision,
+) -> Option<crate::db::entity::user_tool_approval_settings::Model> {
+    match crate::models::user_tool_approval_setting::upsert_active(
+        &app_state.db,
+        user_id,
+        server_id,
+        tool_name,
+        decision,
+    )
+    .await
+    {
+        Ok(setting) => Some(setting),
+        Err(error) => {
+            warn_and_capture_error("store standing tool decision from a continuation", &error);
+            None
+        }
+    }
+}
+
+/// Apply a user's approval decisions to a parked turn and finish it.
+///
+/// Takes no `Sender` of its own on purpose: a continuation may be started by an
+/// HTTP client that wants the SSE stream, or in-process by a turn settling a
+/// child's approval, which has no stream to write to. No caller in this release
+/// takes the second arm, and the events it emits reach the chat only through the
+/// streaming task's broadcast.
+///
+/// Every item settles, whatever happens to it, and its decision part is
+/// persisted as it settles. Giving up midway would leave the row with some
+/// items answered and the rest open, and a client resubmits the set it was
+/// shown — which no longer matches the row, so the card cannot be answered
+/// at all.
+pub(crate) async fn run_continuation(
+    task: &Arc<StreamingTask>,
+    tx: Option<Sender<Result<Event, Report>>>,
     app_state: &AppState,
     policy: &PolicyEngine,
     me_user: &MeProfile,
     request: ContinueStreamRequest,
-    task: &Arc<StreamingTask>,
+    entry: ContinuationEntry,
 ) -> Result<(), Report> {
+    let tx = tx.unwrap_or_else(detached_generation_event_sink);
     let mcp = app_state.mcp_state().await;
     let message = get_message_by_id(
         &app_state.db,
@@ -13398,10 +13770,10 @@ async fn run_continue_message_task(
     )
     .await?;
     let mut parsed = MessageSchema::validate(&message.raw_message)?;
-    let Some(ContentPart::ToolApprovalRequest(approval_request)) = parsed.content.last().cloned()
-    else {
+    let Some(state) = parked_approval_state(&parsed.content) else {
         return Err(eyre!("Message generation is not awaiting tool approval"));
     };
+    let approval_request = state.request;
     let chat = get_or_create_chat(
         &app_state.db,
         policy,
@@ -13423,8 +13795,29 @@ async fn run_continue_message_task(
     // Resolved again against the row as re-read here, so a body that raced
     // another continuation is refused on current state rather than on the state
     // the handler saw.
-    let submitted_decisions =
-        resolve_submitted_decisions(&request, &approval_request.approval_items()).map_err(
+    let submitted_decisions = if state.open.is_empty() {
+        // A crash retry is allowed to find nothing open — that is what it came
+        // for. A continuation that was given decisions to apply is not: the
+        // approvals were settled between the handler's read and this one, so
+        // another continuation owns the model call and making a second one
+        // would append a duplicate answer to the same row.
+        if entry != ContinuationEntry::ResumeCrashed {
+            return Err(eyre!(
+                "Another continuation already settled this generation's approvals"
+            ));
+        }
+        // The same admission test the handler applied, against the row as it is
+        // now: a predecessor that finished in between has written the answer
+        // this retry came to produce, and producing a second one would leave
+        // the message with two.
+        if !state.unanswered && !continuation_owes_an_answer(&message) {
+            return Err(eyre!(
+                "This generation has already produced its answer; nothing to resume"
+            ));
+        }
+        Vec::new()
+    } else {
+        resolve_submitted_decisions(&request, &state.open).map_err(
             |error| match error {
                 StreamRouteError::PlainText(_, message) => eyre!(message),
                 StreamRouteError::DecisionsMismatch(body) => eyre!(
@@ -13434,19 +13827,10 @@ async fn run_continue_message_task(
                 ),
                 _ => eyre!("The approval decision could not be applied"),
             },
-        )?;
-    // The MCP gate parks one call at a time, so every stop that exists today
-    // carries exactly one decision. Executing a multi-decision stop lands with
-    // the branch that can produce one.
-    let [(decided_approval_id, decision)] = submitted_decisions.as_slice() else {
-        return Err(eyre!(
-            "A continuation covering {} approvals is not executable yet",
-            submitted_decisions.len()
-        ));
+        )?
     };
-    let decision = *decision;
-    let decided_approval_id = decided_approval_id.clone();
-    let is_approved = decision.is_approval();
+
+    mark_continuation_in_flight(app_state, policy, me_user, &message).await?;
 
     let generation_parameters: GenerationParameters = serde_json::from_value(
         message
@@ -13510,203 +13894,262 @@ async fn run_continue_message_task(
         &mcp_auth_context,
     )
     .await?;
-    let approved_tool = available_mcp_tools
-        .iter()
-        .find(|tool| {
-            tool.server_id == approval_request.mcp_server_id
-                && tool.tool.name == approval_request.tool_name
-        })
-        .cloned();
-    // A grant is only written for a call that actually runs: "always allow"
-    // on a stale card must not overwrite a denial stored in the meantime.
-    let always_allow_setting =
-        if matches!(decision, ToolApprovalDecision::ApproveAlways) && approved_tool.is_some() {
-            Some(
-                crate::models::user_tool_approval_setting::upsert_active(
-                    &app_state.db,
+
+    // Why an approved call the rebuilt tool set no longer carries cannot run.
+    // `None` is the one retryable answer: a denial is final whatever the
+    // server's state, and so are the chat's write toggle and a server or tool
+    // the user switched off, but a server that was merely unreachable — or that
+    // this request carried no credential for — keeps the park as it was.
+    let park_server_id = &approval_request.mcp_server_id;
+    let refusal_for_unavailable_tool = |tool_name: &str| -> Option<String> {
+        let excluded_pair = (park_server_id.clone(), tool_name.to_string());
+        if denied_mcp_tools.contains(&excluded_pair) {
+            Some(format!(
+                "The user has disabled the tool '{}' in their settings; the call was not executed.",
+                tool_name
+            ))
+        } else if write_suppressed_mcp_tools.contains(&excluded_pair) {
+            Some(format!(
+                "Write operations are turned off for this chat, so the tool '{}' is not available; the call was not executed.",
+                tool_name
+            ))
+        } else if mcp_servers_disabled_by_user.contains(park_server_id) {
+            Some(format!(
+                "The user has turned off the server '{}' for this chat, so the tool '{}' is not available; the call was not executed.",
+                park_server_id, tool_name
+            ))
+        } else if mcp_tool_matches_disabled_patterns(
+            park_server_id,
+            tool_name,
+            &chat.disabled_mcp_tools,
+        ) {
+            Some(format!(
+                "The user has turned off the tool '{}' for this chat; the call was not executed.",
+                tool_name
+            ))
+        } else if mcp_servers_unavailable.contains(park_server_id)
+            || mcp_servers_needing_auth.contains(park_server_id)
+            || mcp_servers_missing_credential.contains(park_server_id)
+        {
+            None
+        } else {
+            Some(format!(
+                "The tool '{}' is not available in this chat; the call was not executed.",
+                tool_name
+            ))
+        }
+    };
+
+    // Decided before anything is written: the park only survives while the row
+    // is still fully open (see `run_continuation`).
+    if submitted_decisions.iter().any(|(approval_id, decision)| {
+        decision.is_approval()
+            && state.open.iter().any(|item| {
+                &item.approval_id == approval_id
+                    && !available_mcp_tools.iter().any(|tool| {
+                        &tool.server_id == park_server_id && tool.tool.name == item.tool_name
+                    })
+                    && refusal_for_unavailable_tool(&item.tool_name).is_none()
+            })
+    }) {
+        return Err(eyre!("Approved MCP tool is no longer available"));
+    }
+
+    // One `mcp_tool` park is one server, recorded on the request itself: the
+    // gate stops the batch at the first gated call, so every item here shares
+    // `approval_request.mcp_server_id`.
+    for (approval_id, decision) in &submitted_decisions {
+        let decision = *decision;
+        let Some(item) = state
+            .open
+            .iter()
+            .find(|item| &item.approval_id == approval_id)
+        else {
+            return Err(eyre!(
+                "Approval '{approval_id}' is not open on this generation"
+            ));
+        };
+        let server_id = approval_request.mcp_server_id.clone();
+        let is_approved = decision.is_approval();
+        let approved_tool = available_mcp_tools
+            .iter()
+            .find(|tool| tool.server_id == server_id && tool.tool.name == item.tool_name)
+            .cloned();
+        // A grant is only written for a call that actually runs: "always allow"
+        // on a stale card must not overwrite a denial stored in the meantime.
+        let always_allow_setting =
+            if matches!(decision, ToolApprovalDecision::ApproveAlways) && approved_tool.is_some() {
+                store_standing_tool_decision(
+                    app_state,
                     user_id,
-                    &approval_request.mcp_server_id,
-                    &approval_request.tool_name,
+                    &server_id,
+                    &item.tool_name,
                     crate::models::user_tool_approval_setting::UserToolDecision::AlwaysAllow,
                 )
-                .await?,
+                .await
+            } else {
+                None
+            };
+        // Unconditional, unlike the grant above: a denial is worth storing even
+        // for a call that can no longer run, and nothing it could overwrite is
+        // more restrictive.
+        let never_allow_setting = if matches!(decision, ToolApprovalDecision::RejectAlways) {
+            store_standing_tool_decision(
+                app_state,
+                user_id,
+                &server_id,
+                &item.tool_name,
+                crate::models::user_tool_approval_setting::UserToolDecision::Denied,
             )
+            .await
         } else {
             None
         };
-    // Unconditional, unlike the grant above: a denial is worth storing even
-    // for a call that can no longer run, and nothing it could overwrite is
-    // more restrictive.
-    let never_allow_setting = if matches!(decision, ToolApprovalDecision::RejectAlways) {
-        Some(
-            crate::models::user_tool_approval_setting::upsert_active(
-                &app_state.db,
-                user_id,
-                &approval_request.mcp_server_id,
-                &approval_request.tool_name,
-                crate::models::user_tool_approval_setting::UserToolDecision::Denied,
-            )
-            .await?,
-        )
-    } else {
-        None
-    };
 
-    if is_approved {
-        parsed
-            .content
-            .push(ContentPart::ToolApproval(ContentPartToolApproval {
-                tool_call_id: approval_request.tool_call_id.clone(),
-                always_allow: always_allow_setting.is_some(),
-                user_tool_approval_setting_id: always_allow_setting
-                    .as_ref()
-                    .map(|setting| setting.id),
-                approved_at: now_timestamp(),
-                approval_id: Some(decided_approval_id.clone()),
-                child_chat_id: None,
-            }));
-    } else {
-        parsed
-            .content
-            .push(ContentPart::ToolRejection(ContentPartToolRejection {
-                tool_call_id: approval_request.tool_call_id.clone(),
-                never_allow: never_allow_setting.is_some(),
-                user_tool_approval_setting_id: never_allow_setting
-                    .as_ref()
-                    .map(|setting| setting.id),
-                rejected_at: now_timestamp(),
-                approval_id: Some(decided_approval_id.clone()),
-                child_chat_id: None,
-                reason: matches!(decision, ToolApprovalDecision::Withdraw)
-                    .then(|| REJECTION_REASON_WITHDRAWN.to_string()),
-            }));
-    }
-
-    let tool_use = if !is_approved {
-        ToolUse {
-            tool_call_id: approval_request.tool_call_id.clone(),
-            status: MessageToolCallStatus::Error,
-            tool_name: approval_request.tool_name.clone(),
-            input: Some(approval_request.input.clone()),
-            progress_message: None,
-            progress: None,
-            total: None,
-            output: Some(json!({"status": "rejected", "error": "The user denied this tool call."})),
-            started_at: Some(now_timestamp()),
-            ended_at: Some(now_timestamp()),
+        if is_approved {
+            parsed
+                .content
+                .push(ContentPart::ToolApproval(ContentPartToolApproval {
+                    tool_call_id: item.tool_call_id.clone(),
+                    always_allow: always_allow_setting.is_some(),
+                    user_tool_approval_setting_id: always_allow_setting
+                        .as_ref()
+                        .map(|setting| setting.id),
+                    approved_at: now_timestamp(),
+                    approval_id: Some(item.approval_id.clone()),
+                    child_chat_id: None,
+                }));
+        } else {
+            parsed
+                .content
+                .push(ContentPart::ToolRejection(ContentPartToolRejection {
+                    tool_call_id: item.tool_call_id.clone(),
+                    never_allow: never_allow_setting.is_some(),
+                    user_tool_approval_setting_id: never_allow_setting
+                        .as_ref()
+                        .map(|setting| setting.id),
+                    rejected_at: now_timestamp(),
+                    approval_id: Some(item.approval_id.clone()),
+                    child_chat_id: None,
+                    reason: matches!(decision, ToolApprovalDecision::Withdraw)
+                        .then(|| REJECTION_REASON_WITHDRAWN.to_string()),
+                }));
         }
-    } else if let Some(managed_tool) = approved_tool {
-        let call = genai::chat::ToolCall {
-            call_id: approval_request.tool_call_id.clone(),
-            fn_name: approval_request.tool_name.clone(),
-            fn_arguments: approval_request.input.clone(),
-            thought_signatures: None,
-        };
-        let (progress_tx, progress_rx) = tokio::sync::mpsc::unbounded_channel();
-        let call = mcp.servers.call_tool_with_progress(
-            chat.id,
-            crate::services::mcp_manager::ManagedToolCall {
-                server_id: managed_tool.server_id,
-                tool_call: call,
-                tool: managed_tool.tool,
-            },
-            &mcp_auth_context,
-            Some(progress_tx),
-        );
-        let result = await_mcp_tool_with_progress::<MessageSubmitStreamingResponseMessage>(
-            call,
-            progress_rx,
-            MessageSubmitStreamingResponseToolCallUpdate {
-                message_id: message.id,
-                content_index: parsed.content.len(),
-                tool_call_id: approval_request.tool_call_id.clone(),
-                tool_name: approval_request.tool_name.clone(),
-                input: None,
-                status: ToolCallStatus::InProgress,
+
+        let tool_use = if !is_approved {
+            ToolUse {
+                tool_call_id: item.tool_call_id.clone(),
+                status: MessageToolCallStatus::Error,
+                tool_name: item.tool_name.clone(),
+                input: Some(item.input.clone()),
                 progress_message: None,
                 progress: None,
                 total: None,
-                output: None,
-            },
-            Some(task),
-            tx.clone(),
-        )
-        .await?;
-        ToolUse {
-            tool_call_id: approval_request.tool_call_id.clone(),
-            status: MessageToolCallStatus::Success,
-            tool_name: approval_request.tool_name.clone(),
-            input: Some(approval_request.input.clone()),
-            progress_message: None,
-            progress: None,
-            total: None,
-            output: Some(serde_json::to_value(result)?),
-            started_at: Some(now_timestamp()),
-            ended_at: Some(now_timestamp()),
-        }
-    } else {
-        // A denial is final whatever the server's state, and so are the chat's
-        // write toggle and a server or tool the user switched off. Otherwise
-        // a server that was merely unreachable, or that this request carried
-        // no credential for, keeps the park retryable; only a tool the rebuilt
-        // set excludes is answered with a refusal the model can work around.
-        let server_id = &approval_request.mcp_server_id;
-        let excluded_pair = (server_id.clone(), approval_request.tool_name.clone());
-        let error_message = if denied_mcp_tools.contains(&excluded_pair) {
-            format!(
-                "The user has disabled the tool '{}' in their settings; the call was not executed.",
-                approval_request.tool_name
+                output: Some(
+                    json!({"status": "rejected", "error": "The user denied this tool call."}),
+                ),
+                started_at: Some(now_timestamp()),
+                ended_at: Some(now_timestamp()),
+            }
+        } else if let Some(managed_tool) = approved_tool {
+            let call = genai::chat::ToolCall {
+                call_id: item.tool_call_id.clone(),
+                fn_name: item.tool_name.clone(),
+                fn_arguments: item.input.clone(),
+                thought_signatures: None,
+            };
+            let (progress_tx, progress_rx) = tokio::sync::mpsc::unbounded_channel();
+            let call = mcp.servers.call_tool_with_progress(
+                chat.id,
+                crate::services::mcp_manager::ManagedToolCall {
+                    server_id: managed_tool.server_id,
+                    tool_call: call,
+                    tool: managed_tool.tool,
+                },
+                &mcp_auth_context,
+                Some(progress_tx),
+            );
+            let dispatched = await_mcp_tool_with_progress::<MessageSubmitStreamingResponseMessage>(
+                call,
+                progress_rx,
+                MessageSubmitStreamingResponseToolCallUpdate {
+                    message_id: message.id,
+                    content_index: parsed.content.len(),
+                    tool_call_id: item.tool_call_id.clone(),
+                    tool_name: item.tool_name.clone(),
+                    input: None,
+                    status: ToolCallStatus::InProgress,
+                    progress_message: None,
+                    progress: None,
+                    total: None,
+                    output: None,
+                },
+                Some(task),
+                tx.clone(),
             )
-        } else if write_suppressed_mcp_tools.contains(&excluded_pair) {
-            format!(
-                "Write operations are turned off for this chat, so the tool '{}' is not available; the call was not executed.",
-                approval_request.tool_name
-            )
-        } else if mcp_servers_disabled_by_user.contains(server_id) {
-            format!(
-                "The user has turned off the server '{}' for this chat, so the tool '{}' is not available; the call was not executed.",
-                server_id, approval_request.tool_name
-            )
-        } else if mcp_tool_matches_disabled_patterns(
-            server_id,
-            &approval_request.tool_name,
-            &chat.disabled_mcp_tools,
-        ) {
-            format!(
-                "The user has turned off the tool '{}' for this chat; the call was not executed.",
-                approval_request.tool_name
-            )
-        } else if mcp_servers_unavailable.contains(server_id)
-            || mcp_servers_needing_auth.contains(server_id)
-            || mcp_servers_missing_credential.contains(server_id)
-        {
-            return Err(eyre!("Approved MCP tool is no longer available"));
+            .await
+            .and_then(|result| serde_json::to_value(result).map_err(Report::from));
+            // A call that failed, or that the user stopped, settles as an error like any
+            // other, rather than abandoning the row half-settled (see `run_continuation`).
+            match dispatched {
+                Ok(output) => ToolUse {
+                    tool_call_id: item.tool_call_id.clone(),
+                    status: MessageToolCallStatus::Success,
+                    tool_name: item.tool_name.clone(),
+                    input: Some(item.input.clone()),
+                    progress_message: None,
+                    progress: None,
+                    total: None,
+                    output: Some(output),
+                    started_at: Some(now_timestamp()),
+                    ended_at: Some(now_timestamp()),
+                },
+                Err(error) => ToolUse {
+                    tool_call_id: item.tool_call_id.clone(),
+                    status: MessageToolCallStatus::Error,
+                    tool_name: item.tool_name.clone(),
+                    input: Some(item.input.clone()),
+                    progress_message: None,
+                    progress: None,
+                    total: None,
+                    output: Some(json!({
+                        "status": "error",
+                        "error": format!("Failed to call MCP tool: {error}"),
+                    })),
+                    started_at: Some(now_timestamp()),
+                    ended_at: Some(now_timestamp()),
+                },
+            }
         } else {
-            format!(
-                "The tool '{}' is not available in this chat; the call was not executed.",
-                approval_request.tool_name
-            )
+            // A server that dropped out between the check above and this item is
+            // refused rather than bailed on: the items before it are already
+            // settled on the row, and one left open among them is one nobody can
+            // answer any more.
+            let error_message =
+                refusal_for_unavailable_tool(&item.tool_name).unwrap_or_else(|| {
+                    format!(
+                        "The server '{}' cannot be reached, so the tool '{}' was not called.",
+                        server_id, item.tool_name
+                    )
+                });
+            ToolUse {
+                tool_call_id: item.tool_call_id.clone(),
+                status: MessageToolCallStatus::Error,
+                tool_name: item.tool_name.clone(),
+                input: Some(item.input.clone()),
+                progress_message: None,
+                progress: None,
+                total: None,
+                output: Some(json!({ "status": "rejected", "error": error_message })),
+                started_at: Some(now_timestamp()),
+                ended_at: Some(now_timestamp()),
+            }
         };
-        ToolUse {
-            tool_call_id: approval_request.tool_call_id.clone(),
-            status: MessageToolCallStatus::Error,
-            tool_name: approval_request.tool_name.clone(),
-            input: Some(approval_request.input.clone()),
-            progress_message: None,
-            progress: None,
-            total: None,
-            output: Some(json!({ "status": "rejected", "error": error_message })),
-            started_at: Some(now_timestamp()),
-            ended_at: Some(now_timestamp()),
-        }
-    };
-    let tool_response = serde_json::to_string(&tool_use.output)?;
 
-    // Announce the gated call's outcome before contacting the model: a client
-    // that seeded the call as running (or a resume replaying this history)
-    // sees its status and output while the answer streams. Mirrors the
-    // terminal update the main loop emits after every tool it runs.
-    {
+        // Announce the gated call's outcome before contacting the model: a
+        // client that seeded the call as running (or a resume replaying this
+        // history) sees its status and output while the answer streams. Mirrors
+        // the terminal update the main loop emits after every tool it runs.
         let succeeded = matches!(tool_use.status, MessageToolCallStatus::Success);
         let update = MessageSubmitStreamingResponseToolCallUpdate {
             message_id: message.id,
@@ -13747,19 +14190,20 @@ async fn run_continue_message_task(
         .await;
         let event: MessageSubmitStreamingResponseMessage = update.into();
         send_generation_event(&event, tx.clone()).await?;
-    }
-    parsed.content.push(ContentPart::ToolUse(tool_use.clone()));
+        parsed.content.push(ContentPart::ToolUse(tool_use));
 
-    // Persist the decision and tool outcome before contacting the model. This
-    // makes retrying `continuestream` safe after a backend restart.
-    update_message_content(
-        &app_state.db,
-        policy,
-        &me_user.to_subject(),
-        &message.id,
-        parsed.content.clone(),
-    )
-    .await?;
+        // Per item, not once after the loop: a tool that ran must leave a record
+        // even if the next item bails, or its side effect happened on a row that
+        // still reads as undecided.
+        update_message_content(
+            &app_state.db,
+            policy,
+            &me_user.to_subject(),
+            &message.id,
+            parsed.content.clone(),
+        )
+        .await?;
+    }
 
     let generation_input_messages: GenerationInputMessages = serde_json::from_value(
         message
@@ -13779,8 +14223,75 @@ async fn run_continue_message_task(
     let generation_input_messages =
         resolve_directive_markers_in_generation_input(app_state, generation_input_messages);
     let mut chat_request = generation_input_messages.into_chat_request();
+    let provider = app_state.config.get_chat_provider(&chat_provider_id);
     let mut continuation_tools =
         convert_mcp_tools_to_genai_tools(available_mcp_tools.clone(), false);
+
+    // Re-offer the task tool to a continuation that was offered it. A model
+    // that was planning sub-tasks when one of its calls hit the approval gate
+    // has to be able to go on planning them; dropping the offer mid-turn makes
+    // it abandon the plan and answer around it. Only the task route — the
+    // mention offer is aimed at assistants named in the user's message and is
+    // deliberately not replayed (`test_continued_turn_does_not_reoffer_the_delegation_tool`).
+    let compat_omit_strict = crate::services::prompt_composition::build_model_settings_for_facets(
+        &provider.model_settings,
+        &app_state.config.facets,
+        &effective_selected_facet_ids,
+    )
+    .compat_omit_strict;
+    let client_tool_allowlist = effective_client_tool_allowlist(
+        &app_state.config.facets,
+        &app_state.config.action_facets,
+        &effective_selected_facet_ids,
+        generation_parameters.action_facet_id.as_deref(),
+    );
+    let is_delegated_run = crate::models::chat::chat_is_delegated_run(&chat);
+    let mut task_offer_scope: Option<crate::services::delegation::TaskOfferScope> = None;
+    let mut delegation_offered_file_ids: Vec<Uuid> = Vec::new();
+    // No anchor row means nothing to hang a child's provenance on, so the offer
+    // is withheld rather than made and then refused at dispatch.
+    let origin_user_message_id = message.previous_message_id;
+    // The same suppression the user path applies through `suppress_task_offer`:
+    // a turn reacting to a delivered task result is deliberately not offered
+    // the tool, and a park must not be the way it gets one.
+    let reacts_to_task_result = generation_parameters.initiator
+        == Some(crate::models::message::GenerationInitiator::TaskResult);
+    if origin_user_message_id.is_some()
+        && !reacts_to_task_result
+        && synthetic_tool_offer_slot(
+            erato_config::config::DELEGATE_TASK_TOOL_NAME,
+            app_state.config.delegation.tasks.enabled,
+            &client_tool_allowlist,
+            &available_mcp_tools,
+            is_delegated_run,
+        )
+    {
+        let scope = resolve_task_offer_scope(
+            app_state,
+            policy,
+            &me_profile_input.subject,
+            me_profile_input.user_groups,
+            &effective_selected_facet_ids,
+        )
+        .await?;
+        delegation_offered_file_ids = crate::models::file_upload::get_chat_file_uploads(
+            &app_state.db,
+            policy,
+            &me_profile_input.subject,
+            &chat.id,
+        )
+        .await?
+        .into_iter()
+        .map(|file| file.id)
+        .collect();
+        continuation_tools.push(crate::services::delegation::build_delegate_task_tool(
+            &scope,
+            &delegation_offered_file_ids,
+            compat_omit_strict,
+        ));
+        task_offer_scope = Some(scope);
+    }
+
     let wait_tool_enabled = !available_mcp_tools.is_empty()
         && (mcp.config.mcp_servers_global.enable_wait
             || available_mcp_tools.iter().any(|managed_tool| {
@@ -13800,40 +14311,137 @@ async fn run_continue_message_task(
         ));
     }
     chat_request.tools = (!continuation_tools.is_empty()).then_some(continuation_tools);
-    chat_request.messages.push(GenAiChatMessage {
-        role: ChatRole::Assistant,
-        content: MessageContent::from_tool_calls(vec![genai::chat::ToolCall {
-            call_id: approval_request.tool_call_id.clone(),
-            fn_name: approval_request.tool_name.clone(),
-            fn_arguments: approval_request.input.clone(),
-            thought_signatures: None,
-        }]),
-        options: None,
-    });
-    chat_request.messages.push(GenAiChatMessage {
-        role: ChatRole::Tool,
-        content: MessageContent::from_parts(vec![GenAiContentPart::ToolResponse(
-            genai::chat::ToolResponse {
-                call_id: approval_request.tool_call_id.clone(),
-                content: tool_response,
-            },
-        )]),
-        options: None,
-    });
-
-    let provider = app_state.config.get_chat_provider(&chat_provider_id);
-    let chat_options =
-        build_chat_options_for_completion(&provider.model_settings, &provider.model_capabilities);
-    let allowed_tool_names = chat_request
+    let allowed_tool_names: HashSet<String> = chat_request
         .tools
         .as_ref()
         .map(|tools| tools.iter().map(|tool| tool.name.to_string()).collect())
         .unwrap_or_default();
+
+    // A crash retry can find some of the abandoned calls already dispatched, and
+    // their `ToolUse` on the row is the record of it: re-seeding one would run
+    // the tool a second time and hand the provider two copies of the same call.
+    let settled_call_ids: HashSet<String> = parsed
+        .content
+        .iter()
+        .filter_map(|part| match part {
+            ContentPart::ToolUse(tool_use) => Some(tool_use.tool_call_id.clone()),
+            _ => None,
+        })
+        .collect();
+    // An abandoned call is not necessarily on the park's server, so the reason
+    // it cannot run is looked up by tool name across the exclusions rather than
+    // scoped to one server the way the gated item's is.
+    let refusal_for_abandoned_call = |tool_name: &str| -> String {
+        if denied_mcp_tools
+            .iter()
+            .any(|(_, denied)| denied == tool_name)
+        {
+            format!(
+                "The user has disabled the tool '{}' in their settings; the call was not executed.",
+                tool_name
+            )
+        } else if write_suppressed_mcp_tools
+            .iter()
+            .any(|(_, suppressed)| suppressed == tool_name)
+        {
+            format!(
+                "Write operations are turned off for this chat, so the tool '{}' is not available; the call was not executed.",
+                tool_name
+            )
+        } else {
+            format!(
+                "The tool '{}' is not available in this chat; the call was not executed.",
+                tool_name
+            )
+        }
+    };
+    // The abandoned calls are replayed through the dispatch loop, which fails
+    // the whole turn on a call naming a tool it was not offered. A tool the user
+    // denied, disabled or switched off while the card was waiting is exactly
+    // that, so it is refused here instead — in the same shape the gated item
+    // gets — and never seeded.
+    let mut pending_tool_calls: Vec<genai::chat::ToolCall> = Vec::new();
+    for call in approval_request
+        .pending_tool_calls
+        .iter()
+        .filter(|call| !settled_call_ids.contains(&call.call_id))
+    {
+        if allowed_tool_names.contains(&call.fn_name) {
+            pending_tool_calls.push(genai::chat::ToolCall {
+                call_id: call.call_id.clone(),
+                fn_name: call.fn_name.clone(),
+                fn_arguments: call.fn_arguments.clone(),
+                thought_signatures: None,
+            });
+            continue;
+        }
+        parsed.content.push(ContentPart::ToolUse(ToolUse {
+            tool_call_id: call.call_id.clone(),
+            status: MessageToolCallStatus::Error,
+            tool_name: call.fn_name.clone(),
+            input: Some(call.fn_arguments.clone()),
+            progress_message: None,
+            progress: None,
+            total: None,
+            output: Some(json!({
+                "status": "rejected",
+                "error": refusal_for_abandoned_call(&call.fn_name),
+            })),
+            started_at: Some(now_timestamp()),
+            ended_at: Some(now_timestamp()),
+        }));
+    }
+
+    // After the refusals above, so they are part of what the model is shown, and
+    // through the same derivation the history walk uses: a hand-built copy is
+    // what used to drop the calls that ran before the gated one.
+    chat_request.messages.extend(
+        crate::services::prompt_composition::transforms::replay_assistant_content(
+            &parsed.role,
+            parsed.content.clone(),
+        )
+        .into_iter()
+        .map(crate::models::message::InputMessage::into_chat_message),
+    );
+
+    if !pending_tool_calls.is_empty() {
+        chat_request.messages.push(GenAiChatMessage {
+            role: ChatRole::Assistant,
+            content: MessageContent::from_tool_calls(pending_tool_calls.clone()),
+            options: None,
+        });
+    }
+    let resume = (!pending_tool_calls.is_empty()).then(|| ParkedTurnResume {
+        initial_unfinished_tool_calls: pending_tool_calls,
+    });
+
+    let chat_options =
+        build_chat_options_for_completion(&provider.model_settings, &provider.model_capabilities);
     let headers_context = ChatProviderHeadersContext::new(&me_user.id, &me_user.id_token_claims);
-    // The tool set above is MCP only, so a continued turn carries no
-    // delegation offer and no dispatch context to honour one with: the
-    // arguments a delegate call needs are request-scoped and are not persisted
-    // with the parked message.
+    let delegation = origin_user_message_id
+        .filter(|_| task_offer_scope.is_some())
+        .map(|origin_user_message_id| DelegationDispatchContext {
+            me_user,
+            // No mention targets: only the task route is re-offered, and a
+            // `delegate_to_assistant` call would have nothing to validate
+            // against.
+            targets: &[],
+            offered_file_ids: &delegation_offered_file_ids,
+            origin_chat: &chat,
+            origin_user_message_id,
+            // Neither a request value nor the user row's: this field only
+            // reaches `delegate_to_assistant` dispatch, which `targets: &[]`
+            // above refuses before it is read. The task route takes its mode
+            // from the tool call's own argument.
+            run_mode: crate::services::delegation::resolve_delegation_run_mode(
+                None,
+                None,
+                &app_state.config.delegation,
+            ),
+            background_dispatches: std::sync::atomic::AtomicUsize::new(0),
+            task_scope: task_offer_scope,
+            tasks_this_turn: std::sync::atomic::AtomicUsize::new(0),
+        });
     let (end_content, generation_metadata) =
         stream_generate_chat_completion::<MessageSubmitStreamingResponseMessage>(
             tx.clone(),
@@ -13860,24 +14468,41 @@ async fn run_continue_message_task(
             Some(task),
             chat.assistant_id,
             parsed.content,
-            crate::models::chat::chat_is_delegated_run(&chat),
-            None,
+            is_delegated_run,
+            delegation,
             // The budget is per generation, like the per-message cap it sits
             // beside: a continuation starts a fresh one. Documented, not
             // fixed — the same is already true of `max_tool_calls_per_message`.
             task_tool_budgets_for_chat(&chat),
+            resume,
         )
         .await?;
-    if let Some(metadata) = generation_metadata {
-        update_message_generation_metadata(
-            &app_state.db,
-            policy,
-            &me_user.to_subject(),
-            &message.id,
-            metadata,
-        )
-        .await?;
-    }
+    // Written even when the generation reported no metadata of its own, and
+    // before the content: this is what releases the claim taken above, and a
+    // claim left behind on an answered turn would readmit it to the crash
+    // retry. The reverse order would be worse — a content write that failed
+    // after the release leaves a row with neither an answer nor a way back.
+    let mut completed_metadata = generation_metadata.unwrap_or_else(|| {
+        message
+            .generation_metadata
+            .as_ref()
+            .and_then(|metadata| {
+                serde_json::from_value::<crate::models::message::GenerationMetadata>(
+                    metadata.clone(),
+                )
+                .ok()
+            })
+            .unwrap_or_default()
+    });
+    completed_metadata.continuation_in_flight = None;
+    update_message_generation_metadata(
+        &app_state.db,
+        policy,
+        &me_user.to_subject(),
+        &message.id,
+        completed_metadata,
+    )
+    .await?;
     stream_update_assistant_message_completion::<MessageSubmitStreamingResponseMessage>(
         tx,
         task,

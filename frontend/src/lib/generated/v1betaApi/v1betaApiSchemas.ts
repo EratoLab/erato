@@ -73,6 +73,17 @@ export type AllDrivesResponse = {
   drives: Drive[];
 };
 
+/**
+ * Body of the `409` `continuestream` answers when the named row has nothing
+ * left to decide: a duplicate resume, not a decision the server refused.
+ */
+export type AlreadyContinuedError = {
+  /**
+   * Always `already_continued`.
+   */
+  code: string;
+};
+
 export type ApplyUserToolApprovalSettingsBatchRequest = {
   decisions: UserToolApprovalDecisionEntry[];
   mcp_server_id: string;

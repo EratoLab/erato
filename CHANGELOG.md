@@ -68,6 +68,18 @@ Typical "Notable changes" categories to copy & paste:
 
 #### Wire changes
 
+**Every MCP tool-approval continuation behaves differently, and none of it is behind a feature flag.** `POST /me/messages/continuestream` now works from the set of approvals a parked turn still has open rather than from the last content part of its row.
+
+- **The rest of the batch runs.** Calls a model made after the one that hit the approval gate used to be dropped — they lived only in an in-memory queue that died with the turn. They are now recorded on the approval part (`pending_tool_calls`) and dispatched after the decision, through the same filtered tool set: a call whose tool has since been denied, disabled or switched off is refused with an error the model can work around rather than executed.
+- **The resumed turn sees what it already did.** The model context is derived from the row's own parts, so the calls that ran before the gated one are replayed with their results instead of vanishing between the park and the answer.
+- **A retry after a crash resumes instead of answering `400`.** A continuation writes the decision and the gated call's outcome before it contacts the model, precisely so a retry is possible, but the old entry guard asked whether the row's last part was still an approval request. A `continuestream` retried after a restart now resumes the model call, decides nothing again and re-runs no tool it finds already recorded. A turn that did produce its answer is never resumed, whatever the chat's most recent generation did.
+- **A duplicate resume answers `409 { "code": "already_continued" }`** instead of `400`. Two tabs, or one retried request, is a conflict rather than a malformed body, and a client has to tell it apart from a decision the server refused. Like the other `409`s on this route it is discriminated by `code`; the generated schema declares `GenerationRunningError` for the status and carries `AlreadyContinuedError` as a type of its own. The web client does not render it specially yet.
+- **`withdraw` rejects every approval the turn has open**, each with `reason: "withdrawn"`, and the turn still finishes in prose rather than leaving the chat on a card the user dismissed.
+
+A continuation on the **task route** also keeps its `delegate_task` offer across the park, so a model interrupted mid-plan can finish it; the `@`-mention offer is still not replayed, and a turn reacting to a delivered task result is still not offered the tool at all.
+
+No deployment ordering is required: the legacy single-`decision` body stays accepted while exactly one approval is open, which is all the MCP gate opens today, so an older frontend keeps working against the new backend.
+
 **Delegated-run results report a new status vocabulary.** This changes values the shipped `@`-mention delegation route already emits, and it is not behind a feature flag.
 
 Deploy the frontend of this release **before or with** the backend: an older frontend renders any status other than `completed` as a failed step, so it would show the new values as errors.

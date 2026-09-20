@@ -5145,6 +5145,7 @@ fn answer_metadata(
         mcp_servers_needing_auth: None,
         mcp_servers_disabled_by_user: None,
         mcp_tools_disabled_by_user: None,
+        continuation_in_flight: None,
     }
 }
 
@@ -7418,6 +7419,294 @@ async fn task_tool_is_offered_only_when_enabled_and_selected(pool: Pool<Postgres
             .iter()
             .any(|body| body.contains("delegate_task")),
         "the task tool must be offered when enabled and selected"
+    );
+}
+
+/// A turn that was planning tasks when one of its calls hit the approval gate
+/// keeps the task offer when it is resumed. Dropping it mid-turn leaves the
+/// model with a half-made plan and no way to finish it, so it answers around
+/// the work it was told to delegate. The mention offer stays unreplayed — that
+/// one is aimed at assistants the user named in a message this continuation is
+/// not part of.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn task_route_continuation_reoffers_delegate_task(pool: Pool<Postgres>) {
+    task_route_continuation_task_offer(pool, false).await;
+}
+
+/// A turn reacting to a delivered task result is deliberately never offered the
+/// task tool — a delivery reaction that could dispatch a child of its own turns
+/// one delivery into a chain nobody asked for. Parking it on an approval must
+/// not be the way it gets the offer back, so the continuation reproduces the
+/// suppression the user path applies, not just the slot check.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn task_result_reaction_continuation_withholds_delegate_task(pool: Pool<Postgres>) {
+    task_route_continuation_task_offer(pool, true).await;
+}
+
+/// A planning turn that also has to pass an MCP approval gate: the tool set the
+/// park is taken from, and the one the continuation is offered again.
+fn gate_mock_mcp_tools_on_approval(config: &mut erato::config::AppConfig) {
+    config.mcp_servers.insert(
+        "mock_mcp_approval".to_string(),
+        erato::config::McpServerConfig {
+            transport_type: "streamable_http".to_string(),
+            url: format!("{}/mcp/approval-policy", mock_mcp_base_url()),
+            http_headers: None,
+            allow_tools: None,
+            exclude_tools: vec![],
+            wait_tools: vec![],
+            authentication: erato::config::McpServerAuthenticationConfig::None,
+            max_session_idle_seconds: None,
+        },
+    );
+    config.mcp_server_permissions.rules.insert(
+        "allow-mock-mcp".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["mock_mcp_approval".to_string()],
+        },
+    );
+    config.mcp_servers_global.approval = erato::config::McpToolApprovalConfig {
+        enabled: true,
+        preset: erato::config::McpToolApprovalPreset::Restrictive,
+        allow_always: false,
+    };
+}
+
+async fn task_route_continuation_task_offer(pool: Pool<Postgres>, reacts_to_task_result: bool) {
+    const TOOL_RESULT: &str = "approval probe published";
+    let continuation_recorder = RequestBodyRecorder::new();
+
+    let mut mocks = MockSet::new();
+    {
+        let recorder = continuation_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[TOOL_RESULT], &[]))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&["PLAN-CONTINUED-ANSWER"]),
+            );
+        });
+    }
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &[TOOL_RESULT]));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_probe",
+                "publish_approval_probe",
+                json!({}),
+            )]),
+        );
+    });
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        gate_mock_mcp_tools_on_approval,
+    )
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, "plan and publish the probe", &["plan"]).await;
+    let assistant_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+
+    if reacts_to_task_result {
+        // The reaction route parks the same way; what it cannot do in a test is
+        // arrive here, so the one field the offer decision reads is seeded.
+        let row = erato::db::entity::prelude::Messages::find_by_id(assistant_message_id)
+            .one(&app_state.db)
+            .await
+            .unwrap()
+            .unwrap();
+        let mut parameters = row.generation_parameters.clone().unwrap();
+        parameters["initiator"] = json!("task_result");
+        let mut active: erato::db::entity::messages::ActiveModel = row.into();
+        active.generation_parameters = ActiveValue::Set(Some(parameters));
+        active
+            .update(&app_state.db)
+            .await
+            .expect("the reaction initiator persists");
+    }
+
+    let continued = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": assistant_message_id,
+            "decision": "approve",
+        }))
+        .await;
+    continued.assert_status_ok();
+    let continued_events = parse_sse_events(&continued);
+    assert!(extract_full_text_answer(&continued_events).contains("PLAN-CONTINUED-ANSWER"));
+
+    let bodies = continuation_recorder.bodies();
+    assert_eq!(bodies.len(), 1);
+    assert_eq!(
+        bodies[0].contains("delegate_task"),
+        !reacts_to_task_result,
+        "the task route keeps its offer across the park; a delivery reaction does not"
+    );
+    assert!(
+        !bodies[0].contains("delegate_to_assistant"),
+        "the mention offer is still not replayed"
+    );
+}
+
+/// Offering the tool is half of it: the continuation also has to be able to
+/// DISPATCH one. The re-offered turn runs with a dispatch context built here
+/// rather than inherited from the user path, so a model that takes the offer
+/// would be the first thing to discover a context that cannot serve it — and
+/// the anchor it carries is the user row of the parked turn, not the tip of the
+/// conversation, because that is what a child's provenance is measured against.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn task_route_continuation_dispatches_delegate_task(pool: Pool<Postgres>) {
+    const TOOL_RESULT: &str = "approval probe published";
+    const USER_MESSAGE: &str = "plan and publish the probe";
+    const BRIEF: &str = "RESUMED-BRIEF-SENTINEL: count the figures";
+    const CHILD_ANSWER: &str = "RESUMED-CHILD-ANSWER";
+
+    let mut mocks = MockSet::new();
+    // The child's own turn: it never sees the conversation that planned it.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[BRIEF], &[USER_MESSAGE]));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&[CHILD_ANSWER]),
+        );
+    });
+    // The parent, once the child has answered.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[CHILD_ANSWER, USER_MESSAGE], &[]));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["PARENT-AFTER-CHILD"]),
+        );
+    });
+    // The continuation: it takes the re-offered tool.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[TOOL_RESULT, USER_MESSAGE],
+                &[CHILD_ANSWER],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_resumed_task",
+                "delegate_task",
+                json!({
+                    "task": BRIEF,
+                    "expected_output": "A single number.",
+                    "facet_ids": ["plan"],
+                }),
+            )]),
+        );
+    });
+    // The parked turn.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[USER_MESSAGE], &[TOOL_RESULT]));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_probe",
+                "publish_approval_probe",
+                json!({}),
+            )]),
+        );
+    });
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        gate_mock_mcp_tools_on_approval,
+    )
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let chat_id = Uuid::parse_str(&chat).unwrap();
+    let events = submit_with_facets(&server, &chat, USER_MESSAGE, &["plan"]).await;
+    let assistant_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    let parked = erato::db::entity::prelude::Messages::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("the parked assistant row");
+    let origin_user_message_id = parked
+        .previous_message_id
+        .expect("the parked turn has a user row to anchor a child to");
+
+    let continued = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": assistant_message_id,
+            "decision": "approve",
+        }))
+        .await;
+    continued.assert_status_ok();
+    let continued_events = parse_sse_events(&continued);
+    let output = find_tool_call_update_output(&continued_events, "delegate_task");
+    assert_eq!(
+        output["status"], "completed",
+        "the resumed turn's dispatch must actually run: {output}"
+    );
+    assert!(
+        output["result"]
+            .as_str()
+            .is_some_and(|text| text.contains(CHILD_ANSWER)),
+        "the child's answer comes back on the tool part: {output}"
+    );
+    assert!(extract_full_text_answer(&continued_events).contains("PARENT-AFTER-CHILD"));
+
+    let child_chat = delegated_child_chat(&app_state.db, chat_id).await;
+    let configuration = child_chat
+        .assistant_configuration
+        .expect("the child carries a configuration");
+    assert_eq!(configuration["task"]["route"], "task");
+    assert_eq!(
+        configuration["provenance"]["origin_chat_id"],
+        json!(chat_id)
+    );
+    assert_eq!(
+        configuration["provenance"]["origin_message_id"],
+        json!(origin_user_message_id),
+        "a child dispatched by a resumed turn is anchored at that turn's user row: {configuration}"
     );
 }
 

@@ -2747,7 +2747,7 @@
             "description": "When the chat does not exist or is not accessible"
           },
           "409": {
-            "description": "When the chat is archived (plain text), or the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running)",
+            "description": "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), or every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError)",
             "content": {
               "application/json": {
                 "schema": {
@@ -4161,6 +4161,19 @@
               "$ref": "#/components/schemas/Drive"
             },
             "description": "List of drives accessible to the user"
+          }
+        }
+      },
+      "AlreadyContinuedError": {
+        "type": "object",
+        "description": "Body of the `409` `continuestream` answers when the named row has nothing\nleft to decide: a duplicate resume, not a decision the server refused.",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Always `already_continued`."
           }
         }
       },

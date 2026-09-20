@@ -261,7 +261,7 @@ pub enum GenerationErrorType {
 }
 
 /// Metadata about the generation process, including usage statistics
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GenerationMetadata {
     /// Number of prompt tokens used during generation
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -309,6 +309,14 @@ pub struct GenerationMetadata {
     /// tool off for this chat. Lets the UI explain why a tool was not used.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mcp_tools_disabled_by_user: Option<Vec<String>>,
+    /// Set while an approval continuation owes this message its answer, and
+    /// cleared by the write that ends the turn. Whether the answer was reached
+    /// cannot be read off the row's parts: a turn that says something and then
+    /// calls another tool commits that text mid-turn, so a `text` part proves
+    /// nothing. Without this, a continuation that died after that commit could
+    /// never be retried.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub continuation_in_flight: Option<bool>,
 }
 
 /// Role of the message author (as defined by the LLM providers)
@@ -698,18 +706,23 @@ impl MessageSchema {
             Resolved,
         }
 
-        let mut pending: HashMap<&str, State> = HashMap::new();
+        let mut pending: HashMap<String, State> = HashMap::new();
         for part in &self.content {
             match part {
                 ContentPart::ToolApprovalRequest(request) => {
-                    if pending
-                        .insert(request.tool_call_id.as_str(), State::Requested)
-                        .is_some()
-                    {
-                        return Err(eyre!(
-                            "Duplicate tool approval request for {}",
-                            request.tool_call_id
-                        ));
+                    // A batch park asks about more than one call, and its
+                    // per-item decisions have to be able to land on the row.
+                    for item in request.approval_items() {
+                        let tool_call_id = item.tool_call_id;
+                        if pending
+                            .insert(tool_call_id.clone(), State::Requested)
+                            .is_some()
+                        {
+                            return Err(eyre!(
+                                "Duplicate tool approval request for {}",
+                                tool_call_id
+                            ));
+                        }
                     }
                 }
                 ContentPart::ToolApproval(approval) => {
