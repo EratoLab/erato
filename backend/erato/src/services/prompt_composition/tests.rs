@@ -517,6 +517,137 @@ mod test_cases {
         assert_eq!(assistant_messages.len(), 1); // msg2
     }
 
+    /// A delivered task result survives into LATER turns.
+    ///
+    /// The history walk drops every user row except the one just submitted, so
+    /// without the dedicated arm a delivered result would reach the model on
+    /// exactly one turn and then vanish from the conversation that contains it.
+    /// Mutation: gate the TaskResult push on `prev_msg.id == *previous_message_id`
+    /// and this fails.
+    #[tokio::test]
+    async fn a_delivered_task_result_is_composed_into_later_turns() {
+        let mut message_repo = MockMessageRepository::new();
+        let prompt_provider = MockPromptProvider::new();
+
+        let asked_id = Uuid::new_v4();
+        let answered_id = Uuid::new_v4();
+        let delivered_id = Uuid::new_v4();
+        let reacted_id = Uuid::new_v4();
+        let current_id = Uuid::new_v4();
+
+        message_repo.add_message(asked_id, None, MessageRole::User, "Start a task");
+        message_repo.add_message(
+            answered_id,
+            Some(asked_id),
+            MessageRole::Assistant,
+            "Started",
+        );
+        message_repo.add_message_with_content(
+            delivered_id,
+            Some(answered_id),
+            MessageRole::User,
+            vec![ContentPart::TaskResult(
+                crate::models::message::ContentPartTaskResult {
+                    child_chat_id: Uuid::new_v4(),
+                    parent_tool_call_id: "call-1".to_string(),
+                    status: "completed".to_string(),
+                    reason: None,
+                    summary: "THE-CHILD-ANSWER".to_string(),
+                    truncated: false,
+                    sequence: 0,
+                },
+            )],
+        );
+        message_repo.add_message(
+            reacted_id,
+            Some(delivered_id),
+            MessageRole::Assistant,
+            "Noted",
+        );
+        // Two turns after the delivery, the result must still be there.
+        message_repo.add_message(current_id, Some(reacted_id), MessageRole::User, "And now?");
+
+        let chat = create_test_chat();
+        let config = create_test_chat_provider_config();
+
+        let seq = build_abstract_sequence(
+            &message_repo,
+            &prompt_provider,
+            &chat,
+            &current_id,
+            vec![],
+            &config,
+            &FacetsConfig::default(),
+            &[],
+            None,
+        )
+        .await
+        .expect("sequence builds");
+
+        let delivered: Vec<_> = seq
+            .parts
+            .iter()
+            .filter(|p| matches!(p, AbstractChatSequencePart::TaskResult { .. }))
+            .collect();
+        assert_eq!(
+            delivered.len(),
+            1,
+            "the delivered task result must still be in the sequence two turns later"
+        );
+    }
+
+    /// A task result is emitted once, not once per turn it has survived.
+    #[tokio::test]
+    async fn a_delivered_task_result_is_not_duplicated() {
+        let mut message_repo = MockMessageRepository::new();
+        let prompt_provider = MockPromptProvider::new();
+
+        let delivered_id = Uuid::new_v4();
+        let current_id = Uuid::new_v4();
+        message_repo.add_message_with_content(
+            delivered_id,
+            None,
+            MessageRole::User,
+            vec![ContentPart::TaskResult(
+                crate::models::message::ContentPartTaskResult {
+                    child_chat_id: Uuid::new_v4(),
+                    parent_tool_call_id: "call-1".to_string(),
+                    status: "completed".to_string(),
+                    reason: None,
+                    summary: "ONCE".to_string(),
+                    truncated: false,
+                    sequence: 0,
+                },
+            )],
+        );
+        message_repo.add_message(current_id, Some(delivered_id), MessageRole::User, "next");
+
+        let chat = create_test_chat();
+        let config = create_test_chat_provider_config();
+
+        let seq = build_abstract_sequence(
+            &message_repo,
+            &prompt_provider,
+            &chat,
+            &current_id,
+            vec![],
+            &config,
+            &FacetsConfig::default(),
+            &[],
+            None,
+        )
+        .await
+        .expect("sequence builds");
+
+        assert_eq!(
+            seq.parts
+                .iter()
+                .filter(|p| matches!(p, AbstractChatSequencePart::TaskResult { .. }))
+                .count(),
+            1
+        );
+    }
+
     #[tokio::test]
     async fn test_build_abstract_sequence_with_assistant_files_on_first_message() {
         let mut message_repo = MockMessageRepository::new();
@@ -2936,6 +3067,7 @@ mod test_cases {
                 legacy_expected_output: None,
                 legacy_constraints: None,
                 run_mode: None,
+                result_delivery: None,
             }),
             task: Some(crate::models::chat::TaskSpec {
                 expected_output: expected_output.map(str::to_string),
@@ -2986,6 +3118,7 @@ mod test_cases {
                 legacy_expected_output: None,
                 legacy_constraints: None,
                 run_mode: None,
+                result_delivery: None,
             }),
             task: Some(crate::models::chat::TaskSpec {
                 expected_output: Some("A single number.".to_string()),

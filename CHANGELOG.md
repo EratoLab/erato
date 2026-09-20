@@ -81,6 +81,14 @@ The new key is `delegation.tasks.multitask_strategy` (default `"reject"`, the on
 
 The visible consequence with the flag on: a double submit from two browser tabs now returns `409` to the second tab instead of appearing to work. Other `409`s on these routes — archived chat, live delegated run — are unchanged plain text, so only clients that read `code` see any difference.
 
+**A finished background task's result can now re-enter the conversation it was started from.** This release adds the wire and composition half; nothing emits these yet, so there is no visible behaviour change.
+
+A delivered result arrives as a user-role message carrying a new `task_result` content part, and `ChatMessage` gains two derived fields: `task_result` (present on such a row) and `initiator` (`user` or `task_result`, absent meaning a user). Both are additive.
+
+Unlike the request-scoped directive markers, a delivered result stays in the conversation: it is composed into every later turn, because the conversation genuinely contains it.
+
+How it is presented to the model is tunable via the new `delegation.tasks.result_template`, but only its prose is. The run's status and reason, the identifiers, the `untrusted-data` frame around the child's answer and the safety guidance are emitted around the template and cannot be edited away — the status is the only thing distinguishing a failed task from a successful one, and the frame and guidance are what stop a child's answer being read as instructions. A template that does not contain `{{result}}` is rejected at startup rather than silently rendering a result with the answer missing.
+
 #### Deprecations
 
 **`[assistants.delegation]` is deprecated; use `[delegation]` and `[delegation.assistants]`.**

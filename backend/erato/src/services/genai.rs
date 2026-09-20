@@ -117,7 +117,9 @@ impl From<ContentPart> for GenAiMessageContent {
                 );
                 GenAiMessageContent::from_parts(vec![binary_part])
             }
-            ContentPart::ActionFacetMarker(_) | ContentPart::DelegationPreambleMarker(_) => {
+            ContentPart::ActionFacetMarker(_)
+            | ContentPart::DelegationPreambleMarker(_)
+            | ContentPart::TaskResult(_) => {
                 // Should never reach here after resolve_directive_markers_in_generation_input.
                 // Log error and return empty text rather than panicking.
                 tracing::error!(

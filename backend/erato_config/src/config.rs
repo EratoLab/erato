@@ -3475,6 +3475,21 @@ impl DelegationConfig {
         // independent, and `0` is a meaningful value for either (it forbids
         // that execution class in task runs).
 
+        if self.tasks.result_template.trim().is_empty() {
+            return Err(eyre!("delegation.tasks.result_template cannot be empty"));
+        }
+
+        // Non-empty is not a sufficient check. A template that lost its
+        // `{{result}}` placeholder still renders, and what it renders is a
+        // task result with the answer silently missing — no error, no empty
+        // string, just a model told a task finished and never shown what it
+        // said.
+        if !self.tasks.result_template.contains("{{result}}") {
+            return Err(eyre!(
+                "delegation.tasks.result_template must contain the {{{{result}}}} placeholder"
+            ));
+        }
+
         // A reserved spelling fails loudly. Serde would already refuse an
         // unknown variant, but only these two names carry a promise the
         // deployment would otherwise believe: both would silently behave as
@@ -3583,6 +3598,15 @@ pub struct DelegationTasksConfig {
     // Defaults to `reject`.
     #[serde(default)]
     pub multitask_strategy: MultitaskStrategy,
+
+    // How a delivered task result is presented to the model that has to react
+    // to it. Tunable prose only: `{{result}}` is required and is replaced with
+    // the child's answer inside an untrusted-data frame, and the run's status,
+    // reason and ids are stated ahead of this text where an edit here cannot
+    // reach them.
+    // Defaults to the built-in wording.
+    #[serde(default = "default_delegation_tasks_result_template")]
+    pub result_template: String,
 }
 
 impl Default for DelegationTasksConfig {
@@ -3598,6 +3622,7 @@ impl Default for DelegationTasksConfig {
             persona: TaskPersona::default(),
             child_facet_ids: Vec::new(),
             multitask_strategy: MultitaskStrategy::default(),
+            result_template: default_delegation_tasks_result_template(),
         }
     }
 }
@@ -3683,6 +3708,15 @@ fn default_delegation_tasks_max_parallel() -> u32 {
 
 fn default_delegation_tasks_max_client_tool_calls_per_task() -> u32 {
     30
+}
+
+/// Presentation only. The status line, the ids and the safety guidance are
+/// emitted around this text by the renderer, so an operator retuning the
+/// wording cannot remove them.
+fn default_delegation_tasks_result_template() -> String {
+    "A task you delegated earlier has finished and its result is below.\
+     {{truncated_note}}\n\n{{result}}"
+        .to_string()
 }
 
 fn default_delegation_max_concurrent_background_runs() -> usize {
