@@ -76,6 +76,7 @@ const listedChat = (id: string): RecentChat => ({
   mcp_write_tools_enabled: true,
   disabled_mcp_server_ids: [],
   disabled_mcp_tools: [],
+  delegated_runs_in_flight: false,
   last_selected_facets: ["listed-facet"],
 });
 

@@ -346,6 +346,8 @@ export function useChatHistory({
       title_by_user_provided: undefined,
       can_edit: false,
       file_uploads: [],
+      // A chat that does not exist on the server yet is owed nothing.
+      delegated_runs_in_flight: false,
       last_message_at: pendingChat.createdAt,
       is_pinned: false,
       // The server default; the composer reads the chat's own detail, so a

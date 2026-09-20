@@ -49,6 +49,11 @@ Typical "Notable changes" categories to copy & paste:
 
   Each task run is bounded by **two independent tool-call budgets**: `max_server_tool_calls_per_task` (default 5) and `max_client_tool_calls_per_task` (default 30). They are never summed and neither constrains the other — a server-executed call makes the backend hold a session, a connection and a slot in the tool loop, while a client-executed call runs on the user's own device. `0` forbids a class outright. Running out is not a failure: the call is refused, the run finishes in prose, and the result comes back as `completed` with `reason: "cap_exceeded"` and a partial but usable answer. The built-in tools (`delegate_task`, `delegate_to_assistant`, `propose_client_action`, `wait`) count against neither budget; they have bounds of their own.
 
+- Two new listing fields let a client keep watching an async task it started, rather than polling the whole time or waiting for a reload:
+
+  - `RecentChat.delegated_runs_in_flight` — always present; true while an async delegated run spawned from the chat is still unfinished or its result is not yet delivered.
+  - `GeneratingChat.initiator` — `"user"` or `"task_result"`; absent means a person started the generation.
+
 #### Stability improvements
 
 - A chat whose provider connection stalls without closing no longer stays "running" forever. A turn that receives no content from its provider for `generation_status.provider_idle_timeout_secs` (new, default 600) now fails as a provider error and releases the chat's generation lease. The budget bounds silence, not length: an answer that keeps streaming is never cut off, however long it takes. Note that it is measured on content rather than on socket traffic — keep-alive pings and empty deltas are dropped by the provider adapter and do not reset it. Set the option to `0` for the previous unbounded behaviour.

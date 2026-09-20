@@ -57,6 +57,14 @@ interface GenerationStatusStore {
    * suppressed since the result is visible in the conversation itself.
    */
   currentChatId: string | null;
+  /**
+   * Chats with an async delegated run still owed back to them, seeded from
+   * the recent-chats listing. Deliberately separate from `statusByChatId`:
+   * an outstanding delivery is not a generation state of this chat, and an
+   * origin can be running its own turn while a delivery is outstanding.
+   */
+  awaitingDeliveryChatIds: Partial<Record<string, true>>;
+  setAwaitingDelivery: (chatId: string, awaiting: boolean) => void;
   seedRunning: (chatId: string, startedAt: string) => void;
   seedRunningLocal: (chatId: string, startedAt: string) => void;
   /** Seed from a durable pending-approval marker (list row, poll, or the
@@ -113,6 +121,29 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
     (set) => ({
       statusByChatId: {},
       currentChatId: null,
+      awaitingDeliveryChatIds: {},
+
+      setAwaitingDelivery: (chatId, awaiting) =>
+        set(
+          (prev) => {
+            const present = prev.awaitingDeliveryChatIds[chatId] === true;
+            // Re-seeded on every listing fetch; returning `prev` unchanged is
+            // what stops that from notifying subscribers and re-running the
+            // seed effect in a loop.
+            if (present === awaiting) {
+              return prev;
+            }
+            const next = { ...prev.awaitingDeliveryChatIds };
+            if (awaiting) {
+              next[chatId] = true;
+            } else {
+              delete next[chatId];
+            }
+            return { awaitingDeliveryChatIds: next };
+          },
+          false,
+          "generationStatus/setAwaitingDelivery",
+        ),
 
       seedRunning: (chatId, startedAt) =>
         set(
@@ -378,12 +409,26 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
       clearStatus: (chatId) =>
         set(
           (prev) => {
-            if (!prev.statusByChatId[chatId]) {
+            const hadStatus = prev.statusByChatId[chatId] !== undefined;
+            const hadDelivery = prev.awaitingDeliveryChatIds[chatId] === true;
+            // Forgetting the chat has to forget both facts about it: a
+            // leftover delivery entry would keep the poll alive for a chat
+            // the store no longer knows anything else about.
+            if (!hadStatus && !hadDelivery) {
               return prev;
             }
-            const next = { ...prev.statusByChatId };
-            delete next[chatId];
-            return { statusByChatId: next };
+            const patch: Partial<GenerationStatusStore> = {};
+            if (hadStatus) {
+              const next = { ...prev.statusByChatId };
+              delete next[chatId];
+              patch.statusByChatId = next;
+            }
+            if (hadDelivery) {
+              const next = { ...prev.awaitingDeliveryChatIds };
+              delete next[chatId];
+              patch.awaitingDeliveryChatIds = next;
+            }
+            return patch;
           },
           false,
           "generationStatus/clearStatus",
@@ -391,7 +436,11 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
 
       reset: () =>
         set(
-          { statusByChatId: {}, currentChatId: null },
+          {
+            statusByChatId: {},
+            currentChatId: null,
+            awaitingDeliveryChatIds: {},
+          },
           false,
           "generationStatus/reset",
         ),
@@ -419,18 +468,29 @@ export function seedGenerationStatusFromListing(
     | "archived_at"
     | "active_generation_started_at"
     | "pending_tool_approval_at"
+    | "delegated_runs_in_flight"
   >[],
 ): void {
-  const { seedRunning, seedActionRequired } =
+  const { seedRunning, seedActionRequired, setAwaitingDelivery } =
     useGenerationStatusStore.getState();
   for (const chat of chats) {
-    if (chat.archived_at) continue;
+    if (chat.archived_at) {
+      // Archiving cascades to the runs and supersedes their deliveries, so an
+      // archived row is positive evidence that nothing is owed — not an
+      // absence of evidence.
+      setAwaitingDelivery(chat.id, false);
+      continue;
+    }
     if (chat.active_generation_started_at) {
       seedRunning(chat.id, chat.active_generation_started_at);
     }
     if (chat.pending_tool_approval_at) {
       seedActionRequired(chat.id, chat.pending_tool_approval_at);
     }
+    // `=== true`, never truthiness: a cached page from before the field
+    // existed, an e2e route stub or an add-in mock carries `undefined`, which
+    // must read as "not in flight", never "unknown, keep polling".
+    setAwaitingDelivery(chat.id, chat.delegated_runs_in_flight === true);
   }
 }
 
@@ -441,14 +501,28 @@ export const selectRunningCount = (state: GenerationStatusStore): number =>
 
 /**
  * Chats that should keep the status poll alive: running ones (to observe
- * their outcome) and parked ones (to observe an approval decided on another
- * device or tab).
+ * their outcome), parked ones (to observe an approval decided on another
+ * device or tab), and origins still owed an async delegated run's result (to
+ * observe it land).
+ *
+ * Counts DISTINCT chats, because the three reasons overlap: an origin running
+ * its own turn while a delivery is outstanding is one chat, not two. Only the
+ * `> 0` test gates the poll, but existing tests read this as an exact count.
  */
-export const selectPollDriverCount = (state: GenerationStatusStore): number =>
-  Object.values(state.statusByChatId).filter(
-    (status) =>
-      status?.kind === "running" || status?.kind === "action_required",
-  ).length;
+export const selectPollDriverCount = (state: GenerationStatusStore): number => {
+  const driving = new Set<string>(Object.keys(state.awaitingDeliveryChatIds));
+  for (const [chatId, status] of Object.entries(state.statusByChatId)) {
+    if (status?.kind === "running" || status?.kind === "action_required") {
+      driving.add(chatId);
+    }
+  }
+  return driving.size;
+};
+
+/** Chats with an async delegated run's result still owed back to them. */
+export const selectAwaitingDeliveryCount = (
+  state: GenerationStatusStore,
+): number => Object.keys(state.awaitingDeliveryChatIds).length;
 
 /**
  * Finished + error. Store-tracked "action_required" is counted by the rail
