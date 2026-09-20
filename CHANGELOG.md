@@ -136,6 +136,16 @@ A delivered result and the turn that reacted to it sit below the assistant messa
 
 Editing or regenerating a turn is still a branch operation and still branches. If the turn that started the task is itself still on the thread, the result is delivered again on the new branch — once, so repeated branching cannot accumulate re-appended results. If the user rewrote the very turn that started the task, the result is stale by definition and is marked superseded.
 
+**An approval stop can now describe more than one decision, and the continuation body can name which one it answers.** Additive: no existing approval behaviour changes, and rows written before this release keep resuming exactly as they did.
+
+`ContentPartToolApprovalRequest` gains three fields: `kind` (`"mcp_tool"`, `"delegated_task"` or `"task_plan"`; absent means `"mcp_tool"`), `approvals[]` — one entry per decision the stop covers, each with an `approval_id` and, for a decision that stands in for a delegated child, a `child` block naming that child's chat, message and gated call — and `pending_tool_calls[]`, the calls of the same batch that have not run yet. An MCP approval records itself as a single `approvals[]` entry whose `approval_id` is the tool call id, so nothing about the shipped single-call flow changes. **A client must branch on `kind` before reading `tool_name` and `mcp_server_id`:** for every kind but `mcp_tool` those describe no MCP tool, and `mcp_server_id` is an empty string.
+
+`ContinueStreamRequest` gains `decisions: [{ approval_id, decision }]`. The legacy body `{ message_id, decision }` is still accepted, but only while exactly one approval is open — it names no approval, so on a wider stop it could only guess. A body that leaves an open approval unanswered, or names one the turn does not have open, is a `400` with `{ "code": "decisions_mismatch", "missing": [...], "unknown": [...] }`, and the turn stays parked and answerable.
+
+`ToolApprovalDecision` gains `"withdraw"`: taking the question back rather than answering it. It rejects the open approvals with `reason: "withdrawn"` and the turn continues with those denials — a decision value, not an endpoint; there is no `withdrawapproval` route. `ContentPartToolApproval` and `ContentPartToolRejection` gain optional `approval_id` and `child_chat_id` recording which decision they settled, and `ContentPartToolRejection` gains an optional `reason` whose only value is `withdrawn`.
+
+No new configuration key, and no migration: the approval part is JSONB.
+
 #### Deprecations
 
 **`[assistants.delegation]` is deprecated; use `[delegation]` and `[delegation.assistants]`.**

@@ -423,6 +423,7 @@ describe("McpToolApprovalCard", () => {
         toolName: approvalRequest.tool_name,
         toolInput: approvalRequest.input,
         mcpServerId: approvalRequest.mcp_server_id,
+        approvalIds: [],
       });
     });
     // The card no longer buffers the continuation itself.
@@ -472,6 +473,152 @@ describe("McpToolApprovalCard", () => {
     expect(allowOnce).toBeDisabled();
     fireEvent.click(allowOnce);
     expect(continueToolApproval).not.toHaveBeenCalled();
+  });
+
+  it("posts a decisions array once the stop covers more than one approval", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response("event: done\\ndata: {}\\n\\n", { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={{
+          ...approvalRequest,
+          kind: "mcp_tool",
+          approvals: [
+            {
+              approval_id: "tool-call-1",
+              tool_call_id: "tool-call-1",
+              tool_name: "publish_approval_probe",
+              input: {},
+            },
+            {
+              approval_id: "tool-call-2",
+              tool_call_id: "tool-call-2",
+              tool_name: "publish_approval_probe",
+              input: {},
+            },
+          ],
+        }}
+        resolution={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Allow once"));
+
+    // The legacy body names no approval, so the server would refuse it here:
+    // every open item has to be covered.
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1beta/me/messages/continuestream",
+        expect.objectContaining({
+          body: JSON.stringify({
+            message_id: "message-1",
+            decisions: [
+              { approval_id: "tool-call-1", decision: "approve" },
+              { approval_id: "tool-call-2", decision: "approve" },
+            ],
+          }),
+        }),
+      );
+    });
+  });
+
+  it("keeps the legacy body for a single approval", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response("event: done\\ndata: {}\\n\\n", { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={{
+          ...approvalRequest,
+          kind: "mcp_tool",
+          approvals: [
+            {
+              approval_id: "tool-call-1",
+              tool_call_id: "tool-call-1",
+              tool_name: "publish_approval_probe",
+              input: {},
+            },
+          ],
+        }}
+        resolution={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Allow once"));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1beta/me/messages/continuestream",
+        expect.objectContaining({
+          body: JSON.stringify({
+            message_id: "message-1",
+            decision: "approve",
+          }),
+        }),
+      );
+    });
+  });
+
+  it.each(["delegated_task", "task_plan"] as const)(
+    "renders a generic decision card for the %s kind instead of an MCP call",
+    (kind) => {
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={{
+            ...approvalRequest,
+            // What the server writes for a kind that names no MCP server.
+            tool_name: "delegate_task",
+            mcp_server_id: "",
+            kind,
+            approvals: [
+              {
+                approval_id: "parent-call-1",
+                tool_call_id: "parent-call-1",
+                tool_name: "delegate_task",
+                input: {},
+              },
+            ],
+          }}
+          resolution={null}
+        />,
+      );
+
+      expect(screen.getByTestId("tool-approval-generic")).toHaveAttribute(
+        "data-approval-kind",
+        kind,
+      );
+      // The MCP layout would have shown an empty server id as the referent.
+      expect(screen.queryByTestId("mcp-tool-approval")).not.toBeInTheDocument();
+      expect(screen.getByText("Allow once")).toBeInTheDocument();
+      expect(screen.queryByText("Always allow")).not.toBeInTheDocument();
+    },
+  );
+
+  it("renders the MCP layout for a row written before kinds existed", () => {
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={approvalRequest}
+        resolution={null}
+      />,
+    );
+
+    expect(screen.getByTestId("mcp-tool-approval")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("tool-approval-generic"),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps the card up with the reason when the decision is refused", async () => {

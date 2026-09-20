@@ -4384,6 +4384,16 @@ async fn test_submit_to_normal_existing_chat_still_succeeds(pool: Pool<Postgres>
 // MCP tool approval: the durable park and its `continuestream` continuation.
 // ---------------------------------------------------------------------------
 
+/// Which `continuestream` body a continuation is driven with. Both are live
+/// wire shapes: the legacy one stays accepted while a single approval is open.
+#[derive(Clone, Copy)]
+enum ApprovalDecisionBody {
+    /// `{ message_id, decision }` — no `approval_id` anywhere.
+    Legacy,
+    /// `{ message_id, decisions: [{ approval_id, decision }] }`.
+    Named,
+}
+
 /// Under the restrictive approval preset an open-world MCP tool call stops the
 /// turn durably: the approval request is the last persisted content part, the
 /// chat is parked, and no answer was streamed. `continuestream` with an
@@ -4396,7 +4406,11 @@ async fn test_submit_to_normal_existing_chat_still_succeeds(pool: Pool<Postgres>
 /// - `sse-streaming`
 /// - `uses-mocked-llm`
 /// - `uses-mock-mcp`
-async fn continuestream_resumes_a_parked_tool_approval(pool: Pool<Postgres>, tasks_enabled: bool) {
+async fn continuestream_resumes_a_parked_tool_approval(
+    pool: Pool<Postgres>,
+    tasks_enabled: bool,
+    decision_body: ApprovalDecisionBody,
+) {
     const TOOL_RESULT: &str = "approval probe published";
     let continuation_recorder = RequestBodyRecorder::new();
 
@@ -4488,6 +4502,18 @@ async fn continuestream_resumes_a_parked_tool_approval(pool: Pool<Postgres>, tas
     assert_eq!(approval_request["tool_name"], "publish_approval_probe");
     assert_eq!(approval_request["mcp_server_id"], "mock_mcp_approval");
     assert_eq!(approval_request["preset"], "restrictive");
+    // The gated call is also recorded as a decision the client can name.
+    assert_eq!(approval_request["kind"], "mcp_tool");
+    let approvals = approval_request["approvals"].as_array().unwrap();
+    assert_eq!(approvals.len(), 1);
+    assert_eq!(approvals[0]["approval_id"], "call_probe");
+    assert_eq!(approvals[0]["tool_name"], "publish_approval_probe");
+    assert!(
+        approval_request["pending_tool_calls"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
     assert_eq!(
         chats::Entity::find_by_id(chat_id)
             .one(&db)
@@ -4502,10 +4528,16 @@ async fn continuestream_resumes_a_parked_tool_approval(pool: Pool<Postgres>, tas
     let continued = server
         .post("/api/v1beta/me/messages/continuestream")
         .with_bearer_token(TEST_JWT_TOKEN)
-        .json(&json!({
-            "message_id": assistant_message_id,
-            "decision": "approve",
-        }))
+        .json(&match decision_body {
+            ApprovalDecisionBody::Legacy => json!({
+                "message_id": assistant_message_id,
+                "decision": "approve",
+            }),
+            ApprovalDecisionBody::Named => json!({
+                "message_id": assistant_message_id,
+                "decisions": [{ "approval_id": "call_probe", "decision": "approve" }],
+            }),
+        })
         .await;
     continued.assert_status_ok();
     let continued_events = parse_sse_events(&continued);
@@ -4535,6 +4567,8 @@ async fn continuestream_resumes_a_parked_tool_approval(pool: Pool<Postgres>, tas
     );
     assert_eq!(resumed_content[1]["tool_call_id"], "call_probe");
     assert_eq!(resumed_content[1]["always_allow"], false);
+    // The decision names the approval it answered, whichever body carried it.
+    assert_eq!(resumed_content[1]["approval_id"], "call_probe");
     assert_eq!(resumed_content[2]["status"], "success");
     assert!(
         serde_json::to_string(&resumed_content[2]["output"])
@@ -4563,7 +4597,24 @@ async fn continuestream_resumes_a_parked_tool_approval(pool: Pool<Postgres>, tas
 /// - `uses-mock-mcp`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_continuestream_resumes_a_parked_tool_approval(pool: Pool<Postgres>) {
-    continuestream_resumes_a_parked_tool_approval(pool, false).await;
+    continuestream_resumes_a_parked_tool_approval(pool, false, ApprovalDecisionBody::Legacy).await;
+}
+
+/// The same park answered by naming the approval. A client that posts
+/// `decisions[]` must get exactly the legacy outcome, or the two shapes have
+/// drifted and the batch form is not a superset of the one it replaces.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn continuestream_resumes_a_parked_tool_approval_from_a_decisions_array(
+    pool: Pool<Postgres>,
+) {
+    continuestream_resumes_a_parked_tool_approval(pool, false, ApprovalDecisionBody::Named).await;
 }
 
 /// Gate ON, and this is the arm that had no coverage at all.
@@ -4584,7 +4635,138 @@ async fn test_continuestream_resumes_a_parked_tool_approval(pool: Pool<Postgres>
 /// - `uses-mock-mcp`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn continuestream_resumes_a_parked_tool_approval_under_the_task_gate(pool: Pool<Postgres>) {
-    continuestream_resumes_a_parked_tool_approval(pool, true).await;
+    continuestream_resumes_a_parked_tool_approval(pool, true, ApprovalDecisionBody::Legacy).await;
+}
+
+/// Park a turn on an approval-gated MCP call, then post `decisions` at it.
+///
+/// Returns the answer body and the chat's `generation_state` afterwards: a body
+/// the server refuses must leave the park answerable, or a client that posts a
+/// stale card once has destroyed the only way to resume the turn.
+async fn continuestream_with_decisions(
+    pool: Pool<Postgres>,
+    decisions: serde_json::Value,
+) -> (axum::http::StatusCode, serde_json::Value, Option<String>) {
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post().path("/v1/chat/completions");
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[(
+                "call_probe",
+                "publish_approval_probe",
+                json!({}),
+            )]),
+        );
+    });
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.mcp_servers.insert(
+        "mock_mcp_approval".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url(),
+            "/mcp/approval-policy",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_server_permissions.rules.insert(
+        "allow-mock-mcp".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["mock_mcp_approval".to_string()],
+        },
+    );
+    app_config.mcp_servers_global.approval = erato::config::McpToolApprovalConfig {
+        enabled: true,
+        preset: erato::config::McpToolApprovalPreset::Restrictive,
+        allow_always: false,
+    };
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let db = app_state.db.clone();
+    let server = app_server(app_state);
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "publish the approval probe" }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let chat_id = Uuid::parse_str(&extract_chat_id(&events).expect("Expected chat_id")).unwrap();
+    let assistant_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+
+    let answer = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": assistant_message_id,
+            "decisions": decisions,
+        }))
+        .await;
+    let status = answer.status_code();
+    let body: serde_json::Value = answer.json();
+
+    let generation_state = chats::Entity::find_by_id(chat_id)
+        .one(&db)
+        .await
+        .unwrap()
+        .unwrap()
+        .generation_state;
+
+    (status, body, generation_state)
+}
+
+/// A body that answers something other than the open approval leaves the
+/// question unanswered, and the server says which one is still owed rather
+/// than resuming on a decision the user never gave.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn continuestream_with_missing_approval_id_returns_400_listing_missing(pool: Pool<Postgres>) {
+    let (status, body, generation_state) = continuestream_with_decisions(
+        pool,
+        json!([{ "approval_id": "call_other", "decision": "approve" }]),
+    )
+    .await;
+
+    assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], "decisions_mismatch");
+    assert_eq!(body["missing"], json!(["call_probe"]));
+    assert_eq!(body["unknown"], json!(["call_other"]));
+    assert_eq!(generation_state.as_deref(), Some("awaiting_approval"));
+}
+
+/// An id this turn never opened is refused even when every open approval IS
+/// answered: it means the client is deciding against a card that has moved on,
+/// and the extra decision would be silently dropped.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn continuestream_with_unknown_approval_id_returns_400(pool: Pool<Postgres>) {
+    let (status, body, generation_state) = continuestream_with_decisions(
+        pool,
+        json!([
+            { "approval_id": "call_probe", "decision": "approve" },
+            { "approval_id": "call_other", "decision": "approve" }
+        ]),
+    )
+    .await;
+
+    assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], "decisions_mismatch");
+    assert_eq!(body["missing"], json!([]));
+    assert_eq!(body["unknown"], json!(["call_other"]));
+    assert_eq!(generation_state.as_deref(), Some("awaiting_approval"));
 }
 
 /// The wire contract the web client seeds its streaming buffer from: a

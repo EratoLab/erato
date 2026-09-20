@@ -4738,6 +4738,21 @@ msgid "sidecar.indexing.upgrade"
 msgstr "Update the desktop sidecar to configure indexing."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "toolApproval.genericDescription"
+msgstr "This turn is waiting on your decision to continue."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "toolApproval.genericDescriptionMany"
+msgstr "This turn is waiting on several decisions. Allowing or denying applies to all of them."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "toolApproval.genericTitle"
+msgstr "A decision is needed in this chat"
+
+#. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallInput.tsx
 msgid "toolcall.input.title"
 msgstr "Input Parameters"

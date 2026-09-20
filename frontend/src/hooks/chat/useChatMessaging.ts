@@ -32,6 +32,7 @@ import {
   useChatMessages,
   useUpdateChat,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { buildContinueStreamBody } from "@/lib/toolApprovalDecisions";
 import { mapApiMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 import { seedDispatchedDelegatedRun } from "@/utils/chat/delegatedRunDispatch";
 import {
@@ -104,6 +105,12 @@ export interface ContinueToolApprovalInput {
   toolInput?: unknown;
   /** Names the roster to drop after a standing decision is written. */
   mcpServerId: string;
+  /**
+   * Every approval the parked turn has open. The server requires the decision
+   * to cover all of them, so a stop with more than one is answered by naming
+   * each; omitted or single, the legacy body is sent.
+   */
+  approvalIds?: string[];
 }
 
 const getSSEConnectionError = (
@@ -2478,6 +2485,7 @@ export function useChatMessaging(
       toolName,
       toolInput,
       mcpServerId,
+      approvalIds,
     }: ContinueToolApprovalInput): Promise<void> => {
       // A park settles through the same completion refetch as any turn, and
       // that refetch resets the streaming buffer when it lands. A decision
@@ -2716,7 +2724,9 @@ export function useChatMessaging(
               [X_ERATO_PLATFORM_HEADER]: platform,
               ...getAuthHeaders(),
             },
-            body: JSON.stringify({ message_id: messageId, decision }),
+            body: JSON.stringify(
+              buildContinueStreamBody({ messageId, decision, approvalIds }),
+            ),
           },
         );
 

@@ -79,6 +79,52 @@ export type ApplyUserToolApprovalSettingsBatchRequest = {
 };
 
 /**
+ * One decision of a continuation, naming the approval it answers.
+ */
+export type ApprovalDecisionItem = {
+  /**
+   * @example call_abc123
+   */
+  approval_id: string;
+  decision: ToolApprovalDecision;
+};
+
+/**
+ * Body of the `400` answers when the submitted decisions do not match the
+ * approvals a parked turn has open.
+ *
+ * Two lists rather than one message, because the client's recovery differs:
+ * `missing` means it has to ask the user the remaining questions, `unknown`
+ * means the card it rendered is stale and the row needs refetching.
+ */
+export type ApprovalDecisionsError = {
+  /**
+   * Always `decisions_mismatch`.
+   */
+  code: string;
+  /**
+   * Open approvals that no submitted decision covers.
+   */
+  missing: string[];
+  /**
+   * Submitted approval ids this turn does not have open.
+   */
+  unknown: string[];
+};
+
+/**
+ * One decision the user owes on a parked turn. A stop carries several of
+ * these when a batch parked on more than one call.
+ */
+export type ApprovalItem = {
+  approval_id: string;
+  child?: null | ChildApprovalRef;
+  input: Value;
+  tool_call_id: string;
+  tool_name: string;
+};
+
+/**
  * Response from the archive all chats endpoint
  */
 export type ArchiveAllChatsResponse = {
@@ -864,6 +910,28 @@ export type ChatModel = {
   model_icon?: string | null | undefined;
 };
 
+/**
+ * The gated call a delegated child parked on, copied onto the parent's
+ * approval item so the card renders without reading the child's chat.
+ */
+export type ChildApprovalRef = {
+  annotations: ToolApprovalAnnotations;
+  /**
+   * @format uuid
+   */
+  child_chat_id: string;
+  /**
+   * @format uuid
+   */
+  child_message_id: string;
+  child_tool_call_id: string;
+  input: Value;
+  mcp_server_id: string;
+  preset: string;
+  requested_at: string;
+  tool_name: string;
+};
+
 export type ClientToolResultRequest = {
   /**
    * The chat whose suspended generation is awaiting this result.
@@ -1059,7 +1127,12 @@ export type ContentPartTextFilePointer = {
  */
 export type ContentPartToolApproval = {
   always_allow?: boolean;
+  approval_id?: null | undefined;
   approved_at: string;
+  /**
+   * @format uuid
+   */
+  child_chat_id?: null | undefined;
   tool_call_id: string;
   /**
    * @format uuid
@@ -1077,8 +1150,16 @@ export type ContentPartToolApprovalRequest = {
    */
   allow_always: boolean;
   annotations: ToolApprovalAnnotations;
+  /**
+   * Every decision this stop covers. An `mcp_tool` stop carries one item
+   * describing the same call as the flat fields above; readers that branch
+   * on `kind` first may use either.
+   */
+  approvals?: ApprovalItem[];
   input: Value;
+  kind?: ToolApprovalKind;
   mcp_server_id: string;
+  pending_tool_calls?: PendingToolCall[];
   preset: string;
   requested_at: string;
   tool_call_id: string;
@@ -1089,11 +1170,21 @@ export type ContentPartToolApprovalRequest = {
  * Records a user rejection in the assistant message lifecycle.
  */
 export type ContentPartToolRejection = {
+  approval_id?: null | undefined;
+  /**
+   * @format uuid
+   */
+  child_chat_id?: null | undefined;
   /**
    * Both fields default, so rejections stored before standing denials
    * existed still parse.
    */
   never_allow?: boolean;
+  /**
+   * Why the call was rejected when the user did not decide it directly.
+   * The only value is `withdrawn`.
+   */
+  reason?: null | undefined;
   rejected_at: string;
   tool_call_id: string;
   /**
@@ -1103,10 +1194,16 @@ export type ContentPartToolRejection = {
 };
 
 /**
- * Rehydrates a generation that was deliberately stopped for MCP tool approval.
+ * Rehydrates a generation that was deliberately stopped for tool approval.
+ *
+ * A stop can cover several decisions, so the body names each one. The legacy
+ * shape `{ message_id, decision }` carries no `approval_id` and is therefore
+ * accepted only while exactly one approval is open — otherwise it would have
+ * to guess which call the user answered.
  */
 export type ContinueStreamRequest = {
-  decision: ToolApprovalDecision;
+  decision?: null | ToolApprovalDecision;
+  decisions?: ApprovalDecisionItem[];
   /**
    * The assistant message/generation that contains the pending approval request.
    *
@@ -2287,6 +2384,16 @@ export type OrganizationUsersResponse = {
 };
 
 /**
+ * A call of the parked batch that was never popped. The parked part is the
+ * only record of these, so the continuation has to replay them from here.
+ */
+export type PendingToolCall = {
+  call_id: string;
+  fn_arguments: Value;
+  fn_name: string;
+};
+
+/**
  * Request to optimize a prompt using the configured prompt optimizer.
  */
 export type PromptOptimizerRequest = {
@@ -3048,7 +3155,14 @@ export type ToolApprovalDecision =
   | "approve"
   | "reject"
   | "approve_always"
-  | "reject_always";
+  | "reject_always"
+  | "withdraw";
+
+/**
+ * Which surface a durable approval stop belongs to. `McpTool` is the
+ * default so rows written before the other kinds existed keep parsing.
+ */
+export type ToolApprovalKind = "mcp_tool" | "delegated_task" | "task_plan";
 
 export type ToolCallStatus = "in_progress" | "success" | "error";
 

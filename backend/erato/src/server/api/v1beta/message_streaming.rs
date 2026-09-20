@@ -11,11 +11,12 @@ use crate::models::chat::{
     get_or_create_chat_by_previous_message_id,
 };
 use crate::models::message::{
-    ContentPart, ContentPartImage, ContentPartReasoning, ContentPartText, ContentPartToolApproval,
-    ContentPartToolApprovalRequest, ContentPartToolRejection, DelegationRunMode,
-    GenerationErrorType, GenerationInputMessages, GenerationMetadata, GenerationParameters,
-    GenerationRequestContext, MessageRole, MessageSchema, ToolCallStatus as MessageToolCallStatus,
-    ToolUse, get_generation_chat_provider_id_for_replaced_user_message,
+    ApprovalItem, ContentPart, ContentPartImage, ContentPartReasoning, ContentPartText,
+    ContentPartToolApproval, ContentPartToolApprovalRequest, ContentPartToolRejection,
+    DelegationRunMode, GenerationErrorType, GenerationInputMessages, GenerationMetadata,
+    GenerationParameters, GenerationRequestContext, MessageRole, MessageSchema, ToolApprovalKind,
+    ToolCallStatus as MessageToolCallStatus, ToolUse,
+    get_generation_chat_provider_id_for_replaced_user_message,
     get_generation_chat_provider_id_from_message, get_message_by_id, submit_message,
     update_message_content, update_message_generation_metadata,
 };
@@ -134,7 +135,9 @@ fn now_timestamp() -> String {
 #[derive(Debug, PartialEq)]
 enum McpToolCallGate {
     Run,
-    Ask(ContentPartToolApprovalRequest),
+    /// Boxed: the request carries the whole decision list, and every call that
+    /// simply runs would otherwise pay for it.
+    Ask(Box<ContentPartToolApprovalRequest>),
     Refuse(String),
 }
 
@@ -167,12 +170,12 @@ fn gate_mcp_tool_call(
                     display_name.text
                 ));
             }
-            McpToolCallGate::Ask(ContentPartToolApprovalRequest {
+            McpToolCallGate::Ask(Box::new(ContentPartToolApprovalRequest {
                 tool_call_id: tool_call.call_id.clone(),
-                tool_name: display_name.text,
+                tool_name: display_name.text.clone(),
                 mcp_server_id: server_id.to_string(),
                 input: tool_call.fn_arguments.clone(),
-                annotations: verdict.annotations,
+                annotations: verdict.annotations.clone(),
                 preset: match config.preset {
                     McpToolApprovalPreset::Permissive => "permissive",
                     McpToolApprovalPreset::Restrictive => "restrictive",
@@ -180,7 +183,21 @@ fn gate_mcp_tool_call(
                 .to_string(),
                 allow_always: config.allow_always,
                 requested_at: now_timestamp(),
-            })
+                kind: ToolApprovalKind::McpTool,
+                // The call id doubles as the approval id: one gated MCP call
+                // is one decision, and the continuation already keys the
+                // resolved slot by it.
+                approvals: vec![ApprovalItem {
+                    approval_id: tool_call.call_id.clone(),
+                    tool_call_id: tool_call.call_id.clone(),
+                    tool_name: display_name.text,
+                    input: tool_call.fn_arguments.clone(),
+                    child: None,
+                }],
+                // The rest of the parked batch is recorded by the caller that
+                // owns the queue, not by this per-call gate.
+                pending_tool_calls: Vec::new(),
+            }))
         }
     }
 }
@@ -1701,22 +1718,54 @@ pub struct ResumeStreamRequest {
 ///
 /// `RejectAlways` needs no policy flag the way `ApproveAlways` needs
 /// `allow_always`: a denial is more restrictive than anything the policy does.
-#[derive(Debug, Clone, Copy, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolApprovalDecision {
     Approve,
     Reject,
     ApproveAlways,
     RejectAlways,
+    /// Take the question back: every open approval is rejected with
+    /// `reason: withdrawn` and the turn continues with those denials. A
+    /// decision value rather than an endpoint, so it travels the same
+    /// validation and lease path as a real answer.
+    Withdraw,
 }
 
-/// Rehydrates a generation that was deliberately stopped for MCP tool approval.
+impl ToolApprovalDecision {
+    /// Whether the decision lets the gated call run.
+    fn is_approval(self) -> bool {
+        matches!(
+            self,
+            ToolApprovalDecision::Approve | ToolApprovalDecision::ApproveAlways
+        )
+    }
+}
+
+/// One decision of a continuation, naming the approval it answers.
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct ApprovalDecisionItem {
+    #[schema(example = "call_abc123")]
+    pub approval_id: String,
+    pub decision: ToolApprovalDecision,
+}
+
+/// Rehydrates a generation that was deliberately stopped for tool approval.
+///
+/// A stop can cover several decisions, so the body names each one. The legacy
+/// shape `{ message_id, decision }` carries no `approval_id` and is therefore
+/// accepted only while exactly one approval is open — otherwise it would have
+/// to guess which call the user answered.
 #[derive(Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct ContinueStreamRequest {
     /// The assistant message/generation that contains the pending approval request.
     message_id: Uuid,
-    decision: ToolApprovalDecision,
+    #[serde(default)]
+    decisions: Vec<ApprovalDecisionItem>,
+    #[serde(default)]
+    decision: Option<ToolApprovalDecision>,
 }
 
 #[derive(serde::Deserialize, ToSchema)]
@@ -1780,6 +1829,29 @@ pub struct NothingToReactError {
     pub reason: String,
 }
 
+/// Body of the `400` answers when the submitted decisions do not match the
+/// approvals a parked turn has open.
+///
+/// Two lists rather than one message, because the client's recovery differs:
+/// `missing` means it has to ask the user the remaining questions, `unknown`
+/// means the card it rendered is stale and the row needs refetching.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct ApprovalDecisionsError {
+    /// Always `decisions_mismatch`.
+    pub code: String,
+    /// Open approvals that no submitted decision covers.
+    pub missing: Vec<String>,
+    /// Submitted approval ids this turn does not have open.
+    pub unknown: Vec<String>,
+}
+
+pub(crate) const DECISIONS_MISMATCH_CODE: &str = "decisions_mismatch";
+
+/// `ContentPartToolRejection.reason` for a call the user took back rather than
+/// answered. The only value the field has.
+pub(crate) const REJECTION_REASON_WITHDRAWN: &str = "withdrawn";
+
 /// The row a client named is not a delivered task result at all.
 pub(crate) const REACT_REASON_NOT_A_TASK_RESULT: &str = "not_a_task_result";
 /// It is one, but its delivery never reached `delivered` — or reached it under
@@ -1802,6 +1874,8 @@ pub enum StreamRouteError {
     GenerationRunning(Box<GenerationRunningError>),
     /// `/react` only: the named row cannot be reacted to, and never will be.
     NothingToReact(Box<NothingToReactError>),
+    /// `continuestream` only: the decisions do not cover the open approvals.
+    DecisionsMismatch(Box<ApprovalDecisionsError>),
 }
 
 impl From<(axum::http::StatusCode, String)> for StreamRouteError {
@@ -1822,6 +1896,11 @@ impl axum::response::IntoResponse for StreamRouteError {
             // on `code`, which is why neither is plain text.
             StreamRouteError::NothingToReact(body) => {
                 (axum::http::StatusCode::CONFLICT, Json(*body)).into_response()
+            }
+            // A bad request rather than a conflict: the row is answerable, the
+            // body just does not answer it.
+            StreamRouteError::DecisionsMismatch(body) => {
+                (axum::http::StatusCode::BAD_REQUEST, Json(*body)).into_response()
             }
         }
     }
@@ -5385,7 +5464,7 @@ async fn stream_generate_chat_completion<
                     // parked while the turn is still running — which is enough
                     // for a continuation to start a second generation on it.
                     // It goes on after the join, still last.
-                    pending_approval_part = Some(approval_request);
+                    pending_approval_part = Some(*approval_request);
                     let generation_metadata = build_generation_metadata(
                         total_prompt_tokens,
                         total_completion_tokens,
@@ -8514,17 +8593,20 @@ fn merge_action_facet_into_mcp_allowlist(
 #[cfg(test)]
 mod tests {
     use super::{
-        MAX_DISPLAY_NAME_CHARS, McpToolCallGate, ReservedSelection, apply_assistant_server_filter,
+        ApprovalDecisionItem, ContinueStreamRequest, MAX_DISPLAY_NAME_CHARS, McpToolCallGate,
+        ReservedSelection, StreamRouteError, ToolApprovalDecision, apply_assistant_server_filter,
         derive_requested_server_ids_from_allowlist, effective_client_tool_allowlist,
         expand_tool_patterns_with_discovered_tools, filter_mcp_tools_by_disabled_patterns,
         filter_mcp_tools_by_disabled_servers, filter_mcp_tools_by_write_access, gate_mcp_tool_call,
-        merge_action_facet_into_mcp_allowlist, reserved_tool_selected,
+        merge_action_facet_into_mcp_allowlist, reserved_tool_selected, resolve_submitted_decisions,
     };
     use crate::config::{McpToolApprovalConfig, McpToolApprovalPreset};
+    use crate::models::message::{ApprovalItem, ToolApprovalKind};
     use crate::models::user_tool_approval_setting::UserToolDecision;
     use crate::services::mcp_tool_approval::evaluate_mcp_tool_approval;
     use genai::chat::ToolCall;
     use rmcp::model::{Tool, ToolAnnotations};
+    use sea_orm::prelude::Uuid;
     use serde_json::{Map, json};
     use std::collections::HashSet;
 
@@ -8863,6 +8945,197 @@ mod tests {
             gate_mcp_tool_call(&restrictive, "server", &tool, &call(&long_name), None),
             McpToolCallGate::Refuse(_)
         ));
+    }
+
+    fn open_approval(approval_id: &str) -> ApprovalItem {
+        ApprovalItem {
+            approval_id: approval_id.to_string(),
+            tool_call_id: approval_id.to_string(),
+            tool_name: "publish".to_string(),
+            input: json!({}),
+            child: None,
+        }
+    }
+
+    fn legacy_request(decision: ToolApprovalDecision) -> ContinueStreamRequest {
+        ContinueStreamRequest {
+            message_id: Uuid::nil(),
+            decisions: Vec::new(),
+            decision: Some(decision),
+        }
+    }
+
+    fn batch_request(decisions: Vec<(&str, ToolApprovalDecision)>) -> ContinueStreamRequest {
+        ContinueStreamRequest {
+            message_id: Uuid::nil(),
+            decisions: decisions
+                .into_iter()
+                .map(|(approval_id, decision)| ApprovalDecisionItem {
+                    approval_id: approval_id.to_string(),
+                    decision,
+                })
+                .collect(),
+            decision: None,
+        }
+    }
+
+    #[test]
+    fn gate_records_the_asked_call_as_one_mcp_tool_approval() {
+        let restrictive = McpToolApprovalConfig {
+            enabled: true,
+            preset: McpToolApprovalPreset::Restrictive,
+            allow_always: false,
+        };
+        let call = ToolCall {
+            call_id: "call-1".to_string(),
+            fn_name: "publish".to_string(),
+            fn_arguments: json!({"topic": "news"}),
+            thought_signatures: None,
+        };
+        let tool = Tool::new("publish", "publish", Map::new());
+
+        match gate_mcp_tool_call(&restrictive, "server", &tool, &call, None) {
+            McpToolCallGate::Ask(request) => {
+                assert_eq!(request.kind, ToolApprovalKind::McpTool);
+                assert_eq!(request.approvals.len(), 1);
+                let item = &request.approvals[0];
+                assert_eq!(item.approval_id, "call-1");
+                assert_eq!(item.tool_call_id, request.tool_call_id);
+                assert_eq!(item.tool_name, request.tool_name);
+                assert_eq!(item.input, request.input);
+                assert!(item.child.is_none());
+                // The queue behind the gated call belongs to the caller.
+                assert!(request.pending_tool_calls.is_empty());
+            }
+            other => panic!("expected an approval request, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn continue_request_accepts_legacy_form_only_when_one_open() {
+        let one = [open_approval("call-1")];
+        let resolved =
+            resolve_submitted_decisions(&legacy_request(ToolApprovalDecision::Approve), &one)
+                .expect("one open approval takes the legacy body");
+        assert_eq!(
+            resolved,
+            vec![("call-1".to_string(), ToolApprovalDecision::Approve)]
+        );
+
+        let two = [open_approval("call-1"), open_approval("call-2")];
+        let error =
+            resolve_submitted_decisions(&legacy_request(ToolApprovalDecision::Approve), &two)
+                .expect_err("two open approvals cannot be answered without naming them");
+        match error {
+            StreamRouteError::PlainText(status, message) => {
+                assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+                assert!(message.contains("approval_id"), "{message}");
+            }
+            other => panic!("expected a plain 400, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn continue_request_must_cover_every_open_approval_and_no_others() {
+        let open = [open_approval("call-1"), open_approval("call-2")];
+
+        let resolved = resolve_submitted_decisions(
+            &batch_request(vec![
+                ("call-2", ToolApprovalDecision::Reject),
+                ("call-1", ToolApprovalDecision::Approve),
+            ]),
+            &open,
+        )
+        .expect("a body covering both is accepted");
+        // Row order, not body order: the continuation settles slots in the
+        // order the calls were made.
+        assert_eq!(
+            resolved,
+            vec![
+                ("call-1".to_string(), ToolApprovalDecision::Approve),
+                ("call-2".to_string(), ToolApprovalDecision::Reject),
+            ]
+        );
+
+        let error = resolve_submitted_decisions(
+            &batch_request(vec![("call-1", ToolApprovalDecision::Approve)]),
+            &open,
+        )
+        .expect_err("a half-answered turn is refused");
+        match error {
+            StreamRouteError::DecisionsMismatch(body) => {
+                assert_eq!(body.code, super::DECISIONS_MISMATCH_CODE);
+                assert_eq!(body.missing, vec!["call-2".to_string()]);
+                assert!(body.unknown.is_empty());
+            }
+            other => panic!("expected a decisions mismatch, got {other:?}"),
+        }
+
+        let error = resolve_submitted_decisions(
+            &batch_request(vec![
+                ("call-1", ToolApprovalDecision::Approve),
+                ("call-2", ToolApprovalDecision::Approve),
+                ("call-9", ToolApprovalDecision::Approve),
+            ]),
+            &open,
+        )
+        .expect_err("an approval this turn never opened is refused");
+        match error {
+            StreamRouteError::DecisionsMismatch(body) => {
+                assert!(body.missing.is_empty());
+                assert_eq!(body.unknown, vec!["call-9".to_string()]);
+            }
+            other => panic!("expected a decisions mismatch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn continue_request_refuses_an_ambiguous_body() {
+        let open = [open_approval("call-1")];
+
+        let mut both = batch_request(vec![("call-1", ToolApprovalDecision::Approve)]);
+        both.decision = Some(ToolApprovalDecision::Reject);
+        assert!(matches!(
+            resolve_submitted_decisions(&both, &open),
+            Err(StreamRouteError::PlainText(
+                axum::http::StatusCode::BAD_REQUEST,
+                _
+            ))
+        ));
+
+        let empty = ContinueStreamRequest {
+            message_id: Uuid::nil(),
+            decisions: Vec::new(),
+            decision: None,
+        };
+        assert!(matches!(
+            resolve_submitted_decisions(&empty, &open),
+            Err(StreamRouteError::PlainText(
+                axum::http::StatusCode::BAD_REQUEST,
+                _
+            ))
+        ));
+
+        let twice = batch_request(vec![
+            ("call-1", ToolApprovalDecision::Approve),
+            ("call-1", ToolApprovalDecision::Reject),
+        ]);
+        match resolve_submitted_decisions(&twice, &open) {
+            Err(StreamRouteError::PlainText(status, message)) => {
+                assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+                assert!(message.contains("decided twice"), "{message}");
+            }
+            other => panic!("expected a plain 400, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn withdraw_is_not_an_approval() {
+        assert!(!ToolApprovalDecision::Withdraw.is_approval());
+        assert!(ToolApprovalDecision::Approve.is_approval());
+        assert!(ToolApprovalDecision::ApproveAlways.is_approval());
+        assert!(!ToolApprovalDecision::Reject.is_approval());
+        assert!(!ToolApprovalDecision::RejectAlways.is_approval());
     }
 
     #[test]
@@ -12878,13 +13151,103 @@ pub async fn react_to_task_result_sse(
     ))
 }
 
+/// Pair every approval a parked turn has open with the decision submitted for
+/// it, refusing any body that does not answer the turn exactly.
+///
+/// Returned in the row's order, not the body's: the continuation settles the
+/// resolved slots, and those follow the order the model made the calls in.
+fn resolve_submitted_decisions(
+    request: &ContinueStreamRequest,
+    open: &[ApprovalItem],
+) -> Result<Vec<(String, ToolApprovalDecision)>, StreamRouteError> {
+    if !request.decisions.is_empty() && request.decision.is_some() {
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            "Submit either `decisions` or the legacy `decision`, not both".to_string(),
+        )
+            .into());
+    }
+
+    if let Some(decision) = request.decision {
+        let [only_open] = open else {
+            return Err((
+                axum::http::StatusCode::BAD_REQUEST,
+                format!(
+                    "This generation has {} approvals open; submit `decisions` naming an `approval_id` for each",
+                    open.len()
+                ),
+            )
+                .into());
+        };
+        return Ok(vec![(only_open.approval_id.clone(), decision)]);
+    }
+
+    if request.decisions.is_empty() {
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            "No approval decision submitted".to_string(),
+        )
+            .into());
+    }
+
+    let mut decided: HashMap<&str, ToolApprovalDecision> = HashMap::new();
+    let mut unknown: Vec<String> = Vec::new();
+    for item in &request.decisions {
+        let is_open = open
+            .iter()
+            .any(|approval| approval.approval_id == item.approval_id);
+        if !is_open {
+            if !unknown.contains(&item.approval_id) {
+                unknown.push(item.approval_id.clone());
+            }
+            continue;
+        }
+        // Two answers for one question is a client bug, and picking either one
+        // would hide it behind a tool call the user may not have wanted.
+        if decided
+            .insert(item.approval_id.as_str(), item.decision)
+            .is_some()
+        {
+            return Err((
+                axum::http::StatusCode::BAD_REQUEST,
+                format!("Approval '{}' was decided twice", item.approval_id),
+            )
+                .into());
+        }
+    }
+
+    let missing: Vec<String> = open
+        .iter()
+        .filter(|approval| !decided.contains_key(approval.approval_id.as_str()))
+        .map(|approval| approval.approval_id.clone())
+        .collect();
+    if !missing.is_empty() || !unknown.is_empty() {
+        return Err(StreamRouteError::DecisionsMismatch(Box::new(
+            ApprovalDecisionsError {
+                code: DECISIONS_MISMATCH_CODE.to_string(),
+                missing,
+                unknown,
+            },
+        )));
+    }
+
+    Ok(open
+        .iter()
+        .map(|approval| {
+            (
+                approval.approval_id.clone(),
+                decided[approval.approval_id.as_str()],
+            )
+        })
+        .collect())
+}
 #[utoipa::path(
     post,
     path = "/me/messages/continuestream",
     request_body = ContinueStreamRequest,
     responses(
         (status = OK, content_type = "text/event-stream", body = MessageSubmitStreamingResponseMessage),
-        (status = BAD_REQUEST, description = "The message has no pending approval or the decision is invalid"),
+        (status = BAD_REQUEST, body = ApprovalDecisionsError, description = "The message has no pending approval, the decision is invalid, or the submitted decisions do not cover the open approvals (JSON, code = decisions_mismatch)"),
         (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
         (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), or the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running)"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
@@ -12913,17 +13276,20 @@ pub async fn continue_message_sse(
     .map_err(|error| (axum::http::StatusCode::NOT_FOUND, error.to_string()))?;
     let parsed = MessageSchema::validate(&message.raw_message)
         .map_err(|error| (axum::http::StatusCode::BAD_REQUEST, error.to_string()))?;
-    if !matches!(
-        parsed.content.last(),
-        Some(ContentPart::ToolApprovalRequest(_))
-    ) {
+    let Some(ContentPart::ToolApprovalRequest(approval_request)) = parsed.content.last() else {
         return Err((
             axum::http::StatusCode::BAD_REQUEST,
             "Message generation is not awaiting tool approval".to_string(),
         )
             .into());
-    }
-    if matches!(request.decision, ToolApprovalDecision::ApproveAlways)
+    };
+    // Validated here as well as in the worker: a body that does not answer the
+    // turn should be an HTTP status, not a stream that opens and dies.
+    let submitted_decisions =
+        resolve_submitted_decisions(&request, &approval_request.approval_items())?;
+    if submitted_decisions
+        .iter()
+        .any(|(_, decision)| matches!(decision, ToolApprovalDecision::ApproveAlways))
         && !mcp.config.mcp_servers_global.approval.allow_always
     {
         return Err((
@@ -13054,10 +13420,33 @@ async fn run_continue_message_task(
 
     let user_id = Uuid::parse_str(&me_user.id)
         .map_err(|_| eyre!("MCP approvals require a UUID-backed user"))?;
-    let is_approved = !matches!(
-        request.decision,
-        ToolApprovalDecision::Reject | ToolApprovalDecision::RejectAlways
-    );
+    // Resolved again against the row as re-read here, so a body that raced
+    // another continuation is refused on current state rather than on the state
+    // the handler saw.
+    let submitted_decisions =
+        resolve_submitted_decisions(&request, &approval_request.approval_items()).map_err(
+            |error| match error {
+                StreamRouteError::PlainText(_, message) => eyre!(message),
+                StreamRouteError::DecisionsMismatch(body) => eyre!(
+                    "The submitted decisions no longer match the open approvals (missing: {:?}, unknown: {:?})",
+                    body.missing,
+                    body.unknown
+                ),
+                _ => eyre!("The approval decision could not be applied"),
+            },
+        )?;
+    // The MCP gate parks one call at a time, so every stop that exists today
+    // carries exactly one decision. Executing a multi-decision stop lands with
+    // the branch that can produce one.
+    let [(decided_approval_id, decision)] = submitted_decisions.as_slice() else {
+        return Err(eyre!(
+            "A continuation covering {} approvals is not executable yet",
+            submitted_decisions.len()
+        ));
+    };
+    let decision = *decision;
+    let decided_approval_id = decided_approval_id.clone();
+    let is_approved = decision.is_approval();
 
     let generation_parameters: GenerationParameters = serde_json::from_value(
         message
@@ -13130,26 +13519,25 @@ async fn run_continue_message_task(
         .cloned();
     // A grant is only written for a call that actually runs: "always allow"
     // on a stale card must not overwrite a denial stored in the meantime.
-    let always_allow_setting = if matches!(request.decision, ToolApprovalDecision::ApproveAlways)
-        && approved_tool.is_some()
-    {
-        Some(
-            crate::models::user_tool_approval_setting::upsert_active(
-                &app_state.db,
-                user_id,
-                &approval_request.mcp_server_id,
-                &approval_request.tool_name,
-                crate::models::user_tool_approval_setting::UserToolDecision::AlwaysAllow,
+    let always_allow_setting =
+        if matches!(decision, ToolApprovalDecision::ApproveAlways) && approved_tool.is_some() {
+            Some(
+                crate::models::user_tool_approval_setting::upsert_active(
+                    &app_state.db,
+                    user_id,
+                    &approval_request.mcp_server_id,
+                    &approval_request.tool_name,
+                    crate::models::user_tool_approval_setting::UserToolDecision::AlwaysAllow,
+                )
+                .await?,
             )
-            .await?,
-        )
-    } else {
-        None
-    };
+        } else {
+            None
+        };
     // Unconditional, unlike the grant above: a denial is worth storing even
     // for a call that can no longer run, and nothing it could overwrite is
     // more restrictive.
-    let never_allow_setting = if matches!(request.decision, ToolApprovalDecision::RejectAlways) {
+    let never_allow_setting = if matches!(decision, ToolApprovalDecision::RejectAlways) {
         Some(
             crate::models::user_tool_approval_setting::upsert_active(
                 &app_state.db,
@@ -13174,6 +13562,8 @@ async fn run_continue_message_task(
                     .as_ref()
                     .map(|setting| setting.id),
                 approved_at: now_timestamp(),
+                approval_id: Some(decided_approval_id.clone()),
+                child_chat_id: None,
             }));
     } else {
         parsed
@@ -13185,6 +13575,10 @@ async fn run_continue_message_task(
                     .as_ref()
                     .map(|setting| setting.id),
                 rejected_at: now_timestamp(),
+                approval_id: Some(decided_approval_id.clone()),
+                child_chat_id: None,
+                reason: matches!(decision, ToolApprovalDecision::Withdraw)
+                    .then(|| REJECTION_REASON_WITHDRAWN.to_string()),
             }));
     }
 

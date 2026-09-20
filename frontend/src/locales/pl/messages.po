@@ -4738,6 +4738,21 @@ msgid "sidecar.indexing.upgrade"
 msgstr "Zaktualizuj Desktop Sidecar, aby skonfigurować indeksowanie."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "toolApproval.genericDescription"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "toolApproval.genericDescriptionMany"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "toolApproval.genericTitle"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallInput.tsx
 msgid "toolcall.input.title"
 msgstr "Parametry wejściowe"

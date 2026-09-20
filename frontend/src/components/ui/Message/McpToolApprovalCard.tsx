@@ -12,6 +12,7 @@ import {
   listMcpServerToolsQuery,
   listUserToolApprovalSettingsQuery,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { buildContinueStreamBody } from "@/lib/toolApprovalDecisions";
 import { ChatContext } from "@/providers/ChatProvider";
 
 import { ResolvedIcon } from "../icons";
@@ -19,20 +20,29 @@ import { ActionConfirmationCard } from "./ActionConfirmationCard";
 
 import type { ToolApprovalStatus } from "../Trace/Trace";
 import type {
+  ApprovalItem,
+  ChildApprovalRef,
   ContentPartToolApprovalRequest,
   ToolApprovalDecision,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
+/** One decision of a stop, with the same `input` correction as the part. */
+type ApprovalItemPart = Omit<ApprovalItem, "input" | "child"> & {
+  input: unknown;
+  child?: (Omit<ChildApprovalRef, "input"> & { input: unknown }) | null;
+};
+
 /**
  * The generated schema collapses `serde_json::Value` to `void`, which would
  * make `input` unusable; track every other field from the generated type and
- * override just that one.
+ * override just those.
  */
 export type McpToolApprovalRequestPart = Omit<
   ContentPartToolApprovalRequest,
-  "input"
+  "input" | "approvals"
 > & {
   input: unknown;
+  approvals?: ApprovalItemPart[];
 };
 
 /**
@@ -58,6 +68,14 @@ export const McpToolApprovalCard = ({
   request: McpToolApprovalRequestPart;
   resolution: ToolApprovalStatus | null;
 }) => {
+  // Read before anything else on the part: for every kind but `mcp_tool` the
+  // flat `tool_name`/`mcp_server_id` fields describe no MCP tool (the server
+  // writes an empty server id), so they must not reach the MCP layout.
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- API kind value
+  const kind = request.kind ?? "mcp_tool";
+  const approvalItems = request.approvals ?? [];
+  const approvalIds = approvalItems.map((item) => item.approval_id);
+
   // This component is also rendered in isolated stories/tests, where the chat
   // provider is deliberately absent. The in-app path always has it.
   const chatContext = useContext(ChatContext);
@@ -129,6 +147,7 @@ export const McpToolApprovalCard = ({
         toolName: request.tool_name,
         toolInput: request.input,
         mcpServerId: request.mcp_server_id,
+        approvalIds,
       });
       // Deliberately no local resolution: the seeded decision part is what
       // hides this card, and it is rolled back if the server refuses the
@@ -145,7 +164,9 @@ export const McpToolApprovalCard = ({
         // eslint-disable-next-line lingui/no-unlocalized-strings -- HTTP auth header
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ message_id: messageId, decision }),
+      body: JSON.stringify(
+        buildContinueStreamBody({ messageId, decision, approvalIds }),
+      ),
     });
     if (!response.ok) {
       throw new Error(await response.text());
@@ -206,6 +227,46 @@ export const McpToolApprovalCard = ({
   // thinking trace. Keep this card solely for the pending decision UI.
   if (!isPending) {
     return null;
+  }
+
+  // The real cards for these kinds — child identity, per-task rows, withdraw —
+  // land with the frontend issue of this stack. Until then a parked turn of a
+  // new kind stays answerable instead of rendering as an MCP call it is not.
+  if (kind !== "mcp_tool") {
+    return (
+      <div
+        data-testid="tool-approval-generic"
+        data-approval-kind={kind}
+        className="my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3"
+      >
+        <ActionConfirmationCard
+          title={t({
+            id: "toolApproval.genericTitle",
+            message: "A decision is needed in this chat",
+          })}
+          description={
+            approvalItems.length > 1
+              ? t({
+                  id: "toolApproval.genericDescriptionMany",
+                  message:
+                    "This turn is waiting on several decisions. Allowing or denying applies to all of them.",
+                })
+              : t({
+                  id: "toolApproval.genericDescription",
+                  message: "This turn is waiting on your decision to continue.",
+                })
+          }
+          onAllowOnce={() => void decide("approve")}
+          onDeny={() => void decide("reject")}
+          status={isArchived ? "dismissed" : "pending"}
+          resolvedLabel={isArchived ? archivedNoticeText() : undefined}
+          isBusy={isBusy || (chatContext?.isPendingResponse ?? false)}
+          scrollIntoViewOnMount
+          data-testid="tool-approval-generic-card"
+        />
+        {error && <p className="mt-2 text-sm text-theme-error-fg">{error}</p>}
+      </div>
+    );
   }
 
   return (
