@@ -244,8 +244,15 @@ pub struct ResultDelivery {
     pub status: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
-    /// Which process holds the claim, for diagnosis only — never for
-    /// correctness, which the compare-and-set owns.
+    /// The fencing token on the `claimed -> delivered` compare-and-set.
+    ///
+    /// A fresh v4 per claim *attempt*, not a replica id: two attempts from one
+    /// process must not collide, which is exactly what a pod name cannot
+    /// distinguish. A claim the backstop sweep judged stale and requeued cannot
+    /// then finish under the later claimant's state, because the stalled
+    /// holder's own compare-and-set still names the token it was given and no
+    /// longer matches. `claimed_at` is left to mean only "when", so the sweep
+    /// can use it as a staleness clock without the two jobs interfering.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claimed_by: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -305,6 +312,26 @@ impl ResultDeliveryState {
         }
     }
 }
+
+/// Why a delivery ended where it did, when the reason is the delivery path's own
+/// rather than the run's.
+///
+/// Consts rather than literals at the write sites because these strings are a
+/// wire vocabulary the frontend renders and two independent writers produce
+/// them: the live delivery path and the backstop sweep. A literal in one of the
+/// two is how they drift.
+///
+/// `result_missing` is deliberately absent: it comes from the run's own
+/// vocabulary, `DelegationRunReason::ResultMissing`.
+/// `origin_branched` belongs to the redelivery path and stays there.
+pub(crate) const DELIVERY_REASON_ORIGIN_MISSING: &str = "origin_missing";
+pub(crate) const DELIVERY_REASON_OWNER_MISMATCH: &str = "owner_mismatch";
+pub(crate) const DELIVERY_REASON_ORIGIN_ARCHIVED: &str = "origin_archived";
+/// The child itself was archived while still owing its result. Terminal: an
+/// archived run is finished by construction, so nothing will ever deliver it,
+/// and leaving it `pending` would pin the origin's "runs in flight" indicator
+/// on forever.
+pub(crate) const DELIVERY_REASON_CHILD_ARCHIVED: &str = "child_archived";
 
 impl ChatProvenanceKind {
     /// The wire spelling of the kind, matching what the listing query reads
@@ -1844,7 +1871,14 @@ pub async fn count_running_background_delegated_runs(
 /// SQL predicate for a chat whose generation has not finished: running with a
 /// fresh heartbeat, or stopped on a tool approval the user can still answer.
 /// `param_index` binds the staleness window in seconds.
-fn generation_unfinished_condition(alias: &str, param_index: u8) -> String {
+///
+/// `pub(crate)` for the delivery backstop sweep, which evaluates exactly this
+/// test on the *origin* chat inside its claim compare-and-set: a sweep takes no
+/// generation lease of its own, so this predicate is how it asks whether the
+/// origin is free. It already treats `awaiting_approval` as busy and already
+/// `COALESCE`s the nullable heartbeat, so a second spelling would only be a
+/// second thing to keep in step.
+pub(crate) fn generation_unfinished_condition(alias: &str, param_index: u8) -> String {
     format!(
         r#"COALESCE(
             {alias}."generation_state" = 'awaiting_approval'

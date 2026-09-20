@@ -656,7 +656,15 @@ pub struct AppConfig {
     #[serde(default)]
     pub audio_conversational: AudioTranscriptionConfig,
 
-    // If true, enables the cleanup worker that periodically deletes old data.
+    // If true, enables the data-retention half of the cleanup worker's tick,
+    // which archives quiet delegated runs and deletes old archived chats.
+    //
+    // It no longer gates the tick as a whole: the delivery backstop, which
+    // recovers an `async` task result whose delivery was stranded by a crash,
+    // deletes nothing and therefore runs whether or not this is set. A
+    // deployment that never opted into deleting user data must still not lose
+    // a result.
+    //
     // Defaults to `false`.
     #[facet(erato_config::needs_scoped_replacement(enabled = true))]
     pub cleanup_enabled: bool,

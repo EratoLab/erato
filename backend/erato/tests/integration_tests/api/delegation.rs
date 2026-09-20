@@ -10235,3 +10235,743 @@ async fn the_regenerate_and_edit_tails_drain_pending_deliveries(pool: Pool<Postg
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// The backstop sweep (ERMAIN-781-A)
+// ---------------------------------------------------------------------------
+
+/// One pass of the backstop sweep, with the deployment's own bounds.
+async fn sweep_once(
+    app_state: &erato::state::AppState,
+) -> erato::services::task_delivery::SweepOutcome {
+    erato::services::task_delivery::sweep_task_result_deliveries(
+        &app_state.db,
+        app_state.config.delegation.result_max_chars,
+        app_state.config.generation_status.stale_after_secs,
+    )
+    .await
+}
+
+/// A child's stored delivery envelope, as the struct the delivery code writes.
+async fn delivery_struct(
+    app_state: &erato::state::AppState,
+    child_chat_id: Uuid,
+) -> erato::models::chat::ResultDelivery {
+    serde_json::from_value(delivery_of(app_state, child_chat_id).await).expect("delivery envelope")
+}
+
+/// Overwrite a child's stored delivery envelope.
+///
+/// Goes through `serde_json::to_value` on the real struct rather than patching
+/// the JSON by hand, so a staged `claimed_at` is byte-for-byte the string the
+/// delivery path would have written — which is what makes the sweep's
+/// `::timestamptz` cast a real round-trip assertion rather than a test fixture
+/// agreeing with itself.
+async fn write_delivery(
+    app_state: &erato::state::AppState,
+    child_chat_id: Uuid,
+    delivery: &erato::models::chat::ResultDelivery,
+) {
+    let chat = erato::db::entity::chats::Entity::find_by_id(child_chat_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("child chat");
+    let mut configuration = chat.assistant_configuration.clone().expect("configuration");
+    configuration["provenance"]["result_delivery"] =
+        serde_json::to_value(delivery).expect("serialize delivery");
+    let mut active: erato::db::entity::chats::ActiveModel = chat.into();
+    active.assistant_configuration = ActiveValue::Set(Some(configuration));
+    active.update(&app_state.db).await.expect("write delivery");
+}
+
+/// The rows of a chat that carry a delivered task result.
+async fn task_result_rows(
+    db: &sea_orm::DatabaseConnection,
+    chat_id: Uuid,
+) -> Vec<erato::db::entity::messages::Model> {
+    chat_messages_by_created_at(db, chat_id)
+        .await
+        .into_iter()
+        .filter(|row| {
+            row.input_parameters
+                .as_ref()
+                .is_some_and(|parameters| !parameters["task_result"].is_null())
+        })
+        .collect()
+}
+
+/// Hand-stage delegated `async` children owing a result to `origin_chat_id`.
+///
+/// Written straight into the column rather than dispatched. What the sweep has
+/// to recover is a row left behind by a run whose own process is gone, so a row
+/// is the honest fixture — and the batch tests below stage two hundred of them,
+/// which as real dispatches would measure dispatch throughput instead of the
+/// sweep's bound.
+async fn stage_owed_children(
+    db: &sea_orm::DatabaseConnection,
+    owner_user_id: &str,
+    origin_chat_id: Uuid,
+    count: usize,
+    staged_at: sea_orm::prelude::DateTimeWithTimeZone,
+) -> Vec<Uuid> {
+    let mut ids = Vec::with_capacity(count);
+    let mut rows = Vec::with_capacity(count);
+    for _ in 0..count {
+        let id = Uuid::new_v4();
+        ids.push(id);
+        rows.push(erato::db::entity::chats::ActiveModel {
+            id: ActiveValue::Set(id),
+            owner_user_id: ActiveValue::Set(owner_user_id.to_string()),
+            assistant_configuration: ActiveValue::Set(Some(json!({
+                "provenance": {
+                    "kind": "delegation",
+                    "origin_chat_id": origin_chat_id,
+                    "depth": 1,
+                    "run_mode": "async",
+                    "result_delivery": {
+                        "state": "pending",
+                        "delivery_id": Uuid::new_v4(),
+                        "status": "failed",
+                        "reason": "result_missing",
+                        "attempts": 0,
+                        "redeliveries": 0,
+                        "sequence": 0,
+                        "at": staged_at,
+                    },
+                },
+                "task": {"scheduling": "silent", "parent_tool_call_id": "call_staged"},
+            }))),
+            created_at: ActiveValue::Set(staged_at),
+            updated_at: ActiveValue::Set(staged_at),
+            ..Default::default()
+        });
+    }
+    erato::db::entity::chats::Entity::insert_many(rows)
+        .exec(db)
+        .await
+        .expect("stage owed children");
+    ids
+}
+
+/// A plain chat row to deliver into, without going through the API.
+async fn insert_plain_chat(
+    db: &sea_orm::DatabaseConnection,
+    owner_user_id: &str,
+    created_at: sea_orm::prelude::DateTimeWithTimeZone,
+) -> Uuid {
+    let id = Uuid::new_v4();
+    erato::db::entity::chats::Entity::insert(erato::db::entity::chats::ActiveModel {
+        id: ActiveValue::Set(id),
+        owner_user_id: ActiveValue::Set(owner_user_id.to_string()),
+        created_at: ActiveValue::Set(created_at),
+        updated_at: ActiveValue::Set(created_at),
+        ..Default::default()
+    })
+    .exec(db)
+    .await
+    .expect("insert chat");
+    id
+}
+
+/// T6. A claim whose holder died comes back and is delivered in the SAME pass.
+///
+/// Splitting the two phases across ticks would make the worst case for a
+/// stranded result ten minutes rather than five, for no gain. This is also the
+/// one place the `claimed_at` round-trip is asserted: the staleness clock reads
+/// a timestamp Rust serialized with `jsonb #>> … ::timestamptz`, and a
+/// disagreement about that format would silently make every claim look ancient
+/// (or none of them).
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn sweep_requeues_stale_claimed_to_pending(pool: Pool<Postgres>) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+
+    let stranded = seed_child_owing_a_result(
+        &app_state,
+        &me.id.to_string(),
+        origin_chat_id,
+        Some("STRANDED-ANSWER"),
+        erato_config::config::TaskScheduling::Silent,
+    )
+    .await;
+    let live = seed_child_owing_a_result(
+        &app_state,
+        &me.id.to_string(),
+        origin_chat_id,
+        Some("LIVE-ANSWER"),
+        erato_config::config::TaskScheduling::Silent,
+    )
+    .await;
+
+    // The replica that claimed `stranded` is gone; the one holding `live` is
+    // working on it right now. Only the clock tells them apart.
+    let stale_after = app_state.config.generation_status.stale_after_secs as i64;
+    for (child, age_secs, token) in [
+        (stranded, stale_after * 10, "dead-replica-claim"),
+        (live, 0, "live-replica-claim"),
+    ] {
+        let mut delivery = delivery_struct(&app_state, child).await;
+        delivery.state = erato::models::chat::ResultDeliveryState::Claimed;
+        delivery.claimed_by = Some(token.to_string());
+        delivery.claimed_at =
+            Some((sqlx::types::chrono::Utc::now() - chrono::Duration::seconds(age_secs)).into());
+        delivery.attempts = 1;
+        write_delivery(&app_state, child, &delivery).await;
+    }
+
+    let outcome = sweep_once(&app_state).await;
+    assert_eq!(
+        outcome.requeued, 1,
+        "exactly the stale claim comes back; a claim someone is still working \
+         must not be seized. If this is 0 or 2 the `::timestamptz` cast is not \
+         reading what Rust wrote."
+    );
+    assert_eq!(
+        outcome.delivered, 1,
+        "the requeued claim is delivered in the same pass, not the next tick"
+    );
+
+    let recovered = delivery_struct(&app_state, stranded).await;
+    assert_eq!(
+        recovered.state,
+        erato::models::chat::ResultDeliveryState::Delivered
+    );
+    assert_ne!(
+        recovered.claimed_by.as_deref(),
+        Some("dead-replica-claim"),
+        "the seizure must mint a new fencing token, or the dead holder's own \
+         compare-and-set would still match"
+    );
+
+    let untouched = delivery_struct(&app_state, live).await;
+    assert_eq!(
+        untouched.state,
+        erato::models::chat::ResultDeliveryState::Claimed
+    );
+    assert_eq!(untouched.claimed_by.as_deref(), Some("live-replica-claim"));
+}
+
+/// T7. The sweep delivers, and stops. No lease, no turn, no reaction.
+///
+/// It runs under nobody's request: there is no attached stream to announce to,
+/// no profile to speak as and no policy engine to authorize with. Reacting to
+/// the row is `/react` or the user's own next message.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn sweep_appends_task_result_and_marks_delivered_without_reaction(pool: Pool<Postgres>) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+
+    // `when_idle` on purpose: the live path would answer this one, and the
+    // sweep deliberately does not.
+    let child_id = seed_child_owing_a_result(
+        &app_state,
+        &me.id.to_string(),
+        origin_chat_id,
+        Some("SWEPT-ANSWER"),
+        erato_config::config::TaskScheduling::WhenIdle,
+    )
+    .await;
+
+    let outcome = sweep_once(&app_state).await;
+    assert_eq!(outcome.delivered, 1);
+
+    let rows = task_result_rows(&app_state.db, origin_chat_id).await;
+    assert_eq!(rows.len(), 1, "one delivery, one row");
+    let row = &rows[0];
+    assert_eq!(row.raw_message["role"], "user");
+    assert_eq!(row.raw_message["content"][0]["content_type"], "task_result");
+    assert_eq!(
+        row.raw_message["content"][0]["summary"], "SWEPT-ANSWER",
+        "the summary comes from the awaited path's own envelope builder"
+    );
+    assert_eq!(
+        row.input_parameters.as_ref().expect("marker")["task_result"]["scheduling"],
+        "when_idle"
+    );
+
+    let delivery = delivery_struct(&app_state, child_id).await;
+    assert_eq!(
+        delivery.state,
+        erato::models::chat::ResultDeliveryState::Delivered,
+        "`delivered`, never `reacted`: nothing reacted"
+    );
+    assert_eq!(delivery.message_id, Some(row.id));
+
+    let origin_chat = erato::db::entity::chats::Entity::find_by_id(origin_chat_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        origin_chat.generation_state.is_none(),
+        "the sweep takes no generation lease"
+    );
+    assert!(
+        chat_messages_by_created_at(&app_state.db, origin_chat_id)
+            .await
+            .iter()
+            .all(|row| row.raw_message["role"] != "assistant"),
+        "no turn ran, so no assistant row may exist"
+    );
+}
+
+/// T8. The crash-after-insert shape: the row is in the conversation but the
+/// delivery never got marked. A second pass must reuse the row, not write it
+/// again — in the user's own conversation.
+///
+/// Deliberately not "run the sweep twice": after the first pass the state is
+/// `delivered`, so the second pass never scans the row and the test would pass
+/// with the duplicate probe deleted.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn sweep_skips_a_delivery_whose_row_already_exists(pool: Pool<Postgres>) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+
+    let child_id = seed_child_owing_a_result(
+        &app_state,
+        &me.id.to_string(),
+        origin_chat_id,
+        Some("ONCE-ONLY-ANSWER"),
+        erato_config::config::TaskScheduling::Silent,
+    )
+    .await;
+
+    assert_eq!(sweep_once(&app_state).await.delivered, 1);
+    let first = task_result_rows(&app_state.db, origin_chat_id).await;
+    assert_eq!(first.len(), 1);
+
+    // The crash: the row committed, the state write did not. Forced back under
+    // the same delivery id, exactly as a stale-claim requeue leaves it.
+    let mut delivery = delivery_struct(&app_state, child_id).await;
+    delivery.state = erato::models::chat::ResultDeliveryState::Pending;
+    delivery.claimed_by = None;
+    delivery.claimed_at = None;
+    write_delivery(&app_state, child_id, &delivery).await;
+
+    assert_eq!(sweep_once(&app_state).await.delivered, 1);
+    let second = task_result_rows(&app_state.db, origin_chat_id).await;
+    assert_eq!(
+        second.len(),
+        1,
+        "the delivery id is the idempotency key; a re-sweep must find its own row"
+    );
+    assert_eq!(second[0].id, first[0].id);
+    assert_eq!(
+        delivery_struct(&app_state, child_id).await.state,
+        erato::models::chat::ResultDeliveryState::Delivered
+    );
+}
+
+/// T10. Fairness. A deferred child that wrote nothing keeps its old
+/// `updated_at`, sorts to the front of every future pass, and — because the
+/// scan is bounded — hides everything behind it forever.
+///
+/// An origin parked on an approval never ages out, so "it will clear eventually"
+/// is not an answer.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn sweep_rotates_deferred_children_behind_fresh_pending_ones(pool: Pool<Postgres>) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let me_id = me.id.to_string();
+    let limit = erato::services::task_delivery::SWEEP_BATCH_LIMIT as usize;
+
+    let old: sea_orm::prelude::DateTimeWithTimeZone =
+        (sqlx::types::chrono::Utc::now() - chrono::Duration::hours(2)).into();
+    let newer: sea_orm::prelude::DateTimeWithTimeZone =
+        (sqlx::types::chrono::Utc::now() - chrono::Duration::hours(1)).into();
+
+    // A whole batch owed to one origin that is parked on an approval it will
+    // never get an answer to.
+    let blocked_origin = insert_plain_chat(&app_state.db, &me_id, old).await;
+    set_generation_lease(&app_state.db, blocked_origin, Some("awaiting_approval"), 0).await;
+    stage_owed_children(&app_state.db, &me_id, blocked_origin, limit, old).await;
+
+    // And one behind them, owed to an origin that is free.
+    let free_origin = insert_plain_chat(&app_state.db, &me_id, newer).await;
+    let fresh = stage_owed_children(&app_state.db, &me_id, free_origin, 1, newer).await[0];
+
+    let first = sweep_once(&app_state).await;
+    assert_eq!(first.deferred, limit as u64);
+    assert_eq!(
+        first.delivered, 0,
+        "the batch limit must hide the fresh child on the first pass"
+    );
+
+    let second = sweep_once(&app_state).await;
+    assert_eq!(
+        second.delivered, 1,
+        "the deferred batch must rotate to the back, or the child behind it \
+         is starved on every pass forever"
+    );
+    assert_eq!(
+        delivery_struct(&app_state, fresh).await.state,
+        erato::models::chat::ResultDeliveryState::Delivered
+    );
+}
+
+/// T11. The free-lease subquery. A result must never land under a running turn
+/// or on top of an approval card the user is looking at.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn sweep_leaves_pending_when_origin_lease_is_fresh_or_awaiting_approval(
+    pool: Pool<Postgres>,
+) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let me_id = me.id.to_string();
+    let now: sea_orm::prelude::DateTimeWithTimeZone = sqlx::types::chrono::Utc::now().into();
+
+    let mut children = Vec::new();
+    for state in ["running", "awaiting_approval"] {
+        let origin = insert_plain_chat(&app_state.db, &me_id, now).await;
+        set_generation_lease(&app_state.db, origin, Some(state), 0).await;
+        let child = stage_owed_children(&app_state.db, &me_id, origin, 1, now).await[0];
+        children.push((origin, child));
+    }
+
+    let outcome = sweep_once(&app_state).await;
+    assert_eq!(outcome.deferred, 2);
+    assert_eq!(outcome.delivered, 0);
+
+    for (origin, child) in &children {
+        let delivery = delivery_struct(&app_state, *child).await;
+        assert_eq!(
+            delivery.state,
+            erato::models::chat::ResultDeliveryState::Pending,
+            "a deferred delivery goes back in the queue, it is not lost"
+        );
+        assert_eq!(
+            delivery.attempts, 1,
+            "the attempt is counted, so a delivery that can never land is visible"
+        );
+        assert!(
+            task_result_rows(&app_state.db, *origin).await.is_empty(),
+            "nothing may be written into a chat that is busy"
+        );
+    }
+
+    // Once the origins are free the same deliveries land.
+    for (origin, _) in &children {
+        set_generation_lease(&app_state.db, *origin, None, 0).await;
+    }
+    assert_eq!(sweep_once(&app_state).await.delivered, 2);
+}
+
+/// T12. Archiving is the user saying they are done with that conversation.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn sweep_supersedes_archived_origin(pool: Pool<Postgres>) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let me_id = me.id.to_string();
+    let now: sea_orm::prelude::DateTimeWithTimeZone = sqlx::types::chrono::Utc::now().into();
+
+    let origin = insert_plain_chat(&app_state.db, &me_id, now).await;
+    erato::db::entity::chats::ActiveModel {
+        id: ActiveValue::Unchanged(origin),
+        archived_at: ActiveValue::Set(Some(now)),
+        ..Default::default()
+    }
+    .update(&app_state.db)
+    .await
+    .expect("archive origin");
+    let child = stage_owed_children(&app_state.db, &me_id, origin, 1, now).await[0];
+
+    let outcome = sweep_once(&app_state).await;
+    assert_eq!(outcome.superseded, 1);
+
+    let delivery = delivery_struct(&app_state, child).await;
+    assert_eq!(
+        delivery.state,
+        erato::models::chat::ResultDeliveryState::Superseded
+    );
+    assert_eq!(delivery.reason.as_deref(), Some("origin_archived"));
+    assert!(
+        task_result_rows(&app_state.db, origin).await.is_empty(),
+        "nothing may be appended to an archived chat"
+    );
+}
+
+/// T13. An archived CHILD is terminal too, and this is the only place that case
+/// is resolved.
+///
+/// The archive cascade skips runs whose generation has not finished, so an
+/// archived child is a finished one — but its delivery can still read `pending`,
+/// and the "does this origin still have runs in flight" query deliberately does
+/// not exclude archived children. Left `pending` it would pin that indicator on
+/// forever.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn sweep_supersedes_an_archived_child(pool: Pool<Postgres>) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let me_id = me.id.to_string();
+    let now: sea_orm::prelude::DateTimeWithTimeZone = sqlx::types::chrono::Utc::now().into();
+
+    let origin = insert_plain_chat(&app_state.db, &me_id, now).await;
+    let child = stage_owed_children(&app_state.db, &me_id, origin, 1, now).await[0];
+    erato::db::entity::chats::ActiveModel {
+        id: ActiveValue::Unchanged(child),
+        archived_at: ActiveValue::Set(Some(now)),
+        ..Default::default()
+    }
+    .update(&app_state.db)
+    .await
+    .expect("archive child");
+
+    let outcome = sweep_once(&app_state).await;
+    assert_eq!(outcome.superseded, 1);
+
+    let delivery = delivery_struct(&app_state, child).await;
+    assert_eq!(
+        delivery.state,
+        erato::models::chat::ResultDeliveryState::Superseded
+    );
+    assert_eq!(delivery.reason.as_deref(), Some("child_archived"));
+    assert!(
+        task_result_rows(&app_state.db, origin).await.is_empty(),
+        "an archived run's result is not delivered"
+    );
+}
+
+/// T14. The security test of this PR. The sweep holds no `PolicyEngine`, so the
+/// `submit_message` rule — which is ownership-only — is evaluated by hand, and
+/// this is the only coverage of that rule in the whole delivery stack.
+///
+/// Writing into a chat whose owner differs from the run's is the ERMAIN-485
+/// class. The refusal appending nothing is the point.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn sweep_owner_mismatch_marks_failed(pool: Pool<Postgres>) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let stranger = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        "someone-else-entirely",
+        None,
+    )
+    .await
+    .unwrap();
+    let now: sea_orm::prelude::DateTimeWithTimeZone = sqlx::types::chrono::Utc::now().into();
+
+    let foreign_origin = insert_plain_chat(&app_state.db, &stranger.id.to_string(), now).await;
+    let child =
+        stage_owed_children(&app_state.db, &me.id.to_string(), foreign_origin, 1, now).await[0];
+
+    let outcome = sweep_once(&app_state).await;
+    assert_eq!(outcome.failed, 1);
+
+    let delivery = delivery_struct(&app_state, child).await;
+    assert_eq!(
+        delivery.state,
+        erato::models::chat::ResultDeliveryState::Failed
+    );
+    assert_eq!(delivery.reason.as_deref(), Some("owner_mismatch"));
+    assert!(
+        task_result_rows(&app_state.db, foreign_origin)
+            .await
+            .is_empty(),
+        "a result must never land in a chat belonging to someone else"
+    );
+}
+
+/// T15. A run whose answer row is gone is still delivered, as a failure.
+///
+/// The run's preamble promised the origin model a result. Silence is the worse
+/// failure: it invites the model to move on from work that never reported.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn sweep_delivers_a_failed_result_missing_row_when_the_child_answer_is_gone(
+    pool: Pool<Postgres>,
+) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+
+    let child_id = seed_child_owing_a_result(
+        &app_state,
+        &me.id.to_string(),
+        origin_chat_id,
+        None,
+        erato_config::config::TaskScheduling::Silent,
+    )
+    .await;
+
+    let outcome = sweep_once(&app_state).await;
+    assert_eq!(
+        outcome.delivered, 1,
+        "a failed task is still news the origin model needs"
+    );
+    assert_eq!(outcome.failed, 0, "the delivery did not fail; the run did");
+
+    let rows = task_result_rows(&app_state.db, origin_chat_id).await;
+    assert_eq!(rows.len(), 1);
+    let part = &rows[0].raw_message["content"][0];
+    assert_eq!(part["status"], "failed");
+    assert_eq!(part["reason"], "result_missing");
+    assert_eq!(part["summary"], "", "there is no answer to summarize");
+    assert!(
+        rows[0].input_parameters.as_ref().expect("marker")["task_result"]["result_message_id"]
+            .is_null(),
+        "there is no answer row to point at"
+    );
+    assert_eq!(
+        delivery_struct(&app_state, child_id).await.state,
+        erato::models::chat::ResultDeliveryState::Delivered
+    );
+}
+
+/// T16. One pass is bounded; a deeper backlog is the next tick's, five minutes
+/// later. A tick that tried to drain an unbounded queue would hold a pool
+/// connection for as long as the backlog is deep.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn sweep_bounds_a_pass_to_the_batch_limit(pool: Pool<Postgres>) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let me_id = me.id.to_string();
+    let limit = erato::services::task_delivery::SWEEP_BATCH_LIMIT as usize;
+    let now: sea_orm::prelude::DateTimeWithTimeZone = sqlx::types::chrono::Utc::now().into();
+
+    let origin = insert_plain_chat(&app_state.db, &me_id, now).await;
+    let staged = stage_owed_children(&app_state.db, &me_id, origin, limit + 3, now).await;
+
+    let first = sweep_once(&app_state).await;
+    assert_eq!(
+        first.delivered, limit as u64,
+        "a pass must stop at the batch limit"
+    );
+
+    let mut still_pending = 0;
+    for child in &staged {
+        if delivery_struct(&app_state, *child).await.state
+            == erato::models::chat::ResultDeliveryState::Pending
+        {
+            still_pending += 1;
+        }
+    }
+    assert_eq!(
+        still_pending, 3,
+        "the overflow stays `pending`; it is deferred work, not lost work"
+    );
+
+    let second = sweep_once(&app_state).await;
+    assert_eq!(second.delivered, 3, "the rest is the next tick's work");
+}
