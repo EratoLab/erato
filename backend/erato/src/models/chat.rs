@@ -6,6 +6,7 @@ use crate::metrics_constants::{
     POSTGRES_QUERY_CHAT_GENERATION_IS_RUNNING, POSTGRES_QUERY_COUNT_BACKGROUND_DELEGATED_RUNS,
     POSTGRES_QUERY_COUNT_RECENT_CHATS, POSTGRES_QUERY_FREQUENT_ASSISTANTS,
     POSTGRES_QUERY_LIST_GENERATING_CHATS, POSTGRES_QUERY_LIST_RECENT_CHATS,
+    POSTGRES_QUERY_REDELIVER_BRANCHED_RESULTS,
 };
 use crate::models::message::{DelegationRunMode, GenerationParameters};
 use crate::models::pagination;
@@ -2012,6 +2013,124 @@ pub async fn mark_delegated_run_adopted(
     chat_active.update(conn).await?;
 
     Ok(())
+}
+
+/// What one branch write did to the origin's outstanding deliveries.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct BranchedDeliveryOutcome {
+    /// Children whose delivery went back to `pending` for a second delivery.
+    pub requeued: Vec<Uuid>,
+    /// Children whose delivery was abandoned: the turn it belonged to is no
+    /// longer on the active thread, or it had already been redelivered once.
+    pub superseded: Vec<Uuid>,
+}
+
+/// Re-queue or abandon the deliveries a branch write knocked off the active
+/// thread.
+///
+/// Edit and regenerate are branch operations: they anchor above the message
+/// being replaced, so everything below — including a `task_result` row a
+/// finished `async` task was delivered into — falls off the active thread. The
+/// task belongs to its origin turn. If that turn is still what the
+/// conversation is built on, the result has to reach the new branch, so the
+/// delivery goes back to `pending`. If the user rewrote the very turn that
+/// spawned it, the result is stale by definition and the record is closed as
+/// `superseded(origin_branched)`.
+///
+/// Re-queued at most once, so a user who keeps branching does not accumulate
+/// re-appended results.
+///
+/// One path-scoped `jsonb_set`, never a read-modify-write of the whole
+/// envelope: `mark_delegated_run_adopted` above replaces the entire
+/// `assistant_configuration` column from a possibly stale in-memory row, with
+/// no transaction and no version guard, and it fires on every user write into
+/// a delegated chat. Scoping the write to `{provenance,result_delivery}` keeps
+/// the two from erasing each other.
+pub async fn requeue_or_supersede_branched_deliveries(
+    conn: &DatabaseConnection,
+    origin_chat_id: &Uuid,
+) -> Result<BranchedDeliveryOutcome, Report> {
+    // `origin_chat_id` is a stored generated column with a partial index, so
+    // the children lookup is an index scan and everything after it is a
+    // recheck over one user's children.
+    //
+    // `||` merges into the CURRENT stored subobject rather than a copy this
+    // process read earlier — that is what makes the write atomic. The
+    // `state IN (...)` predicate is the compare-and-set: a row another path
+    // moved on between our read and this write is simply skipped.
+    let sql = format!(
+        r#"
+        UPDATE "chats" AS "c"
+        SET "assistant_configuration" = jsonb_set(
+            "c"."assistant_configuration",
+            '{{provenance,result_delivery}}',
+            CASE WHEN {requeue_cond} THEN
+                (
+                    ("c"."assistant_configuration" #> '{{provenance,result_delivery}}')
+                        - 'message_id' - 'reaction_message_id' - 'claimed_by' - 'claimed_at'
+                )
+                || jsonb_build_object(
+                    'state', '{pending}',
+                    'delivery_id', gen_random_uuid(),
+                    'redelivery_of', "c"."assistant_configuration" #> '{{provenance,result_delivery,delivery_id}}',
+                    'redeliveries', COALESCE(("c"."assistant_configuration" #>> '{{provenance,result_delivery,redeliveries}}')::int, 0) + 1,
+                    'sequence',     COALESCE(("c"."assistant_configuration" #>> '{{provenance,result_delivery,sequence}}')::int, 0) + 1,
+                    'attempts', 0,
+                    'at', now()
+                )
+            ELSE
+                ("c"."assistant_configuration" #> '{{provenance,result_delivery}}')
+                || jsonb_build_object('state', '{superseded}', 'reason', 'origin_branched', 'at', now())
+            END)
+        WHERE "c"."origin_chat_id" = $1::uuid
+          AND ("c"."assistant_configuration" #>> '{{provenance,kind}}') = 'delegation'
+          AND ("c"."assistant_configuration" #>> '{{provenance,result_delivery,state}}') IN ('{delivered}', '{reacted}')
+          AND ("c"."assistant_configuration" #>> '{{provenance,result_delivery,message_id}}') IS NOT NULL
+          AND NOT EXISTS (
+              SELECT 1 FROM "messages" AS "tr"
+              WHERE "tr"."id" = ("c"."assistant_configuration" #>> '{{provenance,result_delivery,message_id}}')::uuid
+                AND "tr"."is_message_in_active_thread"
+          )
+        RETURNING "c"."id",
+                  ("c"."assistant_configuration" #>> '{{provenance,result_delivery,state}}') AS "state"
+        "#,
+        requeue_cond = r#"
+            COALESCE(("c"."assistant_configuration" #>> '{provenance,result_delivery,redeliveries}')::int, 0) = 0
+            AND EXISTS (
+                SELECT 1 FROM "messages" AS "om"
+                WHERE "om"."id" = ("c"."assistant_configuration" #>> '{provenance,origin_message_id}')::uuid
+                  AND "om"."is_message_in_active_thread"
+            )"#,
+        pending = ResultDeliveryState::Pending.as_str(),
+        superseded = ResultDeliveryState::Superseded.as_str(),
+        delivered = ResultDeliveryState::Delivered.as_str(),
+        reacted = ResultDeliveryState::Reacted.as_str(),
+    );
+
+    let rows = conn
+        .query_all_raw(named_statement_from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            POSTGRES_QUERY_REDELIVER_BRANCHED_RESULTS,
+            sql,
+            [(*origin_chat_id).into()],
+        ))
+        .await?;
+
+    let mut outcome = BranchedDeliveryOutcome::default();
+    for row in rows {
+        let (Ok(id), Ok(state)) = (
+            row.try_get::<Uuid>("", "id"),
+            row.try_get::<String>("", "state"),
+        ) else {
+            continue;
+        };
+        if state == ResultDeliveryState::Pending.as_str() {
+            outcome.requeued.push(id);
+        } else {
+            outcome.superseded.push(id);
+        }
+    }
+    Ok(outcome)
 }
 
 /// Delete a delegated chat that was created but never got a run, along with
