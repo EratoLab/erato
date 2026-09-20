@@ -2158,6 +2158,34 @@ export type MultipartFormFile = {
 };
 
 /**
+ * Body of the `409` `/react` answers when there is nothing to react to.
+ *
+ * Distinct from [`GenerationRunningError`] because the two are different
+ * decisions: that one says "not now", this one says "not this row, ever".
+ * `code` is what the client discriminates on; `reason` is what it uses to
+ * choose between suppressing the affordance and offering a re-anchor.
+ */
+export type NothingToReactError = {
+  /**
+   * @format uuid
+   */
+  chat_id: string;
+  /**
+   * Always `nothing_to_react`.
+   */
+  code: string;
+  /**
+   * One of `not_a_task_result`, `not_delivered`, `already_reacted`,
+   * `tip_moved`.
+   */
+  reason: string;
+  /**
+   * @format uuid
+   */
+  task_result_message_id: string;
+};
+
+/**
  * An organization group
  */
 export type OrganizationGroup = {
@@ -2252,6 +2280,19 @@ export type PromptOptimizerResponse = {
  * stored before this type existed deserializes unchanged.
  */
 export type ProvenanceRunMode = "wait" | "background" | "async";
+
+/**
+ * What a client asks `/react` to answer.
+ */
+export type ReactToTaskResultRequest = {
+  /**
+   * The delivered `task_result` user row to react to.
+   *
+   * @format uuid
+   * @example 00000000-0000-0000-0000-000000000000
+   */
+  task_result_message_id: string;
+};
 
 export type RecentChat = {
   /**
