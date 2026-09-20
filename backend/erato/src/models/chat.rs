@@ -4,7 +4,8 @@ use crate::db::entity_ext::prelude::*;
 use crate::metrics_constants::{
     POSTGRES_QUERY_ARCHIVE_DELEGATED_DESCENDANTS, POSTGRES_QUERY_ARCHIVE_STALE_DELEGATED_RUNS,
     POSTGRES_QUERY_CHAT_GENERATION_IS_RUNNING, POSTGRES_QUERY_COUNT_BACKGROUND_DELEGATED_RUNS,
-    POSTGRES_QUERY_COUNT_RECENT_CHATS, POSTGRES_QUERY_FREQUENT_ASSISTANTS,
+    POSTGRES_QUERY_COUNT_RECENT_CHATS, POSTGRES_QUERY_DELEGATED_RUN_OUTCOME,
+    POSTGRES_QUERY_DELEGATION_RETRY_IN_FLIGHT, POSTGRES_QUERY_FREQUENT_ASSISTANTS,
     POSTGRES_QUERY_LIST_GENERATING_CHATS, POSTGRES_QUERY_LIST_RECENT_CHATS,
     POSTGRES_QUERY_REDELIVER_BRANCHED_RESULTS,
 };
@@ -222,6 +223,11 @@ pub struct ChatProvenance {
     /// and the listing reports whether an origin still has work in flight.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub result_delivery: Option<ResultDelivery>,
+    /// Delegation only: the failed run this one was started to replace.
+    /// Written once, at creation, on the NEW child - a retried run's own
+    /// envelope is never touched, so the failure stays on the record.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_of: Option<Uuid>,
 }
 
 /// Where a finished `async` task's result has got to on its way back to the
@@ -762,6 +768,9 @@ pub struct RecentChat {
     /// `silent` result sits in `delivered` until the user's next turn, and the
     /// origin is not waiting on it.
     pub delegated_runs_in_flight: bool,
+    /// The failed delegated run this one was started to replace; present only
+    /// on a retry child. Read out of the provenance envelope by the listing.
+    pub retry_of: Option<Uuid>,
 }
 
 /// Statistics for a list of chats
@@ -808,6 +817,7 @@ struct ChatWithLatestMessage {
     origin_assistant_id: Option<Uuid>,
     delegated_run_outcome: Option<String>,
     delegated_runs_in_flight: bool,
+    retry_of: Option<Uuid>,
     // Latest message fields
     latest_message_at: DateTimeWithTimeZone,
 }
@@ -844,6 +854,67 @@ pub struct RecentChatsFilter<'a> {
     /// composes with `include_delegated` rather than overriding it, so
     /// listing a chat's delegated runs requires both.
     pub origin_chat_id: Option<Uuid>,
+}
+
+/// SQL expression deriving a delegated run's terminal outcome from the chat's
+/// own messages. Shared verbatim by the recent-chats listing and the
+/// single-chat read below, so a runs-list badge and a retry gate can never
+/// disagree about one run.
+///
+/// Reads `latest_msg`, so every caller must also join
+/// [`latest_message_lateral`].
+///
+/// `generation_stale_after_secs` is interpolated rather than bound, matching
+/// the listing this was lifted from. The parameter keeps that exact name
+/// because the literal interpolates it by name; renaming it silently breaks
+/// the copy.
+fn delegated_run_outcome_expression(generation_stale_after_secs: u64) -> String {
+    format!(
+        r#"CASE
+                WHEN ("chats"."assistant_configuration" #>> '{{provenance,kind}}') IS DISTINCT FROM 'delegation'
+                    OR ("chats"."generation_state" = 'running'
+                        AND "chats"."generation_heartbeat_at" > now() - make_interval(secs => {generation_stale_after_secs}))
+                    OR "chats"."generation_state" = 'awaiting_approval'
+                THEN NULL
+                WHEN "chats"."generation_state" IS DISTINCT FROM 'errored'
+                    AND "latest_msg"."role" = 'assistant'
+                    AND NOT "latest_msg"."has_generation_error"
+                    AND "latest_msg"."has_text_answer"
+                    AND "latest_msg"."created_at" >= "chats"."created_at"
+                THEN 'completed'
+                ELSE 'failed'
+            END"#
+    )
+}
+
+/// The lateral join [`delegated_run_outcome_expression`] reads `latest_msg`
+/// from.
+///
+/// `INNER`, not `LEFT`, on purpose: a chat with no messages at all is invisible
+/// in the listing, so it must also be unretryable, or the badge and the gate
+/// would disagree about a run that never started. It contains no braces, so
+/// unlike the expression above it is a plain literal with nothing to escape.
+fn latest_message_lateral() -> &'static str {
+    r#"INNER JOIN LATERAL (
+            SELECT m.chat_id, m.id, m.created_at,
+                m.raw_message ->> 'role' AS "role",
+                ((m.generation_metadata -> 'error') IS NOT NULL
+                    AND m.generation_metadata -> 'error' <> 'null'::jsonb) AS "has_generation_error",
+                EXISTS (
+                    SELECT 1
+                    FROM jsonb_array_elements(
+                        CASE WHEN jsonb_typeof(m.raw_message -> 'content') = 'array'
+                            THEN m.raw_message -> 'content'
+                        END
+                    ) AS part
+                    WHERE part ->> 'content_type' = 'text'
+                        AND btrim(coalesce(part ->> 'text', '')) <> ''
+                ) AS "has_text_answer"
+            FROM messages m
+            WHERE m.chat_id = chats.id
+            ORDER BY m.created_at DESC
+            LIMIT 1
+        ) latest_msg ON true"#
 }
 
 /// Get the most recent chats for a user.
@@ -965,20 +1036,8 @@ pub async fn get_recent_chats(
             ("chats"."assistant_configuration" #>> '{{provenance,run_mode}}') AS "provenance_run_mode",
             "chats"."origin_chat_id",
             (("chats"."assistant_configuration" #>> '{{provenance,origin_assistant_id}}'))::uuid AS "origin_assistant_id",
-            CASE
-                WHEN ("chats"."assistant_configuration" #>> '{{provenance,kind}}') IS DISTINCT FROM 'delegation'
-                    OR ("chats"."generation_state" = 'running'
-                        AND "chats"."generation_heartbeat_at" > now() - make_interval(secs => {generation_stale_after_secs}))
-                    OR "chats"."generation_state" = 'awaiting_approval'
-                THEN NULL
-                WHEN "chats"."generation_state" IS DISTINCT FROM 'errored'
-                    AND "latest_msg"."role" = 'assistant'
-                    AND NOT "latest_msg"."has_generation_error"
-                    AND "latest_msg"."has_text_answer"
-                    AND "latest_msg"."created_at" >= "chats"."created_at"
-                THEN 'completed'
-                ELSE 'failed'
-            END AS "delegated_run_outcome",
+            (("chats"."assistant_configuration" #>> '{{provenance,retry_of}}'))::uuid AS "retry_of",
+            {outcome_expression} AS "delegated_run_outcome",
             EXISTS (
                 SELECT 1
                 FROM "chats" AS "child"
@@ -1001,26 +1060,7 @@ pub async fn get_recent_chats(
             ) AS "delegated_runs_in_flight",
             "latest_msg"."created_at" AS "latest_message_at"
         FROM "chats"
-        INNER JOIN LATERAL (
-            SELECT m.chat_id, m.id, m.created_at,
-                m.raw_message ->> 'role' AS "role",
-                ((m.generation_metadata -> 'error') IS NOT NULL
-                    AND m.generation_metadata -> 'error' <> 'null'::jsonb) AS "has_generation_error",
-                EXISTS (
-                    SELECT 1
-                    FROM jsonb_array_elements(
-                        CASE WHEN jsonb_typeof(m.raw_message -> 'content') = 'array'
-                            THEN m.raw_message -> 'content'
-                        END
-                    ) AS part
-                    WHERE part ->> 'content_type' = 'text'
-                        AND btrim(coalesce(part ->> 'text', '')) <> ''
-                ) AS "has_text_answer"
-            FROM messages m
-            WHERE m.chat_id = chats.id
-            ORDER BY m.created_at DESC
-            LIMIT 1
-        ) latest_msg ON true
+        {latest_message_lateral}
         WHERE "chats"."owner_user_id" = $1
             {}
             {}
@@ -1046,6 +1086,8 @@ pub async fn get_recent_chats(
         async_mode = ProvenanceRunMode::Async.as_str(),
         pending = ResultDeliveryState::Pending.as_str(),
         claimed = ResultDeliveryState::Claimed.as_str(),
+        outcome_expression = delegated_run_outcome_expression(generation_stale_after_secs),
+        latest_message_lateral = latest_message_lateral(),
     );
 
     let mut query_values = vec![
@@ -1311,6 +1353,7 @@ pub async fn get_recent_chats(
                 origin_assistant_id: chat_with_msg.origin_assistant_id,
                 delegated_run_outcome: chat_with_msg.delegated_run_outcome.clone(),
                 delegated_runs_in_flight: chat_with_msg.delegated_runs_in_flight,
+                retry_of: chat_with_msg.retry_of,
             }
         })
         .collect();
@@ -1840,6 +1883,46 @@ fn dedup_keep_order(values: Vec<String>) -> Vec<String> {
         .collect()
 }
 
+/// Terminal outcome of ONE delegated run, using the listing's own expression.
+///
+/// `None` means the question has no answer yet: the run is live (running with
+/// a fresh heartbeat, or parked on an approval), or the chat has no messages
+/// at all and so never started. The listing hides that second case too - the
+/// join is `INNER` in both - which is deliberate: a badge and a retry gate
+/// that read the same run must never disagree about it.
+pub async fn delegated_run_outcome_for_chat(
+    conn: &DatabaseConnection,
+    chat_id: &Uuid,
+    generation_stale_after_secs: u64,
+) -> Result<Option<String>, Report> {
+    #[derive(Debug, FromQueryResult)]
+    struct OutcomeRow {
+        delegated_run_outcome: Option<String>,
+    }
+
+    let sql = format!(
+        r#"
+        SELECT {outcome_expression} AS "delegated_run_outcome"
+        FROM "chats"
+        {latest_message_lateral}
+        WHERE "chats"."id" = $1
+        "#,
+        outcome_expression = delegated_run_outcome_expression(generation_stale_after_secs),
+        latest_message_lateral = latest_message_lateral(),
+    );
+
+    let row = OutcomeRow::find_by_statement(named_statement_from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        POSTGRES_QUERY_DELEGATED_RUN_OUTCOME,
+        sql,
+        [(*chat_id).into()],
+    ))
+    .one(conn)
+    .await?;
+
+    Ok(row.and_then(|row| row.delegated_run_outcome))
+}
+
 /// True while a generation is actively writing to the chat: state `running`
 /// with a heartbeat inside the staleness window. A generation whose process
 /// died leaves the state behind but stops heartbeating, so it does not count.
@@ -1941,6 +2024,79 @@ pub(crate) fn generation_unfinished_condition(alias: &str, param_index: u8) -> S
             FALSE
         )"#
     )
+}
+
+/// The newest retry child of `retried_chat_id` that has not finished, if one
+/// exists.
+///
+/// One live retry per failed run is the whole bound on a retry storm: a
+/// client that offers the button again while the replacement is still running
+/// would otherwise let a user fan out arbitrarily many children off one
+/// failure.
+///
+/// The predicate comes from [`generation_unfinished_condition`] rather than
+/// being spelled again here, for the reason that function's own doc gives: a
+/// second spelling is only a second thing to keep in step. It is widened by
+/// the same arm [`archive_delegated_descendants`] uses, and for the same
+/// reason: a run's chat row is created a moment BEFORE its generation takes a
+/// lease, and that lease write is best-effort - it is deliberately allowed to
+/// fail without failing the run. A child matched only by the lease would
+/// therefore be invisible here for the whole of `prepare_delegated_chat`'s
+/// lineage seeding, and invisible forever if the lease write lost its race
+/// with a restart, which would let a second retry through on a run that
+/// already has a live replacement. Bounding the extra arm by the staleness
+/// window keeps a child stranded by a crashed dispatch from blocking its run's
+/// retry for good.
+///
+/// The check remains ADVISORY, not atomic: nothing serializes this read
+/// against the replacement's own INSERT, so two genuinely simultaneous
+/// requests can both pass it. That is the same class - and the same accepted
+/// trade - as the concurrency-cap pre-check on the retry route, and it is why
+/// this is a bound on retry storms rather than a lock.
+pub async fn find_working_retry_child(
+    conn: &DatabaseConnection,
+    retried_chat_id: &Uuid,
+    generation_stale_after_secs: u64,
+) -> Result<Option<Uuid>, Report> {
+    #[derive(Debug, FromQueryResult)]
+    struct RetryChildRow {
+        id: Uuid,
+    }
+
+    let unfinished = generation_unfinished_condition("\"chats\"", 2);
+    let sql = format!(
+        r#"
+        SELECT "chats"."id"
+        FROM "chats"
+        WHERE ("chats"."assistant_configuration" #>> '{{provenance,retry_of}}') = $1
+            AND (
+                {unfinished}
+                OR (
+                    "chats"."generation_state" IS NULL
+                    AND "chats"."created_at" > now() - make_interval(secs => $2::double precision)
+                )
+            )
+        ORDER BY "chats"."created_at" DESC
+        LIMIT 1
+        "#
+    );
+
+    let row = RetryChildRow::find_by_statement(named_statement_from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        POSTGRES_QUERY_DELEGATION_RETRY_IN_FLIGHT,
+        sql,
+        // Bound as TEXT, not as a uuid: `#>>` yields text and the stored value
+        // is a JSON string, so a `::uuid` cast on either side would only add a
+        // way for the comparison to fail on a malformed envelope.
+        [
+            retried_chat_id.to_string().into(),
+            (generation_stale_after_secs as f64).into(),
+        ],
+    ))
+    .one(conn)
+    .await?;
+
+    Ok(row.map(|row| row.id))
 }
 
 /// Archive the delegated runs spawned from `chat_id`, and their delegated
@@ -2606,6 +2762,7 @@ mod result_delivery_serde_tests {
             legacy_constraints: None,
             run_mode: None,
             result_delivery: None,
+            retry_of: None,
         };
         let value = serde_json::to_value(&provenance).expect("serializes");
         assert!(

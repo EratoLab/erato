@@ -1582,6 +1582,21 @@ msgstr "Ignorer l'exécution"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/DelegatedRunsSection.tsx
+msgid "chat.history.delegatedRuns.retried"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegatedRunsSection.tsx
+msgid "chat.history.delegatedRuns.retry"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegatedRunsSection.tsx
+msgid "chat.history.delegatedRuns.retryFailed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/DelegatedRunsSection.tsx
 msgid "chat.history.delegatedRuns.toggle"
 msgstr "Exécutions déléguées ({runCount})"
 
@@ -3267,6 +3282,26 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.retried"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.retry"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.retry.background"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.retry.failed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
 msgid "message.taskResult.sequence"
 msgstr ""
 
@@ -4786,6 +4821,26 @@ msgstr "L'exécution a pris trop de temps"
 #: src/components/ui/Trace/steps/DelegationStep.tsx
 msgid "trace.delegation.result.truncated"
 msgstr "Résultat tronqué"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.retried"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.retry"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.retry.background"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.retry.failed"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
