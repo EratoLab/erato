@@ -4,6 +4,7 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
 import { setIdToken } from "@/auth/tokenStore";
+import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import {
   chatMessagesQuery,
   fetchChatMessages,
@@ -14,6 +15,7 @@ import {
   useArchiveChatEndpoint,
   useUpdateChat,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { FrontendRequestError } from "@/utils/errorReport";
 import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
 
 // Mock Zustand for testing
@@ -104,10 +106,13 @@ vi.mock("@/utils/sse/sseClient", () => {
   };
 });
 
+import { useComposeSessionStore } from "../store/composeSessionStore";
 import { useGenerationStatusStore } from "../store/generationStatusStore";
+import { useMessageQueueStore } from "../store/messageQueueStore";
 import { useMessagingStore } from "../store/messagingStore";
 import { useChatHistoryStore } from "../useChatHistory";
 import { useChatMessaging } from "../useChatMessaging";
+import { resetReactAttemptsForTest } from "../useReactToTaskResult";
 
 import type { ReactNode } from "react";
 import type { StateCreator } from "zustand";
@@ -508,6 +513,429 @@ describe("useChatMessaging", () => {
         body: JSON.stringify({ chat_id: "chat1" }),
       }),
     );
+  });
+
+  describe("server-started generation attach guard", () => {
+    /**
+     * The default mock swallows resumestream callbacks; these tests need to
+     * close the enter-chat socket so the next trigger is not simply blocked by
+     * the live-connection pre-check.
+     */
+    const captureSse = () => {
+      const byUrl: Record<string, Record<string, (arg?: unknown) => void>> = {};
+      mockCreateSSEConnection.mockImplementation(
+        (url: string, callbacks: Record<string, (arg?: unknown) => void>) => {
+          byUrl[url] = callbacks;
+          return vi.fn();
+        },
+      );
+      return byUrl;
+    };
+
+    const runningEntry = (startedAt: string) => ({
+      kind: "running" as const,
+      startedAt,
+      localSeenAt: Date.now(),
+    });
+
+    beforeEach(() => {
+      useGenerationStatusStore.setState({
+        statusByChatId: {},
+        currentChatId: null,
+      });
+    });
+
+    it("attaches once when the open chat flips to running underneath this client", async () => {
+      const byUrl = captureSse();
+      renderHook(() => useChatMessaging("chat1"), { wrapper: TestWrapper });
+      expect(mockCreateSSEConnection).toHaveBeenCalledTimes(1);
+
+      // The enter-chat resume found nothing running and closed.
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/resumestream"].onClose();
+      });
+      mockCreateSSEConnection.mockClear();
+
+      // The poll now reports a server-started turn for the open chat.
+      await act(async () => {
+        useGenerationStatusStore.setState({
+          statusByChatId: {
+            chat1: runningEntry("2026-09-19T12:00:00.123456+00:00"),
+          },
+        });
+      });
+
+      expect(mockCreateSSEConnection).toHaveBeenCalledTimes(1);
+      expect(mockCreateSSEConnection).toHaveBeenCalledWith(
+        "/api/v1beta/me/messages/resumestream",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ chat_id: "chat1" }),
+        }),
+      );
+    });
+
+    it("does not re-attach when the same generation is re-reported in another serialization", async () => {
+      const byUrl = captureSse();
+      renderHook(() => useChatMessaging("chat1"), { wrapper: TestWrapper });
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/resumestream"].onClose();
+      });
+      await act(async () => {
+        useGenerationStatusStore.setState({
+          statusByChatId: {
+            chat1: runningEntry("2026-09-19T12:00:00.123456+00:00"),
+          },
+        });
+      });
+      // That attach registered a socket; close it so only the key ref can
+      // stand between us and a second connection.
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/resumestream"].onClose();
+      });
+      mockCreateSSEConnection.mockClear();
+
+      // The 409/lease spelling of the SAME instant: truncated to the second.
+      await act(async () => {
+        useGenerationStatusStore.setState({
+          statusByChatId: { chat1: runningEntry("2026-09-19T12:00:00Z") },
+        });
+      });
+
+      expect(mockCreateSSEConnection).not.toHaveBeenCalled();
+    });
+
+    it("attaches again once a genuinely newer generation starts", async () => {
+      const byUrl = captureSse();
+      renderHook(() => useChatMessaging("chat1"), { wrapper: TestWrapper });
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/resumestream"].onClose();
+      });
+      await act(async () => {
+        useGenerationStatusStore.setState({
+          statusByChatId: { chat1: runningEntry("2026-09-19T12:00:00Z") },
+        });
+      });
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/resumestream"].onClose();
+      });
+      mockCreateSSEConnection.mockClear();
+
+      await act(async () => {
+        useGenerationStatusStore.setState({
+          statusByChatId: { chat1: runningEntry("2026-09-19T12:00:05Z") },
+        });
+      });
+
+      expect(mockCreateSSEConnection).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not attach to a generation this client is itself submitting", async () => {
+      captureSse();
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      await act(async () => {
+        await result.current.sendMessage("hello");
+      });
+      mockCreateSSEConnection.mockClear();
+
+      // Reproduce the window a browser can hit but `act` cannot schedule into:
+      // a send seeds "running" BEFORE its POST goes out and tears down any
+      // previous socket with an awaited delay in between, so the status store
+      // can say running while no abort callback is registered. Without the
+      // submitting guard the attach effect opens a second socket for this
+      // client's own turn.
+      await act(async () => {
+        useMessagingStore.getState().setSSEAbortCallback(null, "chat1");
+        useGenerationStatusStore.setState({
+          statusByChatId: { chat1: runningEntry("2026-09-19T13:00:00Z") },
+        });
+      });
+
+      expect(mockCreateSSEConnection).not.toHaveBeenCalled();
+    });
+
+    const deliveredTip = {
+      id: "delivered-1",
+      content: [{ content_type: "text" as const, text: "Task finished" }],
+      role: "user",
+      created_at: "2023-01-01T12:05:00.000Z",
+      chat_id: "chat1",
+      updated_at: "2023-01-01T12:05:00.000Z",
+      is_message_in_active_thread: true,
+      task_result: {
+        child_chat_id: "child-1",
+        delivery_id: "delivery-1",
+        scheduling: "when_idle",
+        sequence: 0,
+        status: "completed",
+      },
+    };
+
+    const withMessages = (messages: unknown[]) => {
+      mockUseChatMessages.mockReturnValue({
+        data: { messages },
+        isLoading: false,
+        error: null,
+        refetch: vi.fn(),
+      });
+    };
+
+    it("waits for the enter-chat resume rather than opening a second socket", async () => {
+      resetReactAttemptsForTest();
+      const byUrl = captureSse();
+      withMessages([...mockMessages, deliveredTip]);
+
+      renderHook(() => useChatMessaging("chat1"), { wrapper: TestWrapper });
+
+      // The enter-chat resume holds the chat's socket, so the trigger does not
+      // open a `/react` stream alongside it.
+      expect(mockCreateSSEConnection.mock.calls.map((call) => call[0])).toEqual(
+        ["/api/v1beta/me/messages/resumestream"],
+      );
+
+      // ...and it did not spend the row's single ask on that refusal. This is
+      // the brief's own primary case — a delivered, unreacted row already on
+      // disk when the chat is opened — and the resume is not a competitor for
+      // the generation: nothing is running, which is why it 404s and closes.
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/resumestream"].onClose();
+      });
+
+      expect(mockCreateSSEConnection).toHaveBeenCalledWith(
+        "/api/v1beta/me/chats/chat1/react",
+        expect.objectContaining({
+          body: JSON.stringify({ task_result_message_id: "delivered-1" }),
+        }),
+      );
+    });
+
+    it("asks for the missing reaction once the chat holds no socket", async () => {
+      resetReactAttemptsForTest();
+      const byUrl = captureSse();
+      withMessages(mockMessages);
+
+      const { rerender } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/resumestream"].onClose();
+      });
+      mockCreateSSEConnection.mockClear();
+
+      // The poller's run-ended edge refetched the open chat and a delivered
+      // task result is now the tip.
+      withMessages([...mockMessages, deliveredTip]);
+      await act(async () => {
+        rerender();
+      });
+
+      expect(mockCreateSSEConnection).toHaveBeenCalledWith(
+        "/api/v1beta/me/chats/chat1/react",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ task_result_message_id: "delivered-1" }),
+        }),
+      );
+    });
+
+    it("does not let an abandoned branch's row stand in for the thread tip", async () => {
+      // `useReactToTaskResult` reads the LAST row and applies no active-thread
+      // filter of its own, because both ingestion paths into the message
+      // record already drop `is_message_in_active_thread === false`. That is a
+      // guarantee this file makes and the trigger consumes, so it is pinned
+      // here rather than restated there: an edited-away branch can easily
+      // carry a later `created_at` than the delivered result, and if one of
+      // those rows reached the record it would become the tip and the reaction
+      // would never be asked for.
+      resetReactAttemptsForTest();
+      const byUrl = captureSse();
+      withMessages(mockMessages);
+
+      const { rerender } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/resumestream"].onClose();
+      });
+      mockCreateSSEConnection.mockClear();
+
+      withMessages([
+        ...mockMessages,
+        deliveredTip,
+        {
+          ...deliveredTip,
+          id: "abandoned-1",
+          role: "assistant",
+          content: [
+            { content_type: "text" as const, text: "An edited-away reply" },
+          ],
+          created_at: "2023-01-01T12:09:00.000Z",
+          updated_at: "2023-01-01T12:09:00.000Z",
+          is_message_in_active_thread: false,
+          task_result: undefined,
+        },
+      ]);
+      await act(async () => {
+        rerender();
+      });
+
+      expect(mockCreateSSEConnection).toHaveBeenCalledWith(
+        "/api/v1beta/me/chats/chat1/react",
+        expect.objectContaining({
+          body: JSON.stringify({ task_result_message_id: "delivered-1" }),
+        }),
+      );
+    });
+
+    it("attaches and queues the draft when the chat's lease is held elsewhere", async () => {
+      resetReactAttemptsForTest();
+      const byUrl = captureSse();
+      withMessages(mockMessages);
+
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      await act(async () => {
+        await result.current.sendMessage("Anything new?");
+      });
+
+      const refusal = new FrontendRequestError(
+        "SSE request failed",
+        { method: "POST", url: "/api/v1beta/me/messages/submitstream" },
+        {
+          status: 409,
+          statusText: "Conflict",
+          body: JSON.stringify({
+            code: "generation_running",
+            chat_id: "chat1",
+            initiator: "user",
+          }),
+        },
+      );
+      mockCreateSSEConnection.mockClear();
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/submitstream"].onError(refusal);
+      });
+
+      // Not an error: another turn holds the lease, so attach to it.
+      expect(result.current.error).toBeNull();
+      expect(mockCreateSSEConnection).toHaveBeenCalledWith(
+        "/api/v1beta/me/messages/resumestream",
+        expect.objectContaining({
+          body: JSON.stringify({ chat_id: "chat1" }),
+        }),
+      );
+
+      // The queue is keyed by composeSessionId, which is what ChatInput's
+      // existing drain reads; a chatId-keyed handoff would never be seen.
+      const sessionId = useComposeSessionStore
+        .getState()
+        .resolveSessionId("chat1");
+      expect(
+        useMessageQueueStore.getState().getQueued(sessionId)?.message,
+      ).toBe("Anything new?");
+
+      // The turn this client is now watching ends: the composer unlocks, which
+      // is the falling edge ChatInput's drain arms on.
+      expect(result.current.isPendingResponse).toBe(true);
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/resumestream"].onClose();
+      });
+      expect(result.current.isPendingResponse).toBe(false);
+    });
+
+    // The `refusedFiles.every(...)` conjunct on the handoff is not a dead
+    // defensive check. Audio-recording attachments reach the composer through
+    // `upsertAudioTranscriptionAttachment` and never enter `useFileUploadStore`,
+    // so `refusedFiles` genuinely contains `undefined` on a shipping path. The
+    // test above sends with no `inputFileIds` at all, which leaves `.every`
+    // vacuously true — delete the conjunct and a 409 on a send whose attachment
+    // is no longer in the store queues and later re-sends the message WITHOUT
+    // the attachment, silently and with no error. Nothing failed.
+    it("refuses to queue a draft whose attachment it can no longer name", async () => {
+      resetReactAttemptsForTest();
+      const byUrl = captureSse();
+      withMessages(mockMessages);
+      useFileUploadStore.setState({ uploadedFiles: [] });
+
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      await act(async () => {
+        await result.current.sendMessage("Anything new?", ["file-gone"]);
+      });
+
+      const refusal = new FrontendRequestError(
+        "SSE request failed",
+        { method: "POST", url: "/api/v1beta/me/messages/submitstream" },
+        {
+          status: 409,
+          statusText: "Conflict",
+          body: JSON.stringify({
+            code: "generation_running",
+            chat_id: "chat1",
+            initiator: "user",
+          }),
+        },
+      );
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/submitstream"].onError(refusal);
+      });
+
+      // A visible error the user can retry, rather than a silently shortened
+      // message sent later without its attachment.
+      expect(result.current.error).not.toBeNull();
+      const sessionId = useComposeSessionStore
+        .getState()
+        .resolveSessionId("chat1");
+      expect(useMessageQueueStore.getState().getQueued(sessionId)).toBeNull();
+    });
+
+    it("renders assistant deltas that arrive with no user_message_saved ahead of them", async () => {
+      resetReactAttemptsForTest();
+      const byUrl = captureSse();
+      withMessages(mockMessages);
+
+      const { result, rerender } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/resumestream"].onClose();
+      });
+      withMessages([...mockMessages, deliveredTip]);
+      await act(async () => {
+        rerender();
+      });
+
+      // `/react` calls `run_generation_after_user_message` directly, so the
+      // stream opens on assistant deltas with no `user_message_saved` and no
+      // `chat_created` — exactly as `resumestream` does.
+      const reactStream = byUrl["/api/v1beta/me/chats/chat1/react"];
+      await act(async () => {
+        reactStream.onMessage({
+          data: JSON.stringify({
+            message_type: "assistant_message_started",
+            message_id: "reaction-1",
+          }),
+          type: "message",
+        });
+        reactStream.onMessage({
+          data: JSON.stringify({
+            message_type: "text_delta",
+            message_id: "reaction-1",
+            content_index: 0,
+            new_text: "Here is what the task found",
+          }),
+          type: "message",
+        });
+      });
+
+      expect(result.current.streamingContent).toEqual([
+        { content_type: "text", text: "Here is what the task found" },
+      ]);
+    });
   });
 
   // Skip this test for now
