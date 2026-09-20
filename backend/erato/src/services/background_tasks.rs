@@ -7,17 +7,18 @@
 use crate::config::GenerationStatusConfig;
 use crate::metrics_constants::{
     POSTGRES_QUERY_DELEGATION_TIMEOUT_BACKSTOP, POSTGRES_QUERY_GENERATION_CLEANUP,
-    POSTGRES_QUERY_GENERATION_FINISH, POSTGRES_QUERY_GENERATION_HEARTBEAT,
+    POSTGRES_QUERY_GENERATION_DISPLACED, POSTGRES_QUERY_GENERATION_FINISH,
+    POSTGRES_QUERY_GENERATION_HEARTBEAT, POSTGRES_QUERY_GENERATION_LEASE_HOLDER,
     POSTGRES_QUERY_GENERATION_REAP, POSTGRES_QUERY_GENERATION_SHARED_CLEANUP,
     POSTGRES_QUERY_GENERATION_SHARED_COMMAND, POSTGRES_QUERY_GENERATION_SHARED_COMMAND_CONSUME,
     POSTGRES_QUERY_GENERATION_SHARED_COMMANDS, POSTGRES_QUERY_GENERATION_SHARED_EVENTS,
     POSTGRES_QUERY_GENERATION_SHARED_FINISH, POSTGRES_QUERY_GENERATION_SHARED_START,
-    POSTGRES_QUERY_GENERATION_START,
+    POSTGRES_QUERY_GENERATION_START, POSTGRES_QUERY_GENERATION_TRY_START,
 };
 use crate::models::message::ContentPart;
 use crate::query_metrics::named_statement_from_sql_and_values;
 use crate::server::api::v1beta::ChatMessage;
-use sea_orm::{ConnectionTrait, DatabaseConnection, JsonValue};
+use sea_orm::{ConnectionTrait, DatabaseConnection, JsonValue, TransactionTrait};
 use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
 use std::collections::HashMap;
@@ -74,6 +75,31 @@ impl TaskOutcome {
     }
 }
 
+/// Whether a lease acquisition may take over a chat parked on an MCP tool
+/// approval.
+///
+/// `awaiting_approval` is not a finished generation: a continuation is
+/// expected to resume it. A user write is allowed to abandon that and start a
+/// fresh turn, but a system-initiated delivery is not — appending underneath a
+/// mounted approval card would strand it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Takeover {
+    /// A user-initiated write: may take a parked lease.
+    TakeParked,
+    /// A system-initiated turn: leaves a parked lease alone.
+    RefuseParked,
+}
+
+/// Why a lease acquisition was refused, with enough about the holder for the
+/// caller to build a typed 409.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LeaseHeld {
+    /// The generation currently holding the chat, when the row records one.
+    pub active_generation_id: Option<Uuid>,
+    /// When the holding generation started, as an RFC 3339 string.
+    pub started_at: Option<String>,
+}
+
 /// Manager for background streaming tasks
 #[derive(Clone, Debug)]
 pub struct BackgroundTaskManager {
@@ -85,6 +111,14 @@ pub struct BackgroundTaskManager {
     db: Option<DatabaseConnection>,
     /// Handle to the heartbeat/reaper task, kept alive with the manager.
     _maintenance_task: Option<Arc<JoinHandle<()>>>,
+    /// Whether the heartbeat may only refresh a lease this process still
+    /// holds. Off keeps the historical behaviour, where the heartbeat
+    /// re-asserts `active_generation_id` from the in-memory map and so repairs
+    /// a lost start race. On makes the DB row the arbiter, which is what
+    /// `try_start_task` needs to mean anything — see `run_maintenance_task`.
+    /// Shared with the already-spawned maintenance loop, which reads it each
+    /// tick, so it can be set after construction.
+    lease_identity_guard: Arc<AtomicBool>,
 }
 
 impl BackgroundTaskManager {
@@ -100,11 +134,20 @@ impl BackgroundTaskManager {
     ) -> Self {
         let tasks: Arc<RwLock<HashMap<Uuid, Arc<StreamingTask>>>> =
             Arc::new(RwLock::new(HashMap::new()));
+        let lease_identity_guard = Arc::new(AtomicBool::new(false));
 
         let maintenance_task = db.clone().map(|db| {
             let tasks = Arc::clone(&tasks);
+            let lease_identity_guard = Arc::clone(&lease_identity_guard);
             Arc::new(tokio::spawn(async move {
-                Self::run_maintenance_task(db, tasks, config, delegation_run_timeout_secs).await;
+                Self::run_maintenance_task(
+                    db,
+                    tasks,
+                    config,
+                    delegation_run_timeout_secs,
+                    lease_identity_guard,
+                )
+                .await;
             }))
         });
 
@@ -112,7 +155,18 @@ impl BackgroundTaskManager {
             tasks,
             db,
             _maintenance_task: maintenance_task,
+            lease_identity_guard,
         }
+    }
+
+    /// Make the DB lease row the arbiter of which generation owns a chat.
+    ///
+    /// Enabled together with `delegation.tasks.enabled`, because that is what
+    /// turns the lease from best-effort status reporting into admission
+    /// control. With it off, nothing about the historical behaviour changes.
+    pub fn with_lease_identity_guard(self, enabled: bool) -> Self {
+        self.lease_identity_guard.store(enabled, Ordering::Relaxed);
+        self
     }
 
     /// Start a new background task for the given chat
@@ -202,6 +256,260 @@ impl BackgroundTaskManager {
         }
 
         (receiver, task)
+    }
+
+    /// Claim the chat's generation lease, or refuse.
+    ///
+    /// Unlike [`Self::start_task`], which replaces whatever is there, this
+    /// only starts a generation when nothing else currently owns the chat.
+    /// "Owns" is decided by the `chats` row, not by this process's map, so the
+    /// answer holds across replicas.
+    ///
+    /// A lease is claimable when it was never started, ended, or went stale —
+    /// its heartbeat is older than `stale_after_secs`, which means the process
+    /// that held it is gone. `Takeover::TakeParked` additionally claims a chat
+    /// parked on a tool approval.
+    ///
+    /// The three statements run in one transaction behind a per-chat advisory
+    /// lock. Without it a loser can still delete the winner's
+    /// `temp_chat_generations` row on its way out, cutting the winner off from
+    /// its abort channel.
+    pub async fn try_start_task(
+        &self,
+        chat_id: Uuid,
+        message_id: Uuid,
+        takeover: Takeover,
+        stale_after_secs: u64,
+    ) -> Result<(broadcast::Receiver<StreamingEvent>, Arc<StreamingTask>), LeaseHeld> {
+        // A live task in this process's own map is decisive and cheaper than a
+        // round trip: it is this replica's half of the same answer.
+        //
+        // A task whose abort was requested is deliberately NOT treated as a
+        // live holder. Abort is cooperative, and not every await inside a turn
+        // observes it — MCP session discovery, guardrails and file parsing all
+        // run inside the lease with no timeout and no abort arm. Without this,
+        // a turn stuck in one of those holds the chat against every later
+        // write, from every replica, until the process restarts: the user
+        // presses Stop, gets a 200, and the chat answers 409 forever. Falling
+        // through to the CAS bounds that at `stale_after_secs`, because the
+        // heartbeat below stops refreshing the row at the same moment.
+        if let Some(existing) = self.get_task(&chat_id).await
+            && !existing.is_completed()
+            && !existing.is_abort_requested()
+        {
+            return Err(LeaseHeld {
+                active_generation_id: Some(existing.generation_id),
+                started_at: None,
+            });
+        }
+
+        let Some(db) = &self.db else {
+            // No persistence configured: there is no shared lease to contend
+            // for, so fall back to the in-memory path.
+            return Ok(self.start_task(chat_id, message_id).await);
+        };
+
+        let generation_id = Uuid::new_v4();
+        let take_parked = matches!(takeover, Takeover::TakeParked);
+
+        let txn = match db.begin().await {
+            Ok(txn) => txn,
+            Err(err) => {
+                tracing::warn!(chat_id = %chat_id, error = %err, "Failed to open lease transaction");
+                return Err(LeaseHeld {
+                    active_generation_id: None,
+                    started_at: None,
+                });
+            }
+        };
+
+        let claimed = Self::claim_lease_in_txn(
+            &txn,
+            chat_id,
+            message_id,
+            generation_id,
+            take_parked,
+            stale_after_secs,
+        )
+        .await;
+
+        match claimed {
+            Ok(true) => {
+                if let Err(err) = txn.commit().await {
+                    tracing::warn!(chat_id = %chat_id, error = %err, "Failed to commit lease claim");
+                    return Err(LeaseHeld {
+                        active_generation_id: None,
+                        started_at: None,
+                    });
+                }
+            }
+            Ok(false) => {
+                let holder = Self::read_lease_holder(&txn, chat_id).await;
+                let _ = txn.rollback().await;
+                return Err(holder);
+            }
+            Err(err) => {
+                tracing::warn!(chat_id = %chat_id, error = %err, "Failed to claim generation lease");
+                let _ = txn.rollback().await;
+                return Err(LeaseHeld {
+                    active_generation_id: None,
+                    started_at: None,
+                });
+            }
+        }
+
+        // The row is ours. Publish the task only now, so a refused caller
+        // never leaves a map entry behind.
+        let task = Arc::new(
+            StreamingTask::new(message_id, generation_id)
+                .with_shared_state(self.db.clone(), chat_id),
+        );
+        let receiver = task.subscribe();
+
+        let displaced = {
+            let mut tasks =
+                crate::latency::stage("generation.registry_lock_wait", self.tasks.write()).await;
+            let _hold_timer = crate::latency::StageTimer::new("generation.registry_lock_hold");
+            tasks.insert(chat_id, Arc::clone(&task))
+        };
+
+        // Anything the insert displaced no longer owns the chat and will never
+        // be told so by the heartbeat, because it is no longer in the map to
+        // be checked. Tell it here.
+        if let Some(displaced) = displaced
+            && !displaced.is_completed()
+        {
+            tracing::info!(
+                chat_id = %chat_id,
+                displaced_generation_id = %displaced.generation_id,
+                generation_id = %generation_id,
+                "Aborting a generation displaced by a new lease holder"
+            );
+            displaced.request_abort();
+        }
+
+        let task_for_commands = Arc::clone(&task);
+        let db_for_commands = db.clone();
+        tokio::spawn(async move {
+            Self::run_command_listener(db_for_commands, task_for_commands).await;
+        });
+
+        Ok((receiver, task))
+    }
+
+    /// The CAS itself. Returns whether the lease was claimed.
+    async fn claim_lease_in_txn<C: ConnectionTrait>(
+        txn: &C,
+        chat_id: Uuid,
+        message_id: Uuid,
+        generation_id: Uuid,
+        take_parked: bool,
+        stale_after_secs: u64,
+    ) -> Result<bool, sea_orm::DbErr> {
+        // Serialize same-chat contenders. Transaction-scoped, so it is
+        // released by the commit or rollback below whatever happens.
+        let lock_statement = named_statement_from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            POSTGRES_QUERY_GENERATION_TRY_START,
+            "SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+            [chat_id.to_string().into()],
+        );
+        txn.query_one_raw(lock_statement).await?;
+
+        // `generation_heartbeat_at` is nullable, and NULL compares to NULL
+        // rather than to false, so a row left 'running' without one would
+        // never look stale and would wedge the chat forever.
+        let claim_statement = named_statement_from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            POSTGRES_QUERY_GENERATION_TRY_START,
+            r#"
+            UPDATE chats
+            SET active_generation_id = $1,
+                generation_state = 'running',
+                generation_started_at = now(),
+                generation_heartbeat_at = now(),
+                generation_ended_at = NULL
+            WHERE id = $2
+              AND (
+                generation_state IS NULL
+                OR generation_state IN ('completed', 'errored')
+                OR (
+                    generation_state = 'running'
+                    AND COALESCE(generation_heartbeat_at, generation_started_at, 'epoch'::timestamptz)
+                        < now() - make_interval(secs => $3::double precision)
+                )
+                OR ($4::bool AND generation_state = 'awaiting_approval')
+              )
+            RETURNING id
+            "#,
+            [
+                generation_id.into(),
+                chat_id.into(),
+                (stale_after_secs as f64).into(),
+                take_parked.into(),
+            ],
+        );
+
+        if txn.query_one_raw(claim_statement).await?.is_none() {
+            return Ok(false);
+        }
+
+        // Only now is the shared row ours to replace: doing this before the
+        // CAS would cut a live holder off from its abort channel.
+        let delete_statement = named_statement_from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            POSTGRES_QUERY_GENERATION_TRY_START,
+            "DELETE FROM temp_chat_generations WHERE chat_id = $1",
+            [chat_id.into()],
+        );
+        txn.execute_raw(delete_statement).await?;
+
+        let shared_statement = named_statement_from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            POSTGRES_QUERY_GENERATION_TRY_START,
+            r#"
+            INSERT INTO temp_chat_generations
+                (generation_id, chat_id, message_id, owner_pod)
+            VALUES ($1, $2, $3, $4)
+            "#,
+            [
+                generation_id.into(),
+                chat_id.into(),
+                message_id.into(),
+                owner_pod().into(),
+            ],
+        );
+        txn.execute_raw(shared_statement).await?;
+
+        Ok(true)
+    }
+
+    /// Read who holds the lease, for the refusal body. Best-effort: a missing
+    /// row or a failed read still refuses, just with less detail.
+    async fn read_lease_holder<C: ConnectionTrait>(txn: &C, chat_id: Uuid) -> LeaseHeld {
+        let statement = named_statement_from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            POSTGRES_QUERY_GENERATION_LEASE_HOLDER,
+            r#"
+            SELECT active_generation_id,
+                   to_char(generation_started_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+                       AS started_at
+            FROM chats
+            WHERE id = $1
+            "#,
+            [chat_id.into()],
+        );
+
+        match txn.query_one_raw(statement).await {
+            Ok(Some(row)) => LeaseHeld {
+                active_generation_id: row.try_get("", "active_generation_id").ok(),
+                started_at: row.try_get("", "started_at").ok(),
+            },
+            Ok(None) | Err(_) => LeaseHeld {
+                active_generation_id: None,
+                started_at: None,
+            },
+        }
     }
 
     /// Get an existing task for the given chat
@@ -501,6 +809,98 @@ impl BackgroundTaskManager {
         Ok(())
     }
 
+    /// Which of this process's generations should have their lease refreshed.
+    ///
+    /// A generation that has been asked to stop is excluded. Normally it winds
+    /// down in well under `stale_after_secs` and releases the lease itself, so
+    /// this changes nothing. It matters when the run is wedged in an await
+    /// that never observes the abort — MCP session discovery, guardrails and
+    /// file parsing all run inside the lease with no timeout and no abort arm.
+    /// Refreshing such a row forever would leave the chat refusing every write
+    /// from every replica until the process restarted, with Stop reporting
+    /// success and changing nothing. Letting it age is what bounds that at
+    /// `stale_after_secs`.
+    ///
+    /// Split out of the maintenance loop so the rule can be tested without
+    /// waiting on a timer.
+    fn heartbeat_targets(tasks: &HashMap<Uuid, Arc<StreamingTask>>) -> (Vec<Uuid>, Vec<Uuid>) {
+        tasks
+            .iter()
+            .filter(|(_, task)| !task.is_abort_requested())
+            .map(|(chat_id, task)| (*chat_id, task.generation_id))
+            .unzip()
+    }
+
+    /// Abort local generations the DB says someone else now owns.
+    ///
+    /// Only positive evidence counts: the chat is still `running` and its
+    /// `active_generation_id` names a generation other than ours. Treating "my
+    /// heartbeat did not land" as displacement would kill healthy generations
+    /// whose best-effort start write was swallowed, which is exactly the race
+    /// the un-guarded heartbeat exists to repair.
+    ///
+    /// The abort is cooperative, so the displaced run ends at its next check
+    /// rather than instantly; a wedged provider call is bounded by
+    /// `generation_status.provider_idle_timeout_secs`, not by this tick.
+    async fn abort_displaced_generations(
+        db: &DatabaseConnection,
+        tasks: &Arc<RwLock<HashMap<Uuid, Arc<StreamingTask>>>>,
+        chat_ids: Vec<Uuid>,
+        generation_ids: Vec<Uuid>,
+    ) {
+        let statement = named_statement_from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            POSTGRES_QUERY_GENERATION_DISPLACED,
+            r#"
+            SELECT active.chat_id AS chat_id, active.generation_id AS generation_id
+            FROM (
+                SELECT unnest($1::uuid[]) AS chat_id,
+                       unnest($2::uuid[]) AS generation_id
+            ) active
+            JOIN chats ON chats.id = active.chat_id
+            WHERE chats.generation_state = 'running'
+              AND chats.active_generation_id IS DISTINCT FROM active.generation_id
+            "#,
+            [chat_ids.into(), generation_ids.into()],
+        );
+
+        let rows = match db.query_all_raw(statement).await {
+            Ok(rows) => rows,
+            Err(err) => {
+                tracing::warn!(error = %err, "Failed to look for displaced generations");
+                return;
+            }
+        };
+
+        for row in rows {
+            let (Ok(chat_id), Ok(generation_id)) = (
+                row.try_get::<Uuid>("", "chat_id"),
+                row.try_get::<Uuid>("", "generation_id"),
+            ) else {
+                continue;
+            };
+
+            let task = {
+                let tasks = tasks.read().await;
+                tasks
+                    .get(&chat_id)
+                    .filter(|task| task.generation_id == generation_id)
+                    .map(Arc::clone)
+            };
+
+            if let Some(task) = task
+                && !task.is_completed()
+            {
+                tracing::info!(
+                    chat_id = %chat_id,
+                    generation_id = %generation_id,
+                    "Aborting a generation whose lease was taken over"
+                );
+                task.request_abort();
+            }
+        }
+    }
+
     /// Periodically heartbeat all in-flight generations and reap rows whose
     /// heartbeat went stale (e.g. after a process died mid-generation).
     async fn run_maintenance_task(
@@ -508,6 +908,7 @@ impl BackgroundTaskManager {
         tasks: Arc<RwLock<HashMap<Uuid, Arc<StreamingTask>>>>,
         config: GenerationStatusConfig,
         delegation_run_timeout_secs: Option<u64>,
+        lease_identity_guard: Arc<AtomicBool>,
     ) {
         let mut interval =
             tokio::time::interval(Duration::from_secs(config.heartbeat_interval_secs.max(1)));
@@ -517,36 +918,70 @@ impl BackgroundTaskManager {
             // previous process are reaped right at startup.
             interval.tick().await;
 
-            let (chat_ids, generation_ids): (Vec<Uuid>, Vec<Uuid>) = {
-                let tasks = tasks.read().await;
-                tasks
-                    .iter()
-                    .map(|(chat_id, task)| (*chat_id, task.generation_id))
-                    .unzip()
-            };
+            let (chat_ids, generation_ids): (Vec<Uuid>, Vec<Uuid>) =
+                Self::heartbeat_targets(&*tasks.read().await);
+
+            let identity_guarded = lease_identity_guard.load(Ordering::Relaxed);
 
             if !chat_ids.is_empty() {
-                // The heartbeat also re-asserts the lease: two same-chat
-                // starts can race their start UPDATEs, and the map is this
-                // process's source of truth.
-                let statement = named_statement_from_sql_and_values(
-                    sea_orm::DatabaseBackend::Postgres,
-                    POSTGRES_QUERY_GENERATION_HEARTBEAT,
-                    r#"
-                    UPDATE chats
-                    SET generation_heartbeat_at = now(),
-                        active_generation_id = active.generation_id
-                    FROM (
-                        SELECT unnest($1::uuid[]) AS chat_id,
-                               unnest($2::uuid[]) AS generation_id
-                    ) active
-                    WHERE chats.id = active.chat_id
-                      AND chats.generation_state = 'running'
-                    "#,
-                    [chat_ids.into(), generation_ids.clone().into()],
-                );
+                // Two shapes, chosen by `lease_identity_guard`:
+                //
+                // Guard OFF (historical): the heartbeat also re-asserts the
+                // lease, because two same-chat starts can race their start
+                // UPDATEs and the map is this process's source of truth.
+                //
+                // Guard ON: the row decides who owns the chat, so refreshing
+                // a lease we no longer hold would silently undo a legitimate
+                // stale-lease takeover — the taker's own `remove_task` is
+                // identity-gated and would then never land, wedging the chat
+                // as 'running' until the reaper.
+                let statement = if identity_guarded {
+                    named_statement_from_sql_and_values(
+                        sea_orm::DatabaseBackend::Postgres,
+                        POSTGRES_QUERY_GENERATION_HEARTBEAT,
+                        r#"
+                        UPDATE chats
+                        SET generation_heartbeat_at = now()
+                        FROM (
+                            SELECT unnest($1::uuid[]) AS chat_id,
+                                   unnest($2::uuid[]) AS generation_id
+                        ) active
+                        WHERE chats.id = active.chat_id
+                          AND chats.generation_state = 'running'
+                          AND chats.active_generation_id = active.generation_id
+                        "#,
+                        [chat_ids.clone().into(), generation_ids.clone().into()],
+                    )
+                } else {
+                    named_statement_from_sql_and_values(
+                        sea_orm::DatabaseBackend::Postgres,
+                        POSTGRES_QUERY_GENERATION_HEARTBEAT,
+                        r#"
+                        UPDATE chats
+                        SET generation_heartbeat_at = now(),
+                            active_generation_id = active.generation_id
+                        FROM (
+                            SELECT unnest($1::uuid[]) AS chat_id,
+                                   unnest($2::uuid[]) AS generation_id
+                        ) active
+                        WHERE chats.id = active.chat_id
+                          AND chats.generation_state = 'running'
+                        "#,
+                        [chat_ids.clone().into(), generation_ids.clone().into()],
+                    )
+                };
                 if let Err(err) = db.execute_raw(statement).await {
                     tracing::warn!(error = %err, "Failed to heartbeat running generations");
+                }
+
+                if identity_guarded {
+                    Self::abort_displaced_generations(
+                        &db,
+                        &tasks,
+                        chat_ids.clone(),
+                        generation_ids.clone(),
+                    )
+                    .await;
                 }
 
                 let shared_statement = named_statement_from_sql_and_values(
@@ -1462,5 +1897,41 @@ mod tests {
             .deliver_client_tool_result("call-1", ClientToolOutcome::Error("x".to_string()))
             .await;
         assert_eq!(delivery, ClientToolDelivery::Unknown);
+    }
+
+    /// A generation told to stop must not keep its own lease alive.
+    ///
+    /// Abort is cooperative and several awaits inside a turn never observe it,
+    /// so a wedged run would otherwise refresh its row forever and the chat
+    /// would refuse every write, from every replica, until the process
+    /// restarted — with Stop reporting success and doing nothing.
+    ///
+    /// Tested on the rule rather than on the timer: a sleeping test here would
+    /// be masked by `--retries`, which is exactly how a timing regression
+    /// slips through.
+    #[tokio::test]
+    async fn a_stopped_generation_is_not_heartbeated() {
+        let live_chat = Uuid::new_v4();
+        let stopped_chat = Uuid::new_v4();
+        let live = Arc::new(StreamingTask::new(Uuid::new_v4(), Uuid::new_v4()));
+        let stopped = Arc::new(StreamingTask::new(Uuid::new_v4(), Uuid::new_v4()));
+        stopped.request_abort();
+
+        let mut tasks = HashMap::new();
+        tasks.insert(live_chat, Arc::clone(&live));
+        tasks.insert(stopped_chat, Arc::clone(&stopped));
+
+        let (chat_ids, generation_ids) = BackgroundTaskManager::heartbeat_targets(&tasks);
+
+        assert_eq!(
+            chat_ids,
+            vec![live_chat],
+            "only the live run keeps its lease"
+        );
+        assert_eq!(generation_ids, vec![live.generation_id]);
+        assert!(
+            !chat_ids.contains(&stopped_chat),
+            "a stopped run must be left to age out"
+        );
     }
 }

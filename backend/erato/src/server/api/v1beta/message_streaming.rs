@@ -31,7 +31,7 @@ use crate::server::api::v1beta::message_streaming_file_extraction::{
     parse_content_filter_error_from_mcp_tool_result, post_process_mcp_tool_result,
 };
 use crate::services::background_tasks::{
-    BackgroundTaskManager, StreamingEvent, StreamingTask, TaskCleanupGuard,
+    BackgroundTaskManager, StreamingEvent, StreamingTask, Takeover, TaskCleanupGuard,
     ToolCallStatus as BgToolCallStatus,
 };
 use crate::services::client_tools::{ClientToolDelivery, ClientToolOutcome};
@@ -1730,6 +1730,103 @@ pub struct AbortStreamRequest {
 #[serde(rename_all = "snake_case")]
 pub struct AbortStreamResponse {
     abort_requested: bool,
+}
+
+/// Body of the `409` a streaming route answers when the chat's generation
+/// lease is already held.
+///
+/// `code` is what the client discriminates on: the same status is also used
+/// for archived chats and for live delegated runs, which stay plain text.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct GenerationRunningError {
+    /// Always `generation_running`.
+    pub code: String,
+    /// The chat whose lease is held.
+    pub chat_id: Uuid,
+    /// Who started the generation holding the lease. Always `user` until
+    /// system-initiated deliveries persist their own marker.
+    pub initiator: String,
+    /// When the holding generation started, RFC 3339, when the row records it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<String>,
+}
+
+/// Error type of the streaming routes.
+///
+/// Exists so one route can answer a machine-readable body without changing
+/// what every other error on that route looks like: `PlainText` reproduces
+/// the historical `(StatusCode, String)` response byte for byte, and the
+/// `From` impl means existing `?` sites keep compiling untouched.
+#[derive(Debug)]
+pub enum StreamRouteError {
+    PlainText(axum::http::StatusCode, String),
+    GenerationRunning(Box<GenerationRunningError>),
+}
+
+impl From<(axum::http::StatusCode, String)> for StreamRouteError {
+    fn from((status, message): (axum::http::StatusCode, String)) -> Self {
+        StreamRouteError::PlainText(status, message)
+    }
+}
+
+impl axum::response::IntoResponse for StreamRouteError {
+    fn into_response(self) -> axum::response::Response {
+        match self {
+            StreamRouteError::PlainText(status, message) => (status, message).into_response(),
+            StreamRouteError::GenerationRunning(body) => {
+                (axum::http::StatusCode::CONFLICT, Json(*body)).into_response()
+            }
+        }
+    }
+}
+
+/// Take the chat's generation lease for a user-initiated write.
+///
+/// Behind `delegation.tasks.enabled` this is a compare-and-set that refuses
+/// rather than displacing a live generation, because once a task result can
+/// arrive on its own the chat has two possible writers and "last start wins"
+/// silently drops one of them. With the gate off it is the historical
+/// replace-on-start, unchanged.
+async fn acquire_user_generation_lease(
+    app_state: &AppState,
+    chat_id: Uuid,
+    message_id: Uuid,
+) -> Result<
+    (
+        tokio::sync::broadcast::Receiver<StreamingEvent>,
+        Arc<StreamingTask>,
+    ),
+    StreamRouteError,
+> {
+    if !app_state.config.delegation.tasks.enabled {
+        return Ok(app_state
+            .background_tasks
+            .start_task(chat_id, message_id)
+            .await);
+    }
+
+    app_state
+        .background_tasks
+        .try_start_task(
+            chat_id,
+            message_id,
+            // A person is asking for this turn: abandoning an approval card
+            // they have stopped answering is their call to make.
+            Takeover::TakeParked,
+            app_state.config.generation_status.stale_after_secs,
+        )
+        .await
+        .map_err(|held| {
+            StreamRouteError::GenerationRunning(Box::new(GenerationRunningError {
+                code: "generation_running".to_string(),
+                chat_id,
+                // Only user turns take a lease today; 4.5 adds the marker that
+                // makes this answer "task_result" for a delivery.
+                initiator: "user".to_string(),
+                started_at: held.started_at,
+            }))
+        })
 }
 
 /// Deserialize a present field (including an explicit JSON `null`) as `Some`.
@@ -9400,7 +9497,7 @@ async fn accept_user_write_into_delegated_run(
         (status = OK, content_type="text/event-stream", body = MessageSubmitStreamingResponseMessage),
         (status = BAD_REQUEST, description = "When validation fails (e.g., invalid previous_message_id)"),
         (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
-        (status = CONFLICT, description = "When the chat is archived, or is a delegated run that is still in progress"),
+        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived, or is a delegated run that is still in progress (plain text), or the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running)"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -9414,7 +9511,7 @@ pub async fn message_submit_sse(
     Extension(me_user): Extension<MeProfile>,
     headers: HeaderMap,
     Json(request): Json<MessageSubmitRequest>,
-) -> Result<Sse<impl Stream<Item = Result<Event, Report>>>, (axum::http::StatusCode, String)> {
+) -> Result<Sse<impl Stream<Item = Result<Event, Report>>>, StreamRouteError> {
     // Validate request parameters
     validate_submit_request(
         &app_state,
@@ -9536,11 +9633,9 @@ pub async fn message_submit_sse(
     )
     .await?;
 
-    // Start or get background task for this chat
-    let (broadcast_rx, task) = app_state
-        .background_tasks
-        .start_task(chat_id, Uuid::new_v4()) // message_id will be set later
-        .await;
+    // Take the chat's generation lease. message_id is set later.
+    let (broadcast_rx, task) =
+        acquire_user_generation_lease(&app_state, chat_id, Uuid::new_v4()).await?;
 
     // Clone variables for the background task
     let app_state_bg = app_state.clone();
@@ -10821,7 +10916,7 @@ pub(crate) async fn run_message_submit_task(
         (status = OK, content_type="text/event-stream", body = RegenerateMessageStreamingResponseMessage),
         (status = BAD_REQUEST, description = "When validation fails (e.g., invalid message role)"),
         (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
-        (status = CONFLICT, description = "When the chat is archived, or is a delegated run that is still in progress"),
+        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived, or is a delegated run that is still in progress (plain text), or the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running)"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -10835,7 +10930,7 @@ pub async fn regenerate_message_sse(
     Extension(policy): Extension<PolicyEngine>,
     headers: HeaderMap,
     Json(request): Json<RegenerateMessageRequest>,
-) -> Result<Sse<impl Stream<Item = Result<Event, Report>>>, (axum::http::StatusCode, String)> {
+) -> Result<Sse<impl Stream<Item = Result<Event, Report>>>, StreamRouteError> {
     // Validate request parameters
     let validation_result =
         validate_regenerate_request(&app_state, &policy, &me_user, &request.current_message_id)
@@ -10927,10 +11022,8 @@ pub async fn regenerate_message_sse(
 
     // Create a channel for sending events
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
-    let (_abort_rx, task) = app_state
-        .background_tasks
-        .start_task(chat.id, Uuid::new_v4())
-        .await;
+    let (_abort_rx, task) =
+        acquire_user_generation_lease(&app_state, chat.id, Uuid::new_v4()).await?;
 
     // Move validated messages into the task
     let previous_message = validation_result.previous_message;
@@ -11248,7 +11341,7 @@ pub async fn regenerate_message_sse(
         (status = OK, content_type="text/event-stream", body = EditMessageStreamingResponseMessage),
         (status = BAD_REQUEST, description = "When validation fails (e.g., invalid message role)"),
         (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
-        (status = CONFLICT, description = "When the chat is archived, or is a delegated run that is still in progress"),
+        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived, or is a delegated run that is still in progress (plain text), or the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running)"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -11262,7 +11355,7 @@ pub async fn edit_message_sse(
     Extension(policy): Extension<PolicyEngine>,
     headers: HeaderMap,
     Json(request): Json<EditMessageRequest>,
-) -> Result<Sse<impl Stream<Item = Result<Event, Report>>>, (axum::http::StatusCode, String)> {
+) -> Result<Sse<impl Stream<Item = Result<Event, Report>>>, StreamRouteError> {
     // Validate request parameters
     let message_to_edit =
         validate_edit_request(&app_state, &policy, &me_user, &request.message_id).await?;
@@ -11362,10 +11455,8 @@ pub async fn edit_message_sse(
 
     // Create a channel for sending events
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
-    let (_abort_rx, task) = app_state
-        .background_tasks
-        .start_task(chat.id, Uuid::new_v4())
-        .await;
+    let (_abort_rx, task) =
+        acquire_user_generation_lease(&app_state, chat.id, Uuid::new_v4()).await?;
 
     // Move request data into the task
     let replace_user_message = request.replace_user_message;
@@ -11948,7 +12039,7 @@ pub async fn client_tool_result(
         (status = OK, content_type = "text/event-stream", body = MessageSubmitStreamingResponseMessage),
         (status = BAD_REQUEST, description = "The message has no pending approval or the decision is invalid"),
         (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
-        (status = CONFLICT, description = "When the chat is archived"),
+        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), or the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running)"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -11961,7 +12052,7 @@ pub async fn continue_message_sse(
     Extension(policy): Extension<PolicyEngine>,
     Extension(me_user): Extension<MeProfile>,
     Json(request): Json<ContinueStreamRequest>,
-) -> Result<Sse<SseEventStreamWithKeepAlive>, (axum::http::StatusCode, String)> {
+) -> Result<Sse<SseEventStreamWithKeepAlive>, StreamRouteError> {
     let mcp = app_state.mcp_state().await;
     // Check ownership and fail before opening an SSE response. The worker reads
     // the message again so the approval transition is based on current state.
@@ -11982,7 +12073,8 @@ pub async fn continue_message_sse(
         return Err((
             axum::http::StatusCode::BAD_REQUEST,
             "Message generation is not awaiting tool approval".to_string(),
-        ));
+        )
+            .into());
     }
     if matches!(request.decision, ToolApprovalDecision::ApproveAlways)
         && !mcp.config.mcp_servers_global.approval.allow_always
@@ -11990,7 +12082,8 @@ pub async fn continue_message_sse(
         return Err((
             axum::http::StatusCode::BAD_REQUEST,
             "Always allow is disabled by MCP approval policy".to_string(),
-        ));
+        )
+            .into());
     }
 
     // The message load above authorized reads on this chat, so a missing or
@@ -12014,14 +12107,21 @@ pub async fn continue_message_sse(
     let app_state_for_worker = app_state.clone();
     let policy_for_worker = policy.clone();
     let chat_id = message.chat_id;
+
+    // The decision starts a new generation on the chat's lease: the state
+    // leaves 'awaiting_approval' for 'running' here, and the outcome parks it
+    // again when the continuation stops on a chained approval.
+    //
+    // Taken BEFORE the spawn, so a refusal is still an HTTP status rather than
+    // a stream that opens and dies. It has to be taken at all because the
+    // exemption this path used to rely on — "the continuation resumes the
+    // parked generation instead of starting a second one" — stops being true
+    // once a user write can take a parked lease: the card can still be mounted
+    // while another turn already owns the chat.
+    let (_abort_rx, task) =
+        acquire_user_generation_lease(&app_state, chat_id, request.message_id).await?;
+
     tokio::spawn(async move {
-        // The decision starts a new generation on the chat's lease: the state
-        // leaves 'awaiting_approval' for 'running' here, and the outcome
-        // parks it again when the continuation stops on a chained approval.
-        let (_abort_rx, task) = app_state_for_worker
-            .background_tasks
-            .start_task(chat_id, request.message_id)
-            .await;
         let mut cleanup_guard = TaskCleanupGuard::new(
             app_state_for_worker.background_tasks.clone(),
             chat_id,

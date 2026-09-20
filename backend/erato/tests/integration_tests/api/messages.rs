@@ -4395,8 +4395,7 @@ async fn test_submit_to_normal_existing_chat_still_succeeds(pool: Pool<Postgres>
 /// - `sse-streaming`
 /// - `uses-mocked-llm`
 /// - `uses-mock-mcp`
-#[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn test_continuestream_resumes_a_parked_tool_approval(pool: Pool<Postgres>) {
+async fn continuestream_resumes_a_parked_tool_approval(pool: Pool<Postgres>, tasks_enabled: bool) {
     const TOOL_RESULT: &str = "approval probe published";
     let continuation_recorder = RequestBodyRecorder::new();
 
@@ -4450,6 +4449,10 @@ async fn test_continuestream_resumes_a_parked_tool_approval(pool: Pool<Postgres>
         preset: erato::config::McpToolApprovalPreset::Restrictive,
         allow_always: false,
     };
+    // `continuestream` is the one user write where EVERY call lands on a row
+    // in `awaiting_approval`, so under the task gate the takeover mode decides
+    // 100% of this route's behaviour rather than a parked-chat corner case.
+    app_config.delegation.tasks.enabled = tasks_enabled;
     let app_state = test_app_state(app_config, pool).await;
     get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
         .await
@@ -4547,6 +4550,40 @@ async fn test_continuestream_resumes_a_parked_tool_approval(pool: Pool<Postgres>
             .as_deref(),
         Some("completed")
     );
+}
+
+/// Gate off: the approval continuation is unaffected by the task lease.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_continuestream_resumes_a_parked_tool_approval(pool: Pool<Postgres>) {
+    continuestream_resumes_a_parked_tool_approval(pool, false).await;
+}
+
+/// Gate ON, and this is the arm that had no coverage at all.
+///
+/// With `delegation.tasks.enabled` the route acquires the lease through
+/// `try_start_task` before it spawns. Every continuation arrives on a chat in
+/// `awaiting_approval`, so `Takeover::TakeParked` is not a corner case here —
+/// it is the whole gate. Flip that literal in `acquire_user_generation_lease`
+/// to `RefuseParked` and every MCP tool approval 409s forever: the stale-lease
+/// arm of the CAS rescues `running` rows only, never `awaiting_approval`, so
+/// the entire approval flow dies. Before this test, nothing failed.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn continuestream_resumes_a_parked_tool_approval_under_the_task_gate(pool: Pool<Postgres>) {
+    continuestream_resumes_a_parked_tool_approval(pool, true).await;
 }
 
 /// The wire contract the web client seeds its streaming buffer from: a
