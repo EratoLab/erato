@@ -3568,6 +3568,8 @@ impl DelegationConfig {
             }
         }
 
+        self.tasks.approval.validate()?;
+
         Ok(())
     }
 }
@@ -3691,6 +3693,11 @@ pub struct DelegationTasksConfig {
     // Defaults to `true`.
     #[serde(default = "default_delegation_tasks_propagate_child_mcp_approvals")]
     pub propagate_child_mcp_approvals: bool,
+
+    // Whether the model's own task dispatch waits for the user's approval, and
+    // from which batch size a plan is worth asking about.
+    #[serde(default)]
+    pub approval: DelegationTasksApprovalConfig,
 }
 
 impl Default for DelegationTasksConfig {
@@ -3710,6 +3717,110 @@ impl Default for DelegationTasksConfig {
             run_modes: default_delegation_tasks_run_modes(),
             scheduling: TaskScheduling::default(),
             propagate_child_mcp_approvals: default_delegation_tasks_propagate_child_mcp_approvals(),
+            approval: DelegationTasksApprovalConfig::default(),
+        }
+    }
+}
+
+/// The approval-before-dispatch policy for model-planned tasks
+/// (`[delegation.tasks.approval]`).
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct DelegationTasksApprovalConfig {
+    // When the user is asked before the model's planned tasks are dispatched.
+    // "never" dispatches without asking. "always" asks about every batch that
+    // contains a task. "plan" asks only once a batch reaches plan_min_tasks
+    // tasks. "async_only" asks about the tasks that detach and leaves awaited
+    // ones alone, so it is equivalent to "never" until "async" is in
+    // delegation.tasks.run_modes.
+    // Defaults to `async_only`.
+    #[serde(default)]
+    pub mode: TaskApprovalMode,
+
+    // From how many tasks in one batch mode = "plan" asks. Below two there is
+    // no plan to review, only a single call, which is what "always" is for.
+    // Must be at least 2.
+    // Defaults to `2`.
+    #[serde(default = "default_delegation_tasks_approval_plan_min_tasks")]
+    pub plan_min_tasks: u32,
+}
+
+impl Default for DelegationTasksApprovalConfig {
+    fn default() -> Self {
+        Self {
+            mode: TaskApprovalMode::default(),
+            plan_min_tasks: default_delegation_tasks_approval_plan_min_tasks(),
+        }
+    }
+}
+
+impl DelegationTasksApprovalConfig {
+    pub fn validate(&self) -> Result<(), Report> {
+        // A threshold of 1 or 0 is not a stricter `plan`, it is `always` under
+        // a name that promises a review of something with nothing to choose
+        // between.
+        if self.plan_min_tasks < 2 {
+            return Err(eyre!(
+                "delegation.tasks.approval.plan_min_tasks must be at least 2 (got {})",
+                self.plan_min_tasks
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// When the user is asked before a model-planned task is dispatched.
+///
+/// The default is the literal `async_only`, not a value derived from
+/// `run_modes`: a deployment that later offers `async` gets the prompt it
+/// implies without having to remember to ask for it, and one that never offers
+/// it is never asked at all.
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[facet(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+#[repr(C)]
+pub enum TaskApprovalMode {
+    /// Dispatch every planned task without asking.
+    Never,
+    /// Ask about any batch that contains a task call.
+    Always,
+    /// Ask once a batch reaches `plan_min_tasks` task calls.
+    Plan,
+    /// Ask about the task calls that detach, and only those.
+    #[default]
+    AsyncOnly,
+}
+
+impl TaskApprovalMode {
+    /// The spelling the configuration and the injected frontend environment
+    /// use. Homed on the enum so a client-facing string cannot drift from the
+    /// config value it reports.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TaskApprovalMode::Never => "never",
+            TaskApprovalMode::Always => "always",
+            TaskApprovalMode::Plan => "plan",
+            TaskApprovalMode::AsyncOnly => "async_only",
+        }
+    }
+
+    /// How much this mode asks, so two selected facets can be merged without
+    /// either being able to buy its way past the other's policy.
+    fn strictness(self) -> u8 {
+        match self {
+            TaskApprovalMode::Never => 0,
+            TaskApprovalMode::AsyncOnly => 1,
+            TaskApprovalMode::Plan => 2,
+            TaskApprovalMode::Always => 3,
+        }
+    }
+
+    /// The stricter of two modes. Selecting a second facet may only ever make a
+    /// turn ask more, exactly as a second facet may only ever narrow a cap.
+    pub fn strictest(self, other: Self) -> Self {
+        if other.strictness() > self.strictness() {
+            other
+        } else {
+            self
         }
     }
 }
@@ -3760,6 +3871,20 @@ pub struct FacetDelegationOverrides {
 
     #[serde(default)]
     pub scheduling: Option<TaskScheduling>,
+
+    #[serde(default)]
+    pub approval: Option<FacetDelegationApprovalOverrides>,
+}
+
+/// Per-facet overrides of the `[delegation.tasks.approval]` keys
+/// (`[facets.facets.<facet-id>.delegation.approval]`).
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct FacetDelegationApprovalOverrides {
+    #[serde(default)]
+    pub mode: Option<TaskApprovalMode>,
+
+    #[serde(default)]
+    pub plan_min_tasks: Option<u32>,
 }
 
 /// Whether a task child speaks as the origin chat's assistant or as the bare
@@ -3845,6 +3970,10 @@ fn default_delegation_tasks_max_parallel() -> u32 {
 
 fn default_delegation_tasks_propagate_child_mcp_approvals() -> bool {
     true
+}
+
+fn default_delegation_tasks_approval_plan_min_tasks() -> u32 {
+    2
 }
 
 fn default_delegation_tasks_max_client_tool_calls_per_task() -> u32 {

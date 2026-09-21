@@ -9324,6 +9324,9 @@ async fn async_task_dispatch_settles_the_slot_and_detaches(pool: Pool<Postgres>)
             erato_config::config::TaskRunMode::Wait,
             erato_config::config::TaskRunMode::Async,
         ];
+        // This turn asks for `async`, which the shipped default `async_only`
+        // would park before it ran; the policy has tests of its own.
+        config.delegation.tasks.approval.mode = erato_config::config::TaskApprovalMode::Never;
     })
     .await;
 
@@ -9714,6 +9717,9 @@ async fn async_child_completion_delivers_task_result_and_reacts(pool: Pool<Postg
             erato_config::config::TaskRunMode::Wait,
             erato_config::config::TaskRunMode::Async,
         ];
+        // This turn asks for `async`, which the shipped default `async_only`
+        // would park before it ran; the policy has tests of its own.
+        config.delegation.tasks.approval.mode = erato_config::config::TaskApprovalMode::Never;
     })
     .await;
 
@@ -10418,6 +10424,9 @@ async fn a_reaction_turn_does_not_offer_delegate_task(pool: Pool<Postgres>) {
             erato_config::config::TaskRunMode::Wait,
             erato_config::config::TaskRunMode::Async,
         ];
+        // This turn asks for `async`, which the shipped default `async_only`
+        // would park before it ran; the policy has tests of its own.
+        config.delegation.tasks.approval.mode = erato_config::config::TaskApprovalMode::Never;
     })
     .await;
     let server = app_server(app_state.clone());
@@ -14800,6 +14809,10 @@ async fn async_child_still_refuses_gated_call(pool: Pool<Postgres>) {
                 erato_config::config::TaskRunMode::Wait,
                 erato_config::config::TaskRunMode::Async,
             ];
+            // This turn asks for `async`, which the shipped default
+            // `async_only` would park before it ran; the policy has tests of
+            // its own.
+            config.delegation.tasks.approval.mode = erato_config::config::TaskApprovalMode::Never;
             // A silent result is stored rather than answered, so the assertions
             // below are about the child and not about a reaction turn.
             config.delegation.tasks.scheduling = erato_config::config::TaskScheduling::Silent;
@@ -14839,5 +14852,711 @@ async fn async_child_still_refuses_gated_call(pool: Pool<Postgres>) {
             .any(|part| part["content_type"] == "text"
                 && part["text"].as_str().unwrap().contains("ASYNC-CHILD-DONE")),
         "the child finishes in prose without the call: {child_content:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Dispatch-approval policy (`[delegation.tasks.approval]`).
+// ---------------------------------------------------------------------------
+
+const PLAN_USER_MESSAGE: &str = "plan the two-step research";
+const PLAN_BRIEF_A: &str = "PLAN-BRIEF-A: gather the figures";
+const PLAN_BRIEF_B: &str = "PLAN-BRIEF-B: summarise the figures";
+/// The refusal a denied plan item settles as, which the model then answers
+/// around. Not a `reason`: the envelope vocabulary has none for "the user said
+/// no", and a declined task is not a run outcome.
+const PLAN_DENIAL_TEXT: &str = "The user declined this task.";
+
+/// A planning state with the dispatch-approval policy set explicitly. Every
+/// test here is about the policy, so none of them leans on the shipped default.
+async fn plan_policy_state(
+    pool: Pool<Postgres>,
+    mocks: MockSet,
+    tweak: impl FnOnce(&mut erato::config::AppConfig),
+) -> (erato::state::AppState, mocktail::server::MockServer) {
+    task_state(pool, mocks, &["erato/delegate_task"], tweak).await
+}
+
+/// The origin's first turn: plan two sub-tasks in one batch, in this order.
+fn mock_parent_plans_two_tasks(mocks: &mut MockSet, run_mode: Option<&'static str>) {
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[PLAN_USER_MESSAGE],
+                &[PLAN_BRIEF_A, PLAN_BRIEF_B],
+            ));
+        let arguments = |brief: &str| match run_mode {
+            Some(mode) => {
+                json!({ "task": brief, "facet_ids": ["plan"], "run_mode": mode })
+            }
+            None => json!({ "task": brief, "facet_ids": ["plan"] }),
+        };
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[
+                ("call_plan_a", "delegate_task", arguments(PLAN_BRIEF_A)),
+                ("call_plan_b", "delegate_task", arguments(PLAN_BRIEF_B)),
+            ]),
+        );
+    });
+}
+
+/// Each child answers its own brief. Excluded on the envelope key, which only
+/// the origin's replayed tool responses carry.
+fn mock_plan_children_answer(mocks: &mut MockSet) {
+    for (brief, answer) in [
+        (PLAN_BRIEF_A, "CHILD-A-DONE"),
+        (PLAN_BRIEF_B, "CHILD-B-DONE"),
+    ] {
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[brief], &["child_run_id"]));
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&[answer]),
+            );
+        });
+    }
+}
+
+/// The origin's turn once the decision has been applied. Keyed on a needle the
+/// settled batch puts in the request and the planning turn cannot have.
+fn mock_parent_answers_after_the_plan(mocks: &mut MockSet, needle: &'static str) {
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[PLAN_USER_MESSAGE, needle], &[]));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["PARENT-PLAN-FINAL"]),
+        );
+    });
+}
+
+/// Decide a card item by item. The legacy single-`decision` body cannot express
+/// a plan of more than one task, because it names no approval.
+async fn post_continuestream_decisions(
+    server: &TestServer,
+    message_id: Uuid,
+    decisions: &[(&str, &str)],
+) -> axum_test::TestResponse {
+    let decisions: Vec<Value> = decisions
+        .iter()
+        .map(|(approval_id, decision)| json!({ "approval_id": approval_id, "decision": decision }))
+        .collect();
+    server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "message_id": message_id, "decisions": decisions }))
+        .await
+}
+
+/// The part every one of these tests reads: the plan card at the tail of the
+/// origin row.
+fn plan_request(content: &[Value]) -> Value {
+    let request = content.last().expect("expected a persisted content part");
+    assert_eq!(
+        request["content_type"], "tool_approval_request",
+        "the request must be the LAST part, or the six last-part checks stop \
+         seeing a parked row: {content:?}"
+    );
+    request.clone()
+}
+
+/// The whole point of asking BEFORE dispatch: at the moment the card appears
+/// nothing has been created — no child chat, no run, not even a queued
+/// placeholder — so declining costs the deployment nothing at all. A gate
+/// anywhere inside the pop loop would already have launched the first task.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn plan_policy_parks_before_any_child_is_created(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_parent_plans_two_tasks(&mut mocks, None);
+
+    let (app_state, _llm) = plan_policy_state(pool, mocks, |config| {
+        config.delegation.tasks.approval.mode = erato_config::config::TaskApprovalMode::Plan;
+    })
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, PLAN_USER_MESSAGE, &["plan"]).await;
+    let parent_chat_id = Uuid::parse_str(&chat).unwrap();
+    let parent_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+
+    assert!(
+        delegated_child_chats(&app_state.db, parent_chat_id)
+            .await
+            .is_empty(),
+        "no child row may exist before the decision"
+    );
+
+    let content = content_of(&message_row(&app_state.db, parent_message_id).await);
+    assert!(
+        content
+            .iter()
+            .all(|part| part["content_type"] != "tool_use"),
+        "a parked plan leaves no queued or working slots behind: {content:?}"
+    );
+    let request = plan_request(&content);
+    assert_eq!(request["kind"], "task_plan");
+    assert_eq!(request["tool_name"], "delegate_task");
+    assert_eq!(
+        request["mcp_server_id"], "",
+        "no MCP server is being asked about on this card"
+    );
+    assert_eq!(
+        request["allow_always"], false,
+        "a plan has no standing grant in v1"
+    );
+
+    let approvals = request["approvals"].as_array().unwrap();
+    assert_eq!(approvals.len(), 2, "one item per task: {approvals:?}");
+    assert_eq!(approvals[0]["approval_id"], "plan:1:0");
+    assert_eq!(approvals[1]["approval_id"], "plan:1:1");
+    assert_eq!(approvals[0]["tool_call_id"], "call_plan_a");
+    assert_eq!(approvals[1]["tool_call_id"], "call_plan_b");
+    assert_eq!(approvals[0]["tool_name"], "delegate_task");
+    assert_eq!(approvals[0]["input"]["task"], PLAN_BRIEF_A);
+    assert!(
+        approvals.iter().all(|item| item["child"].is_null()),
+        "there is no child to name yet: {approvals:?}"
+    );
+    assert!(
+        request["pending_tool_calls"].as_array().unwrap().is_empty(),
+        "the whole batch was task calls the policy targeted"
+    );
+
+    assert_eq!(
+        generation_state(&app_state.db, parent_chat_id).await,
+        "awaiting_approval"
+    );
+    assert!(
+        extract_full_text_answer(&events).is_empty(),
+        "a parked turn answers nothing"
+    );
+}
+
+/// Approving the plan dispatches the calls it recorded, through the normal
+/// `delegate_task` path and in the order the model asked for them — so the
+/// per-turn cap, the concurrency bound and the queue-within-batch all apply to
+/// an approved plan exactly as they do to an unasked one.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn approve_plan_dispatches_recorded_calls_in_order(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_parent_plans_two_tasks(&mut mocks, None);
+    mock_plan_children_answer(&mut mocks);
+    mock_parent_answers_after_the_plan(&mut mocks, "CHILD-B-DONE");
+
+    let (app_state, _llm) = plan_policy_state(pool, mocks, |config| {
+        config.delegation.tasks.approval.mode = erato_config::config::TaskApprovalMode::Plan;
+    })
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, PLAN_USER_MESSAGE, &["plan"]).await;
+    let parent_chat_id = Uuid::parse_str(&chat).unwrap();
+    let parent_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+
+    let continued = post_continuestream_decisions(
+        &server,
+        parent_message_id,
+        &[("plan:1:0", "approve"), ("plan:1:1", "approve")],
+    )
+    .await;
+    continued.assert_status_ok();
+    assert!(
+        extract_full_text_answer(&parse_sse_events(&continued)).contains("PARENT-PLAN-FINAL"),
+        "the turn finishes once both tasks have reported"
+    );
+
+    assert_eq!(
+        delegated_child_chats(&app_state.db, parent_chat_id)
+            .await
+            .len(),
+        2,
+        "both approved tasks ran"
+    );
+
+    let content = content_of(&message_row(&app_state.db, parent_message_id).await);
+    let dispatched: Vec<&str> = content
+        .iter()
+        .filter(|part| part["content_type"] == "tool_use")
+        .map(|part| part["tool_call_id"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        dispatched,
+        vec!["call_plan_a", "call_plan_b"],
+        "the model is answered in the order it asked: {content:?}"
+    );
+    for (tool_call_id, answer) in [
+        ("call_plan_a", "CHILD-A-DONE"),
+        ("call_plan_b", "CHILD-B-DONE"),
+    ] {
+        let slot = slot_for(&content, tool_call_id);
+        assert_eq!(slot["status"], "success", "{slot}");
+        assert_eq!(slot["output"]["status"], "completed");
+        assert!(slot["output"]["result"].as_str().unwrap().contains(answer));
+    }
+    let decisions: Vec<&str> = content
+        .iter()
+        .filter(|part| part["content_type"] == "tool_approval")
+        .map(|part| part["approval_id"].as_str().unwrap())
+        .collect();
+    assert_eq!(decisions, vec!["plan:1:0", "plan:1:1"]);
+    assert_eq!(
+        generation_state(&app_state.db, parent_chat_id).await,
+        "completed"
+    );
+}
+
+/// Declining the whole plan settles each task as its own refusal and creates
+/// nothing. Ending the turn instead would leave the chat on a card the user has
+/// already answered, and refusing the calls as a batch would leave the model
+/// unable to tell which of its tasks it was told not to run.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn deny_plan_emits_refusal_per_task_and_no_children(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_parent_plans_two_tasks(&mut mocks, None);
+    mock_parent_answers_after_the_plan(&mut mocks, PLAN_DENIAL_TEXT);
+
+    let (app_state, _llm) = plan_policy_state(pool, mocks, |config| {
+        config.delegation.tasks.approval.mode = erato_config::config::TaskApprovalMode::Plan;
+    })
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, PLAN_USER_MESSAGE, &["plan"]).await;
+    let parent_chat_id = Uuid::parse_str(&chat).unwrap();
+    let parent_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+
+    let continued = post_continuestream_decisions(
+        &server,
+        parent_message_id,
+        &[("plan:1:0", "reject"), ("plan:1:1", "reject")],
+    )
+    .await;
+    continued.assert_status_ok();
+    assert!(
+        extract_full_text_answer(&parse_sse_events(&continued)).contains("PARENT-PLAN-FINAL"),
+        "a denial is not a kill: the turn still answers"
+    );
+
+    assert!(
+        delegated_child_chats(&app_state.db, parent_chat_id)
+            .await
+            .is_empty(),
+        "a declined plan creates nothing"
+    );
+
+    let content = content_of(&message_row(&app_state.db, parent_message_id).await);
+    for tool_call_id in ["call_plan_a", "call_plan_b"] {
+        let slot = slot_for(&content, tool_call_id);
+        assert_eq!(slot["status"], "error", "{slot}");
+        assert_eq!(slot["output"]["status"], "rejected");
+        assert_eq!(slot["output"]["error"], PLAN_DENIAL_TEXT);
+        assert!(
+            slot["output"]["reason"].is_null(),
+            "a plan denial carries no reason: {slot}"
+        );
+    }
+    let rejections: Vec<&Value> = content
+        .iter()
+        .filter(|part| part["content_type"] == "tool_rejection")
+        .collect();
+    assert_eq!(rejections.len(), 2);
+    assert!(
+        rejections.iter().all(|part| part["reason"].is_null()),
+        "only a withdraw carries a reason: {rejections:?}"
+    );
+    assert!(
+        rejections.iter().all(|part| part["never_allow"] == false),
+        "a plan has no standing denial either: {rejections:?}"
+    );
+}
+
+/// A plan can be pruned rather than only accepted or refused whole — which is
+/// what one item per task buys, and the reason the card is not a single
+/// approval covering the batch.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn partial_plan_approval_dispatches_only_approved(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_parent_plans_two_tasks(&mut mocks, None);
+    mock_plan_children_answer(&mut mocks);
+    mock_parent_answers_after_the_plan(&mut mocks, "CHILD-A-DONE");
+
+    let (app_state, _llm) = plan_policy_state(pool, mocks, |config| {
+        config.delegation.tasks.approval.mode = erato_config::config::TaskApprovalMode::Plan;
+    })
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, PLAN_USER_MESSAGE, &["plan"]).await;
+    let parent_chat_id = Uuid::parse_str(&chat).unwrap();
+    let parent_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+
+    let continued = post_continuestream_decisions(
+        &server,
+        parent_message_id,
+        &[("plan:1:0", "approve"), ("plan:1:1", "reject")],
+    )
+    .await;
+    continued.assert_status_ok();
+    assert!(extract_full_text_answer(&parse_sse_events(&continued)).contains("PARENT-PLAN-FINAL"));
+
+    let children = delegated_child_chats(&app_state.db, parent_chat_id).await;
+    assert_eq!(children.len(), 1, "only the approved task ran");
+
+    let content = content_of(&message_row(&app_state.db, parent_message_id).await);
+    let approved = slot_for(&content, "call_plan_a");
+    assert_eq!(approved["output"]["status"], "completed");
+    assert!(
+        approved["output"]["result"]
+            .as_str()
+            .unwrap()
+            .contains("CHILD-A-DONE")
+    );
+    let declined = slot_for(&content, "call_plan_b");
+    assert_eq!(declined["output"]["status"], "rejected");
+    assert_eq!(declined["output"]["error"], PLAN_DENIAL_TEXT);
+}
+
+/// Taking the question back is a decision, not an escape: every open item is
+/// denied with `reason: "withdrawn"` and the turn finishes in prose, rather
+/// than leaving the chat parked on a card the user has dismissed.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn withdraw_plan_denies_every_item_and_turn_continues(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_parent_plans_two_tasks(&mut mocks, None);
+    mock_parent_answers_after_the_plan(&mut mocks, PLAN_DENIAL_TEXT);
+
+    let (app_state, _llm) = plan_policy_state(pool, mocks, |config| {
+        config.delegation.tasks.approval.mode = erato_config::config::TaskApprovalMode::Plan;
+    })
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, PLAN_USER_MESSAGE, &["plan"]).await;
+    let parent_chat_id = Uuid::parse_str(&chat).unwrap();
+    let parent_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+
+    let continued = post_continuestream_decisions(
+        &server,
+        parent_message_id,
+        &[("plan:1:0", "withdraw"), ("plan:1:1", "withdraw")],
+    )
+    .await;
+    continued.assert_status_ok();
+    assert!(
+        extract_full_text_answer(&parse_sse_events(&continued)).contains("PARENT-PLAN-FINAL"),
+        "deny is not kill, and withdraw is a deny"
+    );
+
+    assert!(
+        delegated_child_chats(&app_state.db, parent_chat_id)
+            .await
+            .is_empty()
+    );
+    let content = content_of(&message_row(&app_state.db, parent_message_id).await);
+    let rejections: Vec<&Value> = content
+        .iter()
+        .filter(|part| part["content_type"] == "tool_rejection")
+        .collect();
+    assert_eq!(rejections.len(), 2);
+    assert!(
+        rejections.iter().all(|part| part["reason"] == "withdrawn"),
+        "every item carries the withdraw reason: {rejections:?}"
+    );
+    assert_eq!(
+        generation_state(&app_state.db, parent_chat_id).await,
+        "completed"
+    );
+}
+
+/// The default mode asks about the calls that detach and lets the awaited ones
+/// of the same batch run: an awaited task reports into the turn that asked for
+/// it, so the user sees what it did, while a detached one runs on after the
+/// turn has ended. The `wait` call therefore rides along in
+/// `pending_tool_calls` and dispatches once the decision is in.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn async_only_policy_asks_only_for_async_calls(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[PLAN_USER_MESSAGE],
+                &[PLAN_BRIEF_A, PLAN_BRIEF_B],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[
+                (
+                    "call_plan_a",
+                    "delegate_task",
+                    json!({ "task": PLAN_BRIEF_A, "facet_ids": ["plan"] }),
+                ),
+                (
+                    "call_plan_b",
+                    "delegate_task",
+                    json!({ "task": PLAN_BRIEF_B, "facet_ids": ["plan"], "run_mode": "async" }),
+                ),
+            ]),
+        );
+    });
+    mock_plan_children_answer(&mut mocks);
+    mock_parent_answers_after_the_plan(&mut mocks, "CHILD-A-DONE");
+
+    let (app_state, _llm) = plan_policy_state(pool, mocks, |config| {
+        config.delegation.tasks.run_modes = vec![
+            erato_config::config::TaskRunMode::Wait,
+            erato_config::config::TaskRunMode::Async,
+        ];
+        config.delegation.tasks.approval.mode = erato_config::config::TaskApprovalMode::AsyncOnly;
+        // The detached result is stored rather than answered, so nothing but the
+        // decision drives the assertions below.
+        config.delegation.tasks.scheduling = erato_config::config::TaskScheduling::Silent;
+    })
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, PLAN_USER_MESSAGE, &["plan"]).await;
+    let parent_chat_id = Uuid::parse_str(&chat).unwrap();
+    let parent_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+
+    let content = content_of(&message_row(&app_state.db, parent_message_id).await);
+    let request = plan_request(&content);
+    assert_eq!(request["kind"], "task_plan");
+    let approvals = request["approvals"].as_array().unwrap();
+    assert_eq!(
+        approvals.len(),
+        1,
+        "only the detached call is asked about: {approvals:?}"
+    );
+    assert_eq!(approvals[0]["tool_call_id"], "call_plan_b");
+    let pending: Vec<&str> = request["pending_tool_calls"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|call| call["call_id"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        pending,
+        vec!["call_plan_a"],
+        "the awaited call of the same batch waits for the decision rather than \
+         being asked about"
+    );
+    assert!(
+        delegated_child_chats(&app_state.db, parent_chat_id)
+            .await
+            .is_empty(),
+        "not even the ungated call runs before the decision: a plan card must \
+         not leave queued slots behind"
+    );
+
+    let continued =
+        post_continuestream_decisions(&server, parent_message_id, &[("plan:1:0", "reject")]).await;
+    continued.assert_status_ok();
+    assert!(extract_full_text_answer(&parse_sse_events(&continued)).contains("PARENT-PLAN-FINAL"));
+
+    let content = content_of(&message_row(&app_state.db, parent_message_id).await);
+    assert_eq!(
+        slot_for(&content, "call_plan_b")["output"]["status"],
+        "rejected"
+    );
+    let awaited = slot_for(&content, "call_plan_a");
+    assert_eq!(
+        awaited["output"]["status"], "completed",
+        "the rest of the batch runs after the decision: {awaited}"
+    );
+}
+
+/// The default is the unconditional literal, so this is where "equivalent to
+/// `never`" is actually established: with the default `run_modes` there is no
+/// detached call to ask about and the gate never fires.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn async_only_is_inert_when_run_modes_excludes_async(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_parent_plans_two_tasks(&mut mocks, None);
+    mock_plan_children_answer(&mut mocks);
+    mock_parent_answers_after_the_plan(&mut mocks, "CHILD-B-DONE");
+
+    // No tweak at all: the shipped defaults are what this test is about.
+    let (app_state, _llm) = plan_policy_state(pool, mocks, |_| {}).await;
+    assert_eq!(
+        app_state.config.delegation.tasks.approval.mode,
+        erato_config::config::TaskApprovalMode::AsyncOnly
+    );
+    assert_eq!(
+        app_state.config.delegation.tasks.run_modes,
+        vec![erato_config::config::TaskRunMode::Wait]
+    );
+
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, PLAN_USER_MESSAGE, &["plan"]).await;
+    assert!(
+        extract_full_text_answer(&events).contains("PARENT-PLAN-FINAL"),
+        "the turn runs to its answer without asking"
+    );
+
+    let parent_chat_id = Uuid::parse_str(&chat).unwrap();
+    let parent_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    let content = content_of(&message_row(&app_state.db, parent_message_id).await);
+    assert!(
+        content
+            .iter()
+            .all(|part| part["content_type"] != "tool_approval_request"),
+        "nothing was asked: {content:?}"
+    );
+    assert_eq!(
+        delegated_child_chats(&app_state.db, parent_chat_id)
+            .await
+            .len(),
+        2,
+        "both tasks were dispatched unasked"
+    );
+}
+
+/// `always` is the mode a deployment picks when it wants a person in the loop
+/// for every delegated task, so it must fire on a batch of one awaited call —
+/// the case `plan` deliberately lets through.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn always_policy_asks_for_a_single_wait_task(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_parent_plans_one_task(&mut mocks, PLAN_USER_MESSAGE, PLAN_BRIEF_A, "call_plan_a");
+
+    let (app_state, _llm) = plan_policy_state(pool, mocks, |config| {
+        config.delegation.tasks.approval.mode = erato_config::config::TaskApprovalMode::Always;
+        // High enough that `plan` would not have asked: the modes are
+        // independent, and this one does not read the threshold at all.
+        config.delegation.tasks.approval.plan_min_tasks = 5;
+    })
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, PLAN_USER_MESSAGE, &["plan"]).await;
+    let parent_chat_id = Uuid::parse_str(&chat).unwrap();
+    let parent_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+
+    let content = content_of(&message_row(&app_state.db, parent_message_id).await);
+    let request = plan_request(&content);
+    assert_eq!(request["kind"], "task_plan");
+    let approvals = request["approvals"].as_array().unwrap();
+    assert_eq!(approvals.len(), 1);
+    assert_eq!(approvals[0]["approval_id"], "plan:1:0");
+    assert_eq!(approvals[0]["tool_call_id"], "call_plan_a");
+    assert!(
+        delegated_child_chats(&app_state.db, parent_chat_id)
+            .await
+            .is_empty()
+    );
+    assert_eq!(
+        generation_state(&app_state.db, parent_chat_id).await,
+        "awaiting_approval"
+    );
+}
+
+/// A planning facet may run under a stricter policy than the deployment
+/// default, which is the shape a dedicated "plan & delegate" facet needs: the
+/// global setting stays permissive for ordinary chats.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn facet_override_beats_global_policy(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_parent_plans_one_task(&mut mocks, PLAN_USER_MESSAGE, PLAN_BRIEF_A, "call_plan_a");
+
+    let (app_state, _llm) = plan_policy_state(pool, mocks, |config| {
+        config.delegation.tasks.approval.mode = erato_config::config::TaskApprovalMode::Never;
+        let facet = config
+            .facets
+            .facets
+            .get_mut("plan")
+            .expect("the planning facet");
+        facet.delegation = Some(erato_config::config::FacetDelegationOverrides {
+            max_tasks_per_turn: None,
+            max_server_tool_calls_per_task: None,
+            max_client_tool_calls_per_task: None,
+            max_parallel: None,
+            persona: None,
+            child_facet_ids: None,
+            run_modes: None,
+            scheduling: None,
+            approval: Some(erato_config::config::FacetDelegationApprovalOverrides {
+                mode: Some(erato_config::config::TaskApprovalMode::Always),
+                plan_min_tasks: None,
+            }),
+        });
+    })
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, PLAN_USER_MESSAGE, &["plan"]).await;
+    let parent_chat_id = Uuid::parse_str(&chat).unwrap();
+    let parent_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+
+    let content = content_of(&message_row(&app_state.db, parent_message_id).await);
+    let request = plan_request(&content);
+    assert_eq!(
+        request["kind"], "task_plan",
+        "the facet's `always` wins over the deployment's `never`"
+    );
+    assert!(
+        delegated_child_chats(&app_state.db, parent_chat_id)
+            .await
+            .is_empty()
     );
 }

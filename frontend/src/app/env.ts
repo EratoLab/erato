@@ -7,6 +7,14 @@ import {
   DEFAULT_MAX_FILES_PER_MESSAGE,
 } from "@/utils/fileUploadLimits";
 
+// The `[delegation.tasks.approval] mode` the backend is running, as its config
+// spelling.
+export type DelegationTasksApprovalMode =
+  | "never"
+  | "always"
+  | "plan"
+  | "async_only";
+
 export type Env = {
   apiRootUrl: string;
   frontendPlatform: "common" | "platform-office-addin";
@@ -28,6 +36,7 @@ export type Env = {
   assistantsDelegationAllowBackground: boolean;
   delegationTasksEnabled: boolean;
   delegationTasksAllowAsync: boolean;
+  delegationTasksApprovalMode: DelegationTasksApprovalMode;
   assistantsEnableEditSharing?: boolean;
   assistantsUsageViewEnabled?: boolean;
   assistantsShowRecentItems: boolean;
@@ -93,6 +102,7 @@ declare global {
     ASSISTANTS_DELEGATION_ALLOW_BACKGROUND?: boolean;
     DELEGATION_TASKS_ENABLED?: boolean;
     DELEGATION_TASKS_ALLOW_ASYNC?: boolean;
+    DELEGATION_TASKS_APPROVAL_MODE?: string;
     ASSISTANTS_ENABLE_EDIT_SHARING?: boolean;
     ASSISTANTS_USAGE_VIEW_ENABLED?: boolean;
     ASSISTANTS_SHOW_RECENT_ITEMS?: boolean;
@@ -150,6 +160,24 @@ function normalizeChatInputEmptyStateLayout(
   value: string | null | undefined,
 ): "bottom" | "centered" {
   return value === "bottom" ? "bottom" : "centered";
+}
+
+// A config spelling the backend reports, not a user-facing string.
+// eslint-disable-next-line lingui/no-unlocalized-strings
+const DEFAULT_DELEGATION_TASKS_APPROVAL_MODE = "async_only";
+
+// Unknown spellings fall back to the shipped default rather than being carried
+// through: this value only decides what the composer says in advance, and the
+// backend's own gate is what actually asks.
+function asDelegationTasksApprovalMode(
+  value: string | null | undefined,
+): DelegationTasksApprovalMode {
+  return value === "never" ||
+    value === "always" ||
+    value === "plan" ||
+    value === "async_only"
+    ? value
+    : DEFAULT_DELEGATION_TASKS_APPROVAL_MODE;
 }
 
 export const env = (): Env => {
@@ -248,6 +276,10 @@ export const env = (): Env => {
     import.meta.env.VITE_DELEGATION_TASKS_ALLOW_ASYNC === "true"
       ? true
       : (window.DELEGATION_TASKS_ALLOW_ASYNC ?? false);
+  const delegationTasksApprovalMode = asDelegationTasksApprovalMode(
+    import.meta.env.VITE_DELEGATION_TASKS_APPROVAL_MODE ??
+      window.DELEGATION_TASKS_APPROVAL_MODE,
+  );
   const assistantsUsageViewEnabled =
     import.meta.env.VITE_ASSISTANTS_USAGE_VIEW_ENABLED === "true" ||
     (window.ASSISTANTS_USAGE_VIEW_ENABLED ?? false);
@@ -437,6 +469,7 @@ export const env = (): Env => {
     assistantsDelegationAllowBackground,
     delegationTasksEnabled,
     delegationTasksAllowAsync,
+    delegationTasksApprovalMode,
     assistantsEnableEditSharing,
     assistantsUsageViewEnabled,
     assistantsShowRecentItems,

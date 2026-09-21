@@ -171,6 +171,18 @@ Two wire consequences for a client:
 
 Children nobody is waiting for are unaffected: an `@`-mentioned assistant's run and an `async` task still have their gated calls refused, because there is no turn to carry the request to.
 
+**The user can now be asked before the model's planned tasks are dispatched at all.** New sub-table `[delegation.tasks.approval]` with `mode` (default `"async_only"`) and `plan_min_tasks` (default `2`, must be at least 2), plus the per-facet twin `[facets.facets.<facet-id>.delegation.approval]` carrying the same two keys.
+
+The shipped default is the literal `async_only`, not a value derived from `run_modes`: it asks before every `async` dispatch and leaves awaited tasks alone. **A deployment that already offers `run_modes = ["wait", "async"]` therefore starts asking where it did not before** — set `mode = "never"` to keep the old behaviour. With the default `run_modes = ["wait"]` there is nothing for it to ask about and the gate is inert, so most deployments see no change. The other modes are `always` (ask about any batch containing a task) and `plan` (ask once a batch reaches `plan_min_tasks` tasks).
+
+The gate runs over the whole batch before any of it is dispatched, so **no child chat, run or placeholder exists when the card appears**. It is one approval part with `kind: "task_plan"` and **one item per task** — `approval_id` is `"plan:<batch>:<n>"`, `tool_name` is `delegate_task`, `input` is the call's own arguments, and there is no `child` block, because there is no child yet. The task calls the policy did not target and the rest of the batch ride along in `pending_tool_calls` and run once the decision is in. As on every other approval part, `mcp_server_id` is `""` and a client must branch on `kind` first.
+
+A plan can be approved in part: the items the user keeps are re-seeded at the head of the batch in the order the model asked for them and dispatch through the normal path, so the per-turn and concurrency caps apply unchanged, while each item denied settles as a refusal `ToolUse` carrying `{"status": "rejected", "error": "The user declined this task."}` — no `reason`, because "the user said no" is not a run outcome. `withdraw` denies every open item and the turn still finishes in prose. There is no "always allow" for a plan: what may be dispatched unasked is the deployment's to say, not a per-user setting's.
+
+Where two selected planning facets both state a policy, the merge narrows rather than combines — strictest `mode` (`always` > `plan` > `async_only` > `never`) and lowest `plan_min_tasks` — so selecting a second facet can only ever make a turn ask more. Retrying a failed run from the origin chat never asks: the user's click is the approval.
+
+The injected frontend environment gains `DELEGATION_TASKS_APPROVAL_MODE`, the effective **global** mode as its config spelling, so a composer can say in advance that a plan will need approving. Per-facet overrides are deliberately not published: they are resolved per turn from the facet selection, and a client that read one would promise a policy the next turn might not run.
+
 #### Deprecations
 
 **`[assistants.delegation]` is deprecated; use `[delegation]` and `[delegation.assistants]`.**

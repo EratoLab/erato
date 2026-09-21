@@ -4077,6 +4077,56 @@ fn delegated_task_approval_part(
     }
 }
 
+/// The `task_plan` approval part a gated batch leaves behind.
+///
+/// One item per gated task call, so the user can approve part of a plan and
+/// drop the rest; `child` is absent on every one of them because no child
+/// exists yet — that is the whole point of asking before dispatch. The rest of
+/// the batch, task calls the policy did not target included, rides along as
+/// `pending_tool_calls` and runs once the decision is in.
+fn task_plan_approval_part(
+    batch_id: usize,
+    gated: &[genai::chat::ToolCall],
+    pending_tool_calls: Vec<crate::models::message::PendingToolCall>,
+) -> ContentPartToolApprovalRequest {
+    let approvals: Vec<ApprovalItem> = gated
+        .iter()
+        .enumerate()
+        .map(|(position, call)| ApprovalItem {
+            approval_id: format!("plan:{batch_id}:{position}"),
+            tool_call_id: call.call_id.clone(),
+            tool_name: call.fn_name.clone(),
+            input: call.fn_arguments.clone(),
+            child: None,
+        })
+        .collect();
+    let head = &gated[0];
+    ContentPartToolApprovalRequest {
+        tool_call_id: head.call_id.clone(),
+        tool_name: erato_config::config::DELEGATE_TASK_TOOL_NAME.to_string(),
+        mcp_server_id: String::new(),
+        input: head.fn_arguments.clone(),
+        // No MCP tool is being asked about, so there is nothing to annotate;
+        // the values are the pessimistic MCP defaults a card would read for a
+        // tool that declared none.
+        annotations: crate::models::message::ToolApprovalAnnotations {
+            read_only_hint: false,
+            destructive_hint: true,
+            idempotent_hint: false,
+            open_world_hint: true,
+        },
+        preset: String::new(),
+        // No standing "always allow" for a plan in v1: what a deployment is
+        // willing to dispatch unasked is `[delegation.tasks.approval]`'s to say,
+        // not a per-user setting's.
+        allow_always: false,
+        requested_at: now_timestamp(),
+        kind: crate::models::message::ToolApprovalKind::TaskPlan,
+        approvals,
+        pending_tool_calls,
+    }
+}
+
 /// Turn one task outcome into a part, or hold the slot open when the child
 /// stopped to ask.
 ///
@@ -4521,10 +4571,18 @@ async fn stream_generate_chat_completion<
         tool_call_parent_observation_id: Option<String>,
         error: Option<String>,
     }
-    let mut unfinished_tool_calls: std::collections::VecDeque<genai::chat::ToolCall> = resume
-        .map_or_else(std::collections::VecDeque::new, |resume| {
-            resume.initial_unfinished_tool_calls.into()
-        });
+    let (mut unfinished_tool_calls, approved_task_call_ids): (
+        std::collections::VecDeque<genai::chat::ToolCall>,
+        HashSet<String>,
+    ) = resume.map_or_else(
+        || (std::collections::VecDeque::new(), HashSet::new()),
+        |resume| {
+            (
+                resume.initial_unfinished_tool_calls.into(),
+                resume.approved_task_call_ids,
+            )
+        },
+    );
     let mut current_turn = 0;
     let mut current_tool_call_count = 0;
     // Charged per class and never summed: a run that has spent its server
@@ -4713,6 +4771,69 @@ async fn stream_generate_chat_completion<
         // the requests are carried up in one part after the rest of the batch
         // has settled — a child that parks must not abandon its siblings.
         let mut parked_children: Vec<ParkedChild> = Vec::new();
+        // The dispatch-approval gate, before the first call is popped: `plan`
+        // is a statement about the batch's size, so no per-call hook could
+        // answer it, and asking about a plan whose first child has already been
+        // created would be asking after the fact. Nothing is reserved, launched
+        // or announced ahead of it, which is why a parked plan leaves no
+        // `queued` slots behind.
+        if let Some(effective) = delegation
+            .as_ref()
+            .and_then(|context| context.task_scope.as_ref())
+            .map(|scope| &scope.effective)
+        {
+            let batch: Vec<genai::chat::ToolCall> = unfinished_tool_calls.iter().cloned().collect();
+            let gated_positions = crate::services::delegation::tasks_needing_dispatch_approval(
+                effective,
+                &batch,
+                |call| {
+                    call.fn_name == erato_config::config::DELEGATE_TASK_TOOL_NAME
+                        // An MCP tool of the same name wins, exactly as it does
+                        // in the dispatch branch below: the synthetic tool is
+                        // never offered in that case.
+                        && !available_mcp_tools_by_name.contains_key(&call.fn_name)
+                        && !approved_task_call_ids.contains(&call.call_id)
+                },
+            );
+            if !gated_positions.is_empty() {
+                let gated: Vec<genai::chat::ToolCall> = gated_positions
+                    .iter()
+                    .map(|position| batch[*position].clone())
+                    .collect();
+                let pending_tool_calls = batch
+                    .iter()
+                    .enumerate()
+                    .filter(|(position, _)| !gated_positions.contains(position))
+                    .map(|(_, call)| crate::models::message::PendingToolCall {
+                        call_id: call.call_id.clone(),
+                        fn_name: call.fn_name.clone(),
+                        fn_arguments: call.fn_arguments.clone(),
+                    })
+                    .collect();
+                unfinished_tool_calls.clear();
+                pending_approval_part = Some(task_plan_approval_part(
+                    // The turn whose model call emitted this batch: the pop
+                    // loop runs one turn after the call that filled it, and an
+                    // id counted from the call is the one a reader can place.
+                    current_turn.saturating_sub(1),
+                    &gated,
+                    pending_tool_calls,
+                ));
+                exit_metadata = build_generation_metadata(
+                    total_prompt_tokens,
+                    total_completion_tokens,
+                    total_total_tokens,
+                    total_reasoning_tokens,
+                    langfuse_trace_id.clone(),
+                    false,
+                    None,
+                    non_empty_string(&captured_reasoning_summary),
+                    non_empty_vec(&captured_reasoning_items),
+                    non_empty_vec(&captured_reasoning_item_encrypted_content),
+                );
+                exit_after_join = true;
+            }
+        }
         'pop_calls: while let Some(unfinished_tool_call) = unfinished_tool_calls.pop_front() {
             let batch_position = {
                 let position = batch_position;
@@ -14040,6 +14161,10 @@ pub async fn continue_message_sse(
 /// gate and budgets as any other call.
 pub(crate) struct ParkedTurnResume {
     pub initial_unfinished_tool_calls: Vec<genai::chat::ToolCall>,
+    /// Task calls the user has just approved on a `task_plan` card. The
+    /// dispatch-approval pre-pass skips them, or the decision the user made
+    /// would be asked for again the moment the turn resumes.
+    pub approved_task_call_ids: HashSet<String>,
 }
 
 /// How a continuation reached the worker, decided before the generation lease
@@ -14699,19 +14824,15 @@ pub(crate) async fn run_continuation(
     // process calls, a `delegated_task` item names a child whose own
     // continuation makes the call. Splitting the decisions here keeps each loop
     // reading only the items it can act on.
-    let (mcp_decisions, child_decisions): (SubmittedDecisions, SubmittedDecisions) =
-        match approval_request.kind {
-            ToolApprovalKind::McpTool => (submitted_decisions, Vec::new()),
-            ToolApprovalKind::DelegatedTask => (Vec::new(), submitted_decisions),
-            // Nothing writes a plan part yet, and approving one means
-            // dispatching the tasks it lists — which is the dispatch policy's
-            // job, not this one's.
-            ToolApprovalKind::TaskPlan => {
-                return Err(eyre!(
-                    "A task plan approval cannot be continued in this release"
-                ));
-            }
-        };
+    let (mcp_decisions, child_decisions, plan_decisions): (
+        SubmittedDecisions,
+        SubmittedDecisions,
+        SubmittedDecisions,
+    ) = match approval_request.kind {
+        ToolApprovalKind::McpTool => (submitted_decisions, Vec::new(), Vec::new()),
+        ToolApprovalKind::DelegatedTask => (Vec::new(), submitted_decisions, Vec::new()),
+        ToolApprovalKind::TaskPlan => (Vec::new(), Vec::new(), submitted_decisions),
+    };
 
     // Why an approved call the rebuilt tool set no longer carries cannot run.
     // `None` is the one retryable answer: a denial is final whatever the
@@ -15023,6 +15144,117 @@ pub(crate) async fn run_continuation(
         .await?;
     }
 
+    // A plan item names a call that was never made, so there is nothing to
+    // resume and nothing to overwrite: an approved item is re-seeded into the
+    // dispatch loop exactly as an abandoned call is, and a denied one settles as
+    // the refusal the model reads instead of the task's result. No child exists
+    // on either path yet — that is what asking before dispatch bought.
+    let mut approved_plan_calls: Vec<crate::models::message::PendingToolCall> = Vec::new();
+    for (approval_id, decision) in &plan_decisions {
+        let decision = *decision;
+        let Some(item) = state
+            .open
+            .iter()
+            .find(|item| &item.approval_id == approval_id)
+        else {
+            return Err(eyre!(
+                "Approval '{approval_id}' is not open on this generation"
+            ));
+        };
+        if decision.is_approval() {
+            parsed
+                .content
+                .push(ContentPart::ToolApproval(ContentPartToolApproval {
+                    tool_call_id: item.tool_call_id.clone(),
+                    // No standing grant for a plan: `[delegation.tasks.approval]`
+                    // decides what may be dispatched unasked, not a per-user
+                    // setting.
+                    always_allow: false,
+                    user_tool_approval_setting_id: None,
+                    approved_at: now_timestamp(),
+                    approval_id: Some(item.approval_id.clone()),
+                    child_chat_id: None,
+                }));
+            approved_plan_calls.push(crate::models::message::PendingToolCall {
+                call_id: item.tool_call_id.clone(),
+                fn_name: item.tool_name.clone(),
+                fn_arguments: item.input.clone(),
+            });
+            continue;
+        }
+        parsed
+            .content
+            .push(ContentPart::ToolRejection(ContentPartToolRejection {
+                tool_call_id: item.tool_call_id.clone(),
+                never_allow: false,
+                user_tool_approval_setting_id: None,
+                rejected_at: now_timestamp(),
+                approval_id: Some(item.approval_id.clone()),
+                child_chat_id: None,
+                reason: matches!(decision, ToolApprovalDecision::Withdraw)
+                    .then(|| REJECTION_REASON_WITHDRAWN.to_string()),
+            }));
+        let tool_use = ToolUse {
+            tool_call_id: item.tool_call_id.clone(),
+            status: MessageToolCallStatus::Error,
+            tool_name: item.tool_name.clone(),
+            input: Some(item.input.clone()),
+            progress_message: None,
+            progress: None,
+            total: None,
+            // A plan denial carries no `reason`: the closed envelope vocabulary
+            // has none for it, and "the user said no" is not a run outcome.
+            output: Some(json!({
+                "status": "rejected",
+                "error": "The user declined this task.",
+            })),
+            started_at: Some(now_timestamp()),
+            ended_at: Some(now_timestamp()),
+        };
+        let update = MessageSubmitStreamingResponseToolCallUpdate {
+            message_id: message.id,
+            content_index: parsed.content.len(),
+            tool_call_id: tool_use.tool_call_id.clone(),
+            tool_name: tool_use.tool_name.clone(),
+            input: tool_use.input.clone(),
+            status: ToolCallStatus::Error,
+            progress_message: None,
+            progress: None,
+            total: None,
+            output: tool_use.output.clone(),
+        };
+        send_background_event(
+            task,
+            StreamingEvent::ToolCallUpdate {
+                message_id: message.id,
+                content_index: parsed.content.len(),
+                tool_call_id: tool_use.tool_call_id.clone(),
+                tool_name: tool_use.tool_name.clone(),
+                input: tool_use.input.clone(),
+                status: BgToolCallStatus::Error,
+                progress_message: None,
+                progress: None,
+                total: None,
+                output: tool_use.output.clone(),
+            },
+            "broadcast declined task plan item",
+        )
+        .await;
+        let event: MessageSubmitStreamingResponseMessage = update.into();
+        send_generation_event(&event, tx.clone()).await?;
+        parsed.content.push(ContentPart::ToolUse(tool_use));
+    }
+    if !plan_decisions.is_empty() {
+        update_message_content(
+            &app_state.db,
+            policy,
+            &me_user.to_subject(),
+            &message.id,
+            parsed.content.clone(),
+        )
+        .await?;
+    }
+
     let reparked_children = if child_decisions.is_empty() {
         Vec::new()
     } else {
@@ -15253,10 +15485,23 @@ pub(crate) async fn run_continuation(
     // denied, disabled or switched off while the card was waiting is exactly
     // that, so it is refused here instead — in the same shape the gated item
     // gets — and never seeded.
+    //
+    // An approved plan item is seeded through the very same path, and FIRST: the
+    // items were recorded in call order, so re-seeding them at the head is what
+    // makes the batch reach the model in the order it asked, and routing them
+    // here rather than around the filter means a plan approved after the task
+    // tool was withdrawn is refused instead of failing the turn.
     let mut pending_tool_calls: Vec<genai::chat::ToolCall> = Vec::new();
-    for call in approval_request
-        .pending_tool_calls
+    // The gate must not ask about these a second time, so they are named for
+    // the resumed turn's pre-pass; an entry is dropped again below if the call
+    // turns out not to be runnable after all.
+    let mut approved_task_call_ids: HashSet<String> = approved_plan_calls
         .iter()
+        .map(|call| call.call_id.clone())
+        .collect();
+    for call in approved_plan_calls
+        .iter()
+        .chain(approval_request.pending_tool_calls.iter())
         .filter(|call| !settled_call_ids.contains(&call.call_id))
     {
         if allowed_tool_names.contains(&call.fn_name) {
@@ -15268,6 +15513,7 @@ pub(crate) async fn run_continuation(
             });
             continue;
         }
+        approved_task_call_ids.remove(&call.call_id);
         parsed.content.push(ContentPart::ToolUse(ToolUse {
             tool_call_id: call.call_id.clone(),
             status: MessageToolCallStatus::Error,
@@ -15306,6 +15552,7 @@ pub(crate) async fn run_continuation(
     }
     let resume = (!pending_tool_calls.is_empty()).then(|| ParkedTurnResume {
         initial_unfinished_tool_calls: pending_tool_calls,
+        approved_task_call_ids,
     });
 
     let chat_options =

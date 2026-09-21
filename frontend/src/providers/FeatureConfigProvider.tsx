@@ -12,6 +12,7 @@ import {
   DEFAULT_MAX_FILES_PER_MESSAGE,
 } from "@/utils/fileUploadLimits";
 
+import type { DelegationTasksApprovalMode } from "@/app/env";
 import type { ReactNode } from "react";
 
 /**
@@ -95,6 +96,13 @@ interface AssistantsFeatureConfig {
    * endpoint gates on, so a hidden control and a 404 route cannot disagree.
    */
   delegationTasksAllowAsync: boolean;
+  /**
+   * The deployment's `[delegation.tasks.approval] mode`, so a composer can say
+   * in advance that a plan will need approving. The GLOBAL value only: a
+   * per-facet override is resolved per turn from the facet selection, and a
+   * client reading one would promise a policy the next turn might not run.
+   */
+  delegationTasksApprovalMode: DelegationTasksApprovalMode;
   /** Whether assistants may be shared with edit access */
   enableEditSharing: boolean;
   usageViewEnabled: boolean;
@@ -282,6 +290,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
     delegationEnabled: false,
     delegationAllowBackground: false,
     delegationTasksAllowAsync: false,
+    delegationTasksApprovalMode: "async_only",
     enableEditSharing: true,
     usageViewEnabled: false,
     showRecentItems: false,
@@ -400,6 +409,7 @@ function createFeatureConfig(
       // above: it is the backend's own `DELEGATION_TASKS_ALLOW_ASYNC`, named
       // after the config it derives from rather than after this section.
       delegationTasksAllowAsync: Boolean(environment.delegationTasksAllowAsync),
+      delegationTasksApprovalMode: environment.delegationTasksApprovalMode,
       enableEditSharing: environment.assistantsEnableEditSharing ?? true,
       usageViewEnabled: environment.assistantsUsageViewEnabled ?? false,
       showRecentItems: environment.assistantsShowRecentItems,

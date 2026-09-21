@@ -434,6 +434,8 @@ pub(crate) struct EffectiveTasksConfig {
     pub child_facet_ids: Vec<String>,
     pub run_modes: Vec<erato_config::config::TaskRunMode>,
     pub scheduling: erato_config::config::TaskScheduling,
+    pub approval_mode: erato_config::config::TaskApprovalMode,
+    pub approval_plan_min_tasks: u32,
 }
 
 /// Merge the global `[delegation.tasks]` keys with the overrides of every
@@ -447,7 +449,10 @@ pub(crate) struct EffectiveTasksConfig {
 /// facet that states one — it is a single-valued choice with no meaningful
 /// "combination", and selection order is the user's own. `run_modes` unions
 /// for the same reason as child facet ids, with `wait` floored back in;
-/// `scheduling` takes the first, like persona.
+/// `scheduling` takes the first, like persona. The approval policy narrows like
+/// a cap rather than combining: the STRICTEST `mode` and the LOWEST
+/// `plan_min_tasks` win, so selecting a second facet can only ever make a turn
+/// ask more.
 pub(crate) fn effective_tasks_config(
     global: &erato_config::config::DelegationTasksConfig,
     facets: &crate::config::FacetsConfig,
@@ -462,6 +467,8 @@ pub(crate) fn effective_tasks_config(
         child_facet_ids: global.child_facet_ids.clone(),
         run_modes: global.run_modes.clone(),
         scheduling: global.scheduling,
+        approval_mode: global.approval.mode,
+        approval_plan_min_tasks: global.approval.plan_min_tasks,
     };
     let mut persona_set = false;
     let mut scheduling_set = false;
@@ -520,6 +527,14 @@ pub(crate) fn effective_tasks_config(
             effective.scheduling = value;
             scheduling_set = true;
         }
+        if let Some(approval) = overrides.approval.as_ref() {
+            if let Some(mode) = approval.mode {
+                effective.approval_mode = effective.approval_mode.strictest(mode);
+            }
+            if let Some(minimum) = approval.plan_min_tasks {
+                effective.approval_plan_min_tasks = effective.approval_plan_min_tasks.min(minimum);
+            }
+        }
     }
     // Load-time validation only sees the global pair, so a facet that lowers
     // the total below the global concurrency would break the invariant that
@@ -538,6 +553,65 @@ pub(crate) fn effective_tasks_config(
             .insert(0, erato_config::config::TaskRunMode::Wait);
     }
     effective
+}
+
+/// The `run_mode` a `delegate_task` call asked for, read without validating it.
+///
+/// The dispatch-approval gate runs before anything has validated the batch, so
+/// it reads the raw argument: an unoffered or misspelled mode is refused later
+/// by `validate_task_tool_call`, and asking the user about a call that cannot
+/// run would be a prompt with no outcome behind it.
+fn requested_run_mode(tool_call: &genai::chat::ToolCall) -> Option<&str> {
+    tool_call.fn_arguments.get("run_mode")?.as_str()
+}
+
+/// Which calls of one batch the dispatch-approval policy wants the user to see
+/// before any of them runs, as indices into `batch`.
+///
+/// Empty means dispatch as usual. The whole batch is inspected rather than one
+/// call at a time because `plan` is a statement about the batch's size, and a
+/// per-call gate would ask about the first task before it knew whether the
+/// second one existed.
+pub(crate) fn tasks_needing_dispatch_approval(
+    effective: &EffectiveTasksConfig,
+    batch: &[genai::chat::ToolCall],
+    is_task_call: impl Fn(&genai::chat::ToolCall) -> bool,
+) -> Vec<usize> {
+    let task_calls: Vec<usize> = batch
+        .iter()
+        .enumerate()
+        .filter(|(_, call)| is_task_call(call))
+        .map(|(index, _)| index)
+        .collect();
+    if task_calls.is_empty() {
+        return Vec::new();
+    }
+    match effective.approval_mode {
+        erato_config::config::TaskApprovalMode::Never => Vec::new(),
+        erato_config::config::TaskApprovalMode::Always => task_calls,
+        erato_config::config::TaskApprovalMode::Plan => {
+            if task_calls.len() as u32 >= effective.approval_plan_min_tasks {
+                task_calls
+            } else {
+                Vec::new()
+            }
+        }
+        // Inert while the deployment does not offer `async` at all: the mode is
+        // stored as the literal it is, so the question is asked here rather than
+        // encoded as a conditional default nobody can read back.
+        erato_config::config::TaskApprovalMode::AsyncOnly => {
+            if !effective
+                .run_modes
+                .contains(&erato_config::config::TaskRunMode::Async)
+            {
+                return Vec::new();
+            }
+            task_calls
+                .into_iter()
+                .filter(|index| requested_run_mode(&batch[*index]) == Some("async"))
+                .collect()
+        }
+    }
 }
 
 /// Everything the task route needs for one turn: what the model may ask for,
@@ -3011,6 +3085,7 @@ mod tests {
             run_modes: vec![erato_config::config::TaskRunMode::Wait],
             scheduling: erato_config::config::TaskScheduling::default(),
             propagate_child_mcp_approvals: true,
+            approval: erato_config::config::DelegationTasksApprovalConfig::default(),
         }
     }
 
@@ -3030,6 +3105,7 @@ mod tests {
                     child_facet_ids: Some(vec!["files".to_string()]),
                     run_modes: None,
                     scheduling: None,
+                    approval: None,
                 }),
             ),
         );
@@ -3048,6 +3124,7 @@ mod tests {
                     child_facet_ids: Some(vec!["web_search".to_string(), "mail".to_string()]),
                     run_modes: None,
                     scheduling: None,
+                    approval: None,
                 }),
             ),
         );
@@ -3077,6 +3154,218 @@ mod tests {
                 "files".to_string(),
                 "mail".to_string()
             ]
+        );
+    }
+
+    fn approval_overrides(
+        mode: Option<erato_config::config::TaskApprovalMode>,
+        plan_min_tasks: Option<u32>,
+    ) -> Option<erato_config::config::FacetDelegationOverrides> {
+        Some(erato_config::config::FacetDelegationOverrides {
+            max_tasks_per_turn: None,
+            max_server_tool_calls_per_task: None,
+            max_client_tool_calls_per_task: None,
+            max_parallel: None,
+            persona: None,
+            child_facet_ids: None,
+            run_modes: None,
+            scheduling: None,
+            approval: Some(erato_config::config::FacetDelegationApprovalOverrides {
+                mode,
+                plan_min_tasks,
+            }),
+        })
+    }
+
+    /// The approval policy narrows like a cap rather than combining: a facet
+    /// that asks less must not be able to buy the turn out of another facet's
+    /// policy, and a lower plan threshold is the stricter one.
+    #[test]
+    fn multi_facet_merge_takes_strictest_mode_and_min_plan_min_tasks() {
+        let mut facets = crate::config::FacetsConfig::default();
+        facets.facets.insert(
+            "lenient".to_string(),
+            planning_facet(
+                &["erato/delegate_task"],
+                approval_overrides(Some(erato_config::config::TaskApprovalMode::Never), Some(9)),
+            ),
+        );
+        facets.facets.insert(
+            "strict".to_string(),
+            planning_facet(
+                &["erato/delegate_task"],
+                approval_overrides(Some(erato_config::config::TaskApprovalMode::Plan), Some(4)),
+            ),
+        );
+
+        let mut global = tasks_config();
+        global.approval.mode = erato_config::config::TaskApprovalMode::AsyncOnly;
+        global.approval.plan_min_tasks = 6;
+        let effective = effective_tasks_config(
+            &global,
+            &facets,
+            &["lenient".to_string(), "strict".to_string()],
+        );
+
+        assert_eq!(
+            effective.approval_mode,
+            erato_config::config::TaskApprovalMode::Plan,
+            "`plan` is stricter than both `async_only` and `never`"
+        );
+        assert_eq!(effective.approval_plan_min_tasks, 4);
+
+        // Selection order must not change the answer.
+        let reversed = effective_tasks_config(
+            &global,
+            &facets,
+            &["strict".to_string(), "lenient".to_string()],
+        );
+        assert_eq!(reversed.approval_mode, effective.approval_mode);
+        assert_eq!(
+            reversed.approval_plan_min_tasks,
+            effective.approval_plan_min_tasks
+        );
+    }
+
+    fn task_batch(calls: &[(&str, Option<&str>)]) -> Vec<genai::chat::ToolCall> {
+        calls
+            .iter()
+            .map(|(call_id, run_mode)| genai::chat::ToolCall {
+                call_id: (*call_id).to_string(),
+                fn_name: erato_config::config::DELEGATE_TASK_TOOL_NAME.to_string(),
+                fn_arguments: match run_mode {
+                    Some(mode) => json!({ "task": "brief", "run_mode": mode }),
+                    None => json!({ "task": "brief" }),
+                },
+                thought_signatures: None,
+            })
+            .collect()
+    }
+
+    fn gate_scope(
+        mode: erato_config::config::TaskApprovalMode,
+        plan_min_tasks: u32,
+        run_modes: &[erato_config::config::TaskRunMode],
+    ) -> EffectiveTasksConfig {
+        let mut effective = scope_offering(&["plan"], run_modes).effective;
+        effective.approval_mode = mode;
+        effective.approval_plan_min_tasks = plan_min_tasks;
+        effective
+    }
+
+    fn gated_ids(effective: &EffectiveTasksConfig, batch: &[genai::chat::ToolCall]) -> Vec<String> {
+        tasks_needing_dispatch_approval(effective, batch, |call| {
+            call.fn_name == erato_config::config::DELEGATE_TASK_TOOL_NAME
+        })
+        .into_iter()
+        .map(|index| batch[index].call_id.clone())
+        .collect()
+    }
+
+    /// `never` is the only mode that lets a batch through untouched, and it must
+    /// do so whatever the batch contains.
+    #[test]
+    fn never_gates_nothing() {
+        let batch = task_batch(&[("a", Some("async")), ("b", None)]);
+        assert!(
+            gated_ids(
+                &gate_scope(
+                    erato_config::config::TaskApprovalMode::Never,
+                    2,
+                    &[
+                        erato_config::config::TaskRunMode::Wait,
+                        erato_config::config::TaskRunMode::Async
+                    ],
+                ),
+                &batch
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn always_gates_every_task_call_including_a_lone_wait() {
+        let batch = task_batch(&[("a", None)]);
+        assert_eq!(
+            gated_ids(
+                &gate_scope(
+                    erato_config::config::TaskApprovalMode::Always,
+                    2,
+                    &[erato_config::config::TaskRunMode::Wait],
+                ),
+                &batch
+            ),
+            vec!["a".to_string()]
+        );
+    }
+
+    /// The threshold is about the batch, which is why the whole batch is
+    /// inspected at once: a per-call hook would have had to ask about the first
+    /// task before it could know whether a second one existed.
+    #[test]
+    fn plan_gates_only_from_the_threshold_up() {
+        let effective = gate_scope(
+            erato_config::config::TaskApprovalMode::Plan,
+            2,
+            &[erato_config::config::TaskRunMode::Wait],
+        );
+        assert!(gated_ids(&effective, &task_batch(&[("a", None)])).is_empty());
+        assert_eq!(
+            gated_ids(&effective, &task_batch(&[("a", None), ("b", None)])),
+            vec!["a".to_string(), "b".to_string()]
+        );
+    }
+
+    /// `async_only` leaves the awaited calls of the same batch alone — they
+    /// report back into the turn that asked for them, so the user sees what they
+    /// did — and is inert while the deployment offers no detached mode at all.
+    #[test]
+    fn async_only_gates_the_detached_calls_and_nothing_when_async_is_unoffered() {
+        let batch = task_batch(&[("wait_one", None), ("detached", Some("async"))]);
+        let offering_async = gate_scope(
+            erato_config::config::TaskApprovalMode::AsyncOnly,
+            2,
+            &[
+                erato_config::config::TaskRunMode::Wait,
+                erato_config::config::TaskRunMode::Async,
+            ],
+        );
+        assert_eq!(
+            gated_ids(&offering_async, &batch),
+            vec!["detached".to_string()]
+        );
+
+        let wait_only = gate_scope(
+            erato_config::config::TaskApprovalMode::AsyncOnly,
+            2,
+            &[erato_config::config::TaskRunMode::Wait],
+        );
+        assert!(
+            gated_ids(&wait_only, &batch).is_empty(),
+            "a call that cannot run is not worth a prompt"
+        );
+    }
+
+    /// A batch with no task in it is never gated, whatever the mode says: the
+    /// policy is about dispatching tasks, and an MCP batch has its own gate.
+    #[test]
+    fn a_batch_without_a_task_call_is_never_gated() {
+        let batch = vec![genai::chat::ToolCall {
+            call_id: "mcp".to_string(),
+            fn_name: "search_web".to_string(),
+            fn_arguments: json!({}),
+            thought_signatures: None,
+        }];
+        assert!(
+            gated_ids(
+                &gate_scope(
+                    erato_config::config::TaskApprovalMode::Always,
+                    2,
+                    &[erato_config::config::TaskRunMode::Wait],
+                ),
+                &batch
+            )
+            .is_empty()
         );
     }
 
@@ -3163,6 +3452,7 @@ mod tests {
                     child_facet_ids: None,
                     run_modes: Some(vec![erato_config::config::TaskRunMode::Async]),
                     scheduling: Some(erato_config::config::TaskScheduling::Silent),
+                    approval: None,
                 }),
             ),
         );
@@ -3179,6 +3469,7 @@ mod tests {
                     child_facet_ids: None,
                     run_modes: Some(vec![erato_config::config::TaskRunMode::Wait]),
                     scheduling: Some(erato_config::config::TaskScheduling::WhenIdle),
+                    approval: None,
                 }),
             ),
         );
@@ -3228,6 +3519,8 @@ mod tests {
                 child_facet_ids: Vec::new(),
                 run_modes: run_modes.to_vec(),
                 scheduling: erato_config::config::TaskScheduling::default(),
+                approval_mode: erato_config::config::TaskApprovalMode::Never,
+                approval_plan_min_tasks: 2,
             },
         }
     }
@@ -3329,6 +3622,7 @@ mod tests {
                     child_facet_ids: None,
                     run_modes: None,
                     scheduling: None,
+                    approval: None,
                 }),
             ),
         );

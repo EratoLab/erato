@@ -5131,6 +5131,104 @@ model_name = "gpt-4o"
     );
 }
 
+/// The shipped policy is the unconditional literal `async_only`, not a value
+/// derived from `run_modes`: a deployment that later offers `async` gets the
+/// prompt that implies without having to remember to ask for it, and one that
+/// never offers it is never asked at all.
+#[test]
+fn approval_defaults_to_async_only_and_plan_min_tasks_two() {
+    let config = build_and_migrate_delegation_config(
+        r#"
+[delegation.tasks]
+enabled = true
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+    assert_eq!(
+        config.delegation.tasks.approval.mode,
+        erato_config::config::TaskApprovalMode::AsyncOnly
+    );
+    assert_eq!(config.delegation.tasks.approval.plan_min_tasks, 2);
+}
+
+/// A threshold below two is not a stricter `plan`; it is `always` under a name
+/// that promises a review of something with nothing to choose between.
+#[test]
+#[should_panic(expected = "delegation.tasks.approval.plan_min_tasks must be at least 2")]
+fn plan_min_tasks_below_two_panics() {
+    build_and_migrate_delegation_config(
+        r#"
+[delegation.tasks]
+enabled = true
+
+[delegation.tasks.approval]
+mode = "plan"
+plan_min_tasks = 1
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
+
+/// The sub-table is reachable both as its own section and as dotted keys on the
+/// parent, because a deployment writing either spelling means the same thing and
+/// a facet override is usually written inline beside the budgets.
+#[test]
+fn approval_override_parses_dotted_and_inline_forms() {
+    let config = build_and_migrate_delegation_config(
+        r#"
+[delegation.tasks]
+enabled = true
+approval = { mode = "always", plan_min_tasks = 4 }
+
+[facets.facets.plan]
+display_name = "Plan"
+tool_call_allowlist = ["erato/delegate_task", "web-search-mcp/*"]
+
+[facets.facets.plan.delegation.approval]
+mode = "plan"
+plan_min_tasks = 3
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+    assert_eq!(
+        config.delegation.tasks.approval.mode,
+        erato_config::config::TaskApprovalMode::Always
+    );
+    assert_eq!(config.delegation.tasks.approval.plan_min_tasks, 4);
+
+    let overrides = config
+        .facets
+        .facets
+        .get("plan")
+        .expect("the planning facet")
+        .delegation
+        .as_ref()
+        .expect("its delegation overrides")
+        .approval
+        .as_ref()
+        .expect("its approval overrides");
+    assert_eq!(
+        overrides.mode,
+        Some(erato_config::config::TaskApprovalMode::Plan)
+    );
+    assert_eq!(overrides.plan_min_tasks, Some(3));
+}
+
 #[test]
 #[should_panic(expected = "delegation.tasks.multitask_strategy = \"enqueue\" is not supported yet")]
 fn test_delegation_tasks_reserved_multitask_strategy_is_rejected() {

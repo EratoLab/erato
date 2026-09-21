@@ -589,6 +589,11 @@ pub async fn retry_delegated_run(
             scheduling: spec.scheduling,
             run_modes: vec![erato_config::config::TaskRunMode::Async],
             child_facet_ids: facet_ids.clone(),
+            // The user clicking "retry" IS the approval, so this path never
+            // asks again. The batch pre-pass is not on it either; the mode is
+            // written as the one that matches what already happened.
+            approval_mode: erato_config::config::TaskApprovalMode::Never,
+            approval_plan_min_tasks: tasks.approval.plan_min_tasks,
         },
     };
 
