@@ -4462,6 +4462,13 @@ pub struct ClientToolConfig {
     /// deriving `Eq` (`serde_json::Value` is not `Eq`).
     pub parameters: String,
 
+    /// Offer this tool only when the requesting client advertises a ready
+    /// executor with this name. Keep false for legacy clients; set true for
+    /// optional device capabilities such as the desktop sidecar. This is an
+    /// availability hint, never an authorization grant or an allowlist bypass.
+    #[serde(default)]
+    pub requires_client_registration: bool,
+
     /// Optional per-tool park timeout in milliseconds. The agentic loop holds
     /// open at most this long awaiting the client's result before injecting an
     /// error tool response and continuing.

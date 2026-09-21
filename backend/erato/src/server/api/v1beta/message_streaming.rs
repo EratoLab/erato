@@ -1960,6 +1960,10 @@ pub struct ClientToolResultRequest {
     #[serde(default, deserialize_with = "deserialize_present_json")]
     #[schema(nullable = false)]
     result: Option<JsonValue>,
+    /// Uploaded files to read with the normal file processor and include in this
+    /// tool result. Each file is authorized for the current user before reading.
+    #[serde(default)]
+    file_upload_ids: Vec<Uuid>,
     /// An error message if the client could not execute the tool. Provide this
     /// OR `result`.
     #[serde(default)]
@@ -2520,6 +2524,7 @@ fn generation_request_context_from_headers(headers: &HeaderMap) -> GenerationReq
 
     GenerationRequestContext {
         platform: Some(platform),
+        registered_client_tools: crate::services::client_tools::registered_client_tools(headers),
     }
 }
 
@@ -3133,6 +3138,12 @@ pub(crate) async fn prepare_chat_request_with_adapters(
             .client_tools
             .tools
             .values()
+            .filter(|client_tool| {
+                crate::services::client_tools::client_tool_is_available(
+                    client_tool,
+                    &generation_request_context.registered_client_tools,
+                )
+            })
             .filter(|client_tool| {
                 is_qualified_tool_allowed(
                     client_tool.namespace_or_default(),
@@ -12469,6 +12480,8 @@ pub async fn client_tool_result(
     .0;
 
     let task = app_state.background_tasks.get_task(&request.chat_id).await;
+    // Rejected submissions must retain their diagnostics without reading attachments.
+    let resolve_files = request.error.is_none() && request.validation_errors.is_empty();
     let mut payload = json!({ "validation_errors": request.validation_errors });
     if let Some(error) = request.error {
         payload["error"] = json!(error);
@@ -12496,6 +12509,19 @@ pub async fn client_tool_result(
                 "No suspended generation matches this message".to_string(),
             ));
         }
+        if resolve_files
+            && let Some(result) = super::file_resolution::resolve_client_tool_files(
+                &app_state,
+                &policy,
+                &me_user.to_subject(),
+                me_user.access_token.as_deref(),
+                payload.get("result").cloned(),
+                &request.file_upload_ids,
+            )
+            .await
+        {
+            payload["result"] = result;
+        }
         app_state
             .background_tasks
             .enqueue_client_tool_result(generation_id, &request.tool_call_id, payload)
@@ -12520,6 +12546,19 @@ pub async fn client_tool_result(
         ));
     }
 
+    if resolve_files
+        && let Some(result) = super::file_resolution::resolve_client_tool_files(
+            &app_state,
+            &policy,
+            &me_user.to_subject(),
+            me_user.access_token.as_deref(),
+            payload.get("result").cloned(),
+            &request.file_upload_ids,
+        )
+        .await
+    {
+        payload["result"] = result;
+    }
     let outcome = ClientToolOutcome::from_payload(&payload);
 
     let delivery = task
@@ -12690,6 +12729,7 @@ pub async fn react_to_task_result_sse(
     Extension(policy): Extension<PolicyEngine>,
     Extension(me_user): Extension<MeProfile>,
     Path(chat_id): Path<String>,
+    headers: HeaderMap,
     Json(request): Json<ReactToTaskResultRequest>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Report>>>, StreamRouteError> {
     // 1. The gate, the same shape `drain_pending_deliveries` uses. With async
@@ -12854,6 +12894,7 @@ pub async fn react_to_task_result_sse(
         selected_facet_ids,
         Some(task_result_message_id),
     );
+    let generation_request_context = generation_request_context_from_headers(&headers);
 
     let app_state_bg = app_state.clone();
     let policy_bg = policy.clone();
@@ -12874,7 +12915,7 @@ pub async fn react_to_task_result_sse(
                     &policy_bg,
                     &me_user_bg,
                     &request,
-                    GenerationRequestContext { platform: None },
+                    generation_request_context,
                     &chat,
                     false,
                     Vec::new(),

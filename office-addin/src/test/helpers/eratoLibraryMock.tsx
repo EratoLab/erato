@@ -263,6 +263,7 @@ export const DEFAULT_STUBS = {
   ChatMessage: StubNothing,
   DelegatedRunOpenProvider: StubPassthrough,
   DelegatedRunsSection: StubNothing,
+  DesktopSidecarClientTools: StubNothing,
   DesktopSidecarProvider: StubPassthrough,
   FeatureConfigProvider: StubPassthrough,
   FeedbackCommentDialog: StubNothing,

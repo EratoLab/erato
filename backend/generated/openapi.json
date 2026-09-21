@@ -5509,6 +5509,14 @@
             "type": "string",
             "description": "An error message if the client could not execute the tool. Provide this\nOR `result`."
           },
+          "file_upload_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Uploaded files to read with the normal file processor and include in this\ntool result. Each file is authorized for the current user before reading."
+          },
           "message_id": {
             "type": "string",
             "format": "uuid",

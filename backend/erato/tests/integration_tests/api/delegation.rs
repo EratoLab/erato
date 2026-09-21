@@ -1491,6 +1491,7 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
             namespace: None,
             description: "A probe client tool".to_string(),
             parameters: r#"{"type":"object","properties":{}}"#.to_string(),
+            requires_client_registration: false,
             timeout_ms: None,
             submission: None,
         },
@@ -11535,6 +11536,71 @@ async fn react_runs_reaction_under_request_profile_and_marks_reacted(pool: Pool<
             .any(|body| body.contains("REACTABLE-ANSWER")),
         "the delivered result must be composed into the reaction's own request"
     );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn react_offers_optional_client_tools_only_when_registered(pool: Pool<Postgres>) {
+    let (mut app_state, _llm, recorder) = react_state(pool, "REACT-TOOLS-ANSWER").await;
+    for (namespace, name, required) in [
+        ("desktop", "search_sidecar_index", true),
+        ("outlook", "fetch_availability", false),
+        ("excluded", "not_allowlisted", true),
+    ] {
+        app_state.config.client_tools.tools.insert(
+            name.into(),
+            erato::config::ClientToolConfig {
+                name: name.into(),
+                namespace: Some(namespace.into()),
+                description: "Read-only test tool".into(),
+                parameters: r#"{"type":"object","properties":{}}"#.into(),
+                requires_client_registration: required,
+                timeout_ms: None,
+                submission: None,
+            },
+        );
+    }
+    app_state.config.facets.tool_call_allowlist = vec!["desktop/*".into(), "outlook/*".into()];
+    let me = test_user(&app_state).await;
+    let server = app_server(app_state.clone());
+    for ready in [false, true, false] {
+        let origin = create_chat(&server, None).await;
+        let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+        let (child_id, result_row_id) = stage_delivered_result(
+            &app_state,
+            &me.id.to_string(),
+            origin_chat_id,
+            "REACTABLE-TOOLS-ANSWER",
+        )
+        .await;
+        let mut request = server
+            .post(&format!("/api/v1beta/me/chats/{origin_chat_id}/react"))
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&json!({ "task_result_message_id": result_row_id }));
+        if ready {
+            request = request.add_header(
+                "X-Erato-Client-Tools",
+                "search_sidecar_index,not_allowlisted",
+            );
+        }
+        request.await.assert_status_ok();
+        wait_for_delivery_state(&app_state.db, child_id, &["reacted"]).await;
+        let body: Value = serde_json::from_str(recorder.bodies().last().unwrap()).unwrap();
+        let mut names: Vec<_> = body["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|tool| tool["function"]["name"].as_str().unwrap())
+            .collect();
+        names.sort_unstable();
+        assert_eq!(
+            names,
+            if ready {
+                vec!["fetch_availability", "search_sidecar_index"]
+            } else {
+                vec!["fetch_availability"]
+            }
+        );
+    }
 }
 
 /// T2. A second `/react` on an answered row is refused, and appends nothing.

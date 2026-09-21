@@ -73,6 +73,22 @@ describe("handleClientToolCall", () => {
     });
   });
 
+  it("delivers attachment file references through the ordinary result endpoint", async () => {
+    registerClientToolExecutor("read_sidecar_conversation", async () => ({
+      ok: true,
+      result: { messages: [] },
+      fileUploadIds: ["file-1"],
+    }));
+    await handleClientToolCall(
+      makeEvent({ tool_name: "read_sidecar_conversation" }),
+      deps,
+    );
+    expect(lastPostBody(fetchMock)).toMatchObject({
+      result: { messages: [] },
+      file_upload_ids: ["file-1"],
+    });
+  });
+
   it("POSTs an error when the executor returns a failure", async () => {
     registerClientToolExecutor("fetch_availability", async () => ({
       ok: false,

@@ -57,7 +57,7 @@ function defaultConversation() {
 function fakeClient(options: FakeClientOptions = {}): DesktopSidecarClient {
   const {
     supports = true,
-    mailboxes = [{ id: "m1", emailAddress: "user@example.test" }],
+    mailboxes = [{ id: "a".repeat(32), emailAddress: "user@example.test" }],
     conversation = defaultConversation(),
   } = options;
   return {
@@ -114,12 +114,23 @@ describe("createSidecarOutlookMessageFetcher", () => {
     expect(inner.fetchConversationMessages).toHaveBeenCalledOnce();
   });
 
+  it("retains the EWS baseline when mailbox discovery is unsupported", async () => {
+    const inner = stubInner();
+    const client = fakeClient();
+    client.supports = (method) => method === "outlook.get_conversation.v1";
+    const fetcher = createSidecarOutlookMessageFetcher(context(client, inner));
+    expect(await fetcher.fetchConversationMessages("conv-1")).toBe(FALLBACK);
+    expect(inner.fetchConversationMessages).toHaveBeenCalledOnce();
+  });
+
   it("falls back when no local mailbox matches the user", async () => {
     const inner = stubInner();
     const fetcher = createSidecarOutlookMessageFetcher(
       context(
         fakeClient({
-          mailboxes: [{ id: "m1", emailAddress: "other@example.test" }],
+          mailboxes: [
+            { id: "a".repeat(32), emailAddress: "other@example.test" },
+          ],
         }),
         inner,
       ),

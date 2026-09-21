@@ -42,7 +42,10 @@ import {
 import { createLogger } from "@/utils/debugLogger";
 import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
 
-import { abortClientToolCalls } from "./clientToolExecutors";
+import {
+  abortClientToolCalls,
+  getClientToolHeaders,
+} from "./clientToolExecutors";
 import { readConflictRefusal } from "./conflictRefusal";
 import { handleAssistantMessageStarted } from "./handlers/handleAssistantMessageStarted";
 import { handleChatCreated } from "./handlers/handleChatCreated";
@@ -2052,6 +2055,7 @@ export function useChatMessaging(
           headers: {
             "Content-Type": "application/json",
             [X_ERATO_PLATFORM_HEADER]: platform,
+            ...getClientToolHeaders(),
             ...getAuthHeaders(),
           },
           body: JSON.stringify(requestBody),
@@ -2260,6 +2264,7 @@ export function useChatMessaging(
           headers: {
             "Content-Type": "application/json",
             [X_ERATO_PLATFORM_HEADER]: platform,
+            ...getClientToolHeaders(),
             ...getAuthHeaders(),
           },
           body: JSON.stringify(requestBody),
@@ -2415,6 +2420,7 @@ export function useChatMessaging(
           headers: {
             "Content-Type": "application/json",
             [X_ERATO_PLATFORM_HEADER]: platform,
+            ...getClientToolHeaders(),
             ...getAuthHeaders(),
           },
           body: JSON.stringify(requestBody),
