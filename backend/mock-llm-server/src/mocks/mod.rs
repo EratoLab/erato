@@ -448,6 +448,39 @@ const PAIRED_TASK_CHILD_BRIEF_B: &str =
 /// origin chat — an approval by its result, a denial by its refusal.
 const PAIRED_TASK_CHILD_TRACE_PREFIX: &str = "PAIRED-CHILD-CONTEXT";
 
+/// Typed into the origin chat by the deny half of the child-park e2e: one task,
+/// one gated call, one refusal. Kept to a single child on purpose — denial is
+/// the half of the flow with the most ways to go wrong (a killed child, a turn
+/// that never closes), so the test that asserts it carries no second run.
+const REFUSED_TASK_PARENT_PROMPT: &str = "refuse the gated probe task";
+
+/// The brief of the child that gets denied. Its answer is a tool trace rather
+/// than prose, because the whole claim of the test is that the refusal reached
+/// the child and the child spoke on top of it — a scripted sentence would say
+/// the call succeeded no matter what was decided.
+const REFUSED_TASK_CHILD_BRIEF: &str =
+    "Refused task child brief: attempt the approval probe and say what came back.";
+
+const REFUSED_TASK_CHILD_TRACE_PREFIX: &str = "REFUSED-CHILD-CONTEXT";
+
+/// Typed into the origin chat by the park-after-settle e2e: two tasks of which
+/// only the first needs a decision, so the turn has to finish the second one and
+/// commit its result before it asks about the first.
+const MIXED_TASKS_PARENT_PROMPT: &str = "run one gated and one plain probe as tasks";
+
+/// Dispatched FIRST, so its placeholder holds slot 0 while the sibling behind it
+/// settles: a park that vacated its slot would leave the two results in the
+/// wrong order, which is the defect this brief exists to expose.
+const MIXED_GATED_TASK_CHILD_BRIEF: &str =
+    "Mixed gated child brief: publish the approval probe for the mixed pair.";
+
+/// Dispatched second and gated by nothing, so it settles while its sibling is
+/// still waiting on the user.
+const MIXED_PLAIN_TASK_CHILD_BRIEF: &str =
+    "Mixed plain child brief: list the mock files for the mixed pair.";
+
+const MIXED_GATED_TASK_CHILD_TRACE_PREFIX: &str = "MIXED-GATED-CHILD-CONTEXT";
+
 fn build_delegation_child_answer_chunks() -> Vec<String> {
     [
         "CHILD-ANSWER",
@@ -782,6 +815,183 @@ pub fn get_default_mocks() -> Vec<Mock> {
                     " tasks".to_string(),
                     " are".to_string(),
                     " settled".to_string(),
+                    ".".to_string(),
+                ],
+                delay_ms: 200,
+                ..Default::default()
+            }),
+        },
+        // One task that is denied. It duplicates the gated probe's shape rather
+        // than reusing it because the two want different answers from the child:
+        // the gated probe is approved and says so in prose, while a denied child
+        // has to repeat what the refusal put in its context, which only a trace
+        // can do.
+        Mock {
+            name: "RefusedTaskParentToolCall".to_string(),
+            description: "Plans a sub-task whose gated call the user is going to deny".to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: REFUSED_TASK_PARENT_PROMPT.to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
+                tool_name: "delegate_task".to_string(),
+                arguments: format!(
+                    "{{\"task\": \"{REFUSED_TASK_CHILD_BRIEF}\", \"expected_output\": \"One sentence.\"}}"
+                ),
+                delay_ms: 100,
+            }),
+        },
+        Mock {
+            name: "RefusedTaskChildToolCall".to_string(),
+            description: "Returns the gated call on the refused child's first turn".to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: REFUSED_TASK_CHILD_BRIEF.to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
+                tool_name: "publish_approval_probe".to_string(),
+                arguments: "{}".to_string(),
+                delay_ms: 100,
+            }),
+        },
+        Mock {
+            name: "RefusedTaskChildAnswer".to_string(),
+            description: "Answers the refused child with the refusal its call came back with"
+                .to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: REFUSED_TASK_CHILD_BRIEF.to_string(),
+            })],
+            response: ResponseConfig::ToolTrace(ToolTraceResponseConfig {
+                prefix: REFUSED_TASK_CHILD_TRACE_PREFIX.to_string(),
+                delay_ms: 200,
+            }),
+        },
+        Mock {
+            name: "RefusedTaskParentAnswer".to_string(),
+            description: "Answers the origin chat on top of a sub-task that was refused"
+                .to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: REFUSED_TASK_PARENT_PROMPT.to_string(),
+            })],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec![
+                    "REFUSED-TASK-PARENT-ANSWER".to_string(),
+                    ": the".to_string(),
+                    " task".to_string(),
+                    " reported".to_string(),
+                    " back".to_string(),
+                    ".".to_string(),
+                ],
+                delay_ms: 200,
+                ..Default::default()
+            }),
+        },
+        // Two tasks of which only the first stops to ask. The gated brief is the
+        // FIRST call on purpose: its placeholder has to hold slot 0 while the
+        // ungated sibling behind it settles, and the origin turn may only ask
+        // once that sibling's result is committed.
+        Mock {
+            name: "MixedGatedTasksToolCalls".to_string(),
+            description: "Plans one sub-task that needs approval and one that does not".to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: MIXED_TASKS_PARENT_PROMPT.to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCalls(ToolCallsResponseConfig {
+                tool_calls: vec![
+                    ToolCallDef {
+                        tool_name: "delegate_task".to_string(),
+                        arguments: format!(
+                            "{{\"task\": \"{MIXED_GATED_TASK_CHILD_BRIEF}\", \"expected_output\": \"One sentence.\"}}"
+                        ),
+                    },
+                    ToolCallDef {
+                        tool_name: "delegate_task".to_string(),
+                        arguments: format!(
+                            "{{\"task\": \"{MIXED_PLAIN_TASK_CHILD_BRIEF}\", \"expected_output\": \"One sentence.\"}}"
+                        ),
+                    },
+                ],
+                delay_ms: 100,
+            }),
+        },
+        Mock {
+            name: "MixedGatedTaskChildToolCall".to_string(),
+            description: "Returns the gated call on the mixed pair's first child".to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: MIXED_GATED_TASK_CHILD_BRIEF.to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
+                tool_name: "publish_approval_probe".to_string(),
+                arguments: "{}".to_string(),
+                delay_ms: 100,
+            }),
+        },
+        Mock {
+            name: "MixedPlainTaskChildToolCall".to_string(),
+            description: "Returns an ungated call on the mixed pair's second child".to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: MIXED_PLAIN_TASK_CHILD_BRIEF.to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
+                tool_name: "list_files".to_string(),
+                arguments: "{}".to_string(),
+                delay_ms: 100,
+            }),
+        },
+        Mock {
+            name: "MixedGatedTaskChildAnswer".to_string(),
+            description: "Answers the mixed pair's gated child with the decision it got"
+                .to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: MIXED_GATED_TASK_CHILD_BRIEF.to_string(),
+            })],
+            response: ResponseConfig::ToolTrace(ToolTraceResponseConfig {
+                prefix: MIXED_GATED_TASK_CHILD_TRACE_PREFIX.to_string(),
+                delay_ms: 200,
+            }),
+        },
+        Mock {
+            name: "MixedPlainTaskChildAnswer".to_string(),
+            description: "Answers the mixed pair's ungated child, which never stopped".to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: MIXED_PLAIN_TASK_CHILD_BRIEF.to_string(),
+            })],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec![
+                    "MIXED-PLAIN-CHILD-ANSWER".to_string(),
+                    ": the".to_string(),
+                    " mock".to_string(),
+                    " files".to_string(),
+                    " are".to_string(),
+                    " listed".to_string(),
+                    ".".to_string(),
+                ],
+                delay_ms: 200,
+                ..Default::default()
+            }),
+        },
+        Mock {
+            name: "MixedGatedTasksAnswer".to_string(),
+            description: "Answers the origin chat once both mixed sub-tasks are settled"
+                .to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: MIXED_TASKS_PARENT_PROMPT.to_string(),
+            })],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec![
+                    "MIXED-TASKS-PARENT-ANSWER".to_string(),
+                    ": both".to_string(),
+                    " tasks".to_string(),
+                    " reported".to_string(),
+                    " back".to_string(),
                     ".".to_string(),
                 ],
                 delay_ms: 200,
@@ -1859,6 +2069,195 @@ mod tests {
         }
     }
 
+    /// The refused child's two turns. The second one is what the e2e reads: the
+    /// refusal is the only thing in the child's context by then, so a child that
+    /// was killed by the denial rather than told about it could not answer this.
+    #[test]
+    fn the_refused_child_answers_with_the_refusal_its_call_came_back_with() {
+        use serde_json::json;
+
+        let child_system = "Answer the delegated probe task.";
+
+        let child_turn = match_default_mocks(
+            json!([
+                {"role": "system", "content": child_system},
+                {"role": "user", "content": delegate_preamble_message()},
+                {"role": "user", "content": REFUSED_TASK_CHILD_BRIEF},
+            ]),
+            None,
+        );
+        match child_turn {
+            ResponseConfig::ToolCall(config) => {
+                assert_eq!(config.tool_name, "publish_approval_probe")
+            }
+            other => panic!("refused child's first turn matched {other:?}"),
+        }
+
+        let child_after_denial = match_default_mocks(
+            json!([
+                {"role": "system", "content": child_system},
+                {"role": "user", "content": delegate_preamble_message()},
+                {"role": "user", "content": REFUSED_TASK_CHILD_BRIEF},
+                {"role": "assistant", "content": null, "tool_calls": [
+                    {"id": "call_4", "type": "function", "function": {"name": "publish_approval_probe", "arguments": "{}"}},
+                ]},
+                {"role": "tool", "tool_call_id": "call_4", "content": "{\"status\":\"rejected\",\"error\":\"The user denied this tool call.\"}"},
+            ]),
+            None,
+        );
+        match child_after_denial {
+            ResponseConfig::Static(config) => assert_eq!(
+                config.chunks.join(""),
+                format!(
+                    "{REFUSED_TASK_CHILD_TRACE_PREFIX}: publish_approval_probe\
+                     [{{\"status\":\"rejected\",\"error\":\"The user denied this tool call.\"}}]"
+                )
+            ),
+            other => panic!("refused child's answer turn matched {other:?}"),
+        }
+
+        let origin_after_refusal = match_default_mocks(
+            json!([
+                {"role": "system", "content": "You are a helpful assistant"},
+                {"role": "user", "content": REFUSED_TASK_PARENT_PROMPT},
+                {"role": "assistant", "content": null},
+                {"role": "tool", "content": json!({
+                    "status": "completed",
+                    "result": format!("{REFUSED_TASK_CHILD_TRACE_PREFIX}: publish_approval_probe[rejected]"),
+                    "truncated": false,
+                }).to_string()},
+            ]),
+            None,
+        );
+        match origin_after_refusal {
+            ResponseConfig::Static(config) => assert_eq!(
+                config.chunks.join(""),
+                "REFUSED-TASK-PARENT-ANSWER: the task reported back."
+            ),
+            other => panic!("origin answer turn matched {other:?}"),
+        }
+    }
+
+    /// The mixed pair: the gated brief has to be the FIRST call, because the
+    /// e2e reads the parked placeholder off slot 0 and the settled sibling off
+    /// slot 1 — the assertion that a park does not vacate its slot.
+    #[test]
+    fn the_mixed_pair_dispatches_the_gated_task_first_and_only_it_stops() {
+        use serde_json::json;
+
+        let child_system = "Answer the delegated probe task.";
+
+        let origin_turn = match_default_mocks(
+            json!([
+                {"role": "system", "content": "You are a helpful assistant"},
+                {"role": "user", "content": MIXED_TASKS_PARENT_PROMPT},
+            ]),
+            None,
+        );
+        match origin_turn {
+            ResponseConfig::ToolCalls(config) => {
+                assert_eq!(config.tool_calls.len(), 2);
+                assert!(config
+                    .tool_calls
+                    .iter()
+                    .all(|call| call.tool_name == "delegate_task"));
+                assert!(config.tool_calls[0]
+                    .arguments
+                    .contains(MIXED_GATED_TASK_CHILD_BRIEF));
+                assert!(config.tool_calls[1]
+                    .arguments
+                    .contains(MIXED_PLAIN_TASK_CHILD_BRIEF));
+            }
+            other => panic!("origin turn matched {other:?}"),
+        }
+
+        for (brief, expected_tool) in [
+            (MIXED_GATED_TASK_CHILD_BRIEF, "publish_approval_probe"),
+            (MIXED_PLAIN_TASK_CHILD_BRIEF, "list_files"),
+        ] {
+            let child_turn = match_default_mocks(
+                json!([
+                    {"role": "system", "content": child_system},
+                    {"role": "user", "content": delegate_preamble_message()},
+                    {"role": "user", "content": brief},
+                ]),
+                None,
+            );
+            match child_turn {
+                ResponseConfig::ToolCall(config) => {
+                    assert_eq!(config.tool_name, expected_tool)
+                }
+                other => panic!("child turn for {brief} matched {other:?}"),
+            }
+        }
+
+        // The ungated sibling never stops, so its answer is the one the origin
+        // turn has to have committed before it asks about the other.
+        let plain_child_answer = match_default_mocks(
+            json!([
+                {"role": "system", "content": child_system},
+                {"role": "user", "content": delegate_preamble_message()},
+                {"role": "user", "content": MIXED_PLAIN_TASK_CHILD_BRIEF},
+                {"role": "assistant", "content": null, "tool_calls": [
+                    {"id": "call_5", "type": "function", "function": {"name": "list_files", "arguments": "{}"}},
+                ]},
+                {"role": "tool", "tool_call_id": "call_5", "content": "{\"files\":[\"a.txt\"]}"},
+            ]),
+            None,
+        );
+        match plain_child_answer {
+            ResponseConfig::Static(config) => assert_eq!(
+                config.chunks.join(""),
+                "MIXED-PLAIN-CHILD-ANSWER: the mock files are listed."
+            ),
+            other => panic!("plain child answer matched {other:?}"),
+        }
+
+        let gated_child_answer = match_default_mocks(
+            json!([
+                {"role": "system", "content": child_system},
+                {"role": "user", "content": delegate_preamble_message()},
+                {"role": "user", "content": MIXED_GATED_TASK_CHILD_BRIEF},
+                {"role": "assistant", "content": null, "tool_calls": [
+                    {"id": "call_6", "type": "function", "function": {"name": "publish_approval_probe", "arguments": "{}"}},
+                ]},
+                {"role": "tool", "tool_call_id": "call_6", "content": "approval probe published"},
+            ]),
+            None,
+        );
+        match gated_child_answer {
+            ResponseConfig::Static(config) => assert_eq!(
+                config.chunks.join(""),
+                format!(
+                    "{MIXED_GATED_TASK_CHILD_TRACE_PREFIX}: \
+                     publish_approval_probe[approval probe published]"
+                )
+            ),
+            other => panic!("gated child answer matched {other:?}"),
+        }
+
+        let origin_answer = match_default_mocks(
+            json!([
+                {"role": "system", "content": "You are a helpful assistant"},
+                {"role": "user", "content": MIXED_TASKS_PARENT_PROMPT},
+                {"role": "assistant", "content": null},
+                {"role": "tool", "content": json!({
+                    "status": "completed",
+                    "result": "MIXED-PLAIN-CHILD-ANSWER: the mock files are listed.",
+                    "truncated": false,
+                }).to_string()},
+            ]),
+            None,
+        );
+        match origin_answer {
+            ResponseConfig::Static(config) => assert_eq!(
+                config.chunks.join(""),
+                "MIXED-TASKS-PARENT-ANSWER: both tasks reported back."
+            ),
+            other => panic!("origin answer matched {other:?}"),
+        }
+    }
+
     /// Every prompt of the `approvals` scenario's probes, against every other:
     /// matching is first-match substring over one shared mock list, so an
     /// overlap would silently let one probe answer another's turns.
@@ -1872,6 +2271,11 @@ mod tests {
             BATCH_PARK_PROMPT,
             PAIRED_TASKS_PARENT_PROMPT,
             PAIRED_TASK_CHILD_BRIEF_PREFIX,
+            REFUSED_TASK_PARENT_PROMPT,
+            REFUSED_TASK_CHILD_BRIEF,
+            MIXED_TASKS_PARENT_PROMPT,
+            MIXED_GATED_TASK_CHILD_BRIEF,
+            MIXED_PLAIN_TASK_CHILD_BRIEF,
         ];
         for (index, prompt) in prompts.iter().enumerate() {
             for (other_index, other) in prompts.iter().enumerate() {
