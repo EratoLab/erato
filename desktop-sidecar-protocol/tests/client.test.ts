@@ -220,6 +220,29 @@ describe("DesktopSidecarClient", () => {
     ).toEqual({ parallelism: 1, documentsPerMinute: 40 });
   });
 
+  it("keeps the client ready to configure and search after Teams statistics", async () => {
+    const { client, sidecar } = await setup();
+    await client.discover();
+
+    const status = await client.invoke("indexing.status.v1", {});
+    expect(
+      status.generations.every((generation) =>
+        generation.segments.some((segment) => segment.kind === "teams_message"),
+      ),
+    ).toBe(true);
+    expect(status.configuration).toBeDefined();
+    const configuration = {
+      ...status.configuration!,
+      organization_configuration: { show_tray_icon: false },
+    };
+    await client.invoke("sidecar.configure.v1", configuration);
+    expect(sidecar.configuration).toEqual(configuration);
+    await client.invoke("search.query.v1", {
+      filters: { kind: "teams_message" },
+    });
+    expect(client.getSnapshot().state).toBe("ready");
+  });
+
   it("discovers an older sidecar without indexing statistics", async () => {
     const { client } = await setup({ omitMethods: ["indexing.status.v1"] });
     await client.discover();

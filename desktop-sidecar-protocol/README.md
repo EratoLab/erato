@@ -24,6 +24,13 @@ rebuild progress and search performance. The result also reports the effective
 indexing configuration and absolute local `indexingDirectory` path. See [the statistics contract](SPEC.md#15-indexing-statistics)
 and [the example exchange](examples/indexing-statistics.json).
 
+Package 0.1.23 accepts `teams_message` alongside `email` and `file` in indexing
+statistics and search kind filters, matching the Teams values already emitted
+by the Rust sidecar. Clients built from 0.1.22 or earlier reject Teams statistics
+and lose readiness. Update those clients before deploying sidecars that emit
+Teams segments; the package version does not negotiate payload compatibility.
+Updated clients continue to accept earlier sidecars with only email/file rows.
+
 `indexing.reset.v1` fully clears all managed indexing files, including every
 generation, and returns only after cleanup completes with indexing stopped.
 It preserves source Outlook data and configuration. See [full reset semantics](SPEC.md#16-full-indexing-reset).
@@ -138,4 +145,5 @@ deployment are defined in [`DISTRIBUTION.md`](DISTRIBUTION.md).
 
 Index lifecycle: `indexing.start.v1` resumes or requests a shadow rebuild;
 `indexing.stop.v1` drains work and preserves files. Both return indexing statistics.
-`search.query.v1` searches individual indexed emails and files. See SPEC section 17.
+`search.query.v1` searches individual indexed emails, files and Teams messages.
+See SPEC section 17.

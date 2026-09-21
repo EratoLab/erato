@@ -1119,7 +1119,7 @@
       "properties": {
         "kind": {
           "type": "string",
-          "enum": ["email", "file"]
+          "enum": ["email", "file", "teams_message"]
         },
         "sourceId": {
           "anyOf": [

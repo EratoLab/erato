@@ -158,7 +158,7 @@ export interface Generation {
  * Null source/mailbox denotes an all-source aggregate. Non-null scopes are independent views, not additional documents. Null fileType denotes all file types; breakdowns apply only to file rows. There must be one 60-second and one 300-second throughput window per segment.
  */
 export interface Segment {
-  kind: "email" | "file";
+  kind: "email" | "file" | "teams_message";
   sourceId: string | null;
   mailboxId: string | null;
   fileType: ("pdf" | "office" | "text" | "image" | "email" | "archive" | "other") | null;
