@@ -10431,6 +10431,7 @@ async fn seed_delivered_child(
             kind: ChatProvenanceKind::Delegation,
             origin_chat_id: Some(origin_chat_id),
             origin_message_id: Some(origin_message_id),
+            parent_message_id: None,
             origin_assistant_id: None,
             rebase_cutoff: None,
             depth: 1,

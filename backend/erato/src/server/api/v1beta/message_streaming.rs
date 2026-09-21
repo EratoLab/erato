@@ -1859,6 +1859,22 @@ pub struct AlreadyContinuedError {
 
 pub(crate) const ALREADY_CONTINUED_CODE: &str = "already_continued";
 
+/// Body of the `409` `continuestream` answers on a delegated child whose
+/// request is currently being asked about in the chat that started it.
+///
+/// `parent_message_id` is where the question actually is: the client follows it
+/// rather than telling the user their own chat is broken.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct CoveredByParentError {
+    /// Always `covered_by_parent`.
+    pub code: String,
+    /// The origin row whose approval part carries this child's request.
+    pub parent_message_id: Uuid,
+}
+
+pub(crate) const COVERED_BY_PARENT_CODE: &str = "covered_by_parent";
+
 /// `ContentPartToolRejection.reason` for a call the user took back rather than
 /// answered. The only value the field has.
 pub(crate) const REJECTION_REASON_WITHDRAWN: &str = "withdrawn";
@@ -1889,6 +1905,9 @@ pub enum StreamRouteError {
     DecisionsMismatch(Box<ApprovalDecisionsError>),
     /// `continuestream` only: every approval this row opened is already decided.
     AlreadyContinued(Box<AlreadyContinuedError>),
+    /// `continuestream` only: the chat that dispatched this child is asking the
+    /// same question, and its card is the one that can act on the answer.
+    CoveredByParent(Box<CoveredByParentError>),
 }
 
 impl From<(axum::http::StatusCode, String)> for StreamRouteError {
@@ -1918,6 +1937,11 @@ impl axum::response::IntoResponse for StreamRouteError {
             // Nothing about this request is malformed — the row just has nothing
             // left to decide.
             StreamRouteError::AlreadyContinued(body) => {
+                (axum::http::StatusCode::CONFLICT, Json(*body)).into_response()
+            }
+            // The row is answerable in principle, just not here and not yet — the
+            // question is open somewhere else.
+            StreamRouteError::CoveredByParent(body) => {
                 (axum::http::StatusCode::CONFLICT, Json(*body)).into_response()
             }
         }
@@ -3841,6 +3865,32 @@ async fn settle_delegation_slot<
                 model_output.to_string(),
             )
         }
+        // A suspended child only reaches here from a route that does not
+        // carry parked requests up — the mention route, whose children are
+        // refused at the gate and so never park. Settling it as an
+        // `input_required` envelope keeps the slot coherent for a reader
+        // rather than leaving the turn to guess.
+        Ok(crate::services::delegation::DelegationDispatchOutcome::Suspended {
+            child_chat_id,
+            assistant_id: child_assistant_id,
+            assistant_name,
+            trace,
+            ..
+        }) => {
+            let envelope = crate::services::delegation::suspended_envelope(
+                child_chat_id,
+                child_assistant_id,
+                assistant_name,
+                tool_call.call_id.clone(),
+            );
+            (
+                ToolCallStatus::Error,
+                BgToolCallStatus::Error,
+                MessageToolCallStatus::Error,
+                envelope.output_value(&trace),
+                envelope.model_response_text(),
+            )
+        }
         // Cancelled before it ever started, so the envelope's required
         // child ids would be a fiction. Their absence is the signal that
         // nothing ran.
@@ -3949,6 +3999,198 @@ async fn settle_delegation_slot<
         call_id: tool_call.call_id.clone(),
         content: response_text,
     })
+}
+
+/// One awaited child that stopped to ask.
+///
+/// Held until the batch has finished so the requests can be carried up in ONE
+/// part: "parked" means "the last part is a `tool_approval_request`", so a
+/// second part would make the row unreadable to every check that relies on it.
+struct ParkedChild {
+    /// The origin call the child answers. Its id is the approval id, because
+    /// that is the slot a decision settles.
+    tool_call: genai::chat::ToolCall,
+    child_chat_id: Uuid,
+    child_message_id: Uuid,
+    /// The child's own request, copied so the card renders without reading
+    /// another chat. The child's row stays the executable truth.
+    request: ContentPartToolApprovalRequest,
+}
+
+/// The one `delegated_task` approval part a parked batch leaves behind.
+///
+/// The flat fields describe the first item only, for readers that predate
+/// `approvals`; `mcp_server_id` is empty because no server is being asked
+/// about, and a card MUST branch on `kind` before reading any of them.
+fn delegated_task_approval_part(
+    parked: &[ParkedChild],
+    pending_tool_calls: Vec<crate::models::message::PendingToolCall>,
+    allow_always: bool,
+) -> ContentPartToolApprovalRequest {
+    let approvals: Vec<ApprovalItem> = parked
+        .iter()
+        .map(|child| {
+            // The child parked on exactly one call - its gate stops the batch
+            // at the first gated one - so the first item is that call.
+            let gated = child.request.approval_items().into_iter().next();
+            let (child_tool_call_id, child_tool_name, child_input) = gated
+                .map(|item| (item.tool_call_id, item.tool_name, item.input))
+                .unwrap_or_else(|| {
+                    (
+                        child.request.tool_call_id.clone(),
+                        child.request.tool_name.clone(),
+                        child.request.input.clone(),
+                    )
+                });
+            ApprovalItem {
+                approval_id: child.tool_call.call_id.clone(),
+                tool_call_id: child.tool_call.call_id.clone(),
+                tool_name: child.tool_call.fn_name.clone(),
+                input: child.tool_call.fn_arguments.clone(),
+                child: Some(crate::models::message::ChildApprovalRef {
+                    child_chat_id: child.child_chat_id,
+                    child_message_id: child.child_message_id,
+                    child_tool_call_id,
+                    tool_name: child_tool_name,
+                    mcp_server_id: child.request.mcp_server_id.clone(),
+                    input: child_input,
+                    annotations: child.request.annotations.clone(),
+                    preset: child.request.preset.clone(),
+                    requested_at: child.request.requested_at.clone(),
+                }),
+            }
+        })
+        .collect();
+    let head = &parked[0];
+    ContentPartToolApprovalRequest {
+        tool_call_id: head.tool_call.call_id.clone(),
+        tool_name: erato_config::config::DELEGATE_TASK_TOOL_NAME.to_string(),
+        mcp_server_id: String::new(),
+        input: head.tool_call.fn_arguments.clone(),
+        annotations: head.request.annotations.clone(),
+        preset: head.request.preset.clone(),
+        allow_always,
+        requested_at: now_timestamp(),
+        kind: crate::models::message::ToolApprovalKind::DelegatedTask,
+        approvals,
+        pending_tool_calls,
+    }
+}
+
+/// Turn one task outcome into a part, or hold the slot open when the child
+/// stopped to ask.
+///
+/// `None` means the slot is parked: a suspended run owes the model no response
+/// yet, and the turn ends before the model is called again. The slot keeps its
+/// reserved index and an `input_required` output — never `output: None`, which
+/// history replay would re-emit as an empty tool response.
+#[allow(clippy::too_many_arguments)]
+async fn settle_or_park_delegation_slot<
+    MSG: SendAsSseEvent + From<MessageSubmitStreamingResponseToolCallUpdate>,
+>(
+    settled: SettledTask,
+    parked_children: &mut Vec<ParkedChild>,
+    content: &mut Vec<ContentPart>,
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    assistant_message_id: Uuid,
+    assistant_id: Option<Uuid>,
+    streaming_task: Option<&Arc<StreamingTask>>,
+    tracing_client: Option<&TracingLangfuseClient>,
+    platform: &str,
+    tx: &Sender<Result<Event, Report>>,
+) -> Result<Option<(usize, genai::chat::ToolResponse)>, Report> {
+    let SettledTask { meta, outcome } = settled;
+    let outcome = match outcome {
+        Ok(crate::services::delegation::DelegationDispatchOutcome::Suspended {
+            child_chat_id,
+            child_message_id,
+            assistant_id: child_assistant_id,
+            assistant_name,
+            request,
+            trace,
+        }) => {
+            let output = crate::services::delegation::suspended_envelope(
+                child_chat_id,
+                child_assistant_id,
+                assistant_name,
+                meta.tool_call.call_id.clone(),
+            )
+            .output_value(&trace);
+            let slot = match content.get_mut(meta.slot) {
+                Some(ContentPart::ToolUse(part)) => {
+                    part.output = Some(output.clone());
+                    part.ended_at = None;
+                    meta.slot
+                }
+                // Unreachable on the task route, which reserves the slot
+                // before it launches. A lost record would be worse than a
+                // part out of call order, so the output is kept either way.
+                _ => {
+                    content.push(ContentPart::ToolUse(ToolUse {
+                        tool_call_id: meta.tool_call.call_id.clone(),
+                        status: MessageToolCallStatus::InProgress,
+                        tool_name: meta.tool_call.fn_name.clone(),
+                        input: Some(meta.tool_call.fn_arguments.clone()),
+                        progress_message: None,
+                        progress: None,
+                        total: None,
+                        output: Some(output.clone()),
+                        started_at: Some(meta.tool_call_started.clone()),
+                        ended_at: None,
+                    }));
+                    content.len() - 1
+                }
+            };
+            commit_message_content_mid_turn(
+                app_state,
+                policy,
+                subject,
+                assistant_message_id,
+                content,
+                "task park",
+            )
+            .await;
+            announce_reserved_task_slot::<MSG>(
+                &meta.tool_call,
+                slot,
+                output,
+                assistant_message_id,
+                streaming_task,
+                tx,
+            )
+            .await?;
+            parked_children.push(ParkedChild {
+                tool_call: meta.tool_call,
+                child_chat_id,
+                child_message_id,
+                request: *request,
+            });
+            return Ok(None);
+        }
+        outcome => outcome,
+    };
+    let response = settle_delegation_slot::<MSG>(
+        outcome,
+        &meta.tool_call,
+        Some(meta.slot),
+        meta.tool_call_started,
+        meta.otel_tool_call_start_time,
+        meta.otel_parent_observation_id,
+        content,
+        app_state,
+        policy,
+        subject,
+        assistant_message_id,
+        assistant_id,
+        streaming_task,
+        tracing_client,
+        platform,
+        tx,
+    )
+    .await?;
+    Ok(Some((meta.batch_position, response)))
 }
 
 /// Tell the client what a reserved task slot is doing.
@@ -4080,6 +4322,7 @@ async fn launch_prepared_task<'a>(
             scheduling,
             parent_tool_call_id: Some(meta.tool_call.call_id.clone()),
             retry_of: None,
+            parent_message_id: Some(assistant_message_id),
         },
         brief,
     )
@@ -4179,6 +4422,10 @@ async fn stream_generate_chat_completion<
     assistant_id: Option<Uuid>,
     initial_message_content: Vec<ContentPart>,
     is_delegated_run: bool,
+    // Whether a delegated run of this chat may stop on an approval-gated MCP
+    // call and let its origin turn ask, instead of having the call refused.
+    // Always `false` for a turn that is not a delegated run at all.
+    child_may_park: bool,
     delegation: Option<DelegationDispatchContext<'_>>,
     // What this run may spend on tool calls, when it is a task run. `None`
     // for every ordinary turn and for a mention run, which stay bounded by
@@ -4462,6 +4709,10 @@ async fn stream_generate_chat_completion<
         // An approval reached mid-batch. The part must be the LAST one, and it
         // must not reach disk until the batch it interrupted has settled.
         let mut pending_approval_part: Option<ContentPartToolApprovalRequest> = None;
+        // Children that stopped to ask. Collected rather than acted on, because
+        // the requests are carried up in one part after the rest of the batch
+        // has settled — a child that parks must not abandon its siblings.
+        let mut parked_children: Vec<ParkedChild> = Vec::new();
         'pop_calls: while let Some(unfinished_tool_call) = unfinished_tool_calls.pop_front() {
             let batch_position = {
                 let position = batch_position;
@@ -4477,13 +4728,9 @@ async fn stream_generate_chat_completion<
                 let Some(Some(settled)) = futures::FutureExt::now_or_never(in_flight.next()) else {
                     break;
                 };
-                match settle_delegation_slot::<MSG>(
-                    settled.outcome,
-                    &settled.meta.tool_call,
-                    Some(settled.meta.slot),
-                    settled.meta.tool_call_started,
-                    settled.meta.otel_tool_call_start_time,
-                    settled.meta.otel_parent_observation_id,
+                match settle_or_park_delegation_slot::<MSG>(
+                    settled,
+                    &mut parked_children,
                     &mut current_message_content,
                     app_state,
                     policy,
@@ -4497,9 +4744,10 @@ async fn stream_generate_chat_completion<
                 )
                 .await
                 {
-                    Ok(response) => {
-                        current_turn_tool_responses.push((settled.meta.batch_position, response));
-                    }
+                    Ok(Some(response)) => current_turn_tool_responses.push(response),
+                    // Parked: nothing to answer the model with, and the part
+                    // that asks is pushed after the join.
+                    Ok(None) => {}
                     // Through the join like every other exit, so the rest of
                     // the batch is still settled.
                     Err(error) => {
@@ -4507,6 +4755,14 @@ async fn stream_generate_chat_completion<
                         break 'pop_calls;
                     }
                 }
+            }
+            // A park ends the batch: the calls after it belong to the
+            // continuation, and the one just popped has not been looked at yet.
+            // The join below still runs, so the siblings still in flight are
+            // awaited and settled before the request is carried up.
+            if !parked_children.is_empty() {
+                unfinished_tool_calls.push_front(unfinished_tool_call);
+                break 'pop_calls;
             }
             let otel_tool_call_start_time = tracing_client
                 .as_ref()
@@ -5422,11 +5678,14 @@ async fn stream_generate_chat_completion<
             ) {
                 McpToolCallGate::Run => None,
                 McpToolCallGate::Refuse(error_message) => Some(error_message),
-                McpToolCallGate::Ask(_) if is_delegated_run => {
-                    // A delegated child run must never park on approval — the
-                    // parent awaits it, and the durable stop would surface a
-                    // half-done ToolApprovalRequest tail as the delegate's
-                    // result. Refuse the CALL so the child completes in prose.
+                McpToolCallGate::Ask(_) if is_delegated_run && !child_may_park => {
+                    // A delegated run with nowhere to ask must not park: the
+                    // durable stop would surface a half-done
+                    // ToolApprovalRequest tail as the delegate's result.
+                    // Refuse the CALL so the child completes in prose. A task
+                    // child its origin turn is still awaiting does have a
+                    // surface — its slot on that turn — and takes the arm
+                    // below instead.
                     Some(format!(
                         "The tool '{}' requires user approval, which is unavailable in a delegated run; the call was not executed.",
                         unfinished_tool_call.fn_name
@@ -6009,13 +6268,9 @@ async fn stream_generate_chat_completion<
                 // the next pass, which is only reachable while aborting.
                 continue;
             };
-            let response = settle_delegation_slot::<MSG>(
-                settled.outcome,
-                &settled.meta.tool_call,
-                Some(settled.meta.slot),
-                settled.meta.tool_call_started,
-                settled.meta.otel_tool_call_start_time,
-                settled.meta.otel_parent_observation_id,
+            if let Some(response) = settle_or_park_delegation_slot::<MSG>(
+                settled,
+                &mut parked_children,
                 &mut current_message_content,
                 app_state,
                 policy,
@@ -6027,8 +6282,10 @@ async fn stream_generate_chat_completion<
                 &langfuse_trace_enrichment.platform,
                 &tx,
             )
-            .await?;
-            current_turn_tool_responses.push((settled.meta.batch_position, response));
+            .await?
+            {
+                current_turn_tool_responses.push(response);
+            }
 
             // One finished, so one may start — in call order, and only while
             // the turn is still going anywhere.
@@ -6084,6 +6341,54 @@ async fn stream_generate_chat_completion<
                     "task launch",
                 )
                 .await;
+            }
+        }
+
+        // Park-after-settle: every sibling has finished and its slot is in
+        // place, so the children's requests can now be carried up as the one
+        // part that ends the turn.
+        //
+        // Skipped when something else already ended the turn. An abort means
+        // the user withdrew the question, and a gated call of this turn's own
+        // already owns the single approval part — one part carries one kind, so
+        // a parked child cannot be folded into an `mcp_tool` card. In both
+        // cases the child keeps its `input_required` slot and stays answerable
+        // from its own chat.
+        if !parked_children.is_empty() {
+            if pending_approval_part.is_none() && exit_error.is_none() && !exit_after_join {
+                let pending_tool_calls = unfinished_tool_calls
+                    .drain(..)
+                    .map(|call| crate::models::message::PendingToolCall {
+                        call_id: call.call_id,
+                        fn_name: call.fn_name,
+                        fn_arguments: call.fn_arguments,
+                    })
+                    .collect();
+                pending_approval_part = Some(delegated_task_approval_part(
+                    &parked_children,
+                    pending_tool_calls,
+                    mcp.config.mcp_servers_global.approval.allow_always,
+                ));
+                exit_metadata = build_generation_metadata(
+                    total_prompt_tokens,
+                    total_completion_tokens,
+                    total_total_tokens,
+                    total_reasoning_tokens,
+                    langfuse_trace_id.clone(),
+                    false,
+                    None,
+                    non_empty_string(&captured_reasoning_summary),
+                    non_empty_vec(&captured_reasoning_items),
+                    non_empty_vec(&captured_reasoning_item_encrypted_content),
+                );
+                exit_after_join = true;
+            } else {
+                tracing::warn!(
+                    chat_id = %chat_id,
+                    parked = parked_children.len(),
+                    "A task child parked on a turn that cannot carry its request; \
+                     it stays answerable from its own chat"
+                );
             }
         }
 
@@ -11540,6 +11845,7 @@ pub(crate) async fn run_generation_after_user_message(
         chat.assistant_id,
         vec![],
         crate::models::chat::chat_is_delegated_run(chat),
+        crate::services::delegation::child_may_park_on_approval(chat, &app_state.config.delegation),
         Some(DelegationDispatchContext {
             me_user,
             targets: &delegation_targets,
@@ -12028,6 +12334,10 @@ pub async fn regenerate_message_sse(
                     chat.assistant_id,
                     vec![],
                     crate::models::chat::chat_is_delegated_run(&chat),
+                    crate::services::delegation::child_may_park_on_approval(
+                        &chat,
+                        &app_state.config.delegation,
+                    ),
                     Some(DelegationDispatchContext {
                         me_user: &me_user,
                         targets: &delegation_targets,
@@ -12568,6 +12878,10 @@ pub async fn edit_message_sse(
                     chat.assistant_id,
                     vec![],
                     crate::models::chat::chat_is_delegated_run(&chat),
+                    crate::services::delegation::child_may_park_on_approval(
+                        &chat,
+                        &app_state.config.delegation,
+                    ),
                     Some(DelegationDispatchContext {
                         me_user: &me_user,
                         targets: &delegation_targets,
@@ -13407,11 +13721,57 @@ async fn mark_continuation_in_flight(
     Ok(())
 }
 
+/// The origin turn that is currently asking this child's question, if any.
+///
+/// Re-read rather than trusted from the link alone: `parent_message_id` is
+/// written once at dispatch and the origin moves on without it — the approval
+/// is settled or withdrawn, the chat is archived, the whole row is deleted —
+/// while the child keeps pointing at it. A link taken on faith would leave a
+/// parked chat answerable from neither side.
+async fn origin_approval_covering_child(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    chat: &chats::Model,
+) -> Option<Uuid> {
+    let parent_message_id = crate::models::chat::parse_chat_configuration(chat)
+        .ok()
+        .flatten()
+        .and_then(|configuration| configuration.provenance)
+        .filter(|provenance| provenance.kind == crate::models::chat::ChatProvenanceKind::Delegation)
+        .and_then(|provenance| provenance.parent_message_id)?;
+    let subject = me_user.to_subject();
+    // A deleted or foreign origin fails this read, which is the answer: there
+    // is nobody left to ask on the child's behalf.
+    let parent = get_message_by_id(&app_state.db, policy, &subject, &parent_message_id)
+        .await
+        .ok()?;
+    let origin_chat = get_chat_by_message_id(&app_state.db, policy, &subject, &parent_message_id)
+        .await
+        .ok()?;
+    if origin_chat.archived_at.is_some() {
+        return None;
+    }
+    let open =
+        parked_approval_state(&MessageSchema::validate(&parent.raw_message).ok()?.content)?.open;
+    open.iter()
+        .any(|item| {
+            item.child
+                .as_ref()
+                .is_some_and(|child| child.child_chat_id == chat.id)
+        })
+        .then_some(parent_message_id)
+}
+
 fn already_continued() -> StreamRouteError {
     StreamRouteError::AlreadyContinued(Box::new(AlreadyContinuedError {
         code: ALREADY_CONTINUED_CODE.to_string(),
     }))
 }
+
+/// Every open approval paired with the decision submitted for it, in the row's
+/// order.
+type SubmittedDecisions = Vec<(String, ToolApprovalDecision)>;
 
 /// Pair every approval a parked turn has open with the decision submitted for
 /// it, refusing any body that does not answer the turn exactly.
@@ -13421,7 +13781,7 @@ fn already_continued() -> StreamRouteError {
 fn resolve_submitted_decisions(
     request: &ContinueStreamRequest,
     open: &[ApprovalItem],
-) -> Result<Vec<(String, ToolApprovalDecision)>, StreamRouteError> {
+) -> Result<SubmittedDecisions, StreamRouteError> {
     if !request.decisions.is_empty() && request.decision.is_some() {
         return Err((
             axum::http::StatusCode::BAD_REQUEST,
@@ -13511,7 +13871,7 @@ fn resolve_submitted_decisions(
         (status = OK, content_type = "text/event-stream", body = MessageSubmitStreamingResponseMessage),
         (status = BAD_REQUEST, body = ApprovalDecisionsError, description = "The message has no pending approval, the decision is invalid, or the submitted decisions do not cover the open approvals (JSON, code = decisions_mismatch)"),
         (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
-        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), or every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError)"),
+        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), or the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError)"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -13556,6 +13916,21 @@ pub async fn continue_message_sse(
         )
     })?;
     reject_if_archived(&chat)?;
+    // While the chat that dispatched this run is asking the same question, its
+    // card is the only one that can act on the answer: it holds the slot the
+    // child's result is owed to. Two live cards would let one approval be
+    // decided twice, and only one of the two decisions would reach the turn
+    // that is waiting.
+    if let Some(parent_message_id) =
+        origin_approval_covering_child(&app_state, &policy, &me_user, &chat).await
+    {
+        return Err(StreamRouteError::CoveredByParent(Box::new(
+            CoveredByParentError {
+                code: COVERED_BY_PARENT_CODE.to_string(),
+                parent_message_id,
+            },
+        )));
+    }
     let Some(state) = parked_approval_state(&parsed.content) else {
         return Err((
             axum::http::StatusCode::BAD_REQUEST,
@@ -13738,6 +14113,431 @@ async fn store_standing_tool_decision(
     }
 }
 
+/// Run one parked child's continuation in-process, under the child's own lease.
+///
+/// Boxed for the same reason `run_delegated_child` is: this is
+/// `run_continuation` reaching `run_continuation`, which would otherwise make
+/// the future recursively sized and trip the worker-stack limit.
+///
+/// Wrapped in the shared generation lifecycle so the resumed run records its
+/// own outcome on its own chat — including `awaiting_approval` when it stops a
+/// second time, which is what makes the chained park answerable at all.
+fn run_child_approval_continuation(
+    app_state: AppState,
+    policy: PolicyEngine,
+    me_user: MeProfile,
+    child_task: Arc<StreamingTask>,
+    request: ContinueStreamRequest,
+    child_chat_id: Uuid,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), Report>> + Send>> {
+    Box::pin(async move {
+        let run_timeout = Duration::from_secs(app_state.config.delegation.run_timeout_seconds);
+        with_generation_task_lifecycle(
+            &app_state.background_tasks,
+            &child_task,
+            child_chat_id,
+            async {
+                let run = run_continuation(
+                    &child_task,
+                    None,
+                    &app_state,
+                    &policy,
+                    &me_user,
+                    request,
+                    ContinuationEntry::Decide,
+                );
+                tokio::pin!(run);
+                tokio::select! {
+                    result = &mut run => result,
+                    // The same bound an awaited run gets, for the same reason:
+                    // the origin turn is blocked on this, and the abort is
+                    // cooperative so the run is still awaited to completion —
+                    // that wind-down is what persists the partial answer.
+                    _ = tokio::time::sleep(run_timeout) => {
+                        tracing::info!(%child_chat_id, "Resumed child run hit its deadline; aborting");
+                        child_task.request_abort();
+                        run.await
+                    }
+                }
+            },
+        )
+        .await
+    })
+}
+
+/// Resume one child the user has decided about, and read the result its origin
+/// slot is owed.
+///
+/// A decision is applied to whatever the child still has open rather than to
+/// the id the parent's card recorded: the child's own row is the executable
+/// truth, and a card can name a request its owner has since answered from the
+/// child's own chat. Nothing open means there is nothing to run — the answer,
+/// if there is one, is already on the row.
+async fn resume_parked_child(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    child: &crate::models::message::ChildApprovalRef,
+    parent_tool_call_id: String,
+    decision: ToolApprovalDecision,
+) -> Result<crate::services::delegation::DelegationResultEnvelope, String> {
+    use sea_orm::EntityTrait;
+
+    let child_chat = crate::db::entity::chats::Entity::find_by_id(child.child_chat_id)
+        .one(&app_state.db)
+        .await
+        .map_err(|error| {
+            warn_and_capture_error("read a parked child's chat", &eyre!(error.to_string()));
+            "The delegated run could not be read.".to_string()
+        })?
+        .ok_or_else(|| "The delegated run no longer exists.".to_string())?;
+    // The parent's card is a copy, so the ownership check cannot be inherited
+    // from it: a row naming someone else's chat must not start a generation.
+    if child_chat.owner_user_id != me_user.id {
+        return Err("The delegated run belongs to another user.".to_string());
+    }
+    let configuration = crate::models::chat::parse_chat_configuration(&child_chat)
+        .ok()
+        .flatten();
+    let spawned_at = configuration
+        .as_ref()
+        .and_then(|configuration| configuration.provenance.as_ref())
+        .and_then(|provenance| provenance.rebase_cutoff)
+        .unwrap_or(child_chat.created_at);
+
+    let child_message = crate::db::entity::messages::Entity::find_by_id(child.child_message_id)
+        .one(&app_state.db)
+        .await
+        .map_err(|error| {
+            warn_and_capture_error("read a parked child's row", &eyre!(error.to_string()));
+            "The delegated run's answer could not be read.".to_string()
+        })?
+        .filter(|row| row.chat_id == child.child_chat_id)
+        .ok_or_else(|| "The delegated run's answer no longer exists.".to_string())?;
+    let open = MessageSchema::validate(&child_message.raw_message)
+        .ok()
+        .and_then(|parsed| parked_approval_state(&parsed.content))
+        .map(|state| state.open)
+        .unwrap_or_default();
+
+    let mut status = crate::services::delegation::DelegationRunStatus::Completed;
+    let mut hit_tool_budget = false;
+    if !open.is_empty() {
+        let (_child_rx, child_task) = app_state
+            .background_tasks
+            .try_start_task(
+                child.child_chat_id,
+                child.child_message_id,
+                // The park this resumes IS the parked lease, so claiming it is
+                // the whole point rather than a takeover of someone's work.
+                Takeover::TakeParked,
+                app_state.config.generation_status.stale_after_secs,
+            )
+            .await
+            .map_err(|_| "The delegated run is busy; try again once it is idle.".to_string())?;
+        let request = ContinueStreamRequest {
+            message_id: child.child_message_id,
+            decisions: open
+                .iter()
+                .map(|item| ApprovalDecisionItem {
+                    approval_id: item.approval_id.clone(),
+                    decision,
+                })
+                .collect(),
+            decision: None,
+        };
+        let resumed = run_child_approval_continuation(
+            app_state.clone(),
+            policy.clone(),
+            me_user.clone(),
+            child_task.clone(),
+            request,
+            child.child_chat_id,
+        )
+        .await;
+        if resumed.is_err() {
+            status = crate::services::delegation::DelegationRunStatus::Failed;
+        }
+        hit_tool_budget = child_task.tool_budget_exhausted();
+    }
+
+    Ok(crate::services::delegation::build_result_envelope(
+        &app_state.db,
+        child.child_chat_id,
+        child.child_message_id,
+        spawned_at,
+        child_chat.assistant_id,
+        // A task child speaks either as the origin's assistant or as the bare
+        // model; neither is a delegate the origin model named, so there is no
+        // name to report.
+        None,
+        parent_tool_call_id,
+        status,
+        None,
+        hit_tool_budget,
+        app_state.config.delegation.result_max_chars,
+    )
+    .await)
+}
+
+/// Overwrite the origin slot a resumed child owes, and tell the client.
+///
+/// Written in place rather than appended: the slot is the model's memory of the
+/// call and the index every progress frame of the run addressed, so vacating it
+/// would leave those frames pointing at another part. A child that parked again
+/// keeps its `in_progress` status — the run is suspended, not over.
+#[allow(clippy::too_many_arguments)]
+async fn update_resumed_child_slot(
+    content: &mut [ContentPart],
+    tool_call_id: &str,
+    output: JsonValue,
+    still_parked: bool,
+    failed: bool,
+    message_id: Uuid,
+    task: &Arc<StreamingTask>,
+    tx: &Sender<Result<Event, Report>>,
+) -> Result<(), Report> {
+    let Some((index, part)) = content
+        .iter_mut()
+        .enumerate()
+        .find_map(|(index, part)| match part {
+            ContentPart::ToolUse(part) if part.tool_call_id == tool_call_id => Some((index, part)),
+            _ => None,
+        })
+    else {
+        return Ok(());
+    };
+    let status = if still_parked {
+        MessageToolCallStatus::InProgress
+    } else if failed {
+        MessageToolCallStatus::Error
+    } else {
+        MessageToolCallStatus::Success
+    };
+    part.status = status.clone();
+    part.output = Some(output.clone());
+    part.ended_at = (!still_parked).then(now_timestamp);
+    let (wire_status, bg_status) = match status {
+        MessageToolCallStatus::Success => (ToolCallStatus::Success, BgToolCallStatus::Success),
+        MessageToolCallStatus::Error => (ToolCallStatus::Error, BgToolCallStatus::Error),
+        _ => (ToolCallStatus::InProgress, BgToolCallStatus::InProgress),
+    };
+    let tool_name = part.tool_name.clone();
+    let input = part.input.clone();
+    send_background_event(
+        task,
+        StreamingEvent::ToolCallUpdate {
+            message_id,
+            content_index: index,
+            tool_call_id: tool_call_id.to_string(),
+            tool_name: tool_name.clone(),
+            input: input.clone(),
+            status: bg_status,
+            progress_message: None,
+            progress: None,
+            total: None,
+            output: Some(output.clone()),
+        },
+        "broadcast resumed delegated task slot",
+    )
+    .await;
+    let event: MessageSubmitStreamingResponseMessage =
+        MessageSubmitStreamingResponseToolCallUpdate {
+            message_id,
+            content_index: index,
+            tool_call_id: tool_call_id.to_string(),
+            tool_name,
+            input,
+            status: wire_status,
+            progress_message: None,
+            progress: None,
+            total: None,
+            output: Some(output),
+        }
+        .into();
+    send_generation_event(&event, tx.clone()).await
+}
+
+/// Apply the user's decisions to the children a parked turn is waiting on.
+///
+/// Every item settles as it is decided, for the reason given on
+/// `run_continuation`.
+///
+/// Returns the children that stopped a second time. Their slots stay open and
+/// the caller carries their new requests up as one part, the way the batch did.
+#[allow(clippy::too_many_arguments)]
+async fn settle_parked_children(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    user_id: Uuid,
+    task: &Arc<StreamingTask>,
+    tx: &Sender<Result<Event, Report>>,
+    message_id: Uuid,
+    open: &[ApprovalItem],
+    decisions: &[(String, ToolApprovalDecision)],
+    content: &mut Vec<ContentPart>,
+) -> Result<Vec<ParkedChild>, Report> {
+    let mut reparked: Vec<ParkedChild> = Vec::new();
+    for (approval_id, decision) in decisions {
+        let decision = *decision;
+        let Some(item) = open.iter().find(|item| &item.approval_id == approval_id) else {
+            return Err(eyre!(
+                "Approval '{approval_id}' is not open on this generation"
+            ));
+        };
+        let child = item.child.clone();
+
+        // The standing decision belongs to the CHILD's server and tool. The
+        // parent's `delegate_task` is a synthetic name no grant can name, and
+        // storing it would produce a setting no gate ever consults.
+        let always_allow_setting = match child.as_ref() {
+            Some(child) if matches!(decision, ToolApprovalDecision::ApproveAlways) => {
+                store_standing_tool_decision(
+                    app_state,
+                    user_id,
+                    &child.mcp_server_id,
+                    &child.tool_name,
+                    UserToolDecision::AlwaysAllow,
+                )
+                .await
+            }
+            _ => None,
+        };
+        let never_allow_setting = match child.as_ref() {
+            Some(child) if matches!(decision, ToolApprovalDecision::RejectAlways) => {
+                store_standing_tool_decision(
+                    app_state,
+                    user_id,
+                    &child.mcp_server_id,
+                    &child.tool_name,
+                    UserToolDecision::Denied,
+                )
+                .await
+            }
+            _ => None,
+        };
+
+        if decision.is_approval() {
+            content.push(ContentPart::ToolApproval(ContentPartToolApproval {
+                tool_call_id: item.tool_call_id.clone(),
+                always_allow: always_allow_setting.is_some(),
+                user_tool_approval_setting_id: always_allow_setting
+                    .as_ref()
+                    .map(|setting| setting.id),
+                approved_at: now_timestamp(),
+                approval_id: Some(item.approval_id.clone()),
+                child_chat_id: child.as_ref().map(|child| child.child_chat_id),
+            }));
+        } else {
+            content.push(ContentPart::ToolRejection(ContentPartToolRejection {
+                tool_call_id: item.tool_call_id.clone(),
+                never_allow: never_allow_setting.is_some(),
+                user_tool_approval_setting_id: never_allow_setting
+                    .as_ref()
+                    .map(|setting| setting.id),
+                rejected_at: now_timestamp(),
+                approval_id: Some(item.approval_id.clone()),
+                child_chat_id: child.as_ref().map(|child| child.child_chat_id),
+                reason: matches!(decision, ToolApprovalDecision::Withdraw)
+                    .then(|| REJECTION_REASON_WITHDRAWN.to_string()),
+            }));
+        }
+
+        let parked_output = content.iter().find_map(|part| match part {
+            ContentPart::ToolUse(part) if part.tool_call_id == item.tool_call_id => {
+                part.output.clone()
+            }
+            _ => None,
+        });
+        let resumed = match child.as_ref() {
+            Some(child) => {
+                resume_parked_child(
+                    app_state,
+                    policy,
+                    me_user,
+                    child,
+                    item.tool_call_id.clone(),
+                    decision,
+                )
+                .await
+            }
+            // A `delegated_task` item with no child names nothing to resume.
+            // Settling it as a failure is the only answer that leaves the row
+            // consistent; raising would strand the items after it.
+            None => Err("The delegated run this decision covers was not recorded.".to_string()),
+        };
+        let (output, still_parked, failed) = match resumed {
+            Ok(envelope) => {
+                let still_parked = envelope.status
+                    == crate::services::delegation::DelegationRunStatus::InputRequired;
+                let failed =
+                    envelope.status != crate::services::delegation::DelegationRunStatus::Completed;
+                (
+                    crate::services::delegation::resumed_slot_output(
+                        &envelope,
+                        parked_output.as_ref(),
+                    ),
+                    still_parked,
+                    failed,
+                )
+            }
+            Err(error) => (json!({ "status": "failed", "error": error }), false, true),
+        };
+        if still_parked
+            && let Some(child) = child.as_ref()
+            && let Some(request) = crate::services::delegation::read_child_approval_request(
+                &app_state.db,
+                child.child_chat_id,
+                child.child_message_id,
+            )
+            .await
+        {
+            reparked.push(ParkedChild {
+                tool_call: genai::chat::ToolCall {
+                    call_id: item.tool_call_id.clone(),
+                    fn_name: item.tool_name.clone(),
+                    fn_arguments: item.input.clone(),
+                    thought_signatures: None,
+                },
+                child_chat_id: child.child_chat_id,
+                child_message_id: child.child_message_id,
+                request,
+            });
+        }
+        // A client that has gone away must not stop the loop: the items before
+        // this one are already settled on the row, and one left open among them
+        // is one nobody can answer any more.
+        if let Err(error) = update_resumed_child_slot(
+            content,
+            &item.tool_call_id,
+            output,
+            still_parked,
+            failed,
+            message_id,
+            task,
+            tx,
+        )
+        .await
+        {
+            warn_and_capture_error("announce a resumed delegated task slot", &error);
+        }
+
+        // Per item, not once after the loop: a child that has already run must
+        // leave a record even if the next item fails, or its work happened on a
+        // row that still reads as undecided.
+        update_message_content(
+            &app_state.db,
+            policy,
+            &me_user.to_subject(),
+            &message_id,
+            content.clone(),
+        )
+        .await?;
+    }
+    Ok(reparked)
+}
+
 /// Apply a user's approval decisions to a parked turn and finish it.
 ///
 /// Takes no `Sender` of its own on purpose: a continuation may be started by an
@@ -13895,6 +14695,24 @@ pub(crate) async fn run_continuation(
     )
     .await?;
 
+    // The two kinds share no settlement: an `mcp_tool` item names a tool this
+    // process calls, a `delegated_task` item names a child whose own
+    // continuation makes the call. Splitting the decisions here keeps each loop
+    // reading only the items it can act on.
+    let (mcp_decisions, child_decisions): (SubmittedDecisions, SubmittedDecisions) =
+        match approval_request.kind {
+            ToolApprovalKind::McpTool => (submitted_decisions, Vec::new()),
+            ToolApprovalKind::DelegatedTask => (Vec::new(), submitted_decisions),
+            // Nothing writes a plan part yet, and approving one means
+            // dispatching the tasks it lists — which is the dispatch policy's
+            // job, not this one's.
+            ToolApprovalKind::TaskPlan => {
+                return Err(eyre!(
+                    "A task plan approval cannot be continued in this release"
+                ));
+            }
+        };
+
     // Why an approved call the rebuilt tool set no longer carries cannot run.
     // `None` is the one retryable answer: a denial is final whatever the
     // server's state, and so are the chat's write toggle and a server or tool
@@ -13942,7 +14760,7 @@ pub(crate) async fn run_continuation(
 
     // Decided before anything is written: the park only survives while the row
     // is still fully open (see `run_continuation`).
-    if submitted_decisions.iter().any(|(approval_id, decision)| {
+    if mcp_decisions.iter().any(|(approval_id, decision)| {
         decision.is_approval()
             && state.open.iter().any(|item| {
                 &item.approval_id == approval_id
@@ -13958,7 +14776,7 @@ pub(crate) async fn run_continuation(
     // One `mcp_tool` park is one server, recorded on the request itself: the
     // gate stops the batch at the first gated call, so every item here shares
     // `approval_request.mcp_server_id`.
-    for (approval_id, decision) in &submitted_decisions {
+    for (approval_id, decision) in &mcp_decisions {
         let decision = *decision;
         let Some(item) = state
             .open
@@ -14203,6 +15021,81 @@ pub(crate) async fn run_continuation(
             parsed.content.clone(),
         )
         .await?;
+    }
+
+    let reparked_children = if child_decisions.is_empty() {
+        Vec::new()
+    } else {
+        settle_parked_children(
+            app_state,
+            policy,
+            me_user,
+            user_id,
+            task,
+            &tx,
+            message.id,
+            &state.open,
+            &child_decisions,
+            &mut parsed.content,
+        )
+        .await?
+    };
+
+    // A child that stopped a second time re-parks the turn waiting on it: one
+    // new part of the same shape, and no model call — this turn has learnt
+    // nothing yet that it could answer with.
+    if !reparked_children.is_empty() {
+        let settled_call_ids: HashSet<&str> = parsed
+            .content
+            .iter()
+            .filter_map(|part| match part {
+                ContentPart::ToolUse(tool_use) => Some(tool_use.tool_call_id.as_str()),
+                _ => None,
+            })
+            .collect();
+        let pending_tool_calls = approval_request
+            .pending_tool_calls
+            .iter()
+            .filter(|call| !settled_call_ids.contains(call.call_id.as_str()))
+            .cloned()
+            .collect();
+        parsed.content.push(ContentPart::ToolApprovalRequest(
+            delegated_task_approval_part(
+                &reparked_children,
+                pending_tool_calls,
+                mcp.config.mcp_servers_global.approval.allow_always,
+            ),
+        ));
+        // Released here too, not only on the ordinary tail: the claim is what
+        // readmits a crashed continuation, and a row left carrying it would be
+        // resumed by the retry path instead of answered by the card it just
+        // grew.
+        let mut parked_metadata = message
+            .generation_metadata
+            .as_ref()
+            .and_then(|metadata| {
+                serde_json::from_value::<GenerationMetadata>(metadata.clone()).ok()
+            })
+            .unwrap_or_default();
+        parked_metadata.continuation_in_flight = None;
+        update_message_generation_metadata(
+            &app_state.db,
+            policy,
+            &me_user.to_subject(),
+            &message.id,
+            parked_metadata,
+        )
+        .await?;
+        return stream_update_assistant_message_completion::<MessageSubmitStreamingResponseMessage>(
+            tx,
+            task,
+            app_state,
+            policy,
+            parsed.content,
+            me_user,
+            message.id,
+        )
+        .await;
     }
 
     let generation_input_messages: GenerationInputMessages = serde_json::from_value(
@@ -14469,6 +15362,10 @@ pub(crate) async fn run_continuation(
             chat.assistant_id,
             parsed.content,
             is_delegated_run,
+            crate::services::delegation::child_may_park_on_approval(
+                &chat,
+                &app_state.config.delegation,
+            ),
             delegation,
             // The budget is per generation, like the per-message cap it sits
             // beside: a continuation starts a fresh one. Documented, not

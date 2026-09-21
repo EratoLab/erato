@@ -714,9 +714,12 @@ impl MessageSchema {
                     // per-item decisions have to be able to land on the row.
                     for item in request.approval_items() {
                         let tool_call_id = item.tool_call_id;
-                        if pending
-                            .insert(tool_call_id.clone(), State::Requested)
-                            .is_some()
+                        // Only an UNANSWERED duplicate is a broken row. A
+                        // delegated child that stops again puts its origin slot
+                        // on a second card, and the slot never moves, so there
+                        // is no later `ToolUse` closing the first question.
+                        if let Some(State::Requested) =
+                            pending.insert(tool_call_id.clone(), State::Requested)
                         {
                             return Err(eyre!(
                                 "Duplicate tool approval request for {}",

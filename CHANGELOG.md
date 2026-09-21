@@ -88,7 +88,7 @@ Deploy the frontend of this release **before or with** the backend: an older fro
 | --- | --- |
 | `"status": "timeout"` | `"status": "cancelled"` with `"reason": "timeout"` |
 | `"status": "failed"` on a run that produced no text | `"status": "completed"` with `"reason": "no_answer"` |
-| `"status": "failed"` on a run stopped by an approval it could not raise | unchanged, plus `"reason": "approval_unavailable"` |
+| `"status": "failed"` on a run stopped by an approval it could not raise | `"status": "input_required"` with `"reason": "approval_pending"` while the decision is outstanding; a run that cannot ask at all has the CALL refused and still reports `completed` with its partial answer. `"reason": "approval_unavailable"` stays in the vocabulary but is no longer emitted |
 
 `failed` now means infrastructure failure only — a run that could not be carried out. The result envelope also gains `reason`, `child_run_id` (the same value as the existing `delegate_chat_id`, which is kept) and `parent_tool_call_id`, and `assistant_id` / `assistant_name` became optional: they are omitted entirely for a task child that runs on the bare model rather than as an assistant.
 
@@ -157,6 +157,19 @@ Editing or regenerating a turn is still a branch operation and still branches. I
 `ToolApprovalDecision` gains `"withdraw"`: taking the question back rather than answering it. It rejects the open approvals with `reason: "withdrawn"` and the turn continues with those denials — a decision value, not an endpoint; there is no `withdrawapproval` route. `ContentPartToolApproval` and `ContentPartToolRejection` gain optional `approval_id` and `child_chat_id` recording which decision they settled, and `ContentPartToolRejection` gains an optional `reason` whose only value is `withdrawn`.
 
 No new configuration key, and no migration: the approval part is JSONB.
+
+**A delegated task that needs an approval now asks, on the turn that dispatched it.** New key `delegation.tasks.propagate_child_mcp_approvals` (default `true`) — on by default, so this changes behaviour for any deployment that has `[delegation.tasks]` on with the `wait` run mode.
+
+Before, a task child that reached an approval-gated MCP call had the call refused and finished without it: a child has no card of its own on the turn waiting for it, so nobody could be asked. Now the child stops, and the turn that dispatched it grows one approval part with `kind: "delegated_task"` — one item per parked child, `approval_id` naming the `delegate_task` call it covers, and a `child` block carrying that child's gated call so the card renders without a second chat read. The rest of the batch is still awaited and settled first; the part is appended last, so the row reads as parked exactly as an MCP stop does. Set the key to `false` to keep the old refusal.
+
+Answering that card resumes the child, not the parent: approving runs the call inside the child and its answer settles the origin's slot, denying reaches the child as an ordinary refused tool call it finishes around, and "always allow" is stored against the **child's** `(mcp_server_id, tool_name)` — never the synthetic `delegate_task` name. A child that hits a second gate re-parks the turn with a new card.
+
+Two wire consequences for a client:
+
+- The parked child's `delegate_task` part keeps its index and stays `in_progress` with `output.status: "input_required"` and `output.reason: "approval_pending"`. It is never written with a null output, and the continuation overwrites the same part with the settled envelope.
+- `POST /me/messages/continuestream` against a child whose request the origin is currently asking about answers `409 { "code": "covered_by_parent", "parent_message_id": … }` — the origin holds the slot the answer is owed to, so its card is the one that can act. The refusal lasts only while that approval is open: once it is settled or withdrawn, or the origin chat is archived or deleted, the child is an ordinary parked chat its owner can answer. A decision taken there settles the child alone; feeding it back into the origin's slot is a later change.
+
+Children nobody is waiting for are unaffected: an `@`-mentioned assistant's run and an `async` task still have their gated calls refused, because there is no turn to carry the request to.
 
 #### Deprecations
 

@@ -358,6 +358,7 @@
   "delegation.tasks.max_tasks_per_turn": {},
   "delegation.tasks.multitask_strategy": {},
   "delegation.tasks.persona": {},
+  "delegation.tasks.propagate_child_mcp_approvals": {},
   "delegation.tasks.result_template": {},
   "delegation.tasks.run_modes.[]": {},
   "delegation.tasks.scheduling": {},

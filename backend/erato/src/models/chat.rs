@@ -186,6 +186,13 @@ pub struct ChatProvenance {
     /// The assistant bound to the origin chat at spawn time, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin_assistant_id: Option<Uuid>,
+    /// Delegation only, awaited runs only: the origin's assistant row whose
+    /// approval part carries this run's parked request. The link exists so a
+    /// decision taken on this chat's own card can be refused while the origin
+    /// still owns the question — without it the same approval could be
+    /// answered twice, once on each surface.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_message_id: Option<Uuid>,
     /// History before this instant belongs to a different assistant context:
     /// when the replay anchor predates it, prompt composition re-injects the
     /// current assistant's head and strips the replayed system plane.
@@ -2754,6 +2761,7 @@ mod result_delivery_serde_tests {
             kind: ChatProvenanceKind::Delegation,
             origin_chat_id: None,
             origin_message_id: None,
+            parent_message_id: None,
             origin_assistant_id: None,
             rebase_cutoff: None,
             depth: 1,

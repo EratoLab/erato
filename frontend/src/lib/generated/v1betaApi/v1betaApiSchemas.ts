@@ -1224,6 +1224,26 @@ export type ContinueStreamRequest = {
 };
 
 /**
+ * Body of the `409` `continuestream` answers on a delegated child whose
+ * request is currently being asked about in the chat that started it.
+ *
+ * `parent_message_id` is where the question actually is: the client follows it
+ * rather than telling the user their own chat is broken.
+ */
+export type CoveredByParentError = {
+  /**
+   * Always `covered_by_parent`.
+   */
+  code: string;
+  /**
+   * The origin row whose approval part carries this child's request.
+   *
+   * @format uuid
+   */
+  parent_message_id: string;
+};
+
+/**
  * Request to create a new assistant
  */
 export type CreateAssistantRequest = {

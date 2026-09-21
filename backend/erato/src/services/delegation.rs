@@ -831,6 +831,40 @@ pub fn resolve_delegation_run_mode(
     mode
 }
 
+/// Whether this chat is a delegated run that may park on an approval-gated MCP
+/// call instead of having it refused.
+///
+/// Three conditions, each of which is a surface that has to exist: a `task`
+/// child has a `ToolUse` slot on the origin turn to carry the request, an
+/// awaited run has a turn still running to carry it, and the deployment has to
+/// allow the propagation at all. Anything else — the mention route, an `async`
+/// or `background` child, the kill-switch off — has nowhere to ask, so the call
+/// is refused and the child finishes without it.
+pub(crate) fn child_may_park_on_approval(
+    chat: &crate::db::entity::chats::Model,
+    config: &DelegationConfig,
+) -> bool {
+    if !config.tasks.propagate_child_mcp_approvals {
+        return false;
+    }
+    let Ok(Some(configuration)) = crate::models::chat::parse_chat_configuration(chat) else {
+        return false;
+    };
+    let Some(provenance) = configuration.provenance.as_ref() else {
+        return false;
+    };
+    if provenance.kind != crate::models::chat::ChatProvenanceKind::Delegation {
+        return false;
+    }
+    if provenance.run_mode.unwrap_or(ProvenanceRunMode::Wait) != ProvenanceRunMode::Wait {
+        return false;
+    }
+    configuration
+        .task
+        .as_ref()
+        .is_some_and(|task| task.route == crate::models::chat::DelegateRoute::Task)
+}
+
 /// Status of a delegated child run, as reported to the origin model.
 ///
 /// `failed` is infrastructure only — a run that could not be carried out.
@@ -871,9 +905,15 @@ pub enum DelegationRunReason {
     #[allow(dead_code)] // Emitted by the task budgets change (ERMAIN-774).
     CapExceeded,
     /// Parked on an approval the user has not answered yet.
-    #[allow(dead_code)] // Emitted when children park (ERMAIN-766).
     ApprovalPending,
     /// Hit a gated call it could not ask about, so it could not continue.
+    ///
+    /// Not emitted on any path today: a run with nowhere to ask has the CALL
+    /// refused rather than the run stopped, so it finishes in prose and its
+    /// envelope is an ordinary `completed`. The value stays in the vocabulary
+    /// because it is the name for that class of outcome and clients already
+    /// render it.
+    #[allow(dead_code)]
     ApprovalUnavailable,
     /// The run finished but its answer row is gone - deleted, or never written
     /// because the process died mid-run. Distinct from `no_answer`, which means
@@ -1009,6 +1049,55 @@ pub(crate) enum DelegationDispatchOutcome {
     /// envelope requires the ids of a run that exists, and the absence of
     /// them is precisely what tells a reader this one never started.
     NeverStarted { reason: DelegationRunReason },
+    /// The child stopped on an approval nobody in its own chat is going to
+    /// answer, and the request is now the origin turn's to carry.
+    ///
+    /// Not an outcome: the run is unfinished, its slot stays open, and the
+    /// child's own request part remains the executable truth the continuation
+    /// decides against. The copy travelling here exists so the origin's card
+    /// renders without reading another chat.
+    Suspended {
+        child_chat_id: Uuid,
+        /// The child's parked assistant row — the one a continuation decides.
+        child_message_id: Uuid,
+        /// Absent for a task child dispatched on the bare model.
+        assistant_id: Option<Uuid>,
+        assistant_name: Option<String>,
+        request: Box<crate::models::message::ContentPartToolApprovalRequest>,
+        trace: DelegationTrace,
+    },
+}
+
+/// The approval request a parked child is waiting on, read off its own row.
+///
+/// `None` whenever the row cannot be read or does not end on a request: the
+/// caller then treats the run as an ordinary outcome rather than inventing a
+/// park with nothing behind it.
+pub(crate) async fn read_child_approval_request<C: sea_orm::ConnectionTrait>(
+    conn: &C,
+    child_chat_id: Uuid,
+    child_message_id: Uuid,
+) -> Option<crate::models::message::ContentPartToolApprovalRequest> {
+    use sea_orm::EntityTrait;
+
+    let row = crate::db::entity::messages::Entity::find_by_id(child_message_id)
+        .one(conn)
+        .await
+        .map_err(|error| {
+            tracing::warn!(%error, %child_chat_id, "Failed to read a parked child's approval");
+        })
+        .ok()
+        .flatten()
+        .filter(|row| row.chat_id == child_chat_id)?;
+    crate::models::message::MessageSchema::validate(&row.raw_message)
+        .ok()?
+        .content
+        .into_iter()
+        .rev()
+        .find_map(|part| match part {
+            crate::models::message::ContentPart::ToolApprovalRequest(request) => Some(request),
+            _ => None,
+        })
 }
 
 /// The parent generation's stream, and where on it the delegation tool part
@@ -1418,11 +1507,13 @@ pub(crate) async fn build_result_envelope<C: sea_orm::ConnectionTrait>(
             .and_then(|content_type| content_type.as_str())
             .is_some_and(|content_type| content_type == "tool_approval_request");
         if stopped_on_approval && status == DelegationRunStatus::Completed {
-            // The child wanted a gated tool and had no way to ask. Parking it
-            // and surfacing the request on the parent is ERMAIN-766; until
-            // then this is genuinely a run that could not be carried out.
-            status = DelegationRunStatus::Failed;
-            reason = Some(DelegationRunReason::ApprovalUnavailable);
+            // The child stopped to ask, which is not a result and not a
+            // failure. The awaited path normally never gets here — it hands
+            // the request to the origin turn before building an envelope —
+            // but the continuation that settles the slot afterwards does,
+            // when the resumed child parks a second time.
+            status = DelegationRunStatus::InputRequired;
+            reason = Some(DelegationRunReason::ApprovalPending);
         }
         let has_metadata_error = row
             .generation_metadata
@@ -1658,6 +1749,10 @@ pub(crate) struct LaunchRunSpec {
     /// Lands in the child's provenance INSERT, so nothing has to reopen the
     /// document afterwards.
     pub retry_of: Option<Uuid>,
+    /// The origin's assistant row that will carry this run's approval requests.
+    /// Only an awaited run has one: nothing is waiting on a detached run, so
+    /// there is no turn its parked request could be surfaced on.
+    pub parent_message_id: Option<Uuid>,
 }
 
 /// Start a delegated child run and return without awaiting it.
@@ -1798,6 +1893,9 @@ pub(crate) async fn launch_delegation(
         rebase_cutoff: Some(spawned_at),
         depth: parent_depth + 1,
         adopted_at: None,
+        parent_message_id: run
+            .parent_message_id
+            .filter(|_| !run.run_mode.is_detached()),
         legacy_expected_output: None,
         legacy_constraints: None,
         run_mode: (run.run_mode != ProvenanceRunMode::Wait).then_some(run.run_mode),
@@ -2056,6 +2154,26 @@ pub(crate) async fn await_delegation(
     trace.finish();
     progress.flush(&trace).await;
 
+    // Flag first, row second. The child's lifecycle tail records its outcome
+    // before this join can fire, so the in-memory flag is decisive and the row
+    // is read only for the request to copy — a row read on its own would have
+    // to guess whether a trailing request part belongs to this run.
+    if status == DelegationRunStatus::Completed
+        && child_task.derive_outcome(false)
+            == crate::services::background_tasks::TaskOutcome::AwaitingApproval
+        && let Some(request) =
+            read_child_approval_request(&app_state.db, child_chat_id, child_task.message_id()).await
+    {
+        return DelegationDispatchOutcome::Suspended {
+            child_chat_id,
+            child_message_id: child_task.message_id(),
+            assistant_id,
+            assistant_name: target_name,
+            request: Box::new(request),
+            trace: trace.snapshot(),
+        };
+    }
+
     DelegationDispatchOutcome::Completed {
         envelope: build_result_envelope(
             &app_state.db,
@@ -2128,6 +2246,10 @@ pub(crate) async fn dispatch_delegate_tool_call(
             scheduling: erato_config::config::TaskScheduling::default(),
             parent_tool_call_id: Some(tool_call.call_id.clone()),
             retry_of: None,
+            // The mention route has no parent approval surface: its children
+            // never park, so a link here would name a turn that can never
+            // cover them.
+            parent_message_id: None,
         },
         brief,
     )
@@ -2230,6 +2352,50 @@ pub(crate) fn task_placeholder_output(launched: &LaunchedDelegation) -> serde_js
 /// able to tell that from a run that started.
 pub(crate) fn queued_placeholder_output() -> serde_json::Value {
     serde_json::json!({ "status": "queued" })
+}
+
+/// The envelope of a run that has stopped to ask.
+///
+/// A real envelope rather than a bespoke object so the slot reads the same
+/// whether it is parked or settled. The slot that carries it keeps its
+/// `in_progress` tool status: the run is suspended, not over, and this is what
+/// says why it is not moving.
+pub(crate) fn suspended_envelope(
+    child_chat_id: Uuid,
+    assistant_id: Option<Uuid>,
+    assistant_name: Option<String>,
+    parent_tool_call_id: String,
+) -> DelegationResultEnvelope {
+    DelegationResultEnvelope {
+        status: DelegationRunStatus::InputRequired,
+        reason: Some(DelegationRunReason::ApprovalPending),
+        assistant_id,
+        assistant_name,
+        delegate_chat_id: child_chat_id,
+        child_run_id: child_chat_id,
+        parent_tool_call_id,
+        result: None,
+        truncated: false,
+    }
+}
+
+/// The settled output of a slot whose child a continuation resumed.
+///
+/// The trace is carried over from the part the park left behind rather than
+/// rebuilt: the resumed run's events go to a detached sink, so a fresh trace
+/// would show the user a delegate that did nothing.
+pub(crate) fn resumed_slot_output(
+    envelope: &DelegationResultEnvelope,
+    parked_output: Option<&serde_json::Value>,
+) -> serde_json::Value {
+    let mut value =
+        serde_json::to_value(envelope).unwrap_or_else(|_| json!({ "status": "failed" }));
+    if let Some(trace) = parked_output.and_then(|output| output.get(DELEGATION_LOCAL_TRACE_KEY))
+        && let Some(object) = value.as_object_mut()
+    {
+        object.insert(DELEGATION_LOCAL_TRACE_KEY.to_string(), trace.clone());
+    }
+    value
 }
 
 /// One `delegate_task` call that passed validation and is ready to launch.
@@ -2844,6 +3010,7 @@ mod tests {
             result_template: erato_config::config::DelegationTasksConfig::default().result_template,
             run_modes: vec![erato_config::config::TaskRunMode::Wait],
             scheduling: erato_config::config::TaskScheduling::default(),
+            propagate_child_mcp_approvals: true,
         }
     }
 

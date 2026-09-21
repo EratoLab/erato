@@ -3683,6 +3683,14 @@ pub struct DelegationTasksConfig {
     // Defaults to "when_idle".
     #[serde(default)]
     pub scheduling: TaskScheduling,
+
+    // Whether an awaited task child that hits an approval-gated MCP call parks
+    // and has its request surfaced on the origin turn, instead of having the
+    // call refused so it finishes without it. Off means a child can never ask,
+    // so every gated call it makes is lost work.
+    // Defaults to `true`.
+    #[serde(default = "default_delegation_tasks_propagate_child_mcp_approvals")]
+    pub propagate_child_mcp_approvals: bool,
 }
 
 impl Default for DelegationTasksConfig {
@@ -3701,6 +3709,7 @@ impl Default for DelegationTasksConfig {
             result_template: default_delegation_tasks_result_template(),
             run_modes: default_delegation_tasks_run_modes(),
             scheduling: TaskScheduling::default(),
+            propagate_child_mcp_approvals: default_delegation_tasks_propagate_child_mcp_approvals(),
         }
     }
 }
@@ -3832,6 +3841,10 @@ fn default_delegation_tasks_max_server_tool_calls_per_task() -> u32 {
 
 fn default_delegation_tasks_max_parallel() -> u32 {
     3
+}
+
+fn default_delegation_tasks_propagate_child_mcp_approvals() -> bool {
+    true
 }
 
 fn default_delegation_tasks_max_client_tool_calls_per_task() -> u32 {

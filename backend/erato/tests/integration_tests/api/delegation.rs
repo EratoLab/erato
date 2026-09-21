@@ -155,6 +155,7 @@ async fn write_delegation_provenance(
             kind: ChatProvenanceKind::Delegation,
             origin_chat_id: Some(origin_chat_id),
             origin_message_id: None,
+            parent_message_id: None,
             origin_assistant_id,
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
@@ -4281,6 +4282,7 @@ async fn spawn_listed_delegated_run(
             kind: ChatProvenanceKind::Delegation,
             origin_chat_id: Some(origin_chat_id),
             origin_message_id: None,
+            parent_message_id: None,
             origin_assistant_id: Some(assistant_id),
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
@@ -4365,6 +4367,7 @@ async fn test_listing_hides_delegated_runs_and_exposes_provenance(pool: Pool<Pos
                 kind: ChatProvenanceKind::Delegation,
                 origin_chat_id: Some(origin_chat_id),
                 origin_message_id: None,
+                parent_message_id: None,
                 origin_assistant_id: Some(assistant_id),
                 rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
                 depth: 1,
@@ -4578,6 +4581,7 @@ async fn stage_in_flight_child(
         kind: ChatProvenanceKind::Delegation,
         origin_chat_id: Some(origin_chat_id),
         origin_message_id: None,
+        parent_message_id: None,
         origin_assistant_id: None,
         rebase_cutoff: None,
         depth: 1,
@@ -5466,6 +5470,7 @@ async fn test_delegated_run_outcome_reports_failures(pool: Pool<Postgres>) {
             kind: ChatProvenanceKind::Delegation,
             origin_chat_id: Some(origin_id),
             origin_message_id: None,
+            parent_message_id: None,
             origin_assistant_id: Some(assistant_id),
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
@@ -5572,6 +5577,7 @@ async fn test_parked_delegated_chat_stays_reachable(pool: Pool<Postgres>) {
             kind: ChatProvenanceKind::Delegation,
             origin_chat_id: Some(Uuid::parse_str(&origin_chat).unwrap()),
             origin_message_id: None,
+            parent_message_id: None,
             origin_assistant_id: None,
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
@@ -6154,6 +6160,7 @@ async fn spawn_delegated_run(
             kind: ChatProvenanceKind::Delegation,
             origin_chat_id: Some(origin_chat_id),
             origin_message_id: None,
+            parent_message_id: None,
             origin_assistant_id: None,
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
@@ -6193,6 +6200,7 @@ async fn spawn_handoff_branch(
             kind: ChatProvenanceKind::HandoffBranch,
             origin_chat_id: Some(origin_chat_id),
             origin_message_id: None,
+            parent_message_id: None,
             origin_assistant_id: None,
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
@@ -6617,6 +6625,7 @@ async fn test_submit_into_live_delegated_run_conflicts(pool: Pool<Postgres>) {
             kind: ChatProvenanceKind::Delegation,
             origin_chat_id: Some(Uuid::parse_str(&origin).unwrap()),
             origin_message_id: None,
+            parent_message_id: None,
             origin_assistant_id: None,
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
@@ -6971,6 +6980,7 @@ async fn test_chat_detail_carries_provenance_and_run_parameters(pool: Pool<Postg
             kind: ChatProvenanceKind::Delegation,
             origin_chat_id: Some(Uuid::parse_str(&origin).unwrap()),
             origin_message_id: None,
+            parent_message_id: None,
             origin_assistant_id: Some(Uuid::parse_str(&assistant).unwrap()),
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
@@ -7139,6 +7149,7 @@ async fn bare_child_row_has_null_assistant_and_resolves_no_assistant(pool: Pool<
             kind: ChatProvenanceKind::Delegation,
             origin_chat_id: Some(Uuid::parse_str(&origin).unwrap()),
             origin_message_id: None,
+            parent_message_id: None,
             origin_assistant_id: Some(Uuid::parse_str(&assistant).unwrap()),
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
@@ -7263,6 +7274,7 @@ async fn test_chat_detail_reports_adopted_and_archived_runs(pool: Pool<Postgres>
             kind: ChatProvenanceKind::Delegation,
             origin_chat_id: Some(Uuid::parse_str(&origin).unwrap()),
             origin_message_id: None,
+            parent_message_id: None,
             origin_assistant_id: None,
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
@@ -9466,6 +9478,7 @@ async fn count_running_background_delegated_runs_counts_async_runs(pool: Pool<Po
                 kind: ChatProvenanceKind::Delegation,
                 origin_chat_id: Some(origin_chat_id),
                 origin_message_id: None,
+                parent_message_id: None,
                 origin_assistant_id: None,
                 rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
                 depth: 1,
@@ -9836,6 +9849,7 @@ async fn seed_child_owing_a_result(
             kind: ChatProvenanceKind::Delegation,
             origin_chat_id: Some(origin_chat_id),
             origin_message_id: None,
+            parent_message_id: None,
             origin_assistant_id: None,
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
@@ -12471,6 +12485,7 @@ async fn seed_failed_task_run(
             kind: ChatProvenanceKind::Delegation,
             origin_chat_id: Some(origin_chat_id),
             origin_message_id: Some(origin_user_row.id),
+            parent_message_id: None,
             origin_assistant_id: None,
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
@@ -13084,6 +13099,7 @@ async fn retry_while_a_retry_child_is_working_is_409(pool: Pool<Postgres>) {
             kind: ChatProvenanceKind::Delegation,
             origin_chat_id: Some(origin_id),
             origin_message_id: None,
+            parent_message_id: None,
             origin_assistant_id: None,
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
@@ -13367,6 +13383,7 @@ async fn seed_retry_child(
             kind: ChatProvenanceKind::Delegation,
             origin_chat_id: Some(origin_chat_id),
             origin_message_id: None,
+            parent_message_id: None,
             origin_assistant_id: None,
             rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
             depth: 1,
@@ -13754,5 +13771,1073 @@ async fn recent_chats_exposes_retry_of(pool: Pool<Postgres>) {
     assert!(
         failed["retry_of"].is_null(),
         "the failed run itself records nothing - only the replacement does: {failed}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// A task child that stops on an approval, and the origin turn that asks for it.
+// ---------------------------------------------------------------------------
+
+/// The gated MCP tool a child reaches. Open-world, so the restrictive preset
+/// asks about it without any per-user decision being seeded.
+const PARKED_TOOL: &str = "publish_approval_probe";
+/// What the mock MCP server answers once the call is allowed to run.
+const PARKED_TOOL_RESULT: &str = "approval probe published";
+/// The refusal a denied call gets, which the child then answers around.
+const CHILD_DENIAL_TEXT: &str = "The user denied this tool call.";
+const PARK_USER_MESSAGE: &str = "plan a gated sub-task";
+const GATED_BRIEF: &str = "GATED-CHILD-BRIEF: publish the probe";
+
+/// The child's first turn: reach for the gated tool. Excluded on the envelope
+/// key, which only the parent's replayed tool responses carry.
+fn mock_child_reaches_the_gate(mocks: &mut MockSet, brief: &'static str, call_id: &'static str) {
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[brief],
+                &["child_run_id", PARKED_TOOL_RESULT, CHILD_DENIAL_TEXT],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                call_id,
+                PARKED_TOOL,
+                json!({}),
+            )]),
+        );
+    });
+}
+
+/// The origin's first turn: plan exactly one sub-task.
+fn mock_parent_plans_one_task(
+    mocks: &mut MockSet,
+    user_message: &'static str,
+    brief: &'static str,
+    call_id: &'static str,
+) {
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[user_message], &[brief]));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                call_id,
+                "delegate_task",
+                json!({ "task": brief, "facet_ids": ["plan"] }),
+            )]),
+        );
+    });
+}
+
+async fn message_row(
+    db: &sea_orm::DatabaseConnection,
+    message_id: Uuid,
+) -> erato::db::entity::messages::Model {
+    erato::db::entity::messages::Entity::find_by_id(message_id)
+        .one(db)
+        .await
+        .unwrap()
+        .expect("expected the assistant message")
+}
+
+async fn generation_state(db: &sea_orm::DatabaseConnection, chat_id: Uuid) -> String {
+    erato::db::entity::chats::Entity::find_by_id(chat_id)
+        .one(db)
+        .await
+        .unwrap()
+        .unwrap()
+        .generation_state
+        .unwrap_or_default()
+}
+
+fn content_of(row: &erato::db::entity::messages::Model) -> Vec<Value> {
+    row.raw_message["content"].as_array().cloned().unwrap()
+}
+
+fn slot_for(content: &[Value], tool_call_id: &str) -> Value {
+    content
+        .iter()
+        .find(|part| part["content_type"] == "tool_use" && part["tool_call_id"] == tool_call_id)
+        .unwrap_or_else(|| panic!("no slot for {tool_call_id}: {content:?}"))
+        .clone()
+}
+
+/// The child's own parked assistant row — the request the continuation decides
+/// against, as opposed to the copy the origin renders.
+async fn child_parked_row(
+    db: &sea_orm::DatabaseConnection,
+    child_chat_id: Uuid,
+) -> erato::db::entity::messages::Model {
+    chat_messages_by_created_at(db, child_chat_id)
+        .await
+        .into_iter()
+        .rfind(|row| row.raw_message["role"] == "assistant")
+        .expect("expected the child's assistant row")
+}
+
+/// Drive one card, on whichever surface holds it.
+async fn post_continuestream(
+    server: &TestServer,
+    message_id: Uuid,
+    decision: &str,
+) -> axum_test::TestResponse {
+    server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "message_id": message_id, "decision": decision }))
+        .await
+}
+
+/// A task child that reaches an approval-gated MCP call stops instead of
+/// having the call refused, and the turn that dispatched it asks on its behalf:
+/// ONE `delegated_task` part, one item per parked child, the child's own call
+/// copied onto it so the card renders without reading another chat.
+///
+/// Both rows end `awaiting_approval`. The copy is the surface; the child's own
+/// request stays the executable truth the continuation decides against.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn task_child_parks_and_parent_surfaces_one_delegated_task_approval(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_child_reaches_the_gate(&mut mocks, GATED_BRIEF, "call_child_probe");
+    mock_parent_plans_one_task(&mut mocks, PARK_USER_MESSAGE, GATED_BRIEF, "call_task_one");
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        gate_mock_mcp_tools_on_approval,
+    )
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, PARK_USER_MESSAGE, &["plan"]).await;
+    let parent_chat_id = Uuid::parse_str(&chat).unwrap();
+    let parent_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    let child_chat = delegated_child_chat(&app_state.db, parent_chat_id).await;
+
+    let content = content_of(&message_row(&app_state.db, parent_message_id).await);
+    let request = content.last().expect("expected a persisted content part");
+    assert_eq!(
+        request["content_type"], "tool_approval_request",
+        "the request must be the LAST part, or the six last-part checks stop \
+         seeing a parked row: {content:?}"
+    );
+    assert_eq!(request["kind"], "delegated_task");
+    assert_eq!(request["tool_name"], "delegate_task");
+    assert_eq!(
+        request["mcp_server_id"], "",
+        "no MCP server is being asked about on this card"
+    );
+
+    let approvals = request["approvals"].as_array().unwrap();
+    assert_eq!(
+        approvals.len(),
+        1,
+        "one item per parked child: {approvals:?}"
+    );
+    assert_eq!(
+        approvals[0]["approval_id"], "call_task_one",
+        "the approval is named after the origin call it covers"
+    );
+    assert_eq!(approvals[0]["tool_call_id"], "call_task_one");
+    let child_ref = &approvals[0]["child"];
+    assert_eq!(child_ref["child_chat_id"], json!(child_chat.id));
+    assert_eq!(child_ref["child_tool_call_id"], "call_child_probe");
+    assert_eq!(child_ref["tool_name"], PARKED_TOOL);
+    assert_eq!(child_ref["mcp_server_id"], "mock_mcp_approval");
+    assert_eq!(child_ref["preset"], "restrictive");
+    assert!(child_ref["annotations"].is_object());
+    assert!(
+        request["pending_tool_calls"].as_array().unwrap().is_empty(),
+        "nothing followed the task call in this batch"
+    );
+
+    assert_eq!(
+        generation_state(&app_state.db, parent_chat_id).await,
+        "awaiting_approval"
+    );
+    assert_eq!(
+        generation_state(&app_state.db, child_chat.id).await,
+        "awaiting_approval"
+    );
+    let child_content = content_of(&child_parked_row(&app_state.db, child_chat.id).await);
+    assert_eq!(
+        child_content.last().unwrap()["content_type"],
+        "tool_approval_request",
+        "the child keeps its own request: that row, not the copy, is what a \
+         continuation decides against"
+    );
+    assert!(
+        extract_full_text_answer(&events).is_empty(),
+        "a parked turn answers nothing"
+    );
+}
+
+/// The parked child's slot keeps its reserved index and reads as an envelope
+/// that is waiting, never as an empty one: history replay re-emits every stored
+/// `ToolUse` as a call plus its response, so a `null` output would replay as a
+/// tool that answered nothing at all.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn envelope_reports_input_required_for_parked_child(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_child_reaches_the_gate(&mut mocks, GATED_BRIEF, "call_child_probe");
+    mock_parent_plans_one_task(&mut mocks, PARK_USER_MESSAGE, GATED_BRIEF, "call_task_one");
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        gate_mock_mcp_tools_on_approval,
+    )
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, PARK_USER_MESSAGE, &["plan"]).await;
+    let parent_chat_id = Uuid::parse_str(&chat).unwrap();
+    let parent_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    let child_chat = delegated_child_chat(&app_state.db, parent_chat_id).await;
+
+    let content = content_of(&message_row(&app_state.db, parent_message_id).await);
+    let slot = slot_for(&content, "call_task_one");
+    assert_eq!(
+        slot["status"], "in_progress",
+        "the run is suspended, not over: {slot}"
+    );
+    assert!(
+        slot["ended_at"].is_null(),
+        "a suspended run has not ended: {slot}"
+    );
+    assert!(!slot["output"].is_null(), "never output: null: {slot}");
+    assert_eq!(slot["output"]["status"], "input_required");
+    assert_eq!(slot["output"]["reason"], "approval_pending");
+    assert_eq!(slot["output"]["child_run_id"], json!(child_chat.id));
+    assert_eq!(slot["output"]["delegate_chat_id"], json!(child_chat.id));
+    assert_eq!(slot["output"]["parent_tool_call_id"], "call_task_one");
+    assert!(
+        slot["output"]["result"].is_null(),
+        "there is no result yet: {slot}"
+    );
+}
+
+/// Every delegated run of `origin_chat_id`, oldest first. A batch has more than
+/// one, so the single-child helper cannot answer for it.
+async fn delegated_child_chats(
+    db: &sea_orm::DatabaseConnection,
+    origin_chat_id: Uuid,
+) -> Vec<erato::db::entity::chats::Model> {
+    erato::db::entity::chats::Entity::find()
+        .filter(erato::db::entity::chats::Column::OriginChatId.eq(origin_chat_id))
+        .order_by_asc(erato::db::entity::chats::Column::CreatedAt)
+        .all(db)
+        .await
+        .unwrap()
+}
+
+async fn wait_for_generation_state(
+    db: &sea_orm::DatabaseConnection,
+    chat_id: Uuid,
+    expected: &str,
+) {
+    for _ in 0..150 {
+        if generation_state(db, chat_id).await == expected {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+    panic!(
+        "chat {chat_id} never reached '{expected}' (it is '{}')",
+        generation_state(db, chat_id).await
+    );
+}
+
+/// A batch where one child parks and another finishes first: the sibling's slot
+/// is settled, not abandoned, and only the parked child is on the card.
+///
+/// The alternative — leaving the batch the moment one child asks — would strand
+/// the siblings' slots at "working" for runs that are over, and the model would
+/// never learn what they found.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn batch_of_two_tasks_one_parks_other_settles_before_park(pool: Pool<Postgres>) {
+    const PLAIN_BRIEF: &str = "PLAIN-CHILD-BRIEF: just answer";
+    const BATCH_USER_MESSAGE: &str = "plan two sub-tasks";
+
+    let mut mocks = MockSet::new();
+    mock_child_reaches_the_gate(&mut mocks, GATED_BRIEF, "call_child_probe");
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[PLAIN_BRIEF], &["child_run_id"]));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["PLAIN-CHILD-ANSWER"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[BATCH_USER_MESSAGE],
+                &[GATED_BRIEF, PLAIN_BRIEF],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[
+                (
+                    "call_task_plain",
+                    "delegate_task",
+                    json!({ "task": PLAIN_BRIEF, "facet_ids": ["plan"] }),
+                ),
+                (
+                    "call_task_gated",
+                    "delegate_task",
+                    json!({ "task": GATED_BRIEF, "facet_ids": ["plan"] }),
+                ),
+            ]),
+        );
+    });
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        gate_mock_mcp_tools_on_approval,
+    )
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, BATCH_USER_MESSAGE, &["plan"]).await;
+    let parent_chat_id = Uuid::parse_str(&chat).unwrap();
+    let parent_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    assert_eq!(
+        delegated_child_chats(&app_state.db, parent_chat_id)
+            .await
+            .len(),
+        2,
+        "both children ran"
+    );
+
+    let content = content_of(&message_row(&app_state.db, parent_message_id).await);
+    let plain = slot_for(&content, "call_task_plain");
+    assert_eq!(
+        plain["status"], "success",
+        "the sibling is settled, not abandoned: {plain}"
+    );
+    assert_eq!(plain["output"]["status"], "completed");
+    assert!(
+        plain["output"]["result"]
+            .as_str()
+            .unwrap()
+            .contains("PLAIN-CHILD-ANSWER")
+    );
+    let gated = slot_for(&content, "call_task_gated");
+    assert_eq!(gated["output"]["status"], "input_required");
+
+    let request = content.last().unwrap();
+    assert_eq!(request["content_type"], "tool_approval_request");
+    let approvals = request["approvals"].as_array().unwrap();
+    assert_eq!(
+        approvals.len(),
+        1,
+        "only the child that asked is on the card: {approvals:?}"
+    );
+    assert_eq!(approvals[0]["approval_id"], "call_task_gated");
+    assert_eq!(
+        generation_state(&app_state.db, parent_chat_id).await,
+        "awaiting_approval"
+    );
+}
+
+/// Approving the copy resumes the child that actually holds the request: the
+/// gated call runs in the child, the child answers, and the origin's slot is
+/// overwritten in place with the result envelope the model then reads.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn approve_resumes_child_and_parent_settles_slot(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_child_reaches_the_gate(&mut mocks, GATED_BRIEF, "call_child_probe");
+    mock_child_answers_after_the_gate(&mut mocks);
+    mock_parent_plans_one_task(&mut mocks, PARK_USER_MESSAGE, GATED_BRIEF, "call_task_one");
+    mock_parent_final_answer(&mut mocks, PARK_USER_MESSAGE);
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        gate_mock_mcp_tools_on_approval,
+    )
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, PARK_USER_MESSAGE, &["plan"]).await;
+    let parent_chat_id = Uuid::parse_str(&chat).unwrap();
+    let parent_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    let child_chat = delegated_child_chat(&app_state.db, parent_chat_id).await;
+
+    let continued = post_continuestream(&server, parent_message_id, "approve").await;
+    continued.assert_status_ok();
+    let continued_events = parse_sse_events(&continued);
+    assert!(
+        extract_full_text_answer(&continued_events).contains("PARENT-GATED-FINAL"),
+        "the origin turn finishes once its child has reported"
+    );
+
+    let content = content_of(&message_row(&app_state.db, parent_message_id).await);
+    let slot = slot_for(&content, "call_task_one");
+    assert_eq!(
+        slot["status"], "success",
+        "the reserved slot is overwritten in place: {slot}"
+    );
+    assert_eq!(slot["output"]["status"], "completed");
+    assert!(slot["output"]["reason"].is_null());
+    assert!(
+        slot["output"]["result"]
+            .as_str()
+            .unwrap()
+            .contains("CHILD-GATED-DONE")
+    );
+    assert!(
+        slot["output"]["localTrace"].is_object(),
+        "the trace the park left behind survives the settle: {slot}"
+    );
+    let decision = content
+        .iter()
+        .find(|part| part["content_type"] == "tool_approval")
+        .expect("the decision is recorded on the origin row");
+    assert_eq!(decision["approval_id"], "call_task_one");
+    assert_eq!(decision["child_chat_id"], json!(child_chat.id));
+    assert_eq!(decision["always_allow"], false);
+
+    // The gated call really ran, in the chat that asked about it.
+    let child_content = content_of(&child_parked_row(&app_state.db, child_chat.id).await);
+    let child_call = child_content
+        .iter()
+        .find(|part| part["content_type"] == "tool_use" && part["tool_name"] == PARKED_TOOL)
+        .expect("the child's gated call");
+    assert_eq!(child_call["status"], "success");
+    assert!(
+        serde_json::to_string(&child_call["output"])
+            .unwrap()
+            .contains(PARKED_TOOL_RESULT)
+    );
+    assert_eq!(
+        generation_state(&app_state.db, child_chat.id).await,
+        "completed"
+    );
+    assert_eq!(
+        generation_state(&app_state.db, parent_chat_id).await,
+        "completed"
+    );
+}
+
+/// Denying does not kill the child: the refusal reaches it as an ordinary tool
+/// response, it finishes around it in prose, and THAT partial answer is what
+/// the origin slot reports. Killing the run instead would throw away work the
+/// user only meant to withhold one call from.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn deny_child_finishes_in_prose_and_parent_continues(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_child_reaches_the_gate(&mut mocks, GATED_BRIEF, "call_child_probe");
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[GATED_BRIEF, CHILD_DENIAL_TEXT],
+                &["child_run_id"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&[
+                "CHILD-DENIED-ANSWER without the probe",
+            ]),
+        );
+    });
+    mock_parent_plans_one_task(&mut mocks, PARK_USER_MESSAGE, GATED_BRIEF, "call_task_one");
+    mock_parent_final_answer(&mut mocks, PARK_USER_MESSAGE);
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        gate_mock_mcp_tools_on_approval,
+    )
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, PARK_USER_MESSAGE, &["plan"]).await;
+    let parent_chat_id = Uuid::parse_str(&chat).unwrap();
+    let parent_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    let child_chat = delegated_child_chat(&app_state.db, parent_chat_id).await;
+
+    let continued = post_continuestream(&server, parent_message_id, "reject").await;
+    continued.assert_status_ok();
+    assert!(
+        extract_full_text_answer(&parse_sse_events(&continued)).contains("PARENT-GATED-FINAL"),
+        "the origin turn completes on a denial like any other result"
+    );
+
+    let child_content = content_of(&child_parked_row(&app_state.db, child_chat.id).await);
+    let refused = child_content
+        .iter()
+        .find(|part| part["content_type"] == "tool_use" && part["tool_name"] == PARKED_TOOL)
+        .expect("the denial is recorded as the child's own tool result");
+    assert_eq!(refused["status"], "error");
+    assert!(
+        refused["output"]["error"]
+            .as_str()
+            .unwrap()
+            .contains("denied")
+    );
+    assert!(
+        child_content
+            .iter()
+            .any(|part| part["content_type"] == "text"
+                && part["text"]
+                    .as_str()
+                    .unwrap()
+                    .contains("CHILD-DENIED-ANSWER")),
+        "the child answers around the call it was refused: {child_content:?}"
+    );
+
+    let content = content_of(&message_row(&app_state.db, parent_message_id).await);
+    let rejection = content
+        .iter()
+        .find(|part| part["content_type"] == "tool_rejection")
+        .expect("the denial is recorded on the origin row too");
+    assert_eq!(rejection["approval_id"], "call_task_one");
+    assert_eq!(rejection["child_chat_id"], json!(child_chat.id));
+    assert!(
+        rejection["reason"].is_null(),
+        "a denial is not a withdrawal: {rejection}"
+    );
+    let slot = slot_for(&content, "call_task_one");
+    assert_eq!(slot["output"]["status"], "completed");
+    assert!(
+        slot["output"]["result"]
+            .as_str()
+            .unwrap()
+            .contains("CHILD-DENIED-ANSWER"),
+        "the partial answer is the result, not a failure: {slot}"
+    );
+    assert_eq!(
+        generation_state(&app_state.db, child_chat.id).await,
+        "completed"
+    );
+}
+
+/// The child's second turn, once the call it asked about has run.
+fn mock_child_answers_after_the_gate(mocks: &mut MockSet) {
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[GATED_BRIEF, PARKED_TOOL_RESULT],
+                &["child_run_id"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&[
+                "CHILD-GATED-DONE with the probe",
+            ]),
+        );
+    });
+}
+
+/// The origin's turn once its child has reported. Keyed on the envelope, which
+/// only a settled or parked delegation slot puts in the request.
+fn mock_parent_final_answer(mocks: &mut MockSet, user_message: &'static str) {
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[user_message, "child_run_id"],
+                &[],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["PARENT-GATED-FINAL"]),
+        );
+    });
+}
+
+/// A child that reaches a second gate after being resumed re-parks the turn
+/// that was waiting for it: a new card, the same shape, and no model call —
+/// the origin has learnt nothing yet that it could answer with.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn chained_child_approval_reparks_parent(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_child_reaches_the_gate(&mut mocks, GATED_BRIEF, "call_child_probe");
+    // The resumed child asks for the same gated tool again. Nothing was stored
+    // by a plain `approve`, so the gate asks a second time.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[GATED_BRIEF, PARKED_TOOL_RESULT],
+                &["child_run_id"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_child_probe_again",
+                PARKED_TOOL,
+                json!({}),
+            )]),
+        );
+    });
+    mock_parent_plans_one_task(&mut mocks, PARK_USER_MESSAGE, GATED_BRIEF, "call_task_one");
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        gate_mock_mcp_tools_on_approval,
+    )
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, PARK_USER_MESSAGE, &["plan"]).await;
+    let parent_chat_id = Uuid::parse_str(&chat).unwrap();
+    let parent_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    let child_chat = delegated_child_chat(&app_state.db, parent_chat_id).await;
+
+    post_continuestream(&server, parent_message_id, "approve")
+        .await
+        .assert_status_ok();
+
+    let content = content_of(&message_row(&app_state.db, parent_message_id).await);
+    let requests: Vec<&Value> = content
+        .iter()
+        .filter(|part| part["content_type"] == "tool_approval_request")
+        .collect();
+    assert_eq!(
+        requests.len(),
+        2,
+        "the chained park is its own request part: {content:?}"
+    );
+    let second = content.last().unwrap();
+    assert_eq!(
+        second["content_type"], "tool_approval_request",
+        "the new request is last, so the row still reads as parked: {content:?}"
+    );
+    assert_eq!(second["kind"], "delegated_task");
+    let approvals = second["approvals"].as_array().unwrap();
+    assert_eq!(approvals.len(), 1);
+    assert_eq!(
+        approvals[0]["approval_id"], "call_task_one",
+        "the same origin call is still the one being covered"
+    );
+    assert_eq!(
+        approvals[0]["child"]["child_tool_call_id"], "call_child_probe_again",
+        "the copy names the NEW call, not the one already answered"
+    );
+    let slot = slot_for(&content, "call_task_one");
+    assert_eq!(slot["output"]["status"], "input_required");
+    assert!(slot["ended_at"].is_null());
+    assert_eq!(
+        generation_state(&app_state.db, parent_chat_id).await,
+        "awaiting_approval"
+    );
+    assert_eq!(
+        generation_state(&app_state.db, child_chat.id).await,
+        "awaiting_approval"
+    );
+}
+
+/// "Always allow" on a delegated-task card is a standing decision about the
+/// CHILD's server and tool. The origin's `delegate_task` is a synthetic name no
+/// gate ever consults, so a grant stored against it would be a setting that
+/// silently does nothing.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn approve_always_upserts_on_child_server_and_tool(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_child_reaches_the_gate(&mut mocks, GATED_BRIEF, "call_child_probe");
+    mock_child_answers_after_the_gate(&mut mocks);
+    mock_parent_plans_one_task(&mut mocks, PARK_USER_MESSAGE, GATED_BRIEF, "call_task_one");
+    mock_parent_final_answer(&mut mocks, PARK_USER_MESSAGE);
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        |config| {
+            gate_mock_mcp_tools_on_approval(config);
+            config.mcp_servers_global.approval.allow_always = true;
+        },
+    )
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, PARK_USER_MESSAGE, &["plan"]).await;
+    let parent_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+
+    post_continuestream(&server, parent_message_id, "approve_always")
+        .await
+        .assert_status_ok();
+
+    let settings = erato::db::entity::user_tool_approval_settings::Entity::find()
+        .all(&app_state.db)
+        .await
+        .unwrap();
+    let stored: Vec<(String, String, String)> = settings
+        .iter()
+        .filter(|setting| setting.active)
+        .map(|setting| {
+            (
+                setting.mcp_server_id.clone(),
+                setting.tool_name.clone(),
+                setting.decision.clone(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        stored,
+        vec![(
+            "mock_mcp_approval".to_string(),
+            PARKED_TOOL.to_string(),
+            "always_allow".to_string()
+        )],
+        "the grant names the child's pair, and nothing else is stored"
+    );
+
+    let content = content_of(&message_row(&app_state.db, parent_message_id).await);
+    let decision = content
+        .iter()
+        .find(|part| part["content_type"] == "tool_approval")
+        .unwrap();
+    assert_eq!(decision["always_allow"], true);
+    assert!(decision["user_tool_approval_setting_id"].is_string());
+}
+
+/// Park one child of a fresh origin chat, and hand back the four ids the two
+/// surfaces are addressed by.
+async fn park_one_child(
+    server: &TestServer,
+    app_state: &erato::state::AppState,
+) -> (Uuid, Uuid, Uuid, Uuid) {
+    let chat = create_chat(server, None).await;
+    let events = submit_with_facets(server, &chat, PARK_USER_MESSAGE, &["plan"]).await;
+    let parent_chat_id = Uuid::parse_str(&chat).unwrap();
+    let parent_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    let child_chat = delegated_child_chat(&app_state.db, parent_chat_id).await;
+    let child_message_id = child_parked_row(&app_state.db, child_chat.id).await.id;
+    (
+        parent_chat_id,
+        parent_message_id,
+        child_chat.id,
+        child_message_id,
+    )
+}
+
+/// While the chat that dispatched a run is asking the same question, the child's
+/// own card is refused: the origin holds the slot the answer is owed to, and two
+/// live cards would let one approval be decided twice with only one of the two
+/// decisions reaching the turn that is waiting.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn child_card_continuestream_returns_409_covered_by_parent_while_open(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_child_reaches_the_gate(&mut mocks, GATED_BRIEF, "call_child_probe");
+    mock_parent_plans_one_task(&mut mocks, PARK_USER_MESSAGE, GATED_BRIEF, "call_task_one");
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        gate_mock_mcp_tools_on_approval,
+    )
+    .await;
+    let server = app_server(app_state.clone());
+    let (_parent_chat_id, parent_message_id, child_chat_id, child_message_id) =
+        park_one_child(&server, &app_state).await;
+
+    let refused = post_continuestream(&server, child_message_id, "approve").await;
+    refused.assert_status(http::StatusCode::CONFLICT);
+    let body = refused.json::<Value>();
+    assert_eq!(body["code"], "covered_by_parent");
+    assert_eq!(
+        body["parent_message_id"],
+        json!(parent_message_id),
+        "the client is told where the question actually is: {body}"
+    );
+    assert_eq!(
+        generation_state(&app_state.db, child_chat_id).await,
+        "awaiting_approval",
+        "the refusal must not disturb the child"
+    );
+}
+
+/// The refusal holds only while the origin still owns the question. Once its
+/// approval is settled or withdrawn, or the origin chat is archived, the child
+/// is an ordinary parked chat again — otherwise a run could be answered from
+/// neither side.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn child_card_answerable_again_after_parent_settled_withdrawn_or_origin_archived(
+    pool: Pool<Postgres>,
+) {
+    let mut mocks = MockSet::new();
+    mock_child_reaches_the_gate(&mut mocks, GATED_BRIEF, "call_child_probe");
+    mock_child_answers_after_the_gate(&mut mocks);
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[GATED_BRIEF, CHILD_DENIAL_TEXT],
+                &["child_run_id"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["CHILD-DENIED-ANSWER"]),
+        );
+    });
+    mock_parent_plans_one_task(&mut mocks, PARK_USER_MESSAGE, GATED_BRIEF, "call_task_one");
+    mock_parent_final_answer(&mut mocks, PARK_USER_MESSAGE);
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        gate_mock_mcp_tools_on_approval,
+    )
+    .await;
+    let server = app_server(app_state.clone());
+
+    // (a) The origin answered its card, so nothing covers the child any more.
+    let (_, settled_parent, _, settled_child) = park_one_child(&server, &app_state).await;
+    post_continuestream(&server, settled_parent, "approve")
+        .await
+        .assert_status_ok();
+    let answered = post_continuestream(&server, settled_child, "approve").await;
+    answered.assert_status(http::StatusCode::CONFLICT);
+    assert_eq!(
+        answered.json::<Value>()["code"],
+        "already_continued",
+        "an answered child is an ordinary settled row, not a covered one"
+    );
+
+    // (b) The origin took the question back.
+    let (_, withdrawn_parent, _, withdrawn_child) = park_one_child(&server, &app_state).await;
+    post_continuestream(&server, withdrawn_parent, "withdraw")
+        .await
+        .assert_status_ok();
+    let after_withdraw = post_continuestream(&server, withdrawn_child, "approve").await;
+    after_withdraw.assert_status(http::StatusCode::CONFLICT);
+    assert_eq!(
+        after_withdraw.json::<Value>()["code"],
+        "already_continued",
+        "a withdrawal settles the copy, so it covers nothing"
+    );
+
+    // (c) The origin chat is gone from the user's view. The parked child is
+    //     spared by the archive cascade, so it must stay answerable on its own.
+    let (archived_origin, _, orphan_chat, orphan_message) =
+        park_one_child(&server, &app_state).await;
+    archive_chat_via_api(&server, &archived_origin.to_string()).await;
+    post_continuestream(&server, orphan_message, "approve")
+        .await
+        .assert_status_ok();
+    wait_for_generation_state(&app_state.db, orphan_chat, "completed").await;
+    let orphan_content = content_of(&child_parked_row(&app_state.db, orphan_chat).await);
+    let call = orphan_content
+        .iter()
+        .find(|part| part["content_type"] == "tool_use" && part["tool_name"] == PARKED_TOOL)
+        .expect("the orphaned child's gated call");
+    assert_eq!(
+        call["status"], "success",
+        "an orphaned parked chat is answered by its owner: {call}"
+    );
+}
+
+/// An `async` child has no turn waiting on it, so it has nowhere to carry a
+/// request to and keeps having its gated calls refused. This is 5.6's
+/// precondition: when async children learn to park, this test changes with it.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn async_child_still_refuses_gated_call(pool: Pool<Postgres>) {
+    const ASYNC_BRIEF: &str = "ASYNC-GATED-BRIEF: publish the probe";
+    const ASYNC_USER_MESSAGE: &str = "plan an async gated sub-task";
+    const CHILD_REFUSAL: &str = "approval, which is unavailable in a delegated run";
+
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[ASYNC_BRIEF, CHILD_REFUSAL],
+                &["child_run_id"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&[
+                "ASYNC-CHILD-DONE without the probe",
+            ]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[ASYNC_BRIEF],
+                &[CHILD_REFUSAL, "child_run_id"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_async_probe",
+                PARKED_TOOL,
+                json!({}),
+            )]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[ASYNC_USER_MESSAGE, "dispatched"],
+                &[],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["PARENT-ASYNC-FINAL"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[ASYNC_USER_MESSAGE],
+                &[ASYNC_BRIEF, "dispatched"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_task_async",
+                "delegate_task",
+                json!({
+                    "task": ASYNC_BRIEF,
+                    "facet_ids": ["plan"],
+                    "run_mode": "async",
+                }),
+            )]),
+        );
+    });
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        |config| {
+            gate_mock_mcp_tools_on_approval(config);
+            config.delegation.tasks.run_modes = vec![
+                erato_config::config::TaskRunMode::Wait,
+                erato_config::config::TaskRunMode::Async,
+            ];
+            // A silent result is stored rather than answered, so the assertions
+            // below are about the child and not about a reaction turn.
+            config.delegation.tasks.scheduling = erato_config::config::TaskScheduling::Silent;
+        },
+    )
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, ASYNC_USER_MESSAGE, &["plan"]).await;
+    assert!(extract_full_text_answer(&events).contains("PARENT-ASYNC-FINAL"));
+
+    let parent_chat_id = Uuid::parse_str(&chat).unwrap();
+    let child_chat = delegated_child_chat(&app_state.db, parent_chat_id).await;
+    wait_for_generation_state(&app_state.db, child_chat.id, "completed").await;
+
+    let child_content = content_of(&child_parked_row(&app_state.db, child_chat.id).await);
+    assert!(
+        child_content
+            .iter()
+            .all(|part| part["content_type"] != "tool_approval_request"),
+        "an async child must not park: {child_content:?}"
+    );
+    let refused = child_content
+        .iter()
+        .find(|part| part["content_type"] == "tool_use" && part["tool_name"] == PARKED_TOOL)
+        .expect("the gated call is recorded as a refusal");
+    assert_eq!(refused["status"], "error");
+    assert!(
+        refused["output"]["error"]
+            .as_str()
+            .unwrap()
+            .contains("approval")
+    );
+    assert!(
+        child_content
+            .iter()
+            .any(|part| part["content_type"] == "text"
+                && part["text"].as_str().unwrap().contains("ASYNC-CHILD-DONE")),
+        "the child finishes in prose without the call: {child_content:?}"
     );
 }

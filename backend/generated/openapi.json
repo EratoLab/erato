@@ -2747,7 +2747,7 @@
             "description": "When the chat does not exist or is not accessible"
           },
           "409": {
-            "description": "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), or every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError)",
+            "description": "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), or the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError)",
             "content": {
               "application/json": {
                 "schema": {
@@ -6307,6 +6307,25 @@
             "type": "string",
             "format": "uuid",
             "description": "The assistant message/generation that contains the pending approval request."
+          }
+        }
+      },
+      "CoveredByParentError": {
+        "type": "object",
+        "description": "Body of the `409` `continuestream` answers on a delegated child whose\nrequest is currently being asked about in the chat that started it.\n\n`parent_message_id` is where the question actually is: the client follows it\nrather than telling the user their own chat is broken.",
+        "required": [
+          "code",
+          "parent_message_id"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Always `covered_by_parent`."
+          },
+          "parent_message_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The origin row whose approval part carries this child's request."
           }
         }
       },

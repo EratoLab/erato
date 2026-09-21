@@ -631,6 +631,9 @@ pub async fn retry_delegated_run(
                 .clone()
                 .or_else(|| Some(recovered.tool_call_id.clone())),
             retry_of: Some(child_chat_id),
+            // A retry is always `async`: no turn is awaiting it, so there is no
+            // approval surface to link to.
+            parent_message_id: None,
         },
         brief,
     )
