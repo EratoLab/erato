@@ -532,6 +532,7 @@ export {
   registerClientToolExecutor,
   type ClientToolExecutor,
   type ClientToolExecutionResult,
+  type ClientToolValidationIssue,
   type ClientToolCallContext,
 } from "@/hooks/chat/clientToolExecutors";
 export { createLogger } from "@/utils/debugLogger";

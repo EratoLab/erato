@@ -1492,6 +1492,7 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
             description: "A probe client tool".to_string(),
             parameters: r#"{"type":"object","properties":{}}"#.to_string(),
             timeout_ms: None,
+            submission: None,
         },
     );
     app_config.facets.tool_call_allowlist = vec!["client/*".to_string()];
