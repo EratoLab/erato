@@ -24,6 +24,22 @@ Enables the assistants feature. This allows testing assistant creation, manageme
 
 Also enables in-chat delegation, which needs a scripted delegate: the mock LLM is the sole chat provider here, because a delegated child inherits the first entry of `priority_order` rather than the parent's provider. A mock MCP server gives the delegate a real tool to call.
 
+### `approvals` - Parked Approval Testing
+
+**Configuration File:** `config/erato.scenario-approvals.toml`
+
+`assistants` plus the approval half of `many-models`, because neither drives a
+parked approval on its own: `assistants` has the task route and the mock LLM as
+sole chat provider (so a parent and its child are both scriptable) but no
+approval configuration, while `many-models` has the restrictive preset and the
+gated mock MCP server but no tasks and a live default model, which answers the
+child turn itself.
+
+Approval is deliberately not enabled inside `assistants`: its specs complete the
+calls this scenario parks on. The gated server is left out of the planning
+facet's allowlist, so a call under decision can only have come from a task
+child, never from the origin turn.
+
 ### `many-models` - Model Selector Testing
 
 **Configuration File:** `config/erato.scenario-many-models.toml`
@@ -52,6 +68,7 @@ infrastructure/k3d/erato-local/
 │   ├── erato.scenario-basic.toml           # Basic scenario config
 │   ├── erato.scenario-tight-budget.toml    # Tight-budget scenario config
 │   ├── erato.scenario-assistants.toml      # Assistants scenario config
+│   ├── erato.scenario-approvals.toml       # Approvals scenario config
 │   └── erato.scenario-many-models.toml     # Many-models scenario config
 ├── templates/
 │   └── erato-test-scenario-configmap.yaml  # Mounts scenario TOML as ConfigMap
@@ -68,7 +85,7 @@ Scenarios can be switched using the `switch-test-scenario` script:
 infrastructure/scripts/switch-test-scenario --scenario <scenario-name>
 ```
 
-Valid scenario names: `basic`, `tight-budget`, `assistants`, `many-models`, `multi-replica`
+Valid scenario names: `basic`, `tight-budget`, `assistants`, `approvals`, `many-models`, `multi-replica`
 
 The script:
 1. Validates the scenario name
@@ -113,6 +130,12 @@ To add a new test scenario:
    ```python
    VALID_SCENARIOS = ["basic", "tight-budget", "assistants", "<name>"]
    ```
+
+   Also add it to the scenario list in
+   `templates/erato-scenario-secrets.yaml`. That range is what creates the
+   Secret holding the generated `.auto.toml`, and `setup-dev` mounts that
+   Secret by name - a scenario missing from the list fails the install on a
+   secret that does not exist.
 
 4. **Create a setup file:**
    ```typescript

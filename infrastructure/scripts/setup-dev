@@ -290,9 +290,17 @@ def configure_helm_args(config: ScriptConfig) -> list[str]:
             f"erato.backend.migrations.image.repository={derive_sqitch_migrator_repository(config.erato_image_repository)}",
         ])
     
+    # --set-string, not --set: a purely numeric tag (the local build uses a unix
+    # timestamp) is stored as a number, and a later `helm upgrade --reuse-values`
+    # - which is how switch-test-scenario changes scenario - re-renders it in
+    # scientific notation, so the pod comes up ImagePullBackOff on a tag nobody
+    # ever built.
     if config.erato_image_tag:
-        helm_args.extend(["--set", f"erato.backend.image.tag={config.erato_image_tag}"])
-        helm_args.extend(["--set", f"erato.backend.migrations.image.tag={config.erato_image_tag}"])
+        helm_args.extend(["--set-string", f"erato.backend.image.tag={config.erato_image_tag}"])
+        helm_args.extend([
+            "--set-string",
+            f"erato.backend.migrations.image.tag={config.erato_image_tag}",
+        ])
 
     return helm_args
 
@@ -314,7 +322,7 @@ def configure_mock_llm_server_helm_args(config: ScriptConfig) -> list[str]:
 
     effective_mock_tag = config.mock_llm_server_image_tag or config.erato_image_tag
     if effective_mock_tag:
-        helm_args.extend(["--set", f"mockLlmServer.image.tag={effective_mock_tag}"])
+        helm_args.extend(["--set-string", f"mockLlmServer.image.tag={effective_mock_tag}"])
 
     return helm_args
 
@@ -336,7 +344,7 @@ def configure_mock_mcp_server_helm_args(config: ScriptConfig) -> list[str]:
 
     effective_mock_tag = config.mock_mcp_server_image_tag or config.erato_image_tag
     if effective_mock_tag:
-        helm_args.extend(["--set", f"mockMcpServer.image.tag={effective_mock_tag}"])
+        helm_args.extend(["--set-string", f"mockMcpServer.image.tag={effective_mock_tag}"])
 
     return helm_args
 
@@ -422,15 +430,18 @@ def perform_local_build(config: ScriptConfig) -> list[str]:
     ])
     run_command(["docker", "push", build_config.local_sqitch_migrator_image])
     
+    # The tags go in with --set-string for the reason given in
+    # configure_helm_args: this build tag is a bare unix timestamp, and a
+    # numeric value does not survive a later --reuse-values upgrade.
     return [
         "--set", f"erato.backend.image.repository=k3d-registry.localhost:5000/{build_config.combined_image_path}",
-        "--set", f"erato.backend.image.tag={build_config.build_tag}",
+        "--set-string", f"erato.backend.image.tag={build_config.build_tag}",
         "--set",
         (
             "erato.backend.migrations.image.repository="
             f"k3d-registry.localhost:5000/{build_config.sqitch_migrator_image_path}"
         ),
-        "--set", f"erato.backend.migrations.image.tag={build_config.build_tag}"
+        "--set-string", f"erato.backend.migrations.image.tag={build_config.build_tag}"
     ]
 
 

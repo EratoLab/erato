@@ -643,6 +643,8 @@ jobs:
             projects: "--project chromium-tight-budget --project firefox-tight-budget"
           - scenario: assistants
             projects: "--project chromium-assistants --project firefox-assistants"
+          - scenario: approvals
+            projects: "--project chromium-approvals --project firefox-approvals"
           - scenario: many-models
             projects: "--project chromium-many-models --project firefox-many-models"
             shard: "1/2"

@@ -19,7 +19,7 @@ testScenarioConfig:
 # These are created by running: ../../scripts/setup-e2e-secrets apply
 scenarioSecretsConfig:
   enabled: false  # Enabled automatically by setup-dev when .auto.toml files exist
-  scenario: "basic"  # Which scenario secret to mount (basic, tight-budget, assistants, many-models)
+  scenario: "basic"  # Which scenario secret to mount (basic, tight-budget, assistants, approvals, many-models)
 
 erato:
   commonAnnotations:

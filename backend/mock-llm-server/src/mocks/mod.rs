@@ -404,6 +404,18 @@ const TASK_PARENT_PROMPT: &str = "run the probe as a task";
 const TASK_CHILD_BRIEF: &str =
     "Task probe child brief: count the available mock files and report the number.";
 
+/// Typed into the origin chat by the approvals e2e. Deliberately not a
+/// superstring of `TASK_PARENT_PROMPT` in either direction: matching is
+/// first-match substring over the mock list, so an overlap would let one task
+/// probe answer the other's turns.
+const GATED_TASK_PARENT_PROMPT: &str = "run the gated probe as a task";
+
+/// The brief the origin model writes into the gated probe's `delegate_task`
+/// call. Like the other briefs it is the one thing present in every turn of the
+/// child and absent from every turn of the origin.
+const GATED_TASK_CHILD_BRIEF: &str =
+    "Gated task child brief: publish the approval probe and report what it said.";
+
 fn build_delegation_child_answer_chunks() -> Vec<String> {
     [
         "CHILD-ANSWER",
@@ -533,6 +545,87 @@ pub fn get_default_mocks() -> Vec<Mock> {
                     " task".to_string(),
                     " counted".to_string(),
                     " three".to_string(),
+                    ".".to_string(),
+                ],
+                delay_ms: 200,
+                ..Default::default()
+            }),
+        },
+        // The gated task probe of the `approvals` scenario: four turns across two
+        // chats, with an approval in the middle. It sits with the other
+        // delegation mocks for their ordering reason — every one of them ends on
+        // a tool result, so all of them must precede ToolResultResponse — and
+        // within itself the tool-call mocks precede the answer mocks, because
+        // the brief is the child's last user message on BOTH of its turns and
+        // only the first of them may call the tool. A second call would park the
+        // origin turn again and never answer it.
+        Mock {
+            name: "GatedTaskParentToolCall".to_string(),
+            description: "Plans a sub-task whose only tool needs the user's approval".to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: GATED_TASK_PARENT_PROMPT.to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
+                tool_name: "delegate_task".to_string(),
+                arguments: format!(
+                    "{{\"task\": \"{GATED_TASK_CHILD_BRIEF}\", \"expected_output\": \"One sentence.\"}}"
+                ),
+                delay_ms: 100,
+            }),
+        },
+        Mock {
+            name: "GatedTaskChildToolCall".to_string(),
+            description:
+                "Returns the approval-gated MCP call on the child turn that carries the brief"
+                    .to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: GATED_TASK_CHILD_BRIEF.to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
+                tool_name: "publish_approval_probe".to_string(),
+                arguments: "{}".to_string(),
+                delay_ms: 100,
+            }),
+        },
+        Mock {
+            name: "GatedTaskChildAnswer".to_string(),
+            description: "Answers the gated sub-task once its approved call resolved".to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: GATED_TASK_CHILD_BRIEF.to_string(),
+            })],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec![
+                    "GATED-TASK-CHILD-ANSWER".to_string(),
+                    ": the".to_string(),
+                    " approval".to_string(),
+                    " probe".to_string(),
+                    " was".to_string(),
+                    " published".to_string(),
+                    ".".to_string(),
+                ],
+                delay_ms: 200,
+                ..Default::default()
+            }),
+        },
+        Mock {
+            name: "GatedTaskParentAnswer".to_string(),
+            description: "Answers the origin chat once the gated sub-task's result is in"
+                .to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: GATED_TASK_PARENT_PROMPT.to_string(),
+            })],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec![
+                    "GATED-TASK-PARENT-ANSWER".to_string(),
+                    ": the".to_string(),
+                    " task".to_string(),
+                    " published".to_string(),
+                    " the".to_string(),
+                    " probe".to_string(),
                     ".".to_string(),
                 ],
                 delay_ms: 200,
@@ -1360,6 +1453,100 @@ mod tests {
             ),
             other => panic!("origin answer turn matched {other:?}"),
         }
+    }
+
+    /// The approvals scenario's four turns, in the order the cluster asks for
+    /// them. The child's brief is its last user message on BOTH child turns, so
+    /// only the mock order keeps the turn after the approval from calling the
+    /// gated tool a second time — which would park the origin turn again and
+    /// never answer it.
+    #[test]
+    fn gated_task_turns_match_their_own_mocks_on_both_sides_of_the_approval() {
+        use serde_json::json;
+
+        let origin_system = "You are a helpful assistant";
+        let child_system = "Answer the delegated probe task.";
+
+        let origin_turn = match_default_mocks(
+            json!([
+                {"role": "system", "content": origin_system},
+                {"role": "user", "content": GATED_TASK_PARENT_PROMPT},
+            ]),
+            None,
+        );
+        match origin_turn {
+            ResponseConfig::ToolCall(config) => {
+                assert_eq!(config.tool_name, "delegate_task");
+                assert!(config.arguments.contains(GATED_TASK_CHILD_BRIEF));
+            }
+            other => panic!("origin turn matched {other:?}"),
+        }
+
+        let child_turn = match_default_mocks(
+            json!([
+                {"role": "system", "content": child_system},
+                {"role": "user", "content": delegate_preamble_message()},
+                {"role": "user", "content": GATED_TASK_CHILD_BRIEF},
+            ]),
+            None,
+        );
+        match child_turn {
+            ResponseConfig::ToolCall(config) => {
+                assert_eq!(config.tool_name, "publish_approval_probe")
+            }
+            other => panic!("child turn matched {other:?}"),
+        }
+
+        let child_after_approval = match_default_mocks(
+            json!([
+                {"role": "system", "content": child_system},
+                {"role": "user", "content": delegate_preamble_message()},
+                {"role": "user", "content": GATED_TASK_CHILD_BRIEF},
+                {"role": "assistant", "content": null},
+                {"role": "tool", "content": "approval probe published"},
+            ]),
+            None,
+        );
+        match child_after_approval {
+            ResponseConfig::Static(config) => assert_eq!(
+                config.chunks.join(""),
+                "GATED-TASK-CHILD-ANSWER: the approval probe was published."
+            ),
+            other => panic!("child answer turn matched {other:?}"),
+        }
+
+        let origin_after_task = match_default_mocks(
+            json!([
+                {"role": "system", "content": origin_system},
+                {"role": "user", "content": GATED_TASK_PARENT_PROMPT},
+                {"role": "assistant", "content": null},
+                {"role": "tool", "content": json!({
+                    "status": "completed",
+                    "result": "GATED-TASK-CHILD-ANSWER: the approval probe was published.",
+                    "truncated": false,
+                }).to_string()},
+            ]),
+            None,
+        );
+        match origin_after_task {
+            ResponseConfig::Static(config) => assert_eq!(
+                config.chunks.join(""),
+                "GATED-TASK-PARENT-ANSWER: the task published the probe."
+            ),
+            other => panic!("origin answer turn matched {other:?}"),
+        }
+    }
+
+    /// The two task probes share the `assistants` mock quartet's shape and the
+    /// `approvals` scenario runs the mock list the `assistants` one does, so an
+    /// overlap between their prompts would make one probe answer the other's
+    /// turns without either spec failing on anything but the prose.
+    #[test]
+    fn the_two_task_probes_never_answer_each_others_turns() {
+        assert!(!GATED_TASK_PARENT_PROMPT.contains(TASK_PARENT_PROMPT));
+        assert!(!TASK_PARENT_PROMPT.contains(GATED_TASK_PARENT_PROMPT));
+        assert!(!GATED_TASK_CHILD_BRIEF.contains(TASK_CHILD_BRIEF));
+        assert!(!TASK_CHILD_BRIEF.contains(GATED_TASK_CHILD_BRIEF));
     }
 
     #[test]

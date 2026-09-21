@@ -1,0 +1,106 @@
+# Approvals test scenario - a model-planned task whose child stops to ask
+#
+# This is `assistants` plus the approval half of `many-models`, and it exists
+# because neither of those can drive that flow on its own: `assistants` has the
+# task route and the mock LLM as sole provider (so a parent AND its child are
+# scriptable) but no approval configuration, while `many-models` has the
+# approval preset and the gated server but no tasks and a live default model,
+# which would answer the child turn itself.
+#
+# It is a scenario of its own rather than a flag on `assistants` on purpose:
+# turning approval on there would make its passing specs park on calls they
+# currently complete.
+
+[assistants]
+enabled = true
+
+# Migrated off the deprecated `[assistants.delegation]` alias: it may not be
+# combined with `[delegation]`, and the task route below needs
+# `[delegation.tasks]`. Combining the two is a hard panic, not a warning.
+[delegation]
+run_timeout_seconds = 120
+
+[delegation.assistants]
+enabled = true
+
+# The task route, with `propagate_child_mcp_approvals` left at its default of
+# on: that default is what lets a parked child raise its question on the origin
+# turn instead of having the call refused and finishing without it.
+[delegation.tasks]
+enabled = true
+# `async` too, so later coverage can drive a parked child whose question is
+# announced by an `input_required` delivery rather than by a slot on the origin
+# turn - a child may only park in a run mode that has somewhere to ask, and for
+# `async` that somewhere is the delivery. `wait` stays first and stays the
+# default, so a mock that writes no `run_mode` drives the awaited path.
+run_modes = ["wait", "async"]
+
+# `[delegation.tasks.approval]` is deliberately left at its default
+# `mode = "async_only"`: for a `wait` task that behaves as `never`, so a task the
+# model plans is dispatched without a plan approval and the only question the
+# turn raises is the child's own.
+#
+# A delegated child run carries no provider of its own, so the first entry here
+# is what both the origin chat and its delegate talk to; the mock server is the
+# only one that answers the scripted turns on either side.
+[chat_providers]
+priority_order = ["mock-llm-openai"]
+
+[chat_providers.summary]
+summary_chat_provider_id = "mock-llm-openai"
+
+[chat_providers.providers.mock-llm-openai]
+provider_kind = "openai"
+model_name = "placeholder"
+model_display_name = "Mock-LLM"
+base_url = "http://erato-local-mock-llm-server:44320/base-openai/v1/placeholder"
+
+# Copied from many-models: the restrictive preset is what makes the child's
+# open-world `publish_approval_probe` call a question rather than a call.
+# `allow_always` stays on so the standing-decision buttons are offered.
+[mcp_servers_global.approval]
+enabled = true
+preset = "restrictive"
+allow_always = true
+
+# No permission rule for either server: with no `mcp_server_permissions.rules`
+# at all, every configured server is readable by any logged-in user. That is
+# what puts the gated server in the CHILD's tool set - a task child names no
+# facet, so its tools are every server it is authorized for, while the parent is
+# narrowed to the planning facet's allowlist below and cannot make the gated
+# call itself.
+[mcp_servers.mock_mcp_approval]
+transport_type = "streamable_http"
+url = "http://erato-local-mock-mcp-server:44321/mcp/approval-policy"
+
+[mcp_servers.mock_mcp_file]
+transport_type = "streamable_http"
+url = "http://erato-local-mock-mcp-server:44321/mcp/file"
+
+[frontend.additional_environment]
+K3D_TEST_SCENARIO = "approvals"
+
+# Restated in full rather than adding `plan` to the base `erato.toml`, which
+# reaches every scenario. `web_search` stays FIRST for the same reason as in the
+# assistants scenario: /me/facets emits priority_order before the sorted
+# remainder, and alphabetically `plan` would win the first slot.
+[facets]
+priority_order = ["web_search", "plan"]
+default_selected_facets = []
+
+[facets.facets.web_search]
+display_name = "Web search"
+icon = "iconoir-globe"
+tool_call_allowlist = ["web-search-mcp/*", "web-access-mcp/*"]
+additional_system_prompt = "Please execute one or multiple web searches to answer the user's question."
+
+# Selecting this facet is what offers `erato/delegate_task`. The reserved
+# pattern is paired with a real MCP pattern on purpose: an allowlist naming only
+# reserved tools narrows the turn's MCP tool set to nothing, which would leave
+# the parent with no tools at all. That pattern is `mock_mcp_file` and not the
+# gated server, so a call under decision can only have come from a task child.
+[facets.facets.plan]
+display_name = "Plan & delegate"
+icon = "iconoir-strategy"
+tool_call_allowlist = ["erato/delegate_task", "mock_mcp_file/*"]
+disable_facet_prompt_template = true

@@ -69,6 +69,7 @@ See [Scenarios Documentation](../infrastructure/k3d/erato-local/Scenarios.md) fo
 - **`basic`** - Default scenario for general testing
 - **`tight-budget`** - Budget enforcement testing with low limits
 - **`assistants`** - Tests for the assistants feature
+- **`approvals`** - Tests for a task child that parks on an approval-gated tool
 
 ### Test File Naming Convention
 
@@ -77,6 +78,7 @@ Test files are named according to the scenario they require:
 - `*.spec.ts` - Runs in the `basic` scenario (default)
 - `*.tight-budget.spec.ts` - Runs in the `tight-budget` scenario
 - `*.assistants.spec.ts` - Runs in the `assistants` scenario
+- `*.approvals.spec.ts` - Runs in the `approvals` scenario
 
 ### Setup Files
 
@@ -86,6 +88,7 @@ Each scenario has a setup file that ensures the k3d cluster is configured correc
 - `basic.setup.ts` - Switches to basic scenario
 - `tight-budget.setup.ts` - Switches to tight-budget scenario
 - `assistants.setup.ts` - Switches to assistants scenario
+- `approvals.setup.ts` - Switches to approvals scenario
 
 ## Configuration
 
