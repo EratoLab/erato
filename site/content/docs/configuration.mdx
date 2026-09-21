@@ -4292,6 +4292,23 @@ Configure the sidecar endpoint and allowed origins separately as usual. Deploy
 the backend, frontend, and rebuilt add-in together before enabling these tools;
 older backends do not gate optional tools or resolve their attachment references.
 
+Client-tool executors can return uploaded files alongside their JSON result:
+
+```ts
+return { ok: true, result: { summary: "Files retrieved" }, fileUploadIds: [file.id] };
+```
+
+Upload files through the ordinary files API first. The client sends these IDs in
+the dedicated `file_upload_ids` field of `POST /api/v1beta/me/messages/clienttoolresult`.
+The backend checks access, extracts file text for the model, and attaches authorized
+files to the assistant message. Documents use rich file previews; images appear
+inline. Attachments persist when the chat is reloaded. Duplicate IDs are ignored,
+and at most `min(frontend.max_files, 20)` unique files are considered per result.
+Files remain attachable if text extraction fails or reaches its text limit; the
+tool result reports unavailable or truncated contents. Error and rejected
+validation results do not attach files. IDs nested inside arbitrary result JSON
+are not treated as attachments.
+
 #### `client_tools.tools.<key>.requires_client_registration`
 
 {/* erato_toml_config_key: client_tools.tools.<key>.requires_client_registration */}

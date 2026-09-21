@@ -1965,8 +1965,10 @@ pub struct ClientToolResultRequest {
     #[serde(default, deserialize_with = "deserialize_present_json")]
     #[schema(nullable = false)]
     result: Option<JsonValue>,
-    /// Uploaded files to read with the normal file processor and include in this
-    /// tool result. Each file is authorized for the current user before reading.
+    /// Uploaded files to attach to the assistant message with rich previews and
+    /// read with the normal file processor for this tool result. Each file is
+    /// authorized before reading or attaching. Duplicate IDs are ignored; at
+    /// most min(frontend.max_files, 20) unique files are considered.
     #[serde(default)]
     file_upload_ids: Vec<Uuid>,
     /// An error message if the client could not execute the tool. Provide this
@@ -5232,8 +5234,8 @@ async fn stream_generate_chat_completion<
                     continue;
                 };
 
-                let policy = offered_client_tools.get(&tool_name);
-                let submission = policy.and_then(|policy| policy.submission.as_ref());
+                let tool_policy = offered_client_tools.get(&tool_name);
+                let submission = tool_policy.and_then(|policy| policy.submission.as_ref());
                 let attempt = if submission.is_some() {
                     let attempt = submission_attempts.entry(tool_name.clone()).or_default();
                     *attempt += 1;
@@ -5298,7 +5300,7 @@ async fn stream_generate_chat_completion<
                     // Resolve this tool's park budget from the entry that was
                     // OFFERED to this request (a bare-name config scan would be
                     // ambiguous when namespaces reuse a name), else the default.
-                    let park_timeout_ms = policy
+                    let park_timeout_ms = tool_policy
                         .and_then(|policy| policy.timeout_ms)
                         .unwrap_or(DEFAULT_CLIENT_TOOL_PARK_TIMEOUT_MS);
 
@@ -5373,7 +5375,7 @@ async fn stream_generate_chat_completion<
 
                 let (status, bg_status, message_status, mut output_value, mut response_text) =
                     match &outcome {
-                        ClientToolOutcome::Result(result) => (
+                        ClientToolOutcome::Result(result, _) => (
                             ToolCallStatus::Success,
                             BgToolCallStatus::Success,
                             MessageToolCallStatus::Success,
@@ -5489,6 +5491,14 @@ async fn stream_generate_chat_completion<
                         ended_at: Some(now_timestamp()),
                     },
                 );
+                if let ClientToolOutcome::Result(_, file_ids) = &outcome {
+                    current_message_content.extend(
+                        super::file_resolution::attach_client_tool_files(
+                            app_state, policy, subject, &chat_id, file_ids,
+                        )
+                        .await?,
+                    );
+                }
                 persist_otel_tool_call(
                     tracing_client.as_ref(),
                     &unfinished_tool_call,
@@ -12677,7 +12687,7 @@ pub async fn client_tool_result(
             ));
         }
         if resolve_files
-            && let Some(result) = super::file_resolution::resolve_client_tool_files(
+            && let Some((result, file_ids)) = super::file_resolution::resolve_client_tool_files(
                 &app_state,
                 &policy,
                 &me_user.to_subject(),
@@ -12688,6 +12698,7 @@ pub async fn client_tool_result(
             .await
         {
             payload["result"] = result;
+            payload["file_upload_ids"] = json!(file_ids);
         }
         app_state
             .background_tasks
@@ -12714,7 +12725,7 @@ pub async fn client_tool_result(
     }
 
     if resolve_files
-        && let Some(result) = super::file_resolution::resolve_client_tool_files(
+        && let Some((result, file_ids)) = super::file_resolution::resolve_client_tool_files(
             &app_state,
             &policy,
             &me_user.to_subject(),
@@ -12725,6 +12736,7 @@ pub async fn client_tool_result(
         .await
     {
         payload["result"] = result;
+        payload["file_upload_ids"] = json!(file_ids);
     }
     let outcome = ClientToolOutcome::from_payload(&payload);
 

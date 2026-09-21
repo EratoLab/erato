@@ -878,8 +878,10 @@ export type ClientToolResultRequest = {
    */
   error?: string;
   /**
-   * Uploaded files to read with the normal file processor and include in this
-   * tool result. Each file is authorized for the current user before reading.
+   * Uploaded files to attach to the assistant message with rich previews and
+   * read with the normal file processor for this tool result. Each file is
+   * authorized before reading or attaching. Duplicate IDs are ignored; at
+   * most min(frontend.max_files, 20) unique files are considered.
    */
   file_upload_ids?: string[];
   /**

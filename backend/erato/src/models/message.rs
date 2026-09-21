@@ -1558,7 +1558,7 @@ fn is_action_facet_system_message(message: &InputMessage) -> bool {
 }
 
 /// Helper function to determine if a file is an image based on its extension
-fn is_image_file(filename: &str) -> bool {
+pub(crate) fn is_image_file(filename: &str) -> bool {
     if let Some(extension) = filename.rsplit('.').next() {
         matches!(
             extension.to_lowercase().as_str(),
