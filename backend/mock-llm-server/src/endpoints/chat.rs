@@ -139,6 +139,9 @@ pub async fn chat_completions(
                 "DelegateToAssistant responses should be resolved into ToolCall in matcher"
             )
         }
+        crate::matcher::ResponseConfig::ToolTrace(_) => {
+            unreachable!("ToolTrace responses should be resolved into Static in matcher")
+        }
     };
 
     // Log that we're starting the stream
@@ -261,6 +264,9 @@ async fn non_streaming_chat_completion(
             unreachable!(
                 "DelegateToAssistant responses should be resolved into ToolCall in matcher"
             )
+        }
+        ResponseConfig::ToolTrace(_) => {
+            unreachable!("ToolTrace responses should be resolved into Static in matcher")
         }
     }
 }

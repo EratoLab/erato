@@ -37,8 +37,10 @@ child turn itself.
 
 Approval is deliberately not enabled inside `assistants`: its specs complete the
 calls this scenario parks on. The gated server is left out of the planning
-facet's allowlist, so a call under decision can only have come from a task
-child, never from the origin turn.
+facet's allowlist, so while a turn is narrowed to that facet a call under
+decision can only have come from a task child. A turn with no facet selected
+reaches every authorized server, which is how the same scenario also drives a
+gated call the origin chat makes itself.
 
 ### `many-models` - Model Selector Testing
 

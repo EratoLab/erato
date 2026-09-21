@@ -5,7 +5,7 @@ use crate::matcher::{
     MatchRuleAnySystemMessageWithPattern, MatchRuleAnyUserMessageInCurrentTurnWithPattern,
     MatchRuleLastMessageIsUserWithPattern, MatchRuleUserMessagePattern, Mock,
     RandomOneLinerResponseConfig, ResponseConfig, StaticResponseConfig, ToolCallDef,
-    ToolCallResponseConfig, ToolCallsResponseConfig,
+    ToolCallResponseConfig, ToolCallsResponseConfig, ToolTraceResponseConfig,
 };
 use rand::Rng;
 use serde_json::json;
@@ -416,6 +416,38 @@ const GATED_TASK_PARENT_PROMPT: &str = "run the gated probe as a task";
 const GATED_TASK_CHILD_BRIEF: &str =
     "Gated task child brief: publish the approval probe and report what it said.";
 
+/// Typed into a chat of the `approvals` scenario by the batch-continuation e2e.
+/// The turn it answers makes three calls in one batch, of which only the middle
+/// one needs a decision — which is what parks the turn with a processed call
+/// behind it and an unprocessed one in front of it.
+const BATCH_PARK_PROMPT: &str = "batch approval probe";
+
+/// Marker the resumed turn's answer opens with. The answer is the request's own
+/// tool trace, so it is the test's only window on the context the continuation
+/// rebuilt.
+const BATCH_PARK_TRACE_PREFIX: &str = "BATCH-RESUMED-CONTEXT";
+
+/// Typed into the origin chat by the multi-decision e2e: two tasks that each
+/// stop on the same gated call, so one stop on the origin turn covers two
+/// decisions.
+const PAIRED_TASKS_PARENT_PROMPT: &str = "run both gated probes as tasks";
+
+/// What both paired briefs share and no other prompt contains: one pair of
+/// rules drives both children, while each brief is the last user message of its
+/// own child's turns only.
+const PAIRED_TASK_CHILD_BRIEF_PREFIX: &str = "Paired gated child brief";
+
+const PAIRED_TASK_CHILD_BRIEF_A: &str =
+    "Paired gated child brief A: publish the paired approval probe.";
+
+const PAIRED_TASK_CHILD_BRIEF_B: &str =
+    "Paired gated child brief B: publish the paired approval probe.";
+
+/// The paired children answer with their own tool trace, so the decision a
+/// child's call was settled with is visible in the answer that reaches the
+/// origin chat — an approval by its result, a denial by its refusal.
+const PAIRED_TASK_CHILD_TRACE_PREFIX: &str = "PAIRED-CHILD-CONTEXT";
+
 fn build_delegation_child_answer_chunks() -> Vec<String> {
     [
         "CHILD-ANSWER",
@@ -626,6 +658,130 @@ pub fn get_default_mocks() -> Vec<Mock> {
                     " published".to_string(),
                     " the".to_string(),
                     " probe".to_string(),
+                    ".".to_string(),
+                ],
+                delay_ms: 200,
+                ..Default::default()
+            }),
+        },
+        // The batch park of the `approvals` scenario: one turn, three calls, a
+        // decision in the middle of them. The gated call sits between two
+        // ungated ones on purpose — the first is already processed when the turn
+        // parks and must come back in the resumed request, the third is
+        // abandoned by the park and must run after the decision.
+        //
+        // The answer is the request's own tool trace rather than prose: the
+        // context a continuation rebuilds is invisible from a browser, and a
+        // trace is the one thing the model can say that carries it.
+        Mock {
+            name: "BatchApprovalParkToolCalls".to_string(),
+            description: "Returns three calls of which only the middle one needs approval"
+                .to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: BATCH_PARK_PROMPT.to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCalls(ToolCallsResponseConfig {
+                tool_calls: vec![
+                    ToolCallDef {
+                        tool_name: "read_approval_fixture".to_string(),
+                        arguments: "{}".to_string(),
+                    },
+                    ToolCallDef {
+                        tool_name: "publish_approval_probe".to_string(),
+                        arguments: "{}".to_string(),
+                    },
+                    ToolCallDef {
+                        tool_name: "list_files".to_string(),
+                        arguments: "{}".to_string(),
+                    },
+                ],
+                delay_ms: 100,
+            }),
+        },
+        Mock {
+            name: "BatchApprovalParkAnswer".to_string(),
+            description: "Answers the resumed batch with the calls its request carries".to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: BATCH_PARK_PROMPT.to_string(),
+            })],
+            response: ResponseConfig::ToolTrace(ToolTraceResponseConfig {
+                prefix: BATCH_PARK_TRACE_PREFIX.to_string(),
+                delay_ms: 200,
+            }),
+        },
+        // Two tasks that both stop to ask, so the origin turn raises one stop
+        // covering two decisions. One pair of child rules serves both: the
+        // briefs share a prefix, and a child's own brief is the last user
+        // message of its first turn only — which is what keeps the turn after
+        // the decision from calling the gated tool again.
+        Mock {
+            name: "PairedGatedTasksToolCalls".to_string(),
+            description: "Plans two sub-tasks whose only tool needs the user's approval".to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: PAIRED_TASKS_PARENT_PROMPT.to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCalls(ToolCallsResponseConfig {
+                tool_calls: vec![
+                    ToolCallDef {
+                        tool_name: "delegate_task".to_string(),
+                        arguments: format!(
+                            "{{\"task\": \"{PAIRED_TASK_CHILD_BRIEF_A}\", \"expected_output\": \"One sentence.\"}}"
+                        ),
+                    },
+                    ToolCallDef {
+                        tool_name: "delegate_task".to_string(),
+                        arguments: format!(
+                            "{{\"task\": \"{PAIRED_TASK_CHILD_BRIEF_B}\", \"expected_output\": \"One sentence.\"}}"
+                        ),
+                    },
+                ],
+                delay_ms: 100,
+            }),
+        },
+        Mock {
+            name: "PairedGatedTaskChildToolCall".to_string(),
+            description: "Returns the gated call on either paired child's first turn".to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: PAIRED_TASK_CHILD_BRIEF_PREFIX.to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
+                tool_name: "publish_approval_probe".to_string(),
+                arguments: "{}".to_string(),
+                delay_ms: 100,
+            }),
+        },
+        Mock {
+            name: "PairedGatedTaskChildAnswer".to_string(),
+            description: "Answers a paired child with the call it was allowed or refused"
+                .to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: PAIRED_TASK_CHILD_BRIEF_PREFIX.to_string(),
+            })],
+            response: ResponseConfig::ToolTrace(ToolTraceResponseConfig {
+                prefix: PAIRED_TASK_CHILD_TRACE_PREFIX.to_string(),
+                delay_ms: 200,
+            }),
+        },
+        Mock {
+            name: "PairedGatedTasksAnswer".to_string(),
+            description: "Answers the origin chat once both paired sub-tasks are settled"
+                .to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: PAIRED_TASKS_PARENT_PROMPT.to_string(),
+            })],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec![
+                    "PAIRED-TASKS-PARENT-ANSWER".to_string(),
+                    ": both".to_string(),
+                    " tasks".to_string(),
+                    " are".to_string(),
+                    " settled".to_string(),
                     ".".to_string(),
                 ],
                 delay_ms: 200,
@@ -1547,6 +1703,189 @@ mod tests {
         assert!(!TASK_PARENT_PROMPT.contains(GATED_TASK_PARENT_PROMPT));
         assert!(!GATED_TASK_CHILD_BRIEF.contains(TASK_CHILD_BRIEF));
         assert!(!TASK_CHILD_BRIEF.contains(GATED_TASK_CHILD_BRIEF));
+    }
+
+    /// The batch park's two halves: the three calls it asks for, and the trace
+    /// the resumed turn answers with. The trace is what the e2e reads, so a
+    /// request that had lost the call processed before the park would answer
+    /// without it here too.
+    #[test]
+    fn the_batch_park_asks_for_three_calls_and_traces_all_of_them_on_resume() {
+        use serde_json::json;
+
+        let park_turn = match_default_mocks(
+            json!([
+                {"role": "system", "content": "You are a helpful assistant"},
+                {"role": "user", "content": BATCH_PARK_PROMPT},
+            ]),
+            None,
+        );
+        match park_turn {
+            ResponseConfig::ToolCalls(config) => assert_eq!(
+                config
+                    .tool_calls
+                    .iter()
+                    .map(|call| call.tool_name.as_str())
+                    .collect::<Vec<_>>(),
+                vec![
+                    "read_approval_fixture",
+                    "publish_approval_probe",
+                    "list_files"
+                ]
+            ),
+            other => panic!("park turn matched {other:?}"),
+        }
+
+        let resumed_turn = match_default_mocks(
+            json!([
+                {"role": "system", "content": "You are a helpful assistant"},
+                {"role": "user", "content": BATCH_PARK_PROMPT},
+                {"role": "assistant", "content": null, "tool_calls": [
+                    {"id": "call_1", "type": "function", "function": {"name": "read_approval_fixture", "arguments": "{}"}},
+                    {"id": "call_2", "type": "function", "function": {"name": "publish_approval_probe", "arguments": "{}"}},
+                    {"id": "call_3", "type": "function", "function": {"name": "list_files", "arguments": "{}"}},
+                ]},
+                {"role": "tool", "tool_call_id": "call_1", "content": "closed-world approval fixture read"},
+                {"role": "tool", "tool_call_id": "call_2", "content": "approval probe published"},
+                {"role": "tool", "tool_call_id": "call_3", "content": "{\"files\":[\"a.txt\"]}"},
+            ]),
+            None,
+        );
+        match resumed_turn {
+            ResponseConfig::Static(config) => assert_eq!(
+                config.chunks.join(""),
+                format!(
+                    "{BATCH_PARK_TRACE_PREFIX}: \
+                     read_approval_fixture[closed-world approval fixture read] | \
+                     publish_approval_probe[approval probe published] | \
+                     list_files[{{\"files\":[\"a.txt\"]}}]"
+                )
+            ),
+            other => panic!("resumed turn matched {other:?}"),
+        }
+    }
+
+    /// Both paired children run off one pair of rules, and their answer carries
+    /// the decision their call was settled with — which is the only thing that
+    /// tells an allowed run from a refused one once the answer has reached the
+    /// origin chat.
+    #[test]
+    fn the_paired_tasks_drive_two_children_whose_answers_carry_their_decision() {
+        use serde_json::json;
+
+        let origin_turn = match_default_mocks(
+            json!([
+                {"role": "system", "content": "You are a helpful assistant"},
+                {"role": "user", "content": PAIRED_TASKS_PARENT_PROMPT},
+            ]),
+            None,
+        );
+        match origin_turn {
+            ResponseConfig::ToolCalls(config) => {
+                assert_eq!(config.tool_calls.len(), 2);
+                assert!(config
+                    .tool_calls
+                    .iter()
+                    .all(|call| call.tool_name == "delegate_task"));
+                assert!(config.tool_calls[0]
+                    .arguments
+                    .contains(PAIRED_TASK_CHILD_BRIEF_A));
+                assert!(config.tool_calls[1]
+                    .arguments
+                    .contains(PAIRED_TASK_CHILD_BRIEF_B));
+            }
+            other => panic!("origin turn matched {other:?}"),
+        }
+
+        for brief in [PAIRED_TASK_CHILD_BRIEF_A, PAIRED_TASK_CHILD_BRIEF_B] {
+            let child_turn = match_default_mocks(
+                json!([
+                    {"role": "system", "content": "Answer the delegated probe task."},
+                    {"role": "user", "content": delegate_preamble_message()},
+                    {"role": "user", "content": brief},
+                ]),
+                None,
+            );
+            match child_turn {
+                ResponseConfig::ToolCall(config) => {
+                    assert_eq!(config.tool_name, "publish_approval_probe")
+                }
+                other => panic!("child turn for {brief} matched {other:?}"),
+            }
+        }
+
+        let denied_child_answer = match_default_mocks(
+            json!([
+                {"role": "system", "content": "Answer the delegated probe task."},
+                {"role": "user", "content": delegate_preamble_message()},
+                {"role": "user", "content": PAIRED_TASK_CHILD_BRIEF_B},
+                {"role": "assistant", "content": null, "tool_calls": [
+                    {"id": "call_9", "type": "function", "function": {"name": "publish_approval_probe", "arguments": "{}"}},
+                ]},
+                {"role": "tool", "tool_call_id": "call_9", "content": "{\"status\":\"rejected\",\"error\":\"The user denied this tool call.\"}"},
+            ]),
+            None,
+        );
+        match denied_child_answer {
+            ResponseConfig::Static(config) => assert_eq!(
+                config.chunks.join(""),
+                format!(
+                    "{PAIRED_TASK_CHILD_TRACE_PREFIX}: publish_approval_probe\
+                     [{{\"status\":\"rejected\",\"error\":\"The user denied this tool call.\"}}]"
+                )
+            ),
+            other => panic!("denied child answer matched {other:?}"),
+        }
+
+        let origin_answer = match_default_mocks(
+            json!([
+                {"role": "system", "content": "You are a helpful assistant"},
+                {"role": "user", "content": PAIRED_TASKS_PARENT_PROMPT},
+                {"role": "assistant", "content": null},
+                {"role": "tool", "content": json!({
+                    "status": "completed",
+                    "result": format!("{PAIRED_TASK_CHILD_TRACE_PREFIX}: publish_approval_probe[approval probe published]"),
+                    "truncated": false,
+                }).to_string()},
+            ]),
+            None,
+        );
+        match origin_answer {
+            ResponseConfig::Static(config) => assert_eq!(
+                config.chunks.join(""),
+                "PAIRED-TASKS-PARENT-ANSWER: both tasks are settled."
+            ),
+            other => panic!("origin answer matched {other:?}"),
+        }
+    }
+
+    /// Every prompt of the `approvals` scenario's probes, against every other:
+    /// matching is first-match substring over one shared mock list, so an
+    /// overlap would silently let one probe answer another's turns.
+    #[test]
+    fn no_approvals_probe_prompt_contains_another() {
+        let prompts = [
+            TASK_PARENT_PROMPT,
+            TASK_CHILD_BRIEF,
+            GATED_TASK_PARENT_PROMPT,
+            GATED_TASK_CHILD_BRIEF,
+            BATCH_PARK_PROMPT,
+            PAIRED_TASKS_PARENT_PROMPT,
+            PAIRED_TASK_CHILD_BRIEF_PREFIX,
+        ];
+        for (index, prompt) in prompts.iter().enumerate() {
+            for (other_index, other) in prompts.iter().enumerate() {
+                assert!(
+                    index == other_index || !prompt.contains(other),
+                    "'{prompt}' contains '{other}'"
+                );
+            }
+        }
+        // The prefix stands in for both paired briefs, so it has to be shared by
+        // them and by nothing else.
+        assert!(PAIRED_TASK_CHILD_BRIEF_A.contains(PAIRED_TASK_CHILD_BRIEF_PREFIX));
+        assert!(PAIRED_TASK_CHILD_BRIEF_B.contains(PAIRED_TASK_CHILD_BRIEF_PREFIX));
+        assert_ne!(PAIRED_TASK_CHILD_BRIEF_A, PAIRED_TASK_CHILD_BRIEF_B);
     }
 
     #[test]

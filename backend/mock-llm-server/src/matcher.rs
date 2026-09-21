@@ -2,7 +2,7 @@ use colored::Colorize;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 /// Static response configuration with chunks and delay
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -118,6 +118,16 @@ pub struct DelegateToAssistantResponseConfig {
     pub delay_ms: u64,
 }
 
+/// Tool-trace response configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolTraceResponseConfig {
+    /// Marker the answer opens with, so a test can key on it
+    pub prefix: String,
+    /// Delay before sending the answer (in milliseconds)
+    #[serde(default)]
+    pub delay_ms: u64,
+}
+
 /// Configuration for a response to return when a pattern matches
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ResponseConfig {
@@ -137,10 +147,15 @@ pub enum ResponseConfig {
     RandomOneLiner(RandomOneLinerResponseConfig),
     /// Dynamic `delegate_to_assistant` call aimed at an assistant the request offers
     DelegateToAssistant(DelegateToAssistantResponseConfig),
+    /// Dynamic answer naming the tool calls this request carries, with their results
+    ToolTrace(ToolTraceResponseConfig),
 }
 
 /// Name of the backend's synthetic assistant-delegation tool.
 const DELEGATE_TO_ASSISTANT_TOOL_NAME: &str = "delegate_to_assistant";
+
+/// Characters of a tool result a trace answer repeats.
+const TOOL_TRACE_RESULT_CHARS: usize = 160;
 
 /// Match rule that checks user message pattern using substring matching
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -375,6 +390,14 @@ impl Mock {
                     config.task
                 );
             }
+            ResponseConfig::ToolTrace(config) => {
+                println!(
+                    "    {}: the request's tool calls and results under \"{}\", {}ms delay",
+                    "Response".bold(),
+                    config.prefix,
+                    config.delay_ms
+                );
+            }
         }
         println!();
     }
@@ -499,8 +522,69 @@ impl Matcher {
                     }),
                 }
             }
+            ResponseConfig::ToolTrace(config) => ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec![self.build_tool_trace(request, &config.prefix)],
+                delay_ms: config.delay_ms,
+                ..Default::default()
+            }),
             _ => response.clone(),
         }
+    }
+
+    /// Name every call this request carries, in order, each with the result it
+    /// already has.
+    ///
+    /// The only window a test has on the context a turn was resumed with: a
+    /// continuation that dropped the calls processed before the park, or never
+    /// ran the ones after it, answers with a trace that is missing them.
+    fn build_tool_trace(&self, request: &ChatCompletionRequest, prefix: &str) -> String {
+        let mut results: HashMap<&str, String> = HashMap::new();
+        for message in &request.messages {
+            if message.role != "tool" {
+                continue;
+            }
+            if let (Some(call_id), Some(content)) =
+                (message.tool_call_id.as_deref(), message.content.as_ref())
+            {
+                results.insert(call_id, self.extract_content_text(content));
+            }
+        }
+
+        let entries: Vec<String> = request
+            .messages
+            .iter()
+            .filter(|message| message.role == "assistant")
+            .filter_map(|message| message.tool_calls.as_ref()?.as_array())
+            .flatten()
+            .filter_map(|call| {
+                let name = call.get("function")?.get("name")?.as_str()?;
+                let result = call
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .and_then(|call_id| results.get(call_id))
+                    .map(String::as_str)
+                    .unwrap_or_default();
+                Some(format!("{name}[{}]", Self::abbreviate_tool_result(result)))
+            })
+            .collect();
+
+        if entries.is_empty() {
+            return format!("{prefix}: no tool calls in this request");
+        }
+        format!("{prefix}: {}", entries.join(" | "))
+    }
+
+    /// One line per result, long enough to carry the refusal a denied call
+    /// leaves behind and short enough that a file listing does not bury the
+    /// calls after it.
+    fn abbreviate_tool_result(result: &str) -> String {
+        result
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .chars()
+            .take(TOOL_TRACE_RESULT_CHARS)
+            .collect()
     }
 
     /// The delegation tool enumerates the assistants it may target in the
@@ -982,6 +1066,14 @@ pub struct Message {
     pub role: String,
     #[serde(default)]
     pub content: Option<Value>,
+    /// The calls an assistant message asked for, as OpenAI sends them. Read
+    /// only by the tool-trace response, which is how a test sees what a
+    /// resumed turn put back in front of the model.
+    #[serde(default)]
+    pub tool_calls: Option<Value>,
+    /// Which call a tool message answers; pairs a result with its name.
+    #[serde(default)]
+    pub tool_call_id: Option<String>,
 }
 
 /// Image generation mock configuration

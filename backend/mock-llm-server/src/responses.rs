@@ -414,6 +414,9 @@ pub async fn stream_response(
                 "DelegateToAssistant responses should be resolved into ToolCall in matcher"
             )
         }
+        ResponseConfig::ToolTrace(_) => {
+            unreachable!("ToolTrace responses should be resolved into Static in matcher")
+        }
     };
 
     futures::stream::iter(actions).then(|action| async move {
