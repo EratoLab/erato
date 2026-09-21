@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useSidecarIndexing } from "@/hooks/useSidecarIndexing";
 import {
   effectiveMailboxes,
+  indexingMailboxId,
   mailboxCoverage,
   orderedMailboxes,
 } from "@/lib/desktopSidecar/indexingConfiguration";
@@ -85,18 +86,21 @@ export function SidecarIndexingControls() {
       entries[index],
     ];
     // Keep disconnected mailbox overrides; assign explicit priorities to visible entries.
-    const visible = new Set(entries.map((entry) => entry.id.toLowerCase()));
+    const visible = new Set(
+      entries.map((entry) => indexingMailboxId(entry.id)),
+    );
     save({
       indexing_mailboxes: [
         ...overrides.filter(
-          (entry) => !visible.has(entry.mailbox_id.toLowerCase()),
+          (entry) => !visible.has(indexingMailboxId(entry.mailbox_id)),
         ),
         ...entries.map((entry, priority) => ({
           ...overrides.find(
             (override) =>
-              override.mailbox_id.toLowerCase() === entry.id.toLowerCase(),
+              indexingMailboxId(override.mailbox_id) ===
+              indexingMailboxId(entry.id),
           ),
-          mailbox_id: entry.id,
+          mailbox_id: indexingMailboxId(entry.id),
           enabled: entry.enabled,
           priority,
         })),
@@ -136,6 +140,7 @@ export function SidecarIndexingControls() {
       )}
       <ul className="space-y-3">
         {ordered.map((mailbox, index) => {
+          const mailboxId = indexingMailboxId(mailbox.id);
           const emails = mailboxCoverage(status, mailbox.id, "email");
           const attachments = mailboxCoverage(status, mailbox.id, "file");
           return (
@@ -186,16 +191,15 @@ export function SidecarIndexingControls() {
                         indexing_mailboxes: [
                           ...overrides.filter(
                             (entry) =>
-                              entry.mailbox_id.toLowerCase() !==
-                              mailbox.id.toLowerCase(),
+                              indexingMailboxId(entry.mailbox_id) !== mailboxId,
                           ),
                           {
                             ...overrides.find(
                               (entry) =>
-                                entry.mailbox_id.toLowerCase() ===
-                                mailbox.id.toLowerCase(),
+                                indexingMailboxId(entry.mailbox_id) ===
+                                mailboxId,
                             ),
-                            mailbox_id: mailbox.id,
+                            mailbox_id: mailboxId,
                             enabled: event.target.checked,
                             priority: mailbox.priority,
                           },
