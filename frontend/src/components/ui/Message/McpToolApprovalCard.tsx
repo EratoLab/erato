@@ -1,10 +1,11 @@
-import { t } from "@lingui/core/macro";
+import { plural, t } from "@lingui/core/macro";
 import { useQueryClient } from "@tanstack/react-query";
 import { useContext, useEffect, useState } from "react";
 
 import { getIdToken } from "@/auth/tokenStore";
 import { archivedNoticeText } from "@/components/ui/Chat/chatArchiveActions";
 import { ToolCallInput } from "@/components/ui/ToolCall";
+import { readConflictRefusal } from "@/hooks/chat/conflictRefusal";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useChatArchived } from "@/hooks/chat/useChatArchived";
@@ -12,25 +13,36 @@ import {
   listMcpServerToolsQuery,
   listUserToolApprovalSettingsQuery,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
-import { buildContinueStreamBody } from "@/lib/toolApprovalDecisions";
+import {
+  buildContinueStreamBody,
+  isApprovalDecision,
+} from "@/lib/toolApprovalDecisions";
 import { ChatContext } from "@/providers/ChatProvider";
+import { FrontendRequestError } from "@/utils/errorReport";
 
 import { ResolvedIcon } from "../icons";
 import { ActionConfirmationCard } from "./ActionConfirmationCard";
+import { APPROVAL_CARD_SHELL_CLASS } from "./ApprovalDecisionActions";
+import { DelegatedTaskApprovalCard } from "./DelegatedTaskApprovalCard";
+import { OriginApprovalLink } from "./OriginApprovalLink";
+import { TaskPlanApprovalCard } from "./TaskPlanApprovalCard";
+import { approvalItemsOf } from "./approvalItems";
 
+import type { ApprovalItemPart, StagedDecisions } from "./approvalItems";
 import type { ToolApprovalStatus } from "../Trace/Trace";
 import type {
-  ApprovalItem,
-  ChildApprovalRef,
   ContentPartToolApprovalRequest,
   ToolApprovalDecision,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { DecidedApproval } from "@/lib/toolApprovalDecisions";
 
-/** One decision of a stop, with the same `input` correction as the part. */
-type ApprovalItemPart = Omit<ApprovalItem, "input" | "child"> & {
-  input: unknown;
-  child?: (Omit<ChildApprovalRef, "input"> & { input: unknown }) | null;
-};
+/** The `409` a child card gets while its origin is asking the same question. */
+// eslint-disable-next-line lingui/no-unlocalized-strings -- API refusal code
+const COVERED_BY_PARENT = "covered_by_parent";
+
+/** The `409` for a stop every item of which is already decided. */
+// eslint-disable-next-line lingui/no-unlocalized-strings -- API refusal code
+const ALREADY_CONTINUED = "already_continued";
 
 /**
  * The generated schema collapses `serde_json::Value` to `void`, which would
@@ -62,10 +74,19 @@ export type McpToolApprovalRequestPart = Omit<
 export const McpToolApprovalCard = ({
   messageId,
   request,
+  openItems,
   resolution,
 }: {
   messageId: string;
   request: McpToolApprovalRequestPart;
+  /**
+   * The items of the stop still waiting on the user, scoped to the parts below
+   * the request. A decision has to cover exactly these, and a chained re-park
+   * re-asks under ids its predecessor already settled — so the part alone
+   * cannot say what is open. Defaulted for a host that renders the card without
+   * the row around it.
+   */
+  openItems?: ApprovalItemPart[];
   resolution: ToolApprovalStatus | null;
 }) => {
   // Read before anything else on the part: for every kind but `mcp_tool` the
@@ -73,8 +94,9 @@ export const McpToolApprovalCard = ({
   // writes an empty server id), so they must not reach the MCP layout.
   // eslint-disable-next-line lingui/no-unlocalized-strings -- API kind value
   const kind = request.kind ?? "mcp_tool";
-  const approvalItems = request.approvals ?? [];
+  const approvalItems = openItems ?? approvalItemsOf(request);
   const approvalIds = approvalItems.map((item) => item.approval_id);
+  const openItemCount = approvalItems.length;
 
   // This component is also rendered in isolated stories/tests, where the chat
   // provider is deliberately absent. The in-app path always has it.
@@ -84,6 +106,11 @@ export const McpToolApprovalCard = ({
   const [error, setError] = useState<string | null>(null);
   const [localResolution, setLocalResolution] =
     useState<ToolApprovalStatus | null>(null);
+  // Answers taken on individual items while others are still open; the server
+  // settles the whole stop in one request, so they are held until it is fully
+  // answered.
+  const [staged, setStaged] = useState<StagedDecisions>({});
+  const [isCoveredByParent, setIsCoveredByParent] = useState(false);
 
   // While the decision is pending, hold the chat's message-queue auto-send
   // and surface the sidebar "action required" state, exactly like the
@@ -138,7 +165,10 @@ export const McpToolApprovalCard = ({
    * The fallback consumes the continuation here instead, which cannot release
    * this card until the whole answer has been generated.
    */
-  const submitDecision = async (decision: ToolApprovalDecision) => {
+  const submitDecision = async (
+    decision: ToolApprovalDecision,
+    itemDecisions: DecidedApproval[] | undefined,
+  ) => {
     if (chatContext?.continueToolApproval) {
       await chatContext.continueToolApproval({
         messageId,
@@ -146,8 +176,13 @@ export const McpToolApprovalCard = ({
         toolCallId: request.tool_call_id,
         toolName: request.tool_name,
         toolInput: request.input,
+        // The fallback for an item that names no child of its own; a parked
+        // child's grant is keyed on the child's server, which the items carry.
         mcpServerId: request.mcp_server_id,
         approvalIds,
+        itemDecisions,
+        items: approvalItems,
+        kind,
       });
       // Deliberately no local resolution: the seeded decision part is what
       // hides this card, and it is rolled back if the server refuses the
@@ -165,11 +200,24 @@ export const McpToolApprovalCard = ({
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify(
-        buildContinueStreamBody({ messageId, decision, approvalIds }),
+        buildContinueStreamBody({
+          messageId,
+          decision,
+          approvalIds,
+          itemDecisions,
+        }),
       ),
     });
     if (!response.ok) {
-      throw new Error(await response.text());
+      const body = await response.text();
+      // A request error rather than a bare one, so a refusal envelope — the
+      // `409` that points at the origin chat — is readable on this path too.
+      throw new FrontendRequestError(
+        body,
+        // eslint-disable-next-line lingui/no-unlocalized-strings -- HTTP method and route
+        { method: "POST", url: "/api/v1beta/me/messages/continuestream" },
+        { status: response.status, statusText: response.statusText, body },
+      );
     }
     await response.text();
     if (chatId) {
@@ -180,40 +228,131 @@ export const McpToolApprovalCard = ({
     await chatContext?.refetchMessages();
   };
 
-  const decide = async (decision: ToolApprovalDecision) => {
+  /**
+   * The rosters a set of answers is written against. A standing answer on a
+   * parked child lands on the CHILD's server, and a stop can carry children of
+   * several servers — one roster would leave the others serving the pre-grant
+   * state. A kind that names no server at all, a task plan, has none to drop.
+   */
+  const rostersOf = (answers: DecidedApproval[]): string[] =>
+    answers
+      .map(
+        (answer) =>
+          approvalItems.find((item) => item.approval_id === answer.approvalId)
+            ?.child?.mcp_server_id ?? request.mcp_server_id,
+      )
+      .filter(
+        (serverId, index, ids) =>
+          serverId !== "" && ids.indexOf(serverId) === index,
+      );
+
+  const decide = async (
+    decision: ToolApprovalDecision,
+    itemDecisions?: DecidedApproval[],
+  ) => {
+    const answers =
+      itemDecisions ??
+      approvalItems.map((item) => ({
+        approvalId: item.approval_id,
+        decision,
+      }));
     setIsBusy(true);
     setError(null);
+    setIsCoveredByParent(false);
     try {
-      await submitDecision(decision);
+      await submitDecision(decision, itemDecisions);
       if (chatContext?.continueToolApproval) {
         return;
       }
-      setLocalResolution(
-        decision === "reject" || decision === "reject_always"
-          ? "denied"
-          : "approved",
+      setLocalResolution(isApprovalDecision(decision) ? "approved" : "denied");
+      // Standing wherever it was given, not only on the row that happened to be
+      // clicked last.
+      const standing = answers.filter(
+        (answer) =>
+          answer.decision === "approve_always" ||
+          answer.decision === "reject_always",
       );
-      if (decision === "approve_always" || decision === "reject_always") {
+      if (standing.length > 0) {
         // A standing decision is account-wide, and the settings roster and
         // the tool browser would otherwise keep serving the old state from
         // their cached listing. (The streamed path drops them itself, once
         // the decision is written.)
         await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey: listMcpServerToolsQuery({
-              pathParams: { serverId: request.mcp_server_id },
-            }).queryKey,
-          }),
+          ...rostersOf(standing).map((serverId) =>
+            queryClient.invalidateQueries({
+              queryKey: listMcpServerToolsQuery({
+                pathParams: { serverId },
+              }).queryKey,
+            }),
+          ),
           queryClient.invalidateQueries({
             queryKey: listUserToolApprovalSettingsQuery({}).queryKey,
           }),
         ]);
       }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      const refusal = readConflictRefusal(cause);
+      // Nothing is wrong with this card: the same question is open in the chat
+      // that dispatched the run, and only that one can act on the answer. The
+      // next decision retries, because the refusal lifts by itself once the
+      // origin settles.
+      const covered =
+        refusal?.status === 409 && refusal.code === COVERED_BY_PARENT;
+      setIsCoveredByParent(covered);
+      // Not a failure either: the stop was already answered — a second tab, a
+      // double decision, a row this client had gone stale on. The user's answer
+      // landed, so say nothing and let the settled row resolve the card.
+      const alreadyContinued =
+        refusal?.status === 409 && refusal.code === ALREADY_CONTINUED;
+      // The refusal envelope is API wire text; printed beside the link that
+      // says where to go instead, it reads as a second, unexplained failure.
+      setError(
+        covered || alreadyContinued
+          ? null
+          : cause instanceof Error
+            ? cause.message
+            : String(cause),
+      );
+      // Held answers would otherwise leave every row looking decided with no
+      // way to send them again.
+      setStaged({});
+      if (alreadyContinued) {
+        await chatContext?.refetchMessages();
+      }
     } finally {
       setIsBusy(false);
     }
+  };
+
+  const decideAll = (decision: ToolApprovalDecision) => {
+    setStaged({});
+    void decide(
+      decision,
+      approvalItems.map((item) => ({
+        approvalId: item.approval_id,
+        decision,
+      })),
+    );
+  };
+
+  /**
+   * Take one item's answer, and send the stop once every item has one: a
+   * request that does not cover the open set exactly is refused, so a card
+   * that asks per item cannot send per item.
+   */
+  const decideItem = (approvalId: string, decision: ToolApprovalDecision) => {
+    const answers: StagedDecisions = { ...staged, [approvalId]: decision };
+    setStaged(answers);
+    if (approvalItems.some((item) => answers[item.approval_id] === undefined)) {
+      return;
+    }
+    void decide(
+      decision,
+      approvalItems.map((item) => ({
+        approvalId: item.approval_id,
+        decision: answers[item.approval_id] ?? decision,
+      })),
+    );
   };
 
   const openWorldDescription = request.annotations.openWorldHint
@@ -229,42 +368,85 @@ export const McpToolApprovalCard = ({
     return null;
   }
 
-  // The real cards for these kinds — child identity, per-task rows, withdraw —
-  // land with the frontend issue of this stack. Until then a parked turn of a
-  // new kind stays answerable instead of rendering as an MCP call it is not.
-  if (kind !== "mcp_tool") {
+  // Held while the chat is still settling the park's own completion (its
+  // refetch resets the buffer a decision would seed), and while the decision is
+  // in flight.
+  const cardIsBusy = isBusy || (chatContext?.isPendingResponse ?? false);
+
+  // Shown under whichever card renders: a refusal, and where the decision can
+  // be taken instead when this chat is not the surface that owns it.
+  const refusal = (
+    <>
+      {error && <p className="mt-2 text-sm text-theme-error-fg">{error}</p>}
+      {isCoveredByParent && <OriginApprovalLink chatId={chatId} />}
+    </>
+  );
+
+  if (kind === "delegated_task") {
+    return (
+      <>
+        <DelegatedTaskApprovalCard
+          items={approvalItems}
+          staged={staged}
+          allowAlways={request.allow_always}
+          isArchived={isArchived === true}
+          isBusy={cardIsBusy}
+          onDecideItem={decideItem}
+          onDecideAll={decideAll}
+        />
+        {refusal}
+      </>
+    );
+  }
+
+  if (kind === "task_plan") {
+    return (
+      <>
+        <TaskPlanApprovalCard
+          items={approvalItems}
+          staged={staged}
+          isArchived={isArchived === true}
+          isBusy={cardIsBusy}
+          onDecideItem={decideItem}
+          onDecideAll={decideAll}
+        />
+        {refusal}
+      </>
+    );
+  }
+
+  // Compared as a string because the value comes off the wire: a kind a newer
+  // server added reaches this client although the generated union says it
+  // cannot, and the turn cannot go on until it is answered either way.
+  if ((kind as string) !== "mcp_tool") {
     return (
       <div
         data-testid="tool-approval-generic"
         data-approval-kind={kind}
-        className="my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3"
+        className={APPROVAL_CARD_SHELL_CLASS}
       >
         <ActionConfirmationCard
           title={t({
             id: "toolApproval.genericTitle",
             message: "A decision is needed in this chat",
           })}
-          description={
-            approvalItems.length > 1
-              ? t({
-                  id: "toolApproval.genericDescriptionMany",
-                  message:
-                    "This turn is waiting on several decisions. Allowing or denying applies to all of them.",
-                })
-              : t({
-                  id: "toolApproval.genericDescription",
-                  message: "This turn is waiting on your decision to continue.",
-                })
-          }
-          onAllowOnce={() => void decide("approve")}
-          onDeny={() => void decide("reject")}
+          description={t({
+            id: "toolApproval.genericDescription",
+            message: plural(openItemCount, {
+              one: "This response is waiting on your decision to continue.",
+              other:
+                "This response is waiting on several decisions. Allowing or denying applies to all of them.",
+            }),
+          })}
+          onAllowOnce={() => decideAll("approve")}
+          onDeny={() => decideAll("reject")}
           status={isArchived ? "dismissed" : "pending"}
           resolvedLabel={isArchived ? archivedNoticeText() : undefined}
-          isBusy={isBusy || (chatContext?.isPendingResponse ?? false)}
+          isBusy={cardIsBusy}
           scrollIntoViewOnMount
           data-testid="tool-approval-generic-card"
         />
-        {error && <p className="mt-2 text-sm text-theme-error-fg">{error}</p>}
+        {refusal}
       </div>
     );
   }
@@ -273,7 +455,7 @@ export const McpToolApprovalCard = ({
     <div
       data-testid="mcp-tool-approval"
       data-tool-name={request.tool_name}
-      className="my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3"
+      className={APPROVAL_CARD_SHELL_CLASS}
     >
       <div className="flex flex-wrap items-center gap-2">
         <ResolvedIcon
@@ -316,14 +498,11 @@ export const McpToolApprovalCard = ({
         onNeverAllow={() => void decide("reject_always")}
         status={isArchived ? "dismissed" : "pending"}
         resolvedLabel={isArchived ? archivedNoticeText() : undefined}
-        // Held while the chat is still settling the park's own completion
-        // (its refetch resets the buffer a decision would seed), and while the
-        // decision is in flight.
-        isBusy={isBusy || (chatContext?.isPendingResponse ?? false)}
+        isBusy={cardIsBusy}
         scrollIntoViewOnMount
         data-testid="mcp-tool-approval-card"
       />
-      {error && <p className="mt-2 text-sm text-theme-error-fg">{error}</p>}
+      {refusal}
     </div>
   );
 };

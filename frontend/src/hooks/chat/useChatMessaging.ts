@@ -32,7 +32,10 @@ import {
   useChatMessages,
   useUpdateChat,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
-import { buildContinueStreamBody } from "@/lib/toolApprovalDecisions";
+import {
+  buildContinueStreamBody,
+  isApprovalDecision,
+} from "@/lib/toolApprovalDecisions";
 import { mapApiMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 import { seedDispatchedDelegatedRun } from "@/utils/chat/delegatedRunDispatch";
 import {
@@ -81,7 +84,9 @@ import type {
   DelegationRunMode,
   MessageSubmitStreamingResponseMessage,
   ToolApprovalDecision,
+  ToolApprovalKind,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { DecidedApproval } from "@/lib/toolApprovalDecisions";
 import type { Message } from "@/types/chat";
 import type { AssistantMention } from "@/utils/chat/assistantMentions";
 
@@ -103,7 +108,11 @@ export interface ContinueToolApprovalInput {
   toolCallId: string;
   toolName: string;
   toolInput?: unknown;
-  /** Names the roster to drop after a standing decision is written. */
+  /**
+   * Names the roster to drop after a standing decision is written, for items
+   * that name no child of their own. A parked child's grant is keyed on the
+   * CHILD's server, which the item carries.
+   */
   mcpServerId: string;
   /**
    * Every approval the parked turn has open. The server requires the decision
@@ -111,6 +120,33 @@ export interface ContinueToolApprovalInput {
    * each; omitted or single, the legacy body is sent.
    */
   approvalIds?: string[];
+  /**
+   * Per-item answers, when the card asked per item — a task plan is decided row
+   * by row. They replace `decision` in the request body; `decision` stays the
+   * answer a uniform card gave the whole stop.
+   */
+  itemDecisions?: DecidedApproval[];
+  /**
+   * The stop's open items, so the seeded parts can be numbered the way the
+   * server numbers them. Without them only the flat fields are seeded, which is
+   * exactly one item's worth.
+   */
+  items?: SeedableApprovalItem[];
+  /**
+   * Which parts the server appends per item: an `mcp_tool` item is a call this
+   * continuation makes, a `task_plan` item one it dispatches after the
+   * decision, and a `delegated_task` item a slot that already exists and is
+   * overwritten in place.
+   */
+  kind?: ToolApprovalKind;
+}
+
+export interface SeedableApprovalItem {
+  approval_id: string;
+  tool_call_id: string;
+  tool_name: string;
+  input: unknown;
+  child?: { child_chat_id: string; mcp_server_id: string } | null;
 }
 
 const getSSEConnectionError = (
@@ -2486,6 +2522,9 @@ export function useChatMessaging(
       toolInput,
       mcpServerId,
       approvalIds,
+      itemDecisions,
+      items,
+      kind,
     }: ContinueToolApprovalInput): Promise<void> => {
       // A park settles through the same completion refetch as any turn, and
       // that refetch resets the streaming buffer when it lands. A decision
@@ -2517,39 +2556,82 @@ export function useChatMessaging(
       }
 
       const now = new Date().toISOString();
-      const isApproved = decision !== "reject" && decision !== "reject_always";
-      const decisionPart: ContentPart = isApproved
-        ? {
-            content_type: "tool_approval",
-            tool_call_id: toolCallId,
-            always_allow: decision === "approve_always",
-            approved_at: now,
+      // In the row's order, which is the order the server settles them in.
+      // Without the items only the flat fields are known, which describes
+      // exactly one.
+      const settled: {
+        item: SeedableApprovalItem;
+        decision: ToolApprovalDecision;
+      }[] =
+        items && items.length > 0
+          ? items.map((item) => ({
+              item,
+              decision:
+                itemDecisions?.find(
+                  (answer) => answer.approvalId === item.approval_id,
+                )?.decision ?? decision,
+            }))
+          : [
+              {
+                item: {
+                  approval_id: toolCallId,
+                  tool_call_id: toolCallId,
+                  tool_name: toolName,
+                  input: toolInput ?? null,
+                },
+                decision,
+              },
+            ];
+      const seededParts: ContentPart[] = settled.flatMap(
+        ({ item, decision: answer }) => {
+          const approved = isApprovalDecision(answer);
+          // The generated schema collapses both `serde_json::Value` and
+          // `Option<String>` to `void`/`null`, which makes a typed literal
+          // impossible for `input`, `approval_id` and `reason`; the shapes are
+          // the parts the server persists.
+          const decisionPart = (approved
+            ? {
+                content_type: "tool_approval",
+                tool_call_id: item.tool_call_id,
+                always_allow: answer === "approve_always",
+                approved_at: now,
+                approval_id: item.approval_id,
+                child_chat_id: item.child?.child_chat_id ?? null,
+              }
+            : {
+                content_type: "tool_rejection",
+                tool_call_id: item.tool_call_id,
+                never_allow: answer === "reject_always",
+                rejected_at: now,
+                approval_id: item.approval_id,
+                child_chat_id: item.child?.child_chat_id ?? null,
+                reason: answer === "withdraw" ? "withdrawn" : null,
+              }) as unknown as ContentPart;
+          // A parked child's slot already exists and is overwritten where it
+          // stands, and an approved plan item is dispatched later in the turn —
+          // only a call this continuation makes itself, or refuses outright, gets
+          // a part here.
+          if (kind === "delegated_task" || (kind === "task_plan" && approved)) {
+            return [decisionPart];
           }
-        : {
-            content_type: "tool_rejection",
-            tool_call_id: toolCallId,
-            never_allow: decision === "reject_always",
-            rejected_at: now,
-          };
-      // The generated schema collapses `serde_json::Value` to `void`, which
-      // makes a typed literal impossible for `input`; the shape is the
-      // `tool_use` part the server persists.
-      const toolUsePart = {
-        content_type: "tool_use",
-        tool_call_id: toolCallId,
-        tool_name: toolName,
-        input: toolInput ?? null,
-        output: null,
-        progress_message: null,
-        // A denial never calls the tool: the server records the refusal as a
-        // failed call, so show it that way instead of a spinner that can only
-        // ever resolve to an error.
-        status: isApproved ? "in_progress" : "error",
-      } as ContentPart;
+          const toolUsePart = {
+            content_type: "tool_use",
+            tool_call_id: item.tool_call_id,
+            tool_name: item.tool_name,
+            input: item.input ?? null,
+            output: null,
+            progress_message: null,
+            // A denial never calls the tool: the server records the refusal as a
+            // failed call, so show it that way instead of a spinner that can only
+            // ever resolve to an error.
+            status: approved ? "in_progress" : "error",
+          } as ContentPart;
+          return [decisionPart, toolUsePart];
+        },
+      );
       const seededContent: ContentPart[] = [
         ...parkedMessage.content,
-        decisionPart,
-        toolUsePart,
+        ...seededParts,
       ];
       const requestedAt = parkedMessage.content.find(
         (part): part is ContentPart & { requested_at: string } =>
@@ -2579,14 +2661,30 @@ export function useChatMessaging(
       // after it has rebuilt the tool set — so the rosters are dropped again
       // once the stream is over, not only when the decision was accepted.
       const dropDecidedRosters = () => {
-        if (decision !== "approve_always" && decision !== "reject_always") {
+        // One stop can grant on several servers at once — two children of the
+        // same turn on different MCP servers — so every one of them is dropped,
+        // not just the request's own.
+        const rosters = settled
+          .filter(
+            ({ decision: answer }) =>
+              answer === "approve_always" || answer === "reject_always",
+          )
+          .map(({ item }) => item.child?.mcp_server_id ?? mcpServerId);
+        if (rosters.length === 0) {
           return;
         }
-        void queryClient.invalidateQueries({
-          queryKey: listMcpServerToolsQuery({
-            pathParams: { serverId: mcpServerId },
-          }).queryKey,
-        });
+        // A kind that names no MCP server of its own — a task plan — has no
+        // roster to drop, and the empty id would invalidate a listing that does
+        // not exist.
+        new Set(rosters.filter((serverId) => serverId !== "")).forEach(
+          (serverId) => {
+            void queryClient.invalidateQueries({
+              queryKey: listMcpServerToolsQuery({
+                pathParams: { serverId },
+              }).queryKey,
+            });
+          },
+        );
         void queryClient.invalidateQueries({
           queryKey: listUserToolApprovalSettingsQuery({}).queryKey,
         });
@@ -2725,7 +2823,12 @@ export function useChatMessaging(
               ...getAuthHeaders(),
             },
             body: JSON.stringify(
-              buildContinueStreamBody({ messageId, decision, approvalIds }),
+              buildContinueStreamBody({
+                messageId,
+                decision,
+                approvalIds,
+                itemDecisions,
+              }),
             ),
           },
         );

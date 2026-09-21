@@ -2723,6 +2723,31 @@ msgid "common.yes"
 msgstr "Sí"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
+msgid "delegatedTaskApproval.childMissing"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
+msgid "delegatedTaskApproval.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
+msgid "delegatedTaskApproval.itemTitle"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
+msgid "delegatedTaskApproval.title"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
+msgid "delegatedTaskApproval.unnamedTask"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/pages/DesktopSidecarSetupPage.tsx
 msgid "desktopSidecar.setup.architecture.aarch64"
 msgstr "ARM de 64 bits"
@@ -3231,6 +3256,7 @@ msgid "mcp.callback.openSettings"
 msgstr "Abrir configuración"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
 #: src/components/ui/Message/McpToolApprovalCard.tsx
 msgid "mcpApproval.alwaysAllowDisabled"
 msgstr "Bloqueado: tu organización requiere confirmación cada vez que se ejecuta esta herramienta."
@@ -3241,6 +3267,7 @@ msgstr "Bloqueado: tu organización requiere confirmación cada vez que se ejecu
 #~ msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
 #: src/components/ui/Message/McpToolApprovalCard.tsx
 msgid "mcpApproval.openWorldWarning"
 msgstr ""
@@ -4738,18 +4765,73 @@ msgid "sidecar.indexing.upgrade"
 msgstr "Actualiza Desktop Sidecar para configurar la indexación."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/TaskPlanApprovalCard.tsx
+msgid "taskPlanApproval.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskPlanApprovalCard.tsx
+msgid "taskPlanApproval.itemTitle"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskPlanApprovalCard.tsx
+msgid "taskPlanApproval.runMode.async"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskPlanApprovalCard.tsx
+msgid "taskPlanApproval.title"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskPlanApprovalCard.tsx
+msgid "taskPlanApproval.unnamedTask"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalDecisionActions.tsx
+msgid "toolApproval.allowAll"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/OriginApprovalLink.tsx
+msgid "toolApproval.coveredByParent"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalDecisionActions.tsx
+msgid "toolApproval.denyAll"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/McpToolApprovalCard.tsx
 msgid "toolApproval.genericDescription"
 msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/McpToolApprovalCard.tsx
-msgid "toolApproval.genericDescriptionMany"
+msgid "toolApproval.genericTitle"
 msgstr ""
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
-msgid "toolApproval.genericTitle"
+#: src/components/ui/Message/ApprovalDecisionActions.tsx
+msgid "toolApproval.staged.allowed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalDecisionActions.tsx
+msgid "toolApproval.staged.denied"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalDecisionActions.tsx
+msgid "toolApproval.withdraw"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalDecisionActions.tsx
+msgid "toolApproval.withdraw.hint"
 msgstr ""
 
 #. js-lingui-explicit-id

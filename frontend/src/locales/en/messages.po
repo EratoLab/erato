@@ -2723,6 +2723,31 @@ msgid "common.yes"
 msgstr "Yes"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
+msgid "delegatedTaskApproval.childMissing"
+msgstr "The run this decision covers was not recorded."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
+msgid "delegatedTaskApproval.description"
+msgstr "{itemCount, plural, one {It stopped at a tool call it needs permission for. The response continues once you decide.} other {Each one stopped at a tool call it needs permission for. The response continues once all of them are decided.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
+msgid "delegatedTaskApproval.itemTitle"
+msgstr "Allow this task to make the call?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
+msgid "delegatedTaskApproval.title"
+msgstr "{itemCount, plural, one {A task is waiting on your decision} other {Tasks are waiting on your decision}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
+msgid "delegatedTaskApproval.unnamedTask"
+msgstr "A task this response started"
+
+#. js-lingui-explicit-id
 #: src/pages/DesktopSidecarSetupPage.tsx
 msgid "desktopSidecar.setup.architecture.aarch64"
 msgstr "ARM 64-bit"
@@ -3231,6 +3256,7 @@ msgid "mcp.callback.openSettings"
 msgstr "Open settings"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
 #: src/components/ui/Message/McpToolApprovalCard.tsx
 msgid "mcpApproval.alwaysAllowDisabled"
 msgstr "Locked: your organization requires confirmation each time this tool runs."
@@ -3241,6 +3267,7 @@ msgstr "Locked: your organization requires confirmation each time this tool runs
 #~ msgstr "View input parameters"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
 #: src/components/ui/Message/McpToolApprovalCard.tsx
 msgid "mcpApproval.openWorldWarning"
 msgstr "This tool may send data to an external service."
@@ -4738,19 +4765,74 @@ msgid "sidecar.indexing.upgrade"
 msgstr "Update the desktop sidecar to configure indexing."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
-msgid "toolApproval.genericDescription"
-msgstr "This turn is waiting on your decision to continue."
+#: src/components/ui/Message/TaskPlanApprovalCard.tsx
+msgid "taskPlanApproval.description"
+msgstr "{itemCount, plural, one {The assistant planned this sub-task. Declining it is refused to the assistant and the response continues without it.} other {The assistant planned these sub-tasks. Decide each one; the ones you decline are refused and the response continues without them.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskPlanApprovalCard.tsx
+msgid "taskPlanApproval.itemTitle"
+msgstr "Run this task?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskPlanApprovalCard.tsx
+msgid "taskPlanApproval.runMode.async"
+msgstr "Answers separately, after this reply"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskPlanApprovalCard.tsx
+msgid "taskPlanApproval.title"
+msgstr "{itemCount, plural, one {Run this task?} other {Run these tasks?}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskPlanApprovalCard.tsx
+msgid "taskPlanApproval.unnamedTask"
+msgstr "Task {position}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalDecisionActions.tsx
+msgid "toolApproval.allowAll"
+msgstr "Allow all"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/OriginApprovalLink.tsx
+msgid "toolApproval.coveredByParent"
+msgstr "Decide this in the chat that started the task"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalDecisionActions.tsx
+msgid "toolApproval.denyAll"
+msgstr "Deny all"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/McpToolApprovalCard.tsx
-msgid "toolApproval.genericDescriptionMany"
-msgstr "This turn is waiting on several decisions. Allowing or denying applies to all of them."
+msgid "toolApproval.genericDescription"
+msgstr "{openItemCount, plural, one {This response is waiting on your decision to continue.} other {This response is waiting on several decisions. Allowing or denying applies to all of them.}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/McpToolApprovalCard.tsx
 msgid "toolApproval.genericTitle"
 msgstr "A decision is needed in this chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalDecisionActions.tsx
+msgid "toolApproval.staged.allowed"
+msgstr "Allowed — sent once every item is decided"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalDecisionActions.tsx
+msgid "toolApproval.staged.denied"
+msgstr "Denied — sent once every item is decided"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalDecisionActions.tsx
+msgid "toolApproval.withdraw"
+msgstr "Withdraw"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalDecisionActions.tsx
+msgid "toolApproval.withdraw.hint"
+msgstr "Withdrawing denies everything still open; the assistant answers with what it has."
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallInput.tsx

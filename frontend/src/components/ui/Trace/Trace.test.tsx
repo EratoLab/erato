@@ -1,5 +1,6 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -39,6 +40,23 @@ const toolUsePart = (status: "success" | "error" = "success"): ContentPart => ({
   ended_at: null,
 });
 
+const delegationToolUsePart = (): ContentPart =>
+  ({
+    content_type: "tool_use",
+    status: "success",
+    tool_call_id: "call-delegate",
+    tool_name: "delegate_task",
+    input: { task: "count the figures" },
+    output: {
+      status: "completed",
+      delegate_chat_id: "child-chat-7",
+      truncated: false,
+    },
+    progress_message: null,
+    started_at: null,
+    ended_at: null,
+  }) as unknown as ContentPart;
+
 const renderTrace = (
   parts: ContentPart[],
   overrides: {
@@ -51,16 +69,18 @@ const renderTrace = (
   });
 
   return render(
-    <I18nProvider i18n={i18n}>
-      <Trace
-        parts={parts as Parameters<typeof Trace>[0]["parts"]}
-        isStreaming={false}
-        hasLaterContent={false}
-        renderMarkdown={(text) => <span>{text}</span>}
-        durationMs={null}
-        toolApprovalStatuses={overrides.toolApprovalStatuses}
-      />
-    </I18nProvider>,
+    <QueryClientProvider client={new QueryClient()}>
+      <I18nProvider i18n={i18n}>
+        <Trace
+          parts={parts as Parameters<typeof Trace>[0]["parts"]}
+          isStreaming={false}
+          hasLaterContent={false}
+          renderMarkdown={(text) => <span>{text}</span>}
+          durationMs={null}
+          toolApprovalStatuses={overrides.toolApprovalStatuses}
+        />
+      </I18nProvider>
+    </QueryClientProvider>,
   );
 };
 
@@ -127,5 +147,27 @@ describe("Trace — masked mode (cold-load / done state)", () => {
 
     expect(screen.getByText("Denied")).toBeInTheDocument();
     expect(screen.queryByText("Failed")).not.toBeInTheDocument();
+  });
+
+  it("puts a decision recorded on the child's chat beside the step that dispatched it", () => {
+    // A delegated decision names the child it was taken for, which is the only
+    // id shared with the slot once the parent's call id has been rewritten.
+    renderTrace([delegationToolUsePart()], {
+      toolApprovalStatuses: { "child-chat-7": "approved" },
+    });
+
+    expect(screen.getByText("Approved")).toBeInTheDocument();
+  });
+
+  it("prefers the call's own decision over the child's", () => {
+    renderTrace([delegationToolUsePart()], {
+      toolApprovalStatuses: {
+        "call-delegate": "denied",
+        "child-chat-7": "approved",
+      },
+    });
+
+    expect(screen.getByText("Denied")).toBeInTheDocument();
+    expect(screen.queryByText("Approved")).not.toBeInTheDocument();
   });
 });

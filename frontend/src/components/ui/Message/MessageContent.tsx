@@ -33,6 +33,7 @@ import {
   SyntaxHighlightedCode,
   useCodeBlockSurfaceStyle,
 } from "./SyntaxHighlightedCode";
+import { approvalStopState } from "./approvalItems";
 
 import type { ToolApprovalStatus } from "../Trace/Trace";
 import type { HostCardCodeBlockProps } from "@/config/componentRegistry";
@@ -658,6 +659,23 @@ const extractReferencedEratoFileIds = (text: string): Set<string> => {
   return fileIds;
 };
 
+/**
+ * Every id a decision part can be found by. The generated schema loses the type
+ * of the optional ones, so they are read through a narrowing accessor.
+ */
+const decisionKeys = (part: ContentPart): string[] => {
+  const decided = part as unknown as {
+    tool_call_id?: string;
+    approval_id?: string | null;
+    child_chat_id?: string | null;
+  };
+  return [
+    decided.tool_call_id,
+    decided.approval_id,
+    decided.child_chat_id,
+  ].filter((key): key is string => typeof key === "string" && key.length > 0);
+};
+
 export const MessageContent = memo(function MessageContent({
   content,
   messageId,
@@ -684,11 +702,21 @@ export const MessageContent = memo(function MessageContent({
   >(
     () =>
       content.reduce<Record<string, ToolApprovalStatus>>((statuses, part) => {
-        if (part.content_type === "tool_approval") {
-          statuses[part.tool_call_id] = "approved";
-        } else if (part.content_type === "tool_rejection") {
-          statuses[part.tool_call_id] = "denied";
+        if (
+          part.content_type !== "tool_approval" &&
+          part.content_type !== "tool_rejection"
+        ) {
+          return statuses;
         }
+        const status =
+          part.content_type === "tool_approval" ? "approved" : "denied";
+        // Under every id the step that should show the decision may carry: the
+        // gated call, the approval the decision answered, or the child chat it
+        // was taken on. A parked child's slot and its approval share an id; a
+        // plan item's do not.
+        decisionKeys(part).forEach((key) => {
+          statuses[key] = status;
+        });
         return statuses;
       }, {}),
     [content],
@@ -1336,12 +1364,18 @@ export const MessageContent = memo(function MessageContent({
         }
 
         if (part.content_type === "tool_approval_request" && messageId) {
+          // Only the parts BELOW this one answer it: a chained re-park re-asks
+          // under the ids its own predecessor already settled, so the request's
+          // position is what tells the two stops apart. Which is also why the
+          // key is positional — the two parts share a tool call id.
+          const stop = approvalStopState(part, content.slice(index + 1));
           return (
             <McpToolApprovalCard
-              key={`tool-approval-${part.tool_call_id}`}
+              key={`tool-approval-${index}`}
               messageId={messageId}
               request={part}
-              resolution={toolApprovalStatuses[part.tool_call_id] ?? null}
+              openItems={stop.open}
+              resolution={stop.resolution}
             />
           );
         }
