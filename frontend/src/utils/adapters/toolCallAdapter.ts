@@ -1,4 +1,7 @@
-import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  ContentPart,
+  ToolCallStatus,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
  * Interface representing a tool call for UI display
@@ -6,7 +9,7 @@ import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 export interface UiToolCall {
   id: string;
   name: string;
-  status: "success" | "error" | "in_progress";
+  status: ToolCallStatus;
   input?: unknown;
   output?: unknown;
   progressMessage?: string;

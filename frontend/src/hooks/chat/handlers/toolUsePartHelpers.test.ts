@@ -69,6 +69,48 @@ describe("insertProposedToolUse", () => {
 });
 
 describe("applyToolUseUpdate", () => {
+  it("streams preparing snapshots in one row, then replaces them with executable arguments and the result", () => {
+    const progress = (input: unknown, bytes: number) =>
+      ({
+        ...update("draft", 0, null),
+        status: "preparing",
+        input,
+        progress: bytes,
+      }) as unknown as MessageSubmitStreamingResponseToolCallUpdate;
+    let content = insertProposedToolUse([], proposed("draft", 0));
+    content = applyToolUseUpdate(content, progress('{"title":"', 10));
+    content = applyToolUseUpdate(content, progress('{"title":"Hello', 15));
+    expect(content).toHaveLength(1);
+    expect(content[0]).toMatchObject({
+      status: "preparing",
+      input: '{"title":"Hello',
+      progress: 15,
+    });
+    content = applyToolUseUpdate(content, {
+      ...update("draft", 0, null),
+      status: "in_progress",
+      input: { title: "Hello" },
+    } as unknown as MessageSubmitStreamingResponseToolCallUpdate);
+    expect(content[0]).toMatchObject({
+      status: "in_progress",
+      input: { title: "Hello" },
+    });
+    expect(content[0]).not.toHaveProperty("progress");
+    content = applyToolUseUpdate(
+      content,
+      update("draft", 0, { draft_id: "draft" }),
+    );
+    const complete = content;
+    content = applyToolUseUpdate(content, progress('{"title":"Hello', 15));
+    expect(content).toBe(complete);
+    expect(content).toHaveLength(1);
+    expect(content[0]).toMatchObject({
+      status: "success",
+      input: { title: "Hello" },
+      output: { draft_id: "draft" },
+    });
+  });
+
   it("settles two in-flight calls by id, whichever finishes first", () => {
     let content: ContentPart[] = [];
     content = insertProposedToolUse(content, proposed("call-a", 0));

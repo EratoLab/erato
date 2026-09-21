@@ -64,6 +64,9 @@ use crate::services::prompt_guardrails::{
 };
 use crate::services::sentry::capture_report;
 use crate::services::template_rendering::contexts::chat_provider_headers::ChatProviderHeadersContext;
+use crate::services::tool_arguments::{
+    ToolArgumentStreams, tool_call_content_index, upsert_tool_use, without_preparing_tools,
+};
 use crate::state::{AppState, ChatProviderConfigWithId};
 use axum::extract::{Path, State};
 use axum::http::HeaderMap;
@@ -525,6 +528,7 @@ pub struct MessageSubmitStreamingResponseClientToolCall {
 #[serde(rename_all = "snake_case")]
 #[allow(dead_code)]
 pub enum ToolCallStatus {
+    Preparing,
     InProgress,
     Success,
     Error,
@@ -1357,6 +1361,7 @@ fn streaming_event_to_sse(event: &StreamingEvent) -> Result<Event, Report> {
             output,
         } => {
             let status = match status {
+                BgToolCallStatus::Preparing => ToolCallStatus::Preparing,
                 BgToolCallStatus::InProgress => ToolCallStatus::InProgress,
                 BgToolCallStatus::Success => ToolCallStatus::Success,
                 BgToolCallStatus::Error => ToolCallStatus::Error,
@@ -3687,7 +3692,7 @@ async fn commit_message_content_mid_turn(
         policy,
         subject,
         &assistant_message_id,
-        content.to_vec(),
+        without_preparing_tools(content),
     )
     .await
     {
@@ -3857,9 +3862,10 @@ async fn settle_delegation_slot<
         ),
     };
     let tool_error = matches!(status, ToolCallStatus::Error).then(|| response_text.clone());
-    // A reserved slot settles in place; everything else appends
-    // where it always did.
-    let settled_index = reserved.unwrap_or(content.len());
+    // Settle the execution slot or the earlier argument-generation slot;
+    // providers without argument chunks still append here.
+    let settled_index =
+        reserved.unwrap_or_else(|| tool_call_content_index(content, &tool_call.call_id));
     let settled = ContentPart::ToolUse(ToolUse {
         tool_call_id: tool_call.call_id.clone(),
         status: message_status,
@@ -3877,6 +3883,7 @@ async fn settle_delegation_slot<
     // left reading "working" for a child that has finished.
     match reserved {
         Some(index) => content[index] = settled,
+        None if settled_index < content.len() => content[settled_index] = settled,
         None => content.push(settled),
     }
     if reserved.is_some() {
@@ -3939,6 +3946,61 @@ async fn settle_delegation_slot<
         call_id: tool_call.call_id.clone(),
         content: response_text,
     })
+}
+
+/// Preparation and execution share an identity, but only `client_tool_call`
+/// authorizes a host executor. These updates are display-only on both SSE paths.
+#[allow(clippy::too_many_arguments)]
+async fn send_tool_generation_update<
+    MSG: SendAsSseEvent + From<MessageSubmitStreamingResponseToolCallUpdate>,
+>(
+    message_id: Uuid,
+    content_index: usize,
+    call: &genai::chat::ToolCall,
+    status: ToolCallStatus,
+    progress: Option<f64>,
+    task: Option<&Arc<StreamingTask>>,
+    tx: &Sender<Result<Event, Report>>,
+) -> Result<(), Report> {
+    if let Some(task) = task {
+        let bg_status = match status {
+            ToolCallStatus::Preparing => BgToolCallStatus::Preparing,
+            ToolCallStatus::InProgress => BgToolCallStatus::InProgress,
+            ToolCallStatus::Success => BgToolCallStatus::Success,
+            ToolCallStatus::Error => BgToolCallStatus::Error,
+        };
+        send_background_event(
+            task,
+            StreamingEvent::ToolCallUpdate {
+                message_id,
+                content_index,
+                tool_call_id: call.call_id.clone(),
+                tool_name: call.fn_name.clone(),
+                input: Some(call.fn_arguments.clone()),
+                status: bg_status,
+                progress_message: None,
+                progress,
+                total: None,
+                output: None,
+            },
+            "broadcast tool generation progress",
+        )
+        .await;
+    }
+    let message: MSG = MessageSubmitStreamingResponseToolCallUpdate {
+        message_id,
+        content_index,
+        tool_call_id: call.call_id.clone(),
+        tool_name: call.fn_name.clone(),
+        input: Some(call.fn_arguments.clone()),
+        status,
+        progress_message: None,
+        progress,
+        total: None,
+        output: None,
+    }
+    .into();
+    send_generation_event(&message, tx.clone()).await
 }
 
 /// Tell the client what a reserved task slot is doing.
@@ -4389,7 +4451,7 @@ async fn stream_generate_chat_completion<
     let mut tool_call_parent_observation_ids: HashMap<String, String> = HashMap::new();
     let mut tool_call_started_at: HashMap<String, String> = HashMap::new();
 
-    'loop_call_turns: loop {
+    let completion = 'loop_call_turns: loop {
         current_turn += 1;
         tracing::debug!("Starting chat completion turn {}", current_turn);
         let chat_provider_metric_label = chat_provider_id.unwrap_or("unknown");
@@ -4604,36 +4666,52 @@ async fn stream_generate_chat_completion<
                 break 'pop_calls;
             }
             current_tool_call_count += 1;
+            let tool_index =
+                tool_call_content_index(&current_message_content, &unfinished_tool_call.call_id);
+            let was_preparing = matches!(current_message_content.get(tool_index), Some(ContentPart::ToolUse(part)) if part.status == MessageToolCallStatus::Preparing);
             // Emit event for tool call proposed
             {
                 let unfinished_tool_call = unfinished_tool_call.clone();
                 let tool_call_start_time = now_timestamp();
                 tool_call_started_at
                     .insert(unfinished_tool_call.call_id.clone(), tool_call_start_time);
-                let proposed_call = MessageSubmitStreamingResponseToolCallProposed {
-                    message_id: assistant_message_id,
-                    content_index: current_message_content.len(),
-                    tool_call_id: unfinished_tool_call.call_id.clone(),
-                    tool_name: unfinished_tool_call.fn_name.clone(),
-                    input: Some(unfinished_tool_call.fn_arguments.clone()),
-                };
-                // Forward to streaming_task if present
-                if let Some(task) = streaming_task {
-                    send_background_event(
-                        task,
-                        StreamingEvent::ToolCallProposed {
-                            message_id: assistant_message_id,
-                            content_index: current_message_content.len(),
-                            tool_call_id: unfinished_tool_call.call_id,
-                            tool_name: unfinished_tool_call.fn_name,
-                            input: Some(unfinished_tool_call.fn_arguments),
-                        },
-                        "broadcast proposed tool call",
+                if was_preparing {
+                    send_tool_generation_update::<MSG>(
+                        assistant_message_id,
+                        tool_index,
+                        &unfinished_tool_call,
+                        ToolCallStatus::InProgress,
+                        None,
+                        streaming_task,
+                        &tx,
                     )
-                    .await;
+                    .await?;
+                } else {
+                    let proposed_call = MessageSubmitStreamingResponseToolCallProposed {
+                        message_id: assistant_message_id,
+                        content_index: tool_index,
+                        tool_call_id: unfinished_tool_call.call_id.clone(),
+                        tool_name: unfinished_tool_call.fn_name.clone(),
+                        input: Some(unfinished_tool_call.fn_arguments.clone()),
+                    };
+                    // Forward to streaming_task if present
+                    if let Some(task) = streaming_task {
+                        send_background_event(
+                            task,
+                            StreamingEvent::ToolCallProposed {
+                                message_id: assistant_message_id,
+                                content_index: tool_index,
+                                tool_call_id: unfinished_tool_call.call_id,
+                                tool_name: unfinished_tool_call.fn_name,
+                                input: Some(unfinished_tool_call.fn_arguments),
+                            },
+                            "broadcast proposed tool call",
+                        )
+                        .await;
+                    }
+                    let message: MSG = proposed_call.into();
+                    send_generation_event(&message, tx.clone()).await?;
                 }
-                let message: MSG = proposed_call.into();
-                send_generation_event(&message, tx.clone()).await?;
             }
 
             // Budget refusal, decided above and emitted here so it lands
@@ -4662,18 +4740,21 @@ async fn stream_generate_chat_completion<
                     Some(error_message),
                 )
                 .await;
-                current_message_content.push(ContentPart::ToolUse(ToolUse {
-                    tool_call_id: unfinished_tool_call.call_id.clone(),
-                    status: MessageToolCallStatus::Error,
-                    tool_name: unfinished_tool_call.fn_name.clone(),
-                    input: Some(unfinished_tool_call.fn_arguments.clone()),
-                    progress_message: None,
-                    progress: None,
-                    total: None,
-                    output: Some(json!({ "status": "rejected", "error": error_message })),
-                    started_at: Some(tool_call_started),
-                    ended_at: Some(now_timestamp()),
-                }));
+                upsert_tool_use(
+                    &mut current_message_content,
+                    ToolUse {
+                        tool_call_id: unfinished_tool_call.call_id.clone(),
+                        status: MessageToolCallStatus::Error,
+                        tool_name: unfinished_tool_call.fn_name.clone(),
+                        input: Some(unfinished_tool_call.fn_arguments.clone()),
+                        progress_message: None,
+                        progress: None,
+                        total: None,
+                        output: Some(json!({ "status": "rejected", "error": error_message })),
+                        started_at: Some(tool_call_started),
+                        ended_at: Some(now_timestamp()),
+                    },
+                );
                 current_turn_tool_responses.push((
                     batch_position,
                     genai::chat::ToolResponse {
@@ -4707,18 +4788,21 @@ async fn stream_generate_chat_completion<
                     Some(&error_message),
                 )
                 .await;
-                current_message_content.push(ContentPart::ToolUse(ToolUse {
-                    tool_call_id: unfinished_tool_call.call_id.clone(),
-                    status: MessageToolCallStatus::Error,
-                    tool_name: unfinished_tool_call.fn_name.clone(),
-                    input: Some(unfinished_tool_call.fn_arguments.clone()),
-                    progress_message: None,
-                    progress: None,
-                    total: None,
-                    output: Some(json!({ "status": "error", "error": error_message })),
-                    started_at: Some(tool_call_started),
-                    ended_at: Some(now_timestamp()),
-                }));
+                upsert_tool_use(
+                    &mut current_message_content,
+                    ToolUse {
+                        tool_call_id: unfinished_tool_call.call_id.clone(),
+                        status: MessageToolCallStatus::Error,
+                        tool_name: unfinished_tool_call.fn_name.clone(),
+                        input: Some(unfinished_tool_call.fn_arguments.clone()),
+                        progress_message: None,
+                        progress: None,
+                        total: None,
+                        output: Some(json!({ "status": "error", "error": error_message })),
+                        started_at: Some(tool_call_started),
+                        ended_at: Some(now_timestamp()),
+                    },
+                );
                 current_turn_tool_responses.push((
                     batch_position,
                     genai::chat::ToolResponse {
@@ -4831,7 +4915,7 @@ async fn stream_generate_chat_completion<
                     matches!(status, ToolCallStatus::Error).then(|| response_text.clone());
                 let update_event = MessageSubmitStreamingResponseToolCallUpdate {
                     message_id: assistant_message_id,
-                    content_index: current_message_content.len(),
+                    content_index: tool_index,
                     tool_call_id: unfinished_tool_call.call_id.clone(),
                     tool_name: unfinished_tool_call.fn_name.clone(),
                     input: Some(unfinished_tool_call.fn_arguments.clone()),
@@ -4846,7 +4930,7 @@ async fn stream_generate_chat_completion<
                         task,
                         StreamingEvent::ToolCallUpdate {
                             message_id: assistant_message_id,
-                            content_index: current_message_content.len(),
+                            content_index: tool_index,
                             tool_call_id: unfinished_tool_call.call_id.clone(),
                             tool_name: unfinished_tool_call.fn_name.clone(),
                             input: Some(unfinished_tool_call.fn_arguments.clone()),
@@ -4862,18 +4946,21 @@ async fn stream_generate_chat_completion<
                 }
                 let message: MSG = update_event.into();
                 send_generation_event(&message, tx.clone()).await?;
-                current_message_content.push(ContentPart::ToolUse(ToolUse {
-                    tool_call_id: unfinished_tool_call.call_id.clone(),
-                    status: message_status,
-                    tool_name: unfinished_tool_call.fn_name.clone(),
-                    input: Some(unfinished_tool_call.fn_arguments.clone()),
-                    progress_message: None,
-                    progress: None,
-                    total: None,
-                    output: Some(output_value.clone()),
-                    started_at: Some(tool_call_started),
-                    ended_at: Some(now_timestamp()),
-                }));
+                upsert_tool_use(
+                    &mut current_message_content,
+                    ToolUse {
+                        tool_call_id: unfinished_tool_call.call_id.clone(),
+                        status: message_status,
+                        tool_name: unfinished_tool_call.fn_name.clone(),
+                        input: Some(unfinished_tool_call.fn_arguments.clone()),
+                        progress_message: None,
+                        progress: None,
+                        total: None,
+                        output: Some(output_value.clone()),
+                        started_at: Some(tool_call_started),
+                        ended_at: Some(now_timestamp()),
+                    },
+                );
                 persist_otel_tool_call(
                     tracing_client.as_ref(),
                     &unfinished_tool_call,
@@ -4915,7 +5002,7 @@ async fn stream_generate_chat_completion<
                     .unwrap_or_else(now_timestamp);
                 let tool_call_parent_observation_id =
                     tool_call_parent_observation_ids.remove(&unfinished_tool_call.call_id);
-                let slot = current_message_content.len();
+                let slot = tool_index;
 
                 // The task route never settles here. A call either starts now
                 // or waits for a free slot, and the join after this loop is
@@ -4972,18 +5059,21 @@ async fn stream_generate_chat_completion<
                     // Reserved whether or not it starts now: the slot is what
                     // keeps a batch in call order, and a queued one is already
                     // worth showing — it names no child because none exists.
-                    current_message_content.push(ContentPart::ToolUse(ToolUse {
-                        tool_call_id: unfinished_tool_call.call_id.clone(),
-                        status: MessageToolCallStatus::InProgress,
-                        tool_name: unfinished_tool_call.fn_name.clone(),
-                        input: Some(unfinished_tool_call.fn_arguments.clone()),
-                        progress_message: None,
-                        progress: None,
-                        total: None,
-                        output: Some(crate::services::delegation::queued_placeholder_output()),
-                        started_at: Some(tool_call_started),
-                        ended_at: None,
-                    }));
+                    upsert_tool_use(
+                        &mut current_message_content,
+                        ToolUse {
+                            tool_call_id: unfinished_tool_call.call_id.clone(),
+                            status: MessageToolCallStatus::InProgress,
+                            tool_name: unfinished_tool_call.fn_name.clone(),
+                            input: Some(unfinished_tool_call.fn_arguments.clone()),
+                            progress_message: None,
+                            progress: None,
+                            total: None,
+                            output: Some(crate::services::delegation::queued_placeholder_output()),
+                            started_at: Some(tool_call_started),
+                            ended_at: None,
+                        },
+                    );
                     let mut announced =
                         Some(crate::services::delegation::queued_placeholder_output());
                     match delegation.as_ref() {
@@ -5092,7 +5182,7 @@ async fn stream_generate_chat_completion<
             if !available_mcp_tools_by_name.contains_key(unfinished_tool_call.fn_name.as_str()) {
                 let call_id = unfinished_tool_call.call_id.clone();
                 let tool_name = unfinished_tool_call.fn_name.clone();
-                let content_index = current_message_content.len();
+                let content_index = tool_index;
                 let tool_input = unfinished_tool_call.fn_arguments.clone();
                 let tool_call_started = tool_call_started_at
                     .remove(&call_id)
@@ -5105,18 +5195,21 @@ async fn stream_generate_chat_completion<
                     // answer the model with an error so it can recover.
                     let response_text =
                         "Client tool execution is unavailable for this request.".to_string();
-                    current_message_content.push(ContentPart::ToolUse(ToolUse {
-                        tool_call_id: call_id.clone(),
-                        status: MessageToolCallStatus::Error,
-                        tool_name: tool_name.clone(),
-                        input: Some(tool_input.clone()),
-                        progress_message: None,
-                        progress: None,
-                        total: None,
-                        output: Some(json!({ "status": "error", "error": response_text })),
-                        started_at: Some(tool_call_started),
-                        ended_at: Some(now_timestamp()),
-                    }));
+                    upsert_tool_use(
+                        &mut current_message_content,
+                        ToolUse {
+                            tool_call_id: call_id.clone(),
+                            status: MessageToolCallStatus::Error,
+                            tool_name: tool_name.clone(),
+                            input: Some(tool_input.clone()),
+                            progress_message: None,
+                            progress: None,
+                            total: None,
+                            output: Some(json!({ "status": "error", "error": response_text })),
+                            started_at: Some(tool_call_started),
+                            ended_at: Some(now_timestamp()),
+                        },
+                    );
                     persist_otel_tool_call(
                         tracing_client.as_ref(),
                         &unfinished_tool_call,
@@ -5381,18 +5474,21 @@ async fn stream_generate_chat_completion<
                     warn_and_capture_error("send best-effort client tool result SSE event", &error);
                 }
 
-                current_message_content.push(ContentPart::ToolUse(ToolUse {
-                    tool_call_id: call_id.clone(),
-                    status: message_status,
-                    tool_name: tool_name.clone(),
-                    input: Some(tool_input),
-                    progress_message: None,
-                    progress: None,
-                    total: None,
-                    output: Some(output_value.clone()),
-                    started_at: Some(tool_call_started),
-                    ended_at: Some(now_timestamp()),
-                }));
+                upsert_tool_use(
+                    &mut current_message_content,
+                    ToolUse {
+                        tool_call_id: call_id.clone(),
+                        status: message_status,
+                        tool_name: tool_name.clone(),
+                        input: Some(tool_input),
+                        progress_message: None,
+                        progress: None,
+                        total: None,
+                        output: Some(output_value.clone()),
+                        started_at: Some(tool_call_started),
+                        ended_at: Some(now_timestamp()),
+                    },
+                );
                 persist_otel_tool_call(
                     tracing_client.as_ref(),
                     &unfinished_tool_call,
@@ -5503,18 +5599,21 @@ async fn stream_generate_chat_completion<
                 let tool_call_started = tool_call_started_at
                     .remove(&unfinished_tool_call.call_id)
                     .unwrap_or_else(now_timestamp);
-                current_message_content.push(ContentPart::ToolUse(ToolUse {
-                    tool_call_id: unfinished_tool_call.call_id.clone(),
-                    status: MessageToolCallStatus::Error,
-                    tool_name: unfinished_tool_call.fn_name.clone(),
-                    input: Some(unfinished_tool_call.fn_arguments.clone()),
-                    progress_message: None,
-                    progress: None,
-                    total: None,
-                    output: Some(json!({ "status": "rejected", "error": error_message })),
-                    started_at: Some(tool_call_started),
-                    ended_at: Some(now_timestamp()),
-                }));
+                upsert_tool_use(
+                    &mut current_message_content,
+                    ToolUse {
+                        tool_call_id: unfinished_tool_call.call_id.clone(),
+                        status: MessageToolCallStatus::Error,
+                        tool_name: unfinished_tool_call.fn_name.clone(),
+                        input: Some(unfinished_tool_call.fn_arguments.clone()),
+                        progress_message: None,
+                        progress: None,
+                        total: None,
+                        output: Some(json!({ "status": "rejected", "error": error_message })),
+                        started_at: Some(tool_call_started),
+                        ended_at: Some(now_timestamp()),
+                    },
+                );
                 current_turn_tool_responses.push((
                     batch_position,
                     genai::chat::ToolResponse {
@@ -5544,7 +5643,7 @@ async fn stream_generate_chat_completion<
                 progress_rx,
                 MessageSubmitStreamingResponseToolCallUpdate {
                     message_id: assistant_message_id,
-                    content_index: current_message_content.len(),
+                    content_index: tool_index,
                     tool_call_id: unfinished_tool_call.call_id.clone(),
                     tool_name: unfinished_tool_call.fn_name.clone(),
                     input: None,
@@ -5731,7 +5830,7 @@ async fn stream_generate_chat_completion<
                             .await;
                             let update_event = MessageSubmitStreamingResponseToolCallUpdate {
                                 message_id: assistant_message_id,
-                                content_index: current_message_content.len(),
+                                content_index: tool_index,
                                 tool_call_id: unfinished_tool_call.call_id.clone(),
                                 tool_name: unfinished_tool_call.fn_name.clone(),
                                 input: Some(unfinished_tool_call.fn_arguments.clone()),
@@ -5746,7 +5845,7 @@ async fn stream_generate_chat_completion<
                                     task,
                                     StreamingEvent::ToolCallUpdate {
                                         message_id: assistant_message_id,
-                                        content_index: current_message_content.len(),
+                                        content_index: tool_index,
                                         tool_call_id: unfinished_tool_call.call_id.clone(),
                                         tool_name: unfinished_tool_call.fn_name.clone(),
                                         input: Some(unfinished_tool_call.fn_arguments.clone()),
@@ -5765,18 +5864,21 @@ async fn stream_generate_chat_completion<
                             let tool_call_started = tool_call_started_at
                                 .remove(&unfinished_tool_call.call_id)
                                 .unwrap_or_else(now_timestamp);
-                            current_message_content.push(ContentPart::ToolUse(ToolUse {
-                                tool_call_id: unfinished_tool_call.call_id.clone(),
-                                status: MessageToolCallStatus::Error,
-                                tool_name: unfinished_tool_call.fn_name.clone(),
-                                input: Some(unfinished_tool_call.fn_arguments.clone()),
-                                progress_message: None,
-                                progress: None,
-                                total: None,
-                                output: Some(output_value),
-                                started_at: Some(tool_call_started),
-                                ended_at: Some(now_timestamp()),
-                            }));
+                            upsert_tool_use(
+                                &mut current_message_content,
+                                ToolUse {
+                                    tool_call_id: unfinished_tool_call.call_id.clone(),
+                                    status: MessageToolCallStatus::Error,
+                                    tool_name: unfinished_tool_call.fn_name.clone(),
+                                    input: Some(unfinished_tool_call.fn_arguments.clone()),
+                                    progress_message: None,
+                                    progress: None,
+                                    total: None,
+                                    output: Some(output_value),
+                                    started_at: Some(tool_call_started),
+                                    ended_at: Some(now_timestamp()),
+                                },
+                            );
                             current_turn_tool_responses.push((
                                 batch_position,
                                 genai::chat::ToolResponse {
@@ -5810,7 +5912,7 @@ async fn stream_generate_chat_completion<
                         let output_value_for_event = output_value.clone();
                         let proposed_call = MessageSubmitStreamingResponseToolCallUpdate {
                             message_id: assistant_message_id,
-                            content_index: current_message_content.len(),
+                            content_index: tool_index,
                             tool_call_id: finished_tool_call.call_id.clone(),
                             tool_name: finished_tool_call.fn_name.clone(),
                             input: Some(finished_tool_call.fn_arguments.clone()),
@@ -5826,7 +5928,7 @@ async fn stream_generate_chat_completion<
                                 task,
                                 StreamingEvent::ToolCallUpdate {
                                     message_id: assistant_message_id,
-                                    content_index: current_message_content.len(),
+                                    content_index: tool_index,
                                     tool_call_id: finished_tool_call.call_id,
                                     tool_name: finished_tool_call.fn_name,
                                     input: Some(finished_tool_call.fn_arguments),
@@ -5846,18 +5948,21 @@ async fn stream_generate_chat_completion<
                     // Add to current message content
                     {
                         let finished_tool_call = unfinished_tool_call.clone();
-                        current_message_content.push(ContentPart::ToolUse(ToolUse {
-                            tool_call_id: finished_tool_call.call_id,
-                            status: MessageToolCallStatus::Success,
-                            tool_name: finished_tool_call.fn_name,
-                            input: Some(finished_tool_call.fn_arguments),
-                            progress_message: None,
-                            progress: None,
-                            total: None,
-                            output: output_value.clone(),
-                            started_at: Some(tool_call_started.clone()),
-                            ended_at: Some(now_timestamp()),
-                        }));
+                        upsert_tool_use(
+                            &mut current_message_content,
+                            ToolUse {
+                                tool_call_id: finished_tool_call.call_id,
+                                status: MessageToolCallStatus::Success,
+                                tool_name: finished_tool_call.fn_name,
+                                input: Some(finished_tool_call.fn_arguments),
+                                progress_message: None,
+                                progress: None,
+                                total: None,
+                                output: output_value.clone(),
+                                started_at: Some(tool_call_started.clone()),
+                                ended_at: Some(now_timestamp()),
+                            },
+                        );
                         if !file_content_parts.is_empty() {
                             current_message_content.extend(file_content_parts);
                         }
@@ -5885,7 +5990,7 @@ async fn stream_generate_chat_completion<
                     .await;
                     let update_event = MessageSubmitStreamingResponseToolCallUpdate {
                         message_id: assistant_message_id,
-                        content_index: current_message_content.len(),
+                        content_index: tool_index,
                         tool_call_id: unfinished_tool_call.call_id.clone(),
                         tool_name: unfinished_tool_call.fn_name.clone(),
                         input: Some(unfinished_tool_call.fn_arguments.clone()),
@@ -5900,7 +6005,7 @@ async fn stream_generate_chat_completion<
                             task,
                             StreamingEvent::ToolCallUpdate {
                                 message_id: assistant_message_id,
-                                content_index: current_message_content.len(),
+                                content_index: tool_index,
                                 tool_call_id: unfinished_tool_call.call_id.clone(),
                                 tool_name: unfinished_tool_call.fn_name.clone(),
                                 input: Some(unfinished_tool_call.fn_arguments.clone()),
@@ -5919,18 +6024,21 @@ async fn stream_generate_chat_completion<
                     let tool_call_started = tool_call_started_at
                         .remove(&unfinished_tool_call.call_id)
                         .unwrap_or_else(now_timestamp);
-                    current_message_content.push(ContentPart::ToolUse(ToolUse {
-                        tool_call_id: unfinished_tool_call.call_id.clone(),
-                        status: MessageToolCallStatus::Error,
-                        tool_name: unfinished_tool_call.fn_name.clone(),
-                        input: Some(unfinished_tool_call.fn_arguments.clone()),
-                        progress_message: None,
-                        progress: None,
-                        total: None,
-                        output: Some(output_value),
-                        started_at: Some(tool_call_started),
-                        ended_at: Some(now_timestamp()),
-                    }));
+                    upsert_tool_use(
+                        &mut current_message_content,
+                        ToolUse {
+                            tool_call_id: unfinished_tool_call.call_id.clone(),
+                            status: MessageToolCallStatus::Error,
+                            tool_name: unfinished_tool_call.fn_name.clone(),
+                            input: Some(unfinished_tool_call.fn_arguments.clone()),
+                            progress_message: None,
+                            progress: None,
+                            total: None,
+                            output: Some(output_value),
+                            started_at: Some(tool_call_started),
+                            ended_at: Some(now_timestamp()),
+                        },
+                    );
                     current_turn_tool_responses.push((
                         batch_position,
                         genai::chat::ToolResponse {
@@ -6185,7 +6293,10 @@ async fn stream_generate_chat_completion<
                     matches!(status, ToolCallStatus::Error).then(|| response_text.clone());
                 let update_event = MessageSubmitStreamingResponseToolCallUpdate {
                     message_id: assistant_message_id,
-                    content_index: current_message_content.len(),
+                    content_index: tool_call_content_index(
+                        &current_message_content,
+                        &pending_wait.tool_call.call_id,
+                    ),
                     tool_call_id: pending_wait.tool_call.call_id.clone(),
                     tool_name: pending_wait.tool_call.fn_name.clone(),
                     input: Some(pending_wait.tool_call.fn_arguments.clone()),
@@ -6200,7 +6311,10 @@ async fn stream_generate_chat_completion<
                         task,
                         StreamingEvent::ToolCallUpdate {
                             message_id: assistant_message_id,
-                            content_index: current_message_content.len(),
+                            content_index: tool_call_content_index(
+                                &current_message_content,
+                                &pending_wait.tool_call.call_id,
+                            ),
                             tool_call_id: pending_wait.tool_call.call_id.clone(),
                             tool_name: pending_wait.tool_call.fn_name.clone(),
                             input: Some(pending_wait.tool_call.fn_arguments.clone()),
@@ -6216,18 +6330,21 @@ async fn stream_generate_chat_completion<
                 }
                 let message: MSG = update_event.into();
                 send_generation_event(&message, tx.clone()).await?;
-                current_message_content.push(ContentPart::ToolUse(ToolUse {
-                    tool_call_id: pending_wait.tool_call.call_id.clone(),
-                    status: message_status,
-                    tool_name: pending_wait.tool_call.fn_name.clone(),
-                    input: Some(pending_wait.tool_call.fn_arguments.clone()),
-                    progress_message: None,
-                    progress: None,
-                    total: None,
-                    output: Some(output_value.clone()),
-                    started_at: Some(pending_wait.tool_call_started),
-                    ended_at: Some(now_timestamp()),
-                }));
+                upsert_tool_use(
+                    &mut current_message_content,
+                    ToolUse {
+                        tool_call_id: pending_wait.tool_call.call_id.clone(),
+                        status: message_status,
+                        tool_name: pending_wait.tool_call.fn_name.clone(),
+                        input: Some(pending_wait.tool_call.fn_arguments.clone()),
+                        progress_message: None,
+                        progress: None,
+                        total: None,
+                        output: Some(output_value.clone()),
+                        started_at: Some(pending_wait.tool_call_started),
+                        ended_at: Some(now_timestamp()),
+                    },
+                );
                 persist_otel_tool_call(
                     tracing_client.as_ref(),
                     &pending_wait.tool_call,
@@ -6446,6 +6563,7 @@ async fn stream_generate_chat_completion<
 
         let mut inner_stream = chat_stream.stream;
         let turn_content_start_index = current_message_content.len();
+        let mut argument_streams = ToolArgumentStreams::default();
         let mut current_turn_streamed_text = String::new();
         let mut current_turn_streamed_reasoning = String::new();
         // Await until stream end
@@ -6716,6 +6834,55 @@ async fn stream_generate_chat_completion<
                         let message: MSG = delta.into();
                         send_generation_event(&message, tx.clone()).await?;
                     }
+                    ChatStreamEvent::ToolCallChunk(chunk) => {
+                        first_response_elapsed
+                            .get_or_insert_with(|| provider_request_start.elapsed());
+                        if let Some(progress) = argument_streams.observe(
+                            &chunk.tool_call,
+                            &mut current_message_content,
+                            Instant::now(),
+                        ) {
+                            if progress.first {
+                                if let Some(task) = streaming_task {
+                                    send_background_event(
+                                        task,
+                                        StreamingEvent::ToolCallProposed {
+                                            message_id: assistant_message_id,
+                                            content_index: progress.index,
+                                            tool_call_id: chunk.tool_call.call_id.clone(),
+                                            tool_name: chunk.tool_call.fn_name.clone(),
+                                            input: None,
+                                        },
+                                        "broadcast preparing tool call",
+                                    )
+                                    .await;
+                                }
+                                let message: MSG = MessageSubmitStreamingResponseToolCallProposed {
+                                    message_id: assistant_message_id,
+                                    content_index: progress.index,
+                                    tool_call_id: chunk.tool_call.call_id.clone(),
+                                    tool_name: chunk.tool_call.fn_name.clone(),
+                                    input: None,
+                                }
+                                .into();
+                                send_generation_event(&message, tx.clone()).await?;
+                            }
+                            let preview_call = genai::chat::ToolCall {
+                                fn_arguments: progress.preview,
+                                ..chunk.tool_call
+                            };
+                            send_tool_generation_update::<MSG>(
+                                assistant_message_id,
+                                progress.index,
+                                &preview_call,
+                                ToolCallStatus::Preparing,
+                                Some(progress.bytes as f64),
+                                streaming_task,
+                                &tx,
+                            )
+                            .await?;
+                        }
+                    }
                     ChatStreamEvent::ThoughtSignatureChunk(StreamChunk { content }) => {
                         if !content.is_empty() {
                             captured_reasoning_item_encrypted_content.push(content);
@@ -6728,7 +6895,6 @@ async fn stream_generate_chat_completion<
                         stream_end = Some(end);
                     }
                     ChatStreamEvent::Start => {}
-                    _ => {}
                 },
                 Err(failure) => {
                     if let ProviderStreamFailure::Provider(err) = &failure
@@ -7314,7 +7480,8 @@ async fn stream_generate_chat_completion<
                 "Non-streaming chat generation failed without a parseable provider error"
             ));
         }
-    }
+    };
+    completion.map(|(content, metadata)| (without_preparing_tools(&content), metadata))
 }
 
 /// Mark the task's outcome as parked when the finalized message stops on an

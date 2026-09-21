@@ -16,6 +16,7 @@ describe("ToolCallItem", () => {
     ["success", "Success", "bg-theme-success-bg", "text-theme-success-fg"],
     ["error", "Error", "bg-theme-error-bg", "text-theme-error-fg"],
     ["in_progress", "In Progress", "bg-theme-info-bg", "text-theme-info-fg"],
+    ["preparing", "Preparing", "bg-theme-info-bg", "text-theme-info-fg"],
   ] as const)(
     "uses semantic status tokens for the %s expanded row pill",
     (status, label, backgroundClass, foregroundClass) => {

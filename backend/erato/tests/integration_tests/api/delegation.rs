@@ -1314,8 +1314,8 @@ async fn insert_fixed_delegate_assistant(
     id
 }
 
-/// The terminal `tool_call_update` for a tool; in-progress frames carry the
-/// live trace, never the result.
+/// The terminal `tool_call_update` for a tool; preparation and execution
+/// progress frames never carry the result.
 fn find_tool_call_update_output(events: &[Event], tool_name: &str) -> Value {
     events
         .iter()
@@ -1323,7 +1323,7 @@ fn find_tool_call_update_output(events: &[Event], tool_name: &str) -> Value {
         .find(|json| {
             json["message_type"] == "tool_call_update"
                 && json["tool_name"] == tool_name
-                && json["status"] != "in_progress"
+                && matches!(json["status"].as_str(), Some("success" | "error"))
         })
         .map(|json| json["output"].clone())
         .expect("expected a terminal tool_call_update for the tool")
@@ -1343,6 +1343,7 @@ fn delegation_progress_frames(events: &[Event]) -> Vec<Value> {
             json["message_type"] == "tool_call_update"
                 && json["tool_name"] == "delegate_to_assistant"
                 && json["status"] == "in_progress"
+                && json["output"]["localTrace"].is_object()
         })
         .collect()
 }
@@ -3626,7 +3627,7 @@ fn terminal_tool_call_updates(events: &[Event], tool_name: &str) -> Vec<Value> {
         .filter(|json| {
             json["message_type"] == "tool_call_update"
                 && json["tool_name"] == tool_name
-                && json["status"] != "in_progress"
+                && matches!(json["status"].as_str(), Some("success" | "error"))
         })
         .collect()
 }
@@ -8127,7 +8128,10 @@ async fn a_task_settles_at_the_index_it_announced(pool: Pool<Postgres>) {
             .and_then(|value| value["content_index"].as_u64())
     };
     let proposed = index_of("tool_call_proposed").expect("the call is announced");
-    let updated = index_of("tool_call_update").expect("the call settles");
+    let updated = terminal_tool_call_updates(&events, "delegate_task")
+        .first()
+        .and_then(|value| value["content_index"].as_u64())
+        .expect("the call settles");
     assert_eq!(
         proposed, updated,
         "a task call must settle at the slot it reserved"
@@ -8250,7 +8254,7 @@ async fn two_tasks_of_one_batch_overlap_and_answer_in_call_order(pool: Pool<Post
             value["message_type"] == "tool_call_update"
                 && value["tool_name"] == "delegate_task"
                 // Progress frames ride the same event; only the settle counts.
-                && value["status"] != "in_progress"
+                && matches!(value["status"].as_str(), Some("success" | "error"))
         })
         .filter_map(|value| value["tool_call_id"].as_str().map(str::to_string))
         .collect();
@@ -8457,7 +8461,9 @@ async fn a_batch_beyond_max_parallel_waits_for_a_free_slot(pool: Pool<Postgres>)
     );
     assert_eq!(parts.len(), 3, "one slot per call, still: {parts:?}");
     assert!(
-        parts.iter().all(|part| part["status"] != "in_progress"),
+        parts
+            .iter()
+            .all(|part| matches!(part["status"].as_str(), Some("success" | "error"))),
         "every slot settles before the turn ends: {parts:?}"
     );
     let child_ids: std::collections::HashSet<String> = parts
@@ -8632,7 +8638,9 @@ async fn stopping_a_batch_settles_the_queued_calls_without_a_child(pool: Pool<Po
 
     assert_eq!(parts.len(), 2, "both calls keep their slots: {parts:?}");
     assert!(
-        parts.iter().all(|part| part["status"] != "in_progress"),
+        parts
+            .iter()
+            .all(|part| matches!(part["status"].as_str(), Some("success" | "error"))),
         "a stopped turn leaves nothing running: {parts:?}"
     );
     for part in &parts {
@@ -8723,7 +8731,9 @@ async fn a_batch_cut_short_by_the_tool_call_cap_still_settles_its_children(pool:
         "the launched task keeps its slot even though the turn failed"
     );
     assert!(
-        parts.iter().all(|part| part["status"] != "in_progress"),
+        parts
+            .iter()
+            .all(|part| matches!(part["status"].as_str(), Some("success" | "error"))),
         "no child may be abandoned mid-flight by the cap: {parts:?}"
     );
     assert!(

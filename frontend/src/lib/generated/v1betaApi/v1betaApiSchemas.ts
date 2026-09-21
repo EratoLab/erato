@@ -3071,7 +3071,7 @@ export type ToolApprovalDecision =
   | "approve_always"
   | "reject_always";
 
-export type ToolCallStatus = "in_progress" | "success" | "error";
+export type ToolCallStatus = "preparing" | "in_progress" | "success" | "error";
 
 export type ToolUse = {
   /**

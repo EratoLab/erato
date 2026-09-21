@@ -125,7 +125,7 @@ impl DelegationTraceCollector {
             } => {
                 let index = *self.step_by_tool_call.get(tool_call_id)?;
                 let (status, change) = match status {
-                    ToolCallStatus::InProgress => {
+                    ToolCallStatus::Preparing | ToolCallStatus::InProgress => {
                         (DelegationTraceStepStatus::Running, TraceChange::Progress)
                     }
                     ToolCallStatus::Success => {

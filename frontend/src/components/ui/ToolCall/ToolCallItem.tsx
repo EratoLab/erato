@@ -52,6 +52,12 @@ export const ToolCallItem: React.FC<ToolCallItemProps> = ({
       bgColor: "bg-theme-info-bg",
       label: t`In Progress`,
     },
+    preparing: {
+      icon: <ResolvedIcon iconId={inProgressIconId} className="size-3" />,
+      color: "text-theme-info-fg",
+      bgColor: "bg-theme-info-bg",
+      label: t({ id: "trace.tool.preparing", message: "Preparing" }),
+    },
   };
 
   const config = statusConfig[toolCall.status];

@@ -16,7 +16,7 @@ const buildActivityFingerprint = (parts: TraceablePart[]): string =>
     .map((part) =>
       part.content_type === "reasoning"
         ? `r:${(part.text ?? "").length}`
-        : `t:${part.tool_call_id}:${part.status}`,
+        : `t:${part.tool_call_id}:${part.status}:${part.progress ?? ""}:${part.progress_message ?? ""}`,
     )
     .join("|");
 
@@ -25,7 +25,8 @@ const buildActivityFingerprint = (parts: TraceablePart[]): string =>
  * enough to warrant showing a "Thinking…" placeholder step at the tail of the
  * timeline. The timer resets every time the parts fingerprint changes — so
  * during a busy stream of deltas it never fires, but after a tool call
- * completes (or any other lull) the placeholder appears.
+ * completes (or any other lull) the placeholder appears. A preparing or
+ * executing tool already explains the wait and does not need this placeholder.
  *
  * Only active during streaming AND while the trace is the live writer; for
  * cold-load and once text has begun, this always returns `false`.
@@ -37,17 +38,22 @@ export const useThinkingGap = (
   thresholdMs: number = DEFAULT_THINKING_GAP_MS,
 ): boolean => {
   const fingerprint = useMemo(() => buildActivityFingerprint(parts), [parts]);
+  const hasActiveTool = parts.some(
+    (part) =>
+      part.content_type === "tool_use" &&
+      (part.status === "preparing" || part.status === "in_progress"),
+  );
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    if (!isStreaming || hasLaterContent) {
+    if (!isStreaming || hasLaterContent || hasActiveTool) {
       setShow(false);
       return;
     }
     setShow(false);
     const id = window.setTimeout(() => setShow(true), thresholdMs);
     return () => window.clearTimeout(id);
-  }, [fingerprint, isStreaming, hasLaterContent, thresholdMs]);
+  }, [fingerprint, isStreaming, hasLaterContent, hasActiveTool, thresholdMs]);
 
   return show;
 };
