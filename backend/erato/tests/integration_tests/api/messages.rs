@@ -1,6 +1,7 @@
 //! Message submission and streaming API tests.
 
 mod client_submissions;
+mod tool_arguments;
 
 use axum::Router;
 use axum::http;
@@ -3867,11 +3868,14 @@ async fn fetch_assistant_tool_use_parts(
         .collect()
 }
 
-fn tool_call_update_events(events: &[crate::test_utils::Event]) -> Vec<Value> {
+fn terminal_tool_call_update_events(events: &[crate::test_utils::Event]) -> Vec<Value> {
     events
         .iter()
         .filter_map(|event| serde_json::from_str::<Value>(&event.data).ok())
-        .filter(|json| json["message_type"] == "tool_call_update")
+        .filter(|json| {
+            json["message_type"] == "tool_call_update"
+                && matches!(json["status"].as_str(), Some("success" | "error"))
+        })
         .collect()
 }
 
@@ -3954,11 +3958,11 @@ async fn test_client_action_parallel_proposals_first_wins(pool: Pool<Postgres>) 
 
     // SSE: both calls get a terminal update — success for the first emitted
     // call, the already-proposed error for the second.
-    let updates = tool_call_update_events(&events);
+    let updates = terminal_tool_call_update_events(&events);
     assert_eq!(
         updates.len(),
         2,
-        "Expected one tool_call_update per proposal, got: {updates:?}"
+        "Expected one terminal tool_call_update per proposal, got: {updates:?}"
     );
     assert_eq!(updates[0]["tool_call_id"], "call_first");
     assert_eq!(updates[0]["status"], "success");
@@ -4087,11 +4091,11 @@ async fn test_client_action_invalid_proposal_then_valid_retry_succeeds(pool: Poo
 
     let events = submit_under_reply_facet(&server).await;
 
-    let updates = tool_call_update_events(&events);
+    let updates = terminal_tool_call_update_events(&events);
     assert_eq!(
         updates.len(),
         2,
-        "Expected one tool_call_update per proposal, got: {updates:?}"
+        "Expected one terminal tool_call_update per proposal, got: {updates:?}"
     );
     assert_eq!(updates[0]["tool_call_id"], "call_invalid");
     assert_eq!(updates[0]["status"], "error");

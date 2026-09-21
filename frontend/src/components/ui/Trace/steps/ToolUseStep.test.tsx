@@ -37,6 +37,31 @@ const isFolded = (node: HTMLElement): boolean =>
 describe("ToolUseStep sidecar trace", () => {
   afterEach(() => useSidecarLocalTraceStore.setState({ traces: {} }));
 
+  it("labels argument generation as Preparing and shows incomplete input only in details", () => {
+    render(
+      <ToolUseStep
+        part={{
+          ...PART,
+          tool_name: "submit_draft",
+          status: "preparing",
+          input: '{"title":"Hel' as unknown as ToolUse["input"],
+        }}
+        status="running"
+        isStreaming
+        isCollapsed={false}
+        isLastStep
+      />,
+    );
+    expect(screen.getByText("Preparing")).toBeInTheDocument();
+    const input = screen.getByText(/Input Parameters/i);
+    expect(isFolded(input)).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: /submit_draft/ }));
+    expect(isFolded(input)).toBe(false);
+    expect(
+      screen.getByText('{"title":"Hel', { exact: false }),
+    ).toBeInTheDocument();
+  });
+
   it("streams on-device steps in as visible rows, without tool-level payload JSON", () => {
     renderRunningStep();
     act(() => {

@@ -1554,6 +1554,7 @@ pub enum StreamingEvent {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolCallStatus {
+    Preparing,
     InProgress,
     Success,
     Error,

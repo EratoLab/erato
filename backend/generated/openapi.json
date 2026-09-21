@@ -9661,6 +9661,7 @@
       "ToolCallStatus": {
         "type": "string",
         "enum": [
+          "preparing",
           "in_progress",
           "success",
           "error"

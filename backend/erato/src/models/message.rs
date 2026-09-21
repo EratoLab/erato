@@ -338,6 +338,8 @@ impl fmt::Display for MessageRole {
 #[derive(Serialize, Deserialize, ToSchema, Clone, Debug, PartialEq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolCallStatus {
+    /// The provider is still generating arguments; the tool has not run.
+    Preparing,
     #[default]
     InProgress,
     Success,

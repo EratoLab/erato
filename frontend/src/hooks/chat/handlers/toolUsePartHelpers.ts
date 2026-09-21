@@ -35,9 +35,8 @@ const buildToolUsePart = (data: {
 /**
  * Insert a freshly-proposed tool_use part into the content array at its
  * `content_index`. Treated as a new "in_progress" entry — the wire-level
- * `tool_call_proposed` event has no status field, but the canonical schema
- * only knows the three real statuses, so we seed with "in_progress" and let
- * the next `tool_call_update` refine it.
+ * `tool_call_proposed` event has no status field. The next
+ * `tool_call_update` refines it to preparation, execution or completion.
  *
  * If a tool_use with the same tool_call_id already exists (duplicate event),
  * the array is returned unchanged.
@@ -88,7 +87,11 @@ export function applyToolUseUpdate(
 
   if (existingIndex >= 0) {
     const existing = updated[existingIndex] as ToolUseContentPart;
-    if (responseData.progress != null && existing.status !== "in_progress") {
+    if (
+      responseData.progress != null &&
+      existing.status !== "in_progress" &&
+      existing.status !== "preparing"
+    ) {
       return currentContent;
     }
     updated[existingIndex] = buildToolUsePart({
