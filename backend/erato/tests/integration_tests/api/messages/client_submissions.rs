@@ -274,3 +274,179 @@ async fn ordinary_client_tools_still_continue_after_success(pool: Pool<Postgres>
             .any(|event| event["output"].get("submission").is_some())
     );
 }
+
+/// Client files must survive the full tool loop, completion SSE and persisted
+/// history; a JSON-only reference cannot drive the attachment renderer.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn client_tool_attachments_are_linked_streamed_and_persisted(pool: Pool<Postgres>) {
+    use axum_test::multipart::{MultipartForm, Part};
+
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &["call_files"]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[(
+                "call_files",
+                "retrieve_files",
+                json!({}),
+            )]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&["call_files"], &[]));
+        mock_llm_sse_response(
+            then,
+            build_openai_text_streaming_response(&["Retrieved your files."]),
+        );
+    });
+    let (mut config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    config.client_tools.tools.insert(
+        "files".into(),
+        ClientToolConfig {
+            name: "retrieve_files".into(),
+            parameters: json!({"type":"object","properties":{}}).to_string(),
+            ..Default::default()
+        },
+    );
+    config.facets.tool_call_allowlist = vec!["client/retrieve_files".into()];
+    let state = test_app_state(config, pool).await;
+    let chat_id = seed_origin_chat(&state.db).await;
+    let server = app_server(state.clone());
+    // Standalone uploads exercise creation of the chat association. Include a
+    // document that parses, one that cannot parse, and an image.
+    let mut ids = Vec::new();
+    for (name, mime, bytes) in [
+        ("note.txt", "text/plain", b"ATTACHMENT TEXT".to_vec()),
+        ("broken.pdf", "application/pdf", b"not a valid PDF".to_vec()),
+        (
+            "image.png",
+            "image/png",
+            read_integration_test_file_bytes("image_1.png"),
+        ),
+    ] {
+        let upload_url = if name == "note.txt" {
+            format!("/api/v1beta/me/files?chat_id={chat_id}")
+        } else {
+            "/api/v1beta/me/files".to_string()
+        };
+        let uploaded = server
+            .post(&upload_url)
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .multipart(
+                MultipartForm::new()
+                    .add_part("file", Part::bytes(bytes).file_name(name).mime_type(mime)),
+            )
+            .await;
+        uploaded.assert_status_ok();
+        ids.push(
+            uploaded.json::<Value>()["files"][0]["id"]
+                .as_str()
+                .unwrap()
+                .to_string(),
+        );
+    }
+    let request = json!({"existing_chat_id":chat_id,"user_message":"Retrieve the files"});
+    let submit = async {
+        server
+            .post("/api/v1beta/me/messages/submitstream")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&request)
+            .await
+    };
+    let client = async {
+        loop {
+            if let Some(task) = state.background_tasks.get_task(&chat_id).await {
+                for event in task.get_event_history().await {
+                    if let StreamingEvent::ClientToolCall {
+                        message_id,
+                        tool_call_id,
+                        ..
+                    } = event
+                    {
+                        let response = server.post("/api/v1beta/me/messages/clienttoolresult")
+                            .with_bearer_token(TEST_JWT_TOKEN)
+                            .json(&json!({
+                                "chat_id": chat_id, "message_id": message_id, "tool_call_id": tool_call_id,
+                                "result": null,
+                                "file_upload_ids": [ids[0], ids[1], ids[2], ids[0]],
+                            })).await;
+                        response.assert_status_ok();
+                        assert_eq!(response.json::<Value>()["delivered"], true);
+                        return;
+                    }
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    };
+    let (response, ()) = tokio::time::timeout(Duration::from_secs(30), async {
+        tokio::join!(submit, client)
+    })
+    .await
+    .expect("file tool loop did not finish");
+    response.assert_status_ok();
+    let events: Vec<Value> = parse_sse_events(&response)
+        .into_iter()
+        .filter_map(|event| serde_json::from_str(&event.data).ok())
+        .collect();
+    let completed = events
+        .iter()
+        .find(|event| event["message_type"] == "assistant_message_completed")
+        .expect("completed event");
+    let message_id = Uuid::parse_str(completed["message_id"].as_str().unwrap()).unwrap();
+    let saved = Messages::find_by_id(message_id)
+        .one(&state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let listing = server
+        .get(&format!("/api/v1beta/chats/{chat_id}/messages"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    listing.assert_status_ok();
+    let listing: Value = listing.json();
+    let reloaded = listing["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["id"] == message_id.to_string())
+        .unwrap();
+    for content in [
+        &completed["content"],
+        &completed["message"]["content"],
+        &saved.raw_message["content"],
+        &reloaded["content"],
+    ] {
+        let parts = content.as_array().expect("message content");
+        let pointers: Vec<_> = parts
+            .iter()
+            .filter(|part| part.get("file_upload_id").is_some())
+            .collect();
+        assert_eq!(pointers.len(), 3, "each file is attached once: {content}");
+        for (index, id) in ids.iter().enumerate() {
+            assert_eq!(pointers[index]["file_upload_id"], *id);
+            assert_eq!(
+                pointers[index]["content_type"],
+                if index == 2 {
+                    "image_file_pointer"
+                } else {
+                    "text_file_pointer"
+                }
+            );
+        }
+    }
+    for id in ids {
+        assert!(
+            chat_file_uploads::Entity::find_by_id((chat_id, Uuid::parse_str(&id).unwrap()))
+                .one(&state.db)
+                .await
+                .unwrap()
+                .is_some()
+        );
+    }
+}

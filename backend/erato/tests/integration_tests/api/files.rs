@@ -1188,9 +1188,10 @@ async fn test_client_tool_files_extract_only_authorized_uploads(pool: Pool<Postg
         .await;
     response.assert_status_ok();
     assert_eq!(response.json::<Value>()["delivered"], true);
-    let ClientToolOutcome::Result(result) = receiver.await.unwrap() else {
+    let ClientToolOutcome::Result(result, file_ids) = receiver.await.unwrap() else {
         panic!("expected a successful file result")
     };
+    assert_eq!(file_ids, vec![Uuid::parse_str(own_id).unwrap()]);
     assert_eq!(result["result"]["body"], "Conversation body");
     assert!(
         result["files"][0]["text"]
@@ -1264,9 +1265,10 @@ async fn client_tool_file_result(
         .await;
     response.assert_status_ok();
     assert_eq!(response.json::<Value>()["delivered"], true);
-    let ClientToolOutcome::Result(result) = receiver.await.unwrap() else {
+    let ClientToolOutcome::Result(result, file_ids) = receiver.await.unwrap() else {
         panic!("expected a successful file result")
     };
+    assert_eq!(file_ids.len(), result["files"].as_array().unwrap().len());
     result
 }
 

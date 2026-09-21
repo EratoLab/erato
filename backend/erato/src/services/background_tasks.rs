@@ -1837,12 +1837,12 @@ mod tests {
         let delivery = task
             .deliver_client_tool_result(
                 "call-1",
-                ClientToolOutcome::Result(serde_json::json!({ "ok": true })),
+                ClientToolOutcome::Result(serde_json::json!({ "ok": true }), vec![]),
             )
             .await;
         assert_eq!(delivery, ClientToolDelivery::Delivered);
         match rx.try_recv() {
-            Ok(ClientToolOutcome::Result(value)) => {
+            Ok(ClientToolOutcome::Result(value, _)) => {
                 assert_eq!(value, serde_json::json!({ "ok": true }))
             }
             other => panic!("expected the delivered result, got {other:?}"),

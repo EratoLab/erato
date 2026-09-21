@@ -11,7 +11,16 @@ import type { ClientToolValidationIssue } from "@/lib/generated/v1betaApi/v1beta
 export type { ClientToolValidationIssue } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 export type ClientToolExecutionResult =
-  | { ok: true; result: unknown; fileUploadIds?: string[] }
+  | {
+      ok: true;
+      result: unknown;
+      /**
+       * Uploaded files to attach to the assistant message with rich previews.
+       * The server authorizes the IDs and also extracts their text for the model.
+       * Upload through the ordinary files API before returning these IDs.
+       */
+      fileUploadIds?: string[];
+    }
   | {
       ok: false;
       error: string;

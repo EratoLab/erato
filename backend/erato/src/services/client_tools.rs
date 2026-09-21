@@ -111,14 +111,14 @@ impl SubmissionPolicy {
     pub fn finish_after(&self, outcome: &ClientToolOutcome, attempt: u32) -> bool {
         matches!(
             outcome,
-            ClientToolOutcome::Result(_) | ClientToolOutcome::Cancelled { .. }
+            ClientToolOutcome::Result(..) | ClientToolOutcome::Cancelled { .. }
         ) || attempt >= self.max_attempts
     }
 
     pub fn annotate(&self, output: &mut Value, outcome: &ClientToolOutcome, attempt: u32) {
         let finished = self.finish_after(outcome, attempt);
         output["submission"] = json!({
-            "status": if matches!(outcome, ClientToolOutcome::Result(_)) { "accepted" }
+            "status": if matches!(outcome, ClientToolOutcome::Result(..)) { "accepted" }
                 else if finished { "failed" } else { "retry" },
             "attempts_remaining": if finished { 0 } else { self.max_attempts.saturating_sub(attempt) },
         });
@@ -378,10 +378,14 @@ pub fn select_client_tools<'a>(
 /// discovering it via a benign 404 on a late POST).
 #[derive(Debug, Clone)]
 pub enum ClientToolOutcome {
-    Result(Value),
+    /// JSON for the model plus separately authorized attachment IDs. Never
+    /// infer attachments from arbitrary fields inside the tool's JSON result.
+    Result(Value, Vec<sea_orm::prelude::Uuid>),
     Error(String),
     ValidationFailed(Vec<ClientToolValidationIssue>),
-    Cancelled { reason: String },
+    Cancelled {
+        reason: String,
+    },
 }
 
 impl ClientToolOutcome {
@@ -401,7 +405,13 @@ impl ClientToolOutcome {
             return Self::Error(error.as_str().unwrap_or("client tool failed").into());
         }
         match payload.get("result") {
-            Some(result) => Self::Result(result.clone()),
+            Some(result) => match payload.get("file_upload_ids") {
+                Some(ids) => match serde_json::from_value(ids.clone()) {
+                    Ok(ids) => Self::Result(result.clone(), ids),
+                    Err(_) => Self::Error("Invalid client tool file references".into()),
+                },
+                None => Self::Result(result.clone(), Vec::new()),
+            },
             None => Self::Error("client tool returned neither a result nor an error".into()),
         }
     }
@@ -451,7 +461,7 @@ mod tests {
         assert!(!issues[0].message.contains("large-artifact"));
         assert!(!policy.finish_after(&failure, 1));
         assert!(policy.finish_after(&failure, 3));
-        assert!(policy.finish_after(&ClientToolOutcome::Result(Value::Null), 1));
+        assert!(policy.finish_after(&ClientToolOutcome::Result(Value::Null, vec![]), 1));
         assert!(policy.finish_after(
             &ClientToolOutcome::Cancelled {
                 reason: "timeout".into()
@@ -514,7 +524,7 @@ mod tests {
         assert_eq!(issues[0].code, "unknown_reference");
         assert!(matches!(
             ClientToolOutcome::from_payload(&json!({"result":null})),
-            ClientToolOutcome::Result(Value::Null)
+            ClientToolOutcome::Result(Value::Null, _)
         ));
         assert!(matches!(
             ClientToolOutcome::from_payload(&json!({})),
@@ -522,6 +532,34 @@ mod tests {
         ));
         assert!(matches!(
             ClientToolOutcome::from_payload(&json!({"result":true,"validation_errors":{}})),
+            ClientToolOutcome::Error(_)
+        ));
+    }
+
+    #[test]
+    fn attachment_transport_preserves_ids_and_error_precedence() {
+        let id = sea_orm::prelude::Uuid::new_v4();
+        let mut payload = json!({"result": null, "file_upload_ids": [id]});
+        let ClientToolOutcome::Result(Value::Null, ids) = ClientToolOutcome::from_payload(&payload)
+        else {
+            panic!("explicit null can carry attachments")
+        };
+        assert_eq!(ids, vec![id]);
+        payload["error"] = json!("failed");
+        assert!(matches!(
+            ClientToolOutcome::from_payload(&payload),
+            ClientToolOutcome::Error(_)
+        ));
+        let ClientToolOutcome::Result(_, ids) =
+            ClientToolOutcome::from_payload(&json!({"result": {"file_upload_ids": [id]}}))
+        else {
+            panic!("JSON result")
+        };
+        assert!(ids.is_empty(), "nested JSON must not create attachments");
+        assert!(matches!(
+            ClientToolOutcome::from_payload(
+                &json!({"result": null, "file_upload_ids": ["invalid"]})
+            ),
             ClientToolOutcome::Error(_)
         ));
     }
