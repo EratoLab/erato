@@ -69,7 +69,7 @@ See [Scenarios Documentation](../infrastructure/k3d/erato-local/Scenarios.md) fo
 - **`basic`** - Default scenario for general testing
 - **`tight-budget`** - Budget enforcement testing with low limits
 - **`assistants`** - Tests for the assistants feature
-- **`approvals`** - Tests for a task child that parks on an approval-gated tool
+- **`approvals`** - Tests for parked approvals: a task child stopping on an approval-gated tool, and a planned batch stopped by the dispatch-approval policy
 
 ### Test File Naming Convention
 

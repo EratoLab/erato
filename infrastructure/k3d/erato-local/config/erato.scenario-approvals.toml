@@ -38,7 +38,9 @@ run_modes = ["wait", "async"]
 # `[delegation.tasks.approval]` is deliberately left at its default
 # `mode = "async_only"`: for a `wait` task that behaves as `never`, so a task the
 # model plans is dispatched without a plan approval and the only question the
-# turn raises is the child's own.
+# turn raises is the child's own. The `plan_gate` facet at the end of this file
+# overrides the mode per turn, which is how the same scenario also drives a
+# batch the policy stops before dispatch.
 #
 # A delegated child run carries no provider of its own, so the first entry here
 # is what both the origin chat and its delegate talk to; the mock server is the
@@ -85,7 +87,7 @@ K3D_TEST_SCENARIO = "approvals"
 # assistants scenario: /me/facets emits priority_order before the sorted
 # remainder, and alphabetically `plan` would win the first slot.
 [facets]
-priority_order = ["web_search", "plan"]
+priority_order = ["web_search", "plan", "plan_gate"]
 default_selected_facets = []
 
 [facets.facets.web_search]
@@ -104,3 +106,22 @@ display_name = "Plan & delegate"
 icon = "iconoir-strategy"
 tool_call_allowlist = ["erato/delegate_task", "mock_mcp_file/*"]
 disable_facet_prompt_template = true
+
+# The same planning route under the `plan` dispatch-approval mode, so one
+# scenario can drive both policies. A per-facet override rather than a second
+# scenario on purpose: the mode is per-deployment config, and a scenario of its
+# own would add a cluster switch and a CI matrix entry for what a facet
+# selection already expresses. Selecting this facet instead of `plan` is the
+# only difference between a batch that parks and the same batch that dispatches,
+# which is what makes the pair an A/B of the policy rather than of the prompt.
+#
+# `plan_min_tasks` is left at its default of 2, so a two-task batch is exactly at
+# the threshold.
+[facets.facets.plan_gate]
+display_name = "Plan & confirm"
+icon = "iconoir-strategy"
+tool_call_allowlist = ["erato/delegate_task", "mock_mcp_file/*"]
+disable_facet_prompt_template = true
+
+[facets.facets.plan_gate.delegation.approval]
+mode = "plan"

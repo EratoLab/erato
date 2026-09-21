@@ -481,6 +481,38 @@ const MIXED_PLAIN_TASK_CHILD_BRIEF: &str =
 
 const MIXED_GATED_TASK_CHILD_TRACE_PREFIX: &str = "MIXED-GATED-CHILD-CONTEXT";
 
+/// Typed into the origin chat by the plan-gate e2e: two awaited tasks in one
+/// batch, which is exactly `plan_min_tasks` and so the smallest plan the `plan`
+/// mode asks about.
+///
+/// ONE prompt drives every test of that file. The batch is identical in all of
+/// them and only the selected facet differs, so what the dispatch-approval
+/// policy changes is the only thing that can explain a different outcome — a
+/// second prompt per policy would have made the comparison about the prompt.
+const PLANNED_TASKS_PARENT_PROMPT: &str = "plan two probe tasks";
+
+/// The briefs the origin model writes into the two `delegate_task` calls, in
+/// this order. They are what the plan card's rows are told apart by, so a test
+/// can approve one task and decline the other without asking which row is
+/// which.
+const PLANNED_TASK_CHILD_BRIEF_A: &str = "Planned child brief A: report on the first planned step.";
+
+const PLANNED_TASK_CHILD_BRIEF_B: &str =
+    "Planned child brief B: report on the second planned step.";
+
+/// Neither planned child calls a tool: the file is about what happens before a
+/// child exists, and a child that answers in one turn is one fewer turn that
+/// can be slow.
+const PLANNED_TASK_CHILD_ANSWER_A: &str = "PLANNED-CHILD-A-ANSWER";
+const PLANNED_TASK_CHILD_ANSWER_B: &str = "PLANNED-CHILD-B-ANSWER";
+
+/// The origin answers a settled plan with its own tool trace rather than with
+/// prose, because the decision is only readable from the results the turn was
+/// resumed with: an approved task by its child's answer, a declined one by the
+/// refusal that took its place. A scripted sentence would say the same thing
+/// whatever the user decided.
+const PLANNED_TASKS_TRACE_PREFIX: &str = "PLANNED-TASKS-CONTEXT";
+
 fn build_delegation_child_answer_chunks() -> Vec<String> {
     [
         "CHILD-ANSWER",
@@ -996,6 +1028,88 @@ pub fn get_default_mocks() -> Vec<Mock> {
                 ],
                 delay_ms: 200,
                 ..Default::default()
+            }),
+        },
+        // The dispatch-approval policy's own probe: two awaited tasks in one
+        // batch, which under `plan` is a question and under the shipped
+        // `async_only` default is not. Both children answer in a single turn,
+        // so the only rules needed are one per brief.
+        Mock {
+            name: "PlannedTasksToolCalls".to_string(),
+            description: "Plans two awaited sub-tasks in one batch".to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: PLANNED_TASKS_PARENT_PROMPT.to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCalls(ToolCallsResponseConfig {
+                tool_calls: vec![
+                    ToolCallDef {
+                        tool_name: "delegate_task".to_string(),
+                        arguments: format!(
+                            "{{\"task\": \"{PLANNED_TASK_CHILD_BRIEF_A}\", \"expected_output\": \"One sentence.\"}}"
+                        ),
+                    },
+                    ToolCallDef {
+                        tool_name: "delegate_task".to_string(),
+                        arguments: format!(
+                            "{{\"task\": \"{PLANNED_TASK_CHILD_BRIEF_B}\", \"expected_output\": \"One sentence.\"}}"
+                        ),
+                    },
+                ],
+                delay_ms: 100,
+            }),
+        },
+        Mock {
+            name: "PlannedTaskChildAnswerA".to_string(),
+            description: "Answers the first planned sub-task".to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: PLANNED_TASK_CHILD_BRIEF_A.to_string(),
+            })],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec![
+                    PLANNED_TASK_CHILD_ANSWER_A.to_string(),
+                    ": the".to_string(),
+                    " first".to_string(),
+                    " step".to_string(),
+                    " is".to_string(),
+                    " done".to_string(),
+                    ".".to_string(),
+                ],
+                delay_ms: 200,
+                ..Default::default()
+            }),
+        },
+        Mock {
+            name: "PlannedTaskChildAnswerB".to_string(),
+            description: "Answers the second planned sub-task".to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: PLANNED_TASK_CHILD_BRIEF_B.to_string(),
+            })],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec![
+                    PLANNED_TASK_CHILD_ANSWER_B.to_string(),
+                    ": the".to_string(),
+                    " second".to_string(),
+                    " step".to_string(),
+                    " is".to_string(),
+                    " done".to_string(),
+                    ".".to_string(),
+                ],
+                delay_ms: 200,
+                ..Default::default()
+            }),
+        },
+        Mock {
+            name: "PlannedTasksAnswer".to_string(),
+            description: "Answers the origin chat with the results the settled plan left it"
+                .to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: PLANNED_TASKS_PARENT_PROMPT.to_string(),
+            })],
+            response: ResponseConfig::ToolTrace(ToolTraceResponseConfig {
+                prefix: PLANNED_TASKS_TRACE_PREFIX.to_string(),
+                delay_ms: 200,
             }),
         },
         Mock {
@@ -2258,6 +2372,101 @@ mod tests {
         }
     }
 
+    /// The plan-gate probe's four turns. The parent's answer is a trace, so the
+    /// assertion is that a declined task reaches the model as the refusal the
+    /// e2e reads out of the finished reply — under a scripted sentence the same
+    /// answer would appear whether the denial had been delivered or dropped.
+    #[test]
+    fn the_planned_tasks_probe_traces_the_decision_each_task_was_settled_with() {
+        use serde_json::json;
+
+        let child_system = "Answer the delegated probe task.";
+
+        let origin_turn = match_default_mocks(
+            json!([
+                {"role": "system", "content": "You are a helpful assistant"},
+                {"role": "user", "content": PLANNED_TASKS_PARENT_PROMPT},
+            ]),
+            None,
+        );
+        match origin_turn {
+            ResponseConfig::ToolCalls(config) => {
+                assert_eq!(config.tool_calls.len(), 2);
+                assert!(config
+                    .tool_calls
+                    .iter()
+                    .all(|call| call.tool_name == "delegate_task"));
+                assert!(config.tool_calls[0]
+                    .arguments
+                    .contains(PLANNED_TASK_CHILD_BRIEF_A));
+                assert!(config.tool_calls[1]
+                    .arguments
+                    .contains(PLANNED_TASK_CHILD_BRIEF_B));
+                // No `run_mode`: an awaited batch is what the shipped
+                // `async_only` default has nothing to ask about, and the whole
+                // A/B rests on both policies seeing the same batch.
+                assert!(config
+                    .tool_calls
+                    .iter()
+                    .all(|call| !call.arguments.contains("run_mode")));
+            }
+            other => panic!("origin turn matched {other:?}"),
+        }
+
+        for (brief, answer) in [
+            (PLANNED_TASK_CHILD_BRIEF_A, PLANNED_TASK_CHILD_ANSWER_A),
+            (PLANNED_TASK_CHILD_BRIEF_B, PLANNED_TASK_CHILD_ANSWER_B),
+        ] {
+            let child_turn = match_default_mocks(
+                json!([
+                    {"role": "system", "content": child_system},
+                    {"role": "user", "content": delegate_preamble_message()},
+                    {"role": "user", "content": brief},
+                ]),
+                None,
+            );
+            match child_turn {
+                ResponseConfig::Static(config) => {
+                    assert!(config.chunks.join("").starts_with(answer))
+                }
+                other => panic!("child turn for {brief} matched {other:?}"),
+            }
+        }
+
+        // One task approved, the other declined: the trace has to carry both,
+        // and the refusal verbatim, because that string is what the e2e reads
+        // off the finished reply.
+        let origin_after_partial_approval = match_default_mocks(
+            json!([
+                {"role": "system", "content": "You are a helpful assistant"},
+                {"role": "user", "content": PLANNED_TASKS_PARENT_PROMPT},
+                {"role": "assistant", "content": null, "tool_calls": [
+                    {"id": "call_plan_a", "type": "function", "function": {"name": "delegate_task", "arguments": "{}"}},
+                    {"id": "call_plan_b", "type": "function", "function": {"name": "delegate_task", "arguments": "{}"}},
+                ]},
+                {"role": "tool", "tool_call_id": "call_plan_a", "content": json!({
+                    "status": "completed",
+                    "result": format!("{PLANNED_TASK_CHILD_ANSWER_A}: the first step is done."),
+                    "truncated": false,
+                }).to_string()},
+                {"role": "tool", "tool_call_id": "call_plan_b", "content": "{\"status\":\"rejected\",\"error\":\"The user declined this task.\"}"},
+            ]),
+            None,
+        );
+        match origin_after_partial_approval {
+            ResponseConfig::Static(config) => {
+                let answer = config.chunks.join("");
+                assert!(answer.starts_with(&format!("{PLANNED_TASKS_TRACE_PREFIX}: ")));
+                assert!(answer.contains(PLANNED_TASK_CHILD_ANSWER_A));
+                assert!(
+                    answer.contains("The user declined this task."),
+                    "the refusal must survive the trace's per-result cap: {answer}"
+                );
+            }
+            other => panic!("origin answer after a partial approval matched {other:?}"),
+        }
+    }
+
     /// Every prompt of the `approvals` scenario's probes, against every other:
     /// matching is first-match substring over one shared mock list, so an
     /// overlap would silently let one probe answer another's turns.
@@ -2276,6 +2485,9 @@ mod tests {
             MIXED_TASKS_PARENT_PROMPT,
             MIXED_GATED_TASK_CHILD_BRIEF,
             MIXED_PLAIN_TASK_CHILD_BRIEF,
+            PLANNED_TASKS_PARENT_PROMPT,
+            PLANNED_TASK_CHILD_BRIEF_A,
+            PLANNED_TASK_CHILD_BRIEF_B,
         ];
         for (index, prompt) in prompts.iter().enumerate() {
             for (other_index, other) in prompts.iter().enumerate() {

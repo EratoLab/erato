@@ -42,6 +42,15 @@ decision can only have come from a task child. A turn with no facet selected
 reaches every authorized server, which is how the same scenario also drives a
 gated call the origin chat makes itself.
 
+It carries two planning facets rather than one. `plan` overrides nothing, so a
+turn under it runs the shipped global `[delegation.tasks.approval]` default
+`async_only`; `plan_gate` sets `mode = "plan"` through
+`[facets.facets.plan_gate.delegation.approval]`. The dispatch-approval policy is
+per-deployment configuration, and a second scenario for it would cost a cluster
+switch and a CI matrix entry, so the two facets express the two policies inside
+one scenario — selecting one or the other is then the only difference between a
+planned batch that parks and the same batch that dispatches.
+
 ### `many-models` - Model Selector Testing
 
 **Configuration File:** `config/erato.scenario-many-models.toml`
