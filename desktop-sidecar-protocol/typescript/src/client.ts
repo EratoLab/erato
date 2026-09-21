@@ -37,6 +37,10 @@ import {
   validateSidecarRestartV1Result,
   validateSidecarConfigureV1Params,
   validateSidecarConfigureV1Result,
+  validateSourcesListV1Params,
+  validateSourcesListV1Result,
+  validateSourcesGetFolderHierarchyV1Params,
+  validateSourcesGetFolderHierarchyV1Result,
   type Validator,
 } from "./generated/validators.mjs";
 
@@ -79,6 +83,10 @@ import type {
   SidecarRestartV1Result,
   SidecarConfigureV1Params,
   SidecarConfigureV1Result,
+  SourcesListV1Params,
+  SourcesListV1Result,
+  SourcesGetFolderHierarchyV1Params,
+  SourcesGetFolderHierarchyV1Result,
 } from "./generated/index.js";
 import type { SidecarTransport } from "./transport.js";
 
@@ -188,6 +196,14 @@ const builtInContracts: Readonly<Record<string, SidecarMethodContract>> = {
   "outlook.list_mailboxes.v1": {
     validateParams: validateOutlookListMailboxesV1Params,
     validateResult: validateOutlookListMailboxesV1Result,
+  },
+  "sources.list.v1": {
+    validateParams: validateSourcesListV1Params,
+    validateResult: validateSourcesListV1Result,
+  },
+  "sources.get_folder_hierarchy.v1": {
+    validateParams: validateSourcesGetFolderHierarchyV1Params,
+    validateResult: validateSourcesGetFolderHierarchyV1Result,
   },
   "outlook.list_emails.v1": {
     validateParams: validateOutlookListEmailsV1Params,
@@ -328,6 +344,16 @@ export class DesktopSidecarClient {
     params: OutlookListMailboxesV1Params,
     options?: InvokeOptions,
   ): Promise<OutlookListMailboxesV1Result>;
+  async invoke(
+    method: "sources.list.v1",
+    params: SourcesListV1Params,
+    options?: InvokeOptions,
+  ): Promise<SourcesListV1Result>;
+  async invoke(
+    method: "sources.get_folder_hierarchy.v1",
+    params: SourcesGetFolderHierarchyV1Params,
+    options?: InvokeOptions,
+  ): Promise<SourcesGetFolderHierarchyV1Result>;
   async invoke(
     method: "outlook.list_emails.v1",
     params: OutlookListEmailsV1Params,

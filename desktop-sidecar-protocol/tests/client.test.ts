@@ -310,6 +310,26 @@ describe("DesktopSidecarClient", () => {
     });
   });
 
+  it("recognizes source browsing only when the sidecar advertises it", async () => {
+    const current = await setup();
+    await current.client.discover();
+    expect(current.client.supports("sources.list.v1")).toBe(true);
+    expect(current.client.supports("sources.get_folder_hierarchy.v1")).toBe(
+      true,
+    );
+
+    const older = await setup({
+      omitMethods: ["sources.list.v1", "sources.get_folder_hierarchy.v1"],
+    });
+    await older.client.discover();
+    expect(older.client.supports("sources.list.v1")).toBe(false);
+    expect(older.client.supports("sources.get_folder_hierarchy.v1")).toBe(
+      false,
+    );
+    expect(older.client.supports("outlook.list_mailboxes.v1")).toBe(true);
+    expect(older.client.supports("search.query.v1")).toBe(true);
+  });
+
   it("reuses ready data for concurrent requests on independent HTTP connections", async () => {
     const { client } = await setup({ echoDelayMs: 5 });
     await client.discover();
