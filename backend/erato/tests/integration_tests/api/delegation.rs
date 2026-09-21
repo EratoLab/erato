@@ -7044,17 +7044,20 @@ async fn test_chat_detail_carries_provenance_and_run_parameters(pool: Pool<Postg
         .assert_status(axum::http::StatusCode::NOT_FOUND);
 }
 
-/// Adoption parses the envelope and writes it back, so a row seeded in the
-/// pre-`task` shape is rewritten canonically on the way through: the brief
-/// moves under `task` and the legacy keys disappear from the provenance
-/// envelope. Nothing migrates rows eagerly, so this is the path that proves an
-/// old row is readable and re-writable without a data migration.
+/// Adoption writes the one key it means and leaves a pre-`task` row otherwise
+/// as it found it, and that row still reads canonically.
+///
+/// Nothing migrates these rows eagerly, and adoption is not the exception: it
+/// touches `{provenance,adopted_at}` only, so the legacy brief stays where it
+/// was written. The lift that makes an old row readable lives at the parse
+/// point instead, which is where this asserts it — and which is why a narrow
+/// write costs nothing here.
 ///
 /// # Test Categories
 /// - `uses-db`
 /// - `auth-required`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn adoption_rewrites_a_legacy_row_in_canonical_form(pool: Pool<Postgres>) {
+async fn adoption_of_a_legacy_row_writes_only_the_adoption(pool: Pool<Postgres>) {
     let (app_state, _llm) = delegation_enabled_state_with_llm(pool).await;
     let server = app_server(app_state.clone());
 
@@ -7095,23 +7098,45 @@ async fn adoption_rewrites_a_legacy_row_in_canonical_form(pool: Pool<Postgres>) 
         .await
         .unwrap();
 
-    let rewritten = erato::db::entity::chats::Entity::find_by_id(child_id)
+    let adopted = erato::db::entity::chats::Entity::find_by_id(child_id)
         .one(&app_state.db)
         .await
         .unwrap()
-        .expect("child")
-        .assistant_configuration
-        .expect("envelope");
+        .expect("child");
+    let stored = adopted.assistant_configuration.clone().expect("envelope");
 
-    assert_eq!(rewritten["task"]["expected_output"], "One number per line.");
+    assert!(stored["provenance"]["adopted_at"].is_string());
     assert_eq!(
-        rewritten["task"]["constraints"],
+        stored["provenance"]["expected_output"], "One number per line.",
+        "adoption must not rewrite anything but its own key: {stored}"
+    );
+    assert_eq!(
+        stored["provenance"]["constraints"],
         "Only the attached figures."
     );
-    assert!(rewritten["provenance"].get("expected_output").is_none());
-    assert!(rewritten["provenance"].get("constraints").is_none());
-    assert!(rewritten["provenance"]["adopted_at"].is_string());
-    assert_eq!(rewritten["assistant_id"], assistant);
+    assert!(stored.get("task").is_none());
+    assert_eq!(stored["assistant_id"], assistant);
+
+    let parsed = erato::models::chat::parse_chat_configuration(&adopted)
+        .expect("parse")
+        .expect("envelope");
+    let task = parsed
+        .task
+        .expect("the legacy brief must lift into the task spec");
+    assert_eq!(
+        task.expected_output.as_deref(),
+        Some("One number per line.")
+    );
+    assert_eq!(
+        task.constraints.as_deref(),
+        Some("Only the attached figures.")
+    );
+    let provenance = parsed.provenance.expect("provenance");
+    assert!(provenance.adopted_at.is_some());
+    assert_eq!(
+        parsed.assistant_id.map(|id| id.to_string()),
+        Some(assistant)
+    );
 }
 
 /// A task child dispatched on the bare model has no assistant. The row must
@@ -9845,6 +9870,33 @@ async fn seed_child_owing_a_result(
     answer: Option<&str>,
     scheduling: erato_config::config::TaskScheduling,
 ) -> Uuid {
+    let (child_id, answer_message_id) =
+        seed_child_before_recording(app_state, owner_user_id, origin_chat_id, answer, scheduling)
+            .await;
+    erato::services::task_delivery::record_pending_delivery(
+        app_state,
+        child_id,
+        answer_message_id,
+        false,
+        false,
+        false,
+    )
+    .await
+    .expect("the run must record a delivery it owes");
+    child_id
+}
+
+/// As [`seed_child_owing_a_result`], stopping short of recording the delivery.
+///
+/// Returns the child and the answer row the record step will describe, so a
+/// caller can drive the two halves apart — and read the child in between.
+async fn seed_child_before_recording(
+    app_state: &erato::state::AppState,
+    owner_user_id: &str,
+    origin_chat_id: Uuid,
+    answer: Option<&str>,
+    scheduling: erato_config::config::TaskScheduling,
+) -> (Uuid, Uuid) {
     let child = erato::models::chat::create_delegated_chat(
         &app_state.db,
         &rebuilt_policy(app_state).await,
@@ -9934,17 +9986,7 @@ async fn seed_child_owing_a_result(
         None => Uuid::new_v4(),
     };
 
-    erato::services::task_delivery::record_pending_delivery(
-        app_state,
-        child.id,
-        answer_message_id,
-        false,
-        false,
-        false,
-    )
-    .await
-    .expect("the run must record a delivery it owes");
-    child.id
+    (child.id, answer_message_id)
 }
 
 /// Read a child's stored delivery envelope.
@@ -10536,6 +10578,93 @@ async fn adopted_child_still_delivers_the_recorded_result(pool: Pool<Postgres>) 
     assert_eq!(
         delivery_of(&app_state, child_id).await["state"],
         "delivered"
+    );
+}
+
+/// Adoption from a row read before the delivery existed must still not erase
+/// it.
+///
+/// This is the interleaving the owner can actually produce, and the one the
+/// test above does not reach because it re-reads the child after the delivery
+/// is already there. The request loads the child to decide it may write, the
+/// run's tail records the result it owes, and adoption lands last carrying a
+/// picture of the row from before any of that. `record_pending_delivery` has
+/// returned by then and nothing retries it, so a delivery lost here is lost for
+/// good: the run reads as owing nothing and the origin never hears back.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn adoption_from_a_pre_delivery_snapshot_keeps_the_record(pool: Pool<Postgres>) {
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+
+    let (child_id, answer_message_id) = seed_child_before_recording(
+        &app_state,
+        &me.id.to_string(),
+        origin_chat_id,
+        Some("STALE-SNAPSHOT-ANSWER"),
+        erato_config::config::TaskScheduling::Silent,
+    )
+    .await;
+
+    // What the user's write path is holding when it reaches the adoption call.
+    let stale = erato::db::entity::chats::Entity::find_by_id(child_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        stale
+            .assistant_configuration
+            .as_ref()
+            .expect("configuration")["provenance"]["result_delivery"]
+            .is_null(),
+        "the snapshot must predate the delivery or this is not the race under test"
+    );
+
+    erato::services::task_delivery::record_pending_delivery(
+        &app_state,
+        child_id,
+        answer_message_id,
+        false,
+        false,
+        false,
+    )
+    .await
+    .expect("the run must record a delivery it owes");
+
+    erato::models::chat::mark_delegated_run_adopted(&app_state.db, &stale)
+        .await
+        .expect("adoption");
+
+    let delivery = delivery_of(&app_state, child_id).await;
+    assert_eq!(
+        delivery["state"], "pending",
+        "a stale adoption snapshot must not erase the delivery: {delivery}"
+    );
+
+    let adopted = erato::db::entity::chats::Entity::find_by_id(child_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap()
+        .assistant_configuration
+        .expect("configuration");
+    assert!(
+        adopted["provenance"]["adopted_at"].is_string(),
+        "the adoption itself must still be recorded: {adopted}"
     );
 }
 

@@ -27,6 +27,7 @@ pub const POSTGRES_QUERY_GENERATION_TRY_START: &str = "generation_try_start";
 pub const POSTGRES_QUERY_GENERATION_LEASE_HOLDER: &str = "generation_lease_holder";
 pub const POSTGRES_QUERY_GENERATION_DISPLACED: &str = "generation_displaced";
 pub const POSTGRES_QUERY_RESOLVE_SYSTEM_DELIVERED_TIP: &str = "resolve_system_delivered_tip";
+pub const POSTGRES_QUERY_MARK_RUN_ADOPTED: &str = "mark_run_adopted";
 pub const POSTGRES_QUERY_REDELIVER_BRANCHED_RESULTS: &str = "redeliver_branched_results";
 pub const POSTGRES_QUERY_DELIVERY_RECORD: &str = "delivery_record";
 pub const POSTGRES_QUERY_DELIVERY_CLAIM: &str = "delivery_claim";
@@ -73,6 +74,7 @@ pub const KNOWN_POSTGRES_QUERY_IDS: &[&str] = &[
     POSTGRES_QUERY_GENERATION_LEASE_HOLDER,
     POSTGRES_QUERY_GENERATION_DISPLACED,
     POSTGRES_QUERY_RESOLVE_SYSTEM_DELIVERED_TIP,
+    POSTGRES_QUERY_MARK_RUN_ADOPTED,
     POSTGRES_QUERY_REDELIVER_BRANCHED_RESULTS,
     POSTGRES_QUERY_DELIVERY_RECORD,
     POSTGRES_QUERY_DELIVERY_CLAIM,

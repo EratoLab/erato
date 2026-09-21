@@ -170,9 +170,10 @@ pub async fn record_pending_delivery(
 
     let payload = serde_json::to_value(&delivery).ok()?;
     // Path-scoped rather than a whole-envelope rewrite: the adoption path
-    // replaces `assistant_configuration` wholesale from a possibly stale
-    // in-memory row, and the two would otherwise erase each other. Conditional
-    // on nothing being there yet, so a re-run writes no second delivery id.
+    // writes `{provenance,adopted_at}` on the owner's first write into this
+    // chat, and either landing second must keep what the other wrote.
+    // Conditional on nothing being there yet, so a re-run writes no second
+    // delivery id.
     let rows = app_state
         .db
         .query_all_raw(named_statement_from_sql_and_values(
