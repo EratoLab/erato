@@ -513,6 +513,62 @@ const PLANNED_TASK_CHILD_ANSWER_B: &str = "PLANNED-CHILD-B-ANSWER";
 /// whatever the user decided.
 const PLANNED_TASKS_TRACE_PREFIX: &str = "PLANNED-TASKS-CONTEXT";
 
+/// Typed into the origin chat by the async-park e2e: one `async` task whose
+/// child stops on a gated call. Not a superstring of any other task prompt in
+/// either direction — matching is first-match substring over this list, so an
+/// overlap would let one probe answer another's turns.
+const ASYNC_PARK_PARENT_PROMPT: &str = "detach the gated probe as a background task";
+
+/// The brief of the parked `async` child. It is the one thing present in every
+/// turn of the child and absent from every turn of the origin, which is what
+/// lets one pair of rules drive a child whose first turn calls the gated tool
+/// and whose second answers on top of whatever the decision was.
+const ASYNC_PARK_TASK_CHILD_BRIEF: &str =
+    "Async gated child brief: publish the approval probe and report what came back.";
+
+/// The parked child answers with its own tool trace, so the SAME rules serve
+/// the allow and the deny test: an allowed call is visible by the probe's own
+/// result and a denied one by the refusal that took its place, while a scripted
+/// sentence would claim the call succeeded whatever was decided. It is also the
+/// text the second delivery carries into the origin chat, so the decision is
+/// readable from the delivered row rather than only from the child's chat.
+const ASYNC_PARK_CHILD_TRACE_PREFIX: &str = "ASYNC-PARK-CHILD-CONTEXT";
+
+/// Typed into the origin chat by the plain half of the async e2e: one `async`
+/// task that never stops, which is the one-row round trip the two-row parked
+/// one has to be told apart from.
+const ASYNC_PLAIN_PARENT_PROMPT: &str = "detach the plain probe as a background task";
+
+/// Its child calls nothing: that test is about the delivery, and a tool call
+/// would only add a turn that can be slow.
+const ASYNC_PLAIN_TASK_CHILD_BRIEF: &str =
+    "Async plain child brief: report the probe status without using any tool.";
+
+const ASYNC_PLAIN_CHILD_ANSWER: &str = "ASYNC-PLAIN-CHILD-ANSWER";
+
+/// What the origin says on the turn that dispatched an `async` task. It has to
+/// be its own marker: an `async` call returns a launch envelope and NOT the
+/// child's answer, so a test can only tell the dispatch apart from an awaited
+/// run by what is absent from this turn.
+const ASYNC_DISPATCH_PARENT_ANSWER: &str = "ASYNC-DISPATCH-PARENT-ANSWER";
+
+/// The status lines a delivered `task_result` row opens with, which is what the
+/// origin's reaction is keyed on. The delivered row is the last user message of
+/// the reaction turn, so the prompt-keyed rules cannot see that turn at all —
+/// and a reaction scripted off the prompt would read the same whether the
+/// delivery had arrived or not. The status is also the one field the contract
+/// fixes for this, so keying on it is what keeps the two reactions from
+/// standing in for each other: only a parked run delivers `input_required`, and
+/// only a run with an answer delivers `completed`.
+const ASYNC_PARK_NOTIFIED_STATUS: &str = "status: input_required";
+const ASYNC_DELIVERED_STATUS: &str = "status: completed";
+
+/// What the origin says to each of them. Two markers rather than one because a
+/// parked `async` run delivers twice, and a test that could not tell the
+/// reactions apart could not tell one delivery from two.
+const ASYNC_PARK_NOTIFIED_ANSWER: &str = "ASYNC-DELIVERY-NOTIFIED";
+const ASYNC_PARK_ANSWERED_ANSWER: &str = "ASYNC-DELIVERY-ANSWERED";
+
 fn build_delegation_child_answer_chunks() -> Vec<String> {
     [
         "CHILD-ANSWER",
@@ -1110,6 +1166,176 @@ pub fn get_default_mocks() -> Vec<Mock> {
             response: ResponseConfig::ToolTrace(ToolTraceResponseConfig {
                 prefix: PLANNED_TASKS_TRACE_PREFIX.to_string(),
                 delay_ms: 200,
+            }),
+        },
+        // The `async` probes. An `async` call returns a launch envelope instead
+        // of a result, so the origin turn ends before its child does and the
+        // child's answer reaches the chat later as a delivered `task_result`
+        // row. That row is a USER message, which is why the two reaction rules
+        // below are keyed on the row's own status line: the prompt-keyed rules
+        // cannot see a turn whose last user message is a delivery, and a
+        // reaction scripted off the prompt would read the same whether the
+        // delivery had arrived or not.
+        //
+        // Ordering inside this group follows the group above: tool-call rules
+        // before answer rules, because a brief is the last user message of its
+        // child's FIRST turn only and a second gated call would park the run
+        // again instead of answering it.
+        Mock {
+            name: "AsyncParkParentToolCall".to_string(),
+            description: "Detaches a sub-task whose only tool needs the user's approval"
+                .to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: ASYNC_PARK_PARENT_PROMPT.to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
+                tool_name: "delegate_task".to_string(),
+                arguments: format!(
+                    "{{\"task\": \"{ASYNC_PARK_TASK_CHILD_BRIEF}\", \"expected_output\": \"One sentence.\", \"run_mode\": \"async\"}}"
+                ),
+                delay_ms: 100,
+            }),
+        },
+        Mock {
+            name: "AsyncPlainParentToolCall".to_string(),
+            description: "Detaches a sub-task that stops for nothing".to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: ASYNC_PLAIN_PARENT_PROMPT.to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
+                tool_name: "delegate_task".to_string(),
+                arguments: format!(
+                    "{{\"task\": \"{ASYNC_PLAIN_TASK_CHILD_BRIEF}\", \"expected_output\": \"One sentence.\", \"run_mode\": \"async\"}}"
+                ),
+                delay_ms: 100,
+            }),
+        },
+        Mock {
+            name: "AsyncParkChildToolCall".to_string(),
+            description: "Returns the gated call on the detached child's first turn".to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: ASYNC_PARK_TASK_CHILD_BRIEF.to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
+                tool_name: "publish_approval_probe".to_string(),
+                arguments: "{}".to_string(),
+                delay_ms: 100,
+            }),
+        },
+        Mock {
+            name: "AsyncParkChildAnswer".to_string(),
+            description: "Answers the detached child with the decision its call got".to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: ASYNC_PARK_TASK_CHILD_BRIEF.to_string(),
+            })],
+            response: ResponseConfig::ToolTrace(ToolTraceResponseConfig {
+                prefix: ASYNC_PARK_CHILD_TRACE_PREFIX.to_string(),
+                delay_ms: 200,
+            }),
+        },
+        Mock {
+            name: "AsyncPlainChildAnswer".to_string(),
+            description: "Answers the detached child that never stopped".to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: ASYNC_PLAIN_TASK_CHILD_BRIEF.to_string(),
+            })],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec![
+                    ASYNC_PLAIN_CHILD_ANSWER.to_string(),
+                    ": the".to_string(),
+                    " probe".to_string(),
+                    " needed".to_string(),
+                    " no".to_string(),
+                    " decision".to_string(),
+                    ".".to_string(),
+                ],
+                delay_ms: 200,
+                ..Default::default()
+            }),
+        },
+        // The two reactions to a delivered row. They must precede nothing in
+        // particular — no earlier rule can match a turn whose last user message
+        // is a delivery — but they are keyed on the status line rather than on
+        // the child's answer so that "which delivery is this" is read off the
+        // one field the contract fixes, and so the pair cannot stand in for
+        // each other: only a parked run produces `input_required`, and only a
+        // run that has an answer produces `completed`.
+        Mock {
+            name: "AsyncDeliveryNotifiedReaction".to_string(),
+            description: "Reacts to a delivered result that says the run stopped to ask"
+                .to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: ASYNC_PARK_NOTIFIED_STATUS.to_string(),
+                },
+            )],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec![
+                    ASYNC_PARK_NOTIFIED_ANSWER.to_string(),
+                    ": the".to_string(),
+                    " task".to_string(),
+                    " is".to_string(),
+                    " waiting".to_string(),
+                    " on".to_string(),
+                    " you".to_string(),
+                    ".".to_string(),
+                ],
+                delay_ms: 200,
+                ..Default::default()
+            }),
+        },
+        Mock {
+            name: "AsyncDeliveryAnsweredReaction".to_string(),
+            description: "Reacts to a delivered result that carries the run's answer".to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: ASYNC_DELIVERED_STATUS.to_string(),
+                },
+            )],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec![
+                    ASYNC_PARK_ANSWERED_ANSWER.to_string(),
+                    ": the".to_string(),
+                    " task".to_string(),
+                    " reported".to_string(),
+                    " back".to_string(),
+                    ".".to_string(),
+                ],
+                delay_ms: 200,
+                ..Default::default()
+            }),
+        },
+        Mock {
+            name: "AsyncDispatchParentAnswer".to_string(),
+            description: "Answers the turn that launched a detached sub-task".to_string(),
+            match_rules: vec![
+                MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                    pattern: ASYNC_PARK_PARENT_PROMPT.to_string(),
+                }),
+                MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                    pattern: ASYNC_PLAIN_PARENT_PROMPT.to_string(),
+                }),
+            ],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec![
+                    ASYNC_DISPATCH_PARENT_ANSWER.to_string(),
+                    ": the".to_string(),
+                    " task".to_string(),
+                    " is".to_string(),
+                    " running".to_string(),
+                    " in".to_string(),
+                    " the".to_string(),
+                    " background".to_string(),
+                    ".".to_string(),
+                ],
+                delay_ms: 200,
+                ..Default::default()
             }),
         },
         Mock {
@@ -2467,6 +2693,139 @@ mod tests {
         }
     }
 
+    /// The detached probes' turns, including the two the origin only ever sees
+    /// as a delivered row.
+    ///
+    /// The `run_mode` argument is the assertion that carries the first half:
+    /// without it the task is awaited, the child's answer comes back as the
+    /// call's result, and there is no delivery to re-arm at all. The reaction
+    /// rules are the second half — they are keyed on the status line of the row
+    /// rather than on the prompt, because the delivery is the last user message
+    /// of the turn it draws and a prompt-keyed rule cannot see that turn.
+    #[test]
+    fn the_detached_probes_ask_for_async_and_react_to_each_delivered_status() {
+        use serde_json::json;
+
+        let child_system = "Answer the delegated probe task.";
+
+        for (prompt, brief) in [
+            (ASYNC_PARK_PARENT_PROMPT, ASYNC_PARK_TASK_CHILD_BRIEF),
+            (ASYNC_PLAIN_PARENT_PROMPT, ASYNC_PLAIN_TASK_CHILD_BRIEF),
+        ] {
+            let origin_turn = match_default_mocks(
+                json!([
+                    {"role": "system", "content": "You are a helpful assistant"},
+                    {"role": "user", "content": prompt},
+                ]),
+                None,
+            );
+            match origin_turn {
+                ResponseConfig::ToolCall(config) => {
+                    assert_eq!(config.tool_name, "delegate_task");
+                    assert!(config.arguments.contains(brief));
+                    assert!(
+                        config.arguments.contains("\"run_mode\": \"async\""),
+                        "a detached probe must ask for it: {}",
+                        config.arguments
+                    );
+                }
+                other => panic!("origin turn for {prompt} matched {other:?}"),
+            }
+
+            // Whatever the child does, the turn that dispatched it answers with
+            // the launch marker: the e2e reads the absence of the child's answer
+            // from this very turn.
+            let origin_after_dispatch = match_default_mocks(
+                json!([
+                    {"role": "system", "content": "You are a helpful assistant"},
+                    {"role": "user", "content": prompt},
+                    {"role": "assistant", "content": null, "tool_calls": [
+                        {"id": "call_async", "type": "function", "function": {"name": "delegate_task", "arguments": "{}"}},
+                    ]},
+                    {"role": "tool", "tool_call_id": "call_async", "content": "{\"status\":\"dispatched\"}"},
+                ]),
+                None,
+            );
+            match origin_after_dispatch {
+                ResponseConfig::Static(config) => assert_eq!(
+                    config.chunks.join(""),
+                    format!(
+                        "{ASYNC_DISPATCH_PARENT_ANSWER}: the task is running in the background."
+                    )
+                ),
+                other => panic!("dispatch answer for {prompt} matched {other:?}"),
+            }
+        }
+
+        let parked_child_turn = match_default_mocks(
+            json!([
+                {"role": "system", "content": child_system},
+                {"role": "user", "content": delegate_preamble_message()},
+                {"role": "user", "content": ASYNC_PARK_TASK_CHILD_BRIEF},
+            ]),
+            None,
+        );
+        match parked_child_turn {
+            ResponseConfig::ToolCall(config) => {
+                assert_eq!(config.tool_name, "publish_approval_probe")
+            }
+            other => panic!("detached child's first turn matched {other:?}"),
+        }
+
+        // One pair of child rules serves the allow and the deny test, so the
+        // answer has to be the trace of whatever the call came back with.
+        for decision in [
+            "approval probe published",
+            "{\"status\":\"rejected\",\"error\":\"The user denied this tool call.\"}",
+        ] {
+            let child_answer = match_default_mocks(
+                json!([
+                    {"role": "system", "content": child_system},
+                    {"role": "user", "content": delegate_preamble_message()},
+                    {"role": "user", "content": ASYNC_PARK_TASK_CHILD_BRIEF},
+                    {"role": "assistant", "content": null, "tool_calls": [
+                        {"id": "call_async_child", "type": "function", "function": {"name": "publish_approval_probe", "arguments": "{}"}},
+                    ]},
+                    {"role": "tool", "tool_call_id": "call_async_child", "content": decision},
+                ]),
+                None,
+            );
+            match child_answer {
+                ResponseConfig::Static(config) => assert_eq!(
+                    config.chunks.join(""),
+                    format!("{ASYNC_PARK_CHILD_TRACE_PREFIX}: publish_approval_probe[{decision}]")
+                ),
+                other => panic!("detached child's answer for {decision} matched {other:?}"),
+            }
+        }
+
+        // The two reactions. The row erato renders opens with the status line and
+        // carries nothing of the prompt, which is exactly why the prompt-keyed
+        // answer above cannot serve here.
+        for (status, expected) in [
+            (ASYNC_PARK_NOTIFIED_STATUS, ASYNC_PARK_NOTIFIED_ANSWER),
+            (ASYNC_DELIVERED_STATUS, ASYNC_PARK_ANSWERED_ANSWER),
+        ] {
+            let reaction = match_default_mocks(
+                json!([
+                    {"role": "system", "content": "You are a helpful assistant"},
+                    {"role": "user", "content": ASYNC_PARK_PARENT_PROMPT},
+                    {"role": "assistant", "content": format!("{ASYNC_DISPATCH_PARENT_ANSWER}: the task is running in the background.")},
+                    {"role": "user", "content": format!("Delegated task result — {status}.\nsome guidance\n\nsome body")},
+                ]),
+                None,
+            );
+            match reaction {
+                ResponseConfig::Static(config) => assert!(
+                    config.chunks.join("").starts_with(expected),
+                    "the reaction to '{status}' must be its own: {:?}",
+                    config.chunks
+                ),
+                other => panic!("reaction to {status} matched {other:?}"),
+            }
+        }
+    }
+
     /// Every prompt of the `approvals` scenario's probes, against every other:
     /// matching is first-match substring over one shared mock list, so an
     /// overlap would silently let one probe answer another's turns.
@@ -2488,6 +2847,10 @@ mod tests {
             PLANNED_TASKS_PARENT_PROMPT,
             PLANNED_TASK_CHILD_BRIEF_A,
             PLANNED_TASK_CHILD_BRIEF_B,
+            ASYNC_PARK_PARENT_PROMPT,
+            ASYNC_PARK_TASK_CHILD_BRIEF,
+            ASYNC_PLAIN_PARENT_PROMPT,
+            ASYNC_PLAIN_TASK_CHILD_BRIEF,
         ];
         for (index, prompt) in prompts.iter().enumerate() {
             for (other_index, other) in prompts.iter().enumerate() {

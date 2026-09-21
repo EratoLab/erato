@@ -42,6 +42,15 @@ decision can only have come from a task child. A turn with no facet selected
 reaches every authorized server, which is how the same scenario also drives a
 gated call the origin chat makes itself.
 
+It offers both task run modes, which is what lets one scenario drive both
+places a child can raise a question. An awaited child asks in the slot it holds
+on the origin turn; a detached (`async`) child has no such slot and asks on its
+own card, with the origin told about it by a delivered `task_result` row and
+told the answer by a second one. Offering `async` also un-inerts the shipped
+`[delegation.tasks.approval]` default, so every detached dispatch here is asked
+about before it happens — which is that default's whole purpose and is only
+reachable in a deployment that offers the mode.
+
 It carries two planning facets rather than one. `plan` overrides nothing, so a
 turn under it runs the shipped global `[delegation.tasks.approval]` default
 `async_only`; `plan_gate` sets `mode = "plan"` through
