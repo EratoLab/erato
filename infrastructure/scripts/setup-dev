@@ -54,7 +54,10 @@ class BuildConfig(BaseModel):
     """Configuration for local image build."""
     project_root: Path
     build_tag: str
-    local_registry: str = "registry.eratolabs.com"
+    # The k3d-managed registry the cluster pulls from. `Dockerfile.combined`
+    # resolves BOTH of its FROMs through this one value, so every image it
+    # composes has to be published here.
+    local_registry: str = "k3d-registry.localhost:5000"
     frontend_image_name: str = "erato/frontend"
     repo_base: str
     tag_base: str
@@ -63,6 +66,7 @@ class BuildConfig(BaseModel):
     combined_image_path: str
     sqitch_migrator_image_path: str
     local_frontend_image: str
+    local_backend_image: str
     local_combined_image: str
     local_sqitch_migrator_image: str
     backend_image_for_build_arg: str
@@ -349,6 +353,7 @@ def perform_local_build(config: ScriptConfig) -> list[str]:
     base_backend_image = f"{backend_image_repo}:{tag_base}"
     print(f"Using base backend image: {base_backend_image}")
     
+    backend_image_path = "/".join(backend_image_repo.split("/")[1:])
     combined_image_path = "/".join(repo_base.split("/")[1:])
     sqitch_migrator_image_path = "/".join(
         derive_sqitch_migrator_repository(repo_base).split("/")[1:]
@@ -363,21 +368,36 @@ def perform_local_build(config: ScriptConfig) -> list[str]:
         base_backend_image=base_backend_image,
         combined_image_path=combined_image_path,
         sqitch_migrator_image_path=sqitch_migrator_image_path,
-        local_frontend_image=f"registry.eratolabs.com/erato/frontend:{build_tag}",
+        local_frontend_image=f"k3d-registry.localhost:5000/erato/frontend:{build_tag}",
+        local_backend_image=f"k3d-registry.localhost:5000/{backend_image_path}:{build_tag}",
         local_combined_image=f"k3d-registry.localhost:5000/{combined_image_path}:{build_tag}",
         local_sqitch_migrator_image=(
             f"k3d-registry.localhost:5000/{sqitch_migrator_image_path}:{build_tag}"
         ),
-        backend_image_for_build_arg="/".join(base_backend_image.split("/")[1:])
+        backend_image_for_build_arg=f"{backend_image_path}:{build_tag}"
     )
     
+    # Built from source, not pulled: a local build exists to run the working
+    # tree, and the backend is where most of it lives. cargo-chef caches the
+    # dependency compile, so only the first build pays for it.
+    print(f"Building backend image: {build_config.local_backend_image}")
+    run_command([
+        "docker", "build",
+        "-t", build_config.local_backend_image,
+        "-f", str(build_config.project_root / "backend" / "Dockerfile"),
+        str(build_config.project_root / "backend"),
+    ])
+    run_command(["docker", "push", build_config.local_backend_image])
+
     print(f"Building frontend image: {build_config.local_frontend_image}")
     run_command([
         "docker", "build",
         "-t", build_config.local_frontend_image,
         "-f", str(build_config.project_root / "frontend" / "Dockerfile"),
-        str(build_config.project_root / "frontend"),
-        "--platform=linux/amd64"
+        # Repo root, not frontend/: the Dockerfile copies desktop-sidecar-protocol,
+        # frontend-utils, scripts and office-addin alongside frontend itself. This
+        # is the context CI builds it with.
+        str(build_config.project_root),
     ])
     run_command(["docker", "push", build_config.local_frontend_image])
     
@@ -390,7 +410,6 @@ def perform_local_build(config: ScriptConfig) -> list[str]:
         "-t", build_config.local_combined_image,
         "-f", str(build_config.project_root / "Dockerfile.combined"),
         str(build_config.project_root),
-        "--platform=linux/amd64"
     ])
     run_command(["docker", "push", build_config.local_combined_image])
 
@@ -400,7 +419,6 @@ def perform_local_build(config: ScriptConfig) -> list[str]:
         "-t", build_config.local_sqitch_migrator_image,
         "-f", str(build_config.project_root / "backend" / "Dockerfile.sqitch-migrator"),
         str(build_config.project_root / "backend"),
-        "--platform=linux/amd64"
     ])
     run_command(["docker", "push", build_config.local_sqitch_migrator_image])
     

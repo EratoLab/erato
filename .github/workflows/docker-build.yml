@@ -718,7 +718,7 @@ jobs:
       - name: Setup e2e tests
         working-directory: ./e2e-tests
         run: |
-          echo "BASE_URL=https://app.erato.internal" > .env
+          echo "BASE_URL=https://app.erato.internal:8443" > .env
           pnpm install --frozen-lockfile
 
       - name: Get Playwright version
