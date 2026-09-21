@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # Configuration
 
 ## Ways to provide configuration
@@ -1266,6 +1268,7 @@ supports_reasoning_summary = true
 supports_encrypted_reasoning_content = true
 supports_audio_input = false
 supports_verbosity = false
+supports_strict_tool_calling = false
 cost_input_tokens_per_1m = 5.0
 cost_output_tokens_per_1m = 15.0
 ```
@@ -1278,6 +1281,7 @@ cost_output_tokens_per_1m = 15.0
 {/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.supports_reasoning_summary */}
 {/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.supports_encrypted_reasoning_content */}
 {/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.supports_verbosity */}
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.supports_strict_tool_calling */}
 {/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.cost_input_tokens_per_1m */}
 {/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.cost_output_tokens_per_1m */}
 
@@ -1288,6 +1292,7 @@ cost_output_tokens_per_1m = 15.0
 - **`supports_reasoning_summary`** _(default: true)_ - Whether the model supports returning reasoning summaries when reasoning is enabled
 - **`supports_encrypted_reasoning_content`** _(default: true)_ - Whether the model supports requesting encrypted reasoning content for stateless reasoning replay
 - **`supports_verbosity`** _(default: false)_ - Whether the model supports providing a verbosity parameter (for future support of advanced models)
+- **`supports_strict_tool_calling`** _(default: false)_ - Opt this model/endpoint into native strict arguments for configured client submissions. Currently supported by the OpenAI-compatible Chat Completions and Responses adapters. Other adapters retain local schema validation and bounded corrections. Set this only after verifying the endpoint's support; it is not inferred from the model name.
 - **`cost_input_tokens_per_1m`** _(default: 0.0)_ - Price per 1 million input tokens (unit-less, for cost estimation)
 - **`cost_output_tokens_per_1m`** _(default: 0.0)_ - Price per 1 million output tokens (unit-less, for cost estimation)
 
@@ -4595,6 +4600,49 @@ The `action_facet` field is accepted on `submit`, `edit`, and `regenerate` endpo
 | Request field      | `selected_facet_ids`                                 | `action_facet`                     |
 | Prompt lifecycle   | Toggle-state based, persistent across messages       | Per-request, ephemeral             |
 | Base system prompt | May suppress historical replay on newly-enabled turn | Never suppresses — always additive |
+
+### Validated client submissions
+
+Client tools normally return a result to the model and continue generation. Add a
+`submission` table to a client tool to validate its arguments against its configured
+JSON Schema before dispatch, then finish generation immediately when the client
+accepts the draft. The client executor must only validate and stage the draft;
+applying it remains a separate action requiring user confirmation.
+
+```toml
+[client_tools.tools.submit_draft]
+name = "submit_draft"
+namespace = "editor"
+description = "Validate and stage a draft for review. Call alone after reading."
+parameters = '''{"type":"object","properties":{"title":{"type":"string"}},"required":["title"],"additionalProperties":false}'''
+
+[client_tools.tools.submit_draft.submission]
+max_attempts = 3
+native_schema = "auto"
+```
+
+Select the tool using `editor/submit_draft` in a global, regular-facet or
+action-facet `tool_call_allowlist`. Existing tools are unchanged when `submission`
+is absent. Schemas support local references, and never fetch external schemas.
+
+{/* erato_toml_config_key: client_tools.tools.<key>.submission.max_attempts */}
+{/* erato_toml_config_key: client_tools.tools.<key>.submission.native_schema */}
+
+- **`max_attempts`** _(default: 3, range: 1–10)_ - Total attempts per tool and generation, including the initial call. Schema errors and client failures return bounded feedback for correction; the final failed attempt ends generation. A timeout ends generation without retrying a possibly staged draft.
+- **`native_schema`** _(default: `"auto"`)_ - `auto` uses native enforcement when the adapter, explicit model capability and schema are compatible; otherwise it uses local validation and feedback. `off` always uses local validation. `required` rejects request preparation if native enforcement is unavailable, including when `compat_omit_strict` is enabled.
+
+Native enforcement does not replace the host's parser or domain checks. A schema
+must already fit the provider subset: object properties are all required and
+`additionalProperties` is false. Optional fields are never silently made required
+or rewritten. More general schemas continue to work through local validation.
+Gemini/Vertex and Ollama currently use that local path.
+
+The shared frontend executor may return `ok: false`, an `error` string and
+`validationErrors: [{ path, code, message }]`. Paths are JSON Pointers into the
+arguments. The backend passes at most 16 bounded diagnostics to the model, with
+the remaining attempt count. A successful executor returns a small receipt in
+`result`; the accepted arguments and receipt are persisted without an additional
+model call. The host's review UI can restore the draft from those records.
 
 ### `budget`
 

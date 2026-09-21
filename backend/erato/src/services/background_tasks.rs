@@ -670,26 +670,7 @@ impl BackgroundTaskManager {
                                 .ok()
                                 .flatten()
                                 .unwrap_or(JsonValue::Null);
-                            let outcome = match payload {
-                                JsonValue::Object(ref object) if object.get("error").is_some() => {
-                                    ClientToolOutcome::Error(
-                                        object
-                                            .get("error")
-                                            .and_then(|value| value.as_str())
-                                            .unwrap_or("client tool failed")
-                                            .to_string(),
-                                    )
-                                }
-                                JsonValue::Object(ref object) if object.get("result").is_some() => {
-                                    ClientToolOutcome::Result(
-                                        object.get("result").cloned().unwrap_or(JsonValue::Null),
-                                    )
-                                }
-                                _ => ClientToolOutcome::Error(
-                                    "client tool returned neither a result nor an error"
-                                        .to_string(),
-                                ),
-                            };
+                            let outcome = ClientToolOutcome::from_payload(&payload);
                             let _ = task
                                 .deliver_client_tool_result(&tool_call_id, outcome)
                                 .await;

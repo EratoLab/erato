@@ -5,19 +5,233 @@
 //! executed on the client (the Outlook add-in / web app) rather than on the
 //! backend. This is distinct from `client_actions` (terminal, one-way,
 //! user-confirmed mutations proposed via `propose_client_action`): a client
-//! tool returns a result and the turn continues.
+//! tool normally returns a result and the turn continues. Opt-in submissions
+//! validate/stage a draft and finish the turn on success, without applying it.
 //!
 //! Returning client tools MUST be read-only / idempotent: a backend restart
 //! drops the parked turn, so a client may re-execute on recovery. Mutations
 //! must use the terminal `client_actions` path.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use genai::chat::Tool as GenaiTool;
 use genai::chat::ToolName as GenaiToolName;
-use serde_json::Value;
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use utoipa::ToSchema;
 
-use crate::config::ClientToolConfig;
+use crate::config::{ClientToolConfig, ClientToolNativeSchema};
+
+/// Request-scoped policy for the exact tool selected after namespace deduplication.
+#[derive(Clone)]
+pub struct OfferedClientTool {
+    pub timeout_ms: Option<u64>,
+    pub submission: Option<SubmissionPolicy>,
+}
+
+#[derive(Clone)]
+pub struct SubmissionPolicy {
+    validator: Arc<jsonschema::Validator>,
+    pub max_attempts: u32,
+}
+
+impl OfferedClientTool {
+    pub fn prepare(config: &ClientToolConfig, schema: &Value) -> Result<Self, String> {
+        let submission = config
+            .submission
+            .as_ref()
+            .map(|submission| {
+                erato_config::client_tool_schema::compile(schema).map(|validator| {
+                    SubmissionPolicy {
+                        validator: Arc::new(validator),
+                        max_attempts: submission.max_attempts,
+                    }
+                })
+            })
+            .transpose()?;
+        Ok(Self {
+            timeout_ms: config.timeout_ms,
+            submission,
+        })
+    }
+}
+
+/// Compact, parser-owned diagnostics. `path` is a JSON Pointer into the tool
+/// arguments (empty for the root); `code` is a stable validator error identifier.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, ToSchema)]
+pub struct ClientToolValidationIssue {
+    pub path: String,
+    pub code: String,
+    pub message: String,
+}
+
+const MAX_VALIDATION_ISSUES: usize = 16;
+
+fn bounded(value: &str, max_chars: usize) -> String {
+    value.chars().take(max_chars).collect()
+}
+
+fn bound_issues(issues: Vec<ClientToolValidationIssue>) -> Vec<ClientToolValidationIssue> {
+    issues
+        .into_iter()
+        .take(MAX_VALIDATION_ISSUES)
+        .map(|issue| ClientToolValidationIssue {
+            path: bounded(&issue.path, 512),
+            code: bounded(&issue.code, 64),
+            message: bounded(&issue.message, 512),
+        })
+        .collect()
+}
+
+impl SubmissionPolicy {
+    pub fn validate(&self, input: &Value) -> Option<ClientToolOutcome> {
+        let issues = self
+            .validator
+            .iter_errors(input)
+            .take(MAX_VALIDATION_ISSUES)
+            .map(|error| {
+                ClientToolValidationIssue {
+                    path: error.instance_path.to_string(),
+                    code: error
+                        .schema_path
+                        .to_string()
+                        .rsplit('/')
+                        .next()
+                        .unwrap_or("schema")
+                        .into(),
+                    // Do not echo the proposed artifact into a correction response.
+                    message: bounded(&error.masked().to_string(), 512),
+                }
+            })
+            .collect::<Vec<_>>();
+        (!issues.is_empty()).then(|| ClientToolOutcome::ValidationFailed(bound_issues(issues)))
+    }
+
+    pub fn finish_after(&self, outcome: &ClientToolOutcome, attempt: u32) -> bool {
+        matches!(
+            outcome,
+            ClientToolOutcome::Result(_) | ClientToolOutcome::Cancelled { .. }
+        ) || attempt >= self.max_attempts
+    }
+
+    pub fn annotate(&self, output: &mut Value, outcome: &ClientToolOutcome, attempt: u32) {
+        let finished = self.finish_after(outcome, attempt);
+        output["submission"] = json!({
+            "status": if matches!(outcome, ClientToolOutcome::Result(_)) { "accepted" }
+                else if finished { "failed" } else { "retry" },
+            "attempts_remaining": if finished { 0 } else { self.max_attempts.saturating_sub(attempt) },
+        });
+    }
+}
+
+/// Native strict generation is an optimization, not the acceptance authority.
+/// Only adapters that actually serialize the setting are eligible. A deployment
+/// explicitly opts each model/endpoint in; never infer support from a model name.
+pub fn native_strict_for_submission(
+    config: &ClientToolConfig,
+    schema: &Value,
+    provider_kind: &str,
+    model_supports_strict: bool,
+    omit_strict: bool,
+) -> Result<bool, String> {
+    let Some(submission) = &config.submission else {
+        return Ok(false);
+    };
+    let available = model_supports_strict
+        && !omit_strict
+        && matches!(
+            provider_kind,
+            "openai" | "openai_responses" | "azure_openai_responses"
+        )
+        && schema.get("anyOf").is_none()
+        && native_schema_compatible(schema);
+    match submission.native_schema {
+        ClientToolNativeSchema::Off => Ok(false),
+        ClientToolNativeSchema::Auto => Ok(available),
+        ClientToolNativeSchema::Required if available => Ok(true),
+        ClientToolNativeSchema::Required => Err(format!(
+            "Client tool '{}' requires native schema enforcement, but the model, adapter, schema or compat_omit_strict setting does not support it",
+            config.qualified_name()
+        )),
+    }
+}
+
+// Conservative OpenAI strict subset. Walk schema positions, never instance
+// literals (const/enum/default). Do not make optional fields required or strip
+// constraints to coerce a schema into a provider's subset.
+fn native_schema_compatible(schema: &Value) -> bool {
+    let Some(object) = schema.as_object() else {
+        return false;
+    };
+    for key in object.keys() {
+        if !matches!(
+            key.as_str(),
+            "$schema"
+                | "$defs"
+                | "$ref"
+                | "type"
+                | "title"
+                | "description"
+                | "properties"
+                | "required"
+                | "additionalProperties"
+                | "items"
+                | "anyOf"
+                | "enum"
+                | "const"
+        ) {
+            return false;
+        }
+    }
+    if let Some(reference) = object.get("$ref")
+        && !reference
+            .as_str()
+            .is_some_and(|reference| reference == "#" || reference.starts_with("#/$defs/"))
+    {
+        return false;
+    }
+    let object_type = object.get("type").is_some_and(|ty| {
+        ty == "object"
+            || ty
+                .as_array()
+                .is_some_and(|types| types.iter().any(|ty| ty == "object"))
+    });
+    if object_type || object.contains_key("properties") {
+        let Some(properties) = object.get("properties").and_then(Value::as_object) else {
+            return false;
+        };
+        let Some(required) = object.get("required").and_then(Value::as_array) else {
+            return false;
+        };
+        if object.get("additionalProperties") != Some(&Value::Bool(false))
+            || required.len() != properties.len()
+            || !properties
+                .keys()
+                .all(|key| required.iter().any(|value| value.as_str() == Some(key)))
+        {
+            return false;
+        }
+    }
+    for key in ["properties", "$defs"] {
+        if let Some(children) = object.get(key).and_then(Value::as_object)
+            && !children.values().all(native_schema_compatible)
+        {
+            return false;
+        }
+    }
+    if let Some(items) = object.get("items")
+        && !native_schema_compatible(items)
+    {
+        return false;
+    }
+    if let Some(choices) = object.get("anyOf").and_then(Value::as_array)
+        && !choices.iter().all(native_schema_compatible)
+    {
+        return false;
+    }
+    true
+}
 
 /// Build a genai tool for a facet-declared client tool. `schema` is the parsed
 /// JSON-Schema object for the tool's input parameters (validated as a JSON
@@ -28,12 +242,17 @@ pub fn build_client_tool(
     description: &str,
     schema: Value,
     omit_tool_strict: bool,
+    native_strict: bool,
 ) -> GenaiTool {
     GenaiTool {
         name: GenaiToolName::Custom(name.to_string()),
         description: Some(description.to_string()),
         schema: Some(schema),
-        strict: if omit_tool_strict { None } else { Some(false) },
+        strict: if omit_tool_strict {
+            None
+        } else {
+            Some(native_strict)
+        },
         config: None,
     }
 }
@@ -128,7 +347,31 @@ pub fn select_client_tools<'a>(
 pub enum ClientToolOutcome {
     Result(Value),
     Error(String),
+    ValidationFailed(Vec<ClientToolValidationIssue>),
     Cancelled { reason: String },
+}
+
+impl ClientToolOutcome {
+    /// Shared by direct delivery and the cross-instance command queue so both
+    /// paths preserve diagnostics and error precedence, including explicit null.
+    pub fn from_payload(payload: &Value) -> Self {
+        if let Some(issues) = payload.get("validation_errors") {
+            match serde_json::from_value::<Vec<ClientToolValidationIssue>>(issues.clone()) {
+                Ok(issues) if !issues.is_empty() => {
+                    return Self::ValidationFailed(bound_issues(issues));
+                }
+                Ok(_) => {}
+                Err(_) => return Self::Error("Invalid client validation diagnostics".into()),
+            }
+        }
+        if let Some(error) = payload.get("error") {
+            return Self::Error(error.as_str().unwrap_or("client tool failed").into());
+        }
+        match payload.get("result") {
+            Some(result) => Self::Result(result.clone()),
+            None => Self::Error("client tool returned neither a result nor an error".into()),
+        }
+    }
 }
 
 /// Outcome of attempting to deliver a client-tool result into a parked loop.
@@ -146,6 +389,110 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    fn submission() -> (ClientToolConfig, Value) {
+        let schema = json!({"type":"object","properties":{"title":{"type":"string"}},"required":["title"],"additionalProperties":false});
+        let config = ClientToolConfig {
+            name: "submit_draft".into(),
+            parameters: schema.to_string(),
+            submission: Some(Default::default()),
+            ..Default::default()
+        };
+        (config, schema)
+    }
+
+    #[test]
+    fn validates_before_dispatch_and_bounds_repair_feedback() {
+        let (config, schema) = submission();
+        let policy = OfferedClientTool::prepare(&config, &schema)
+            .unwrap()
+            .submission
+            .unwrap();
+        assert!(policy.validate(&json!({"title":"Draft"})).is_none());
+        let invalid = json!({"title": ["large-artifact".repeat(1000)]});
+        let failure = policy.validate(&invalid).unwrap();
+        let ClientToolOutcome::ValidationFailed(issues) = &failure else {
+            panic!("validation failure")
+        };
+        assert_eq!(issues[0].path, "/title");
+        assert_eq!(issues[0].code, "type");
+        assert!(!issues[0].message.contains("large-artifact"));
+        assert!(!policy.finish_after(&failure, 1));
+        assert!(policy.finish_after(&failure, 3));
+        assert!(policy.finish_after(&ClientToolOutcome::Result(Value::Null), 1));
+        assert!(policy.finish_after(
+            &ClientToolOutcome::Cancelled {
+                reason: "timeout".into()
+            },
+            1
+        ));
+        let mut output = json!({});
+        policy.annotate(&mut output, &failure, 2);
+        assert_eq!(
+            output["submission"],
+            json!({"status":"retry","attempts_remaining":1})
+        );
+        policy.annotate(&mut output, &failure, 3);
+        assert_eq!(
+            output["submission"],
+            json!({"status":"failed","attempts_remaining":0})
+        );
+    }
+
+    #[test]
+    fn native_enforcement_requires_model_adapter_and_schema_support() {
+        let (mut config, schema) = submission();
+        for provider in ["openai", "openai_responses", "azure_openai_responses"] {
+            assert!(native_strict_for_submission(&config, &schema, provider, true, false).unwrap());
+        }
+        for provider in ["gemini", "vertex_ai", "ollama", "unknown"] {
+            assert!(
+                !native_strict_for_submission(&config, &schema, provider, true, false).unwrap()
+            );
+        }
+        assert!(!native_strict_for_submission(&config, &schema, "openai", false, false).unwrap());
+        assert!(!native_strict_for_submission(&config, &schema, "openai", true, true).unwrap());
+        let mut optional = schema.clone();
+        optional["required"] = json!([]);
+        assert!(!native_strict_for_submission(&config, &optional, "openai", true, false).unwrap());
+        assert_eq!(
+            optional["required"],
+            json!([]),
+            "optional fields must not change meaning"
+        );
+        config.submission.as_mut().unwrap().native_schema = ClientToolNativeSchema::Required;
+        assert!(native_strict_for_submission(&config, &optional, "openai", true, false).is_err());
+        config.submission.as_mut().unwrap().native_schema = ClientToolNativeSchema::Off;
+        assert!(!native_strict_for_submission(&config, &schema, "openai", true, false).unwrap());
+        assert_eq!(
+            build_client_tool("submit_draft", "Stage a draft", schema, false, true).strict,
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn diagnostic_transport_fails_closed_and_preserves_null_success() {
+        let payload = json!({"result": {"accepted":true}, "error":"bad draft", "validation_errors":[
+            {"path":"/items/0/source","code":"unknown_reference","message":"Use a current ID"}
+        ]});
+        let ClientToolOutcome::ValidationFailed(issues) = ClientToolOutcome::from_payload(&payload)
+        else {
+            panic!("errors take precedence")
+        };
+        assert_eq!(issues[0].code, "unknown_reference");
+        assert!(matches!(
+            ClientToolOutcome::from_payload(&json!({"result":null})),
+            ClientToolOutcome::Result(Value::Null)
+        ));
+        assert!(matches!(
+            ClientToolOutcome::from_payload(&json!({})),
+            ClientToolOutcome::Error(_)
+        ));
+        assert!(matches!(
+            ClientToolOutcome::from_payload(&json!({"result":true,"validation_errors":{}})),
+            ClientToolOutcome::Error(_)
+        ));
+    }
+
     #[test]
     fn build_client_tool_sets_name_description_and_schema() {
         let schema = json!({ "type": "object", "properties": {} });
@@ -153,6 +500,7 @@ mod tests {
             "fetch_availability",
             "Fetch the user's free/busy.",
             schema.clone(),
+            false,
             false,
         );
         match &tool.name {
@@ -169,7 +517,7 @@ mod tests {
 
     #[test]
     fn build_client_tool_omits_strict_when_requested() {
-        let tool = build_client_tool("t", "d", json!({ "type": "object" }), true);
+        let tool = build_client_tool("t", "d", json!({ "type": "object" }), true, false);
         assert_eq!(tool.strict, None);
     }
 
@@ -180,6 +528,7 @@ mod tests {
             description: "d".to_string(),
             parameters: r#"{ "type": "object" }"#.to_string(),
             timeout_ms: None,
+            submission: None,
         }
     }
 

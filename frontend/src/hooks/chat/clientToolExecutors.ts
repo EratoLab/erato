@@ -6,9 +6,17 @@
  * re-execute on recovery; mutations belong on `propose_client_action`.
  */
 
+import type { ClientToolValidationIssue } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
+export type { ClientToolValidationIssue } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
 export type ClientToolExecutionResult =
   | { ok: true; result: unknown }
-  | { ok: false; error: string };
+  | {
+      ok: false;
+      error: string;
+      validationErrors?: ClientToolValidationIssue[];
+    };
 
 /**
  * Identifiers of the call being executed. Additive second parameter: existing

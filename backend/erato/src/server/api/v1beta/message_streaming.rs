@@ -1965,6 +1965,11 @@ pub struct ClientToolResultRequest {
     #[serde(default)]
     #[schema(nullable = false)]
     error: Option<String>,
+    /// Parser diagnostics for a rejected submission. Nonempty diagnostics are
+    /// a failure even if a result is also supplied. Messages should be concise;
+    /// the backend retains at most 16 issues with bounded field lengths.
+    #[serde(default)]
+    validation_errors: Vec<crate::services::client_tools::ClientToolValidationIssue>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -2217,11 +2222,11 @@ pub struct PreparedChatRequest {
     mcp_tools_disabled_by_user: Vec<String>,
     // Filtered MCP tools available to this request, including server routing info.
     available_mcp_tools: Vec<crate::services::mcp_session_manager::ManagedTool>,
-    // Park budgets of the client tools OFFERED to this request, keyed by the
+    // Runtime policies of the client tools OFFERED to this request, keyed by the
     // model-facing name (unique post-dedup). The dispatch/park site resolves
     // timeouts from here instead of re-finding config entries by bare name,
     // which is ambiguous when namespaces reuse a name.
-    offered_client_tool_timeouts: HashMap<String, Option<u64>>,
+    offered_client_tools: HashMap<String, crate::services::client_tools::OfferedClientTool>,
     // Prepared `genai` `ChatRequest` (messages + available tools)
     chat_request: ChatRequest,
     // Prepared `genai` `ChatOptions` (e.g. reasoning effort)
@@ -3115,11 +3120,13 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         &effective_selected_facet_ids,
         user_input.action_facet.as_ref().map(|af| af.id.as_str()),
     );
-    // Park budgets of the client tools OFFERED to this request, keyed by the
+    // Runtime policies of the client tools OFFERED to this request, keyed by the
     // model-facing name (unique post-dedup). The dispatch/park site resolves
     // timeouts from here instead of re-finding config entries by bare name.
-    let mut offered_client_tool_timeouts: std::collections::HashMap<String, Option<u64>> =
-        std::collections::HashMap::new();
+    let mut offered_client_tools: std::collections::HashMap<
+        String,
+        crate::services::client_tools::OfferedClientTool,
+    > = std::collections::HashMap::new();
     if !client_tool_allowlist.is_empty() && !is_delegated_run {
         let allowlist_matched: Vec<&crate::config::ClientToolConfig> = app_state
             .config
@@ -3181,15 +3188,31 @@ pub(crate) async fn prepare_chat_request_with_adapters(
                     continue;
                 }
             };
-            // Remember the OFFERED entry's park budget by model-facing name
+            // Remember the OFFERED entry's policy by model-facing name
             // (unique post-dedup) — the dispatch site must not re-find the
             // config by bare name, which is ambiguous across namespaces.
-            offered_client_tool_timeouts.insert(name.to_string(), client_tool.timeout_ms);
+            let policy =
+                crate::services::client_tools::OfferedClientTool::prepare(client_tool, &schema)
+                    .map_err(|error| {
+                        eyre!("Invalid client submission schema for '{}': {}", name, error)
+                    })?;
+            let native_strict = crate::services::client_tools::native_strict_for_submission(
+                client_tool,
+                &schema,
+                &chat_provider_config.provider_kind,
+                chat_provider_config
+                    .model_capabilities
+                    .supports_strict_tool_calling,
+                effective_model_settings.compat_omit_strict,
+            )
+            .map_err(|error| eyre!(error))?;
+            offered_client_tools.insert(name.to_string(), policy);
             chat_request_tools.push(crate::services::client_tools::build_client_tool(
                 name,
                 &client_tool.description,
                 schema,
                 effective_model_settings.compat_omit_strict,
+                native_strict,
             ));
         }
     }
@@ -3407,7 +3430,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         mcp_servers_disabled_by_user,
         mcp_tools_disabled_by_user,
         available_mcp_tools: generation_mcp_tools.clone(),
-        offered_client_tool_timeouts,
+        offered_client_tools,
         chat_request,
         chat_options,
         delegation_targets: user_input.delegation_targets.clone(),
@@ -4129,7 +4152,7 @@ async fn stream_generate_chat_completion<
     mcp_tools_disabled_by_user: Vec<String>,
     allowed_tool_names: HashSet<String>,
     available_mcp_tools: Vec<crate::services::mcp_session_manager::ManagedTool>,
-    offered_client_tool_timeouts: HashMap<String, Option<u64>>,
+    offered_client_tools: HashMap<String, crate::services::client_tools::OfferedClientTool>,
     chat_provider_headers_context: &'a ChatProviderHeadersContext<'a>,
     streaming_task: Option<&Arc<StreamingTask>>,
     assistant_id: Option<Uuid>,
@@ -4234,6 +4257,7 @@ async fn stream_generate_chat_completion<
     // budget may still make client calls, and the other way round.
     let mut task_server_tool_calls: u32 = 0;
     let mut task_client_tool_calls: u32 = 0;
+    let mut submission_attempts: HashMap<String, u32> = HashMap::new();
     // At most one successful client-action proposal per generation: the
     // client needs a single authoritative proposal, so duplicate or
     // conflicting calls after the first are answered with an error.
@@ -4383,6 +4407,7 @@ async fn stream_generate_chat_completion<
         // must be the one that wins.
         // Paired with the call's position in the batch: task runs settle out
         // of order, and the model is answered in the order it asked.
+        let batch_call_count = unfinished_tool_calls.len();
         let mut current_turn_tool_responses: Vec<(usize, genai::chat::ToolResponse)> = vec![];
         let mut pending_waits = Vec::new();
         let mut in_flight: futures::stream::FuturesUnordered<InFlightTask<'_>> =
@@ -5103,117 +5128,146 @@ async fn stream_generate_chat_completion<
                     continue;
                 };
 
-                // Register interest BEFORE emitting the call event, so a result
-                // POSTed immediately cannot race ahead of the registered waiter.
-                let mut result_rx = task.register_client_tool_call(call_id.clone()).await;
+                let policy = offered_client_tools.get(&tool_name);
+                let submission = policy.and_then(|policy| policy.submission.as_ref());
+                let attempt = if submission.is_some() {
+                    let attempt = submission_attempts.entry(tool_name.clone()).or_default();
+                    *attempt += 1;
+                    *attempt
+                } else {
+                    0
+                };
+                // A submission is a single final artifact, never one of several
+                // parallel candidates. Reject it before invoking a host executor.
+                let validation_failure = submission.and_then(|submission| {
+                    if batch_call_count != 1 {
+                        Some(ClientToolOutcome::ValidationFailed(vec![
+                            crate::services::client_tools::ClientToolValidationIssue {
+                                path: String::new(),
+                                code: "submission_must_be_alone".into(),
+                                message: "Call the submission tool alone after completing other tool calls.".into(),
+                            }
+                        ]))
+                    } else { submission.validate(&tool_input) }
+                });
+                let outcome = if let Some(failure) = validation_failure {
+                    failure
+                } else {
+                    // Register interest BEFORE emitting the call event, so a result
+                    // POSTed immediately cannot race ahead of the registered waiter.
+                    let mut result_rx = task.register_client_tool_call(call_id.clone()).await;
 
-                // Signal the client to execute: broadcast (submit path + resume
-                // replay) AND the typed tx stream (regenerate/edit path).
-                send_background_event(
-                    task,
-                    StreamingEvent::ClientToolCall {
+                    // Signal the client to execute: broadcast (submit path + resume
+                    // replay) AND the typed tx stream (regenerate/edit path).
+                    send_background_event(
+                        task,
+                        StreamingEvent::ClientToolCall {
+                            message_id: assistant_message_id,
+                            content_index,
+                            tool_call_id: call_id.clone(),
+                            tool_name: tool_name.clone(),
+                            input: Some(tool_input.clone()),
+                        },
+                        "broadcast client tool call",
+                    )
+                    .await;
+                    let call_event = MessageSubmitStreamingResponseClientToolCall {
                         message_id: assistant_message_id,
                         content_index,
                         tool_call_id: call_id.clone(),
                         tool_name: tool_name.clone(),
                         input: Some(tool_input.clone()),
-                    },
-                    "broadcast client tool call",
-                )
-                .await;
-                let call_event = MessageSubmitStreamingResponseClientToolCall {
-                    message_id: assistant_message_id,
-                    content_index,
-                    tool_call_id: call_id.clone(),
-                    tool_name: tool_name.clone(),
-                    input: Some(tool_input.clone()),
-                };
-                let call_message: MSG = call_event.into();
-                // Best-effort on the typed stream: the client is, by design,
-                // away executing the tool and POSTing to a separate endpoint
-                // during the park, so a dropped SSE connection here must NOT
-                // abort the generation. The broadcast + resume history is the
-                // durable signal path.
-                if let Err(error) = call_message.send_event_report(tx.clone()).await {
-                    warn_and_capture_error("send best-effort client tool call SSE event", &error);
-                }
-
-                // Resolve this tool's park budget from the entry that was
-                // OFFERED to this request (a bare-name config scan would be
-                // ambiguous when namespaces reuse a name), else the default.
-                let park_timeout_ms = offered_client_tool_timeouts
-                    .get(tool_name.as_str())
-                    .copied()
-                    .flatten()
-                    .unwrap_or(DEFAULT_CLIENT_TOOL_PARK_TIMEOUT_MS);
-
-                // Park until the client POSTs a result, an abort arrives, or the
-                // bounded timeout fires.
-                enum Park {
-                    Delivered(ClientToolOutcome),
-                    Aborted,
-                    TimedOut,
-                }
-                let park = tokio::select! {
-                    received = &mut result_rx => match received {
-                        Ok(outcome) => Park::Delivered(outcome),
-                        // Sender dropped without delivering (e.g. task replaced).
-                        Err(_) => Park::TimedOut,
-                    },
-                    _ = task.wait_for_abort() => Park::Aborted,
-                    _ = tokio::time::sleep(tokio::time::Duration::from_millis(
-                        park_timeout_ms,
-                    )) => Park::TimedOut,
-                };
-
-                // Drop the pending entry, then settle the timeout/abort-vs-
-                // delivery boundary race: if the client's result landed just as
-                // we gave up, prefer it over discarding (and over the endpoint
-                // having reported a spurious success).
-                task.remove_pending_client_tool(&call_id).await;
-                let raced_in = result_rx.try_recv().ok();
-
-                let outcome = match park {
-                    Park::Delivered(outcome) => outcome,
-                    Park::TimedOut => raced_in.unwrap_or_else(|| ClientToolOutcome::Cancelled {
-                        reason: "timeout".to_string(),
-                    }),
-                    Park::Aborted => {
-                        // User cancelled: discard any raced-in result and mirror
-                        // the drain's abort exit.
-                        persist_otel_tool_call(
-                            tracing_client.as_ref(),
-                            &unfinished_tool_call,
-                            Some(json!({ "status": "cancelled", "reason": "aborted" })),
-                            otel_tool_call_start_time,
-                            Some(SystemTime::now()),
-                            tool_call_parent_observation_id.clone(),
-                            assistant_id,
-                            &langfuse_trace_enrichment.platform,
-                            Some("Client tool execution was aborted"),
-                        )
-                        .await;
-                        let generation_metadata = build_generation_metadata(
-                            total_prompt_tokens,
-                            total_completion_tokens,
-                            total_total_tokens,
-                            total_reasoning_tokens,
-                            langfuse_trace_id.clone(),
-                            true,
-                            None,
-                            non_empty_string(&captured_reasoning_summary),
-                            non_empty_vec(&captured_reasoning_items),
-                            non_empty_vec(&captured_reasoning_item_encrypted_content),
+                    };
+                    let call_message: MSG = call_event.into();
+                    // Best-effort on the typed stream: the client is, by design,
+                    // away executing the tool and POSTing to a separate endpoint
+                    // during the park, so a dropped SSE connection here must NOT
+                    // abort the generation. The broadcast + resume history is the
+                    // durable signal path.
+                    if let Err(error) = call_message.send_event_report(tx.clone()).await {
+                        warn_and_capture_error(
+                            "send best-effort client tool call SSE event",
+                            &error,
                         );
-                        // Leave the batch, but not before the join below: children are
-                        // already running and their slots must not be left open.
-                        exit_metadata = generation_metadata;
-                        exit_after_join = true;
-                        break 'pop_calls;
+                    }
+
+                    // Resolve this tool's park budget from the entry that was
+                    // OFFERED to this request (a bare-name config scan would be
+                    // ambiguous when namespaces reuse a name), else the default.
+                    let park_timeout_ms = policy
+                        .and_then(|policy| policy.timeout_ms)
+                        .unwrap_or(DEFAULT_CLIENT_TOOL_PARK_TIMEOUT_MS);
+
+                    // Park until the client POSTs a result, an abort arrives, or the
+                    // bounded timeout fires.
+                    enum Park {
+                        Delivered(ClientToolOutcome),
+                        Aborted,
+                        TimedOut,
+                    }
+                    let park = tokio::select! {
+                        received = &mut result_rx => match received {
+                            Ok(outcome) => Park::Delivered(outcome),
+                            // Sender dropped without delivering (e.g. task replaced).
+                            Err(_) => Park::TimedOut,
+                        },
+                        _ = task.wait_for_abort() => Park::Aborted,
+                        _ = tokio::time::sleep(tokio::time::Duration::from_millis(
+                            park_timeout_ms,
+                        )) => Park::TimedOut,
+                    };
+
+                    // Drop the pending entry, then settle the timeout/abort-vs-
+                    // delivery boundary race: if the client's result landed just as
+                    // we gave up, prefer it over discarding (and over the endpoint
+                    // having reported a spurious success).
+                    task.remove_pending_client_tool(&call_id).await;
+                    let raced_in = result_rx.try_recv().ok();
+
+                    match park {
+                        Park::Delivered(outcome) => outcome,
+                        Park::TimedOut => {
+                            raced_in.unwrap_or_else(|| ClientToolOutcome::Cancelled {
+                                reason: "timeout".to_string(),
+                            })
+                        }
+                        Park::Aborted => {
+                            // User cancelled: discard any raced-in result and mirror
+                            // the drain's abort exit.
+                            persist_otel_tool_call(
+                                tracing_client.as_ref(),
+                                &unfinished_tool_call,
+                                Some(json!({ "status": "cancelled", "reason": "aborted" })),
+                                otel_tool_call_start_time,
+                                Some(SystemTime::now()),
+                                tool_call_parent_observation_id.clone(),
+                                assistant_id,
+                                &langfuse_trace_enrichment.platform,
+                                Some("Client tool execution was aborted"),
+                            )
+                            .await;
+                            let generation_metadata = build_generation_metadata(
+                                total_prompt_tokens,
+                                total_completion_tokens,
+                                total_total_tokens,
+                                total_reasoning_tokens,
+                                langfuse_trace_id.clone(),
+                                true,
+                                None,
+                                non_empty_string(&captured_reasoning_summary),
+                                non_empty_vec(&captured_reasoning_items),
+                                non_empty_vec(&captured_reasoning_item_encrypted_content),
+                            );
+                            // Leave the batch, but not before the join below: children are
+                            // already running and their slots must not be left open.
+                            exit_metadata = generation_metadata;
+                            exit_after_join = true;
+                            break 'pop_calls;
+                        }
                     }
                 };
 
-                let (status, bg_status, message_status, output_value, response_text) =
+                let (status, bg_status, message_status, mut output_value, mut response_text) =
                     match &outcome {
                         ClientToolOutcome::Result(result) => (
                             ToolCallStatus::Success,
@@ -5229,6 +5283,16 @@ async fn stream_generate_chat_completion<
                             json!({ "status": "error", "error": error }),
                             format!("Client tool error: {error}"),
                         ),
+                        ClientToolOutcome::ValidationFailed(issues) => {
+                            let output = json!({ "status": "error", "error": "Submission validation failed", "validation_errors": issues });
+                            (
+                                ToolCallStatus::Error,
+                                BgToolCallStatus::Error,
+                                MessageToolCallStatus::Error,
+                                output.clone(),
+                                output.to_string(),
+                            )
+                        }
                         // Backend-produced (e.g. park timeout): a typed,
                         // tool_call_id-correlated resolution the client can tell
                         // apart from a genuine tool error (its output carries
@@ -5244,6 +5308,25 @@ async fn stream_generate_chat_completion<
                             ),
                         ),
                     };
+                if let Some(submission) = submission {
+                    submission.annotate(&mut output_value, &outcome, attempt);
+                    response_text = output_value.to_string();
+                    if submission.finish_after(&outcome, attempt) {
+                        exit_after_join = true;
+                        exit_metadata = build_generation_metadata(
+                            total_prompt_tokens,
+                            total_completion_tokens,
+                            total_total_tokens,
+                            total_reasoning_tokens,
+                            langfuse_trace_id.clone(),
+                            false,
+                            None,
+                            non_empty_string(&captured_reasoning_summary),
+                            non_empty_vec(&captured_reasoning_items),
+                            non_empty_vec(&captured_reasoning_item_encrypted_content),
+                        );
+                    }
+                }
                 let tool_error =
                     matches!(status, ToolCallStatus::Error).then(|| response_text.clone());
 
@@ -10967,7 +11050,7 @@ pub(crate) async fn run_generation_after_user_message(
         mcp_servers_disabled_by_user,
         mcp_tools_disabled_by_user,
         available_mcp_tools,
-        offered_client_tool_timeouts,
+        offered_client_tools,
         delegation_targets,
         delegation_offered_file_ids,
         task_offer_scope,
@@ -11133,7 +11216,7 @@ pub(crate) async fn run_generation_after_user_message(
         mcp_tools_disabled_by_user,
         allowed_tool_names,
         available_mcp_tools,
-        offered_client_tool_timeouts,
+        offered_client_tools,
         &chat_provider_headers_context,
         Some(task),
         chat.assistant_id,
@@ -11500,7 +11583,7 @@ pub async fn regenerate_message_sse(
                 mcp_servers_disabled_by_user,
                 mcp_tools_disabled_by_user,
                 available_mcp_tools,
-                offered_client_tool_timeouts,
+                offered_client_tools,
                 delegation_targets,
                 delegation_offered_file_ids,
                 task_offer_scope,
@@ -11620,7 +11703,7 @@ pub async fn regenerate_message_sse(
                     mcp_tools_disabled_by_user,
                     allowed_tool_names,
                     available_mcp_tools,
-                    offered_client_tool_timeouts,
+                    offered_client_tools,
                     &chat_provider_headers_context,
                     Some(&task_for_stream),
                     chat.assistant_id,
@@ -12039,7 +12122,7 @@ pub async fn edit_message_sse(
                 mcp_servers_disabled_by_user,
                 mcp_tools_disabled_by_user,
                 available_mcp_tools,
-                offered_client_tool_timeouts,
+                offered_client_tools,
                 delegation_targets,
                 delegation_offered_file_ids,
                 task_offer_scope,
@@ -12159,7 +12242,7 @@ pub async fn edit_message_sse(
                     mcp_tools_disabled_by_user,
                     allowed_tool_names,
                     available_mcp_tools,
-                    offered_client_tool_timeouts,
+                    offered_client_tools,
                     &chat_provider_headers_context,
                     Some(&task_for_stream),
                     chat.assistant_id,
@@ -12386,6 +12469,13 @@ pub async fn client_tool_result(
     .0;
 
     let task = app_state.background_tasks.get_task(&request.chat_id).await;
+    let mut payload = json!({ "validation_errors": request.validation_errors });
+    if let Some(error) = request.error {
+        payload["error"] = json!(error);
+    }
+    if let Some(result) = request.result {
+        payload["result"] = result;
+    }
 
     if task.is_none() {
         let Some((generation_id, message_id)) = app_state
@@ -12406,13 +12496,6 @@ pub async fn client_tool_result(
                 "No suspended generation matches this message".to_string(),
             ));
         }
-        let payload = match (request.result, request.error) {
-            (_, Some(error)) => json!({ "error": error }),
-            (Some(result), None) => json!({ "result": result }),
-            (None, None) => json!({
-                "error": "client tool returned neither a result nor an error"
-            }),
-        };
         app_state
             .background_tasks
             .enqueue_client_tool_result(generation_id, &request.tool_call_id, payload)
@@ -12437,15 +12520,7 @@ pub async fn client_tool_result(
         ));
     }
 
-    // `error` takes precedence if present; otherwise a result; neither is itself
-    // surfaced to the model as an error.
-    let outcome = match (request.result, request.error) {
-        (_, Some(error)) => ClientToolOutcome::Error(error),
-        (Some(result), None) => ClientToolOutcome::Result(result),
-        (None, None) => ClientToolOutcome::Error(
-            "client tool returned neither a result nor an error".to_string(),
-        ),
-    };
+    let outcome = ClientToolOutcome::from_payload(&payload);
 
     let delivery = task
         .deliver_client_tool_result(&request.tool_call_id, outcome)
