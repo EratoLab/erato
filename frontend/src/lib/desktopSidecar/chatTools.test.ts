@@ -1,7 +1,10 @@
 import { DesktopSidecarClient } from "@erato/desktop-sidecar-protocol";
 import { describe, expect, it, vi } from "vitest";
 
-import { createSidecarChatTools } from "./chatTools";
+import {
+  createSidecarChatTools,
+  GET_SIDECAR_SEARCH_FIELDS_TOOL,
+} from "./chatTools";
 import { resolveSidecarMailboxId } from "./mailboxAccess";
 
 import type { OutlookGetConversationV1Result } from "@erato/desktop-sidecar-protocol";
@@ -59,6 +62,137 @@ function conversation(): OutlookGetConversationV1Result {
 }
 
 describe("shared desktop sidecar tools", () => {
+  it("returns discovered metadata descriptors through the pinned contract", async () => {
+    const fields = [
+      {
+        field: "custom_source_field",
+        operators: ["eq", "in"],
+        type: "string",
+        description: "A source-specific identifier.",
+        applicable_kinds: ["email", "teams_message"],
+      },
+    ];
+    const env = setup({ "search.metadata_fields.v1": { fields } });
+    const tool = env
+      .tools()
+      .find((item) => item.name === GET_SIDECAR_SEARCH_FIELDS_TOOL)!;
+    expect(await tool.execute({}, context)).toEqual({
+      ok: true,
+      result: { fields },
+    });
+    expect(JSON.parse(env.request.mock.calls[0][0])).toMatchObject({
+      method: "search.metadata_fields.v1",
+      params: {},
+    });
+    expect(env.uploadAttachment).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed metadata discovery results", async () => {
+    const env = setup({
+      "search.metadata_fields.v1": {
+        fields: [{ field: "missing-descriptors" }],
+      },
+    });
+    const tool = env
+      .tools()
+      .find((item) => item.name === GET_SIDECAR_SEARCH_FIELDS_TOOL)!;
+    expect(await tool.execute({})).toMatchObject({ ok: false });
+  });
+
+  it("keeps existing tools available when metadata discovery is unsupported", async () => {
+    const env = setup({});
+    env.supports.mockImplementation(
+      (method) => method !== "search.metadata_fields.v1",
+    );
+    const tools = env.tools();
+    expect(tools[0].isAvailable()).toBe(true);
+    expect(tools[1].isAvailable()).toBe(true);
+    const discovery = tools.find(
+      (item) => item.name === GET_SIDECAR_SEARCH_FIELDS_TOOL,
+    )!;
+    expect(discovery.isAvailable()).toBe(false);
+    expect(await discovery.execute({})).toMatchObject({ ok: false });
+    expect(env.request).not.toHaveBeenCalled();
+  });
+
+  it("rejects extra discovery arguments before transport", async () => {
+    const env = setup({});
+    const tool = env
+      .tools()
+      .find((item) => item.name === GET_SIDECAR_SEARCH_FIELDS_TOOL)!;
+    expect(await tool.execute({ unknown: true })).toMatchObject({ ok: false });
+    expect(env.request).not.toHaveBeenCalled();
+  });
+
+  it("forwards metadata predicates alongside the existing filters", async () => {
+    const env = setup({
+      "search.query.v1": {
+        hits: [],
+        elapsedMs: 0,
+        blocksRead: 0,
+        candidatesScored: 0,
+      },
+    });
+    const input = {
+      text: "report",
+      filters: {
+        kind: "email",
+        sourceId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        dateFrom: 100,
+      },
+      metadata_filters: [
+        { field: "has_attachments", operator: "eq", value: true },
+        {
+          field: "sender",
+          operator: "in",
+          value: ["a@example.test", "b@example.test"],
+        },
+      ],
+    };
+    expect(await env.tools()[0].execute(input)).toMatchObject({ ok: true });
+    expect(JSON.parse(env.request.mock.calls[0][0]).params).toEqual(input);
+  });
+
+  it.each(["eq", "ne", "in"])(
+    "normalizes mailbox metadata IDs for %s without changing the caller's input",
+    async (operator) => {
+      const env = setup({
+        "search.query.v1": {
+          hits: [],
+          elapsedMs: 0,
+          blocksRead: 0,
+          candidatesScored: 0,
+        },
+      });
+      const value = operator === "in" ? [mailboxId] : mailboxId;
+      const input = {
+        metadata_filters: [{ field: "mailbox_id", operator, value }],
+      };
+      expect(await env.tools()[0].execute(input)).toMatchObject({ ok: true });
+      const expected = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+      expect(
+        JSON.parse(env.request.mock.calls[0][0]).params.metadata_filters,
+      ).toEqual([
+        {
+          field: "mailbox_id",
+          operator,
+          value: operator === "in" ? [expected] : expected,
+        },
+      ]);
+      expect(input.metadata_filters[0].value).toEqual(value);
+    },
+  );
+
+  it("rejects malformed metadata predicates before transport", async () => {
+    const env = setup({});
+    expect(
+      await env
+        .tools()[0]
+        .execute({ metadata_filters: [{ field: "kind", value: "email" }] }),
+    ).toMatchObject({ ok: false });
+    expect(env.request).not.toHaveBeenCalled();
+  });
+
   it("uploads an audio attachment with its filename and MIME type preserved", async () => {
     const result = conversation();
     result.messages[0].attachments = [

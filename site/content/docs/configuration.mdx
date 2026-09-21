@@ -4281,13 +4281,13 @@ priority_order = ["research_topic", "draft_email", "summarize_notes"]
 
 ### Optional desktop-sidecar client tools
 
-The web app and Office/Teams add-ins register `search_sidecar_index` and
-`read_sidecar_conversation` when a configured desktop sidecar supports them.
-Declare them as ordinary `[client_tools.tools.<id>]` tools and select `desktop/*`
-with a regular facet, action facet, or the global tool allowlist. The complete
-configuration is in `backend/examples/desktop-sidecar.erato.toml`; copy it into
-Erato's working directory as `desktop-sidecar.auto.erato.toml`, or merge its
-sections into your configuration. The example supplies an optional visible facet.
+The web app and Office/Teams add-ins register `get_sidecar_search_fields`,
+`search_sidecar_index`, and `read_sidecar_conversation` when the configured desktop
+sidecar supports each capability. Tool definitions, input schemas, and facet
+prompts are maintained in the subscription configuration package. Load that
+package through the backend's normal TOML configuration; the public runtime
+provides the shared executors. Configuration still selects the tools through
+ordinary `[client_tools.tools.<id>]` entries and facet tool allowlists.
 Configure the sidecar endpoint and allowed origins separately as usual. Deploy
 the backend, frontend, and rebuilt add-in together before enabling these tools;
 older backends do not gate optional tools or resolve their attachment references.
@@ -4313,10 +4313,20 @@ separate sharing-consent workflow.
 
 | Capability | Web and add-in behavior |
 | --- | --- |
-| Index search | Emails, attachment files, and Teams messages; optional kind, sender, mailbox, date, and file-type filters. Returns metadata and source references, not excerpts or bodies. Only indexed local data is covered. |
+| Search field discovery | `get_sidecar_search_fields` invokes `search.metadata_fields.v1` with `{}`. Returns field names, value types, operators, descriptions, and applicable document kinds. This describes filter support, not the distinct values stored in an index. |
+| Index search | Emails, attachment files, and Teams messages; optional kind, source, sender, mailbox, date, and file-type filters, plus `metadata_filters` predicates. Returns metadata and source references, not excerpts or bodies. Only indexed local data is covered. |
 | Outlook conversation read | A search email's `readConversation` reference supplies the mailbox and Message-ID. Bodies are converted to readable text. Attachment metadata is always returned. |
 | Attachment contents | `includeAttachments=true` uploads selected available bytes using the normal authenticated file API. Server authorization and the existing file processor apply before attachment text enters the tool result. `attachmentNames` selects exact names; otherwise inline files are skipped. |
 | Missing or partial content | Explicit statuses for unavailable bytes, disabled uploads, limits, upload failures, unparseable files, and truncated bodies/text. Images can be downloaded, but this tool returns text; image understanding uses normal message attachments. |
+
+Each `metadata_filters` entry has `field`, `operator`, and `value`, as defined by
+the pinned `SearchQueryV1Params` contract. Metadata predicates and the existing
+`filters` are combined with AND. The runtime preserves the sidecar's descriptors
+and source-specific field names. Compact mailbox IDs are normalized for the
+existing `filters.mailboxId` and metadata `mailbox_id` equality, inequality, and
+membership predicates. Other metadata values are forwarded unchanged.
+An older sidecar without field discovery can still provide its existing search
+and conversation capabilities; each executor advertises availability separately.
 
 Conversation reads default to 20 messages (maximum 50), with up to 20,000 body
 characters per message and 80,000 across the result. Attachment count respects

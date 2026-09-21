@@ -597,8 +597,8 @@ chat_provider_ids = ["test-token-limit"]
 #
 # Optional device tools should set requires_client_registration = true so they
 # are offered only when the current web/add-in client has a ready executor.
-# Existing tools default to false for backward compatibility. Full shared
-# sidecar search/conversation configuration: examples/desktop-sidecar.erato.toml.
+# Existing tools default to false for backward compatibility. Sidecar tool
+# definitions and facet prompts are supplied by deployment configuration packages.
 #
 # [client_tools.tools.outlook_fetch_availability]
 # # Model-facing name; keep it dot-free (OpenAI/Anthropic reject "." in tool
