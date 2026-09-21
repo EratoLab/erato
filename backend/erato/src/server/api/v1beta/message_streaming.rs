@@ -32,7 +32,7 @@ use crate::server::api::v1beta::message_streaming_file_extraction::{
     parse_content_filter_error_from_mcp_tool_result, post_process_mcp_tool_result,
 };
 use crate::services::background_tasks::{
-    BackgroundTaskManager, StreamingEvent, StreamingTask, Takeover, TaskCleanupGuard,
+    BackgroundTaskManager, StreamingEvent, StreamingTask, Takeover, TaskCleanupGuard, TaskOutcome,
     ToolCallStatus as BgToolCallStatus,
 };
 use crate::services::client_tools::{ClientToolDelivery, ClientToolOutcome};
@@ -2378,6 +2378,48 @@ fn generation_failure_error_value() -> Option<JsonValue> {
         },
     };
     serde_json::to_value(MessageSubmitStreamingResponseMessage::Error(error_event)).ok()
+}
+
+/// The delivery work every generation tail on a user-writable chat owes: this
+/// chat may be a parked `async` child whose answer an origin is still waiting
+/// for, and it may itself be an origin with results owed to it.
+///
+/// One function rather than four copies because the outward half is the easy
+/// one to forget: the decision that finishes a parked child runs on the CHILD
+/// chat, so a tail that drained only its own chat is a result nobody ever hears
+/// about.
+///
+/// Called after `remove_task`, wherever the tail owns that: a delivery takes the
+/// chat's lease for itself and `RefuseParked` would refuse a lease this turn
+/// still held.
+async fn settle_tail_deliveries(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    chat_id: Uuid,
+    task: &Arc<StreamingTask>,
+    outcome: TaskOutcome,
+) {
+    if let Some(origin_chat_id) =
+        crate::services::task_delivery::rearm_delivery_after_child_decision(
+            app_state,
+            chat_id,
+            task.message_id(),
+            outcome,
+            task.tool_budget_exhausted(),
+        )
+        .await
+    {
+        crate::services::task_delivery::drain_pending_deliveries(
+            app_state,
+            policy,
+            me_user,
+            origin_chat_id,
+        )
+        .await;
+    }
+    crate::services::task_delivery::drain_pending_deliveries(app_state, policy, me_user, chat_id)
+        .await;
 }
 
 /// Runs a generation inside the lifecycle a user submit and a delegated child
@@ -5804,9 +5846,10 @@ async fn stream_generate_chat_completion<
                     // durable stop would surface a half-done
                     // ToolApprovalRequest tail as the delegate's result.
                     // Refuse the CALL so the child completes in prose. A task
-                    // child its origin turn is still awaiting does have a
-                    // surface — its slot on that turn — and takes the arm
-                    // below instead.
+                    // child does have a surface and takes the arm below: an
+                    // awaited one its slot on the origin turn, an `async` one
+                    // its own card, announced to the origin by an
+                    // `input_required` delivery.
                     Some(format!(
                         "The tool '{}' requires user approval, which is unavailable in a delegated run; the call was not executed.",
                         unfinished_tool_call.fn_name
@@ -10696,7 +10739,7 @@ pub async fn message_submit_sse(
         async move {
             drop(dispatch_wait);
             tracing::info!("Starting background task for chat_id: {}", chat_id);
-            let _ = with_generation_task_lifecycle(
+            let result = with_generation_task_lifecycle(
                 &app_state_bg.background_tasks,
                 &task_clone,
                 chat_id,
@@ -10714,14 +10757,17 @@ pub async fn message_submit_sse(
             )
             .await;
 
-            // After `remove_task`, which the lifecycle owns: the delivery takes
-            // this chat's lease for itself, and `RefuseParked` would refuse a
-            // lease this turn still held.
-            crate::services::task_delivery::drain_pending_deliveries(
+            // Re-derived rather than returned: the lifecycle reads the same
+            // atomics to write the lease's terminal state, so the two cannot
+            // disagree.
+            let outcome = task_clone.derive_outcome(result.is_err());
+            settle_tail_deliveries(
                 &app_state_bg,
                 &policy_bg,
                 &me_user_bg,
                 chat_id,
+                &task_clone,
+                outcome,
             )
             .await;
         }
@@ -12544,13 +12590,13 @@ pub async fn regenerate_message_sse(
             .remove_task(&chat_id_for_cleanup, task_for_stream.generation_id, outcome)
             .await;
 
-        // After `remove_task`: the delivery takes this chat's lease for
-        // itself, and `try_start_task` consults the in-process map first.
-        crate::services::task_delivery::drain_pending_deliveries(
+        settle_tail_deliveries(
             &app_state,
             &policy,
             &me_user,
             chat_id_for_cleanup,
+            &task_for_stream,
+            outcome,
         )
         .await;
     });
@@ -13088,13 +13134,13 @@ pub async fn edit_message_sse(
             .remove_task(&chat_id_for_cleanup, task_for_stream.generation_id, outcome)
             .await;
 
-        // After `remove_task`: the delivery takes this chat's lease for
-        // itself, and `try_start_task` consults the in-process map first.
-        crate::services::task_delivery::drain_pending_deliveries(
+        settle_tail_deliveries(
             &app_state,
             &policy,
             &me_user,
             chat_id_for_cleanup,
+            &task_for_stream,
+            outcome,
         )
         .await;
     });
@@ -13673,6 +13719,11 @@ pub async fn react_to_task_result_sse(
             // Last, and after `remove_task`, which the lifecycle owns: a
             // delivery takes this chat's lease for itself, and `RefuseParked`
             // would refuse a lease this turn still held.
+            //
+            // The inward half only, unlike the user-write tails: a reaction
+            // cannot be the answer to a parked card. `/react` refuses a parked
+            // lease outright, so this chat cannot be a parked `async` child
+            // whose delivery is still `input_required`.
             crate::services::task_delivery::drain_pending_deliveries(
                 &app_state_bg,
                 &policy_bg,
@@ -14137,13 +14188,13 @@ pub async fn continue_message_sse(
             .remove_task(&chat_id, task.generation_id, outcome)
             .await;
 
-        // After `remove_task`: the delivery takes this chat's lease for
-        // itself, and `try_start_task` consults the in-process map first.
-        crate::services::task_delivery::drain_pending_deliveries(
+        settle_tail_deliveries(
             &app_state_for_worker,
             &policy_for_worker,
             &me_user,
             chat_id,
+            &task,
+            outcome,
         )
         .await;
     });
@@ -14247,6 +14298,11 @@ async fn store_standing_tool_decision(
 /// Wrapped in the shared generation lifecycle so the resumed run records its
 /// own outcome on its own chat — including `awaiting_approval` when it stops a
 /// second time, which is what makes the chained park answerable at all.
+///
+/// No `settle_tail_deliveries` here, unlike the tails a person's own request
+/// ends on: this runs only for a child covered by an open approval part on the
+/// origin turn, which is an awaited run that owns no `result_delivery` at all —
+/// its answer goes back through the slot the origin turn is blocked on.
 fn run_child_approval_continuation(
     app_state: AppState,
     policy: PolicyEngine,

@@ -463,10 +463,12 @@ chat_provider_ids = ["test-token-limit"]
 # # lets the user's next message compose it. "interrupt" is a reserved spelling
 # # with no implementation and is rejected at load (default: "when_idle")
 # scheduling = "when_idle"
-# # Whether an awaited task child that hits an approval-gated MCP call parks and
-# # has its request surfaced on the turn that delegated it, so the user can
-# # decide and the child carries on. Turning this off refuses the child's gated
-# # call instead, which means the child finishes without it (default: true)
+# # Whether a task child that hits an approval-gated MCP call parks and asks, so
+# # the user can decide and the child carries on. An awaited child's request is
+# # surfaced on the turn that delegated it; a detached "async" child stops on its
+# # own card and the origin conversation is told by an "input_required" result.
+# # Turning this off refuses the child's gated call instead, which means the
+# # child finishes without it (default: true)
 # propagate_child_mcp_approvals = true
 #
 # # When the user is asked before the model's planned tasks are dispatched. The

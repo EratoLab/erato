@@ -3686,10 +3686,12 @@ pub struct DelegationTasksConfig {
     #[serde(default)]
     pub scheduling: TaskScheduling,
 
-    // Whether an awaited task child that hits an approval-gated MCP call parks
-    // and has its request surfaced on the origin turn, instead of having the
-    // call refused so it finishes without it. Off means a child can never ask,
-    // so every gated call it makes is lost work.
+    // Whether a task child that hits an approval-gated MCP call parks and asks,
+    // instead of having the call refused so it finishes without it. An awaited
+    // child's request is surfaced on the origin turn; a detached `async` child
+    // stops on its own card and the origin is told by an `input_required`
+    // result. Off means a child can never ask, so every gated call it makes is
+    // lost work.
     // Defaults to `true`.
     #[serde(default = "default_delegation_tasks_propagate_child_mcp_approvals")]
     pub propagate_child_mcp_approvals: bool,

@@ -185,6 +185,24 @@ fn framed_untrusted_block(value: &str) -> String {
     value.replace('<', "&lt;").replace('>', "&gt;")
 }
 
+/// What the model is told when the run has stopped to ask instead of finishing.
+///
+/// Emitted in place of `delegation.tasks.result_template`, not around it: that
+/// template introduces a finished result — the shipped default says "has
+/// finished" — and saying so about a run that is still waiting would invite the
+/// model to report the task as done and move on. There is deliberately no
+/// second template key for this: an operator retuning the wording could drop
+/// the only sentence saying the answer has not arrived yet, and the sentence
+/// naming where the decision is taken is the whole point of the delivery.
+const INPUT_REQUIRED_TEMPLATE: &str = concat!(
+    "A task you delegated earlier has NOT finished. It stopped to ask for a decision only a ",
+    "person can make, and what follows is only what it had reached when it ",
+    "stopped.{{truncated_note}} The decision is taken in the run's own conversation — the one ",
+    "identified by the `child_run_id` below — and never in this one. A further result ",
+    "carrying the real answer arrives once the decision has been made; until then nothing ",
+    "about this task has been reported.\n\n{{result}}"
+);
+
 /// Render a delivered task result for the model that has to react to it.
 ///
 /// The split here is the whole point. `template` is operator-tunable prose and
@@ -198,6 +216,9 @@ fn framed_untrusted_block(value: &str) -> String {
 /// `{{result}}` is guaranteed present: a template without it is rejected at
 /// config load, because such a template renders perfectly well and what it
 /// renders is a result with the answer silently missing.
+///
+/// An `input_required` delivery ignores the operator's template and uses
+/// [`INPUT_REQUIRED_TEMPLATE`] instead — see there for why.
 pub fn render_task_result(
     template: &str,
     part: &crate::models::message::ContentPartTaskResult,
@@ -217,6 +238,11 @@ pub fn render_task_result(
         ""
     };
 
+    let template = if part.status == DelegationRunStatus::InputRequired.as_str() {
+        INPUT_REQUIRED_TEMPLATE
+    } else {
+        template
+    };
     let body = template
         .replace("{{truncated_note}}", truncated_note)
         .replace("{{result}}", &framed);
@@ -908,12 +934,14 @@ pub fn resolve_delegation_run_mode(
 /// Whether this chat is a delegated run that may park on an approval-gated MCP
 /// call instead of having it refused.
 ///
-/// Three conditions, each of which is a surface that has to exist: a `task`
-/// child has a `ToolUse` slot on the origin turn to carry the request, an
-/// awaited run has a turn still running to carry it, and the deployment has to
-/// allow the propagation at all. Anything else — the mention route, an `async`
-/// or `background` child, the kill-switch off — has nowhere to ask, so the call
-/// is refused and the child finishes without it.
+/// Every condition is a surface that has to exist. A `task` child is asked
+/// about somewhere — an awaited run on the origin turn's `ToolUse` slot, an
+/// `async` run on its own card, with the `input_required` delivery as the
+/// notification — and the deployment has to allow the propagation at all.
+/// Anything else has nowhere to ask, so the call is refused and the child
+/// finishes without it: the mention route has no task slot, a `background`
+/// child re-enters the origin on no route whatsoever, and the kill-switch off
+/// means the deployment does not want the question raised.
 pub(crate) fn child_may_park_on_approval(
     chat: &crate::db::entity::chats::Model,
     config: &DelegationConfig,
@@ -930,8 +958,21 @@ pub(crate) fn child_may_park_on_approval(
     if provenance.kind != crate::models::chat::ChatProvenanceKind::Delegation {
         return false;
     }
-    if provenance.run_mode.unwrap_or(ProvenanceRunMode::Wait) != ProvenanceRunMode::Wait {
-        return false;
+    match provenance.run_mode.unwrap_or(ProvenanceRunMode::Wait) {
+        ProvenanceRunMode::Wait => {}
+        // An `async` park is only visible through the delivery that carries it,
+        // so the same gate `drain_pending_deliveries` and `/react` use decides
+        // whether there is a notification to park behind.
+        ProvenanceRunMode::Async => {
+            if !config
+                .tasks
+                .run_modes
+                .contains(&erato_config::config::TaskRunMode::Async)
+            {
+                return false;
+            }
+        }
+        ProvenanceRunMode::Background => return false,
     }
     configuration
         .task
@@ -3751,6 +3792,94 @@ mod tests {
         );
     }
 
+    fn delegated_chat(run_mode: &str, route: &str) -> crate::db::entity::chats::Model {
+        let now: sea_orm::prelude::DateTimeWithTimeZone = chrono::Utc::now().into();
+        crate::db::entity::chats::Model {
+            id: Uuid::new_v4(),
+            owner_user_id: "owner".to_string(),
+            created_at: now,
+            updated_at: now,
+            title_by_summary: None,
+            archived_at: None,
+            assistant_configuration: Some(json!({
+                "provenance": { "kind": "delegation", "run_mode": run_mode },
+                "task": { "route": route },
+            })),
+            assistant_id: None,
+            origin_chat_id: None,
+            title_by_user_provided: None,
+            is_pinned: false,
+            active_generation_id: None,
+            generation_state: None,
+            generation_started_at: None,
+            generation_heartbeat_at: None,
+            generation_ended_at: None,
+            mcp_write_tools_enabled: false,
+            disabled_mcp_server_ids: Vec::new(),
+            disabled_mcp_tools: Vec::new(),
+        }
+    }
+
+    fn park_config(run_modes: Vec<erato_config::config::TaskRunMode>) -> DelegationConfig {
+        let mut config = DelegationConfig::default();
+        config.tasks.run_modes = run_modes;
+        config
+    }
+
+    /// The gate is per run mode, and every `false` here is a run with nowhere
+    /// to put the question: a `background` child re-enters the origin on no
+    /// route at all, an `async` child is only asked about through the delivery
+    /// its origin gets — so a deployment that does not offer `async` tasks has
+    /// no such delivery — and the mention route has no task slot.
+    #[test]
+    fn only_a_task_child_with_somewhere_to_ask_may_park() {
+        use erato_config::config::TaskRunMode;
+
+        let offers_async = park_config(vec![TaskRunMode::Wait, TaskRunMode::Async]);
+        assert!(child_may_park_on_approval(
+            &delegated_chat("wait", "task"),
+            &offers_async
+        ));
+        assert!(child_may_park_on_approval(
+            &delegated_chat("async", "task"),
+            &offers_async
+        ));
+        assert!(!child_may_park_on_approval(
+            &delegated_chat("background", "task"),
+            &offers_async
+        ));
+        assert!(!child_may_park_on_approval(
+            &delegated_chat("wait", "assistant"),
+            &offers_async
+        ));
+        assert!(
+            !child_may_park_on_approval(
+                &delegated_chat("async", "task"),
+                &park_config(vec![TaskRunMode::Wait])
+            ),
+            "an async park announces itself through a delivery a wait-only deployment never makes"
+        );
+    }
+
+    /// The kill switch is exactly that: off, no child of any shape asks.
+    #[test]
+    fn the_propagation_kill_switch_refuses_every_child() {
+        let mut config = park_config(vec![
+            erato_config::config::TaskRunMode::Wait,
+            erato_config::config::TaskRunMode::Async,
+        ]);
+        config.tasks.propagate_child_mcp_approvals = false;
+
+        assert!(!child_may_park_on_approval(
+            &delegated_chat("wait", "task"),
+            &config
+        ));
+        assert!(!child_may_park_on_approval(
+            &delegated_chat("async", "task"),
+            &config
+        ));
+    }
+
     fn task_result_part(
         summary: &str,
         truncated: bool,
@@ -3763,6 +3892,7 @@ mod tests {
             summary: summary.to_string(),
             truncated,
             sequence: 0,
+            redeliveries: 0,
         }
     }
 
@@ -3836,6 +3966,52 @@ mod tests {
         assert_eq!(
             close_count, 1,
             "a child closing the tag must not produce a second one: {rendered}"
+        );
+    }
+
+    /// The origin model must not be told a parked run reported.
+    ///
+    /// The operator template introduces a finished result — the shipped default
+    /// says "has finished" — and a notification rendered through it would read
+    /// as the task's answer, which invites the model to summarise a run that has
+    /// not done anything yet and never to mention that someone has to decide.
+    ///
+    /// Mutation: let `input_required` fall through to the operator template and
+    /// this fails.
+    #[test]
+    fn a_parked_run_is_not_rendered_as_a_finished_one() {
+        let mut part = task_result_part("WHAT-IT-HAD-SO-FAR", false);
+        part.status = DelegationRunStatus::InputRequired.as_str().to_string();
+        part.reason = Some(DelegationRunReason::ApprovalPending.as_str().to_string());
+
+        let rendered = render_task_result(
+            "A task you delegated earlier has finished and its result is below. {{result}}",
+            &part,
+        );
+
+        assert!(
+            !rendered.contains("has finished and its result is below"),
+            "the operator's finished-result prose must not describe a park: {rendered}"
+        );
+        assert!(
+            rendered.contains("status: input_required"),
+            "the status line is still emitted by the renderer: {rendered}"
+        );
+        assert!(
+            rendered.contains("NOT finished"),
+            "the model has to be told the task has not reported: {rendered}"
+        );
+        assert!(
+            rendered.contains("child_run_id"),
+            "and where the decision is taken: {rendered}"
+        );
+        assert!(
+            rendered.contains("WHAT-IT-HAD-SO-FAR"),
+            "what the run reached still reaches the model: {rendered}"
+        );
+        assert!(
+            rendered.contains(RESULT_UNTRUSTED_GUIDANCE),
+            "the guidance is not the template's to lose: {rendered}"
         );
     }
 

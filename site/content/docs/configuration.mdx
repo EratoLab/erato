@@ -4072,11 +4072,13 @@ scheduling = "when_idle"
 
 {/* erato_toml_config_key: delegation.tasks.propagate_child_mcp_approvals */}
 
-What an awaited task child does when it reaches an MCP tool call that needs the user's approval. A child has no card of its own on the turn that dispatched it, so with this on the child parks and its request is carried up to that turn: the user answers there, the child resumes where it stopped, and a denial reaches it as an ordinary refused tool call it finishes around.
+What a task child does when it reaches an MCP tool call that needs the user's approval. With this on the child parks and asks: the user answers, the child resumes where it stopped, and a denial reaches it as an ordinary refused tool call it finishes around.
+
+Where the question appears depends on the run mode. A `wait` child is asked about on the turn that dispatched it, which is still waiting for it. An `async` child stops on its own card in its own chat, and the conversation that started the task is told by a result with status `input_required` linking to it; answering there delivers a second result carrying the run's real answer.
 
 Turning it off refuses the gated call inside the child instead. The child still finishes, but without whatever the call was for, and nobody is asked — which is why the default is on. Leave it off only where an approval prompt raised by work the user did not explicitly start is unacceptable.
 
-This applies to `wait` tasks. A child nothing is waiting for — `async`, or an @-mentioned assistant — has no turn to carry the request to and has its gated calls refused whatever this says.
+An @-mentioned assistant's run is not covered either way: it has neither a task slot on the turn waiting for it nor a card of its own, so its gated calls are refused whatever this says.
 
 This only takes effect when `delegation.tasks.enabled` is `true`.
 

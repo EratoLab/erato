@@ -12419,6 +12419,72 @@ async fn reacted_result_survives_into_the_next_user_turn(pool: Pool<Postgres>) {
     );
 }
 
+/// What a model is told about a run that stopped to ask.
+///
+/// The operator's result template introduces a finished result — the shipped
+/// default says so in as many words — so a notification composed through it
+/// would read as the task's answer and invite the model to report work that has
+/// not happened. The reaction turn is where that prose reaches a model, and it
+/// is also where the user learns that a decision is waiting and where it is
+/// taken, so the substitution has to survive the whole composition and not only
+/// the renderer's own unit test.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_parked_result_is_composed_as_a_question_not_as_an_answer(pool: Pool<Postgres>) {
+    const SO_FAR: &str = "WHAT-THE-RUN-HAD-REACHED";
+
+    let (app_state, _llm, recorder) = react_state(pool, "REACTION-TO-A-PARKED-RUN").await;
+    let me = test_user(&app_state).await;
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+
+    let child_id = seed_child_owing_a_result(
+        &app_state,
+        &me.id.to_string(),
+        origin_chat_id,
+        Some(SO_FAR),
+        erato_config::config::TaskScheduling::Silent,
+    )
+    .await;
+    let mut parked = delivery_struct(&app_state, child_id).await;
+    parked.status = "input_required".to_string();
+    parked.reason = Some("approval_pending".to_string());
+    write_delivery(&app_state, child_id, &parked).await;
+    assert_eq!(sweep_once(&app_state).await.delivered, 1);
+    let result_row_id = delivery_struct(&app_state, child_id)
+        .await
+        .message_id
+        .expect("the delivery names its row");
+
+    post_react(&server, origin_chat_id, result_row_id)
+        .await
+        .assert_status_ok();
+
+    let composed = recorder
+        .bodies()
+        .into_iter()
+        .find(|body| body.contains(SO_FAR))
+        .expect("the reaction turn composed the parked result");
+    assert!(
+        !composed.contains("has finished and its result is below"),
+        "the operator's finished-result template must not introduce a park: {composed}"
+    );
+    assert!(
+        composed.contains("NOT finished"),
+        "the model has to be told the task has not reported: {composed}"
+    );
+    assert!(
+        composed.contains(&child_id.to_string()),
+        "and where the decision is taken: {composed}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // ERMAIN-783: retrying a failed delegated task run.
 // ---------------------------------------------------------------------------
@@ -14719,43 +14785,56 @@ async fn child_card_answerable_again_after_parent_settled_withdrawn_or_origin_ar
     );
 }
 
-/// An `async` child has no turn waiting on it, so it has nowhere to carry a
-/// request to and keeps having its gated calls refused. This is 5.6's
-/// precondition: when async children learn to park, this test changes with it.
-///
-/// # Test Categories
-/// - `uses-db`
-/// - `auth-required`
-/// - `sse-streaming`
-/// - `uses-mocked-llm`
-/// - `uses-mock-mcp`
-#[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn async_child_still_refuses_gated_call(pool: Pool<Postgres>) {
-    const ASYNC_BRIEF: &str = "ASYNC-GATED-BRIEF: publish the probe";
-    const ASYNC_USER_MESSAGE: &str = "plan an async gated sub-task";
-    const CHILD_REFUSAL: &str = "approval, which is unavailable in a delegated run";
+// ---------------------------------------------------------------------------
+// An `async` child that parks (D20 "Async child that parks").
+// ---------------------------------------------------------------------------
 
-    let mut mocks = MockSet::new();
+const ASYNC_PARK_BRIEF: &str = "ASYNC-GATED-BRIEF: publish the probe";
+const ASYNC_PARK_USER_MESSAGE: &str = "plan an async gated sub-task";
+const ASYNC_PARK_CALL_ID: &str = "call_task_async";
+const ASYNC_CHILD_WITH_PROBE: &str = "ASYNC-CHILD-DONE with the probe";
+const ASYNC_CHILD_WITHOUT_PROBE: &str = "ASYNC-CHILD-DONE without the probe";
+const ASYNC_ABANDON_MESSAGE: &str = "never mind the probe, just summarise";
+const ASYNC_CHILD_ABANDONED: &str = "ASYNC-CHILD-DONE after the card was abandoned";
+
+/// Every turn the tests below can reach: the origin dispatches one `async`
+/// task, the child walks into the gate, and — whichever way the card is
+/// answered — it finishes in prose. Both continuations are registered in all of
+/// them, because a mock nobody matches costs nothing and one fixture per
+/// decision would be the same five turns twice.
+fn mock_async_gated_task(mocks: &mut MockSet) {
+    // The child's continuations first: their context is a superset of its
+    // opening turn's, so registering them later would lose to it.
     mocks.mock(|when, then| {
         when.post()
             .path("/v1/chat/completions")
             .matcher(BodyContainsMatcher::new(
-                &[ASYNC_BRIEF, CHILD_REFUSAL],
+                &[ASYNC_PARK_BRIEF, PARKED_TOOL_RESULT],
                 &["child_run_id"],
             ));
         mock_llm_sse_response(
             then,
-            crate::test_utils::build_openai_text_streaming_response(&[
-                "ASYNC-CHILD-DONE without the probe",
-            ]),
+            crate::test_utils::build_openai_text_streaming_response(&[ASYNC_CHILD_WITH_PROBE]),
         );
     });
     mocks.mock(|when, then| {
         when.post()
             .path("/v1/chat/completions")
             .matcher(BodyContainsMatcher::new(
-                &[ASYNC_BRIEF],
-                &[CHILD_REFUSAL, "child_run_id"],
+                &[ASYNC_PARK_BRIEF, CHILD_DENIAL_TEXT],
+                &["child_run_id"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&[ASYNC_CHILD_WITHOUT_PROBE]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[ASYNC_PARK_BRIEF],
+                &[PARKED_TOOL_RESULT, CHILD_DENIAL_TEXT, "child_run_id"],
             ));
         mock_llm_sse_response(
             then,
@@ -14770,7 +14849,7 @@ async fn async_child_still_refuses_gated_call(pool: Pool<Postgres>) {
         when.post()
             .path("/v1/chat/completions")
             .matcher(BodyContainsMatcher::new(
-                &[ASYNC_USER_MESSAGE, "dispatched"],
+                &[ASYNC_PARK_USER_MESSAGE, "dispatched"],
                 &[],
             ));
         mock_llm_sse_response(
@@ -14782,24 +14861,75 @@ async fn async_child_still_refuses_gated_call(pool: Pool<Postgres>) {
         when.post()
             .path("/v1/chat/completions")
             .matcher(BodyContainsMatcher::new(
-                &[ASYNC_USER_MESSAGE],
-                &[ASYNC_BRIEF, "dispatched"],
+                &[ASYNC_PARK_USER_MESSAGE],
+                &[ASYNC_PARK_BRIEF, "dispatched"],
             ));
         mock_llm_sse_response(
             then,
             crate::test_utils::build_openai_tool_calls_streaming_response(&[(
-                "call_task_async",
+                ASYNC_PARK_CALL_ID,
                 "delegate_task",
                 json!({
-                    "task": ASYNC_BRIEF,
+                    "task": ASYNC_PARK_BRIEF,
                     "facet_ids": ["plan"],
                     "run_mode": "async",
                 }),
             )]),
         );
     });
+}
 
-    let (app_state, _llm) = task_state(
+/// The resumed child walks into a gate a second time. Registered before
+/// [`mock_async_gated_task`], whose continuation mock answers the same context
+/// in prose.
+fn mock_async_child_parks_again(mocks: &mut MockSet) {
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[ASYNC_PARK_BRIEF, PARKED_TOOL_RESULT],
+                &["child_run_id"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_async_probe_again",
+                PARKED_TOOL,
+                json!({}),
+            )]),
+        );
+    });
+}
+
+/// The child's turn after its owner writes into the parked chat instead of
+/// answering the card. Registered before [`mock_async_gated_task`], whose
+/// opening-turn mock would otherwise match this context too.
+fn mock_async_child_abandoned_turn(mocks: &mut MockSet) {
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[ASYNC_PARK_BRIEF, ASYNC_ABANDON_MESSAGE],
+                &["child_run_id"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&[ASYNC_CHILD_ABANDONED]),
+        );
+    });
+}
+
+/// A deployment that offers `async` tasks and gates the mock MCP server.
+///
+/// `silent` scheduling throughout: a reaction turn is another generation with
+/// another mock to satisfy, and everything asserted below is about the delivery
+/// records and the rows they append, which a silent result writes just the same.
+/// The reaction itself is covered where the delivery path is.
+async fn async_park_state(
+    pool: Pool<Postgres>,
+    mocks: MockSet,
+) -> (erato::state::AppState, mocktail::server::MockServer) {
+    task_state(
         pool,
         mocks,
         &["erato/delegate_task", "mock_mcp_approval/*"],
@@ -14813,45 +14943,435 @@ async fn async_child_still_refuses_gated_call(pool: Pool<Postgres>) {
             // `async_only` would park before it ran; the policy has tests of
             // its own.
             config.delegation.tasks.approval.mode = erato_config::config::TaskApprovalMode::Never;
-            // A silent result is stored rather than answered, so the assertions
-            // below are about the child and not about a reaction turn.
             config.delegation.tasks.scheduling = erato_config::config::TaskScheduling::Silent;
         },
     )
-    .await;
-    let server = app_server(app_state.clone());
-    let chat = create_chat(&server, None).await;
-    let events = submit_with_facets(&server, &chat, ASYNC_USER_MESSAGE, &["plan"]).await;
+    .await
+}
+
+/// Dispatch one `async` task that parks, and hand back the origin chat, the
+/// child chat and the child's own parked row.
+async fn park_one_async_child(
+    server: &TestServer,
+    app_state: &erato::state::AppState,
+) -> (Uuid, Uuid, Uuid) {
+    let chat = create_chat(server, None).await;
+    let events = submit_with_facets(server, &chat, ASYNC_PARK_USER_MESSAGE, &["plan"]).await;
     assert!(extract_full_text_answer(&events).contains("PARENT-ASYNC-FINAL"));
+    let origin_chat_id = Uuid::parse_str(&chat).unwrap();
+    let child_chat = delegated_child_chat(&app_state.db, origin_chat_id).await;
+    wait_for_generation_state(&app_state.db, child_chat.id, "awaiting_approval").await;
+    let child_message_id = child_parked_row(&app_state.db, child_chat.id).await.id;
+    (origin_chat_id, child_chat.id, child_message_id)
+}
 
-    let parent_chat_id = Uuid::parse_str(&chat).unwrap();
-    let child_chat = delegated_child_chat(&app_state.db, parent_chat_id).await;
-    wait_for_generation_state(&app_state.db, child_chat.id, "completed").await;
+/// The child's delivery envelope once it is `delivered` at `sequence`.
+async fn wait_for_delivered_sequence(
+    app_state: &erato::state::AppState,
+    child_chat_id: Uuid,
+    sequence: u64,
+) -> Value {
+    for _ in 0..150 {
+        let delivery = delivery_of(app_state, child_chat_id).await;
+        if delivery["sequence"].as_u64() == Some(sequence)
+            && delivery["state"].as_str() == Some("delivered")
+        {
+            return delivery;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+    panic!(
+        "the delivery of child {child_chat_id} never reached sequence {sequence}; it is {:?}",
+        delivery_of(app_state, child_chat_id).await
+    );
+}
 
-    let child_content = content_of(&child_parked_row(&app_state.db, child_chat.id).await);
+/// An `async` child parks on a gated call like any other task child, but it has
+/// no turn waiting on it — so its own card is the surface, and what reaches the
+/// conversation that asked for the task is a `task_result { input_required }`
+/// row saying where the question is.
+///
+/// The origin must NOT grow an approval part of its own: the turn that
+/// dispatched the run finished long ago, and a card there would be a second
+/// place to answer one question.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn async_child_parks_and_origin_receives_input_required_task_result(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_async_gated_task(&mut mocks);
+    let (app_state, _llm) = async_park_state(pool, mocks).await;
+    let server = app_server(app_state.clone());
+
+    let (origin_chat_id, child_chat_id, child_message_id) =
+        park_one_async_child(&server, &app_state).await;
+
+    let child_content = content_of(&message_row(&app_state.db, child_message_id).await);
+    assert_eq!(
+        child_content.last().map(|part| &part["content_type"]),
+        Some(&json!("tool_approval_request")),
+        "the child must park on its own card: {child_content:?}"
+    );
+
+    let delivery = wait_for_delivered_sequence(&app_state, child_chat_id, 0).await;
+    assert_eq!(delivery["status"], "input_required");
+    assert_eq!(delivery["reason"], "approval_pending");
+
+    let results = task_result_rows(&app_state.db, origin_chat_id).await;
+    assert_eq!(results.len(), 1, "one notification, not one per park");
+    let part = &results[0].raw_message["content"][0];
+    assert_eq!(part["content_type"], "task_result");
+    assert_eq!(part["status"], "input_required");
+    assert_eq!(part["reason"], "approval_pending");
+    assert_eq!(part["sequence"], 0);
+    assert_eq!(
+        part["child_chat_id"],
+        json!(child_chat_id),
+        "the card points at the chat the question is on: {part}"
+    );
+    assert_eq!(part["parent_tool_call_id"], ASYNC_PARK_CALL_ID);
+
+    let origin_rows = active_thread_rows(&app_state.db, origin_chat_id).await;
     assert!(
-        child_content
+        origin_rows
             .iter()
+            .flat_map(|row| row.raw_message["content"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default())
             .all(|part| part["content_type"] != "tool_approval_request"),
-        "an async child must not park: {child_content:?}"
+        "the origin must not raise a card of its own for a detached run"
     );
-    let refused = child_content
+}
+
+/// Answering the child's card is what makes the run's real answer reach the
+/// origin, and nothing else can: the decision runs through `continuestream` on
+/// the CHILD chat, while the delivery that carried the notification is finished
+/// and its claim only takes `pending` rows. The child-side tail therefore
+/// re-arms the delivery, and the origin ends up with two results — the question
+/// and the answer — told apart by `sequence`.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn deciding_on_async_child_rearms_delivery_and_delivers_final_result_with_sequence_1(
+    pool: Pool<Postgres>,
+) {
+    let mut mocks = MockSet::new();
+    mock_async_gated_task(&mut mocks);
+    let (app_state, _llm) = async_park_state(pool, mocks).await;
+    let server = app_server(app_state.clone());
+
+    let (origin_chat_id, child_chat_id, child_message_id) =
+        park_one_async_child(&server, &app_state).await;
+    let notification = wait_for_delivered_sequence(&app_state, child_chat_id, 0).await;
+
+    post_continuestream(&server, child_message_id, "approve")
+        .await
+        .assert_status_ok();
+    wait_for_generation_state(&app_state.db, child_chat_id, "completed").await;
+
+    let final_delivery = wait_for_delivered_sequence(&app_state, child_chat_id, 1).await;
+    assert_eq!(final_delivery["status"], "completed");
+    assert_ne!(
+        final_delivery["delivery_id"], notification["delivery_id"],
+        "a re-armed delivery is a new one, or the origin's duplicate probe \
+         would recognise it and append nothing"
+    );
+
+    let results = task_result_rows(&app_state.db, origin_chat_id).await;
+    assert_eq!(
+        results.len(),
+        2,
+        "two rows per run that parked: {results:?}"
+    );
+    let sequences: Vec<Value> = results
         .iter()
-        .find(|part| part["content_type"] == "tool_use" && part["tool_name"] == PARKED_TOOL)
-        .expect("the gated call is recorded as a refusal");
-    assert_eq!(refused["status"], "error");
-    assert!(
-        refused["output"]["error"]
-            .as_str()
-            .unwrap()
-            .contains("approval")
+        .map(|row| row.raw_message["content"][0]["sequence"].clone())
+        .collect();
+    assert_eq!(sequences, vec![json!(0), json!(1)]);
+    let answer = &results[1].raw_message["content"][0];
+    assert_eq!(answer["status"], "completed");
+    assert_eq!(
+        answer["redeliveries"], 0,
+        "the answer is a second result, not the notification delivered again —          a client badging it as one would tell the reader they have seen it: {answer}"
     );
     assert!(
-        child_content
+        answer["summary"]
+            .as_str()
+            .is_some_and(|summary| summary.contains(ASYNC_CHILD_WITH_PROBE)),
+        "the second row carries the answer the decision unblocked: {answer}"
+    );
+
+    let call = slot_for(
+        &content_of(&message_row(&app_state.db, child_message_id).await),
+        "call_async_probe",
+    );
+    assert_eq!(
+        call["status"], "success",
+        "the approved call ran on the child: {call}"
+    );
+}
+
+/// Denying the call is not killing the run. The child gets the denial as the
+/// tool's answer and finishes in prose, so what the origin is finally told is
+/// `completed` — a run that reported, without the tool — and not a failure the
+/// model would be invited to retry.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn denied_async_child_delivers_completed_in_prose(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_async_gated_task(&mut mocks);
+    let (app_state, _llm) = async_park_state(pool, mocks).await;
+    let server = app_server(app_state.clone());
+
+    let (origin_chat_id, child_chat_id, child_message_id) =
+        park_one_async_child(&server, &app_state).await;
+    wait_for_delivered_sequence(&app_state, child_chat_id, 0).await;
+
+    post_continuestream(&server, child_message_id, "reject")
+        .await
+        .assert_status_ok();
+    wait_for_generation_state(&app_state.db, child_chat_id, "completed").await;
+
+    let final_delivery = wait_for_delivered_sequence(&app_state, child_chat_id, 1).await;
+    assert_eq!(final_delivery["status"], "completed");
+    assert!(
+        final_delivery["reason"].is_null(),
+        "a denial is an ordinary tool answer and carries no reason: {final_delivery}"
+    );
+
+    let child_content = content_of(&message_row(&app_state.db, child_message_id).await);
+    let call = slot_for(&child_content, "call_async_probe");
+    assert_eq!(
+        call["status"], "error",
+        "the denied call did not run: {call}"
+    );
+
+    let results = task_result_rows(&app_state.db, origin_chat_id).await;
+    assert_eq!(results.len(), 2);
+    let answer = &results[1].raw_message["content"][0];
+    assert_eq!(answer["status"], "completed");
+    assert!(
+        answer["summary"]
+            .as_str()
+            .is_some_and(|summary| summary.contains(ASYNC_CHILD_WITHOUT_PROBE)),
+        "the denied run still reports what it managed to do: {answer}"
+    );
+}
+
+/// The card is not the only way a parked run moves on. A person who writes into
+/// the run's own chat abandons the card and gets an answer that way, and the
+/// conversation that asked for the task is owed that answer just as much — so
+/// the re-arm lives in the tail every user-driven generation shares, not in the
+/// continuation alone. This drives the `message_submit` tail; `edit` and
+/// `regenerate` reach the same helper.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn writing_into_a_parked_async_child_also_rearms_its_delivery(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_async_child_abandoned_turn(&mut mocks);
+    mock_async_gated_task(&mut mocks);
+    let (app_state, _llm) = async_park_state(pool, mocks).await;
+    let server = app_server(app_state.clone());
+
+    let (origin_chat_id, child_chat_id, child_message_id) =
+        park_one_async_child(&server, &app_state).await;
+    wait_for_delivered_sequence(&app_state, child_chat_id, 0).await;
+
+    let events = submit_message(
+        &server,
+        &child_chat_id.to_string(),
+        Some(&child_message_id.to_string()),
+        ASYNC_ABANDON_MESSAGE,
+        vec![],
+    )
+    .await;
+    assert!(extract_full_text_answer(&events).contains(ASYNC_CHILD_ABANDONED));
+
+    let final_delivery = wait_for_delivered_sequence(&app_state, child_chat_id, 1).await;
+    assert_eq!(final_delivery["status"], "completed");
+
+    let results = task_result_rows(&app_state.db, origin_chat_id).await;
+    assert_eq!(results.len(), 2, "the answer is owed too: {results:?}");
+    let answer = &results[1].raw_message["content"][0];
+    assert_eq!(answer["sequence"], 1);
+    assert_eq!(
+        answer["redeliveries"], 0,
+        "a re-arm is a new result, not this one delivered again: {answer}"
+    );
+    assert!(
+        answer["summary"]
+            .as_str()
+            .is_some_and(|summary| summary.contains(ASYNC_CHILD_ABANDONED)),
+        "what the run said after the card was abandoned: {answer}"
+    );
+}
+
+/// A run that parks a second time owes nothing further. The notification the
+/// conversation already holds still describes the situation — the task stopped
+/// to ask — so the `sequence` bump stays spent on the answer and the origin does
+/// not collect one row per gate a long run walks into.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn an_async_child_that_parks_again_delivers_no_second_notification(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_async_child_parks_again(&mut mocks);
+    mock_async_gated_task(&mut mocks);
+    let (app_state, _llm) = async_park_state(pool, mocks).await;
+    let server = app_server(app_state.clone());
+
+    let (origin_chat_id, child_chat_id, child_message_id) =
+        park_one_async_child(&server, &app_state).await;
+    let notification = wait_for_delivered_sequence(&app_state, child_chat_id, 0).await;
+
+    post_continuestream(&server, child_message_id, "approve")
+        .await
+        .assert_status_ok();
+    let parks = |content: &[Value]| {
+        content
             .iter()
-            .any(|part| part["content_type"] == "text"
-                && part["text"].as_str().unwrap().contains("ASYNC-CHILD-DONE")),
-        "the child finishes in prose without the call: {child_content:?}"
+            .filter(|part| part["content_type"] == "tool_approval_request")
+            .count()
+    };
+    for _ in 0..150 {
+        if parks(&content_of(
+            &message_row(&app_state.db, child_message_id).await,
+        )) == 2
+        {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    let content = content_of(&message_row(&app_state.db, child_message_id).await);
+    assert_eq!(
+        parks(&content),
+        2,
+        "the resumed run walked into a second gate: {content:?}"
+    );
+
+    // Nothing is owed, so there is no state to wait for: poll long enough that a
+    // re-armed delivery would have been written and drained.
+    for _ in 0..10 {
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        assert_eq!(
+            delivery_of(&app_state, child_chat_id).await["delivery_id"],
+            notification["delivery_id"],
+            "the notification is still the only delivery this run has owed"
+        );
+        assert_eq!(
+            task_result_rows(&app_state.db, origin_chat_id).await.len(),
+            1,
+            "one row for a run that is still asking, not one per question"
+        );
+    }
+}
+
+/// A notification the origin has not taken yet is replaced, not waited for.
+///
+/// The window is not a race: an origin parked on an approval of its own defers
+/// every delivery and puts the claim back, so the notification sits `pending`
+/// for as long as that lasts — and the run's own chat is reachable from the runs
+/// list all the while. A re-arm that insisted on `delivered` would give up
+/// there, and nothing else would ever carry the answer; worse, the one row the
+/// origin eventually got would carry the finished answer under `input_required`,
+/// telling its model to wait for a result that could never come.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_rearm_replaces_a_notification_the_origin_never_took(pool: Pool<Postgres>) {
+    const PARKED_ANSWER: &str = "SEEDED-ANSWER-AFTER-THE-DECISION";
+
+    let (app_state, _llm) = task_enabled_state_with_async(pool).await;
+    let me = test_user(&app_state).await;
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+
+    let child_id = seed_child_owing_a_result(
+        &app_state,
+        &me.id.to_string(),
+        origin_chat_id,
+        Some(PARKED_ANSWER),
+        erato_config::config::TaskScheduling::Silent,
+    )
+    .await;
+    let mut notification = delivery_struct(&app_state, child_id).await;
+    let answer_row_id = notification
+        .result_message_id
+        .expect("the seeded delivery names the run's answer row");
+    notification.status = "input_required".to_string();
+    notification.reason = Some("approval_pending".to_string());
+    write_delivery(&app_state, child_id, &notification).await;
+
+    let drained = erato::services::task_delivery::rearm_delivery_after_child_decision(
+        &app_state,
+        child_id,
+        answer_row_id,
+        erato::services::background_tasks::TaskOutcome::Completed,
+        false,
+    )
+    .await;
+    assert_eq!(
+        drained,
+        Some(origin_chat_id),
+        "the re-arm must hand back the origin for the caller to drain"
+    );
+
+    let rearmed = delivery_struct(&app_state, child_id).await;
+    assert_eq!(
+        rearmed.state,
+        erato::models::chat::ResultDeliveryState::Pending
+    );
+    assert_eq!(rearmed.status, "completed");
+    assert_eq!(rearmed.sequence, 1);
+    assert_ne!(rearmed.delivery_id, notification.delivery_id);
+
+    assert_eq!(sweep_once(&app_state).await.delivered, 1);
+    let results = task_result_rows(&app_state.db, origin_chat_id).await;
+    assert_eq!(
+        results.len(),
+        1,
+        "the question was never delivered, so the answer is all the origin is \
+         ever told: {results:?}"
+    );
+    let part = &results[0].raw_message["content"][0];
+    assert_eq!(part["status"], "completed");
+    assert_eq!(part["sequence"], 1);
+    assert!(
+        part["summary"]
+            .as_str()
+            .is_some_and(|summary| summary.contains(PARKED_ANSWER)),
+        "and what it is told is the answer, not the question: {part}"
     );
 }
 

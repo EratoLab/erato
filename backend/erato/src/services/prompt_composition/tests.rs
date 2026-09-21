@@ -555,6 +555,7 @@ mod test_cases {
                     summary: "THE-CHILD-ANSWER".to_string(),
                     truncated: false,
                     sequence: 0,
+                    redeliveries: 0,
                 },
             )],
         );
@@ -617,6 +618,7 @@ mod test_cases {
                     summary: "ONCE".to_string(),
                     truncated: false,
                     sequence: 0,
+                    redeliveries: 0,
                 },
             )],
         );

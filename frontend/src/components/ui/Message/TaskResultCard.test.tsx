@@ -17,6 +17,7 @@ const part = (
   summary: "THE-CHILD-ANSWER",
   truncated: false,
   sequence: 0,
+  redeliveries: 0,
   ...overrides,
 });
 
@@ -109,9 +110,9 @@ describe("TaskResultCard", () => {
     expect(screen.queryByTestId("task-result-retry")).toBeNull();
   });
 
-  /// The reason vocabulary is shared with the trace step so the two cannot
-  /// drift; an unknown value must degrade to something readable rather than
-  /// to silence.
+  // The reason vocabulary is shared with the trace step so the two cannot
+  // drift; an unknown value must degrade to something readable rather than
+  // to silence.
   it("renders a known reason in words and an unknown one verbatim", () => {
     const { rerender } = render(
       <TaskResultCard part={part({ reason: "cap_exceeded" })} />,
@@ -126,17 +127,57 @@ describe("TaskResultCard", () => {
     );
   });
 
-  /// `sequence` is 0-based: 0 is the first delivery. Badging on `> 1` would
-  /// silently hide the fact that a result was delivered a second time after
-  /// the conversation branched, which is exactly when a reader needs telling.
   it("badges a redelivery but not the first delivery", () => {
     const { rerender } = render(
-      <TaskResultCard part={part({ sequence: 0 })} />,
+      <TaskResultCard part={part({ redeliveries: 0 })} />,
     );
     expect(screen.queryByTestId("task-result-sequence")).toBeNull();
 
-    rerender(<TaskResultCard part={part({ sequence: 1 })} />);
+    rerender(<TaskResultCard part={part({ redeliveries: 1 })} />);
     expect(screen.getByTestId("task-result-sequence")).toBeInTheDocument();
+
+    // Results delivered before the field existed carry no count, only the
+    // `sequence` that meant "again" back when nothing else could raise it.
+    rerender(
+      <TaskResultCard part={part({ sequence: 0, redeliveries: undefined })} />,
+    );
+    expect(screen.queryByTestId("task-result-sequence")).toBeNull();
+
+    rerender(
+      <TaskResultCard part={part({ sequence: 1, redeliveries: undefined })} />,
+    );
+    expect(screen.getByTestId("task-result-sequence")).toBeInTheDocument();
+  });
+
+  // A parked run's answer arrives at `sequence: 1` on every happy path, and it
+  // is the result the reader has been waiting for — not the notification they
+  // already saw.
+  it("does not badge a parked run's follow-up answer as a redelivery", () => {
+    render(
+      <TaskResultCard
+        part={part({ status: "completed", sequence: 1, redeliveries: 0 })}
+      />,
+    );
+
+    expect(screen.queryByTestId("task-result-sequence")).toBeNull();
+  });
+
+  it("sends a task that stopped to ask to the chat where it can be answered", () => {
+    render(
+      <TaskResultCard
+        part={part({ status: "input_required", reason: "approval_pending" })}
+      />,
+    );
+
+    expect(screen.getByTestId("task-result-status")).toHaveTextContent(
+      /decision/i,
+    );
+    expect(
+      screen.getByTestId("task-result-input-required-open"),
+    ).toHaveAttribute(
+      "href",
+      expect.stringContaining("11111111-1111-1111-1111-111111111111"),
+    );
   });
 
   it("notes a shortened answer only when it was shortened", () => {
@@ -149,9 +190,9 @@ describe("TaskResultCard", () => {
     expect(screen.getByTestId("task-result-truncated")).toBeInTheDocument();
   });
 
-  /// The summary is a delegated run's own text, shaped by whatever it read.
-  /// Rendering it as markdown would let it draw links and headings in the
-  /// transcript; it stays plain text, as the trace's result preview does.
+  // The summary is a delegated run's own text, shaped by whatever it read.
+  // Rendering it as markdown would let it draw links and headings in the
+  // transcript; it stays plain text, as the trace's result preview does.
   it("renders the answer as plain text, not as markdown", () => {
     render(
       <TaskResultCard

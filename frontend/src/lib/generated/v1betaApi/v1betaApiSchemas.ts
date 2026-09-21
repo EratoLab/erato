@@ -1100,9 +1100,20 @@ export type ContentPartTaskResult = {
   parent_tool_call_id: string;
   reason?: string;
   /**
-   * Which delivery for this task this is. `0` is the first; a later value
-   * means the result was delivered again after the origin branched away
-   * from the first one.
+   * How many times this same result was delivered again after the origin
+   * branched away from an earlier delivery of it. `0` on every first-time
+   * delivery, including a parked run's follow-up answer.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  redeliveries?: number;
+  /**
+   * Which delivery for this task this is. `0` is the first, and every
+   * further delivery of the same run bumps it — including the answer a
+   * parked `async` run delivers after its card is decided, which is a
+   * SECOND result and not the first one repeated. `redeliveries` is the
+   * field that says "you have seen this before".
    *
    * @format int32
    * @minimum 0

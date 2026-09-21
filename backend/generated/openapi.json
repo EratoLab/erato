@@ -6094,10 +6094,16 @@
           "reason": {
             "type": "string"
           },
+          "redeliveries": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many times this same result was delivered again after the origin\nbranched away from an earlier delivery of it. `0` on every first-time\ndelivery, including a parked run's follow-up answer.",
+            "minimum": 0
+          },
           "sequence": {
             "type": "integer",
             "format": "int32",
-            "description": "Which delivery for this task this is. `0` is the first; a later value\nmeans the result was delivered again after the origin branched away\nfrom the first one.",
+            "description": "Which delivery for this task this is. `0` is the first, and every\nfurther delivery of the same run bumps it — including the answer a\nparked `async` run delivers after its card is decided, which is a\nSECOND result and not the first one repeated. `redeliveries` is the\nfield that says \"you have seen this before\".",
             "minimum": 0
           },
           "status": {

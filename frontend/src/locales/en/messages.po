@@ -3304,6 +3304,11 @@ msgstr "Show raw markdown"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.inputRequired"
+msgstr "Answer it in the task's own chat:"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
 msgid "message.taskResult.openRun"
 msgstr "Open the task's run"
 
@@ -3341,6 +3346,11 @@ msgstr "Cancelled"
 #: src/components/ui/Message/TaskResultCard.tsx
 msgid "message.taskResult.status.failed"
 msgstr "Failed"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.status.inputRequired"
+msgstr "Needs your decision"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
