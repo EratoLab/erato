@@ -110,6 +110,29 @@ describe("handleClientToolCall", () => {
     expect(lastPostBody(fetchMock)).toMatchObject({ error: "kaboom" });
   });
 
+  it("preserves parser diagnostics without resubmitting the draft", async () => {
+    const issues = [
+      {
+        path: "/items/0/source",
+        code: "unknown_reference",
+        message: "Use a current source ID.",
+      },
+    ];
+    registerClientToolExecutor("fetch_availability", async () => ({
+      ok: false,
+      error: "Draft validation failed",
+      validationErrors: issues,
+    }));
+    await handleClientToolCall(makeEvent(), deps);
+    expect(lastPostBody(fetchMock)).toEqual({
+      chat_id: "chat-1",
+      message_id: "msg-1",
+      tool_call_id: "call-1",
+      error: "Draft validation failed",
+      validation_errors: issues,
+    });
+  });
+
   it("POSTs an error when no executor is registered", async () => {
     await handleClientToolCall(makeEvent(), deps);
 

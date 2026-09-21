@@ -896,6 +896,12 @@ export type ClientToolResultRequest = {
    * The `tool_call_id` from the `client_tool_call` event being answered.
    */
   tool_call_id: string;
+  /**
+   * Parser diagnostics for a rejected submission. Nonempty diagnostics are
+   * a failure even if a result is also supplied. Messages should be concise;
+   * the backend retains at most 16 issues with bounded field lengths.
+   */
+  validation_errors?: ClientToolValidationIssue[];
 };
 
 export type ClientToolResultResponse = {
@@ -904,6 +910,16 @@ export type ClientToolResultResponse = {
    * benign no-op (already delivered, timed out, aborted, or unknown id).
    */
   delivered: boolean;
+};
+
+/**
+ * Compact, parser-owned diagnostics. `path` is a JSON Pointer into the tool
+ * arguments (empty for the root); `code` is a stable validator error identifier.
+ */
+export type ClientToolValidationIssue = {
+  code: string;
+  message: string;
+  path: string;
 };
 
 export type CompleteMcpServerOauthResponse = {

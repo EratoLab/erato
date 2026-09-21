@@ -1,5 +1,7 @@
 //! Message submission and streaming API tests.
 
+mod client_submissions;
+
 use axum::Router;
 use axum::http;
 use axum_test::TestServer;
@@ -5853,6 +5855,7 @@ async fn test_denied_mcp_tool_does_not_promote_a_same_named_client_tool(pool: Po
             parameters: r#"{"type":"object","properties":{}}"#.to_string(),
             requires_client_registration: false,
             timeout_ms: None,
+            submission: None,
         },
     );
     app_config.facets.tool_call_allowlist = vec!["outlook/read_file".to_string()];
@@ -6244,6 +6247,7 @@ async fn test_writes_off_withholds_client_actions_but_keeps_client_tools(pool: P
             parameters: r#"{"type":"object","properties":{}}"#.to_string(),
             requires_client_registration: false,
             timeout_ms: None,
+            submission: None,
         },
     );
     app_config.facets.tool_call_allowlist = vec!["client/*".to_string()];
@@ -6788,6 +6792,7 @@ async fn test_disabled_mcp_server_does_not_promote_a_same_named_client_tool(pool
             parameters: r#"{"type":"object","properties":{}}"#.to_string(),
             requires_client_registration: false,
             timeout_ms: None,
+            submission: None,
         },
     );
     app_config.facets.tool_call_allowlist = vec!["outlook/read_file".to_string()];
@@ -7371,6 +7376,7 @@ async fn test_disabled_mcp_tool_does_not_promote_a_same_named_client_tool(pool: 
             parameters: r#"{"type":"object","properties":{}}"#.to_string(),
             requires_client_registration: false,
             timeout_ms: None,
+            submission: None,
         },
     );
     app_config.facets.tool_call_allowlist = vec!["outlook/read_file".to_string()];
@@ -9008,6 +9014,7 @@ async fn test_optional_client_tools_follow_registration_without_changing_legacy_
                 parameters: r#"{"type":"object","properties":{}}"#.into(),
                 requires_client_registration: required,
                 timeout_ms: None,
+                submission: None,
             },
         );
     }

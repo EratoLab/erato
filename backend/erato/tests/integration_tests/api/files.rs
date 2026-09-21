@@ -1209,6 +1209,32 @@ async fn test_client_tool_files_extract_only_authorized_uploads(pool: Pool<Postg
         .await;
     replay.assert_status_ok();
     assert_eq!(replay.json::<Value>()["delivered"], false);
+
+    // A mixed submission response must preserve diagnostics and skip file extraction.
+    state.file_contents_cache.invalidate_all();
+    state.file_contents_cache.run_pending_tasks().await;
+    let receiver = task
+        .register_client_tool_call("invalid-with-files".into())
+        .await;
+    let mut rejected = body.clone();
+    rejected["tool_call_id"] = json!("invalid-with-files");
+    rejected["validation_errors"] = json!([{
+        "path": "/body", "code": "invalid_reference", "message": "Select an existing message."
+    }]);
+    let response = server
+        .post("/api/v1beta/me/messages/clienttoolresult")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&rejected)
+        .await;
+    response.assert_status_ok();
+    assert_eq!(response.json::<Value>()["delivered"], true);
+    let ClientToolOutcome::ValidationFailed(issues) = receiver.await.unwrap() else {
+        panic!("validation diagnostics must take precedence over a result with files")
+    };
+    assert_eq!(issues.len(), 1);
+    assert_eq!(issues[0].code, "invalid_reference");
+    state.file_contents_cache.run_pending_tasks().await;
+    assert_eq!(state.file_contents_cache.entry_count(), 0);
 }
 
 async fn client_tool_file_result(

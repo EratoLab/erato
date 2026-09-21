@@ -73,7 +73,11 @@ export async function handleClientToolCall(
             result: (outcome.result ?? null) as unknown as Value,
             file_upload_ids: outcome.fileUploadIds,
           }
-        : { ...base, error: outcome.error };
+        : {
+            ...base,
+            error: outcome.error,
+            validation_errors: outcome.validationErrors,
+          };
     } catch (error) {
       body = {
         ...base,
