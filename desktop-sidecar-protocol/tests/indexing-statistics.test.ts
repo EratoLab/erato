@@ -138,6 +138,47 @@ describe("indexing statistics contract", () => {
           );
       }
   });
+  it("accepts lifecycle statistics from previous and Teams-capable sidecars", () => {
+    const previous = structuredClone(fixture);
+    for (const generation of previous.generations) {
+      generation.segments = generation.segments.filter(
+        (segment) => segment.kind !== "teams_message",
+      );
+    }
+    for (const validate of [
+      validateIndexingStatusV1Result,
+      validateIndexingStartV1Result,
+      validateIndexingStopV1Result,
+    ]) {
+      expect(validate(fixture)).toBe(true);
+      expect(validate(previous)).toBe(true);
+    }
+  });
+  it("accepts the supported document-kind filters and rejects unknown kinds", () => {
+    for (const kind of ["email", "file", "teams_message"]) {
+      expect(validateSearchQueryV1Params({ filters: { kind } })).toBe(true);
+    }
+    for (const kind of ["teams", "thread", "", null]) {
+      expect(validateSearchQueryV1Params({ filters: { kind } })).toBe(false);
+      const generation = fixture.generations[0]!;
+      const result = {
+        ...fixture,
+        generations: [
+          {
+            ...generation,
+            segments: [{ ...generation.segments[0], kind }],
+          },
+        ],
+      };
+      for (const validate of [
+        validateIndexingStatusV1Result,
+        validateIndexingStartV1Result,
+        validateIndexingStopV1Result,
+      ]) {
+        expect(validate(result)).toBe(false);
+      }
+    }
+  });
   it("allows unknown measurements and additive fields", () => {
     const data = structuredClone(fixture);
     data.resources.sidecar.cpuCoresUsed = null;

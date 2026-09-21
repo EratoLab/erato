@@ -377,7 +377,13 @@ to false to reduce payload size; each defaults to true. These only omit extra
 segment rows. Global resource measurements, discovery and aggregate rows are
 unchanged. The server MUST include aggregate `email` and `file` rows for each
 reported generation, even when a kind has zero documents. Source rows include
-mailbox IDs when known. File type groups are mutually exclusive: PDF, Office,
+mailbox IDs when known. Sidecars indexing Teams messages also report
+`teams_message` segments, including an aggregate row even when no Teams messages
+are indexed. Teams segments have null `mailboxId` and `fileType`; source
+breakdowns identify the Teams source with `sourceId`. Earlier sidecars may omit
+Teams segments entirely.
+
+File type groups are mutually exclusive: PDF, Office,
 text, image, embedded email, archive and other; `fileType: null` means all types.
 An embedded `.eml` attachment is a `file` with `fileType: "email"`. A standalone
 file and an attachment are both `file`; attachment age derives from its parent.
@@ -617,11 +623,12 @@ start and stop return the same complete statistics shape as `indexing.status.v1`
 Stop does not change persistent configuration. Configure alone does not resume a
 stopped index. A successful stop returns state `stopped`.
 
-`search.query.v1` searches individual indexed emails and files across sources.
+`search.query.v1` searches individual indexed emails, files and Teams messages
+across sources.
 It complements `outlook.search_emails.v1`; attachments are independent results,
 and conversationKey associates results without indexing grouped conversations.
 Filters are combined with AND: sender is a case-insensitive exact address or name,
-mailboxId identifies a mailbox, kind selects email/file, fileType matches MIME type
+mailboxId identifies a mailbox, kind selects `email`, `file` or `teams_message`, fileType matches MIME type
 or filename extension, and dateFrom/dateTo are Unix seconds with an inclusive lower bound and exclusive upper bound. Reversed
 date bounds are invalid params. Files inherit available sender/mailbox/date/thread
 metadata from their parent email. Missing metadata does not satisfy a filter.
