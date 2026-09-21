@@ -1210,3 +1210,166 @@ async fn test_client_tool_files_extract_only_authorized_uploads(pool: Pool<Postg
     replay.assert_status_ok();
     assert_eq!(replay.json::<Value>()["delivered"], false);
 }
+
+async fn client_tool_file_result(
+    server: &TestServer,
+    state: &erato::state::AppState,
+    chat_id: &str,
+    file_ids: &[Uuid],
+) -> Value {
+    use erato::services::client_tools::ClientToolOutcome;
+
+    let message_id = Uuid::new_v4();
+    let (_events, task) = state
+        .background_tasks
+        .start_task(Uuid::parse_str(chat_id).unwrap(), message_id)
+        .await;
+    let receiver = task.register_client_tool_call("file-read".into()).await;
+    let response = server
+        .post("/api/v1beta/me/messages/clienttoolresult")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "tool_call_id": "file-read",
+            "result": {},
+            "file_upload_ids": file_ids,
+        }))
+        .await;
+    response.assert_status_ok();
+    assert_eq!(response.json::<Value>()["delivered"], true);
+    let ClientToolOutcome::Result(result) = receiver.await.unwrap() else {
+        panic!("expected a successful file result")
+    };
+    result
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_client_tool_files_deduplicate_before_limit(pool: Pool<Postgres>) {
+    let (mut config, _llm) = setup_mock_llm_server(None).await;
+    config.frontend.max_files = 2;
+    let state = test_app_state(config, pool).await;
+    let app: Router = router(state.clone())
+        .split_for_parts()
+        .0
+        .with_state(state.clone());
+    let server = TestServer::new(app.into_make_service()).unwrap();
+    let chat_id = create_chat(&server).await;
+    let mut ids = Vec::new();
+    for name in ["first.txt", "second.txt", "third.txt"] {
+        let uploaded = upload_file_to_chat(
+            &server,
+            &chat_id,
+            name.as_bytes().to_vec(),
+            name,
+            "text/plain",
+        )
+        .await;
+        ids.push(Uuid::parse_str(uploaded["files"][0]["id"].as_str().unwrap()).unwrap());
+    }
+    for (file_ids, truncated) in [
+        (vec![ids[0], ids[0], ids[0], ids[1]], false),
+        (vec![ids[0], ids[0], ids[1], ids[1], ids[2]], true),
+    ] {
+        let result = client_tool_file_result(&server, &state, &chat_id, &file_ids).await;
+        assert_eq!(result["files"].as_array().unwrap().len(), 2);
+        assert_eq!(result["files"][0]["fileId"], json!(ids[0]));
+        assert_eq!(result["files"][1]["fileId"], json!(ids[1]));
+        assert!(
+            result["files"][1]["text"]
+                .as_str()
+                .unwrap()
+                .contains("second.txt")
+        );
+        assert_eq!(result["filesTruncated"], truncated);
+    }
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_client_tool_files_use_audio_transcripts_and_report_pending(pool: Pool<Postgres>) {
+    use erato::models::file_upload::{
+        AudioTranscriptionMetadata, set_audio_transcription_metadata,
+    };
+
+    let (config, _llm) = setup_mock_llm_server(Some(MockLlmConfig {
+        supports_audio_input: true,
+        audio_transcription_enabled: true,
+        ..Default::default()
+    }))
+    .await;
+    let state = test_app_state(config, pool).await;
+    let app: Router = router(state.clone())
+        .split_for_parts()
+        .0
+        .with_state(state.clone());
+    let server = TestServer::new(app.into_make_service()).unwrap();
+    let chat_id = create_chat(&server).await;
+    let mut ids = Vec::new();
+    for name in ["pending.mp3", "completed.mp3", "failed.mp3"] {
+        let uploaded = upload_file_to_chat(
+            &server,
+            &chat_id,
+            read_integration_test_file_bytes("audio_recordings/sales-summary-1-1.mp3"),
+            name,
+            "audio/mpeg",
+        )
+        .await;
+        assert_eq!(
+            uploaded["files"][0]["audio_transcription"]["status"],
+            "processing"
+        );
+        ids.push(Uuid::parse_str(uploaded["files"][0]["id"].as_str().unwrap()).unwrap());
+    }
+    set_audio_transcription_metadata(
+        &state.db,
+        &ids[1],
+        Some(AudioTranscriptionMetadata {
+            status: "completed".into(),
+            transcript: Some("A ready transcript".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .unwrap();
+    set_audio_transcription_metadata(
+        &state.db,
+        &ids[2],
+        Some(AudioTranscriptionMetadata {
+            status: "failed".into(),
+            error: Some("Transcription failed".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .unwrap();
+    let result = client_tool_file_result(&server, &state, &chat_id, &ids).await;
+    assert!(
+        result["files"][0]["unavailableReason"]
+            .as_str()
+            .unwrap()
+            .contains("status = processing")
+    );
+    assert_eq!(result["files"][1]["text"], "A ready transcript");
+    assert_eq!(result["files"][1]["truncated"], false);
+    assert!(
+        result["files"][2]["unavailableReason"]
+            .as_str()
+            .unwrap()
+            .contains("Transcription failed")
+    );
+
+    set_audio_transcription_metadata(
+        &state.db,
+        &ids[1],
+        Some(AudioTranscriptionMetadata {
+            status: "completed".into(),
+            transcript: Some("é".repeat(80_001)),
+            ..Default::default()
+        }),
+    )
+    .await
+    .unwrap();
+    let result = client_tool_file_result(&server, &state, &chat_id, &[ids[1]]).await;
+    assert_eq!(result["files"][0]["text"], "é".repeat(80_000));
+    assert_eq!(result["files"][0]["truncated"], true);
+}

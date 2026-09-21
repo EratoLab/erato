@@ -1349,7 +1349,6 @@ export function useChatMessaging(
           method: "POST",
           headers: {
             [X_ERATO_PLATFORM_HEADER]: platform,
-            ...getClientToolHeaders(),
           },
           body: JSON.stringify({ chat_id: effectiveChatId }),
           onMessage: (sseEvent) =>
@@ -2721,7 +2720,6 @@ export function useChatMessaging(
             method: "POST",
             headers: {
               [X_ERATO_PLATFORM_HEADER]: platform,
-              ...getClientToolHeaders(),
               ...getAuthHeaders(),
             },
             body: JSON.stringify({ message_id: messageId, decision }),

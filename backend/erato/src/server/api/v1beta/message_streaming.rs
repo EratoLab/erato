@@ -12421,6 +12421,7 @@ pub async fn client_tool_result(
             &app_state,
             &policy,
             &me_user.to_subject(),
+            me_user.access_token.as_deref(),
             request.result,
             if request.error.is_none() {
                 &request.file_upload_ids
@@ -12466,6 +12467,7 @@ pub async fn client_tool_result(
         &app_state,
         &policy,
         &me_user.to_subject(),
+        me_user.access_token.as_deref(),
         request.result,
         if request.error.is_none() {
             &request.file_upload_ids
@@ -12650,6 +12652,7 @@ pub async fn react_to_task_result_sse(
     Extension(policy): Extension<PolicyEngine>,
     Extension(me_user): Extension<MeProfile>,
     Path(chat_id): Path<String>,
+    headers: HeaderMap,
     Json(request): Json<ReactToTaskResultRequest>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Report>>>, StreamRouteError> {
     // 1. The gate, the same shape `drain_pending_deliveries` uses. With async
@@ -12814,6 +12817,7 @@ pub async fn react_to_task_result_sse(
         selected_facet_ids,
         Some(task_result_message_id),
     );
+    let generation_request_context = generation_request_context_from_headers(&headers);
 
     let app_state_bg = app_state.clone();
     let policy_bg = policy.clone();
@@ -12834,7 +12838,7 @@ pub async fn react_to_task_result_sse(
                     &policy_bg,
                     &me_user_bg,
                     &request,
-                    GenerationRequestContext::default(),
+                    generation_request_context,
                     &chat,
                     false,
                     Vec::new(),

@@ -4301,7 +4301,10 @@ unconfigured or disallowed tool. Older clients and absent sidecars cannot offer
 these tools. Existing tools keep their prior behavior with the default `false`.
 Availability is captured for each new generation; a device that disconnects
 mid-turn returns an ordinary tool error. Discovery retries when the sidecar is
-unavailable at startup. There is no separate sharing-consent workflow.
+unavailable at startup. Explicit task-result reactions also capture current
+availability. Reconnecting to a stream retains its original generation context;
+the existing MCP approval-continuation flow offers MCP tools only. There is no
+separate sharing-consent workflow.
 
 | Capability | Web and add-in behavior |
 | --- | --- |
@@ -4317,6 +4320,12 @@ upload-size limit. Extracted attachment text has a separate 80,000-character
 budget. An attachment search match without an email Message-ID cannot be read
 directly; search for its parent email first. Teams results provide metadata and
 links because the sidecar currently exposes no Teams body-read method.
+
+Client-tool file references use the requesting user's SharePoint access token
+when they refer to linked SharePoint files. Completed audio transcripts are
+returned as text within the same character budget; incomplete or failed
+transcriptions are reported explicitly. These tools do not start or wait for an
+audio transcription job.
 
 These tools are an additional local-data source. Outlook Exchange Online retains
 its Graph implementation and delegated/shared-mailbox scoping. Exchange SE and

@@ -59,6 +59,35 @@ function conversation(): OutlookGetConversationV1Result {
 }
 
 describe("shared desktop sidecar tools", () => {
+  it("uploads an audio attachment with its filename and MIME type preserved", async () => {
+    const result = conversation();
+    result.messages[0].attachments = [
+      {
+        name: "recording.mp3",
+        contentType: "audio/mpeg",
+        contentBytes: globalThis.btoa("audio bytes"),
+        size: 11,
+      },
+    ];
+    const env = setup({ "outlook.get_conversation.v1": result });
+    const outcome = await env
+      .tools()[1]
+      .execute({ ...anchor, includeAttachments: true }, context);
+    expect(env.uploadAttachment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "recording.mp3",
+        type: "audio/mpeg",
+        size: 11,
+      }),
+      "chat",
+      undefined,
+    );
+    expect(outcome).toMatchObject({
+      ok: true,
+      fileUploadIds: ["uploaded-file"],
+    });
+  });
+
   it.each(["email", "file", "teams_message"])(
     "searches indexed %s through the pinned contract",
     async (kind) => {
