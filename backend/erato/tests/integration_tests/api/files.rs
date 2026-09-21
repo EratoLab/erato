@@ -1126,3 +1126,87 @@ async fn test_file_upload_with_sharepoint_enabled(pool: Pool<Postgres>) {
         "Download URL should be a valid URL"
     );
 }
+
+/// Local client-tool attachments use the ordinary file processor and file policy.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_client_tool_files_extract_only_authorized_uploads(pool: Pool<Postgres>) {
+    use crate::test_utils::JwtTokenBuilder;
+    use erato::services::client_tools::ClientToolOutcome;
+
+    let (config, _llm) = setup_mock_llm_server(None).await;
+    let state = test_app_state(config, pool).await;
+    let app: Router = router(state.clone())
+        .split_for_parts()
+        .0
+        .with_state(state.clone());
+    let server = TestServer::new(app.into_make_service()).unwrap();
+    let chat_id = create_chat(&server).await;
+    let uploaded = upload_file_to_chat(
+        &server,
+        &chat_id,
+        b"OWN-ATTACHMENT-CONTENT".to_vec(),
+        "note.txt",
+        "text/plain",
+    )
+    .await;
+    let own_id = uploaded["files"][0]["id"].as_str().unwrap();
+
+    let foreign_token = JwtTokenBuilder::new()
+        .subject("different-file-owner")
+        .build();
+    let foreign = server
+        .post("/api/v1beta/me/files")
+        .with_bearer_token(&foreign_token)
+        .multipart(
+            MultipartForm::new().add_part(
+                "file",
+                Part::bytes(b"FOREIGN-PRIVATE-CONTENT".to_vec())
+                    .file_name("private.txt")
+                    .mime_type("text/plain"),
+            ),
+        )
+        .await;
+    foreign.assert_status_ok();
+    let foreign: Value = foreign.json();
+    let foreign_id = foreign["files"][0]["id"].as_str().unwrap();
+
+    let message_id = Uuid::new_v4();
+    let (_events, task) = state
+        .background_tasks
+        .start_task(Uuid::parse_str(&chat_id).unwrap(), message_id)
+        .await;
+    let receiver = task.register_client_tool_call("local-read".into()).await;
+    let body = json!({
+        "chat_id": chat_id, "message_id": message_id, "tool_call_id": "local-read",
+        "result": { "body": "Conversation body" },
+        "file_upload_ids": [own_id, foreign_id, Uuid::new_v4()],
+    });
+    let response = server
+        .post("/api/v1beta/me/messages/clienttoolresult")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&body)
+        .await;
+    response.assert_status_ok();
+    assert_eq!(response.json::<Value>()["delivered"], true);
+    let ClientToolOutcome::Result(result) = receiver.await.unwrap() else {
+        panic!("expected a successful file result")
+    };
+    assert_eq!(result["result"]["body"], "Conversation body");
+    assert!(
+        result["files"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("OWN-ATTACHMENT-CONTENT")
+    );
+    assert!(result["files"][1]["unavailableReason"].is_string());
+    assert!(result["files"][2]["unavailableReason"].is_string());
+    assert!(!result.to_string().contains("FOREIGN-PRIVATE-CONTENT"));
+    assert!(!result.to_string().contains("private.txt"));
+    let replay = server
+        .post("/api/v1beta/me/messages/clienttoolresult")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&body)
+        .await;
+    replay.assert_status_ok();
+    assert_eq!(replay.json::<Value>()["delivered"], false);
+}

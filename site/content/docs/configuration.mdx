@@ -4274,6 +4274,62 @@ List of starter prompt IDs in the order they should be displayed.
 priority_order = ["research_topic", "draft_email", "summarize_notes"]
 ```
 
+### Optional desktop-sidecar client tools
+
+The web app and Office/Teams add-ins register `search_sidecar_index` and
+`read_sidecar_conversation` when a configured desktop sidecar supports them.
+Declare them as ordinary `[client_tools.tools.<id>]` tools and select `desktop/*`
+with a regular facet, action facet, or the global tool allowlist. The complete
+configuration is in `backend/examples/desktop-sidecar.erato.toml`; copy it into
+Erato's working directory as `desktop-sidecar.auto.erato.toml`, or merge its
+sections into your configuration. The example supplies an optional visible facet.
+Configure the sidecar endpoint and allowed origins separately as usual. Deploy
+the backend, frontend, and rebuilt add-in together before enabling these tools;
+older backends do not gate optional tools or resolve their attachment references.
+
+#### `client_tools.tools.<key>.requires_client_registration`
+
+{/* erato_toml_config_key: client_tools.tools.<key>.requires_client_registration */}
+
+**Type:** `boolean` — **Default:** `false`
+
+Set this to `true` for optional client tools. They are offered only if their name
+appears in the requesting client's `X-Erato-Client-Tools` availability header.
+Configuration, facet allowlists, name collision handling, and the exclusion of
+client tools from delegated runs still apply. The header cannot enable an
+unconfigured or disallowed tool. Older clients and absent sidecars cannot offer
+these tools. Existing tools keep their prior behavior with the default `false`.
+Availability is captured for each new generation; a device that disconnects
+mid-turn returns an ordinary tool error. Discovery retries when the sidecar is
+unavailable at startup. There is no separate sharing-consent workflow.
+
+| Capability | Web and add-in behavior |
+| --- | --- |
+| Index search | Emails, attachment files, and Teams messages; optional kind, sender, mailbox, date, and file-type filters. Returns metadata and source references, not excerpts or bodies. Only indexed local data is covered. |
+| Outlook conversation read | A search email's `readConversation` reference supplies the mailbox and Message-ID. Bodies are converted to readable text. Attachment metadata is always returned. |
+| Attachment contents | `includeAttachments=true` uploads selected available bytes using the normal authenticated file API. Server authorization and the existing file processor apply before attachment text enters the tool result. `attachmentNames` selects exact names; otherwise inline files are skipped. |
+| Missing or partial content | Explicit statuses for unavailable bytes, disabled uploads, limits, upload failures, unparseable files, and truncated bodies/text. Images can be downloaded, but this tool returns text; image understanding uses normal message attachments. |
+
+Conversation reads default to 20 messages (maximum 50), with up to 20,000 body
+characters per message and 80,000 across the result. Attachment count respects
+the configured chat limit, capped at 20, and combined bytes respect the configured
+upload-size limit. Extracted attachment text has a separate 80,000-character
+budget. An attachment search match without an email Message-ID cannot be read
+directly; search for its parent email first. Teams results provide metadata and
+links because the sidecar currently exposes no Teams body-read method.
+
+These tools are an additional local-data source. Outlook Exchange Online retains
+its Graph implementation and delegated/shared-mailbox scoping. Exchange SE and
+other on-premises Outlook installations retain their item-scoped EWS proxy and
+Office-host EWS conversation path; the optional sidecar conversation adapter
+still falls back to EWS on failure. On-premises shared/delegated mailboxes keep
+their existing restrictions: the adapter never substitutes the user's own mailbox.
+Teams Graph message, transcript, and file flows remain independent of the sidecar.
+The web app does not acquire Office.js or Graph host dependencies.
+
+This integration adds no source/folder browser, global indexing controls,
+restart action, or benchmark UI.
+
 ### `facets`
 
 {/* erato_toml_config_key: facets */}

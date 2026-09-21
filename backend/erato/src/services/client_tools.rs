@@ -19,6 +19,39 @@ use serde_json::Value;
 
 use crate::config::ClientToolConfig;
 
+/// Bounded availability hints. Config and facet allowlists remain authoritative.
+pub fn registered_client_tools(headers: &axum::http::HeaderMap) -> Vec<String> {
+    let Some(value) = headers
+        .get("X-Erato-Client-Tools")
+        .and_then(|v| v.to_str().ok())
+    else {
+        return Vec::new();
+    };
+    if value.len() > 8319 {
+        return Vec::new();
+    }
+    let mut names: Vec<String> = value
+        .split(',')
+        .map(str::trim)
+        .filter(|name| {
+            !name.is_empty()
+                && name.len() <= 64
+                && name
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+        })
+        .take(128)
+        .map(str::to_owned)
+        .collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
+pub fn client_tool_is_available(tool: &ClientToolConfig, registered: &[String]) -> bool {
+    !tool.requires_client_registration || registered.contains(&tool.name)
+}
+
 /// Build a genai tool for a facet-declared client tool. `schema` is the parsed
 /// JSON-Schema object for the tool's input parameters (validated as a JSON
 /// object at config load). Mirrors `client_actions::build_client_action_tool`'s
@@ -147,6 +180,52 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn optional_tools_need_registration_but_legacy_tools_do_not() {
+        let mut optional = tool("desktop", "search_sidecar_index");
+        optional.requires_client_registration = true;
+        let legacy = tool("outlook", "fetch_availability");
+        assert!(!client_tool_is_available(&optional, &[]));
+        assert!(client_tool_is_available(&legacy, &[]));
+        assert!(client_tool_is_available(
+            &optional,
+            &["search_sidecar_index".into()]
+        ));
+        assert!(!client_tool_is_available(
+            &optional,
+            &["different_tool".into()]
+        ));
+    }
+
+    #[test]
+    fn registration_headers_are_bounded_and_do_not_parse_arbitrary_names() {
+        use axum::http::{HeaderMap, HeaderValue};
+        let mut headers = HeaderMap::new();
+        assert!(registered_client_tools(&headers).is_empty());
+        headers.insert(
+            "X-Erato-Client-Tools",
+            HeaderValue::from_static(
+                "search_sidecar_index, search_sidecar_index, bad/name, read_sidecar_conversation",
+            ),
+        );
+        assert_eq!(
+            registered_client_tools(&headers),
+            vec!["read_sidecar_conversation", "search_sidecar_index"]
+        );
+        headers.insert(
+            "X-Erato-Client-Tools",
+            HeaderValue::from_str(&"x".repeat(8320)).unwrap(),
+        );
+        assert!(registered_client_tools(&headers).is_empty());
+    }
+
+    #[test]
+    fn older_generation_contexts_have_no_optional_tools() {
+        let context: crate::models::message::GenerationRequestContext =
+            serde_json::from_str(r#"{"platform":"outlook"}"#).unwrap();
+        assert!(context.registered_client_tools.is_empty());
+    }
+
+    #[test]
     fn build_client_tool_sets_name_description_and_schema() {
         let schema = json!({ "type": "object", "properties": {} });
         let tool = build_client_tool(
@@ -179,6 +258,7 @@ mod tests {
             namespace: Some(namespace.to_string()),
             description: "d".to_string(),
             parameters: r#"{ "type": "object" }"#.to_string(),
+            requires_client_registration: false,
             timeout_ms: None,
         }
     }

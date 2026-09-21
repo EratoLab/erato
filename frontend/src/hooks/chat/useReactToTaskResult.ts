@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { createLogger } from "@/utils/debugLogger";
 import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
 
+import { getClientToolHeaders } from "./clientToolExecutors";
 import { readConflictRefusal } from "./conflictRefusal";
 import { getStreamKey, useMessagingStore } from "./store/messagingStore";
 
@@ -188,7 +189,10 @@ export function useReactToTaskResult({
           `/api/v1beta/me/chats/${targetChatId}/react`,
           {
             method: "POST",
-            headers: { [X_ERATO_PLATFORM_HEADER]: platform },
+            headers: {
+              [X_ERATO_PLATFORM_HEADER]: platform,
+              ...getClientToolHeaders(),
+            },
             body: JSON.stringify({
               task_result_message_id: targetMessageId,
             }),

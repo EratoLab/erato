@@ -880,7 +880,7 @@ pub async fn deliver_task_result(
             policy,
             me_user,
             &request,
-            crate::models::message::GenerationRequestContext { platform: None },
+            crate::models::message::GenerationRequestContext::default(),
             &origin,
             false,
             Vec::new(),

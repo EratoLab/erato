@@ -16,6 +16,7 @@ const spies = vi.hoisted(() => ({
 }));
 
 vi.mock("@erato/frontend/library", () => ({
+  DesktopSidecarClientTools: () => <div data-testid="sidecar-tools" />,
   GenerationStatusPoller: ({ seedOnMount }: { seedOnMount?: boolean }) => (
     <div data-testid="generation-poller" data-seed={String(seedOnMount)} />
   ),
@@ -55,6 +56,7 @@ describe("AuthGate", () => {
     );
 
     expect(screen.queryByTestId("generation-poller")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("sidecar-tools")).not.toBeInTheDocument();
     expect(screen.queryByTestId("app")).not.toBeInTheDocument();
   });
 
@@ -71,6 +73,7 @@ describe("AuthGate", () => {
     );
 
     expect(screen.queryByTestId("generation-poller")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("sidecar-tools")).not.toBeInTheDocument();
   });
 
   it("seeds the status poll once the session is established", () => {
@@ -81,6 +84,7 @@ describe("AuthGate", () => {
     );
 
     expect(screen.getByTestId("app")).toBeInTheDocument();
+    expect(screen.getByTestId("sidecar-tools")).toBeInTheDocument();
     expect(screen.getByTestId("generation-poller")).toHaveAttribute(
       "data-seed",
       "true",

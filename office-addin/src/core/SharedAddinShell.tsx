@@ -1,6 +1,7 @@
 import {
   ApiProvider,
   DesktopSidecarProvider,
+  DesktopSidecarClientTools,
   FeatureConfigProvider,
   GenerationStatusPoller,
   I18nProvider,
@@ -70,6 +71,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
           and a background run launched before the last reload appears in no
           listing the pane reads. `isAuthenticated` stays true across
           transient refresh failures, so this does not remount and re-seed. */}
+      <DesktopSidecarClientTools />
       <GenerationStatusPoller seedOnMount />
     </>
   );

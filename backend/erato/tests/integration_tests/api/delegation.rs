@@ -1491,6 +1491,7 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
             namespace: None,
             description: "A probe client tool".to_string(),
             parameters: r#"{"type":"object","properties":{}}"#.to_string(),
+            requires_client_registration: false,
             timeout_ms: None,
         },
     );

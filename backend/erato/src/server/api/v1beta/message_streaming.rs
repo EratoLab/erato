@@ -1960,6 +1960,10 @@ pub struct ClientToolResultRequest {
     #[serde(default, deserialize_with = "deserialize_present_json")]
     #[schema(nullable = false)]
     result: Option<JsonValue>,
+    /// Uploaded files to read with the normal file processor and include in this
+    /// tool result. Each file is authorized for the current user before reading.
+    #[serde(default)]
+    file_upload_ids: Vec<Uuid>,
     /// An error message if the client could not execute the tool. Provide this
     /// OR `result`.
     #[serde(default)]
@@ -2515,6 +2519,7 @@ fn generation_request_context_from_headers(headers: &HeaderMap) -> GenerationReq
 
     GenerationRequestContext {
         platform: Some(platform),
+        registered_client_tools: crate::services::client_tools::registered_client_tools(headers),
     }
 }
 
@@ -3126,6 +3131,12 @@ pub(crate) async fn prepare_chat_request_with_adapters(
             .client_tools
             .tools
             .values()
+            .filter(|client_tool| {
+                crate::services::client_tools::client_tool_is_available(
+                    client_tool,
+                    &generation_request_context.registered_client_tools,
+                )
+            })
             .filter(|client_tool| {
                 is_qualified_tool_allowed(
                     client_tool.namespace_or_default(),
@@ -12406,7 +12417,19 @@ pub async fn client_tool_result(
                 "No suspended generation matches this message".to_string(),
             ));
         }
-        let payload = match (request.result, request.error) {
+        let result = super::file_resolution::resolve_client_tool_files(
+            &app_state,
+            &policy,
+            &me_user.to_subject(),
+            request.result,
+            if request.error.is_none() {
+                &request.file_upload_ids
+            } else {
+                &[]
+            },
+        )
+        .await;
+        let payload = match (result, request.error) {
             (_, Some(error)) => json!({ "error": error }),
             (Some(result), None) => json!({ "result": result }),
             (None, None) => json!({
@@ -12439,7 +12462,19 @@ pub async fn client_tool_result(
 
     // `error` takes precedence if present; otherwise a result; neither is itself
     // surfaced to the model as an error.
-    let outcome = match (request.result, request.error) {
+    let result = super::file_resolution::resolve_client_tool_files(
+        &app_state,
+        &policy,
+        &me_user.to_subject(),
+        request.result,
+        if request.error.is_none() {
+            &request.file_upload_ids
+        } else {
+            &[]
+        },
+    )
+    .await;
+    let outcome = match (result, request.error) {
         (_, Some(error)) => ClientToolOutcome::Error(error),
         (Some(result), None) => ClientToolOutcome::Result(result),
         (None, None) => ClientToolOutcome::Error(
@@ -12799,7 +12834,7 @@ pub async fn react_to_task_result_sse(
                     &policy_bg,
                     &me_user_bg,
                     &request,
-                    GenerationRequestContext { platform: None },
+                    GenerationRequestContext::default(),
                     &chat,
                     false,
                     Vec::new(),

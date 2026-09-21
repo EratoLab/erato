@@ -1267,7 +1267,7 @@ fn run_delegated_child(
                                 &policy,
                                 &me_user,
                                 &request,
-                                crate::models::message::GenerationRequestContext { platform: None },
+                                crate::models::message::GenerationRequestContext::default(),
                                 chat_id,
                                 true,
                                 Vec::new(),

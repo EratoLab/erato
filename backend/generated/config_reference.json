@@ -339,6 +339,7 @@
   "client_tools.tools.<key>.name": {},
   "client_tools.tools.<key>.namespace": {},
   "client_tools.tools.<key>.parameters": {},
+  "client_tools.tools.<key>.requires_client_registration": {},
   "client_tools.tools.<key>.timeout_ms": {},
   "database_url": {},
   "default_file_storage_provider": {},

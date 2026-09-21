@@ -621,3 +621,10 @@ export { useMcpBrowserAuthorization } from "@/hooks/ui/useMcpBrowserAuthorizatio
 // server has to be able to report how that authorization ended, including
 // after the user has closed the settings surface they started it from.
 export { McpAuthorizationToasts } from "@/components/ui/Settings/mcpAuthorizationToasts";
+
+// Optional local tools and mailbox access are shared; host SDK adapters stay in the add-in.
+export { DesktopSidecarClientTools } from "@/providers/DesktopSidecarClientTools";
+export {
+  readSidecarConversation,
+  resolveSidecarMailboxId,
+} from "@/lib/desktopSidecar/mailboxAccess";

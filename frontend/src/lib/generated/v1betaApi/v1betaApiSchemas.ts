@@ -878,6 +878,11 @@ export type ClientToolResultRequest = {
    */
   error?: string;
   /**
+   * Uploaded files to read with the normal file processor and include in this
+   * tool result. Each file is authorized for the current user before reading.
+   */
+  file_upload_ids?: string[];
+  /**
    * The id of the assistant message whose generation emitted the client
    * tool call. Disambiguates a result from a task that has since been
    * replaced by a concurrent generation on the same chat.
