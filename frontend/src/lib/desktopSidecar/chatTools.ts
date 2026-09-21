@@ -10,11 +10,13 @@ import type {
 } from "@/hooks/chat/clientToolExecutors";
 import type {
   DesktopSidecarClient,
+  SearchMetadataFilter,
   SearchQueryV1Params,
 } from "@erato/desktop-sidecar-protocol";
 
 export const SEARCH_SIDECAR_INDEX_TOOL = "search_sidecar_index";
 export const READ_SIDECAR_CONVERSATION_TOOL = "read_sidecar_conversation";
+export const GET_SIDECAR_SEARCH_FIELDS_TOOL = "get_sidecar_search_fields";
 
 export interface SidecarAttachmentUpload {
   (file: File, chatId: string, signal?: AbortSignal): Promise<{ id: string }>;
@@ -46,6 +48,21 @@ function requiredString(input: Record<string, unknown>, name: string): string {
     throw new Error(`${name} must be a non-empty string.`);
   }
   return value;
+}
+
+function normalizeMailboxMetadataFilter(
+  filter: SearchMetadataFilter,
+): SearchMetadataFilter {
+  if (filter.field !== "mailbox_id") return filter;
+  const normalize = (value: unknown) =>
+    typeof value === "string" ? indexingMailboxId(value) : value;
+  if (filter.operator === "eq" || filter.operator === "ne") {
+    return { ...filter, value: normalize(filter.value) };
+  }
+  if (filter.operator === "in" && Array.isArray(filter.value)) {
+    return { ...filter, value: filter.value.map(normalize) };
+  }
+  return filter;
 }
 
 /** Shared by the browser and every add-in host. No Office/Teams SDK or auth here. */
@@ -110,16 +127,24 @@ export function createSidecarChatTools(
       async (input, context) => {
         // The pinned client validates the complete input, including filters.
         const args = objectInput(input) as SearchQueryV1Params;
-        const params =
-          typeof args.filters?.mailboxId === "string"
+        const params = {
+          ...args,
+          ...(typeof args.filters?.mailboxId === "string"
             ? {
-                ...args,
                 filters: {
                   ...args.filters,
                   mailboxId: indexingMailboxId(args.filters.mailboxId),
                 },
               }
-            : args;
+            : {}),
+          ...(Array.isArray(args.metadata_filters)
+            ? {
+                metadata_filters: args.metadata_filters.map(
+                  normalizeMailboxMetadataFilter,
+                ),
+              }
+            : {}),
+        };
         const result = await client.invoke("search.query.v1", params, {
           signal: context?.signal,
         });
@@ -305,6 +330,18 @@ export function createSidecarChatTools(
           },
         };
       },
+    ),
+    tool(
+      GET_SIDECAR_SEARCH_FIELDS_TOOL,
+      "search.metadata_fields.v1",
+      async (input, context) => ({
+        ok: true,
+        result: await client.invoke(
+          "search.metadata_fields.v1",
+          objectInput(input),
+          { signal: context?.signal },
+        ),
+      }),
     ),
   ];
 }
