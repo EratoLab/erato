@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/delegation/security.schema.json",
+  "title": "LocalDelegationSecurity",
+  "type": "object",
+  "properties": {
+    "profile": {
+      "const": "strict_snapshot_v1"
+    },
+    "enforcement": {
+      "enum": ["unavailable", "enforced"]
+    },
+    "contextAuthentication": {
+      "const": "pinned_backend_assertion_v1"
+    },
+    "consent": {
+      "const": "native_exact_snapshot"
+    },
+    "recovery": {
+      "const": "durable_receipt_v1"
+    }
+  },
+  "required": [
+    "profile",
+    "enforcement",
+    "contextAuthentication",
+    "consent",
+    "recovery"
+  ],
+  "additionalProperties": false
+}

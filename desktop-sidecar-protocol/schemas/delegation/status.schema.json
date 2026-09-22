@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/delegation/status.schema.json",
+  "title": "LocalTaskStatus",
+  "type": "object",
+  "properties": {
+    "handle": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{32,128}$"
+    },
+    "state": {
+      "enum": [
+        "queued",
+        "running",
+        "ready_for_review",
+        "approved",
+        "acknowledged",
+        "declined",
+        "cancelled",
+        "expired",
+        "failed"
+      ]
+    }
+  },
+  "required": ["handle", "state"],
+  "additionalProperties": false
+}

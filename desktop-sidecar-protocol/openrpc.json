@@ -927,6 +927,258 @@
           "state": "enabled"
         }
       }
+    },
+    {
+      "name": "local_contexts.challenge.v1",
+      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/local-contexts-challenge-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/local-contexts-challenge-v1-result.schema.json"
+        }
+      },
+      "x-erato-capability": {
+        "id": "local_contexts.challenge",
+        "major": 1,
+        "method": "local_contexts.challenge.v1",
+        "availability": {
+          "state": "disabled",
+          "reasonCode": "native_boundary_unqualified"
+        }
+      }
+    },
+    {
+      "name": "local_contexts.bind.v1",
+      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/local-contexts-bind-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/local-contexts-bind-v1-result.schema.json"
+        }
+      },
+      "x-erato-capability": {
+        "id": "local_contexts.bind",
+        "major": 1,
+        "method": "local_contexts.bind.v1",
+        "availability": {
+          "state": "disabled",
+          "reasonCode": "native_boundary_unqualified"
+        }
+      }
+    },
+    {
+      "name": "local_tasks.start.v1",
+      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/local-tasks-start-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/local-tasks-start-v1-result.schema.json"
+        }
+      },
+      "x-erato-capability": {
+        "id": "local_tasks.start",
+        "major": 1,
+        "method": "local_tasks.start.v1",
+        "availability": {
+          "state": "disabled",
+          "reasonCode": "native_boundary_unqualified"
+        }
+      }
+    },
+    {
+      "name": "local_tasks.status.v1",
+      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/local-tasks-status-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/local-tasks-status-v1-result.schema.json"
+        }
+      },
+      "x-erato-capability": {
+        "id": "local_tasks.status",
+        "major": 1,
+        "method": "local_tasks.status.v1",
+        "availability": {
+          "state": "disabled",
+          "reasonCode": "native_boundary_unqualified"
+        }
+      }
+    },
+    {
+      "name": "local_tasks.cancel.v1",
+      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/local-tasks-cancel-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/local-tasks-cancel-v1-result.schema.json"
+        }
+      },
+      "x-erato-capability": {
+        "id": "local_tasks.cancel",
+        "major": 1,
+        "method": "local_tasks.cancel.v1",
+        "availability": {
+          "state": "disabled",
+          "reasonCode": "native_boundary_unqualified"
+        }
+      }
+    },
+    {
+      "name": "local_tasks.review.v1",
+      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/local-tasks-review-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/local-tasks-review-v1-result.schema.json"
+        }
+      },
+      "x-erato-capability": {
+        "id": "local_tasks.review",
+        "major": 1,
+        "method": "local_tasks.review.v1",
+        "availability": {
+          "state": "disabled",
+          "reasonCode": "native_boundary_unqualified"
+        }
+      }
+    },
+    {
+      "name": "local_exports.status.v1",
+      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/local-exports-status-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/local-exports-status-v1-result.schema.json"
+        }
+      },
+      "x-erato-capability": {
+        "id": "local_exports.status",
+        "major": 1,
+        "method": "local_exports.status.v1",
+        "availability": {
+          "state": "disabled",
+          "reasonCode": "native_boundary_unqualified"
+        }
+      }
+    },
+    {
+      "name": "local_exports.read.v1",
+      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/local-exports-read-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/local-exports-read-v1-result.schema.json"
+        }
+      },
+      "x-erato-capability": {
+        "id": "local_exports.read",
+        "major": 1,
+        "method": "local_exports.read.v1",
+        "availability": {
+          "state": "disabled",
+          "reasonCode": "native_boundary_unqualified"
+        }
+      }
+    },
+    {
+      "name": "local_exports.ack.v1",
+      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/local-exports-ack-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/local-exports-ack-v1-result.schema.json"
+        }
+      },
+      "x-erato-capability": {
+        "id": "local_exports.ack",
+        "major": 1,
+        "method": "local_exports.ack.v1",
+        "availability": {
+          "state": "disabled",
+          "reasonCode": "native_boundary_unqualified"
+        }
+      }
     }
   ],
   "components": {
@@ -980,7 +1232,7 @@
     }
   },
   "x-erato-catalogue": {
-    "revision": "10",
-    "digest": "sha256:522228a794865d96241e7e7eb9878646f983ac8b34c5ef42edbbaae5773cfbc6"
+    "revision": "11",
+    "digest": "sha256:fb42276e143f407e10b3491e4957ea03d41455995184c1633e9f4787208f930e"
   }
 }

@@ -12,6 +12,32 @@ export interface Validator {
   errors?: ValidationError[] | null;
 }
 
+export const validateLocalTaskBinding: Validator;
+export const validateLocalTaskPlan: Validator;
+export const validateLocalTaskStatus: Validator;
+export const validateLocalDelegationSecurity: Validator;
+export const validateApprovedLocalExport: Validator;
+export const validateLocalExportReceiptClaims: Validator;
+export const validateLocalContextClaims: Validator;
+export const validateLocalJobClaims: Validator;
+export const validateLocalContextsChallengeV1Params: Validator;
+export const validateLocalContextsChallengeV1Result: Validator;
+export const validateLocalContextsBindV1Params: Validator;
+export const validateLocalContextsBindV1Result: Validator;
+export const validateLocalTasksStartV1Params: Validator;
+export const validateLocalTasksStartV1Result: Validator;
+export const validateLocalTasksStatusV1Params: Validator;
+export const validateLocalTasksStatusV1Result: Validator;
+export const validateLocalTasksCancelV1Params: Validator;
+export const validateLocalTasksCancelV1Result: Validator;
+export const validateLocalTasksReviewV1Params: Validator;
+export const validateLocalTasksReviewV1Result: Validator;
+export const validateLocalExportsStatusV1Params: Validator;
+export const validateLocalExportsStatusV1Result: Validator;
+export const validateLocalExportsReadV1Params: Validator;
+export const validateLocalExportsReadV1Result: Validator;
+export const validateLocalExportsAckV1Params: Validator;
+export const validateLocalExportsAckV1Result: Validator;
 export const validateIndexingBenchmarkListV1Params: Validator;
 export const validateIndexingBenchmarkListV1Result: Validator;
 export const validateIndexingBenchmarkStartV1Params: Validator;

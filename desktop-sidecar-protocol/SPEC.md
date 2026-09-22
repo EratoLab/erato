@@ -767,3 +767,9 @@ but has no external IDs. Deleted parents MUST NOT be returned.
 
 These new fields are optional in the v1 schemas so responses from older sidecars
 remain valid. Clients MUST tolerate missing fields and unknown identifier keys.
+
+## Strict local delegation (reserved)
+
+[DELEGATION.md](./DELEGATION.md) defines the strict snapshot profile and its
+closed schemas. Version 0.1.26 reserves these methods with disabled availability;
+shipping their schemas does not qualify any implementation or enable delegation.

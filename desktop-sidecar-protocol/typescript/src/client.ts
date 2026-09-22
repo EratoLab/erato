@@ -43,10 +43,46 @@ import {
   validateSourcesListV1Result,
   validateSourcesGetFolderHierarchyV1Params,
   validateSourcesGetFolderHierarchyV1Result,
+  validateLocalContextsChallengeV1Params,
+  validateLocalContextsChallengeV1Result,
+  validateLocalContextsBindV1Params,
+  validateLocalContextsBindV1Result,
+  validateLocalTasksStartV1Params,
+  validateLocalTasksStartV1Result,
+  validateLocalTasksStatusV1Params,
+  validateLocalTasksStatusV1Result,
+  validateLocalTasksCancelV1Params,
+  validateLocalTasksCancelV1Result,
+  validateLocalTasksReviewV1Params,
+  validateLocalTasksReviewV1Result,
+  validateLocalExportsStatusV1Params,
+  validateLocalExportsStatusV1Result,
+  validateLocalExportsReadV1Params,
+  validateLocalExportsReadV1Result,
+  validateLocalExportsAckV1Params,
+  validateLocalExportsAckV1Result,
   type Validator,
 } from "./generated/validators.mjs";
 
 import type {
+  LocalContextsChallengeV1Params,
+  LocalContextsChallengeV1Result,
+  LocalContextsBindV1Params,
+  LocalContextsBindV1Result,
+  LocalTasksStartV1Params,
+  LocalTasksStartV1Result,
+  LocalTasksStatusV1Params,
+  LocalTasksStatusV1Result,
+  LocalTasksCancelV1Params,
+  LocalTasksCancelV1Result,
+  LocalTasksReviewV1Params,
+  LocalTasksReviewV1Result,
+  LocalExportsStatusV1Params,
+  LocalExportsStatusV1Result,
+  LocalExportsReadV1Params,
+  LocalExportsReadV1Result,
+  LocalExportsAckV1Params,
+  LocalExportsAckV1Result,
   CapabilityDescriptor,
   IndexingBenchmarkListV1Params,
   IndexingBenchmarkListV1Result,
@@ -193,6 +229,43 @@ interface JsonRpcResponse {
 }
 
 const builtInContracts: Readonly<Record<string, SidecarMethodContract>> = {
+  "local_contexts.challenge.v1": {
+    validateParams: validateLocalContextsChallengeV1Params,
+    validateResult: validateLocalContextsChallengeV1Result,
+  },
+  "local_contexts.bind.v1": {
+    validateParams: validateLocalContextsBindV1Params,
+    validateResult: validateLocalContextsBindV1Result,
+  },
+  "local_tasks.start.v1": {
+    validateParams: validateLocalTasksStartV1Params,
+    validateResult: validateLocalTasksStartV1Result,
+  },
+  "local_tasks.status.v1": {
+    validateParams: validateLocalTasksStatusV1Params,
+    validateResult: validateLocalTasksStatusV1Result,
+  },
+  "local_tasks.cancel.v1": {
+    validateParams: validateLocalTasksCancelV1Params,
+    validateResult: validateLocalTasksCancelV1Result,
+  },
+  "local_tasks.review.v1": {
+    validateParams: validateLocalTasksReviewV1Params,
+    validateResult: validateLocalTasksReviewV1Result,
+  },
+  "local_exports.status.v1": {
+    validateParams: validateLocalExportsStatusV1Params,
+    validateResult: validateLocalExportsStatusV1Result,
+  },
+  "local_exports.read.v1": {
+    validateParams: validateLocalExportsReadV1Params,
+    validateResult: validateLocalExportsReadV1Result,
+  },
+  "local_exports.ack.v1": {
+    validateParams: validateLocalExportsAckV1Params,
+    validateResult: validateLocalExportsAckV1Result,
+  },
+
   "diagnostics.echo.v1": {
     validateParams: validateDiagnosticsEchoV1Params,
     validateResult: validateDiagnosticsEchoV1Result,
@@ -342,6 +415,51 @@ export class DesktopSidecarClient {
     );
   }
 
+  async invoke(
+    method: "local_contexts.challenge.v1",
+    params: LocalContextsChallengeV1Params,
+    options?: InvokeOptions,
+  ): Promise<LocalContextsChallengeV1Result>;
+  async invoke(
+    method: "local_contexts.bind.v1",
+    params: LocalContextsBindV1Params,
+    options?: InvokeOptions,
+  ): Promise<LocalContextsBindV1Result>;
+  async invoke(
+    method: "local_tasks.start.v1",
+    params: LocalTasksStartV1Params,
+    options?: InvokeOptions,
+  ): Promise<LocalTasksStartV1Result>;
+  async invoke(
+    method: "local_tasks.status.v1",
+    params: LocalTasksStatusV1Params,
+    options?: InvokeOptions,
+  ): Promise<LocalTasksStatusV1Result>;
+  async invoke(
+    method: "local_tasks.cancel.v1",
+    params: LocalTasksCancelV1Params,
+    options?: InvokeOptions,
+  ): Promise<LocalTasksCancelV1Result>;
+  async invoke(
+    method: "local_tasks.review.v1",
+    params: LocalTasksReviewV1Params,
+    options?: InvokeOptions,
+  ): Promise<LocalTasksReviewV1Result>;
+  async invoke(
+    method: "local_exports.status.v1",
+    params: LocalExportsStatusV1Params,
+    options?: InvokeOptions,
+  ): Promise<LocalExportsStatusV1Result>;
+  async invoke(
+    method: "local_exports.read.v1",
+    params: LocalExportsReadV1Params,
+    options?: InvokeOptions,
+  ): Promise<LocalExportsReadV1Result>;
+  async invoke(
+    method: "local_exports.ack.v1",
+    params: LocalExportsAckV1Params,
+    options?: InvokeOptions,
+  ): Promise<LocalExportsAckV1Result>;
   async invoke(
     method: "diagnostics.echo.v1",
     params: DiagnosticsEchoV1Params,

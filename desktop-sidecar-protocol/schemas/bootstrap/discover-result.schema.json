@@ -11,8 +11,17 @@
     "serverInfo": {
       "$ref": "../common.schema.json#/definitions/ProductInfo"
     },
-    "instanceId": { "type": "string", "minLength": 1, "maxLength": 256 },
-    "document": { "$ref": "./discovery-document.schema.json" }
+    "instanceId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "document": {
+      "$ref": "./discovery-document.schema.json"
+    },
+    "localDelegation": {
+      "$ref": "../delegation/security.schema.json"
+    }
   },
   "additionalProperties": true
 }
