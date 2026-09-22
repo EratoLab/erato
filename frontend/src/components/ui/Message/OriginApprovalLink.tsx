@@ -31,7 +31,15 @@ export const OriginApprovalLink = ({
     message: "Decide this in the chat that started the task",
   });
   const originChatId = chat?.origin_chat_id;
-  if (chat === undefined || originChatId === undefined) {
+  // The title is the liveness signal, not the id: the id outlives the chat it
+  // names and the backend drops the title once the origin is gone, so linking on
+  // the id alone sends the user to a chat that is not there — worse than saying
+  // where the decision lives and letting them find it.
+  if (
+    chat === undefined ||
+    originChatId === undefined ||
+    chat.origin_chat_title === undefined
+  ) {
     // Nothing to navigate to (or not loaded yet). The sentence still has to be
     // said: it is the only explanation the card gives for the refusal.
     return (

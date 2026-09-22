@@ -32,6 +32,22 @@ vi.mock("@/hooks/chat/useChatArchived", () => ({
   useChatArchived: () => archived.value,
 }));
 
+// A live origin: the backend sends the title with the id, and drops the title
+// once the chat is gone. Tests that need a deleted origin clear the title.
+const originChat: {
+  value: {
+    id: string;
+    origin_chat_id?: string;
+    origin_chat_title?: string;
+  };
+} = {
+  value: {
+    id: "chat-1",
+    origin_chat_id: "origin-1",
+    origin_chat_title: "Origin chat",
+  },
+};
+
 // The origin link reads this chat's provenance; the rest of the module is the
 // real thing, because the card's cache invalidation uses its query keys.
 vi.mock(
@@ -43,9 +59,7 @@ vi.mock(
       >();
     return {
       ...actual,
-      useChatDetail: () => ({
-        data: { id: "chat-1", origin_chat_id: "origin-1" },
-      }),
+      useChatDetail: () => ({ data: originChat.value }),
     };
   },
 );
@@ -174,6 +188,11 @@ const renderCard = (ui: ReactNode) => {
 afterEach(() => {
   vi.unstubAllGlobals();
   archived.value = false;
+  originChat.value = {
+    id: "chat-1",
+    origin_chat_id: "origin-1",
+    origin_chat_title: "Origin chat",
+  };
   useConfirmationRegistryStore.setState({ pendingIdsByChatId: {} });
   useGenerationStatusStore.getState().reset();
 });
@@ -1031,6 +1050,44 @@ describe("McpToolApprovalCard", () => {
     // The link IS the explanation; the wire envelope beside it would read as a
     // second, unexplained failure.
     expect(screen.queryByText(/covered_by_parent/)).not.toBeInTheDocument();
+  });
+
+  it("says where the decision lives without linking when the origin chat is gone", async () => {
+    // The id outlives the chat it names; the backend drops the title instead.
+    // A link here would land the user on a chat that is not there.
+    originChat.value = { id: "chat-1", origin_chat_id: "origin-1" };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: "covered_by_parent",
+          parent_message_id: "22222222-2222-2222-2222-222222222222",
+        }),
+        { status: 409 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={approvalRequest}
+        resolution={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Allow once"));
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("tool-approval-origin-notice"),
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByTestId("tool-approval-origin-link"),
+    ).not.toBeInTheDocument();
+    // Still the explanation, and the card is still answerable.
+    expect(screen.queryByText(/covered_by_parent/)).not.toBeInTheDocument();
+    expect(screen.getByTestId("mcp-tool-approval")).toBeInTheDocument();
   });
 
   it("points at the origin chat on the streamed path too", async () => {
