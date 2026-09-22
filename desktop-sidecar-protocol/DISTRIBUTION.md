@@ -509,3 +509,23 @@ define:
 
 These concerns MAY affect how bytes are produced or verified, but they MUST NOT
 add fields to this manifest or write derived files into the artifact root.
+
+## Strict delegation packaging gate
+
+The reserved strict snapshot contract in [DELEGATION.md](./DELEGATION.md) does
+not qualify current distribution artifacts. Native `content_release` policy
+values are `legacy` and `strict_snapshot_v1`; the latter currently refuses
+startup. Do not personalize older bootstrap-v1 binaries with this requirement:
+unknown fields were historically ignored. Support must be validated against
+the actual artifact, not inferred from the presence of a JSON field.
+
+A future strict artifact requires an independently confined content service,
+a listener without access to private state, authenticated private review IPC,
+validated helper identities/entitlements and signed bundled review resources.
+The current macOS template accepts only the main executable, Info.plist and
+bootstrap.json; its allowlist must be deliberately versioned before adding
+helpers. Do not broaden it to arbitrary ZIP contents or silently strip signatures.
+The native probe has demonstrated that closing inherited sockets and omitting
+network entitlements still allows a LaunchServices proxy release on macOS.
+Packaging and deployment cannot claim strict enforcement until that boundary
+and the recovery prerequisites are proven. No strict rollout setting is enabled.

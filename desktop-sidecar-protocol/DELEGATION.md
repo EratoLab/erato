@@ -5,6 +5,24 @@ Status: reserved, disabled. ERMAIN-862 / ERDSCAR-9. Package 0.1.26 extends
 and `topLevelParent`. Transport protocol remains 1.0. This document is the
 shared design record. It does not certify a security implementation.
 
+## Boundary feasibility gate (2026-09-22)
+
+The companion native prototype demonstrated two macOS App Sandbox escapes
+using only a synthetic marker: a write through an inherited accepted socket,
+and, after closing inherited sockets, an OS URL-handler request initiated by
+`/usr/bin/open`. A separate loopback receiver observed the marker in both tests.
+Direct TCP/UDP calls were denied. Therefore ordinary App Sandbox entitlements
+alone do not meet the required local-proxy boundary.
+
+Windows AppContainer worker/descendant tokens and synthetic-cache reads were
+exercised on Parallels, but that narrow test is not platform qualification.
+See the native repository's `security-probes/README.md` and reproducers.
+No production platform is qualified, and no durable native/backend/coordinator
+integration has been implemented past this prerequisite. The decision is to
+keep macOS strict mode unavailable and qualify Windows independently, or first
+prove an additional supported macOS enforcement mechanism. Neither option
+weakens the pre-consent guarantee. All reserved methods remain disabled.
+
 ## Trust and rollout
 
 Trust the OS, signed native broker/reviewer, pinned backend verification keys,
