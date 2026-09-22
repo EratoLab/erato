@@ -21,6 +21,8 @@ pub struct Model {
     pub audio_transcription: Option<String>,
     #[sea_orm(column_type = "Text", nullable)]
     pub external_id_ews_id: Option<String>,
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    pub outlook_provenance: Option<Json>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

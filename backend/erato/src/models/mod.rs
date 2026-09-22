@@ -6,6 +6,7 @@ pub mod file_upload;
 pub mod mcp_oauth;
 pub mod message;
 pub mod message_feedback;
+pub mod outlook_provenance;
 pub mod permissions;
 pub mod runtime_configuration;
 pub mod share_grant;

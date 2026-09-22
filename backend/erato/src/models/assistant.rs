@@ -23,6 +23,7 @@ pub struct FileInfo {
     pub id: Uuid,
     pub filename: String,
     pub external_id_ews_id: Option<String>,
+    pub outlook_provenance: Option<serde_json::Value>,
     pub file_storage_provider_id: String,
     pub file_storage_path: String,
     pub file_contents_unavailable_missing_permissions: bool,
@@ -36,6 +37,7 @@ impl From<file_uploads::Model> for FileInfo {
             id: file.id,
             filename: file.filename,
             external_id_ews_id: file.external_id_ews_id,
+            outlook_provenance: file.outlook_provenance,
             file_storage_provider_id: file.file_storage_provider_id,
             file_storage_path: file.file_storage_path,
             file_contents_unavailable_missing_permissions: false,
@@ -614,6 +616,7 @@ pub async fn remove_file_from_assistant(
 }
 
 /// Create a file upload record directly (not associated with chat)
+#[allow(clippy::too_many_arguments)]
 pub async fn create_standalone_file_upload(
     conn: &DatabaseConnection,
     _policy: &PolicyEngine,
@@ -622,6 +625,7 @@ pub async fn create_standalone_file_upload(
     file_storage_provider_id: String,
     file_storage_path: String,
     external_id_ews_id: Option<String>,
+    outlook_provenance: Option<serde_json::Value>,
 ) -> Result<file_uploads::Model, Report> {
     let owner_user_id = subject.user_id().to_string();
 
@@ -634,6 +638,7 @@ pub async fn create_standalone_file_upload(
         file_storage_path: Set(file_storage_path),
         audio_transcription: Set(None),
         external_id_ews_id: Set(external_id_ews_id),
+        outlook_provenance: Set(outlook_provenance),
         created_at: Set(Utc::now().into()),
         updated_at: Set(Utc::now().into()),
     };
@@ -670,6 +675,7 @@ pub async fn upload_file_to_assistant(
         filename,
         file_storage_provider_id,
         file_storage_path,
+        None,
         None,
     )
     .await;

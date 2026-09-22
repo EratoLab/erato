@@ -1944,6 +1944,7 @@ async fn insert_fixed_parent_file(
         owner_user_id: ActiveValue::Set(owner_user_id.to_string()),
         audio_transcription: ActiveValue::Set(None),
         external_id_ews_id: ActiveValue::Set(None),
+        outlook_provenance: ActiveValue::Set(None),
     };
     erato::db::entity::file_uploads::Entity::insert(file)
         .exec(db)

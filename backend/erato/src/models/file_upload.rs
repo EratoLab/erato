@@ -265,6 +265,7 @@ pub async fn create_file_upload(
     file_storage_provider_id: String,
     file_storage_path: String,
     external_id_ews_id: Option<String>,
+    outlook_provenance: Option<serde_json::Value>,
 ) -> Result<file_uploads::Model, Report> {
     // Authorize that the subject can access the chat
     authorize!(
@@ -285,6 +286,7 @@ pub async fn create_file_upload(
         file_storage_provider_id: ActiveValue::Set(file_storage_provider_id),
         file_storage_path: ActiveValue::Set(file_storage_path),
         external_id_ews_id: ActiveValue::Set(external_id_ews_id),
+        outlook_provenance: ActiveValue::Set(outlook_provenance),
         ..Default::default()
     };
 
@@ -434,6 +436,7 @@ pub struct FileUploadWithUrl {
     pub file_contents_unavailable_missing_permissions: bool,
     pub audio_transcription: Option<AudioTranscriptionMetadata>,
     pub external_id_ews_id: Option<String>,
+    pub outlook_provenance: Option<serde_json::Value>,
 }
 
 /// Get a specific file upload by ID, including a pre-signed download URL.
@@ -520,6 +523,7 @@ pub async fn get_file_upload_with_url_and_token(
     Ok(FileUploadWithUrl {
         id: file_upload.id,
         external_id_ews_id: file_upload.external_id_ews_id,
+        outlook_provenance: file_upload.outlook_provenance,
         filename,
         file_storage_provider_id,
         file_storage_path,
@@ -643,6 +647,7 @@ pub async fn get_chat_file_uploads_with_urls_and_token(
         result.push(FileUploadWithUrl {
             id: upload.id,
             external_id_ews_id: upload.external_id_ews_id,
+            outlook_provenance: upload.outlook_provenance,
             filename,
             file_storage_provider_id,
             file_storage_path,

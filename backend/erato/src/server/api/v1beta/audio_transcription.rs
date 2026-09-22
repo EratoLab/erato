@@ -646,6 +646,7 @@ async fn handle_control_frame(
                 app_state.default_file_storage_provider_id(),
                 file_storage_path,
                 None,
+                None,
             )
             .await
             .wrap_err("Failed to create audio transcription file upload")?;
