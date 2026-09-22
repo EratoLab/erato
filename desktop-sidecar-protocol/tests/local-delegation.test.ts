@@ -29,6 +29,7 @@ const security = {
   contextAuthentication: "pinned_backend_assertion_v1",
   consent: "native_exact_snapshot",
   recovery: "durable_receipt_v1",
+  trustModel: "installed_native_code",
 } as const;
 function discovery(): DiscoverResult {
   const result: DiscoverResult = {
@@ -54,7 +55,7 @@ describe("strict local delegation contract", () => {
     for (const method of methods)
       expect(method["x-erato-capability"].availability).toEqual({
         state: "disabled",
-        reasonCode: "native_boundary_unqualified",
+        reasonCode: "local_delegation_not_enabled",
       });
     expect(
       methods.some((m: { name: string }) => /approve|grant/.test(m.name)),
@@ -197,7 +198,7 @@ describe("strict local delegation contract", () => {
       const body = await response.text();
       expect(body).not.toContain("SECRET_MARKER");
       expect(JSON.parse(body).error.data.reasonCode).toBe(
-        "native_boundary_unqualified",
+        "local_delegation_not_enabled",
       );
     } finally {
       await server.stop();

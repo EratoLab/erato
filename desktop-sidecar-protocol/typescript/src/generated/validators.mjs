@@ -858,7 +858,7 @@ return errors === 0;
 }
 
 export const validateLocalDelegationSecurity = validate13;
-const schema14 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/delegation/security.schema.json","title":"LocalDelegationSecurity","type":"object","properties":{"profile":{"const":"strict_snapshot_v1"},"enforcement":{"enum":["unavailable","enforced"]},"contextAuthentication":{"const":"pinned_backend_assertion_v1"},"consent":{"const":"native_exact_snapshot"},"recovery":{"const":"durable_receipt_v1"}},"required":["profile","enforcement","contextAuthentication","consent","recovery"],"additionalProperties":false};
+const schema14 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/delegation/security.schema.json","title":"LocalDelegationSecurity","type":"object","properties":{"profile":{"const":"strict_snapshot_v1"},"enforcement":{"enum":["unavailable","enforced"]},"contextAuthentication":{"const":"pinned_backend_assertion_v1"},"consent":{"const":"native_exact_snapshot"},"recovery":{"const":"durable_receipt_v1"},"trustModel":{"const":"installed_native_code"}},"required":["profile","enforcement","contextAuthentication","consent","recovery","trustModel"],"additionalProperties":false};
 
 function validate13(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/delegation/security.schema.json" */;
@@ -915,9 +915,8 @@ vErrors.push(err4);
 }
 errors++;
 }
-for(const key0 in data){
-if(!(((((key0 === "profile") || (key0 === "enforcement")) || (key0 === "contextAuthentication")) || (key0 === "consent")) || (key0 === "recovery"))){
-const err5 = {instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"};
+if(data.trustModel === undefined){
+const err5 = {instancePath,schemaPath:"#/required",keyword:"required",params:{missingProperty: "trustModel"},message:"must have required property '"+"trustModel"+"'"};
 if(vErrors === null){
 vErrors = [err5];
 }
@@ -926,10 +925,9 @@ vErrors.push(err5);
 }
 errors++;
 }
-}
-if(data.profile !== undefined){
-if("strict_snapshot_v1" !== data.profile){
-const err6 = {instancePath:instancePath+"/profile",schemaPath:"#/properties/profile/const",keyword:"const",params:{allowedValue: "strict_snapshot_v1"},message:"must be equal to constant"};
+for(const key0 in data){
+if(!((((((key0 === "profile") || (key0 === "enforcement")) || (key0 === "contextAuthentication")) || (key0 === "consent")) || (key0 === "recovery")) || (key0 === "trustModel"))){
+const err6 = {instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err6];
 }
@@ -939,10 +937,9 @@ vErrors.push(err6);
 errors++;
 }
 }
-if(data.enforcement !== undefined){
-let data1 = data.enforcement;
-if(!((data1 === "unavailable") || (data1 === "enforced"))){
-const err7 = {instancePath:instancePath+"/enforcement",schemaPath:"#/properties/enforcement/enum",keyword:"enum",params:{allowedValues: schema14.properties.enforcement.enum},message:"must be equal to one of the allowed values"};
+if(data.profile !== undefined){
+if("strict_snapshot_v1" !== data.profile){
+const err7 = {instancePath:instancePath+"/profile",schemaPath:"#/properties/profile/const",keyword:"const",params:{allowedValue: "strict_snapshot_v1"},message:"must be equal to constant"};
 if(vErrors === null){
 vErrors = [err7];
 }
@@ -952,9 +949,10 @@ vErrors.push(err7);
 errors++;
 }
 }
-if(data.contextAuthentication !== undefined){
-if("pinned_backend_assertion_v1" !== data.contextAuthentication){
-const err8 = {instancePath:instancePath+"/contextAuthentication",schemaPath:"#/properties/contextAuthentication/const",keyword:"const",params:{allowedValue: "pinned_backend_assertion_v1"},message:"must be equal to constant"};
+if(data.enforcement !== undefined){
+let data1 = data.enforcement;
+if(!((data1 === "unavailable") || (data1 === "enforced"))){
+const err8 = {instancePath:instancePath+"/enforcement",schemaPath:"#/properties/enforcement/enum",keyword:"enum",params:{allowedValues: schema14.properties.enforcement.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err8];
 }
@@ -964,9 +962,9 @@ vErrors.push(err8);
 errors++;
 }
 }
-if(data.consent !== undefined){
-if("native_exact_snapshot" !== data.consent){
-const err9 = {instancePath:instancePath+"/consent",schemaPath:"#/properties/consent/const",keyword:"const",params:{allowedValue: "native_exact_snapshot"},message:"must be equal to constant"};
+if(data.contextAuthentication !== undefined){
+if("pinned_backend_assertion_v1" !== data.contextAuthentication){
+const err9 = {instancePath:instancePath+"/contextAuthentication",schemaPath:"#/properties/contextAuthentication/const",keyword:"const",params:{allowedValue: "pinned_backend_assertion_v1"},message:"must be equal to constant"};
 if(vErrors === null){
 vErrors = [err9];
 }
@@ -976,9 +974,9 @@ vErrors.push(err9);
 errors++;
 }
 }
-if(data.recovery !== undefined){
-if("durable_receipt_v1" !== data.recovery){
-const err10 = {instancePath:instancePath+"/recovery",schemaPath:"#/properties/recovery/const",keyword:"const",params:{allowedValue: "durable_receipt_v1"},message:"must be equal to constant"};
+if(data.consent !== undefined){
+if("native_exact_snapshot" !== data.consent){
+const err10 = {instancePath:instancePath+"/consent",schemaPath:"#/properties/consent/const",keyword:"const",params:{allowedValue: "native_exact_snapshot"},message:"must be equal to constant"};
 if(vErrors === null){
 vErrors = [err10];
 }
@@ -988,14 +986,38 @@ vErrors.push(err10);
 errors++;
 }
 }
-}
-else {
-const err11 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data.recovery !== undefined){
+if("durable_receipt_v1" !== data.recovery){
+const err11 = {instancePath:instancePath+"/recovery",schemaPath:"#/properties/recovery/const",keyword:"const",params:{allowedValue: "durable_receipt_v1"},message:"must be equal to constant"};
 if(vErrors === null){
 vErrors = [err11];
 }
 else {
 vErrors.push(err11);
+}
+errors++;
+}
+}
+if(data.trustModel !== undefined){
+if("installed_native_code" !== data.trustModel){
+const err12 = {instancePath:instancePath+"/trustModel",schemaPath:"#/properties/trustModel/const",keyword:"const",params:{allowedValue: "installed_native_code"},message:"must be equal to constant"};
+if(vErrors === null){
+vErrors = [err12];
+}
+else {
+vErrors.push(err12);
+}
+errors++;
+}
+}
+}
+else {
+const err13 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err13];
+}
+else {
+vErrors.push(err13);
 }
 errors++;
 }
@@ -22463,9 +22485,8 @@ vErrors.push(err22);
 }
 errors++;
 }
-for(const key0 in data6){
-if(!(((((key0 === "profile") || (key0 === "enforcement")) || (key0 === "contextAuthentication")) || (key0 === "consent")) || (key0 === "recovery"))){
-const err23 = {instancePath:instancePath+"/localDelegation",schemaPath:"../delegation/security.schema.json/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"};
+if(data6.trustModel === undefined){
+const err23 = {instancePath:instancePath+"/localDelegation",schemaPath:"../delegation/security.schema.json/required",keyword:"required",params:{missingProperty: "trustModel"},message:"must have required property '"+"trustModel"+"'"};
 if(vErrors === null){
 vErrors = [err23];
 }
@@ -22474,10 +22495,9 @@ vErrors.push(err23);
 }
 errors++;
 }
-}
-if(data6.profile !== undefined){
-if("strict_snapshot_v1" !== data6.profile){
-const err24 = {instancePath:instancePath+"/localDelegation/profile",schemaPath:"../delegation/security.schema.json/properties/profile/const",keyword:"const",params:{allowedValue: "strict_snapshot_v1"},message:"must be equal to constant"};
+for(const key0 in data6){
+if(!((((((key0 === "profile") || (key0 === "enforcement")) || (key0 === "contextAuthentication")) || (key0 === "consent")) || (key0 === "recovery")) || (key0 === "trustModel"))){
+const err24 = {instancePath:instancePath+"/localDelegation",schemaPath:"../delegation/security.schema.json/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err24];
 }
@@ -22487,10 +22507,9 @@ vErrors.push(err24);
 errors++;
 }
 }
-if(data6.enforcement !== undefined){
-let data8 = data6.enforcement;
-if(!((data8 === "unavailable") || (data8 === "enforced"))){
-const err25 = {instancePath:instancePath+"/localDelegation/enforcement",schemaPath:"../delegation/security.schema.json/properties/enforcement/enum",keyword:"enum",params:{allowedValues: schema14.properties.enforcement.enum},message:"must be equal to one of the allowed values"};
+if(data6.profile !== undefined){
+if("strict_snapshot_v1" !== data6.profile){
+const err25 = {instancePath:instancePath+"/localDelegation/profile",schemaPath:"../delegation/security.schema.json/properties/profile/const",keyword:"const",params:{allowedValue: "strict_snapshot_v1"},message:"must be equal to constant"};
 if(vErrors === null){
 vErrors = [err25];
 }
@@ -22500,9 +22519,10 @@ vErrors.push(err25);
 errors++;
 }
 }
-if(data6.contextAuthentication !== undefined){
-if("pinned_backend_assertion_v1" !== data6.contextAuthentication){
-const err26 = {instancePath:instancePath+"/localDelegation/contextAuthentication",schemaPath:"../delegation/security.schema.json/properties/contextAuthentication/const",keyword:"const",params:{allowedValue: "pinned_backend_assertion_v1"},message:"must be equal to constant"};
+if(data6.enforcement !== undefined){
+let data8 = data6.enforcement;
+if(!((data8 === "unavailable") || (data8 === "enforced"))){
+const err26 = {instancePath:instancePath+"/localDelegation/enforcement",schemaPath:"../delegation/security.schema.json/properties/enforcement/enum",keyword:"enum",params:{allowedValues: schema14.properties.enforcement.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err26];
 }
@@ -22512,9 +22532,9 @@ vErrors.push(err26);
 errors++;
 }
 }
-if(data6.consent !== undefined){
-if("native_exact_snapshot" !== data6.consent){
-const err27 = {instancePath:instancePath+"/localDelegation/consent",schemaPath:"../delegation/security.schema.json/properties/consent/const",keyword:"const",params:{allowedValue: "native_exact_snapshot"},message:"must be equal to constant"};
+if(data6.contextAuthentication !== undefined){
+if("pinned_backend_assertion_v1" !== data6.contextAuthentication){
+const err27 = {instancePath:instancePath+"/localDelegation/contextAuthentication",schemaPath:"../delegation/security.schema.json/properties/contextAuthentication/const",keyword:"const",params:{allowedValue: "pinned_backend_assertion_v1"},message:"must be equal to constant"};
 if(vErrors === null){
 vErrors = [err27];
 }
@@ -22524,9 +22544,9 @@ vErrors.push(err27);
 errors++;
 }
 }
-if(data6.recovery !== undefined){
-if("durable_receipt_v1" !== data6.recovery){
-const err28 = {instancePath:instancePath+"/localDelegation/recovery",schemaPath:"../delegation/security.schema.json/properties/recovery/const",keyword:"const",params:{allowedValue: "durable_receipt_v1"},message:"must be equal to constant"};
+if(data6.consent !== undefined){
+if("native_exact_snapshot" !== data6.consent){
+const err28 = {instancePath:instancePath+"/localDelegation/consent",schemaPath:"../delegation/security.schema.json/properties/consent/const",keyword:"const",params:{allowedValue: "native_exact_snapshot"},message:"must be equal to constant"};
 if(vErrors === null){
 vErrors = [err28];
 }
@@ -22536,9 +22556,9 @@ vErrors.push(err28);
 errors++;
 }
 }
-}
-else {
-const err29 = {instancePath:instancePath+"/localDelegation",schemaPath:"../delegation/security.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data6.recovery !== undefined){
+if("durable_receipt_v1" !== data6.recovery){
+const err29 = {instancePath:instancePath+"/localDelegation/recovery",schemaPath:"../delegation/security.schema.json/properties/recovery/const",keyword:"const",params:{allowedValue: "durable_receipt_v1"},message:"must be equal to constant"};
 if(vErrors === null){
 vErrors = [err29];
 }
@@ -22548,14 +22568,38 @@ vErrors.push(err29);
 errors++;
 }
 }
-}
-else {
-const err30 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data6.trustModel !== undefined){
+if("installed_native_code" !== data6.trustModel){
+const err30 = {instancePath:instancePath+"/localDelegation/trustModel",schemaPath:"../delegation/security.schema.json/properties/trustModel/const",keyword:"const",params:{allowedValue: "installed_native_code"},message:"must be equal to constant"};
 if(vErrors === null){
 vErrors = [err30];
 }
 else {
 vErrors.push(err30);
+}
+errors++;
+}
+}
+}
+else {
+const err31 = {instancePath:instancePath+"/localDelegation",schemaPath:"../delegation/security.schema.json/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err31];
+}
+else {
+vErrors.push(err31);
+}
+errors++;
+}
+}
+}
+else {
+const err32 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err32];
+}
+else {
+vErrors.push(err32);
 }
 errors++;
 }

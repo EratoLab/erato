@@ -5,35 +5,31 @@ Status: reserved, disabled. ERMAIN-862 / ERDSCAR-9. Package 0.1.26 extends
 and `topLevelParent`. Transport protocol remains 1.0. This document is the
 shared design record. It does not certify a security implementation.
 
-## Boundary feasibility gate (2026-09-22)
+## Scope decision (2026-09-22)
 
-The companion native prototype demonstrated two macOS App Sandbox escapes
-using only a synthetic marker: a write through an inherited accepted socket,
-and, after closing inherited sockets, an OS URL-handler request initiated by
-`/usr/bin/open`. A separate loopback receiver observed the marker in both tests.
-Direct TCP/UDP calls were denied. Therefore ordinary App Sandbox entitlements
-alone do not meet the required local-proxy boundary.
+The owner removed OS/process confinement and a new signed macOS sandbox
+application from these issues, following Max's guidance. Trust the installed
+native implementation. Enforce exact approval in native review/export APIs and
+keep unapproved content out of the ordinary frontend and backend through those
+checks. This profile does not claim OS-enforced egress prevention or protection
+from compromised native code. Sandbox probes are not a delivery prerequisite.
 
-Windows AppContainer worker/descendant tokens and synthetic-cache reads were
-exercised on Parallels, but that narrow test is not platform qualification.
-See the native repository's `security-probes/README.md` and reproducers.
-No production platform is qualified, and no durable native/backend/coordinator
-integration has been implemented past this prerequisite. Owner decision
-(2026-09-22): defer a signed macOS application for now. Keep strict delegation
-unavailable on macOS and qualify the Windows boundary independently. The
-macOS signing/confinement work no longer blocks Windows development; the
-pre-consent guarantee remains unchanged. All reserved methods remain disabled
-until the Windows security and recovery prerequisites pass.
+Future dynamic/untrusted local code must run in WASM with explicitly controlled
+host capabilities. The initial workflow executes bounded deterministic search
+using existing native readers; it does not execute generated code or introduce
+a WASM runtime. Build durable native jobs, native review/export, backend recovery
+and the shared frontend in that order. Enable only after consent/ownership,
+immutable export and recovery checks pass.
 
 ## Trust and rollout
 
-Trust the OS, signed native broker/reviewer, pinned backend verification keys,
+Trust the OS, installed native broker/reviewer, pinned backend verification keys,
 and authenticated backend. Source documents and network-facing frontend scripts
 cannot authorize export. No native component stores backend access/refresh
 tokens or opens a backend connection. A locally verified signed assertion is
 an input, not a credential permitting native cloud access.
 
-Before approval, content and derived metadata remain in confined native
+Before approval, content and derived metadata remain in trusted native
 processes: subjects, senders, folders, filenames, snippets, documents, summaries,
 counts, digests, traces and errors. Public status is exactly `handle` plus a
 closed lifecycle `state`. No device-derived status, handle, error or timing is
@@ -48,18 +44,19 @@ All `local_*` capabilities are disabled in the canonical catalogue and reference
 server. A client must require `localDelegation.enforcement = enforced`, the exact
 security profile and every v1 method enabled. Missing/unknown declarations or
 partial catalogues fail closed, without raw RPC fallback. Advertising methods
-alone is insufficient. The reference server cannot claim native confinement.
-Production enablement additionally requires qualified signed native artifacts,
+alone is insufficient. The declaration identifies `trustModel = installed_native_code`; it does not
+claim OS isolation. The reference server cannot issue native grants.
+Production enablement additionally requires tested native consent/export,
 durable backend checkpoints/results and the shared authenticated coordinator.
 No platform is qualified by this contract change.
 
-A strict-required installation refuses startup if confinement is unavailable.
+A strict-required installation refuses startup if native consent is unavailable.
 It must never downgrade to legacy on a command-line mode, reset, restart,
 missing helper, signature failure or unsupported OS. The RPC boundary denies
 legacy content, metadata, configuration, progress and diagnostic methods before
-running them. The process launch boundary must independently cover cache readers,
-extractors/descendants, native UI, crash handlers and alternate executable modes.
-A CSP, Origin allowlist or frontend approval boolean is not this boundary.
+running them. Native code must route every public path through these checks, including
+alternate modes and diagnostic serialization. Origin allowlisting or a frontend
+approval boolean does not authorize an export.
 
 ## Account and device authentication
 
@@ -74,7 +71,7 @@ first pairing. This is not evidence-export approval. Binding returns a random
 256-bit context handle, scoped to the OS user, Origin, backend/account and device.
 
 JWS profile: EdDSA/Ed25519 only, `kid` selects an exact public key installed in
-signed organization bootstrap; reject unknown keys, algorithms, headers, remote
+installed organization bootstrap; reject unknown keys, algorithms, headers, remote
 key URLs and duplicate JSON keys. Never fetch a JWK URL from native. Claims use
 `LocalContextClaims`, with canonical HTTPS `iss` and Origin, stable backend
 subject `sub` (not email), exact audience, device, single-use challenge and `jti`.
@@ -155,8 +152,8 @@ a new immutable snapshot for review. Treat links, clipboard, download and
 external-open as explicit separate releases. No remote resources or document
 scripts. Public RPC never receives preview bytes or a private selection manifest.
 
-The private reviewer-to-store channel authenticates the signed process and OS
-session. Only it creates a grant for the binding, snapshot/version, exact selection,
+The reviewer and store use an in-process private channel, or authenticated native
+IPC when separated. No network RPC is capable of submitting a review decision. Only it creates a grant for the binding, snapshot/version, exact selection,
 manifest digest, nonce, expiry and recipient. Grant identifiers exposed after
 approval are not bearer authority. Existing always-allow settings never substitute
 for this decision. Native grant validation and read/cancel/expiry must serialize.
@@ -219,12 +216,11 @@ plus native idempotency across browsers and Office views.
 
 ## Qualification gate
 
-Require native secret-marker/RPC and TCP/UDP/DNS/local-proxy/accepted-socket
-escape tests, descendants, malicious previews and every executable mode. Run
-packaged Windows/macOS cache access and review tests; Linux remains unavailable
-without equivalent enforcement. Sign nested helpers before the personalized
-outer app; validate identities and entitlements and notarize production macOS
-artifacts. A URI launcher carries no content, token or export credentials.
+Require native secret-marker/RPC tests, inert text-only previews and coverage
+of every public content/metadata path. Qualify existing Windows/macOS packaging,
+cache access and native review invocation; report untested Office hosts honestly.
+A URI launcher carries no content, token or export credentials. OS sandbox,
+network/IPC confinement and new macOS signing work are outside this scope.
 
 Then qualify native process death at every persistence boundary, immutable
 selection/source mutation, account/device/job mismatch, expiry/cancel races,

@@ -401,7 +401,7 @@ export class MockSidecar {
         "Strict local delegation is unavailable.",
         {
           kind: "capability_unavailable",
-          reasonCode: "native_boundary_unqualified",
+          reasonCode: "local_delegation_not_enabled",
         },
       );
     }

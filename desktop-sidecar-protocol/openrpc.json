@@ -952,7 +952,7 @@
         "method": "local_contexts.challenge.v1",
         "availability": {
           "state": "disabled",
-          "reasonCode": "native_boundary_unqualified"
+          "reasonCode": "local_delegation_not_enabled"
         }
       }
     },
@@ -980,7 +980,7 @@
         "method": "local_contexts.bind.v1",
         "availability": {
           "state": "disabled",
-          "reasonCode": "native_boundary_unqualified"
+          "reasonCode": "local_delegation_not_enabled"
         }
       }
     },
@@ -1008,7 +1008,7 @@
         "method": "local_tasks.start.v1",
         "availability": {
           "state": "disabled",
-          "reasonCode": "native_boundary_unqualified"
+          "reasonCode": "local_delegation_not_enabled"
         }
       }
     },
@@ -1036,7 +1036,7 @@
         "method": "local_tasks.status.v1",
         "availability": {
           "state": "disabled",
-          "reasonCode": "native_boundary_unqualified"
+          "reasonCode": "local_delegation_not_enabled"
         }
       }
     },
@@ -1064,7 +1064,7 @@
         "method": "local_tasks.cancel.v1",
         "availability": {
           "state": "disabled",
-          "reasonCode": "native_boundary_unqualified"
+          "reasonCode": "local_delegation_not_enabled"
         }
       }
     },
@@ -1092,7 +1092,7 @@
         "method": "local_tasks.review.v1",
         "availability": {
           "state": "disabled",
-          "reasonCode": "native_boundary_unqualified"
+          "reasonCode": "local_delegation_not_enabled"
         }
       }
     },
@@ -1120,7 +1120,7 @@
         "method": "local_exports.status.v1",
         "availability": {
           "state": "disabled",
-          "reasonCode": "native_boundary_unqualified"
+          "reasonCode": "local_delegation_not_enabled"
         }
       }
     },
@@ -1148,7 +1148,7 @@
         "method": "local_exports.read.v1",
         "availability": {
           "state": "disabled",
-          "reasonCode": "native_boundary_unqualified"
+          "reasonCode": "local_delegation_not_enabled"
         }
       }
     },
@@ -1176,7 +1176,7 @@
         "method": "local_exports.ack.v1",
         "availability": {
           "state": "disabled",
-          "reasonCode": "native_boundary_unqualified"
+          "reasonCode": "local_delegation_not_enabled"
         }
       }
     }
@@ -1233,6 +1233,6 @@
   },
   "x-erato-catalogue": {
     "revision": "11",
-    "digest": "sha256:fb42276e143f407e10b3491e4957ea03d41455995184c1633e9f4787208f930e"
+    "digest": "sha256:baf5585976863507fd5dc9f1e81e84caa81ea04cad079e1f05ceec78e7b2281f"
   }
 }

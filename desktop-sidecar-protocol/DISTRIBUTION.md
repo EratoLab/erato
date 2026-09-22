@@ -519,13 +519,10 @@ startup. Do not personalize older bootstrap-v1 binaries with this requirement:
 unknown fields were historically ignored. Support must be validated against
 the actual artifact, not inferred from the presence of a JSON field.
 
-A future strict artifact requires an independently confined content service,
-a listener without access to private state, authenticated private review IPC,
-validated helper identities/entitlements and signed bundled review resources.
-The current macOS template accepts only the main executable, Info.plist and
-bootstrap.json; its allowlist must be deliberately versioned before adding
-helpers. Do not broaden it to arbitrary ZIP contents or silently strip signatures.
-The native probe has demonstrated that closing inherited sockets and omitting
-network entitlements still allows a LaunchServices proxy release on macOS.
-Packaging and deployment cannot claim strict enforcement until that boundary
-and the recovery prerequisites are proven. No strict rollout setting is enabled.
+Native exact-snapshot delegation requires bundled inert review assets, private
+review-to-store communication and tested consent/export/recovery behavior.
+The owner removed OS sandbox qualification and a new signed macOS application
+from this scope. Existing installer/personalization validation still applies;
+do not broaden archive allowlists to arbitrary contents or strip existing
+signatures. Capability discovery declares trust in installed native code, not
+OS-enforced egress isolation. No rollout setting is enabled by the contract alone.

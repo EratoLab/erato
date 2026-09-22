@@ -18,6 +18,9 @@
     },
     "recovery": {
       "const": "durable_receipt_v1"
+    },
+    "trustModel": {
+      "const": "installed_native_code"
     }
   },
   "required": [
@@ -25,7 +28,8 @@
     "enforcement",
     "contextAuthentication",
     "consent",
-    "recovery"
+    "recovery",
+    "trustModel"
   ],
   "additionalProperties": false
 }

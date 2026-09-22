@@ -6,4 +6,5 @@ export interface LocalDelegationSecurity {
   contextAuthentication: "pinned_backend_assertion_v1";
   consent: "native_exact_snapshot";
   recovery: "durable_receipt_v1";
+  trustModel: "installed_native_code";
 }
