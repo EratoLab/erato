@@ -26,8 +26,12 @@ export const isTraceablePart = (part: ContentPart): part is TraceablePart =>
  * - `running`  – step is the live tail of an ongoing stream (current writer)
  * - `done`     – step finished successfully
  * - `error`    – step ended in an error (only meaningful for tool calls today)
+ * - `interrupted` – step never finished and nothing is left to finish it
+ *   (the writing process died mid-call). Distinct from `error`: the call did
+ *   not fail, it was abandoned, and the distinction is what stops the rail
+ *   from reporting an unfinished call as a success.
  */
-export type TraceStepStatus = "running" | "done" | "error";
+export type TraceStepStatus = "running" | "done" | "error" | "interrupted";
 
 /**
  * One renderable row in the timeline. Reasoning ContentParts may expand into

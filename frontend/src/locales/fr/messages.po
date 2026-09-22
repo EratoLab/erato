@@ -5157,6 +5157,11 @@ msgstr "Arrêtée à son budget d'appels d'outils ; la réponse peut être parti
 
 #. js-lingui-explicit-id
 #: src/lib/delegation/delegationLabels.ts
+msgid "trace.delegation.reason.interrupted"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.noAnswer"
 msgstr "L'exécution s'est terminée sans réponse"
 
@@ -5316,6 +5321,11 @@ msgstr ""
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.failed"
 msgstr "Échec"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolStatusPill.tsx
+msgid "trace.tool.interrupted"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallItem.tsx

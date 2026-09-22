@@ -5,16 +5,20 @@ import type { ToolApprovalStatus } from "../Trace";
 import type { TraceStepStatus } from "../types";
 
 // Pills are only shown for states that need extra emphasis beyond the rail
-// icon: in-flight (animated) and failed (red attention). The success state is
-// already conveyed by the rail's checkmark — no pill needed.
+// icon: in-flight (animated), failed (red attention) and abandoned (warning —
+// the one state a reader would otherwise mistake for success). The success
+// state is already conveyed by the rail's checkmark — no pill needed.
 const STATUS_PILL_CLASS = {
   running: "bg-theme-info-bg text-theme-info-fg animate-pulse",
   error: "bg-theme-error-bg text-theme-error-fg",
+  interrupted: "bg-theme-warning-bg text-theme-warning-fg",
 } as const;
 
 const STATUS_LABEL = {
   running: () => t({ id: "trace.tool.running", message: "Running" }),
   error: () => t({ id: "trace.tool.failed", message: "Failed" }),
+  interrupted: () =>
+    t({ id: "trace.tool.interrupted", message: "Interrupted" }),
 } as const;
 
 const APPROVAL_PILL = {
@@ -30,7 +34,7 @@ const APPROVAL_PILL = {
 
 type StatusWithPill = keyof typeof STATUS_PILL_CLASS;
 const hasPill = (status: TraceStepStatus): status is StatusWithPill =>
-  status === "running" || status === "error";
+  status === "running" || status === "error" || status === "interrupted";
 
 interface ToolStatusPillProps {
   status: TraceStepStatus;

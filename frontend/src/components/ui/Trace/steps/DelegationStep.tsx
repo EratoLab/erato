@@ -157,12 +157,19 @@ const stepStatusFor = (
     case "cancelled":
     case "timeout":
       return "error";
-    // Alive, or waiting on someone. None of these is a failure, and the rail
-    // has only three states, so they inherit the step's own status and say
-    // what they are in the pill instead.
+    // Alive, or waiting on someone. None of these is a failure, so they
+    // inherit the step's own status and say what they are in the pill
+    // instead. `working` and `queued` inherit `interrupted` too: an unsettled
+    // slot on a chat with no writer left is exactly the orphan the
+    // interrupted rule exists to name.
     case "working":
     case "queued":
+      return status;
+    // A run parked on a decision is waiting for the user, not abandoned — the
+    // park outlives the turn by design. The pill carries the news; the rail
+    // keeps the neutral glyph it had before the interrupted rule existed.
     case "input_required":
+      return status === "interrupted" ? "done" : status;
     default:
       return status;
   }
@@ -465,6 +472,15 @@ export const DelegationStep = ({
             // The detachment is the one thing worth saying about this step —
             // it outranks even an approval decision.
             <SettledInfoPill {...backgroundPill(liveStatus)} />
+          ) : stepStatus === "interrupted" ? (
+            // The envelope is frozen at whatever the dying writer last wrote,
+            // so "Queued" or "Running a task" is exactly the claim that is no
+            // longer true. The interrupted pill outranks it: a stale
+            // self-description is worse here than no description.
+            <ToolStatusPill
+              status={stepStatus}
+              approvalStatus={approvalStatus}
+            />
           ) : pending !== undefined ? (
             <SettledInfoPill {...pending} />
           ) : (

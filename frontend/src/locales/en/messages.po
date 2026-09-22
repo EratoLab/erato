@@ -5157,6 +5157,11 @@ msgstr "Stopped at its tool-call budget; the answer may be partial"
 
 #. js-lingui-explicit-id
 #: src/lib/delegation/delegationLabels.ts
+msgid "trace.delegation.reason.interrupted"
+msgstr "Stopped when the server restarted mid-run"
+
+#. js-lingui-explicit-id
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.noAnswer"
 msgstr "The run ended without an answer"
 
@@ -5316,6 +5321,11 @@ msgstr "Denied"
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.failed"
 msgstr "Failed"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolStatusPill.tsx
+msgid "trace.tool.interrupted"
+msgstr "Interrupted"
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallItem.tsx

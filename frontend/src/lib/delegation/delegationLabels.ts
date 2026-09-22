@@ -41,6 +41,11 @@ export const delegationReasonLabel = (reason: string): string => {
         id: "trace.delegation.reason.approvalUnavailable",
         message: "Needed a tool it could not ask you about",
       });
+    case "interrupted":
+      return t({
+        id: "trace.delegation.reason.interrupted",
+        message: "Stopped when the server restarted mid-run",
+      });
     default:
       return reason;
   }
