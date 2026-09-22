@@ -2277,6 +2277,21 @@ msgid "chat.share.warning.title"
 msgstr "The conversation may contain sensitive information"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatTaskPlanAdvisory.tsx
+msgid "chat.task_approval.always"
+msgstr "Any task run for you here needs your approval first."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatTaskPlanAdvisory.tsx
+msgid "chat.task_approval.asyncOnly"
+msgstr "If any of this runs as a background task, you will be asked to approve it first."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatTaskPlanAdvisory.tsx
+msgid "chat.task_approval.plan"
+msgstr "If this is split into separate tasks, you will be asked to approve the plan before any of it runs."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "chat.warning.budget.limit_reached.header"
 msgstr "Budget Limit Reached"
