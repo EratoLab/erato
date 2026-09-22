@@ -66,8 +66,9 @@ restart-specific instance ID). Device ID and challenge remain local except for
 the authenticated pairing API's explicitly user-initiated device registration.
 The challenge is bound to the caller's exact canonical Origin and OS user. The
 frontend obtains a compact JWS assertion from its authenticated backend session.
-It calls `local_contexts.bind.v1`; native UI confirms the backend/account when
-first pairing. This is not evidence-export approval. Binding returns a random
+It calls `local_contexts.bind.v1`; the installed backend key authenticates the
+account assertion. Native export review always shows that backend/account.
+Binding is not evidence-export approval. Binding returns a random
 256-bit context handle, scoped to the OS user, Origin, backend/account and device.
 
 JWS profile: EdDSA/Ed25519 only, `kid` selects an exact public key installed in
@@ -126,10 +127,15 @@ addition to schema validation. Generated Rust types are not schema validators.
 Persist acceptance transactionally before returning a handle. Store job records
 and immutable snapshots separately from replaceable search indexes. A killed
 worker recovers queued/running work within its remaining persisted execution
-budget; snapshot creation uses a temp file, fsync, atomic rename and database
-commit before making it reviewable. Keep snapshot files private to the OS user;
-no public file URLs. At-rest encryption/key storage, quotas and retention cleanup
-must be qualified with the platform implementation before availability is enabled.
+budget. The native implementation commits snapshot bytes and their state together
+in a separate SQLite database using WAL and FULL synchronization. Keep its directory
+private to the OS user; expose no public file URLs. Unix permissions are 0700/0600;
+Windows uses the installed user's private profile directory and inherited ACLs.
+At-rest protection relies on those OS permissions and deployment-managed disk
+encryption, not an application encryption key. Administrators, backups and other
+code running as that OS user are within the stated trust assumptions. Enforce
+storage quotas and expiry cleanup; do not claim forensic erasure from backups or
+old filesystem pages.
 
 Transitions:
 
@@ -147,8 +153,8 @@ before review; source mutation cannot change the reviewed/exported bytes.
 
 Native text-first review shows the authenticated backend/account and the exact
 selected artifacts, metadata and bytes. EML approval includes all nested content;
-reviewing an excerpt cannot authorize a full thread. Selection/redaction creates
-a new immutable snapshot for review. Treat links, clipboard, download and
+reviewing an excerpt cannot authorize a full thread. Selection binds a private grant to artifact IDs in the frozen snapshot; omitted
+items never enter the package. Editing/redaction is not supported in v1. Treat links, clipboard, download and
 external-open as explicit separate releases. No remote resources or document
 scripts. Public RPC never receives preview bytes or a private selection manifest.
 
