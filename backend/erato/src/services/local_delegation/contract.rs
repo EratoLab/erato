@@ -15,7 +15,7 @@ static SCHEMAS: LazyLock<BTreeMap<String, jsonschema::Validator>> = LazyLock::ne
     documents
         .iter()
         .map(|(name, document)| {
-            let resources = documents.iter().map(|(_, value)| {
+            let resources = documents.values().map(|value| {
                 (
                     value["$id"].as_str().unwrap().to_string(),
                     jsonschema::Resource::from_contents(value.clone()).expect("shared resource"),
