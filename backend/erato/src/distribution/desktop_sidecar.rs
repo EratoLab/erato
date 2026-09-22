@@ -41,6 +41,7 @@ pub struct DistributionTarget {
     pub platform: DistributionPlatform,
     pub default_file: String,
     pub files: Vec<DistributionArtifact>,
+    local_delegation_profile: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
@@ -81,6 +82,7 @@ struct ManifestTarget {
     platform: DistributionPlatform,
     default_file: String,
     files: Vec<ManifestArtifact>,
+    local_delegation_profile: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -97,6 +99,16 @@ impl DesktopSidecarDistribution {
         let fields = config.bootstrap_fields()?;
         let mut distribution =
             Self::load_with_bootstrap(root, &config.allowed_origins, &config.tls)?;
+        if config.local_delegation.enabled {
+            distribution.targets.retain(|target| {
+                matches!(target.platform.os.as_str(), "windows" | "macos")
+                    && target.local_delegation_profile.as_deref() == Some("strict_snapshot_v1")
+            });
+            ensure!(
+                !distribution.targets.is_empty(),
+                "Strict delegation requires compatible native-review distribution artifacts"
+            );
+        }
         let mut document: serde_json::Value = serde_json::from_slice(&distribution.bootstrap)?;
         document
             .as_object_mut()
@@ -232,6 +244,7 @@ impl DesktopSidecarDistribution {
                 id: target.id,
                 platform: target.platform,
                 default_file: target.default_file,
+                local_delegation_profile: target.local_delegation_profile,
                 files,
             });
         }
@@ -876,6 +889,23 @@ mod tests {
             encode_executable_bootstrap_slot(&vec![b' '; EMBEDDED_BOOTSTRAP_SLOT_CAPACITY])
                 .is_err()
         );
+    }
+
+    #[test]
+    fn strict_distribution_refuses_legacy_artifacts() {
+        let directory = tempdir().unwrap();
+        let mut manifest = valid_manifest();
+        write_distribution(directory.path(), manifest.clone());
+        let config: DesktopSidecarConfig = serde_json::from_value(json!({"local_delegation":{"enabled":true,"backend_origin":"https://erato.example","verification_keys":{"key":"public"}}})).unwrap();
+        assert!(DesktopSidecarDistribution::load_with_config(directory.path(), &config).is_err());
+        manifest["targets"][0]["local_delegation_profile"] = json!("strict_snapshot_v1");
+        write_distribution(directory.path(), manifest);
+        let distribution =
+            DesktopSidecarDistribution::load_with_config(directory.path(), &config).unwrap();
+        let bootstrap: serde_json::Value =
+            serde_json::from_slice(distribution.bootstrap()).unwrap();
+        assert_eq!(bootstrap["content_release"], "strict_snapshot_v1");
+        assert_eq!(distribution.targets().len(), 1);
     }
 
     #[test]
