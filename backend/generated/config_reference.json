@@ -376,6 +376,7 @@
   "desktop_sidecar.display_name": {},
   "desktop_sidecar.distribution.directory": {},
   "desktop_sidecar.distribution.enabled": {},
+  "desktop_sidecar.file_upload_approval": {},
   "desktop_sidecar.icon": {},
   "desktop_sidecar.organization_configuration.show_tray_icon": {},
   "desktop_sidecar.port": {},

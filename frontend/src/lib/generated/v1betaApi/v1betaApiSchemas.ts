@@ -943,6 +943,11 @@ export type ChildApprovalRef = {
   tool_name: string;
 };
 
+/**
+ * Default handling of files retrieved by client tools before they leave the device.
+ */
+export type ClientToolFileApproval = "never_allow" | "ask" | "always_allow";
+
 export type ClientToolResultRequest = {
   /**
    * The chat whose suspended generation is awaiting this result.
@@ -3406,6 +3411,7 @@ export type UpdateChatResponse = {
 };
 
 export type UpdateProfilePreferencesRequest = {
+  client_tool_file_approval?: null | ClientToolFileApproval;
   /**
    * Additional contextual information about the user for the assistant.
    */
@@ -3463,6 +3469,7 @@ export type UsageBucket = {
 };
 
 export type UserProfile = {
+  client_tool_file_approval?: ClientToolFileApproval;
   /**
    * The user's email address. Shouldn't be used as a unique identifier, as it may change.
    */

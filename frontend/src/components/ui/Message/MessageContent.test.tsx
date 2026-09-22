@@ -9,6 +9,7 @@ import {
   ThemeProvider,
 } from "@/components/providers/ThemeProvider";
 import { componentRegistry } from "@/config/componentRegistry";
+import { useClientToolFileApprovalStore } from "@/hooks/chat/store/clientToolFileApprovalStore";
 import { messages as enMessages } from "@/locales/en/messages.json";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
@@ -1736,4 +1737,44 @@ describe("MessageContent", () => {
       ).not.toBeInTheDocument();
     });
   });
+});
+
+it("renders local file consent inline in the originating message using the shared action card", () => {
+  const file = new File(["local contents"], "review.txt", {
+    type: "text/plain",
+  });
+  const finish = vi.fn();
+  useClientToolFileApprovalStore.setState({
+    requests: [
+      {
+        id: 999,
+        files: [file],
+        selected: new Set([file]),
+        finish,
+        context: {
+          chatId: "chat",
+          messageId: "file-message",
+          toolCallId: "file-call",
+        },
+      },
+    ],
+  });
+  try {
+    renderWithTheme(
+      <MessageContent
+        content={textContent("Retrieved a file.")}
+        messageId="file-message"
+      />,
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("client-tool-file-approval").closest("article"),
+    ).not.toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Upload selected files" }),
+    );
+    expect(finish).toHaveBeenCalledWith(new Set([file]));
+  } finally {
+    useClientToolFileApprovalStore.setState({ requests: [] });
+  }
 });

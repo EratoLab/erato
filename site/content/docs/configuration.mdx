@@ -594,6 +594,19 @@ directory = "/app/component-kits"
 
 Settings for distributing and configuring the local Erato desktop sidecar.
 
+#### `desktop_sidecar.file_upload_approval`
+
+{/* erato_toml_config_key: desktop_sidecar.file_upload_approval */}
+
+Default approval policy for files retrieved by client tools: `never_allow`,
+`ask`, or `always_allow`. Defaults to `ask`. Users can override this in the
+Desktop Sidecar settings; their preference is stored in Erato's database.
+In ask mode, files are previewed locally and individually selected before any
+file bytes are uploaded to Erato or shared with the AI provider. Rejected files
+are omitted from the tool's file references. The selection appears inline in the
+originating message, using the same consent card as MCP tool approvals. Tool timeouts still apply; configure `client_tools.tools.<key>.timeout_ms` to allow
+enough time to review files (for example, `600000` for ten minutes).
+
 #### `desktop_sidecar.show_settings_tab`
 
 {/* erato_toml_config_key: desktop_sidecar.show_settings_tab */}

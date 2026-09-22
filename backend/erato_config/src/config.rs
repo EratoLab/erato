@@ -715,8 +715,33 @@ pub struct AppConfig {
     pub frontend_bundle_path: Option<String>,
 }
 
+/// Default handling of files retrieved by client tools before they leave the device.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema, Facet)]
+#[serde(rename_all = "snake_case")]
+#[repr(u8)]
+pub enum ClientToolFileApproval {
+    NeverAllow,
+    #[default]
+    Ask,
+    AlwaysAllow,
+}
+
+impl ClientToolFileApproval {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::NeverAllow => "never_allow",
+            Self::Ask => "ask",
+            Self::AlwaysAllow => "always_allow",
+        }
+    }
+}
+
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct DesktopSidecarConfig {
+    /// Default file upload decision. Users may override this in Sidecar settings.
+    #[serde(default)]
+    pub file_upload_approval: ClientToolFileApproval,
+
     /// Loopback listener port injected into downloads and the browser endpoint.
     /// Defaults to 23123 when omitted; must be between 1 and 65535.
     pub port: Option<u16>,
@@ -6468,6 +6493,26 @@ enabled = true
 #[cfg(test)]
 mod desktop_sidecar_installation_tests {
     use super::*;
+
+    #[test]
+    fn client_tool_file_approval_defaults_to_ask_and_validates_overrides() {
+        use super::ClientToolFileApproval;
+        assert_eq!(
+            DesktopSidecarConfig::default().file_upload_approval,
+            ClientToolFileApproval::Ask
+        );
+        for value in ["never_allow", "ask", "always_allow"] {
+            let config: DesktopSidecarConfig =
+                serde_json::from_value(serde_json::json!({"file_upload_approval": value})).unwrap();
+            assert_eq!(config.file_upload_approval.as_str(), value);
+        }
+        assert!(
+            serde_json::from_value::<DesktopSidecarConfig>(
+                serde_json::json!({"file_upload_approval": "invalid"})
+            )
+            .is_err()
+        );
+    }
 
     #[test]
     fn installation_defaults_and_endpoint() {

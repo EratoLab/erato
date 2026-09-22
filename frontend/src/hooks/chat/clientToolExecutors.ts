@@ -135,6 +135,13 @@ export function releaseClientToolCallAbort(toolCallId: string): void {
   abortControllers.delete(toolCallId);
 }
 
+/** Stop local work when the server reports that this call has finished or expired. */
+export function abortClientToolCall(toolCallId: string): void {
+  const tracked = abortControllers.get(toolCallId);
+  abortControllers.delete(toolCallId);
+  tracked?.controller.abort();
+}
+
 /**
  * Fire the signal of every execution still running for `chatId`. Called from
  * the user stop pathway only (`cancelMessage`, next to the abortstream POST)

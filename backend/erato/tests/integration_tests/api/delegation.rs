@@ -9846,6 +9846,7 @@ async fn me_profile(
 ) -> erato::MeProfile {
     erato::MeProfile {
         profile: erato::UserProfile {
+            client_tool_file_approval: Default::default(),
             id: user.id.to_string(),
             email: None,
             name: None,

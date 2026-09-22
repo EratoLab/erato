@@ -5,6 +5,7 @@ import { indexingMailboxId } from "./indexingConfiguration";
 import { outlookMailboxId, readSidecarConversation } from "./mailboxAccess";
 
 import type {
+  ClientToolCallContext,
   ClientToolExecutor,
   ClientToolExecutionResult,
 } from "@/hooks/chat/clientToolExecutors";
@@ -28,6 +29,10 @@ export interface SidecarAttachmentUpload {
 
 export interface SidecarChatToolOptions {
   uploadAttachment: SidecarAttachmentUpload;
+  approveFiles: (
+    files: File[],
+    context: ClientToolCallContext,
+  ) => Promise<ReadonlySet<File>>;
   uploadsEnabled: boolean;
   maxUploadBytes: number;
   maxFiles: number;
@@ -224,6 +229,59 @@ export function createSidecarChatTools(
           },
           context?.signal,
         );
+        // Keep bytes local until the user has reviewed the complete selection.
+        const localFiles = new Map<object, File>();
+        const preparationFailures = new Map<object, string>();
+        let previewBytes = options.maxUploadBytes;
+        if (
+          args.includeAttachments === true &&
+          options.uploadsEnabled &&
+          context?.chatId
+        ) {
+          for (const message of conversation.messages) {
+            for (const attachment of message.attachments) {
+              const selected = names
+                ? names.includes(attachment.name ?? "")
+                : !attachment.isInline;
+              if (!selected || attachment.contentBytes === undefined) continue;
+              if (localFiles.size >= Math.min(options.maxFiles, 20)) {
+                preparationFailures.set(attachment, "file_count_limit");
+                continue;
+              }
+              if (
+                Math.floor((attachment.contentBytes.length * 3) / 4) - 2 >
+                previewBytes
+              ) {
+                preparationFailures.set(attachment, "size_limit");
+                continue;
+              }
+              try {
+                const bytes = Uint8Array.from(
+                  globalThis.atob(attachment.contentBytes),
+                  (char) => char.charCodeAt(0),
+                );
+                if (bytes.length > previewBytes) {
+                  preparationFailures.set(attachment, "size_limit");
+                  continue;
+                }
+                localFiles.set(
+                  attachment,
+                  new File([bytes], attachment.name ?? "attachment", {
+                    type: attachment.contentType ?? "application/octet-stream",
+                  }),
+                );
+                previewBytes -= bytes.length;
+              } catch {
+                preparationFailures.set(attachment, "upload_failed");
+              }
+            }
+          }
+        }
+        const approvedFiles =
+          localFiles.size && context
+            ? await options.approveFiles([...localFiles.values()], context)
+            : new Set<File>();
+        context?.signal?.throwIfAborted();
         const fileUploadIds: string[] = [];
         const uploadedByHash = new Map<string, string>();
         let remainingBodyChars = 80_000;
@@ -258,49 +316,37 @@ export function createSidecarChatTools(
               fileId = attachment.sha256
                 ? uploadedByHash.get(attachment.sha256)
                 : undefined;
-              if (fileId) {
-                status = "uploaded";
-              } else if (!options.uploadsEnabled || !context?.chatId) {
+              const localFile = localFiles.get(attachment);
+              if (!options.uploadsEnabled || !context?.chatId) {
                 status = "uploads_unavailable";
+              } else if (preparationFailures.has(attachment)) {
+                status = preparationFailures.get(attachment) ?? "unavailable";
+                fileId = undefined;
+              } else if (!localFile || !approvedFiles.has(localFile)) {
+                fileId = undefined;
+                status = "rejected";
+              } else if (fileId) {
+                status = "uploaded";
               } else if (
                 fileUploadIds.length >= Math.min(options.maxFiles, 20)
               ) {
                 status = "file_count_limit";
-              } else if (
-                Math.floor((contentBytes.length * 3) / 4) - 2 >
-                remainingUploadBytes
-              ) {
+              } else if (localFile.size > remainingUploadBytes) {
                 status = "size_limit";
               } else {
                 try {
                   context.signal?.throwIfAborted();
-                  const bytes = Uint8Array.from(
-                    globalThis.atob(contentBytes),
-                    (char) => char.charCodeAt(0),
+                  const uploaded = await options.uploadAttachment(
+                    localFile,
+                    context.chatId,
+                    context.signal,
                   );
-                  if (bytes.length > remainingUploadBytes) {
-                    status = "size_limit";
-                  } else {
-                    const file = new File(
-                      [bytes],
-                      attachment.name ?? "attachment",
-                      {
-                        type:
-                          attachment.contentType ?? "application/octet-stream",
-                      },
-                    );
-                    const uploaded = await options.uploadAttachment(
-                      file,
-                      context.chatId,
-                      context.signal,
-                    );
-                    fileId = uploaded.id;
-                    fileUploadIds.push(fileId);
-                    if (attachment.sha256)
-                      uploadedByHash.set(attachment.sha256, fileId);
-                    remainingUploadBytes -= bytes.length;
-                    status = "uploaded";
-                  }
+                  fileId = uploaded.id;
+                  fileUploadIds.push(fileId);
+                  if (attachment.sha256)
+                    uploadedByHash.set(attachment.sha256, fileId);
+                  remainingUploadBytes -= localFile.size;
+                  status = "uploaded";
                 } catch (cause) {
                   context.signal?.throwIfAborted();
                   status = "upload_failed";
@@ -485,6 +531,15 @@ export function createSidecarChatTools(
           throw new Error("The document exceeds the upload size limit.");
         }
         const file = new File([bytes], filename, { type: mimeType });
+        const approved = await options.approveFiles([file], context);
+        context.signal?.throwIfAborted();
+        if (!approved.has(file)) {
+          return {
+            ok: false,
+            error:
+              "The user rejected uploading this file. Do not retry without their permission.",
+          };
+        }
         const uploaded = await options.uploadAttachment(
           file,
           context.chatId,

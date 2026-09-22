@@ -6,6 +6,7 @@ use sea_orm::{ActiveModelTrait, ActiveValue, DatabaseConnection, EntityTrait, In
 
 #[derive(Debug, Clone, Default)]
 pub struct UpdateUserPreferencesInput {
+    pub client_tool_file_approval: Option<crate::config::ClientToolFileApproval>,
     pub nickname: Option<Option<String>>,
     pub job_title: Option<Option<String>>,
     pub assistant_custom_instructions: Option<Option<String>>,
@@ -92,6 +93,9 @@ pub async fn upsert_user_preferences(
         };
         let mut model = existing.into_active_model();
 
+        if let Some(value) = input.client_tool_file_approval {
+            model.client_tool_file_approval = ActiveValue::Set(Some(value.as_str().to_owned()));
+        }
         if let Some(value) = input.nickname {
             model.nickname = ActiveValue::Set(normalize_optional_text(value));
         }
@@ -135,6 +139,11 @@ pub async fn upsert_user_preferences(
         );
         let model = user_preferences::ActiveModel {
             user_id: ActiveValue::Set(*user_id),
+            client_tool_file_approval: ActiveValue::Set(
+                input
+                    .client_tool_file_approval
+                    .map(|value| value.as_str().to_owned()),
+            ),
             nickname: ActiveValue::Set(normalize_optional_text(input.nickname.unwrap_or(None))),
             job_title: ActiveValue::Set(normalize_optional_text(input.job_title.unwrap_or(None))),
             assistant_custom_instructions: ActiveValue::Set(normalize_optional_text(
