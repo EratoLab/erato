@@ -635,3 +635,5 @@ export {
   TextComparison,
   type TextComparisonView,
 } from "@/components/ui/Message/TextComparison";
+
+export { LocalTaskCoordinator } from "@/providers/LocalTaskCoordinator";

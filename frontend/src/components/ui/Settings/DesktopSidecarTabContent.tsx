@@ -102,10 +102,14 @@ function DesktopSidecarEntityRow({
               message: "Start the desktop sidecar, then try connecting again.",
             })}
       </p>
-      <ClientToolFileApprovalSetting />
-      {connected && client?.supports("indexing.status.v1") && (
-        <SidecarIndexingControls />
+      {snapshot.localDelegation ? (
+        <p className="text-sm text-theme-fg-secondary">{t`Evidence sharing requires review in the desktop app for each package.`}</p>
+      ) : (
+        <ClientToolFileApprovalSetting />
       )}
+      {connected &&
+        !snapshot.localDelegation &&
+        client?.supports("indexing.status.v1") && <SidecarIndexingControls />}
       <div className="flex flex-wrap gap-2">
         <Button
           variant="secondary"

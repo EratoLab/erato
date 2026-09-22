@@ -152,6 +152,7 @@ export function DesktopSidecarConfigurationSync() {
     if (
       !client ||
       snapshot.state !== "ready" ||
+      Boolean(snapshot.localDelegation) ||
       !client.supports("sidecar.configure.v1") ||
       !organizationConfiguration
     ) {
@@ -205,6 +206,7 @@ export function DesktopSidecarConfigurationSync() {
     queryClient,
     snapshot.instanceId,
     snapshot.state,
+    snapshot.localDelegation,
   ]);
 
   return null;

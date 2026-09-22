@@ -4239,6 +4239,310 @@ export const useGeneratingChats = <TData = Schemas.GeneratingChatsResponse,>(
   });
 };
 
+export type ContextError = Fetcher.ErrorWrapper<undefined>;
+
+export type ContextVariables = {
+  body: Schemas.ContextRequest;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchContext = (
+  variables: ContextVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.AssertionResponse,
+    ContextError,
+    Schemas.ContextRequest,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/local-delegation/context",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useContext = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.AssertionResponse,
+      ContextError,
+      ContextVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.AssertionResponse,
+    ContextError,
+    ContextVariables
+  >({
+    mutationFn: (variables: ContextVariables) =>
+      fetchContext(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type PendingError = Fetcher.ErrorWrapper<undefined>;
+
+export type PendingVariables = V1betaApiContext["fetcherOptions"];
+
+export const fetchPending = (
+  variables: PendingVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<Schemas.PendingResponse, PendingError, undefined, {}, {}, {}>({
+    url: "/api/v1beta/me/local-delegation/jobs",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function pendingQuery(variables: PendingVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.PendingResponse>;
+};
+
+export function pendingQuery(
+  variables: PendingVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.PendingResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function pendingQuery(
+  variables: PendingVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/local-delegation/jobs",
+      operationId: "pending",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) => fetchPending(variables, signal),
+  };
+}
+
+export const useSuspensePending = <TData = Schemas.PendingResponse,>(
+  variables: PendingVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<Schemas.PendingResponse, PendingError, TData>,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.PendingResponse,
+    PendingError,
+    TData
+  >({
+    ...pendingQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const usePending = <TData = Schemas.PendingResponse,>(
+  variables: PendingVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<Schemas.PendingResponse, PendingError, TData>,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<Schemas.PendingResponse, PendingError, TData>({
+    ...pendingQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export type CancelPathParams = {
+  /**
+   * @format uuid
+   */
+  id: string;
+};
+
+export type CancelError = Fetcher.ErrorWrapper<undefined>;
+
+export type CancelVariables = {
+  pathParams: CancelPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchCancel = (variables: CancelVariables, signal?: AbortSignal) =>
+  v1betaApiFetch<undefined, CancelError, undefined, {}, {}, CancelPathParams>({
+    url: "/api/v1beta/me/local-delegation/jobs/{id}/cancel",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useCancel = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<undefined, CancelError, CancelVariables>,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<undefined, CancelError, CancelVariables>({
+    mutationFn: (variables: CancelVariables) =>
+      fetchCancel(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type ClaimPathParams = {
+  /**
+   * @format uuid
+   */
+  id: string;
+};
+
+export type ClaimError = Fetcher.ErrorWrapper<undefined>;
+
+export type ClaimVariables = {
+  body: Schemas.ClaimRequest;
+  pathParams: ClaimPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchClaim = (variables: ClaimVariables, signal?: AbortSignal) =>
+  v1betaApiFetch<
+    Schemas.ClaimResponse,
+    ClaimError,
+    Schemas.ClaimRequest,
+    {},
+    {},
+    ClaimPathParams
+  >({
+    url: "/api/v1beta/me/local-delegation/jobs/{id}/claim",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useClaim = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.ClaimResponse,
+      ClaimError,
+      ClaimVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.ClaimResponse,
+    ClaimError,
+    ClaimVariables
+  >({
+    mutationFn: (variables: ClaimVariables) =>
+      fetchClaim(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type CompletePathParams = {
+  /**
+   * @format uuid
+   */
+  id: string;
+};
+
+export type CompleteError = Fetcher.ErrorWrapper<undefined>;
+
+export type CompleteVariables = {
+  body?: null | undefined;
+  pathParams: CompletePathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchComplete = (
+  variables: CompleteVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ReceiptResponse,
+    CompleteError,
+    void,
+    {},
+    {},
+    CompletePathParams
+  >({
+    url: "/api/v1beta/me/local-delegation/jobs/{id}/complete",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useComplete = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.ReceiptResponse,
+      CompleteError,
+      CompleteVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.ReceiptResponse,
+    CompleteError,
+    CompleteVariables
+  >({
+    mutationFn: (variables: CompleteVariables) =>
+      fetchComplete(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type ResumePathParams = {
+  /**
+   * @format uuid
+   */
+  id: string;
+};
+
+export type ResumeError = Fetcher.ErrorWrapper<undefined>;
+
+export type ResumeVariables = {
+  pathParams: ResumePathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchResume = (variables: ResumeVariables, signal?: AbortSignal) =>
+  v1betaApiFetch<undefined, ResumeError, undefined, {}, {}, ResumePathParams>({
+    url: "/api/v1beta/me/local-delegation/jobs/{id}/resume",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useResume = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<undefined, ResumeError, ResumeVariables>,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<undefined, ResumeError, ResumeVariables>({
+    mutationFn: (variables: ResumeVariables) =>
+      fetchResume(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type ListUserToolApprovalSettingsError = Fetcher.ErrorWrapper<undefined>;
 
 export type ListUserToolApprovalSettingsVariables =
@@ -7195,6 +7499,121 @@ export const useHealth = <TData = undefined,>(
   });
 };
 
+export type OfficeAddinDocumentManifestQueryParams = {
+  /**
+   * Optional externally reachable deployment base URL used to rewrite the manifest.
+   * Example: https://app.example.com
+   */
+  base_url?: null | undefined;
+};
+
+export type OfficeAddinDocumentManifestError = Fetcher.ErrorWrapper<undefined>;
+
+export type OfficeAddinDocumentManifestVariables = {
+  queryParams?: OfficeAddinDocumentManifestQueryParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchOfficeAddinDocumentManifest = (
+  variables: OfficeAddinDocumentManifestVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    OfficeAddinDocumentManifestError,
+    undefined,
+    {},
+    OfficeAddinDocumentManifestQueryParams,
+    {}
+  >({
+    url: "/office-addin/manifest-document.xml",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function officeAddinDocumentManifestQuery(
+  variables: OfficeAddinDocumentManifestVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<undefined>;
+};
+
+export function officeAddinDocumentManifestQuery(
+  variables: OfficeAddinDocumentManifestVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<undefined>)
+    | reactQuery.SkipToken;
+};
+
+export function officeAddinDocumentManifestQuery(
+  variables: OfficeAddinDocumentManifestVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/office-addin/manifest-document.xml",
+      operationId: "officeAddinDocumentManifest",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchOfficeAddinDocumentManifest(variables, signal),
+  };
+}
+
+export const useSuspenseOfficeAddinDocumentManifest = <TData = undefined,>(
+  variables: OfficeAddinDocumentManifestVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      undefined,
+      OfficeAddinDocumentManifestError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    undefined,
+    OfficeAddinDocumentManifestError,
+    TData
+  >({
+    ...officeAddinDocumentManifestQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useOfficeAddinDocumentManifest = <TData = undefined,>(
+  variables: OfficeAddinDocumentManifestVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      undefined,
+      OfficeAddinDocumentManifestError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    undefined,
+    OfficeAddinDocumentManifestError,
+    TData
+  >({
+    ...officeAddinDocumentManifestQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type OfficeAddinExchangeServerManifestQueryParams = {
   /**
    * Optional externally reachable deployment base URL used to rewrite the manifest.
@@ -7550,6 +7969,11 @@ export type QueryOperation =
       variables: GeneratingChatsVariables | reactQuery.SkipToken;
     }
   | {
+      path: "/api/v1beta/me/local-delegation/jobs";
+      operationId: "pending";
+      variables: PendingVariables | reactQuery.SkipToken;
+    }
+  | {
       path: "/api/v1beta/me/mcp-tool-approval-settings";
       operationId: "listUserToolApprovalSettings";
       variables: ListUserToolApprovalSettingsVariables | reactQuery.SkipToken;
@@ -7633,6 +8057,11 @@ export type QueryOperation =
       path: "/health";
       operationId: "health";
       variables: HealthVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/office-addin/manifest-document.xml";
+      operationId: "officeAddinDocumentManifest";
+      variables: OfficeAddinDocumentManifestVariables | reactQuery.SkipToken;
     }
   | {
       path: "/office-addin/manifest-exchange-server.xml";

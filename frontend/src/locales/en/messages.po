@@ -5555,6 +5555,10 @@ msgstr "Approaching Budget Limit"
 msgid "Approaching Token Limit"
 msgstr "Approaching Token Limit"
 
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Approved evidence is ready to upload"
+msgstr "Approved evidence is ready to upload"
+
 #: src/pages/AssistantsListPage.tsx
 #~ msgid "Archive"
 #~ msgstr "Archive"
@@ -5774,6 +5778,10 @@ msgstr "Cancel queued message"
 #~ msgid "Cancel starting dictation"
 #~ msgstr "Cancel starting dictation"
 
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Cancel task"
+msgstr "Cancel task"
+
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Canceled"
 msgstr "Canceled"
@@ -5866,6 +5874,10 @@ msgstr "Collapse {title}"
 msgid "collapse sidebar"
 msgstr "collapse sidebar"
 
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Collecting evidence on this device"
+msgstr "Collecting evidence on this device"
+
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Completed"
 msgstr "Completed"
@@ -5907,6 +5919,10 @@ msgstr "Context usage"
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Context usage exceeds model capacity. The assistant can't be created like this."
 msgstr "Context usage exceeds model capacity. The assistant can't be created like this."
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Continuing the original task"
+msgstr "Continuing the original task"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Conversational"
@@ -6146,6 +6162,10 @@ msgstr "Error:"
 msgid "Estimating token usage..."
 msgstr "Estimating token usage..."
 
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "Evidence sharing requires review in the desktop app for each package."
+msgstr "Evidence sharing requires review in the desktop app for each package."
+
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Exit audio mode"
 msgstr "Exit audio mode"
@@ -6346,6 +6366,26 @@ msgstr "Loading conversation…"
 msgid "Loading..."
 msgstr "Loading..."
 
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Local collection could not finish"
+msgstr "Local collection could not finish"
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Local research"
+msgstr "Local research"
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Local research tasks"
+msgstr "Local research tasks"
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Local task cancelled"
+msgstr "Local task cancelled"
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Local task expired"
+msgstr "Local task expired"
+
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Locale Detection Test"
 msgstr "Locale Detection Test"
@@ -6493,6 +6533,10 @@ msgstr "Open in Teams"
 msgid "Open menu"
 msgstr "Open menu"
 
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Open original task"
+msgstr "Open original task"
+
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.prompt-optimizer.tooltip"
@@ -6560,6 +6604,10 @@ msgstr "Queued — sends when response finishes"
 #: src/components/ui/Trace/SidecarLocalTraceView.tsx
 msgid "Read local mailbox"
 msgstr "Read local mailbox"
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Ready for review in the desktop app"
+msgstr "Ready for review in the desktop app"
 
 #: src/components/ui/Message/MessageContent.tsx
 #~ msgid "Reasoning"
@@ -6653,6 +6701,14 @@ msgstr "Retry transcription"
 msgid "Retrying..."
 msgstr "Retrying..."
 
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Review and choose evidence in the desktop app. Collection continues if this pane closes; uploading and cloud continuation wait until you return signed in."
+msgstr "Review and choose evidence in the desktop app. Collection continues if this pane closes; uploading and cloud continuation wait until you return signed in."
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Review in desktop app"
+msgstr "Review in desktop app"
+
 #: src/components/ui/Trace/steps/ToolUseStep.tsx
 #~ msgid "Running"
 #~ msgstr "Running"
@@ -6708,6 +6764,10 @@ msgstr "Shared Chat - {effectiveSharedChatTitle}"
 #: src/pages/SharedChatPage.tsx
 #~ msgid "Shared Chat - {sharedChatTitle}"
 #~ msgstr "Shared Chat - {sharedChatTitle}"
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Sharing declined on this device"
+msgstr "Sharing declined on this device"
 
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Show"
@@ -7101,6 +7161,14 @@ msgstr "Using tools"
 #: src/components/ui/Chat/FrequentAssistantsList.tsx
 #~ msgid "View all assistants"
 #~ msgstr "View all assistants"
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Waiting for the desktop app to reconnect"
+msgstr "Waiting for the desktop app to reconnect"
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Waiting for the device that accepted this task"
+msgstr "Waiting for the device that accepted this task"
 
 #: src/pages/assistantHubUtils.tsx
 #~ msgid "Yes"

@@ -5555,6 +5555,10 @@ msgstr "Budgetlimit wird erreicht"
 msgid "Approaching Token Limit"
 msgstr "Token-Limit wird erreicht"
 
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Approved evidence is ready to upload"
+msgstr ""
+
 #: src/pages/AssistantsListPage.tsx
 #~ msgid "Archive"
 #~ msgstr "Archivieren"
@@ -5774,6 +5778,10 @@ msgstr "Wartende Nachricht abbrechen"
 #~ msgid "Cancel starting dictation"
 #~ msgstr "Diktatstart abbrechen"
 
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Cancel task"
+msgstr ""
+
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Canceled"
 msgstr ""
@@ -5866,6 +5874,10 @@ msgstr ""
 msgid "collapse sidebar"
 msgstr "Seitenleiste einklappen"
 
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Collecting evidence on this device"
+msgstr ""
+
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Completed"
 msgstr ""
@@ -5907,6 +5919,10 @@ msgstr "Kontextnutzung"
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Context usage exceeds model capacity. The assistant can't be created like this."
 msgstr "Die Kontextnutzung überschreitet die Modellkapazität. Der Assistent kann so nicht erstellt werden."
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Continuing the original task"
+msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Conversational"
@@ -6146,6 +6162,10 @@ msgstr "Fehler:"
 msgid "Estimating token usage..."
 msgstr "Tokennutzung wird geschätzt..."
 
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "Evidence sharing requires review in the desktop app for each package."
+msgstr ""
+
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Exit audio mode"
 msgstr ""
@@ -6346,6 +6366,26 @@ msgstr "Unterhaltung wird geladen …"
 msgid "Loading..."
 msgstr "Laden..."
 
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Local collection could not finish"
+msgstr ""
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Local research"
+msgstr ""
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Local research tasks"
+msgstr ""
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Local task cancelled"
+msgstr ""
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Local task expired"
+msgstr ""
+
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Locale Detection Test"
 msgstr ""
@@ -6493,6 +6533,10 @@ msgstr "In Teams öffnen"
 msgid "Open menu"
 msgstr "Menü öffnen"
 
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Open original task"
+msgstr ""
+
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.prompt-optimizer.tooltip"
@@ -6560,6 +6604,10 @@ msgstr "In Warteschlange – wird nach der Antwort gesendet"
 #: src/components/ui/Trace/SidecarLocalTraceView.tsx
 msgid "Read local mailbox"
 msgstr "Lokales Postfach lesen"
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Ready for review in the desktop app"
+msgstr ""
 
 #: src/components/ui/Message/MessageContent.tsx
 #~ msgid "Reasoning"
@@ -6653,6 +6701,14 @@ msgstr "Transkription erneut versuchen"
 msgid "Retrying..."
 msgstr "Erneuter Versuch..."
 
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Review and choose evidence in the desktop app. Collection continues if this pane closes; uploading and cloud continuation wait until you return signed in."
+msgstr ""
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Review in desktop app"
+msgstr ""
+
 #: src/components/ui/Trace/steps/ToolUseStep.tsx
 #~ msgid "Running"
 #~ msgstr "Wird ausgeführt"
@@ -6708,6 +6764,10 @@ msgstr ""
 #: src/pages/SharedChatPage.tsx
 #~ msgid "Shared Chat - {sharedChatTitle}"
 #~ msgstr "Geteilter Chat - {sharedChatTitle}"
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Sharing declined on this device"
+msgstr ""
 
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Show"
@@ -7101,6 +7161,14 @@ msgstr "Tools werden verwendet"
 #: src/components/ui/Chat/FrequentAssistantsList.tsx
 #~ msgid "View all assistants"
 #~ msgstr ""
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Waiting for the desktop app to reconnect"
+msgstr ""
+
+#: src/providers/LocalTaskCoordinator.tsx
+msgid "Waiting for the device that accepted this task"
+msgstr ""
 
 #: src/pages/assistantHubUtils.tsx
 #~ msgid "Yes"

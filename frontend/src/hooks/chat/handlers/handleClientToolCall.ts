@@ -1,5 +1,6 @@
 import {
   getClientToolExecutor,
+  isClientToolResultLocalOnly,
   hasClientToolCallBeenAnswered,
   markClientToolCallAnswered,
   releaseClientToolCallAbort,
@@ -33,6 +34,7 @@ export async function handleClientToolCall(
 ): Promise<void> {
   const { message_id, tool_call_id, tool_name, input } = responseData;
   const { chatId } = deps;
+  if (isClientToolResultLocalOnly(tool_name)) return;
 
   if (!chatId || !message_id || !tool_call_id || !tool_name) {
     console.warn("[client_tool_call] missing required fields", responseData);
@@ -65,6 +67,7 @@ export async function handleClientToolCall(
         chatId,
         signal,
       });
+      if (outcome.disposition === "local_only") return;
       body = outcome.ok
         ? // Coalesce to explicit null so an empty success is delivered as a
           // result, not treated by the backend as "no result → tool error".
@@ -88,6 +91,7 @@ export async function handleClientToolCall(
     }
   }
 
+  if (isClientToolResultLocalOnly(tool_name)) return;
   try {
     const response = await fetch("/api/v1beta/me/messages/clienttoolresult", {
       method: "POST",

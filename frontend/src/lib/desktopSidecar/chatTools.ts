@@ -95,8 +95,11 @@ export function createSidecarChatTools(
     execute: ClientToolExecutor,
   ): SidecarChatTool => ({
     name,
-    isAvailable: () => client.supports(method),
+    isAvailable: () =>
+      !client.getSnapshot().localDelegation && client.supports(method),
     execute: async (input, context) => {
+      if (client.getSnapshot().localDelegation)
+        return { ok: true, disposition: "local_only" };
       const key = context
         ? `${name}:${context.messageId}:${context.toolCallId}`
         : null;

@@ -189,6 +189,10 @@ export type ArchiveChatResponse = {
   chat_id: string;
 };
 
+export type AssertionResponse = {
+  assertion: string;
+};
+
 /**
  * An assistant model
  */
@@ -947,6 +951,15 @@ export type ChildApprovalRef = {
   tool_name: string;
 };
 
+export type ClaimRequest = {
+  deviceId: string;
+};
+
+export type ClaimResponse = {
+  authorization: string;
+  job: JobResponse;
+};
+
 /**
  * Default handling of files retrieved by client tools before they leave the device.
  */
@@ -1245,6 +1258,11 @@ export type ContentPartToolRejection = {
    * @format uuid
    */
   user_tool_approval_setting_id?: null | undefined;
+};
+
+export type ContextRequest = {
+  challenge: string;
+  deviceId: string;
 };
 
 /**
@@ -1904,6 +1922,26 @@ export type GlobalFacetSettings = {
   show_facet_indicator_with_display_name: boolean;
 };
 
+export type JobResponse = {
+  binding?: null | undefined;
+  /**
+   * @format uuid
+   */
+  chatId: string;
+  /**
+   * @format uuid
+   */
+  id: string;
+  /**
+   * @format uuid
+   */
+  messageId: string;
+  plan: void;
+  receipt?: null | undefined;
+  serverOutcome?: null | undefined;
+  state: string;
+};
+
 /**
  * Request to link an external file (SharePoint, Google Drive, etc.)
  */
@@ -2461,6 +2499,16 @@ export type OrganizationUsersResponse = {
   users: OrganizationUser[];
 };
 
+export type PendingResponse = {
+  accountId: string;
+  enabled: boolean;
+  jobs: JobResponse[];
+  /**
+   * @format uuid
+   */
+  next?: null | undefined;
+};
+
 /**
  * A call of the parked batch that was never popped. The parked part is the
  * only record of these, so the continuation has to replay them from here.
@@ -2514,6 +2562,10 @@ export type ReactToTaskResultRequest = {
    * @example 00000000-0000-0000-0000-000000000000
    */
   task_result_message_id: string;
+};
+
+export type ReceiptResponse = {
+  receipt: string;
 };
 
 export type RecentChat = {
