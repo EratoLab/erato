@@ -5,6 +5,7 @@ import { indexingMailboxId } from "./indexingConfiguration";
 import { outlookMailboxId, readSidecarConversation } from "./mailboxAccess";
 
 import type {
+  ClientToolCallContext,
   ClientToolExecutor,
   ClientToolExecutionResult,
 } from "@/hooks/chat/clientToolExecutors";
@@ -23,11 +24,20 @@ export const GET_SIDECAR_FOLDER_HIERARCHY_TOOL = "get_sidecar_folder_hierarchy";
 export const GET_SIDECAR_DOCUMENT_TOOL = "get_sidecar_document";
 
 export interface SidecarAttachmentUpload {
-  (file: File, chatId: string, signal?: AbortSignal): Promise<{ id: string }>;
+  (
+    file: File,
+    chatId: string,
+    signal?: AbortSignal,
+    externalIdEwsId?: string,
+  ): Promise<{ id: string }>;
 }
 
 export interface SidecarChatToolOptions {
   uploadAttachment: SidecarAttachmentUpload;
+  approveFiles: (
+    files: File[],
+    context: ClientToolCallContext,
+  ) => Promise<ReadonlySet<File>>;
   uploadsEnabled: boolean;
   maxUploadBytes: number;
   maxFiles: number;
@@ -224,8 +234,61 @@ export function createSidecarChatTools(
           },
           context?.signal,
         );
+        // Keep bytes local until the user has reviewed the complete selection.
+        const localFiles = new Map<object, File>();
+        const preparationFailures = new Map<object, string>();
+        let previewBytes = options.maxUploadBytes;
+        if (
+          args.includeAttachments === true &&
+          options.uploadsEnabled &&
+          context?.chatId
+        ) {
+          for (const message of conversation.messages) {
+            for (const attachment of message.attachments) {
+              const selected = names
+                ? names.includes(attachment.name ?? "")
+                : !attachment.isInline;
+              if (!selected || attachment.contentBytes === undefined) continue;
+              if (localFiles.size >= Math.min(options.maxFiles, 20)) {
+                preparationFailures.set(attachment, "file_count_limit");
+                continue;
+              }
+              if (
+                Math.floor((attachment.contentBytes.length * 3) / 4) - 2 >
+                previewBytes
+              ) {
+                preparationFailures.set(attachment, "size_limit");
+                continue;
+              }
+              try {
+                const bytes = Uint8Array.from(
+                  globalThis.atob(attachment.contentBytes),
+                  (char) => char.charCodeAt(0),
+                );
+                if (bytes.length > previewBytes) {
+                  preparationFailures.set(attachment, "size_limit");
+                  continue;
+                }
+                localFiles.set(
+                  attachment,
+                  new File([bytes], attachment.name ?? "attachment", {
+                    type: attachment.contentType ?? "application/octet-stream",
+                  }),
+                );
+                previewBytes -= bytes.length;
+              } catch {
+                preparationFailures.set(attachment, "upload_failed");
+              }
+            }
+          }
+        }
+        const approvedFiles =
+          localFiles.size && context
+            ? await options.approveFiles([...localFiles.values()], context)
+            : new Set<File>();
+        context?.signal?.throwIfAborted();
         const fileUploadIds: string[] = [];
-        const uploadedByHash = new Map<string, string>();
+        const uploadedByIdentity = new Map<string, string>();
         let remainingBodyChars = 80_000;
         let remainingUploadBytes = options.maxUploadBytes;
         let partial = conversation.state !== "ok";
@@ -244,6 +307,13 @@ export function createSidecarChatTools(
             // Never pass base64 to the model. Selected bytes use the ordinary
             // authenticated upload and file extraction path, with its limits.
             const { contentBytes, ...metadata } = attachment;
+            const externalIdEwsId = attachment.external_ids?.find(
+              (id) => id.key === "ews_id",
+            )?.value;
+            // Equal bytes can belong to distinct Outlook items. Preserve their identities.
+            const uploadKey = attachment.sha256
+              ? JSON.stringify([attachment.sha256, externalIdEwsId ?? null])
+              : undefined;
             let status =
               contentBytes === undefined ? "unavailable" : "not_requested";
             let fileId: string | undefined;
@@ -255,52 +325,40 @@ export function createSidecarChatTools(
                 ? names.includes(attachment.name ?? "")
                 : !attachment.isInline);
             if (selected && contentBytes !== undefined) {
-              fileId = attachment.sha256
-                ? uploadedByHash.get(attachment.sha256)
+              fileId = uploadKey
+                ? uploadedByIdentity.get(uploadKey)
                 : undefined;
-              if (fileId) {
-                status = "uploaded";
-              } else if (!options.uploadsEnabled || !context?.chatId) {
+              const localFile = localFiles.get(attachment);
+              if (!options.uploadsEnabled || !context?.chatId) {
                 status = "uploads_unavailable";
+              } else if (preparationFailures.has(attachment)) {
+                status = preparationFailures.get(attachment) ?? "unavailable";
+                fileId = undefined;
+              } else if (!localFile || !approvedFiles.has(localFile)) {
+                fileId = undefined;
+                status = "rejected";
+              } else if (fileId) {
+                status = "uploaded";
               } else if (
                 fileUploadIds.length >= Math.min(options.maxFiles, 20)
               ) {
                 status = "file_count_limit";
-              } else if (
-                Math.floor((contentBytes.length * 3) / 4) - 2 >
-                remainingUploadBytes
-              ) {
+              } else if (localFile.size > remainingUploadBytes) {
                 status = "size_limit";
               } else {
                 try {
                   context.signal?.throwIfAborted();
-                  const bytes = Uint8Array.from(
-                    globalThis.atob(contentBytes),
-                    (char) => char.charCodeAt(0),
+                  const uploaded = await options.uploadAttachment(
+                    localFile,
+                    context.chatId,
+                    context.signal,
+                    externalIdEwsId,
                   );
-                  if (bytes.length > remainingUploadBytes) {
-                    status = "size_limit";
-                  } else {
-                    const file = new File(
-                      [bytes],
-                      attachment.name ?? "attachment",
-                      {
-                        type:
-                          attachment.contentType ?? "application/octet-stream",
-                      },
-                    );
-                    const uploaded = await options.uploadAttachment(
-                      file,
-                      context.chatId,
-                      context.signal,
-                    );
-                    fileId = uploaded.id;
-                    fileUploadIds.push(fileId);
-                    if (attachment.sha256)
-                      uploadedByHash.set(attachment.sha256, fileId);
-                    remainingUploadBytes -= bytes.length;
-                    status = "uploaded";
-                  }
+                  fileId = uploaded.id;
+                  fileUploadIds.push(fileId);
+                  if (uploadKey) uploadedByIdentity.set(uploadKey, fileId);
+                  remainingUploadBytes -= localFile.size;
+                  status = "uploaded";
                 } catch (cause) {
                   context.signal?.throwIfAborted();
                   status = "upload_failed";
@@ -466,11 +524,10 @@ export function createSidecarChatTools(
         if (options.maxFiles < 1) {
           throw new Error("The file count limit prevents document uploads.");
         }
-        const { filename, mimeType, contentBase64 } = await client.invoke(
-          "sources.get_document.v1",
-          args,
-          { signal: context.signal },
-        );
+        const { filename, mimeType, contentBase64, external_ids } =
+          await client.invoke("sources.get_document.v1", args, {
+            signal: context.signal,
+          });
         context.signal?.throwIfAborted();
         if (
           Math.floor((contentBase64.length * 3) / 4) - 2 >
@@ -485,10 +542,20 @@ export function createSidecarChatTools(
           throw new Error("The document exceeds the upload size limit.");
         }
         const file = new File([bytes], filename, { type: mimeType });
+        const approved = await options.approveFiles([file], context);
+        context.signal?.throwIfAborted();
+        if (!approved.has(file)) {
+          return {
+            ok: false,
+            error:
+              "The user rejected uploading this file. Do not retry without their permission.",
+          };
+        }
         const uploaded = await options.uploadAttachment(
           file,
           context.chatId,
           context.signal,
+          external_ids?.find((id) => id.key === "ews_id")?.value,
         );
         return {
           ok: true,

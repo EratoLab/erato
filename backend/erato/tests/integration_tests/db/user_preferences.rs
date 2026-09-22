@@ -369,3 +369,44 @@ async fn test_the_two_pick_kinds_are_mutually_exclusive(pool: Pool<Postgres>) {
     assert_eq!(prefs.starting_assistant_id, None);
     assert!(prefs.starting_assistant_cleared);
 }
+
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_client_tool_file_approval_persists_and_survives_unrelated_updates(
+    pool: Pool<Postgres>,
+) {
+    use erato::config::ClientToolFileApproval;
+    let conn = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+    let user = create_user(&conn, "file-approval").await;
+    for decision in [
+        ClientToolFileApproval::NeverAllow,
+        ClientToolFileApproval::Ask,
+        ClientToolFileApproval::AlwaysAllow,
+    ] {
+        upsert_user_preferences(
+            &conn,
+            &user,
+            UpdateUserPreferencesInput {
+                client_tool_file_approval: Some(decision),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        let prefs = upsert_user_preferences(
+            &conn,
+            &user,
+            UpdateUserPreferencesInput {
+                nickname: Some(Some("Sam".to_owned())),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            prefs.client_tool_file_approval.as_deref(),
+            Some(decision.as_str())
+        );
+    }
+}

@@ -255,6 +255,7 @@ impl FileUploadLookup for DatabaseConnection {
 }
 
 /// Create a new file upload record in the database and associate it with a chat
+#[allow(clippy::too_many_arguments)]
 pub async fn create_file_upload(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,
@@ -263,6 +264,7 @@ pub async fn create_file_upload(
     filename: String,
     file_storage_provider_id: String,
     file_storage_path: String,
+    external_id_ews_id: Option<String>,
 ) -> Result<file_uploads::Model, Report> {
     // Authorize that the subject can access the chat
     authorize!(
@@ -282,6 +284,7 @@ pub async fn create_file_upload(
         filename: ActiveValue::Set(filename),
         file_storage_provider_id: ActiveValue::Set(file_storage_provider_id),
         file_storage_path: ActiveValue::Set(file_storage_path),
+        external_id_ews_id: ActiveValue::Set(external_id_ews_id),
         ..Default::default()
     };
 
@@ -430,6 +433,7 @@ pub struct FileUploadWithUrl {
     pub preview_url: Option<String>,
     pub file_contents_unavailable_missing_permissions: bool,
     pub audio_transcription: Option<AudioTranscriptionMetadata>,
+    pub external_id_ews_id: Option<String>,
 }
 
 /// Get a specific file upload by ID, including a pre-signed download URL.
@@ -515,6 +519,7 @@ pub async fn get_file_upload_with_url_and_token(
 
     Ok(FileUploadWithUrl {
         id: file_upload.id,
+        external_id_ews_id: file_upload.external_id_ews_id,
         filename,
         file_storage_provider_id,
         file_storage_path,
@@ -637,6 +642,7 @@ pub async fn get_chat_file_uploads_with_urls_and_token(
 
         result.push(FileUploadWithUrl {
             id: upload.id,
+            external_id_ews_id: upload.external_id_ews_id,
             filename,
             file_storage_provider_id,
             file_storage_path,

@@ -1943,6 +1943,7 @@ async fn insert_fixed_parent_file(
         updated_at: ActiveValue::Set(now),
         owner_user_id: ActiveValue::Set(owner_user_id.to_string()),
         audio_transcription: ActiveValue::Set(None),
+        external_id_ews_id: ActiveValue::Set(None),
     };
     erato::db::entity::file_uploads::Entity::insert(file)
         .exec(db)
@@ -9846,6 +9847,7 @@ async fn me_profile(
 ) -> erato::MeProfile {
     erato::MeProfile {
         profile: erato::UserProfile {
+            client_tool_file_approval: Default::default(),
             id: user.id.to_string(),
             email: None,
             name: None,

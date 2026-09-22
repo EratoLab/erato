@@ -9,6 +9,7 @@ import {
   useDesktopSidecar,
 } from "@/providers/DesktopSidecarProvider";
 
+import { ClientToolFileApprovalSetting } from "./ClientToolFileApprovalSetting";
 import { EntityRow } from "./EntityRow";
 import { Button } from "../Controls/Button";
 import { SidecarIndexingControls } from "../DesktopSidecar/SidecarIndexingCard";
@@ -101,6 +102,7 @@ function DesktopSidecarEntityRow({
               message: "Start the desktop sidecar, then try connecting again.",
             })}
       </p>
+      <ClientToolFileApprovalSetting />
       {connected && client?.supports("indexing.status.v1") && (
         <SidecarIndexingControls />
       )}

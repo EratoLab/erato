@@ -2089,6 +2089,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "external_id_ews_id",
+            "in": "query",
+            "description": "Optional external EWS ID to persist on each file in this request. Upload files with different IDs in separate requests.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -4492,6 +4501,10 @@
             ],
             "description": "Pre-signed URL for downloading the file.\nNull when file contents are unavailable for the current user due to missing permissions."
           },
+          "external_id_ews_id": {
+            "type": "string",
+            "description": "External Exchange Web Services ID for deep linking to the original item."
+          },
           "file_capability": {
             "$ref": "#/components/schemas/FileCapability",
             "description": "The file capability that was evaluated for this file"
@@ -5699,6 +5712,15 @@
             "type": "string"
           }
         }
+      },
+      "ClientToolFileApproval": {
+        "type": "string",
+        "description": "Default handling of files retrieved by client tools before they leave the device.",
+        "enum": [
+          "never_allow",
+          "ask",
+          "always_allow"
+        ]
       },
       "ClientToolResultRequest": {
         "type": "object",
@@ -7270,6 +7292,10 @@
           "download_url": {
             "type": "string",
             "description": "Pre-signed URL for downloading the file directly from storage"
+          },
+          "external_id_ews_id": {
+            "type": "string",
+            "description": "External Exchange Web Services ID for deep linking to the original item."
           },
           "file_capability": {
             "$ref": "#/components/schemas/FileCapability",
@@ -10258,6 +10284,16 @@
       "UpdateProfilePreferencesRequest": {
         "type": "object",
         "properties": {
+          "client_tool_file_approval": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ClientToolFileApproval"
+              }
+            ]
+          },
           "preference_assistant_additional_information": {
             "type": [
               "string",
@@ -10344,6 +10380,10 @@
           "organization_group_ids"
         ],
         "properties": {
+          "client_tool_file_approval": {
+            "$ref": "#/components/schemas/ClientToolFileApproval",
+            "description": "Effective decision, including the configured default when no user override exists."
+          },
           "email": {
             "type": "string",
             "description": "The user's email address. Shouldn't be used as a unique identifier, as it may change."

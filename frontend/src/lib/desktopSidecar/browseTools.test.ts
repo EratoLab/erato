@@ -71,6 +71,7 @@ function setup(responses: Record<string, unknown>) {
   const supports = vi.spyOn(client, "supports").mockReturnValue(true);
   const uploadAttachment = vi.fn();
   const tools = createSidecarChatTools(client, {
+    approveFiles: async (files: File[]) => new Set(files),
     uploadAttachment,
     uploadsEnabled: false,
     maxUploadBytes: 0,

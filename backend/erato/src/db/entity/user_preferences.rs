@@ -22,6 +22,8 @@ pub struct Model {
     pub starting_hub_assistant_id: Option<Uuid>,
     pub starting_assistant_id: Option<Uuid>,
     pub starting_assistant_cleared: bool,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub client_tool_file_approval: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

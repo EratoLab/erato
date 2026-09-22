@@ -264,6 +264,10 @@ export type AssistantFile = {
    * Null when file contents are unavailable for the current user due to missing permissions.
    */
   download_url?: string | null | undefined;
+  /**
+   * External Exchange Web Services ID for deep linking to the original item.
+   */
+  external_id_ews_id?: string;
   file_capability: FileCapability;
   /**
    * Indicates that file contents are unavailable for the current user due to missing permissions.
@@ -942,6 +946,11 @@ export type ChildApprovalRef = {
   requested_at: string;
   tool_name: string;
 };
+
+/**
+ * Default handling of files retrieved by client tools before they leave the device.
+ */
+export type ClientToolFileApproval = "never_allow" | "ask" | "always_allow";
 
 export type ClientToolResultRequest = {
   /**
@@ -1678,6 +1687,10 @@ export type FileUploadItem = {
    * Pre-signed URL for downloading the file directly from storage
    */
   download_url: string;
+  /**
+   * External Exchange Web Services ID for deep linking to the original item.
+   */
+  external_id_ews_id?: string;
   file_capability: FileCapability;
   /**
    * Indicates that file contents are unavailable for the current user due to missing permissions.
@@ -3406,6 +3419,7 @@ export type UpdateChatResponse = {
 };
 
 export type UpdateProfilePreferencesRequest = {
+  client_tool_file_approval?: null | ClientToolFileApproval;
   /**
    * Additional contextual information about the user for the assistant.
    */
@@ -3463,6 +3477,7 @@ export type UsageBucket = {
 };
 
 export type UserProfile = {
+  client_tool_file_approval?: ClientToolFileApproval;
   /**
    * The user's email address. Shouldn't be used as a unique identifier, as it may change.
    */

@@ -6,6 +6,10 @@ import { DesktopSidecarRow } from "./DesktopSidecarTabContent";
 
 import type { ReactNode } from "react";
 
+vi.mock("./ClientToolFileApprovalSetting", () => ({
+  ClientToolFileApprovalSetting: () => null,
+}));
+
 const providerMounted = vi.fn();
 vi.mock("@/providers/DesktopSidecarProvider", () => ({
   DEFAULT_DESKTOP_SIDECAR_ENDPOINT: "https://localhost:1234",

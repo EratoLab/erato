@@ -818,6 +818,8 @@ async fn fetch_entra_id_profile_photo_data_url(
 
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct UpdateProfilePreferencesRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_tool_file_approval: Option<crate::config::ClientToolFileApproval>,
     /// Preferred name to address the user with.
     #[serde(default, deserialize_with = "deserialize_patch_optional_string")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -921,6 +923,7 @@ pub async fn update_profile_preferences(
         &app_state.db,
         &user_id,
         models::user_preference::UpdateUserPreferencesInput {
+            client_tool_file_approval: request.client_tool_file_approval,
             nickname: request.preference_nickname,
             job_title: request.preference_job_title,
             assistant_custom_instructions: request.preference_assistant_custom_instructions,
@@ -946,6 +949,9 @@ pub async fn update_profile_preferences(
     })?;
 
     let mut profile = me_user.profile.clone();
+    if let Some(value) = request.client_tool_file_approval {
+        profile.client_tool_file_approval = value;
+    }
     profile.preference_nickname = updated_prefs.nickname;
     profile.preference_job_title = updated_prefs.job_title;
     profile.preference_assistant_custom_instructions = updated_prefs.assistant_custom_instructions;
@@ -1805,6 +1811,10 @@ struct MultipartFormFile {
 pub struct FileUploadItem {
     /// The unique ID of the uploaded file
     id: String,
+    /// External Exchange Web Services ID for deep linking to the original item.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    external_id_ews_id: Option<String>,
     /// The original filename of the uploaded file
     filename: String,
     /// Pre-signed URL for downloading the file directly from storage
@@ -1905,6 +1915,7 @@ pub struct PromptOptimizerResponse {
     tag = "files",
     params(
         ("chat_id" = Option<String>, Query, description = "Optional chat ID to associate the file with. If not provided, creates standalone files."),
+        ("external_id_ews_id" = Option<String>, Query, description = "Optional external EWS ID to persist on each file in this request. Upload files with different IDs in separate requests."),
     ),
     request_body(content = Vec<MultipartFormFile>, description = "Files to upload", content_type = "multipart/form-data"),
     responses(
@@ -2026,6 +2037,7 @@ pub async fn upload_file(
                 filename.clone(),
                 app_state.default_file_storage_provider_id(),
                 file_path,
+                params.get("external_id_ews_id").cloned(),
             )
             .await
         } else {
@@ -2037,6 +2049,7 @@ pub async fn upload_file(
                 filename.clone(),
                 app_state.default_file_storage_provider_id(),
                 file_path,
+                params.get("external_id_ews_id").cloned(),
             )
             .await
         }
@@ -2088,6 +2101,7 @@ pub async fn upload_file(
         // Add this file to our list of uploaded files
         uploaded_files.push(FileUploadItem {
             id: file_upload.id.to_string(),
+            external_id_ews_id: file_upload.external_id_ews_id,
             filename,
             download_url,
             preview_url: Some(preview_url),
@@ -2359,6 +2373,7 @@ async fn link_sharepoint_file_impl(
     Ok(Json(FileUploadResponse {
         files: vec![FileUploadItem {
             id: file_upload.id.to_string(),
+            external_id_ews_id: file_upload.external_id_ews_id,
             filename,
             preview_url: Some(proxied_preview_url_for_file(&file_upload.id)),
             download_url,
@@ -2907,6 +2922,7 @@ async fn assemble_chat_messages_response(
                         == SHAREPOINT_PROVIDER_ID,
                     file_capability,
                     audio_transcription: file_upload.audio_transcription,
+                    external_id_ews_id: file_upload.external_id_ews_id,
                 },
             );
         }
@@ -3415,6 +3431,7 @@ pub async fn frequent_assistants(
                         find_file_capability_by_filename(&all_capabilities, &file.filename);
                     AssistantFile {
                         id: file.id.to_string(),
+                        external_id_ews_id: file.external_id_ews_id,
                         filename: file.filename,
                         download_url: Some(format!("/api/v1beta/files/{}", file.id)),
                         preview_url: Some(proxied_preview_url_for_file(&file.id)),
@@ -3901,6 +3918,7 @@ pub async fn get_file(
         is_sharepoint_file: file_upload.file_storage_provider_id == SHAREPOINT_PROVIDER_ID,
         file_capability,
         audio_transcription: file_upload.audio_transcription,
+        external_id_ews_id: file_upload.external_id_ews_id,
     }))
 }
 

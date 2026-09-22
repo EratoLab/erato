@@ -438,6 +438,7 @@ async fn process_mcp_file_outputs(
             filename.clone(),
             file_storage_provider_id.clone(),
             file_storage_path.clone(),
+            None,
         )
         .await?;
 

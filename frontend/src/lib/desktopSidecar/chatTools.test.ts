@@ -13,6 +13,22 @@ import type { OutlookGetConversationV1Result } from "@erato/desktop-sidecar-prot
 const mailboxId = "a".repeat(32);
 const context = { toolCallId: "call", messageId: "message", chatId: "chat" };
 const anchor = { mailboxId, internetMessageId: "<email@example.test>" };
+const externalIdCases = [
+  { external_ids: undefined, expected: undefined },
+  { external_ids: [], expected: undefined },
+  {
+    external_ids: [{ key: "email_message_id", value: "<email@example.test>" }],
+    expected: undefined,
+  },
+  {
+    external_ids: [
+      { key: "email_message_id", value: "<email@example.test>" },
+      { key: "ews_id", value: "AaM+opaque/id==" },
+      { key: "future_id", value: "other-id" },
+    ],
+    expected: "AaM+opaque/id==",
+  },
+];
 
 function setup(responses: Record<string, unknown>) {
   const request = vi.fn(async (body: string) => {
@@ -32,6 +48,7 @@ function setup(responses: Record<string, unknown>) {
   const supports = vi.spyOn(client, "supports").mockReturnValue(true);
   const uploadAttachment = vi.fn(async () => ({ id: "uploaded-file" }));
   const options = {
+    approveFiles: vi.fn(async (files: File[]) => new Set(files)),
     uploadAttachment,
     uploadsEnabled: true,
     maxUploadBytes: 1000,
@@ -63,6 +80,75 @@ function conversation(): OutlookGetConversationV1Result {
 }
 
 describe("shared desktop sidecar tools", () => {
+  it("uploads only individually approved attachments, including duplicate hashes", async () => {
+    const data = conversation();
+    data.messages[0].attachments[0].external_ids = [
+      { key: "ews_id", value: "approved-ews-id" },
+    ];
+    data.messages[0].attachments.push({
+      ...data.messages[0].attachments[0],
+      name: "duplicate.txt",
+    });
+    const env = setup({ "outlook.get_conversation.v1": data });
+    env.options.approveFiles.mockImplementation(
+      async (files) => new Set([files[0]]),
+    );
+    const result = await env
+      .tools()[1]
+      .execute({ ...anchor, includeAttachments: true }, context);
+    expect(env.options.approveFiles).toHaveBeenCalledTimes(1);
+    expect(env.options.approveFiles.mock.calls[0][0]).toHaveLength(2);
+    expect(env.uploadAttachment).toHaveBeenCalledTimes(1);
+    expect(env.uploadAttachment).toHaveBeenCalledWith(
+      expect.any(File),
+      "chat",
+      undefined,
+      "approved-ews-id",
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        messages: [
+          {
+            attachments: [
+              { status: "uploaded" },
+              { status: "rejected", fileId: undefined },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
+  it("does not upload while approval is pending and caches rejection for replay", async () => {
+    const env = setup({ "outlook.get_conversation.v1": conversation() });
+    let decide!: (files: Set<File>) => void;
+    env.options.approveFiles.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          decide = resolve;
+        }),
+    );
+    const tool = env.tools()[1];
+    const result = tool.execute(
+      { ...anchor, includeAttachments: true },
+      context,
+    );
+    await vi.waitFor(() => expect(env.options.approveFiles).toHaveBeenCalled());
+    expect(env.uploadAttachment).not.toHaveBeenCalled();
+    decide(new Set());
+    expect(await result).toMatchObject({
+      ok: true,
+      fileUploadIds: [],
+      result: {
+        messages: [{ attachments: [{ status: "rejected" }] }],
+      },
+    });
+    await tool.execute({ ...anchor, includeAttachments: true }, context);
+    expect(env.options.approveFiles).toHaveBeenCalledTimes(1);
+    expect(env.uploadAttachment).not.toHaveBeenCalled();
+  });
+
   it("returns discovered metadata descriptors through the pinned contract", async () => {
     const fields = [
       {
@@ -216,6 +302,7 @@ describe("shared desktop sidecar tools", () => {
       }),
       "chat",
       undefined,
+      undefined,
     );
     expect(outcome).toMatchObject({
       ok: true,
@@ -353,6 +440,61 @@ describe("shared desktop sidecar tools", () => {
     );
   });
 
+  it.each(externalIdCases)(
+    "uses only the attachment's own EWS ID (%j)",
+    async ({ external_ids, expected }) => {
+      const data = conversation();
+      data.messages[0].external_ids = [
+        { key: "ews_id", value: "message-ews-id" },
+      ];
+      data.messages[0].attachments[0].external_ids = external_ids;
+      data.messages[0].attachments[0].topLevelParent = {
+        external_ids: [{ key: "ews_id", value: "parent-ews-id" }],
+      };
+      const env = setup({ "outlook.get_conversation.v1": data });
+      expect(
+        await env
+          .tools()[1]
+          .execute({ ...anchor, includeAttachments: true }, context),
+      ).toMatchObject({ ok: true });
+      expect(env.uploadAttachment).toHaveBeenCalledWith(
+        expect.any(File),
+        "chat",
+        undefined,
+        expected,
+      );
+    },
+  );
+
+  it("does not merge identical attachment bytes with different EWS identities", async () => {
+    const data = conversation();
+    const attachment = data.messages[0].attachments[0];
+    data.messages[0].attachments = [
+      undefined,
+      "ews-one",
+      "ews-two",
+      "ews-one",
+    ].map((id) => ({
+      ...attachment,
+      external_ids: id ? [{ key: "ews_id", value: id }] : [],
+    }));
+    const env = setup({ "outlook.get_conversation.v1": data });
+    const outcome = await env
+      .tools()[1]
+      .execute({ ...anchor, includeAttachments: true }, context);
+    expect(outcome).toMatchObject({ ok: true });
+    expect(env.uploadAttachment).toHaveBeenCalledTimes(3);
+    for (const [index, id] of [undefined, "ews-one", "ews-two"].entries()) {
+      expect(env.uploadAttachment).toHaveBeenNthCalledWith(
+        index + 1,
+        expect.any(File),
+        "chat",
+        undefined,
+        id,
+      );
+    }
+  });
+
   it("replays a completed tool call without uploading its attachments again", async () => {
     const env = setup({ "outlook.get_conversation.v1": conversation() });
     const tool = env.tools()[1];
@@ -461,6 +603,28 @@ describe("sidecar document retrieval", () => {
     };
   };
 
+  it.each(["reject", "abort", "failure"])(
+    "never uploads a document after approval %s",
+    async (mode) => {
+      const env = setupDocument();
+      const controller = new AbortController();
+      env.options.approveFiles.mockImplementation(async (files) => {
+        if (mode === "failure") throw new Error("Preference unavailable");
+        if (mode === "abort") {
+          controller.abort();
+          return new Set(files);
+        }
+        return new Set();
+      });
+      const result = await env
+        .tool()
+        .execute(input, { ...context, signal: controller.signal });
+      expect(result.ok).toBe(false);
+      expect(env.uploadAttachment).not.toHaveBeenCalled();
+      expect(JSON.stringify(result)).not.toContain(document.contentBase64);
+    },
+  );
+
   it.each([undefined, "subject", "subject_with_thread"])(
     "uploads scope %s and replays without duplicate uploads",
     async (subject_scope) => {
@@ -488,6 +652,7 @@ describe("sidecar document retrieval", () => {
         }),
         "chat",
         signal,
+        undefined,
       );
       expect(JSON.parse(env.request.mock.calls[0][0]).params).toEqual(args);
       expect(JSON.stringify(outcome)).not.toContain(document.contentBase64);
@@ -495,6 +660,35 @@ describe("sidecar document retrieval", () => {
       expect(await tool.execute(args, context)).toEqual(outcome);
       expect(env.uploadAttachment).toHaveBeenCalledTimes(1);
       expect(env.request).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(externalIdCases)(
+    "uploads the requested document's own EWS ID for both export scopes (%j)",
+    async ({ external_ids, expected }) => {
+      for (const subject_scope of ["subject", "subject_with_thread"]) {
+        const env = setup({
+          "sources.get_document.v1": {
+            ...document,
+            external_ids,
+            topLevelParent: {
+              external_ids: [{ key: "ews_id", value: "parent-ews-id" }],
+            },
+          },
+        });
+        const tool = env
+          .tools()
+          .find((item) => item.name === GET_SIDECAR_DOCUMENT_TOOL)!;
+        expect(
+          await tool.execute({ ...input, subject_scope }, context),
+        ).toMatchObject({ ok: true });
+        expect(env.uploadAttachment).toHaveBeenCalledWith(
+          expect.any(File),
+          "chat",
+          undefined,
+          expected,
+        );
+      }
     },
   );
 

@@ -46,7 +46,9 @@
     "deploy/0044_add_disabled_mcp_server_ids_to_chats.sql",
     "deploy/0045_add_disabled_mcp_tools_to_chats.sql",
     "deploy/0046_widen_user_tool_approval_decisions.sql",
-    "deploy/0047_add_async_delivery_and_latest_generation_indexes.sql"
+    "deploy/0047_add_async_delivery_and_latest_generation_indexes.sql",
+    "deploy/0048_add_client_tool_file_approval.sql",
+    "deploy/0049_add_external_id_ews_id_to_file_uploads.sql"
   ],
-  "latest_change": "b9e2282e30cb2d63d094e61fe3b4f1c81194d818"
+  "latest_change": "d9900235aee4cc402930f16ff49d88fe81355ffa"
 }

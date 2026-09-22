@@ -1,4 +1,5 @@
 import { applyToolUseUpdate } from "./toolUsePartHelpers";
+import { abortClientToolCall } from "../clientToolExecutors";
 import { useMessagingStore } from "../store/messagingStore";
 
 import type { MessageSubmitStreamingResponseToolCallUpdate } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -28,6 +29,10 @@ export const handleToolCallUpdate = (
       responseData,
     );
     return;
+  }
+
+  if (responseData.status === "success" || responseData.status === "error") {
+    abortClientToolCall(responseData.tool_call_id);
   }
 
   useMessagingStore.setState(

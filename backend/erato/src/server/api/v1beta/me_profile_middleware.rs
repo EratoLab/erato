@@ -18,6 +18,9 @@ use utoipa::ToSchema;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct UserProfile {
+    /// Effective decision, including the configured default when no user override exists.
+    #[serde(default)]
+    pub client_tool_file_approval: crate::config::ClientToolFileApproval,
     pub id: String,
     /// The user's email address. Shouldn't be used as a unique identifier, as it may change.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -104,6 +107,7 @@ impl UserProfile {
         let preferred_language = profile.preferred_language.unwrap_or_default();
         Self {
             id: user_id,
+            client_tool_file_approval: Default::default(),
             email: profile.email,
             name: profile.name,
             picture: profile.picture,
@@ -167,6 +171,11 @@ impl UserProfile {
         prefs: Option<crate::db::entity::user_preferences::Model>,
     ) {
         if let Some(prefs) = prefs {
+            if let Some(value) = prefs.client_tool_file_approval {
+                self.client_tool_file_approval =
+                    serde_json::from_value(serde_json::Value::String(value))
+                        .unwrap_or(crate::config::ClientToolFileApproval::NeverAllow);
+            }
             self.preference_nickname = prefs.nickname;
             self.preference_job_title = prefs.job_title;
             self.preference_assistant_custom_instructions = prefs.assistant_custom_instructions;
@@ -266,6 +275,7 @@ pub async fn user_profile_from_token(
     let prefs = get_user_preferences(&app_state.db, &user.id)
         .await
         .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
+    user_profile.client_tool_file_approval = app_state.config.desktop_sidecar.file_upload_approval;
     user_profile.apply_user_preferences(prefs);
 
     Ok((user_profile, id_token_claims))

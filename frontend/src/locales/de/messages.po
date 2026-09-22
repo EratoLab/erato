@@ -1566,6 +1566,26 @@ msgstr "Anhang anzeigen"
 #~ msgstr "Angehängte Datei anzeigen:"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
+msgid "chat.fileApproval.approve"
+msgstr "Ausgewählte Dateien hochladen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
+msgid "chat.fileApproval.description"
+msgstr "Ausgewählte Dateien werden zu Erato hochgeladen und ihre Inhalte mit dem KI-Anbieter geteilt. Sehen Sie sich die Dateien an, bevor Sie entscheiden."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
+msgid "chat.fileApproval.reject"
+msgstr "Alle ablehnen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
+msgid "chat.fileApproval.title"
+msgstr "Diese Dateien zum Hochladen freigeben?"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 msgid "chat.fileDrop.overlay.label"
 msgstr "Zum Hochladen ablegen"
@@ -3779,6 +3799,26 @@ msgstr ""
 #~ msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/ClientToolFileApprovalSetting.tsx
+msgid "preferences.dialog.desktopSidecar.fileApproval"
+msgstr "Wie sollen Uploads von Dateien behandelt werden, die vom Sidecar abgerufen wurden?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/ClientToolFileApprovalSetting.tsx
+#~ msgid "preferences.dialog.desktopSidecar.fileApproval.always"
+#~ msgstr "Immer erlauben"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/ClientToolFileApprovalSetting.tsx
+#~ msgid "preferences.dialog.desktopSidecar.fileApproval.ask"
+#~ msgstr "Nachfragen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/ClientToolFileApprovalSetting.tsx
+#~ msgid "preferences.dialog.desktopSidecar.fileApproval.never"
+#~ msgstr "Nie erlauben"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
 msgid "preferences.dialog.desktopSidecar.heading"
 msgstr ""
@@ -4331,6 +4371,7 @@ msgid "preferences.dialog.mcpServers.tools.permissions.heading"
 msgstr "Tool-Berechtigungen"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/ClientToolFileApprovalSetting.tsx
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.save.error"
 msgstr "Einstellungen konnten nicht gespeichert werden. Bitte versuche es erneut."

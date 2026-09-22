@@ -9,6 +9,7 @@ import {
   ThemeProvider,
 } from "@/components/providers/ThemeProvider";
 import { componentRegistry } from "@/config/componentRegistry";
+import { useClientToolFileApprovalStore } from "@/hooks/chat/store/clientToolFileApprovalStore";
 import { messages as enMessages } from "@/locales/en/messages.json";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
@@ -1814,4 +1815,67 @@ describe("MessageContent", () => {
       ).not.toBeInTheDocument();
     });
   });
+});
+
+it("renders local file consent alongside a submitted host card in the originating message", () => {
+  const original = componentRegistry.HostCardCodeBlock;
+  componentRegistry.HostCardCodeBlock = function SubmittedCardStub({
+    content,
+  }) {
+    return <div data-testid="submitted-card">{content}</div>;
+  };
+  const file = new File(["local contents"], "review.txt", {
+    type: "text/plain",
+  });
+  const finish = vi.fn();
+  useClientToolFileApprovalStore.setState({
+    requests: [
+      {
+        id: 999,
+        files: [file],
+        selected: new Set([file]),
+        finish,
+        context: {
+          chatId: "chat",
+          messageId: "file-message",
+          toolCallId: "file-call",
+        },
+      },
+    ],
+  });
+  try {
+    renderWithTheme(
+      <MessageContent
+        content={[...textContent("Retrieved a file."), toolUseContent({})]}
+        messageId="file-message"
+        hostArtifact={{
+          facetId: "editor",
+          renderMode: "suggestions",
+          cardFenceLanguages: ["editor-draft"],
+          submittedCard: {
+            toolCallId: "tool-call-123",
+            language: "editor-draft",
+            content: "Saved draft",
+          },
+        }}
+      />,
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("client-tool-file-approval").closest("article"),
+    ).not.toBeNull();
+    expect(screen.getByTestId("submitted-card")).toHaveTextContent(
+      "Saved draft",
+    );
+    expect(screen.getByTestId("submitted-card").closest("article")).toBe(
+      screen.getByTestId("client-tool-file-approval").closest("article"),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Upload selected files" }),
+    );
+    expect(finish).toHaveBeenCalledWith(new Set([file]));
+  } finally {
+    componentRegistry.HostCardCodeBlock = original;
+    useClientToolFileApprovalStore.setState({ requests: [] });
+  }
 });

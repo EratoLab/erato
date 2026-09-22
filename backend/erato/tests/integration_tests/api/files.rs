@@ -82,6 +82,118 @@ async fn upload_file_to_chat(
     upload_response.json()
 }
 
+/// EWS metadata survives both upload modes and all resolved file response paths.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_file_external_ews_id_roundtrip(pool: Pool<Postgres>) {
+    use erato::db::entity::{file_uploads, messages};
+    use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+
+    let (app_config, _mock_server) = setup_mock_llm_server(None).await;
+    let state = test_app_state(app_config, pool).await;
+    let app = router(state.clone())
+        .split_for_parts()
+        .0
+        .with_state(state.clone());
+    let server = TestServer::new(app.into_make_service()).unwrap();
+    let chat_id = create_chat(&server).await;
+    let ews_id = "AAMkAGI+opaque/id==&value%";
+
+    for associate_chat in [false, true] {
+        for external_id in [None, Some(ews_id)] {
+            let mut request = server
+                .post("/api/v1beta/me/files")
+                .with_bearer_token(TEST_JWT_TOKEN);
+            if associate_chat {
+                request = request.add_query_param("chat_id", &chat_id);
+            }
+            if let Some(external_id) = external_id {
+                request = request.add_query_param("external_id_ews_id", external_id);
+            }
+            let response = request
+                .multipart(
+                    MultipartForm::new().add_part(
+                        "file",
+                        Part::bytes(b"EWS metadata test".to_vec())
+                            .file_name("source.txt")
+                            .mime_type("text/plain"),
+                    ),
+                )
+                .await;
+            response.assert_status_ok();
+            let uploaded: Value = response.json();
+            let file = &uploaded["files"][0];
+            assert_eq!(file["external_id_ews_id"].as_str(), external_id);
+            let file_id = file["id"].as_str().unwrap();
+            let file_uuid = Uuid::parse_str(file_id).unwrap();
+            let stored = file_uploads::Entity::find_by_id(file_uuid)
+                .one(&state.db)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(stored.external_id_ews_id.as_deref(), external_id);
+
+            // File pointers are resolved through this endpoint.
+            let resolved = server
+                .get(&format!("/api/v1beta/files/{file_id}"))
+                .with_bearer_token(TEST_JWT_TOKEN)
+                .await;
+            resolved.assert_status_ok();
+            assert_eq!(
+                resolved.json::<Value>()["external_id_ews_id"].as_str(),
+                external_id
+            );
+
+            if associate_chat {
+                messages::ActiveModel {
+                    id: Set(Uuid::new_v4()),
+                    chat_id: Set(Uuid::parse_str(&chat_id).unwrap()),
+                    raw_message: Set(
+                        json!({"role": "user", "content": [{"content_type": "text", "text": "See file"}]}),
+                    ),
+                    input_file_uploads: Set(Some(vec![file_uuid])),
+                    ..Default::default()
+                }
+                .insert(&state.db)
+                .await
+                .unwrap();
+                let response = server
+                    .get(&format!("/api/v1beta/chats/{chat_id}/messages"))
+                    .with_bearer_token(TEST_JWT_TOKEN)
+                    .await;
+                response.assert_status_ok();
+                let response: Value = response.json();
+                let attachment = response["messages"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .flat_map(|message| message["files"].as_array().unwrap())
+                    .find(|file| file["id"] == file_id)
+                    .unwrap();
+                assert_eq!(attachment["external_id_ews_id"].as_str(), external_id);
+            } else {
+                let response = server.post("/api/v1beta/assistants")
+                    .with_bearer_token(TEST_JWT_TOKEN)
+                    .json(&json!({"name": "EWS test", "prompt": "Use the file", "file_ids": [file_id]}))
+                    .await;
+                response.assert_status(StatusCode::CREATED);
+                let assistant: Value = response.json();
+                let assistant_id = assistant["id"].as_str().unwrap();
+                let response = server
+                    .get(&format!("/api/v1beta/assistants/{assistant_id}"))
+                    .with_bearer_token(TEST_JWT_TOKEN)
+                    .await;
+                response.assert_status_ok();
+                let assistant: Value = response.json();
+                assert_eq!(assistant["files"][0]["id"], file_id);
+                assert_eq!(
+                    assistant["files"][0]["external_id_ews_id"].as_str(),
+                    external_id
+                );
+            }
+        }
+    }
+}
+
 /// Test file upload to a chat.
 ///
 /// # Test Categories

@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 
 import { registerClientToolExecutor } from "@/hooks/chat/clientToolExecutors";
+import { useClientToolFileApproval } from "@/hooks/chat/useClientToolFileApproval";
 import { createSidecarChatTools } from "@/lib/desktopSidecar/chatTools";
 import {
   fetchUploadFile,
@@ -13,21 +14,28 @@ import { useChatInputFeature, useUploadFeature } from "./FeatureConfigProvider";
 /** The same configurable client tools in the web app and all add-in hosts. */
 export function DesktopSidecarClientTools() {
   const { client } = useDesktopSidecar();
+  const { approveFiles } = useClientToolFileApproval();
   const { enabled, maxSizeBytes } = useUploadFeature();
   const { maxFiles } = useChatInputFeature();
 
   useEffect(() => {
     if (!client) return;
     const tools = createSidecarChatTools(client, {
+      approveFiles,
       uploadsEnabled: enabled,
       maxUploadBytes: maxSizeBytes,
       maxFiles,
-      uploadAttachment: async (file, chatId, signal) => {
+      uploadAttachment: async (file, chatId, signal, externalIdEwsId) => {
         const body = new FormData();
         body.append("file", file, file.name);
         const response = await fetchUploadFile(
           {
-            queryParams: { chat_id: chatId },
+            queryParams: {
+              chat_id: chatId,
+              ...(externalIdEwsId !== undefined
+                ? { external_id_ews_id: externalIdEwsId }
+                : {}),
+            },
             body: body as unknown as UploadFileVariables["body"],
           },
           signal,
@@ -42,6 +50,6 @@ export function DesktopSidecarClientTools() {
       registerClientToolExecutor(tool.name, tool.execute, tool.isAvailable),
     );
     return () => unregister.forEach((cleanup) => cleanup());
-  }, [client, enabled, maxSizeBytes, maxFiles]);
+  }, [client, enabled, maxSizeBytes, maxFiles, approveFiles]);
   return null;
 }
