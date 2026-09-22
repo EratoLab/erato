@@ -445,6 +445,44 @@
       }
     },
     {
+      "name": "sidecar.open_data_directory.v1",
+      "summary": "Open the sidecar data directory in the platform file manager.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/sidecar-open-data-directory-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/sidecar-open-data-directory-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ],
+      "x-erato-capability": {
+        "id": "sidecar.open_data_directory",
+        "major": 1,
+        "method": "sidecar.open_data_directory.v1",
+        "availability": {
+          "state": "enabled"
+        }
+      }
+    },
+    {
       "name": "sidecar.restart.v1",
       "summary": "Acknowledge a request to restart the sidecar with its original command-line arguments.",
       "params": [
@@ -980,7 +1018,7 @@
     }
   },
   "x-erato-catalogue": {
-    "revision": "10",
-    "digest": "sha256:522228a794865d96241e7e7eb9878646f983ac8b34c5ef42edbbaae5773cfbc6"
+    "revision": "11",
+    "digest": "sha256:44f54ed6dac070706e2278ddde66d98eba21cc4f10a1a20296c58ef20b9a82c7"
   }
 }

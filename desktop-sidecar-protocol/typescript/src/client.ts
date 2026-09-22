@@ -33,6 +33,8 @@ import {
   validateOutlookSearchEmailsV1Result,
   validateSidecarProgressV1Params,
   validateSidecarProgressV1Result,
+  validateSidecarOpenDataDirectoryV1Params,
+  validateSidecarOpenDataDirectoryV1Result,
   validateSidecarRestartV1Params,
   validateSidecarRestartV1Result,
   validateSidecarConfigureV1Params,
@@ -81,6 +83,8 @@ import type {
   OutlookSearchEmailsV1Result,
   SidecarProgressV1Params,
   SidecarProgressV1Result,
+  SidecarOpenDataDirectoryV1Params,
+  SidecarOpenDataDirectoryV1Result,
   SidecarRestartV1Params,
   SidecarRestartV1Result,
   SidecarConfigureV1Params,
@@ -228,6 +232,10 @@ const builtInContracts: Readonly<Record<string, SidecarMethodContract>> = {
   "sidecar.progress.v1": {
     validateParams: validateSidecarProgressV1Params,
     validateResult: validateSidecarProgressV1Result,
+  },
+  "sidecar.open_data_directory.v1": {
+    validateParams: validateSidecarOpenDataDirectoryV1Params,
+    validateResult: validateSidecarOpenDataDirectoryV1Result,
   },
   "sidecar.restart.v1": {
     validateParams: validateSidecarRestartV1Params,
@@ -437,6 +445,11 @@ export class DesktopSidecarClient {
     params: SidecarConfigureV1Params,
     options?: InvokeOptions,
   ): Promise<SidecarConfigureV1Result>;
+  async invoke(
+    method: "sidecar.open_data_directory.v1",
+    params: SidecarOpenDataDirectoryV1Params,
+    options?: InvokeOptions,
+  ): Promise<SidecarOpenDataDirectoryV1Result>;
   async invoke(
     method: "sidecar.restart.v1",
     params: SidecarRestartV1Params,

@@ -39,6 +39,8 @@ export const validateCancelResult: Validator;
 export const validateDiscoveryDocument: Validator;
 export const validateDiagnosticsEchoV1Params: Validator;
 export const validateDiagnosticsEchoV1Result: Validator;
+export const validateSidecarOpenDataDirectoryV1Params: Validator;
+export const validateSidecarOpenDataDirectoryV1Result: Validator;
 export const validateSidecarRestartV1Params: Validator;
 export const validateSidecarRestartV1Result: Validator;
 export const validateSidecarConfigureV1Params: Validator;

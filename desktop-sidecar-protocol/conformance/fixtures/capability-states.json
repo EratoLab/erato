@@ -2,7 +2,10 @@
   "cases": [
     {
       "name": "enabled compiled capability",
-      "advertised": { "method": "diagnostics.echo.v1", "state": "enabled" },
+      "advertised": {
+        "method": "diagnostics.echo.v1",
+        "state": "enabled"
+      },
       "compiledMethods": ["diagnostics.echo.v1"],
       "supports": true
     },
@@ -23,20 +26,41 @@
     },
     {
       "name": "unknown additive capability",
-      "advertised": { "method": "future.feature.v3", "state": "enabled" },
+      "advertised": {
+        "method": "future.feature.v3",
+        "state": "enabled"
+      },
       "compiledMethods": ["diagnostics.echo.v1", "sidecar.restart.v1"],
       "supports": false
     },
     {
       "name": "enabled restart capability",
-      "advertised": { "method": "sidecar.restart.v1", "state": "enabled" },
+      "advertised": {
+        "method": "sidecar.restart.v1",
+        "state": "enabled"
+      },
       "compiledMethods": ["diagnostics.echo.v1", "sidecar.restart.v1"],
       "supports": true
     },
     {
       "name": "enabled progress capability",
-      "advertised": { "method": "sidecar.progress.v1", "state": "enabled" },
+      "advertised": {
+        "method": "sidecar.progress.v1",
+        "state": "enabled"
+      },
       "compiledMethods": ["diagnostics.echo.v1", "sidecar.progress.v1"],
+      "supports": true
+    },
+    {
+      "name": "enabled open data directory capability",
+      "advertised": {
+        "method": "sidecar.open_data_directory.v1",
+        "state": "enabled"
+      },
+      "compiledMethods": [
+        "diagnostics.echo.v1",
+        "sidecar.open_data_directory.v1"
+      ],
       "supports": true
     }
   ]

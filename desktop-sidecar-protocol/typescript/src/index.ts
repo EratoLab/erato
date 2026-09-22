@@ -87,6 +87,8 @@ export type {
   SidecarLocalTraceStep,
   SidecarProgressV1Params,
   SidecarProgressV1Result,
+  SidecarOpenDataDirectoryV1Params,
+  SidecarOpenDataDirectoryV1Result,
   SidecarRestartV1Params,
   SidecarRestartV1Result,
   SidecarConfiguration,
