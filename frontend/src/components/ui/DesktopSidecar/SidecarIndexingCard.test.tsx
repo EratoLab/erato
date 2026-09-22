@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useSidecarIndexing } from "@/hooks/useSidecarIndexing";
@@ -14,7 +14,7 @@ const sharedId = "aabbccdd112244558899001122334455";
 const sharedUuid = "aabbccdd-1122-4455-8899-001122334455";
 const personalId = "bbccddee2233445599aa112233445566";
 const personalUuid = "bbccddee-2233-4455-99aa-112233445566";
-const save = vi.fn<(patch: Partial<SidecarConfiguration>) => void>();
+const save = vi.fn<(patch: Partial<SidecarConfiguration>) => Promise<void>>();
 const data = {
   mailboxes: [
     {
@@ -31,6 +31,8 @@ const data = {
     },
   ],
   status: {
+    state: "running",
+    discovery: [],
     effectiveConfiguration: { parallelism: 2, documentsPerMinute: 40 },
     configuration: {
       user_configuration: {
@@ -53,12 +55,14 @@ const data = {
             mailboxId: personalUuid,
             kind: "email",
             fileType: null,
+            backlog: { discoveryComplete: false, remaining: 7, inProgress: 0 },
             coverage: { indexedCurrent: 4, knownEligible: 10 },
           },
           {
             mailboxId: personalUuid,
             kind: "file",
             fileType: null,
+            backlog: { discoveryComplete: false, remaining: 7, inProgress: 0 },
             coverage: { indexedCurrent: 2, knownEligible: 3 },
           },
         ],
@@ -70,6 +74,9 @@ let currentData: typeof data;
 
 async function expectValidSavedConfiguration() {
   expect(save).toHaveBeenCalledTimes(1);
+  await waitFor(() =>
+    expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument(),
+  );
   await expectSidecarConfigurationAccepted({
     ...currentData.status.configuration,
     user_configuration: {
@@ -81,6 +88,7 @@ async function expectValidSavedConfiguration() {
 
 beforeEach(() => {
   save.mockReset();
+  save.mockResolvedValue();
   currentData = globalThis.structuredClone(data);
   vi.mocked(useSidecarIndexing).mockReturnValue({
     data: currentData,
@@ -94,13 +102,11 @@ beforeEach(() => {
 });
 
 describe("mailbox indexing controls", () => {
-  it("shows ordered mailboxes and all three progress counts", () => {
+  it("shows ordered mailboxes with combined progress", () => {
     render(<SidecarIndexingControls />);
     const entries = screen.getAllByRole("listitem");
     expect(entries[0]).toHaveTextContent("personal@example.com");
-    expect(entries[0]).toHaveTextContent("4 / 10 emails indexed");
-    expect(entries[0]).toHaveTextContent("2 / 3 attachments indexed");
-    expect(entries[0]).toHaveTextContent("6 / 13 documents indexed");
+    expect(entries[0]).toHaveTextContent("46% of 13 documents indexed");
     expect(
       screen.getByRole("button", {
         name: "Increase priority for personal@example.com",
@@ -119,7 +125,13 @@ describe("mailbox indexing controls", () => {
         name: "Increase priority for shared@example.com",
       }),
     );
+    expect(save).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save indexing settings" }),
+    );
     expect(save).toHaveBeenCalledWith({
+      indexing_parallelism: 2,
+      indexing_documents_per_minute: 40,
       indexing_mailboxes: [
         { mailbox_id: sharedUuid, enabled: true, priority: 0 },
         { mailbox_id: personalUuid, enabled: false, priority: 1 },
@@ -134,7 +146,13 @@ describe("mailbox indexing controls", () => {
         name: "Enable indexing for personal@example.com",
       }),
     );
+    expect(save).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save indexing settings" }),
+    );
     expect(save).toHaveBeenCalledWith({
+      indexing_parallelism: 2,
+      indexing_documents_per_minute: 40,
       indexing_mailboxes: [
         { mailbox_id: sharedUuid, enabled: true, priority: 10 },
         { mailbox_id: personalUuid, enabled: true, priority: 0 },
@@ -150,7 +168,13 @@ describe("mailbox indexing controls", () => {
         name: "Enable indexing for personal@example.com",
       }),
     );
+    expect(save).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save indexing settings" }),
+    );
     expect(save).toHaveBeenCalledWith({
+      indexing_parallelism: 2,
+      indexing_documents_per_minute: 40,
       indexing_mailboxes: [
         {
           mailbox_id: personalUuid,
@@ -178,7 +202,13 @@ describe("mailbox indexing controls", () => {
         name: "Increase priority for shared@example.com",
       }),
     );
+    expect(save).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save indexing settings" }),
+    );
     expect(save).toHaveBeenCalledWith({
+      indexing_parallelism: 2,
+      indexing_documents_per_minute: 40,
       indexing_mailboxes: [
         disconnected,
         {
@@ -218,4 +248,71 @@ describe("mailbox indexing controls", () => {
     });
     await expectValidSavedConfiguration();
   });
+});
+
+it("retains drafts across polls and failed saves, then clears them after success", async () => {
+  const { rerender } = render(<SidecarIndexingControls />);
+  const checkbox = () =>
+    screen.getByRole("checkbox", {
+      name: "Enable indexing for personal@example.com",
+    });
+  fireEvent.click(checkbox());
+  fireEvent.change(
+    screen.getByRole("spinbutton", { name: "Indexing parallelism" }),
+    { target: { value: "5" } },
+  );
+  currentData.status.effectiveConfiguration.parallelism = 7;
+  rerender(<SidecarIndexingControls />);
+  expect(checkbox()).toBeChecked();
+  expect(
+    screen.getByRole("spinbutton", { name: "Indexing parallelism" }),
+  ).toHaveValue(5);
+  expect(screen.getAllByRole("listitem")[0]).toHaveTextContent("Disabled");
+  expect(save).not.toHaveBeenCalled();
+  save.mockRejectedValueOnce(new Error("offline"));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Save indexing settings" }),
+  );
+  await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+  expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+  expect(checkbox()).toBeChecked();
+  save.mockImplementationOnce(async () => {
+    currentData.status.configuration.user_configuration.indexing_mailboxes[1].enabled =
+      true;
+    currentData.status.effectiveConfiguration.parallelism = 5;
+  });
+  fireEvent.click(
+    screen.getByRole("button", { name: "Save indexing settings" }),
+  );
+  await waitFor(() =>
+    expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument(),
+  );
+  expect(checkbox()).toBeChecked();
+  expect(
+    screen.getByRole("spinbutton", { name: "Indexing parallelism" }),
+  ).toHaveValue(5);
+});
+
+it("resets only after confirmation and hides reset on older sidecars", () => {
+  const reset = vi.fn();
+  vi.mocked(useSidecarIndexing).mockReturnValue({
+    ...vi.mocked(useSidecarIndexing)(),
+    reset,
+    resetSupported: true,
+  });
+  const { rerender } = render(<SidecarIndexingControls />);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Reset sidecar indices" }),
+  );
+  expect(reset).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Confirm action" }));
+  expect(reset).toHaveBeenCalledOnce();
+  vi.mocked(useSidecarIndexing).mockReturnValue({
+    ...vi.mocked(useSidecarIndexing)(),
+    resetSupported: false,
+  });
+  rerender(<SidecarIndexingControls />);
+  expect(
+    screen.queryByRole("button", { name: "Reset sidecar indices" }),
+  ).not.toBeInTheDocument();
 });

@@ -16,7 +16,12 @@ interface IndexingData {
 
 type SidecarIndexingState = UseQueryResult<IndexingData, Error> & {
   supported: boolean;
-  save: (patch: Partial<SidecarConfiguration>) => void;
+  save: (patch: Partial<SidecarConfiguration>) => Promise<void>;
+  reset: () => void;
+  resetSupported: boolean;
+  resetting: boolean;
+  resetError: Error | null;
+  resetSucceeded: boolean;
   saving: boolean;
   saveError: Error | null;
 };
@@ -63,10 +68,24 @@ export function useSidecarIndexing(): SidecarIndexingState {
       await queryClient.invalidateQueries({ queryKey });
     },
   });
+  const resetMutation = useMutation({
+    mutationFn: async () => {
+      if (!client) throw new Error("Sidecar unavailable");
+      await client.invoke("indexing.reset.v1", {});
+    },
+    onSettled: async () => {
+      await queryClient.invalidateQueries({ queryKey });
+    },
+  });
   return {
     ...query,
+    reset: resetMutation.mutate,
+    resetSupported: !!client?.supports("indexing.reset.v1"),
+    resetting: resetMutation.isPending,
+    resetError: resetMutation.error,
+    resetSucceeded: resetMutation.isSuccess,
     supported,
-    save: mutation.mutate,
+    save: mutation.mutateAsync,
     saving: mutation.isPending,
     saveError: mutation.error,
   };
