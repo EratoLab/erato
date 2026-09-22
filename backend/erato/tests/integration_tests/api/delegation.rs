@@ -8391,6 +8391,263 @@ async fn a_running_task_is_persisted_at_its_slot_before_it_finishes(pool: Pool<P
     assert_eq!(task_parts[0]["output"]["reason"], "timeout");
 }
 
+/// The sweep, proven against the bytes a real dispatch writes rather than a
+/// fixture someone typed.
+///
+/// `a_running_task_is_persisted_at_its_slot_before_it_finishes` shows the
+/// launch commit leaves an `in_progress` slot carrying `output.status:
+/// "working"`. What it cannot show is what becomes of that slot when the
+/// process that owed it an answer never comes back — the exit that would have
+/// settled it is precisely the one a crash skips.
+///
+/// So: drive the same real dispatch, lift the placeholder the server actually
+/// persisted straight out of `raw_message`, replant it under a chat whose
+/// lease has gone stale (the state a killed replica leaves behind) and assert
+/// the cleanup tick ends it. The live turn running alongside is the control:
+/// a real generation, mid-flight, that the sweep must not touch.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_placeholder_a_real_dispatch_wrote_is_settled_by_the_sweep(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&["CRASH-SHAPE-BRIEF"], &[]));
+        mock_llm_sse_response(
+            then,
+            vec![
+                BodyAction::Delay(std::time::Duration::from_secs(30)),
+                BodyAction::Bytes("data: [DONE]\n\n".into()),
+            ],
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["crash shape question"],
+                &["CRASH-SHAPE-BRIEF"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_crash_shape",
+                "delegate_task",
+                json!({ "task": "CRASH-SHAPE-BRIEF: stall", "facet_ids": ["plan"] }),
+            )]),
+        );
+    });
+
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        config.delegation.run_timeout_seconds = 5;
+    })
+    .await;
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server_addr = listener.local_addr().unwrap();
+    let app: Router = erato::server::router::router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    let client = reqwest::Client::new();
+    let base_url = format!("http://{server_addr}");
+    let create_response = client
+        .post(format!("{base_url}/api/v1beta/me/chats"))
+        .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap();
+    let chat_id = create_response.json::<Value>().await.unwrap()["chat_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let origin_id = Uuid::parse_str(&chat_id).unwrap();
+
+    let streaming = tokio::spawn({
+        let client = client.clone();
+        let base_url = base_url.clone();
+        let chat_id = chat_id.clone();
+        async move {
+            client
+                .post(format!("{base_url}/api/v1beta/me/messages/submitstream"))
+                .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+                .json(&json!({
+                    "existing_chat_id": chat_id,
+                    "user_message": "crash shape question",
+                    "input_files_ids": [],
+                    "selected_facet_ids": ["plan"],
+                }))
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap()
+        }
+    });
+
+    // Read the durable column, not the API projection: `raw_message` is what
+    // the sweep scans, so `raw_message` is what has to be proven.
+    let mut committed = None;
+    for _ in 0..40 {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        let rows = erato::db::entity::messages::Entity::find()
+            .filter(erato::db::entity::messages::Column::ChatId.eq(origin_id))
+            .all(&app_state.db)
+            .await
+            .unwrap();
+        let found = rows.iter().find(|row| {
+            row.raw_message["content"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|part| {
+                    part["content_type"] == "tool_use"
+                        && part["status"] == "in_progress"
+                        && part["output"]["status"] == "working"
+                })
+        });
+        if let Some(row) = found {
+            committed = Some(row.raw_message.clone());
+            break;
+        }
+    }
+    let committed = committed.expect("the real dispatch must commit a running slot to the row");
+
+    let origin = erato::db::entity::chats::Entity::find_by_id(origin_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("origin chat");
+
+    // The crash: the same bytes, under a lease nobody is refreshing any more.
+    let stale: sea_orm::prelude::DateTimeWithTimeZone =
+        (chrono::Utc::now() - chrono::Duration::seconds(600)).into();
+    let now: sea_orm::prelude::DateTimeWithTimeZone = chrono::Utc::now().into();
+    let crashed_chat = Uuid::new_v4();
+    erato::db::entity::chats::ActiveModel {
+        id: ActiveValue::Set(crashed_chat),
+        owner_user_id: ActiveValue::Set(origin.owner_user_id.clone()),
+        generation_state: ActiveValue::Set(Some("errored".to_string())),
+        generation_started_at: ActiveValue::Set(Some(stale)),
+        generation_heartbeat_at: ActiveValue::Set(Some(stale)),
+        created_at: ActiveValue::Set(now),
+        updated_at: ActiveValue::Set(now),
+        ..Default::default()
+    }
+    .insert(&app_state.db)
+    .await
+    .expect("insert crashed chat");
+
+    let crashed_message = Uuid::new_v4();
+    erato::db::entity::messages::ActiveModel {
+        id: ActiveValue::Set(crashed_message),
+        chat_id: ActiveValue::Set(crashed_chat),
+        raw_message: ActiveValue::Set(committed.clone()),
+        created_at: ActiveValue::Set(now),
+        updated_at: ActiveValue::Set(now),
+        is_message_in_active_thread: ActiveValue::Set(true),
+        ..Default::default()
+    }
+    .insert(&app_state.db)
+    .await
+    .expect("insert crashed message");
+
+    let cleanup_args = erato::actors::cleanup_worker::CleanupWorkerArgs {
+        db: app_state.db.clone(),
+        cleanup_enabled: false,
+        cleanup_archived_max_age_days: 30,
+        delegated_run_auto_archive_after_days: 0,
+        generation_stale_after_secs: app_state.config.generation_status.stale_after_secs,
+        result_max_chars: app_state.config.delegation.result_max_chars,
+    };
+    let tick = || erato::actors::cleanup_worker::run_cleanup_tick(&cleanup_args);
+    let part_of = async |message_id: Uuid| -> Value {
+        erato::db::entity::messages::Entity::find_by_id(message_id)
+            .one(&app_state.db)
+            .await
+            .unwrap()
+            .expect("message")
+            .raw_message["content"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|part| part["content_type"] == "tool_use")
+            .cloned()
+            .expect("the tool part survives")
+    };
+
+    // First tick, with the child this slot names still genuinely running. A
+    // crash takes the child down with the parent, so a child that is still
+    // writing is evidence the slot is not orphaned at all — and the guard has
+    // a real live run to prove itself against, not a synthetic one.
+    tick().await.expect("tick must not fail");
+    assert_eq!(
+        part_of(crashed_message).await["status"],
+        "in_progress",
+        "a slot whose child is still writing must survive the sweep"
+    );
+
+    // Let the run finish, which is the state a killed replica leaves: the
+    // parent's exit never settled the slot, and the child is not writing
+    // either. The placeholder bytes under test are still the ones the real
+    // dispatch committed mid-flight.
+    streaming.await.unwrap();
+
+    tick().await.expect("tick must not fail");
+
+    let settled = erato::db::entity::messages::Entity::find_by_id(crashed_message)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("crashed message")
+        .raw_message;
+    let settled_part = settled["content"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|part| part["content_type"] == "tool_use")
+        .cloned()
+        .expect("the tool part survives the settle");
+    assert_ne!(
+        settled_part["status"], "in_progress",
+        "the sweep must end a slot the real dispatch left running: {settled_part}"
+    );
+    assert_eq!(settled_part["output"]["status"], "cancelled");
+    assert_eq!(settled_part["output"]["reason"], "interrupted");
+    assert!(
+        settled_part["output"]["child_run_id"].is_string(),
+        "a run that had started keeps the child it started: {settled_part}"
+    );
+
+    // The control: a real generation was in flight throughout. Whatever it
+    // ends as, it must not be wearing the sweep's reason.
+    let origin_rows = erato::db::entity::messages::Entity::find()
+        .filter(erato::db::entity::messages::Column::ChatId.eq(origin_id))
+        .all(&app_state.db)
+        .await
+        .unwrap();
+    for row in &origin_rows {
+        for part in row.raw_message["content"].as_array().into_iter().flatten() {
+            assert_ne!(
+                part["output"]["reason"], "interrupted",
+                "the sweep reached into a live turn: {part}"
+            );
+        }
+    }
+}
+
 /// The index a task call announces is the index it settles at. The frontend
 /// splices a proposal in at `content_index` and then matches updates by
 /// `tool_call_id`, so a settle that appended instead of overwriting would
