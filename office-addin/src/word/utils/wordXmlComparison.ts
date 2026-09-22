@@ -57,8 +57,17 @@ const ON_OFF_PROPERTIES = new Set([
   "titlePg",
   "evenAndOddHeaders",
 ]);
-const elements = (node: Document | Element, ns: string, name: string) =>
-  Array.from(node.getElementsByTagNameNS(ns, name));
+export function wordXmlElements(
+  node: Document | Element,
+  ns: string,
+  name: string,
+): Element[] {
+  const matches = node.getElementsByTagNameNS(ns, name);
+  // jsdom rescans named properties on each live-collection lookup, including length.
+  const length = matches.length;
+  const item = matches.item.bind(matches);
+  return Array.from({ length }, (_, index) => item(index)!);
+}
 
 function relationshipOwner(path: string): string {
   if (path === "/_rels/.rels") return "";
@@ -100,7 +109,7 @@ export interface WordXmlComparison {
 
 export function createWordXmlComparison(doc: Document): WordXmlComparison {
   const parts = new Map(
-    elements(doc, PKG, "part").map((part) => [
+    wordXmlElements(doc, PKG, "part").map((part) => [
       part.getAttributeNS(PKG, "name") ?? "",
       part,
     ]),
@@ -108,7 +117,7 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
   const roots = new Map<string, Element>();
   if (!parts.size) roots.set("/word/document.xml", doc.documentElement);
   for (const [path, part] of parts) {
-    const root = elements(part, PKG, "xmlData")[0]?.firstElementChild;
+    const root = wordXmlElements(part, PKG, "xmlData")[0]?.firstElementChild;
     if (root) roots.set(path, root);
   }
   const relationships = new Map<string, Map<string, Element>>();
@@ -144,14 +153,14 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
   for (const [path, root] of roots) {
     const ids = new Map<string, number | null>();
     // MS-DOCX 2.2.4 defines paraId on both paragraphs and table rows.
-    elements(root, W, "*")
+    wordXmlElements(root, W, "*")
       .filter((e) => ["p", "tr"].includes(e.localName))
       .forEach((p, index) => {
         const id = p.getAttributeNS(W14, "paraId");
         if (id) ids.set(id, ids.has(id) ? null : index);
       });
     paragraphIds.set(path, ids);
-    for (const element of [root, ...elements(root, "*", "*")])
+    for (const element of [root, ...wordXmlElements(root, "*", "*")])
       for (const attribute of Array.from(element.attributes)) {
         if (
           ["anchorId", "editId"].includes(attribute.localName) &&
@@ -181,7 +190,7 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
       : JSON.stringify(["unresolved-paragraph", id]);
   };
   const partCache = new Map<string, string>();
-  const defaultParagraphStyle = elements(doc, W, "style")
+  const defaultParagraphStyle = wordXmlElements(doc, W, "style")
     .find(
       (s) =>
         s.getAttributeNS(W, "type") === "paragraph" &&
@@ -191,7 +200,7 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
   const activeParts = new Set<string>();
   const numberingRoot = roots.get("/word/numbering.xml");
   const abstracts = new Map(
-    (numberingRoot ? elements(numberingRoot, W, "abstractNum") : []).map(
+    (numberingRoot ? wordXmlElements(numberingRoot, W, "abstractNum") : []).map(
       (element) => [element.getAttributeNS(W, "abstractNumId"), element],
     ),
   );
@@ -443,7 +452,7 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
     const part = parts.get(path);
     if (!part) return "missing-part";
     activeParts.add(path);
-    const binary = elements(part, PKG, "binaryData")[0];
+    const binary = wordXmlElements(part, PKG, "binaryData")[0];
     const root = roots.get(path);
     const result =
       (part.getAttributeNS(PKG, "contentType") ?? "") +
@@ -466,7 +475,7 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([path, part]) => {
               const root = roots.get(path);
-              const binary = elements(part, PKG, "binaryData")[0];
+              const binary = wordXmlElements(part, PKG, "binaryData")[0];
               return (
                 JSON.stringify([
                   path,

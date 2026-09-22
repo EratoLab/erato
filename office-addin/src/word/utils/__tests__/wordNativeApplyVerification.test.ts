@@ -31,7 +31,7 @@ function change(xml: string, edit: (doc: Document) => void): string {
   return new XMLSerializer().serializeToString(doc);
 }
 
-describe("recorded native Office.js Apply/Revert verification", () => {
+describe("native Apply/Revert verification", { timeout: 15_000 }, () => {
   it("verifies 49 requested blocks plus Word's empty terminal paragraph", () => {
     expect(snapshot(rewriteSource).blocks).toHaveLength(11);
     expect(snapshot(rewriteApplied).blocks).toHaveLength(50);

@@ -348,7 +348,10 @@ export function sameWordPreservedParts(before: string, after: string): boolean {
     if (!remaining) return false;
     definitions.set(key, remaining - 1);
   }
-  const signature = (doc: Document, original: string) =>
+  const signature = (
+    doc: Document,
+    contentSignature: ReturnType<typeof createNativeContentSignature>,
+  ) =>
     [...parts(doc)]
       .filter(
         ([p]) =>
@@ -360,29 +363,25 @@ export function sameWordPreservedParts(before: string, after: string): boolean {
         const root = part.getElementsByTagNameNS(PKG, "xmlData")[0]
           ?.firstElementChild;
         return root
-          ? nativeContentSignature(
-              new XMLSerializer().serializeToString(root),
-              original,
-              path,
-            )
+          ? contentSignature(new XMLSerializer().serializeToString(root), path)
           : "";
       })
       .sort();
   if (
-    JSON.stringify(signature(a, before)) !== JSON.stringify(signature(b, after))
+    JSON.stringify(signature(a, beforeSignature)) !==
+    JSON.stringify(signature(b, afterSignature))
   )
     return false;
-  const section = (doc: Document, original: string) =>
+  const section = (
+    doc: Document,
+    contentSignature: ReturnType<typeof createNativeContentSignature>,
+  ) =>
     Array.from(wordMainBody(doc)?.children ?? [])
       .filter((e) => e.namespaceURI === W && e.localName === "sectPr")
-      .map((e) =>
-        nativeContentSignature(
-          new XMLSerializer().serializeToString(e),
-          original,
-        ),
-      );
+      .map((e) => contentSignature(new XMLSerializer().serializeToString(e)));
   return (
-    JSON.stringify(section(a, before)) === JSON.stringify(section(b, after))
+    JSON.stringify(section(a, beforeSignature)) ===
+    JSON.stringify(section(b, afterSignature))
   );
 }
 

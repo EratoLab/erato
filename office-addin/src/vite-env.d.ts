@@ -1,6 +1,12 @@
 /// <reference types="vite/client" />
 /// <reference types="office-js" />
 
+declare module "*.po" {
+  import type { Messages } from "@lingui/core";
+
+  export const messages: Messages;
+}
+
 interface ImportMetaEnv {
   readonly VITE_MSAL_CLIENT_ID?: string;
   readonly VITE_MSAL_AUTHORITY?: string;

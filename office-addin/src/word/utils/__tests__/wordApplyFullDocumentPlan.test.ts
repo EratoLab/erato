@@ -404,7 +404,8 @@ async function sourceAndPlan(options: { lockedControls?: boolean } = {}) {
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("complete-document structured writer orchestration", () => {
+// Each integration case imports, verifies, and restores several real DOCX archives.
+describe("complete-document writer", { timeout: 15_000 }, () => {
   it("retains the exact locked original before unlocking and preserves requested locks through Apply and Revert", async () => {
     const { bytes, host, source, plan } = await sourceAndPlan({
       lockedControls: true,

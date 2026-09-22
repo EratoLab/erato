@@ -9,7 +9,7 @@ export default defineConfig({
         plugins: ["@lingui/babel-plugin-lingui-macro"],
       },
     }),
-    lingui(),
+    lingui({ configPath: "../frontend/lingui.config.ts" }),
   ],
   test: {
     environment: "jsdom",

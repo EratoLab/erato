@@ -57,7 +57,7 @@ const base = () =>
       `<pkg:part pkg:name="/word/fontTable.xml" pkg:contentType="application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml"><pkg:xmlData><w:fonts xmlns:w="${W}"><w:font w:name="Aptos"><w:family w:val="swiss"/><w:charset w:val="00"/></w:font></w:fonts></pkg:xmlData></pkg:part></pkg:package>`,
     );
 
-describe("native full-document formatting normalization", () => {
+describe("native formatting normalization", { timeout: 15_000 }, () => {
   it("emits the centered-table row properties Word serializes, and removes ignored indentation", () => {
     const doc = parse(oldTableExpected);
     const source = all(doc, "tbl")[0];

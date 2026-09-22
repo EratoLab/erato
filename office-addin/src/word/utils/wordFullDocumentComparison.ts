@@ -6,7 +6,10 @@ import {
 import { normalizeWordInlineForComparison } from "./wordInlineStructures";
 import { normalizeWordMediaForComparison } from "./wordMediaComparison";
 import { normalizeWordTablesForComparison } from "./wordTableComparison";
-import { createWordXmlComparison } from "./wordXmlComparison";
+import {
+  createWordXmlComparison,
+  wordXmlElements as all,
+} from "./wordXmlComparison";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -19,8 +22,6 @@ const CID = "http://schemas.microsoft.com/office/word/2016/wordml/cid";
 const WP14 =
   "http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing";
 const XMLNS = "http://www.w3.org/2000/xmlns/";
-const all = (root: Document | Element, ns: string, local: string) =>
-  Array.from(root.getElementsByTagNameNS(ns, local));
 const direct = (root: Element | undefined, local: string) =>
   Array.from(root?.children ?? []).find(
     (e) => e.namespaceURI === W && e.localName === local,

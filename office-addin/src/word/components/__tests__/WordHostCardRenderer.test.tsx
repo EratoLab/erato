@@ -1,4 +1,4 @@
-import { i18n, type Messages } from "@lingui/core";
+import { i18n } from "@lingui/core";
 import {
   act,
   cleanup,
@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { messages as frontendMessages } from "../../../../../frontend/src/locales/en/messages.json";
+import { messages as frontendMessages } from "../../../../../frontend/src/locales/en/messages.po";
 import { TestTheme } from "../../../test/helpers/TestTheme";
 import {
   installMockWordDocument,
@@ -176,7 +176,7 @@ describe("WordHostCardRenderer", () => {
   let word: MockWordHost;
 
   beforeEach(() => {
-    i18n.load("en", frontendMessages as unknown as Messages);
+    i18n.load("en", frontendMessages);
     i18n.activate("en");
     word = installMockWordDocument(PARAGRAPHS.map((text) => ({ text })));
   });
