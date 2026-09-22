@@ -94,7 +94,6 @@ describe("useWordDocumentCaptures", () => {
     );
 
     act(() => result.current.stagePendingCapture(capture("doc-a")));
-    // A chip-off send: nothing must be promoted onto its reply.
     act(() => result.current.hostCallbacks.beforeSend?.(null));
     rerender(streaming);
     rerender(complete);
@@ -109,7 +108,6 @@ describe("useWordDocumentCaptures", () => {
     );
 
     act(() => result.current.stagePendingCapture(capture("doc-a")));
-    // null -> "chat-1" is the same conversation continuing, not a switch.
     rerender(streaming);
     rerender(complete);
 
@@ -141,8 +139,6 @@ describe("useWordDocumentCaptures", () => {
     rerender(streaming);
     rerender(complete);
 
-    // An edit replays the ORIGINAL document, so the stamp comes from the
-    // assistant message that answered the edited user message.
     act(() => result.current.hostCallbacks.beforeEdit?.("u1"));
     const afterEdit: Snapshot = {
       currentChatId: "chat-1",
@@ -192,8 +188,6 @@ describe("useWordDocumentCaptures", () => {
       { initialProps: empty },
     );
 
-    // No capture was ever promoted: an in-memory map is empty after a reload,
-    // and ERMAIN-822 must then fail closed rather than write blind.
     act(() => result.current.hostCallbacks.beforeEdit?.("u1"));
     rerender(streaming);
     rerender(complete);

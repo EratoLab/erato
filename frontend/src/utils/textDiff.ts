@@ -9,8 +9,7 @@ export function textDiff(
   proposed: string,
 ): TextChange[] | null {
   if (original === proposed) return [{ kind: "same", text: original }];
-  // Bound both tokenization and the quadratic comparison. Dense/large edits
-  // use the complete Original / Proposed views instead of freezing the pane.
+  // Bound the quadratic comparison so large edits cannot freeze the task pane.
   if (original.length + proposed.length > 80_000) return null;
   const tokenize = (text: string) =>
     text.match(/\r\n|[\r\n\t]| +|[^\s]+|\s/gu) ?? [];

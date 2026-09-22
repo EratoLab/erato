@@ -169,12 +169,7 @@ export function buildMcpToolsSection({
           message: "Allow write operations",
         }),
         description: pausesHostActions
-          ? // Host-neutral on purpose: every Office.js host that proposes
-            // actions of its own inherits this one string through the shared
-            // composer, so naming Outlook (or its Reply and Send buttons)
-            // would be wrong in a Word or Teams pane. The id moved with the
-            // wording so the existing de/fr/es/pl translations — which all
-            // name Outlook — are re-translated rather than silently kept.
+          ? // A new Lingui ID avoids reusing translations that name Outlook.
             t({
               id: "chatInput.connectors.allowWrites.descriptionHostActions",
               message:

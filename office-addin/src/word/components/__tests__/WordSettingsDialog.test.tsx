@@ -6,9 +6,6 @@ import { WordSettingsDialog } from "../WordSettingsDialog";
 
 import type { AddinSettingsHostContribution } from "../../../core/AddinSettingsDialogCore";
 
-// The shared dialog is exercised by its own suite; what matters here is WHAT
-// Word contributes to it, so the dialog is replaced by a probe that renders
-// the contribution and records its shape.
 let contribution: AddinSettingsHostContribution | undefined;
 
 vi.mock("../../../core/AddinSettingsDialogCore", () => ({
@@ -104,8 +101,6 @@ describe("WordSettingsDialog", () => {
   it("uses Word copy that never claims a later send-time gate", () => {
     render(<WordSettingsDialog isOpen={true} onClose={() => {}} />);
 
-    // Outlook's copy promises "nothing is sent until you press Send"; a Word
-    // grant writes immediately, so the copy must name the real safety net.
     expect(screen.queryByText(/press Send in Outlook/)).toBeNull();
     expect(
       screen.getAllByText(/write into the open document straight away/).length,

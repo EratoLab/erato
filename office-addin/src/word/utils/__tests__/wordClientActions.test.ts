@@ -51,8 +51,6 @@ describe("the Word client-action registry", () => {
   });
 
   it("gives all actions distinct auto-prompt scopes", () => {
-    // The slot is consumed on first evaluation whatever the verdict, so a
-    // shared scope would let one card suppress the other's prompt.
     const scopes = [...WORD_CLIENT_ACTIONS.values()].map(
       (entry) => entry.promptScope,
     );
@@ -61,8 +59,6 @@ describe("the Word client-action registry", () => {
 
   it("derives membership from the registry", () => {
     expect(isImplementedClientAction("word.apply_edits")).toBe(true);
-    // A historical OOXML message or stale server advertisement cannot reactivate
-    // the parked experiment on this structured-authoring branch.
     expect(isImplementedClientAction("word.apply_ooxml_package")).toBe(false);
     expect(wordActionForFence("erato-word-ooxml")).toBeUndefined();
     expect(
@@ -70,9 +66,7 @@ describe("the Word client-action registry", () => {
         "word.apply_ooxml_package",
       ]),
     ).toEqual([]);
-    // v2, deliberately absent.
     expect(isImplementedClientAction("word.replace_selection")).toBe(false);
-    // Another host's action must never be claimed by this one.
     expect(isImplementedClientAction("outlook.reply")).toBe(false);
   });
 
@@ -119,8 +113,6 @@ describe("offerable actions", () => {
   });
 
   it("additionally gates on the facet the registry entry names", () => {
-    // Advertised, implemented — but on the wrong facet: an edits card must
-    // never appear on a compose answer.
     expect(
       offerableWordClientActionsForFacet("word_compose", ["word.apply_edits"]),
     ).toEqual([]);

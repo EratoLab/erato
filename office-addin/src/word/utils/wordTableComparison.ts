@@ -41,9 +41,8 @@ function automaticLayout(doc: Document, table: Element): boolean {
   return true;
 }
 
-/** Normalize a disposable comparison copy, never the captured document or its
- * compare-and-swap fingerprint. Word recomputes AutoFit grid positions after a
- * section changes width while retaining all authored cell-width constraints. */
+/** Word recomputes AutoFit grids after section-width changes while retaining cell-width constraints.
+ * Normalize only a comparison copy, never the capture or its stale-state fingerprint. */
 export function normalizeWordTablesForComparison(doc: Document): void {
   for (const name of ["tblBorders", "tcBorders"])
     for (const borders of doc.getElementsByTagNameNS(W, name)) {

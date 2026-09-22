@@ -460,8 +460,7 @@ function MarkdownCode({
   }
 
   if (isBlockCode && rules.isHostCardLanguage(language)) {
-    // A persisted, accepted submission is the authoritative draft. A model
-    // that also echoes its old fence must not produce two actionable cards.
+    // An accepted submission replaces the echoed fence to avoid a second actionable card.
     if (artifact?.submittedCard?.language === language) return null;
     return <HostCardBlock language={language} content={codeContent} />;
   }

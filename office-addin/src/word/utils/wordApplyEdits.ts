@@ -10,32 +10,15 @@ import type { WordEdit, WordEditOutcome } from "./wordEditPlan";
 import type { WordReviewAnchor } from "./wordReviewLocation";
 
 export interface WordApplyResult {
-  /** One line per edit, in the order the model wrote them. */
   outcomes: WordEditOutcome[];
-  /**
-   * Original body OOXML, retained before a write and returned even if it fails.
-   * Office.js may apply some commands before rejecting the batch, so failures
-   * also need recovery. Null if no snapshot was acquired; pane memory only.
-   */
+  /** Preserve the backup after a rejected batch: earlier queued writes may already have applied. */
   snapshotOoxml: string | null;
-  /** True when the host was unreachable or the batch threw. */
   hostFailed: boolean;
-  /** Exact post-write locations, when the entire resulting span is known. */
   resultAnchors?: ReadonlyMap<number, WordReviewAnchor>;
 }
 
-/**
- * Verify send-time text, snapshot the body, then write by stable paragraph ID
- * in descending document order. Newlines can change collection indexes.
- *
- * Load IDs as a collection: resolving a deleted ID directly would abort the
- * entire sync instead of reporting that target as changed. Take no snapshot
- * when no edits survive verification. Attempt result anchors after writing.
- *
- * writeReplacement retains the first paragraph and delegates formatting
- * inheritance to Word; jsdom cannot verify that native behavior. A rejected
- * write reports its queued edits as failed, preserving prior skipped outcomes.
- */
+/** Load IDs as a collection: resolving a deleted ID directly rejects the whole sync.
+ * Apply last-to-first because inserted paragraphs shift collection positions. */
 export async function applyWordEdits(args: {
   edits: readonly WordEdit[];
   capture: WordDocumentCapture;
@@ -76,9 +59,6 @@ export async function applyWordEdits(args: {
           edit.targets.map((target) => target.uniqueLocalId),
         ),
       );
-      // Spelled through `ReturnType` rather than `OfficeExtension.ClientResult`
-      // so the file names only the `Word` namespace, the one global the lint
-      // config declares.
       const pending = new Map<string, ReturnType<Word.Paragraph["getText"]>>();
       for (const paragraph of paragraphs.items) {
         if (targetIds.has(paragraph.uniqueLocalId)) {
@@ -89,8 +69,6 @@ export async function applyWordEdits(args: {
 
       const currentTextById = new Map<string, string | null>();
       for (const id of targetIds) {
-        // An id with no live paragraph resolves to null, which no send-time
-        // text can equal — the user deleted it, so the edit is "changed".
         currentTextById.set(id, pending.get(id)?.value ?? null);
       }
 
@@ -110,9 +88,6 @@ export async function applyWordEdits(args: {
         };
       }
 
-      // Scoped so the catch below can hand the snapshot back: a rejected write
-      // sync is precisely when Revert matters, because the host may have
-      // applied part of the batch before the command that failed.
       let snapshotOoxml: string | null = null;
       try {
         const snapshot = context.document.body.getOoxml();
@@ -146,9 +121,6 @@ export async function applyWordEdits(args: {
         };
       }
 
-      // Bounded v1 result navigation: only a single surviving paragraph with
-      // exact replacement text. Range/newline results stay explicitly unavailable.
-      // A read failure here never changes a confirmed write into a failed write.
       const resultAnchors = new Map<number, WordReviewAnchor>();
       try {
         const candidates = verified.applicable.filter(
@@ -178,7 +150,7 @@ export async function applyWordEdits(args: {
           }
         }
       } catch {
-        /* The review remains available even when location is not. */
+        // Navigation failure must not change the successful write result.
       }
 
       return {
@@ -217,13 +189,7 @@ export async function applyWordEdits(args: {
   }
 }
 
-/**
- * The ONLY mutating call in the edit path (D-31's single point of change).
- *
- * The span's trailing paragraphs are removed first and the head paragraph is
- * replaced last, so the head — the one whose style the result inherits — is
- * touched once and the removals cannot disturb it.
- */
+/** Delete trailing paragraphs first, then replace the head to retain its style. */
 function writeReplacement(
   context: Word.RequestContext,
   targets: readonly { uniqueLocalId: string }[],
@@ -236,20 +202,11 @@ function writeReplacement(
   }
   context.document
     .getParagraphByUniqueLocalId(targets[0].uniqueLocalId)
-    // String literal rather than `Word.InsertLocation.replace`: the enum is a
-    // RUNTIME member of the Office.js `Word` namespace, so reaching for it
-    // would couple the executor to the full office.js bundle being loaded.
-    // The typings accept the literal and it is what crosses the wire anyway.
+    // Word.InsertLocation is a runtime SDK object; use its literal value.
     .insertText(text, "Replace");
 }
 
-/**
- * Restore the body from the one pre-batch snapshot.
- *
- * Whole-body replace: the snapshot is the whole body, and a partial restore
- * would have to re-locate paragraphs that the batch itself moved. The caller
- * owns the single-use rule and the identity gate.
- */
+/** Restore the whole body because inserted newlines invalidate the original paragraph positions. */
 export async function revertWordEdits(snapshotOoxml: string): Promise<boolean> {
   const word = wordWriteHost();
   if (!word) return false;

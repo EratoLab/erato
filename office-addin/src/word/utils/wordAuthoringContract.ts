@@ -1,6 +1,4 @@
-/** Public wire vocabulary and validation constraints for this host.
- * Behavioral instructions are supplied by deployment-owned facet configuration.
- */
+/** Protocol vocabulary belongs here; model behavior instructions come from deployment configuration. */
 export const WORD_AUTHORING_CONTRACT = {
   version: 1,
   plan: "{version:1,snapshot,readToken,scope:'body'|'document',entries:[keep|replace|insert],deleted?:[{source:[refs],reason}],stories?:[],sections?:[]}; omitted deleted means []. Source coverage must still be complete.",

@@ -1,8 +1,6 @@
 import { wordMainBody, WORD_NS } from "./wordNativeContent";
 
-/** Word's file importer can materialize one space when importing an otherwise
- * empty document. Remove only this observed placeholder, never user whitespace,
- * keeping the paragraph formatting and final section supplied by the file. */
+/** Word may insert a space for an empty file. Remove only this placeholder, preserving user whitespace. */
 export async function finishWordEmptyDocumentImport(
   context: Word.RequestContext,
   expectedOoxml: string,

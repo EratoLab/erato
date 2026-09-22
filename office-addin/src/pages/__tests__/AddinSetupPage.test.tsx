@@ -76,10 +76,7 @@ describe("AddinSetupRoute Word branch", () => {
     }
   });
 
-  /**
-   * Every manifest URL fetched so far. `I18nProvider` fetches locale catalogs
-   * through the same global, so the raw call count is not the manifest count.
-   */
+  /** Locale catalogs share the fetch mock, so raw call counts include non-manifest requests. */
   function fetchedManifests(): string[] {
     return vi
       .mocked(globalThis.fetch)
@@ -87,7 +84,6 @@ describe("AddinSetupRoute Word branch", () => {
       .filter((url) => url.includes("manifest"));
   }
 
-  /** Selects Word and waits for the manifest refetch it triggers. */
   async function selectWord() {
     render(<AddinSetupRoute />);
     await waitFor(() => expect(fetchedManifests()).toHaveLength(1));
@@ -108,7 +104,6 @@ describe("AddinSetupRoute Word branch", () => {
     );
   });
 
-  /** Makes `handleDownload` observable: returns the anchor it will click. */
   function stubDownload(): HTMLAnchorElement {
     vi.stubGlobal("URL", {
       ...URL,
@@ -149,8 +144,6 @@ describe("AddinSetupRoute Word branch", () => {
       screen.getByRole("button", { name: "Download manifest.xml" }),
     );
 
-    // The Exchange axis picks the manifest to FETCH; both variants are still
-    // uploaded as manifest.xml, which is what the on-screen copy says.
     expect(anchor.download).toBe("manifest.xml");
   });
 

@@ -14,14 +14,7 @@ import type { ContentPart } from "@erato/frontend/library";
 
 export { CLIENT_ACTION_TOOL_NAME } from "../../core/clientActions/proposedClientAction";
 
-/**
- * Fence tags the Word cards render. Each must be listed verbatim in
- * `HostArtifact.cardFenceLanguages` (see `buildWordArtifact`) or the fences
- * fall back to plain code blocks, and both must match the tags ERMAIN-820's
- * facet templates teach the model — EXACTLY. Matching is case-sensitive and
- * there is deliberately no drifted-tag rescue: the drift path in the frontend
- * is gated on `bodyFormat`, which neither Word facet declares.
- */
+/** Fence tags are case-sensitive and must match the renderer registration. */
 export const WORD_EDITS_FENCE = "erato-word-edits";
 export const WORD_PLAN_FENCE = "erato-word-document-plan";
 export const WORD_INSERT_FENCE = "erato-word-insert";
@@ -31,24 +24,17 @@ export type WordClientAction =
   | "word.insert_at_cursor"
   | "word.apply_document_plan";
 
-/** What an executor gets. */
 export interface WordClientActionContext {
-  /** The raw text inside this message's fence for the action. */
   fenceContent: string;
-  /** The send-time capture this message was stamped with. */
   capture: WordDocumentCapture;
   messageId?: string;
   /** Retain recovery before entering a structural write, even if it later fails. */
   onBeforeDocumentWrite?: (before: string) => void;
 }
 
-/** What an executor reports back. */
 export interface WordClientActionRun {
-  /** Whether the document was actually written to. */
   ok: boolean;
-  /** Per-edit report lines; a single-outcome action returns none. */
   outcomes: WordEditOutcome[];
-  /** Pre-batch body snapshot backing Revert; `null` when nothing was written. */
   snapshotOoxml: string | null;
   hostFailed?: boolean;
   documentPlanResult?: WordDocumentApplyResult;
@@ -57,34 +43,15 @@ export interface WordClientActionRun {
 
 export interface WordClientActionEntry {
   action: WordClientAction;
-  /**
-   * The facets this action may be offered on. The backend's advertised
-   * `client_actions` for the producing facet is the outer gate; this is the
-   * client's own statement of which facet each action belongs to, so a facet
-   * that advertises the wrong action can never surface it.
-   */
   facetIds: readonly string[];
-  /** The fence tag carrying this action's payload. */
   fenceLanguage: string;
-  /**
-   * Namespaces the once-per-message auto-prompt slot. Each action gets its own
-   * scope on purpose: the slot is consumed on first evaluation whatever the
-   * verdict, so a shared scope would let whichever card mounted first suppress
-   * the other's prompt for the same message.
-   */
+  /** Use a separate scope per action: evaluation consumes the one-shot prompt even when denied. */
   promptScope: string;
-  /**
-   * Called, not stored: `t()` resolves against the catalogue active at call
-   * time, so a label captured at module scope would freeze the first locale.
-   */
+  /** Evaluate labels at render time so locale changes take effect. */
   displayLabel: () => string;
   execute: (context: WordClientActionContext) => Promise<WordClientActionRun>;
 }
 
-/**
- * Single registry for action membership, labels, facet availability and
- * execution. Cards dispatch through each entry's execute function.
- */
 export const WORD_CLIENT_ACTIONS: ReadonlyMap<
   WordClientAction,
   WordClientActionEntry
@@ -172,7 +139,6 @@ export const WORD_CLIENT_ACTIONS: ReadonlyMap<
   ],
 ]);
 
-/** Registry order, fixed, and the order everything else displays in. */
 const REGISTRY_ORDER = [...WORD_CLIENT_ACTIONS.keys()];
 
 export function isImplementedClientAction(
@@ -181,16 +147,10 @@ export function isImplementedClientAction(
   return WORD_CLIENT_ACTIONS.has(action as WordClientAction);
 }
 
-/** Registry-derived label, shared by the card, the report and settings. */
 export function clientActionDisplayLabel(action: WordClientAction): string {
   return WORD_CLIENT_ACTIONS.get(action)!.displayLabel();
 }
 
-/**
- * The backend-advertised actions for a facet, intersected with the registry,
- * in registry order. Consumed by the settings surface, which iterates every
- * advertised facet and has no facet-level opinion of its own.
- */
 export function offerableWordClientActions(
   allowedActions: readonly string[] | undefined,
 ): WordClientAction[] {
@@ -200,12 +160,6 @@ export function offerableWordClientActions(
   return REGISTRY_ORDER.filter((action) => allowedActions.includes(action));
 }
 
-/**
- * {@link offerableWordClientActions} plus the registry's own facet gate: an
- * action is only ever offered on a facet its entry names. Both halves are
- * required — the advertised set is the security gate, the facet gate is the
- * client's guarantee that an edits card never appears on a compose answer.
- */
 export function offerableWordClientActionsForFacet(
   facetId: string | undefined,
   allowedActions: readonly string[] | undefined,
@@ -216,7 +170,6 @@ export function offerableWordClientActionsForFacet(
   );
 }
 
-/** The registry entry whose fence carries this tag, if any. */
 export function wordActionForFence(
   language: string,
 ): WordClientActionEntry | undefined {
@@ -226,11 +179,6 @@ export function wordActionForFence(
   return undefined;
 }
 
-/**
- * The Word binding of the host-neutral proposal validator. The validator is
- * never re-implemented here: the advertised-set check is the security-relevant
- * half and divergence between hosts is exactly what it exists to prevent.
- */
 export function extractProposedClientAction(
   content: ContentPart[] | undefined,
   allowedActions: readonly string[],

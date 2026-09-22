@@ -9,12 +9,7 @@ import {
 import type { WordDocumentArgs } from "../buildWordDocumentArgs";
 import type { WordActionFacetInput } from "../wordActionFacet";
 
-/**
- * The `allowed_args` ERMAIN-820 declares. `validate_action_facet` rejects any
- * key outside this list with a 400, and an omitted key reaches the model as a
- * literal `{{placeholder}}` — so the emitted set must match EXACTLY, not
- * merely be a subset.
- */
+/** Arguments must match the configured facet: extra keys fail validation; missing values leave placeholders. */
 const ALLOWED_ARGS: Record<string, string[]> = {
   [WORD_DOCUMENT_REVIEW_FACET_ID]: [
     "document_name",
@@ -100,7 +95,6 @@ describe("resolveWordActionFacet", () => {
   });
 
   it("never attaches a facet the backend does not advertise", () => {
-    // An unknown facet id hard-400s the whole send, before a chat row exists.
     expect(
       resolveWordActionFacet(
         input({ availableFacetIds: new Set([WORD_COMPOSE_FACET_ID]) }),
@@ -132,8 +126,6 @@ describe("resolveWordActionFacet", () => {
   });
 
   it("carries the document on every send, with no fingerprint de-dup", () => {
-    // Prior-turn facet context is stripped from replayed history, so an
-    // unchanged document must still ride the second turn.
     const first = resolveWordActionFacet(input());
     const second = resolveWordActionFacet(input());
     expect(first).toEqual(second);

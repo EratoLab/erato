@@ -67,7 +67,6 @@ describe("mixed document structural authoring", () => {
       "doc-A",
       "Off",
     );
-    // Add prose before the final section properties, as required by Word.
     const corrected = captureWordAuthoringSnapshot(
       mixedAuthoringXml().replace("<w:sectPr>", tail + "<w:sectPr>"),
       "doc-A",

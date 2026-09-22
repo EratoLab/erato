@@ -158,8 +158,7 @@ export function captureWordAuthoringSnapshot(
       return undefined;
     };
     const inventory = nativeBodyGroups(body);
-    // Full-file imports can temporarily unlock ordinary content controls after
-    // saving the original. The older body-only path cannot do this safely.
+    // Unlocking native content requires a full original file; a body-only backup cannot restore it.
     base.issueDetails = inventory.issues.filter(
       (issue) => !fullDocument || issue !== "locked-content-control",
     );
@@ -364,7 +363,6 @@ export function captureWordAuthoringSnapshot(
   return base;
 }
 
-/** Create a missing package part, maintaining its relationship to document.xml. */
 function ensurePart(doc: Document, name: "styles" | "numbering"): Element {
   const existing = all(doc, name)[0];
   if (existing) return existing;
@@ -431,7 +429,7 @@ function ensureHeading(doc: Document, level: number): string {
     existingIds.add(result.toLowerCase());
     return result;
   };
-  // Style IDs share one namespace across paragraph, character and table styles.
+  // All style types share one ID namespace.
   const headingId = allocateId(`Heading${level}`);
   const characterId = allocateId(`${headingId}Char`);
   const defaultStyleId = (type: string, conventional: string) => {
@@ -473,8 +471,7 @@ function ensureHeading(doc: Document, level: number): string {
     make(doc, "sz", String(Math.max(22, 36 - level * 2))),
   );
   style.append(props, runs);
-  // Word's built-in heading is a linked paragraph/character style. Emit both
-  // halves so native import does not have to complete the style definition.
+  // Linked heading styles require both the paragraph and character definitions.
   const character = make(doc, "style");
   character.setAttributeNS(W, "w:type", "character");
   character.setAttributeNS(W, "w:customStyle", "1");
@@ -532,7 +529,6 @@ function newList(doc: Document, ordered: boolean): string {
   return numId;
 }
 
-/** Deterministic typed output; never interpret model text as HTML/XML. */
 export function compileWordDocumentPlan(
   plan: WordDocumentPlan,
   snapshot: WordAuthoringSnapshot,
@@ -859,9 +855,8 @@ export function sameWordBodyContent(
   );
 }
 
-/** Body.insertOoxml can supply one empty terminal paragraph when the plan does
- * not end in one. This is a write-verification allowance only: fingerprints
- * still detect added/removed blank paragraphs before Apply or Revert. */
+/** Ignore Word’s empty terminal paragraph only during write verification.
+ * Snapshot identity must still observe it. */
 function verifiedBodyBlocks(
   expected: readonly { type: string; text: string }[],
   actual: WordSourceBlock[],

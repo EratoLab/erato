@@ -1,6 +1,5 @@
 import * as CFB from "cfb";
 
-/** Internal native DOCX transport. The model receives structured content, never XML. */
 export type WordDocumentParts = ReadonlyMap<string, Uint8Array>;
 export const MAX_WORD_DOCX_BYTES = 4 * 1024 * 1024;
 const MAX_EXPANDED_BYTES = 64 * 1024 * 1024;
@@ -51,8 +50,7 @@ export function readWordPackage(bytes: Uint8Array): WordDocumentParts {
   )
     throw new Error("Word document import supports DOCX files up to 4 MB.");
   inspectZipDirectory(bytes);
-  // CFB decorates its input buffer with reader state. Never mutate the captured
-  // original used for independent recovery.
+  // CFB mutates its input; copy the bytes to preserve the original recovery file.
   const zip = CFB.read(new Uint8Array(bytes), { type: "array" });
   const root = zip.FullPaths[0];
   const parts = new Map<string, Uint8Array>();
@@ -217,7 +215,6 @@ export function wordRelationshipTarget(owner: string, target: string): string {
   return result.join("/");
 }
 
-/** OPC integrity, not an invented vocabulary restricting Word content types. */
 export function validateWordPackage(parts: WordDocumentParts): void {
   for (const path of [
     "[Content_Types].xml",

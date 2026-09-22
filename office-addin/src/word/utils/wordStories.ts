@@ -56,7 +56,6 @@ export interface WordPageLayout {
 }
 export interface WordSectionPlan {
   id: string;
-  /** Clone an existing section's properties before applying requested changes. */
   source?: string;
   /** End this section after an output block. The last section omits after. */
   after?: string;
@@ -75,21 +74,17 @@ export interface WordStorySource {
   text: string;
   author?: string;
   initials?: string;
-  /** Host-only source needed to preserve native content and related assets. */
   xml: string;
   part: string;
   nativeId?: string;
-  /** Whether the source capture contains a live note/comment anchor. */
   anchored?: boolean;
 }
 export interface WordSectionSource {
-  /** Output/source body block containing this section's final paragraph. */
   afterBlock?: string;
   id: string;
   layout: WordPageLayout;
   headers: WordSectionStories;
   footers: WordSectionStories;
-  /** Ordinal of the paragraph containing this section's boundary, if any. */
   afterParagraph?: number;
   xml: string;
 }
@@ -619,7 +614,6 @@ function visibleText(root: Element): string {
     .join("");
 }
 
-/** Split only a native text run at an exact UTF-16 offset, preserving its marks. */
 function markerInParagraph(
   paragraph: Element,
   offset: number,
@@ -760,9 +754,8 @@ function addStoryAnchor(
   }
 }
 
-/** Never emit a style ID absent from the source's style inventory. Word drops
- * those dangling references on import. Annotation marker styles are native
- * formatting; comment body references retain the document's default size. */
+/** Word drops style references absent from the inventory.
+ * Annotation markers use native styles; comment bodies retain the default size. */
 function storyMarkerProperties(
   doc: Document,
   styleId: string,
@@ -809,8 +802,7 @@ export function compileWordStories(
         node.remove();
         stripReferences(doc, change.type, source.nativeId);
       } else {
-        // A blank explicit header/footer prevents inheritance from the preceding
-        // section, which removing its reference alone would accidentally enable.
+        // Removing a header/footer reference enables inheritance; an explicit blank part prevents it.
         node.replaceChildren(make(doc, "p"));
       }
       continue;
@@ -848,9 +840,7 @@ export function compileWordStories(
             special.setAttributeNS(W, "w:type", specialType);
             const p = make(doc, "p"),
               r = make(doc, "r");
-            // Word materializes these standard separator paragraphs when the
-            // first note part is imported. Emit their actual geometry up front;
-            // existing custom separators must keep their original formatting.
+            // Word materializes standard note-separator geometry on import; retain existing custom separators.
             const properties = make(doc, "pPr"),
               spacing = make(doc, "spacing");
             spacing.setAttributeNS(W, "w:after", "0");
@@ -872,8 +862,7 @@ export function compileWordStories(
           let noteProperties = child(settings, `${change.type}Pr`);
           if (!noteProperties) {
             noteProperties = make(doc, `${change.type}Pr`);
-            // CT_Settings places the two note settings immediately before
-            // compatibility settings; retain all preceding settings in place.
+            // CT_Settings orders note settings immediately before compatibility settings.
             const following = Array.from(settings.children).find(
               (e) =>
                 e.namespaceURI !== W ||
@@ -977,8 +966,7 @@ export function compileWordStories(
         addStoryAnchor(doc, change, nativeId, output);
       } else if (!source) addStoryAnchor(doc, change, nativeId, output);
     }
-    // New IDs are model labels, mapped only during this compile. Persisting an
-    // arbitrary model label as an OPC path or native numeric ID is unnecessary.
+    // Map model labels to native IDs during compilation; never use them directly as OPC paths.
     existing.set(change.id, {
       id: change.id,
       type: change.type,
@@ -994,7 +982,6 @@ export function compileWordStories(
 
 const storyAliases = new WeakMap<Document, Map<string, WordStorySource>>();
 
-/** Remove annotation bodies whose owning text was removed; reject dangling refs. */
 export function pruneWordStoryReferences(
   doc: Document,
   originalStories?: readonly WordStorySource[],
@@ -1060,8 +1047,7 @@ function orderSectionProperties(section: Element): void {
     "footnoteColumns",
     "sectPrChange",
   ];
-  // Microsoft Open XML's CT_SectPr sequence has a defined property order. Keep
-  // that order when adding a property so Word need not repair the new section.
+  // CT_SectPr requires property order; inserting out of order makes Word repair the section.
   const rank = (node: Element) => {
     const index = order.indexOf(node.localName);
     return index < 0 ? order.length : index;
@@ -1157,7 +1143,6 @@ function setLayout(
     throw new Error("Page margins must leave space for document content.");
 }
 
-/** Replace the complete boundary sequence; untouched section data is cloned. */
 export function compileWordSections(
   doc: Document,
   sections: readonly WordSectionPlan[],

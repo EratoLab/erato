@@ -51,8 +51,6 @@ vi.mock("../../core/AddinSettingsDialogCore", () => ({
   AddinSettingsDialogCore: () => <div data-testid="word-settings" />,
 }));
 
-// Only the two members the Word host consumes are stubbed; everything else in
-// that module is types, which are erased.
 vi.mock("../../core/AddinChatCore", () => {
   const controller = {
     hostCallbacksRef: harness.hostCallbacksRef,
@@ -164,10 +162,7 @@ describe("WordAddinChatHost", () => {
       "erato-word-insert",
       "erato-word-document-plan",
     ]);
-    // This pane never captured a send for it (history), so the write gate has
-    // no identity to match and the card states why instead of guessing.
     expect(stamped.hostArtifact?.itemIdentity).toBeUndefined();
-    // A user message is never stamped.
     expect(harness.stampedMessages.current.u1).not.toHaveProperty(
       "hostArtifact",
     );
@@ -193,8 +188,6 @@ describe("WordAddinChatHost", () => {
   it("passes the pane's document identity down to the composer", () => {
     render(<WordAddinChat />);
 
-    // The chip is keyed to the pane's document; the host mints the identity so
-    // a document change can reset it.
     expect(screen.getByTestId("word-include-document-chip")).toHaveAttribute(
       "aria-pressed",
       "false",

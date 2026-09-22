@@ -3,7 +3,6 @@ import { t } from "@lingui/core/macro";
 
 import type { WordSourceBlock } from "../utils/wordDocumentPlan";
 
-/** Semantic source preview. Word owns rendering images, tables and live fields. */
 export function WordNativeBlockPreview({
   block,
   retained = true,

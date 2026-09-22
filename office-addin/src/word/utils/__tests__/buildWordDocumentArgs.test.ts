@@ -23,8 +23,7 @@ const paragraph = (
   text,
   uniqueLocalId: `id-${ordinal}`,
   styleBuiltIn: "Normal",
-  // Word reports 10 for body text; a 0 or 1 default would make the
-  // outline-level fallback test pass vacuously.
+  // Word uses outline level 10 for body text; another default would hide a broken fallback.
   outlineLevel: 10,
   ...overrides,
 });
@@ -48,8 +47,6 @@ describe("buildWordDocumentArgs", () => {
         "[6|H3] Costs fell.",
       ].join("\n"),
     );
-    // Both counts run over the SAME population, so a document with blank
-    // paragraphs that fits entirely must not look truncated.
     expect(build.args.paragraphs_sent).toBe("6");
     expect(build.args.paragraphs_total).toBe("6");
     expect(build.coverage.truncated).toBe(false);
@@ -63,9 +60,7 @@ describe("buildWordDocumentArgs", () => {
       paragraph(4, "Fourth"),
     ]);
 
-    // The blanks keep their ordinals and are inside the window, but the model
-    // is shown no line for them: an edit naming 2 or 3 is a drifted ordinal,
-    // and its exact-text check ("\t" === "\t") could never catch it.
+    // Blank text would match itself even for a drifted ordinal; only the rendered set catches it.
     expect([...build.renderedOrdinals].sort((a, b) => a - b)).toEqual([1, 4]);
     expect(build.partialOrdinal).toBeNull();
     expect(build.args.paragraphs_sent).toBe("4");
@@ -78,9 +73,6 @@ describe("buildWordDocumentArgs", () => {
       paragraph(2, "After the wall."),
     ]);
 
-    // The model read a PREFIX of paragraph 1. Replacing the paragraph would
-    // delete the tail it never saw, so the ordinal is not writable — and it is
-    // not merely "unknown" either, which is why it is carried separately.
     expect(build.renderedOrdinals.has(1)).toBe(false);
     expect(build.partialOrdinal).toBe(1);
     expect(build.args.paragraphs_sent).toBe("1");
@@ -113,9 +105,7 @@ describe("buildWordDocumentArgs", () => {
   });
 
   it("budgets in UTF-8 bytes, not UTF-16 string length", () => {
-    // Umlaut-heavy text: two UTF-8 bytes per character, one UTF-16 unit. A
-    // String.length budget would let roughly twice the bytes through and ship
-    // a hard 400 from the backend's per-argument cap.
+    // Umlauts distinguish the backend UTF-8 byte cap from JavaScript string length.
     const line = "Größenänderung für Übermäßigkeit ".repeat(30);
     const paragraphs = Array.from({ length: 1_400 }, (_unused, index) =>
       paragraph(index + 1, line),
@@ -127,7 +117,6 @@ describe("buildWordDocumentArgs", () => {
     expect(documentText.length).toBeGreaterThan(DOCUMENT_TEXT_BUDGET_BYTES / 2);
     expect(documentText.length).toBeLessThan(DOCUMENT_TEXT_BUDGET_BYTES);
     expect(bytes(documentText)).toBeLessThanOrEqual(DOCUMENT_TEXT_BUDGET_BYTES);
-    // Tight: the very next paragraph would not have fit.
     const sent = Number(build.args.paragraphs_sent);
     expect(
       bytes(documentText) + bytes(`\n[${sent + 1}] ${line}`),
@@ -149,7 +138,6 @@ describe("buildWordDocumentArgs", () => {
     }
     expect(rendered.length).toBe(Number(build.args.paragraphs_sent));
     expect(build.args.truncation_note).toBe("");
-    // The next paragraph would have exceeded the budget.
     expect(bytes(build.args.document_text)).toBeLessThanOrEqual(
       DOCUMENT_TEXT_BUDGET_BYTES,
     );
@@ -185,8 +173,6 @@ describe("buildWordDocumentArgs", () => {
     expect(documentText.startsWith("[2] ")).toBe(true);
     expect(documentText.length).toBeGreaterThan(0);
     expect(bytes(documentText)).toBeLessThanOrEqual(DOCUMENT_TEXT_BUDGET_BYTES);
-    // Re-decoding must round-trip: a mid-sequence cut would leave a lone
-    // surrogate and produce U+FFFD.
     expect(documentText).not.toContain("�");
     expect(new TextDecoder().decode(encoder.encode(documentText))).toBe(
       documentText,
@@ -245,8 +231,6 @@ describe("buildWordDocumentArgs", () => {
 
     expect(outline.startsWith("Headings beyond the included text:")).toBe(true);
     expect(bytes(outline)).toBeLessThanOrEqual(HEADING_OUTLINE_BUDGET_BYTES);
-    // The in-window Heading1 is already in document_text; repeating it in the
-    // outline would pay for the same tokens twice.
     expect(outline).not.toContain("[1|H1]");
     const sent = Number(build.args.paragraphs_sent);
     for (const line of outline.split("\n").slice(1)) {
@@ -294,8 +278,6 @@ describe("resolveHeadingLevel", () => {
     expect(
       resolveHeadingLevel({ styleBuiltIn: "Other", outlineLevel: 2 }),
     ).toBe(2);
-    // Word's body-text level. Treating it as a heading would tag every
-    // ordinary paragraph as [n|H10].
     expect(
       resolveHeadingLevel({ styleBuiltIn: "Normal", outlineLevel: 10 }),
     ).toBeNull();

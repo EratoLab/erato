@@ -9,8 +9,7 @@ import {
   verifyWordPlanOutput,
 } from "../wordDocumentXml";
 
-/** Real Word 16.113 (Mac) imports/exports of our synthetic fixture, not an echo
- * mock. The readme distinguishes this from Office.js Body.insertOoxml testing. */
+/** Captured Word 16.113 (Mac) file imports/exports; these fixtures do not exercise Office.js insertion. */
 describe("Word-native mixed document regression", () => {
   it("verifies the compiled rewrite after Word imports and saves it", () => {
     const before = captureWordAuthoringSnapshot(

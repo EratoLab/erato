@@ -12,23 +12,6 @@ import {
   offerableWordClientActions,
 } from "../utils/wordClientActions";
 
-/**
- * The Word settings surface: the shared dialog plus one entity in the "MCP &
- * Apps" pane carrying the per-action decision rows.
- *
- * Word contributes NO host tab. It has no host behaviour to configure — the
- * include-document chip is a per-chat gesture, not a setting — so it supplies
- * only `serversToolsEntities`, which is enough to spawn the shared pane. That
- * is why `AddinSettingsHostContribution`'s four tab fields are optional and
- * the tab is gated on `content`: otherwise reaching the client-action rows
- * would have cost an empty "Word" tab.
- *
- * The copy diverges from Outlook's deliberately. Outlook can promise "nothing
- * is sent until you press Send", because its actions only ever open a
- * prefilled form. A Word `always` grant writes into the open document
- * immediately, with no later gate — so the copy names the real safety net:
- * each action describes its own source checks and recovery limits.
- */
 export function WordSettingsDialog(props: AddinSettingsDialogCoreProps) {
   return (
     <AddinSettingsDialogCore

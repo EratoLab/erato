@@ -279,10 +279,6 @@ const eslintConfig = [
     },
   },
   {
-    // Word is an Office.js host, so unlike the Teams zone this one deliberately
-    // does NOT ban Office/OfficeRuntime, `**/OfficeProvider`,
-    // `**/OfficeThemeProvider` or `**/useOffice*`: the Word composition
-    // consumes all of them from the shared ring.
     files: ["src/word/**/*.ts", "src/word/**/*.tsx"],
     rules: {
       "no-restricted-imports": [

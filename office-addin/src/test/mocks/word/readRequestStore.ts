@@ -1,4 +1,3 @@
-/** Minimal synchronous streaming store for exercising the host's SSE binding. */
 export function createWordReadRequestStore() {
   const empty = { currentMessageId: null as string | null, isStreaming: false };
   let state = {

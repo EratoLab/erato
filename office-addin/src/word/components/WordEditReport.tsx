@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { WordEditOutcome, WordEditStatus } from "../utils/wordEditPlan";
 
-/** One line's status word. Localized here; the plan layer stays pure. */
 export function statusLabel(status: WordEditStatus): string {
   switch (status) {
     case "applied":
@@ -41,7 +40,6 @@ export function statusLabel(status: WordEditStatus): string {
   }
 }
 
-/** "Paragraph 12" or "Paragraphs 18-20". */
 function targetLabel(outcome: WordEditOutcome): string {
   return outcome.through === undefined
     ? t({
@@ -54,7 +52,6 @@ function targetLabel(outcome: WordEditOutcome): string {
       });
 }
 
-/** The plain-text form the Copy button puts on the clipboard. */
 export function formatWordEditReport(
   outcomes: readonly WordEditOutcome[],
   reverted = false,
@@ -69,10 +66,6 @@ export function formatWordEditReport(
     .join("\n");
 }
 
-/**
- * Inline outcomes for both explicit approval and standing grants. Automatic
- * application also needs a visible report of skipped or failed edits.
- */
 export function WordEditReport({
   outcomes,
   compact = false,
@@ -111,7 +104,6 @@ export function WordEditReport({
       .then(() => {
         setCopied(true);
         if (resetRef.current) clearTimeout(resetRef.current);
-        // The add-in's success idiom: a transient label swap, never a toast.
         resetRef.current = setTimeout(() => setCopied(false), 2000);
       })
       .catch(() => {

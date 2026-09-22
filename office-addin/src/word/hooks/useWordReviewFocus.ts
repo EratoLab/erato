@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 
-/** Restore a Word action's lost focus without interrupting work elsewhere. */
 export function useWordReviewFocus(transition: string) {
   const cardRef = useRef<HTMLElement>(null);
   const ownedFocus = useRef(false);
@@ -8,8 +7,7 @@ export function useWordReviewFocus(transition: string) {
 
   useEffect(() => {
     const trackFocus = (event: FocusEvent) => {
-      // Removing a focused control falls back to body. Retain ownership until
-      // the result renders, unless the user has focused another actual control.
+      // Removing a focused control moves focus to body; retain ownership through that transition.
       if (event.target !== document.body && event.target instanceof Node) {
         ownedFocus.current = !!cardRef.current?.contains(event.target);
       }

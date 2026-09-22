@@ -114,12 +114,6 @@ export function offerableAppointmentClientActions(
   );
 }
 
-/**
- * The Outlook binding of the host-neutral proposal validator: Outlook's
- * action registry is what decides whether a backend-advertised action is one
- * this build can execute. Everything else about the validation lives in
- * `core/clientActions/proposedClientAction.ts`.
- */
 export function extractProposedClientAction(
   content: ContentPart[] | undefined,
   allowedActions: readonly string[],

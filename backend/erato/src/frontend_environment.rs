@@ -110,15 +110,8 @@ const TEAMS_M365_FRAME_ANCESTORS: &[&str] = &[
     "https://outlook.office365.com",
     "https://outlook-sdf.office365.com",
 ];
-/// Hosts that frame the Word task pane. On Word for the web the pane's
-/// immediate parent is the WAC frame on `*.officeapps.live.com`, and when the
-/// document is opened from SharePoint or OneDrive the chain also runs through
-/// `*.sharepoint.com`. `frame-ancestors` requires EVERY ancestor to match, so
-/// missing either leaves the pane blank.
-///
-/// This origin set is a Microsoft fact rather than a repo fact: it is a seed
-/// that the Word-on-the-web smoke test confirms or extends, with
-/// `frontend.extra_frame_ancestors` as the per-deployment escape hatch.
+/// CSP requires every ancestor to match, including the Word web frame and SharePoint host.
+/// Deployments can extend this set through frontend.extra_frame_ancestors.
 const WORD_OFFICE_FRAME_ANCESTORS: &[&str] =
     &["https://*.officeapps.live.com", "https://*.sharepoint.com"];
 

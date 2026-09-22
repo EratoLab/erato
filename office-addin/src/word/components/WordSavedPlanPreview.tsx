@@ -9,7 +9,7 @@ import type {
   WordDocumentPlan,
 } from "../utils/wordDocumentPlan";
 
-/** Persisted draft review only. This empty source inventory is never a write capture. */
+/** Saved previews have no live object inventory and cannot authorize writes. */
 const NO_SOURCES: WordAuthoringSnapshot = {
   token: "",
   identity: "",

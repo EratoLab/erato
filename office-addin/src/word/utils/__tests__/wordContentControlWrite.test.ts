@@ -14,8 +14,7 @@ interface NativeState {
   cannotDelete: boolean;
 }
 
-/** Simulates queued Office setters, an outer content lock, and a poisoned
- * context after a failing sync. Each run has fresh native object proxies. */
+/** Model queued setters and a poisoned context after sync failure; each run gets fresh proxies. */
 function nativeWord(initial: NativeState[], listedIds?: number[]) {
   const controls = new Map(initial.map((state) => [state.id, { ...state }]));
   const events: string[] = [];

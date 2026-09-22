@@ -1523,7 +1523,6 @@ section[data-footnotes="true"] > .sr-only {
 .data-footnote-backref {
   display: none;
 }
-/* Exact text comparison is shared by hosts; themes own its semantic colours. */
 .text-comparison {
   min-width: 0;
   font-size: var(--theme-font-size-sm);

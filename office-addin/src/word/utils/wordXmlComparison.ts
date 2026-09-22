@@ -1,4 +1,3 @@
-/** Shared Word serialization normalization. No model markup or DOCX import. */
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
 const REL = "http://schemas.openxmlformats.org/package/2006/relationships";
@@ -95,9 +94,7 @@ function drawingIdentity(element: Element, attribute: Attr): boolean {
 }
 
 export interface WordXmlComparison {
-  /** Versioned whole-capture identity; meaningful package differences survive. */
   fingerprint: () => string;
-  /** Content identity for retained fragments, including moved native objects. */
   signature: (node: Node, owner?: string) => string;
 }
 
@@ -134,8 +131,7 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
         targetPath("/word/document.xml", rel.getAttribute("Target") ?? ""),
       ),
   );
-  // Bare test packages may omit relationships. A unique actual comments part is
-  // unambiguous; multiple possible owners must retain their literal IDs.
+  // Bare packages may omit relationships; infer a comments owner only when there is one candidate.
   if (!commentTargets.size)
     for (const [path, root] of roots)
       if (root.namespaceURI === W && root.localName === "comments")
@@ -251,9 +247,7 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
           !unknownDrawingReferences.has(value)
         )
           return [];
-        // Native imports can reorder abstract definitions while keeping each
-        // list instance and its formatting intact. Resolve the reference;
-        // retain numId/durableId so distinct list instances do not collapse.
+        // Word can reorder abstract definitions; resolve them while retaining numId/durableId list identity.
         if (content && ns === W && element.namespaceURI === W) {
           if (element.localName === "abstractNum" && name === "abstractNumId")
             return [];
@@ -266,8 +260,7 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
           ns === W14 &&
           name === "paraId"
         ) {
-          // A declaration is not content. Known annotation references below carry
-          // its topology. Omitting only a resolved declaration permits block moves.
+          // Only resolved annotation declarations can be omitted for block moves; references retain topology.
           const ids = paragraphIds.get(owner);
           if (
             ids?.has(value) &&
@@ -423,8 +416,7 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
         ? signature
         : JSON.stringify(["text-run", signature, text]),
     );
-    // An empty paragraph-properties wrapper has no formatting. Word omits it
-    // after importing paragraphs whose only property was the default style.
+    // Word omits empty paragraph properties after removing an explicit default style.
     if (
       element.namespaceURI === W &&
       element.localName === "pPr" &&

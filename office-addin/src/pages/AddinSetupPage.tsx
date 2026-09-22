@@ -34,11 +34,6 @@ const PRODUCT_OPTIONS: ProductOption[] = [
   { id: "powerpoint", label: "PowerPoint", selectable: false },
 ];
 
-/**
- * The document task-pane add-in is a SECOND add-in with its own manifest and
- * its own catalog identity — the Exchange-setup axis does not apply to it,
- * because there is no mailbox involved.
- */
 const DOCUMENT_MANIFEST_PATH = "manifest-document.xml";
 
 const EXCHANGE_SETUP_OPTIONS: ExchangeSetupOption[] = [
@@ -75,11 +70,7 @@ function getManifestPath(
   return selectedSetup.manifestPath;
 }
 
-/**
- * The name the file is SAVED under, which follows the product alone. The
- * Exchange axis selects a different manifest to fetch, but both Outlook
- * variants are uploaded as `manifest.xml` and the on-screen copy says so.
- */
+/** Both Exchange variants are sideloaded with the filename shown in the instructions. */
 function getDownloadFilename(product: OfficeProduct): string {
   return product === "word" ? DOCUMENT_MANIFEST_PATH : "manifest.xml";
 }
@@ -392,12 +383,6 @@ function SetupSelectors({
   );
 }
 
-/**
- * Word has no Exchange-setup axis: the delivery route is decided by the
- * customer's mailbox and licence combination, not by a manifest variant.
- * Copy is split under `officeAddin.word.*` rather than sharing Outlook's ids,
- * because the two diverge in substance, not only in wording.
- */
 function WordInstructions({ spaRedirectUri }: { spaRedirectUri: string }) {
   return (
     <ol className="office-setup-steps">

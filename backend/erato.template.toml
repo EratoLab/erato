@@ -184,10 +184,7 @@ chat_provider_ids = ["test-token-limit"]
 # icon_32_path = "assets/ribbon-icon-32.png"
 # icon_80_path = "assets/ribbon-icon-80.png"
 #
-# # The SECOND add-in identity: the host-neutral document task-pane add-in,
-# # served at /office-addin/manifest-document.xml. Two add-ins in one catalog
-# # cannot share an id, so this block carries its own. Provider, support URL,
-# # ribbon labels and icons are inherited from the block above.
+# # Document add-ins need a distinct catalog ID; other branding inherits the block above.
 # [integrations.ms_office.addin.document]
 # addin_id = "15a5d0e8-e96a-4e26-b6a1-bd8f429468c2"
 # [integrations.ms_office.addin.document.manifest]

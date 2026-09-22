@@ -97,7 +97,6 @@ export async function captureWordImageAssets(
       );
       if (file.id !== fileId) throw new AssetFailure("unavailable");
       name = file.filename;
-      // Unrelated attachments still travel through the ordinary chat upload path.
       if (
         file.file_capability.id !== "image" &&
         !file.file_capability.operations.includes("analyze_image")

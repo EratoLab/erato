@@ -23,8 +23,6 @@ const capture = (
     ]),
   ),
   paragraphsSent,
-  // Mirrors what `buildWordDocumentArgs` renders: inside the window, carrying
-  // text, and not the one paragraph the send had to cut short.
   renderedOrdinals: new Set(
     paragraphs
       .map((paragraph, index) => ({ ordinal: index + 1, text: paragraph.text }))
@@ -72,8 +70,6 @@ describe("parseWordEdits", () => {
   });
 
   it("rejects the whole payload when ONE entry is malformed", () => {
-    // A partially understood write instruction is the one thing a write path
-    // must never guess at: the good edit is dropped with the bad one.
     expect(
       parseWordEdits(
         '{"edits":[{"paragraph":1,"text":"Fine."},{"paragraph":2}]}',
@@ -113,8 +109,6 @@ describe("planWordEdits", () => {
   });
 
   it("rejects an ordinal the send never carried, with no fallback search", () => {
-    // The window is a prefix: 3 and 4 exist in the map (the write path needs
-    // their text) but were never shown to the model.
     const plan = planWordEdits(
       [
         { paragraph: 4, text: "Never seen." },
@@ -134,9 +128,6 @@ describe("planWordEdits", () => {
   });
 
   it("rejects an edit that starts on a paragraph that rendered no line", () => {
-    // Paragraph 2 is a whitespace-only spacer: it is inside the window and its
-    // captured text would verify against itself forever, so the rendered set
-    // is the only gate that can catch the ordinal drift blank lines invite.
     const plan = planWordEdits(
       [{ paragraph: 2, text: "Meant for paragraph 3." }],
       capture([{ text: "One." }, { text: "\t" }, { text: "Three." }]),
@@ -157,8 +148,6 @@ describe("planWordEdits", () => {
   });
 
   it("keeps a blank paragraph INSIDE a span replaceable", () => {
-    // Both ends were read, so the blank between them is part of the passage
-    // the model read and the span still means what it said.
     const plan = planWordEdits(
       [{ paragraph: 1, through: 3, text: "One paragraph." }],
       capture([{ text: "One." }, { text: "" }, { text: "Three." }]),
@@ -171,9 +160,6 @@ describe("planWordEdits", () => {
   });
 
   it("refuses to rewrite the paragraph the send could only cut", () => {
-    // The model read a prefix of paragraph 1 and rewrote what it read.
-    // Applying that would delete the tail nobody ever saw — and the captured
-    // text is the FULL paragraph, so verification would happily pass.
     const plan = planWordEdits(
       [{ paragraph: 1, text: "A tightened version of the part I read." }],
       capture([{ text: "A 100 KB wall of text." }], 1, 1),
@@ -357,8 +343,6 @@ describe("editExcerpt", () => {
 
   it("cuts a long replacement on a code point, never a surrogate half", () => {
     const excerpt = editExcerpt("😀".repeat(80));
-    // 60 code points plus the ellipsis; splitting UTF-16 units would give 60
-    // halves and render as replacement characters.
     expect([...excerpt]).toHaveLength(61);
     expect(excerpt.endsWith("…")).toBe(true);
     expect(excerpt).not.toContain("�");
@@ -376,9 +360,6 @@ describe("buildWordEditReport", () => {
   });
 
   it("keeps each verdict when two edits name the SAME paragraph", () => {
-    // The report is the safety net under a standing "always" grant, so a line
-    // that inherits another edit's verdict would report a skipped change as
-    // applied. Ordinals are not unique; the list position is.
     const plan = planWordEdits(
       [
         { paragraph: 2, text: "First wins." },

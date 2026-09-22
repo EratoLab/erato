@@ -45,9 +45,6 @@ const OFFICE_ADDIN_MANIFEST_VERSION_PLACEHOLDER: &str = "{{OFFICE_ADDIN_MANIFEST
 const OFFICE_ADDIN_ID_PLACEHOLDER: &str = "{{OFFICE_ADDIN_ID}}";
 const OFFICE_ADDIN_MANIFEST_FILE_NAME: &str = "manifest.xml";
 const OFFICE_ADDIN_EXCHANGE_SERVER_MANIFEST_FILE_NAME: &str = "manifest-exchange-server.xml";
-/// The document task-pane variant: a SECOND add-in identity served from the
-/// same deployment, host-neutral by design (Word today, Excel/PowerPoint
-/// later in the same catalog entry).
 const OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME: &str = "manifest-document.xml";
 // The launch event placeholders sit in element-only content models
 // (`Host`, `DesktopFormFactor`, `bt:Urls`), where bare character data is not
@@ -318,12 +315,7 @@ fn render_office_addin_manifest(
     manifest_name: &str,
     deployment_version: Option<&str>,
 ) -> String {
-    // The document variant renders from the second identity: its own `<Id>`
-    // and its own display name and description, with every remaining scalar
-    // (provider, support URL, ribbon labels, icon paths) composed from the
-    // mail block so per-customer branding still reaches it. Serde `default`
-    // gives struct defaults, never cross-block inheritance, so this
-    // composition has to be explicit.
+    // Serde defaults do not inherit customer branding from the mail block; compose it explicitly.
     let is_document_manifest = manifest_name == OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME;
     let document_manifest_config = is_document_manifest.then(|| MsOfficeAddinManifestConfig {
         display_name: addin_config.document.manifest.display_name.clone(),
@@ -1073,12 +1065,6 @@ mod tests {
         );
     }
 
-    /// The document task-pane template's structural invariants, asserted on the
-    /// file as it ships. Each of these is load-bearing for a delivery route:
-    /// the host declaration decides which app offers the add-in, the top-level
-    /// requirement is the activation floor, and a `<Requirements>` child inside
-    /// `<VersionOverrides>` would gate the commands node against the SharePoint
-    /// catalog route.
     #[test]
     fn office_addin_document_manifest_template_declares_the_word_task_pane_shape() {
         let template = stock_manifest_template(OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME);
@@ -1089,8 +1075,7 @@ mod tests {
         assert!(template.contains(r#"<Set Name="WordApi" MinVersion="1.7" />"#));
         assert!(template.contains("<Permissions>ReadWriteDocument</Permissions>"));
 
-        // No <Requirements> inside <VersionOverrides>: the only requirement
-        // block in the file is the top-level activation floor.
+        // Command-specific requirements can exclude the SharePoint catalog route.
         assert_eq!(template.matches("<Requirements>").count(), 1);
         let version_overrides = template
             .split_once("<VersionOverrides")
@@ -1128,22 +1113,17 @@ mod tests {
             None,
         );
 
-        // Every placeholder is substituted.
         assert!(
             !rendered.contains("{{"),
             "unsubstituted placeholder in: {rendered}"
         );
-        // The document identity, not the mail one.
         assert!(rendered.contains("<Id>document-addin-id</Id>"));
         assert!(!rendered.contains("custom-addin-id"));
         assert!(rendered.contains(r#"<DisplayName DefaultValue="Erato for Documents" />"#));
-        // Scalars with no document-scoped override are composed from the mail
-        // block, so per-customer branding still reaches this manifest.
         assert!(rendered.contains(&format!(
             r#"<ProviderName>{}</ProviderName>"#,
             MsOfficeAddinManifestConfig::default().provider_name
         )));
-        // SourceLocation resolves to the route the pane is served from.
         assert!(rendered.contains(
             r#"<SourceLocation DefaultValue="https://app.example.com/base/office-addin/word" />"#
         ));
@@ -1153,9 +1133,6 @@ mod tests {
         assert!(!rendered.contains("localhost:3002"));
     }
 
-    /// The document variant is excluded from launch events by manifest name,
-    /// the same way the Exchange Server variant is: a deployment that
-    /// configures launch events renders none into it.
     #[test]
     fn render_office_addin_document_manifest_never_emits_launch_events() {
         let template = stock_manifest_template(OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME);
@@ -1171,8 +1148,6 @@ mod tests {
         assert!(!rendered.contains("<Runtimes>"));
     }
 
-    /// The mail manifest keeps the mail identity even after the document block
-    /// exists: the two identities must never cross over.
     #[test]
     fn render_office_addin_mail_manifest_keeps_the_mail_identity() {
         let template = stock_manifest_template(OFFICE_ADDIN_MANIFEST_FILE_NAME);

@@ -5035,11 +5035,7 @@ pub struct MsOfficeAddinConfig {
     #[serde(default)]
     pub manifest: MsOfficeAddinManifestConfig,
 
-    // The second add-in identity: the host-neutral document task-pane add-in
-    // (Word today; Excel and PowerPoint later join the same catalog entry).
-    // Non-optional with its own distinct default id, so a deployment that
-    // declares no `[integrations.ms_office.addin.document]` block still boots
-    // and still passes the duplicate-id check.
+    // A distinct default identity keeps existing deployments valid when this block is omitted.
     #[serde(default)]
     pub document: MsOfficeAddinDocumentConfig,
 
@@ -5166,14 +5162,7 @@ impl MsOfficeAddinConfig {
     }
 }
 
-/// Identity and naming of the document task-pane add-in, a SECOND Office
-/// add-in served from the same deployment as the mail add-in. Two add-ins in
-/// one catalog cannot share an `<Id>`, and "Erato for Documents" cannot come
-/// out of the placeholder that names the mail add-in, so both are configured
-/// here. Every other manifest scalar (provider, support URL, ribbon labels,
-/// icons) is composed from the mail block at render time — serde `default`
-/// gives struct defaults, never cross-block inheritance, so a full nested
-/// manifest struct here would silently ignore per-customer branding.
+/// Document add-ins need a catalog identity distinct from mail. Other branding is inherited at render time.
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct MsOfficeAddinDocumentConfig {
     #[serde(default = "default_ms_office_addin_document_id")]
@@ -5193,8 +5182,7 @@ impl Default for MsOfficeAddinDocumentConfig {
 }
 
 impl MsOfficeAddinDocumentConfig {
-    /// `mail_addin_id` is the mail add-in's id: the two identities must differ,
-    /// or a catalog holding both rejects the second.
+    /// A catalog rejects two add-ins with the same identity.
     pub fn validate(&self, mail_addin_id: &str) -> Result<(), Report> {
         if self.addin_id.trim().is_empty() {
             return Err(eyre!(
@@ -5211,15 +5199,12 @@ impl MsOfficeAddinDocumentConfig {
     }
 }
 
-/// The manifest scalars that are genuinely document-scoped. Everything else is
-/// inherited from `MsOfficeAddinManifestConfig` when the manifest is rendered.
+/// Document-specific overrides; other manifest fields inherit the mail configuration at render time.
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct MsOfficeAddinDocumentManifestConfig {
-    // Add-in display name shown by Word.
     #[serde(default = "default_ms_office_addin_document_manifest_display_name")]
     pub display_name: String,
 
-    // Add-in description shown by Word.
     #[serde(default = "default_ms_office_addin_document_manifest_description")]
     pub description: String,
 }

@@ -48,12 +48,9 @@ export type WordDocumentReadRequest = Pick<
   "chatId" | "messageId"
 >;
 
-/** One active send. Old plans cannot silently inherit a later read's coverage. */
 export class WordDocumentReadSession {
   private session: Session | null = null;
-  /** Bind from the host's send/stream lifecycle, never from model arguments.
-   * A paused/resumed request keeps its owner; a child or later request cannot
-   * inherit the source merely because it knows a snapshot token. */
+  /** The host binds ownership; model arguments cannot transfer a snapshot to another turn. */
   bindRequest(token: string, request: WordDocumentReadRequest): boolean {
     const session = this.session;
     if (
@@ -72,7 +69,6 @@ export class WordDocumentReadSession {
     session.chatId = request.chatId;
     return true;
   }
-  /** Submission can only use the snapshot read by this chat and assistant turn. */
   snapshotForSubmission(
     context: ClientToolCallContext,
   ): WordAuthoringSnapshot | undefined {
@@ -241,8 +237,7 @@ export class WordDocumentReadSession {
     if (!session || !context || context.signal?.aborted)
       return fail("Document read unavailable or stopped.", "read-unavailable");
     const { snapshot } = session;
-    // Check the trusted request before disclosing a replacement token or any
-    // source data. An old SSE event must not claim a newly captured document.
+    // Reject stale SSE ownership before disclosing a read token.
     if (
       !snapshot.ownerMessageId ||
       snapshot.ownerMessageId !== context.messageId ||
@@ -286,8 +281,7 @@ export class WordDocumentReadSession {
     const firstPage = args.cursor == null || args.cursor === "";
     const snapshotChanged = args.snapshot !== snapshot.token;
     const restart = `Restart read_document_blocks with ${JSON.stringify({ snapshot: snapshot.token, cursor: null })}. Use the snapshot, source refs, cursors and readToken returned by that read.`;
-    // Starting a read is safe to recover within this explicitly bound request.
-    // A continuation must never mix pages from two different versions.
+    // The first page can refresh an expired snapshot; continuation pages must use the same version.
     if (snapshotChanged && !firstPage)
       return fail(restart, "snapshot-mismatch");
     const index = firstPage ? 0 : session.cursors.indexOf(String(args.cursor));

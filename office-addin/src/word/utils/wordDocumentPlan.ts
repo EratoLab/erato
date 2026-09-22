@@ -25,7 +25,6 @@ import type {
 } from "./wordStories";
 import type { WordTableBlock, WordTableContent } from "./wordTableContent";
 
-/** Host-validated authoring data. Source ownership is independent of output order. */
 export interface WordPlanRun extends WordRunFormatting {
   text: string;
   bold?: boolean;
@@ -80,7 +79,6 @@ export interface WordSourceBlock {
   ref: string;
   text: string;
   type: "paragraph" | "heading" | "list-item" | "native";
-  /** Native objects and anchored ranges travel intact, never through model text. */
   nativeKind?:
     | "table"
     | "image"
@@ -90,7 +88,6 @@ export interface WordSourceBlock {
     | "section-break"
     | "rich-content";
   description?: string;
-  /** A section's native properties stay in their original section order. */
   sectionBoundary?: boolean;
   /** Host-only navigation mapping; block references are not paragraph ordinals. */
   paragraphOrdinal?: number;
@@ -101,10 +98,8 @@ export interface WordSourceBlock {
   list?: string;
   runs?: WordPlanRun[];
   format?: WordParagraphFormatting;
-  /** Typed inventory; source XML and binary assets remain on the host. */
   content?: WordTableContent<WordPlanBlock>;
   objects?: Record<string, unknown>[];
-  /** Captured native XML is host-only, never returned by the read tool. */
   xml: string;
 }
 export interface WordAuthoringSnapshot {
@@ -126,7 +121,6 @@ export interface WordAuthoringSnapshot {
   preservedStories?: string[];
   /** True only when all DOCX parts were read, including out-of-body stories. */
   fullDocument?: boolean;
-  /** Host-only identity for full-file capture/apply/recovery. */
   documentUrl?: string;
   stories?: WordStorySource[];
   sections?: WordSectionSource[];
@@ -164,8 +158,7 @@ export function parseWordDocumentPlan(
     return fail("", "too-large", "Plan exceeds the host's maxPlanBytes limit.");
   try {
     const v: unknown = JSON.parse(content);
-    // Absence means no explicit deletions. Coverage validation still requires
-    // every source exactly once; this never infers deletion of omitted sources.
+    // An omitted deleted array means no explicit deletions, never permission to drop uncovered blocks.
     if (object(v) && v.deleted === undefined) v.deleted = [];
     if (
       !object(v) ||
@@ -398,8 +391,7 @@ export function validateWordDocumentPlan(
       entry.kind === "keep" ? entry.source : [],
     ),
   );
-  // An annotation target must resolve to exactly one body block. Story content
-  // shares the output ID namespace, but cannot become a body annotation target.
+  // Story content shares the ID namespace, but annotation targets must resolve to a body block.
   const outputIds = new Set(keptRefs);
   const bodyAnchors = new Map<string, { text: string; type: string }>();
   const bodyOrder = new Map<string, number>();
@@ -531,8 +523,7 @@ export function validateWordDocumentPlan(
         );
       if (block.type === "native-edit") {
         const source = sourceDetails(block.sourceRef);
-        // Native-edit selectors are relative to the complete source block or
-        // story. An object sourceRef is instead used by its typed block form.
+        // Native selectors are relative to the whole source block or story, not an individual object reference.
         if (!source || source.kind !== undefined)
           return reject(
             `${blockPath}/sourceRef`,
@@ -824,8 +815,7 @@ export function wordPlanOutput(
           kind: e.kind,
         })),
   );
-  // Word always retains a final paragraph. A clear-body plan explicitly deletes
-  // the source; the host supplies the empty document, not nine empty replacements.
+  // Word requires a final paragraph even when the requested document is empty.
   return output.length
     ? output
     : [

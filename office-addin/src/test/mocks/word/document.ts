@@ -2,15 +2,10 @@ import { vi } from "vitest";
 
 import type { Mock } from "vitest";
 
-/** The subset of `Office.context.document` the Word composition reads. */
 export interface MockWordDocument {
-  /** Null models an unsaved document, where Office.js exposes no URL. */
   url: string | null;
   mode: string;
-  /**
-   * Spied, and deliberately so: this store persists into the .docx, and the
-   * read gate must never touch it. Tests assert zero calls.
-   */
+  /** This store persists into the DOCX; spies verify that reading never touches it. */
   settings: {
     get: Mock<(name: string) => unknown>;
     set: Mock<(name: string, value: unknown) => void>;
@@ -18,54 +13,36 @@ export interface MockWordDocument {
   };
 }
 
-/** What `Office.onReady()` resolves to. */
 export interface MockWordReadyInfo {
   host: string;
   platform: string;
 }
 
-/** One paragraph in the mock document's main story. */
 export interface MockWordParagraphSpec {
   text: string;
   uniqueLocalId?: string;
   styleBuiltIn?: string;
-  /** Word reports 10 for body text; 1..9 are the heading outline levels. */
   outlineLevel?: number;
 }
 
-/** One mutation the document actually received, in execution order. */
 export interface MockWordWrite {
   kind: "insertText" | "delete" | "insertOoxml" | "style";
-  /** `uniqueLocalId` for a paragraph write; `"body"` / `"selection"` else. */
   target: string;
-  /** Ordinal (1-based) the target held when the write executed. */
   ordinal: number;
   value?: string;
-  /** `insertText` location, verbatim. */
   location?: string;
 }
 
 export interface MockWordRun {
-  /** `Word.run` itself, so a test can make it reject. */
   run: Mock<
     (callback: (context: unknown) => Promise<unknown>) => Promise<unknown>
   >;
-  /** How many `context.sync()` calls the last run issued. */
   syncCount: () => number;
-  /** Replace the document body between renders. */
   setParagraphs: (paragraphs: MockWordParagraphSpec[]) => void;
-  /** The body as it stands now — what a write test asserts against. */
   paragraphs: () => { text: string; uniqueLocalId: string }[];
-  /** Every mutation, in execution order. Cleared by `setParagraphs`. */
   writes: () => MockWordWrite[];
-  /** Text of the current selection; `""` is a collapsed insertion point. */
   setSelection: (text: string) => void;
-  /**
-   * Make the write to this paragraph throw when the queue reaches it — a
-   * paragraph inside a locked content control, or a final paragraph mark that
-   * cannot be deleted. Commands queued BEFORE it still execute, which is the
-   * whole point: an Office.js batch is not a transaction.
-   */
+  /** Commands before a rejection still execute: an Office.js batch is not a transaction. */
   failWriteOn: (uniqueLocalId: string | null) => void;
   setTrackingMode: (mode: "Off" | "TrackAll" | "TrackMineOnly") => void;
   selections: () => string[][];
@@ -73,21 +50,13 @@ export interface MockWordRun {
 
 export interface MockWordHost {
   document: MockWordDocument;
-  /** Requirement-set probe; drive it to model a host below the floor. */
   isSetSupported: Mock<(name: string, minVersion?: string) => boolean>;
-  /**
-   * Resolves `Office.onReady()`; drive it to model a different surface. Typed
-   * precisely rather than as a bare `Mock`, so a `mockImplementation` in a test
-   * is checked against the promise-returning shape `OfficeProvider` awaits.
-   */
   onReady: Mock<
     (callback?: (info: MockWordReadyInfo) => void) => Promise<MockWordReadyInfo>
   >;
-  /** `globalThis.Word`, the document read and write surface. */
   word: MockWordRun;
 }
 
-/** What `Office.onReady()` resolves to on Word for the web. */
 export const MOCK_WORD_READY_INFO: MockWordReadyInfo = {
   host: "Word",
   platform: "OfficeOnline",
@@ -114,32 +83,8 @@ function toState(
   }));
 }
 
-/**
- * Installs Word-specific stubs over the shared `setupOffice.ts` global:
- * `Office.context.document`, an `Office.context.requirements.isSetSupported`
- * probe answering for `WordApi` and `NestedAppAuth`, `Office.onReady`, and a
- * `globalThis.Word` whose `run` walks — and mutates — a paragraph collection.
- *
- * `Office.onReady` is the load-bearing part. `loadOfficeJs()` short-circuits
- * when it is already a function and otherwise appends a CDN script whose
- * `onload` never fires under jsdom — which would park `OfficeProvider` on its
- * loading branch forever and leave the chat surface unrendered. Installing it
- * therefore also means NO CDN script is appended, which is what the Word route
- * test pins.
- *
- * The paragraph stubs model Office.js's two-phase contract faithfully:
- * `items` is empty until the collection's `load` has been synced, a
- * `getText()` result throws on `.value` until the sync that resolves it, and
- * every WRITE is queued and executed in queue order at the next `sync()` — so
- * a batch whose commands are queued in the wrong order fails here exactly as
- * it would in Word.
- *
- * `getParagraphByUniqueLocalId` resolves its id at EXECUTION time, which is
- * what the real API does: the id is stable for the session, so a proxy taken
- * before a sibling edit still lands on the right paragraph afterwards.
- *
- * Returns the stub so tests can drive the probe, the ready info and the body.
- */
+/** Reads and writes resolve at sync, with paragraph IDs resolved at execution time.
+ * Office.onReady bypasses the CDN script that cannot load in jsdom. */
 export function installMockWordDocument(
   paragraphs: MockWordParagraphSpec[] = [],
 ): MockWordHost {
@@ -155,8 +100,6 @@ export function installMockWordDocument(
     },
   };
 
-  // Answers "supported" for every set by default: the activation floor means a
-  // host that reaches the pane at all already clears WordApi 1.7.
   const isSetSupported = vi.fn((_name: string, _minVersion?: string) => true);
 
   const onReady = vi.fn(
@@ -181,7 +124,6 @@ export function installMockWordDocument(
       syncCount = 0;
       let loaded = false;
       const pending: { resolve: () => void }[] = [];
-      /** Queued commands, executed in order at the next sync. */
       let queue: (() => void)[] = [];
 
       const deferred = <T>(read: () => T) => {
@@ -231,7 +173,6 @@ export function installMockWordDocument(
           }),
       });
 
-      /** A paragraph proxy addressed by its session-stable id. */
       const paragraphProxy = (uniqueLocalId: string) => {
         const state = () =>
           body.find((entry) => entry.uniqueLocalId === uniqueLocalId);
@@ -242,8 +183,6 @@ export function installMockWordDocument(
             return state()?.styleBuiltIn ?? "Normal";
           },
           set styleBuiltIn(value: string) {
-            // Recorded, never honoured: D-31 says the executor introduces no
-            // style of its own, and a test asserts this log stays empty.
             writes.push({
               kind: "style",
               target: uniqueLocalId,
@@ -272,9 +211,6 @@ export function installMockWordDocument(
                 value: text,
                 location,
               });
-              // A newline creates further paragraphs; the head keeps its id
-              // and its style, the new ones inherit the style and get fresh
-              // ids, exactly as Word reports them.
               const lines = text.split("\n");
               const head = body[index];
               const created = lines.slice(1).map((line) => {
@@ -337,8 +273,7 @@ export function installMockWordDocument(
 
       const bodyProxy = {
         paragraphs: collection,
-        // A JSON snapshot stands in for OOXML: the executor treats it as an
-        // opaque string, and a revert test wants exact restoration.
+        // JSON stands in for opaque OOXML so tests can verify exact restoration.
         getOoxml: () => {
           const snapshot = JSON.stringify(body);
           return deferred(() => snapshot);
@@ -372,8 +307,7 @@ export function installMockWordDocument(
           const queued = queue;
           queue = [];
           try {
-            // Word executes the batch command by command and STOPS at the
-            // first rejection; everything queued before it stays applied.
+            // Office.js stops at the first rejection without rolling back earlier commands.
             for (const command of queued) command();
           } catch (error) {
             return Promise.reject(
@@ -425,9 +359,6 @@ export function installMockWordDocument(
   };
 }
 
-/**
- * Removes the Word stubs to restore a clean shared state. Call in `afterEach`.
- */
 export function uninstallMockWordDocument() {
   const office = Office as unknown as Record<string, unknown>;
   const context = Office.context as unknown as Record<string, unknown>;

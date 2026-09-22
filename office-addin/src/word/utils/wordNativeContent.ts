@@ -4,7 +4,6 @@ import {
 } from "./wordMediaComparison";
 import { createWordXmlComparison } from "./wordXmlComparison";
 
-/** Native islands and package checks for structural authoring. No model XML. */
 export const WORD_NS =
   "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
@@ -29,8 +28,7 @@ export const wordMainBody = (doc: Document): Element | undefined => {
   return (part ?? doc).getElementsByTagNameNS(W, "body")[0];
 };
 
-/** A range crossing paragraphs/tables is one native island. Splitting it would
- * detach bookmarks, comments or field instructions from the text they describe. */
+/** Keep cross-paragraph ranges together so bookmarks, comments and fields retain their anchors. */
 export function nativeBodyGroups(body: Element): {
   groups: Element[][];
   issues: string[];
@@ -117,8 +115,7 @@ export function nativeBodyGroups(body: Element): {
   return { groups, issues: [...issues] };
 }
 
-/** Human-readable source only; hidden/deleted text, field code and binary data
- * stay on the host. Paragraph/cell boundaries remain visible in table context. */
+/** Expose visible source text only; hidden/deleted text, field code and binary data stay on the host. */
 export function nativeVisibleText(root: Element): string {
   const visit = (e: Element): string => {
     if (e.namespaceURI === W) {
@@ -272,9 +269,7 @@ export function missingWordRelationships(doc: Document): boolean {
   return false;
 }
 
-/** Content identity resolves relationship IDs through the package. Word can
- * rename rIds/media files without changing the object; lost bytes or a changed
- * external link must still fail verification. */
+/** Resolve relationships by content: Word can rename rIds and media files without changing the object. */
 export function createNativeContentSignature(
   packageXml: string,
 ): (value: string, owner?: string) => string {
@@ -306,8 +301,7 @@ export function preservedWordStories(doc: Document): string[] {
   );
 }
 
-/** Verify all out-of-body stories, including unreferenced headers and notes.
- * Styles/numbering are checked separately since the compiler can extend them. */
+/** Check even unreferenced stories; the compiler may extend styles and numbering separately. */
 export function sameWordPreservedParts(before: string, after: string): boolean {
   const parse = (v: string) =>
     new DOMParser().parseFromString(v, "application/xml");
@@ -315,8 +309,7 @@ export function sameWordPreservedParts(before: string, after: string): boolean {
     b = parse(after);
   const beforeSignature = createNativeContentSignature(before);
   const afterSignature = createNativeContentSignature(after);
-  // Existing definitions must survive. New heading styles/list definitions may
-  // be added, so equality of the entire styles/numbering part is inappropriate.
+  // New style/list definitions are allowed, but existing definitions must survive.
   for (const [local, key] of [
     ["style", "styleId"],
     ["num", "numId"],
@@ -338,9 +331,8 @@ export function sameWordPreservedParts(before: string, after: string): boolean {
         return false;
     }
   }
-  // Word renumbers abstract definitions on import. Compare retained definition
-  // content with multiplicity; each num reference above still resolves to its
-  // own definition and retains the list-instance identity.
+  // Word renumbers abstract definitions on import; compare content with multiplicity.
+  // Each num reference must still retain its list-instance identity.
   const definitions = new Map<string, number>();
   for (const element of Array.from(
     b.getElementsByTagNameNS(W, "abstractNum"),
@@ -394,9 +386,8 @@ export function sameWordPreservedParts(before: string, after: string): boolean {
   );
 }
 
-/** Word removes row margin exceptions equal to the inherited table/style
- * margin. Normalize only proven redundant top/bottom exceptions; never ignore
- * a changed margin, style or conditional table-style override. */
+/** Word removes row margins equal to inherited margins.
+ * Normalize only proven duplicates; changed margins and conditional styles must still fail. */
 function normalizeRedundantTableMargins(
   fragment: Document,
   packageDoc: Document,

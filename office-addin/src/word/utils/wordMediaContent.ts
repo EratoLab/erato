@@ -1,6 +1,5 @@
 import { isWordMediaElementActive } from "./wordMediaComparison";
 
-/** Typed DrawingML authoring. Model text never becomes XML or a fetched URL. */
 export interface WordImageSpec {
   sourceRef?: string;
   assetRef?: string;
@@ -188,7 +187,6 @@ function imageData(v: unknown): v is NonNullable<WordImageSpec["data"]> {
   }
 }
 
-/** Header dimensions are bounded before Word decodes the user-supplied image. */
 export function wordImageDimensions(
   data: NonNullable<WordImageSpec["data"]>,
 ): { widthPx: number; heightPx: number } | undefined {
@@ -1028,8 +1026,7 @@ function sourceDrawing(
   const original = nodes[index];
   if (!original) throw new Error("The referenced media no longer exists");
   const node = doc.importNode(original, true);
-  // Copies of shapes can contain other images in a text box; all non-visual IDs
-  // need fresh identities, while inner geometry stays untouched.
+  // Copied shapes can contain images in text boxes; every non-visual ID needs a fresh identity.
   if (!source.preserveIds)
     for (const properties of descendants(node, WP, "docPr"))
       properties.setAttribute("id", allocateWordNativeId(doc, "drawing"));
@@ -1061,7 +1058,6 @@ function sourceDrawing(
   return node;
 }
 
-/** Read existing embedded raster bytes for the review; never fetch linked images. */
 export function readWordImageData(
   doc: Document,
   sourceXml: string,

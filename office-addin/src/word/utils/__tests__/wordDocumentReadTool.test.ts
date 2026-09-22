@@ -142,7 +142,6 @@ describe("bounded body read session", () => {
         toolCallId: `resumed-step-${step++}`,
       };
       const response = await session.execute(input, stepContext);
-      // An SSE replay or a resumed tool loop reads the same immutable page.
       expect(await session.execute(input, stepContext)).toEqual(response);
       result = page(response);
       returned.push(...result.blocks.map((b) => b.text));

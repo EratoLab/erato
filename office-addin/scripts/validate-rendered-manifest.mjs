@@ -1,15 +1,6 @@
 #!/usr/bin/env node
-// Validates the shipped manifest templates AS THE BACKEND SERVES THEM.
-// `office:validate` runs the validator over a raw template, whose {{…}} tokens
-// fail before the schema is even reached, so the manifests customers actually
-// upload were never validated. This substitutes the placeholders the way
-// router.rs does and validates each result against Microsoft's schema service
-// (network required).
-//
-// Per-manifest launch-event expectations: only the mail manifest carries the
-// three placeholders (`manifest_supports_launch_events` in router.rs is true
-// for it alone), and it is rendered both with and without them. The document
-// task-pane manifest must carry NONE, and that absence is itself asserted.
+// Resolve placeholders before schema validation; otherwise invalid URLs hide structural errors.
+// Uses the Microsoft manifest validator, which requires network access.
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -18,11 +9,6 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 
-/**
- * `launchEvents: true` means the template MUST carry the three placeholders
- * and is validated both with and without the rendered blocks; `false` means it
- * must carry none, and is validated once.
- */
 const MANIFESTS = [
   { name: "manifest.xml", launchEvents: true },
   { name: "manifest-document.xml", launchEvents: false },

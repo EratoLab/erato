@@ -18,7 +18,6 @@ describe("TextComparison", () => {
     fireEvent.keyDown(changes, { key: "ArrowRight" });
     expect(screen.getByRole("tab", { name: "Original" })).toHaveFocus();
     const panel = screen.getByRole("tabpanel");
-    // The visible break marker is decorative; the source line ending survives.
     expect(panel.textContent).toBe("a↵\r\n\tb ");
     fireEvent.keyDown(document.activeElement!, { key: "ArrowRight" });
     expect(panel.textContent).toBe("a↵\n  b");

@@ -45,8 +45,6 @@ function changeStory(xml: string, kind: "hdr" | "ftr", text: string): string {
   return new XMLSerializer().serializeToString(doc);
 }
 
-/** Real ZIP/Flat OPC codecs and a captured native package with headers/footers are
- * used throughout. Only Office transport and context.sync are simulated. */
 function fullWord(original: Uint8Array) {
   let current: Uint8Array = new Uint8Array(original);
   let pending: Uint8Array | undefined;
@@ -336,9 +334,8 @@ function fullWord(original: Uint8Array) {
 }
 
 async function sourceAndPlan(options: { lockedControls?: boolean } = {}) {
-  // jsdom's serializer reuses a generated w14 alias across sibling paragraphs
-  // without redeclaring it. Bind that alias on each native part in this fixture;
-  // namespace declarations do not alter native content or its fingerprint.
+  // jsdom reuses a w14 alias across sibling paragraphs without declaring it.
+  // Bind it on each native part; namespace aliases do not change content identity.
   const fixture = new DOMParser().parseFromString(
     nativeSource,
     "application/xml",

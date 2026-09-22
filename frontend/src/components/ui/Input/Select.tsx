@@ -9,7 +9,6 @@ export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   error?: string;
 }
 
-/** Native selection, retaining platform keyboard behavior and themed field geometry. */
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
   function Select(
     {

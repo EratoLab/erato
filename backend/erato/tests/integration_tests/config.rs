@@ -4604,12 +4604,7 @@ model_name = "gpt-4o"
 
 #[test]
 fn test_ms_office_addin_document_template_block_matches_rust_defaults() {
-    // Same contract as the delegation block above, for the commented
-    // [integrations.ms_office.addin.document] reference block. Deliberately
-    // scoped to that block alone: the surrounding
-    // [integrations.ms_office.addin] block in the template intentionally
-    // diverges from `Default` (it shows `enabled = true` and a placeholder
-    // `msal_client_id`), so comparing the whole struct would fail on day one.
+    // The surrounding mail example intentionally differs from Default; compare only the document block.
     let template = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../erato.template.toml"

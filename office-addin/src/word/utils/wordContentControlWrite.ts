@@ -10,11 +10,9 @@ export interface WordContentControlLock {
 export type WordContentControlLocks = readonly WordContentControlLock[];
 
 export interface WordContentControlUnlockOptions {
-  /** Save these records outside this Word.run before the first mutation. The
-   * original full-file backup must already have been retained by the caller. */
+  /** Save locks outside this Word.run; the caller must already hold the full original file. */
   onLocksCaptured: (locks: WordContentControlLocks) => void;
-  /** Called before any lock setter is queued, including a potentially failing
-   * setter. The caller must now treat subsequent errors as interrupted writes. */
+  /** Expose the recovery state before a queued setter can fail. */
   onMutationStart: () => void;
 }
 
@@ -67,20 +65,7 @@ function controlDepths(
   return depths;
 }
 
-/** Temporarily remove ordinary content-control locks for an already authorized
- * full-file import. Never call this before retaining the exact original file.
- *
- * The document collection includes headers, footers and textboxes as well as the
- * body. Parents are discovered before writing, then unlocked outside-in: an
- * outer content lock can prevent changing an inner control's properties.
- *
- * This does not remove document Restrict Editing, rights management, passwords,
- * or other document protection. Office failures propagate unchanged.
- *
- * APIs: document.contentControls and lock flags, WordApi 1.1; safe parent lookup,
- * WordApi 1.3. https://learn.microsoft.com/javascript/api/word/word.contentcontrol
- * https://learn.microsoft.com/javascript/api/word/word.document
- */
+/** Unlock outer controls first: a locked parent prevents changing its descendants. */
 export async function unlockWordContentControlsForImport(
   context: Word.RequestContext,
   options: WordContentControlUnlockOptions,
@@ -96,8 +81,7 @@ export async function unlockWordContentControlsForImport(
     return empty;
   }
 
-  // Some host collections omit a parent of a returned control. Follow those
-  // native parent objects too instead of treating the child as a root.
+  // Collections can omit parents; follow parentContentControl to include their locks.
   let pending = [...controls.entries()];
   while (pending.length) {
     const parents = pending.map(([id, item]) => {
@@ -161,14 +145,8 @@ export interface WordContentControlRestoreResult {
   failed: number[];
 }
 
-/** Only use after a failed unlock/import. A successful import supplies its own
- * requested locks; restoring old flags then would undo the reviewed plan.
- *
- * Reacquire stable IDs in fresh contexts, inside-out, so relocking an outer
- * control cannot prevent recovery of its descendants. A missing/deleted control
- * is never recreated. The saved complete original remains authoritative when
- * any native write or this best-effort recovery is incomplete.
- */
+/** Only after failed unlock/import: a successful import supplies its requested locks.
+ * Restore inside-out in fresh contexts because rejected syncs invalidate their proxies. */
 export async function restoreWordContentControlLocks(
   host: WordControlRestoreHost,
   locks: WordContentControlLocks,
@@ -195,8 +173,7 @@ export async function restoreWordContentControlLocks(
         const changeEdit = control.cannotEdit !== lock.cannotEdit;
         const changeDelete = control.cannotDelete !== lock.cannotDelete;
         if (changeEdit || changeDelete) {
-          // Restoring cannotEdit last keeps this control editable while its
-          // other original flag is re-established.
+          // Restore cannotEdit last, because it can prevent changing the other lock flags.
           if (changeDelete) control.cannotDelete = lock.cannotDelete;
           if (changeEdit) control.cannotEdit = lock.cannotEdit;
           control.load("cannotEdit,cannotDelete");

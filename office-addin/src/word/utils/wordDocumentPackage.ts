@@ -37,10 +37,7 @@ export function supportsWordDocumentPackage(): boolean {
   );
 }
 
-/**
- * Document-level import includes headers, footers and section properties. The
- * Body import API does not. WordApi 1.7 also preserves odd/even header settings.
- */
+/** Use full-document import to restore out-of-body stories; body insertion cannot restore them. */
 export const WORD_DOCUMENT_IMPORT_OPTIONS: Word.InsertFileOptions = {
   importStyles: true,
   importTheme: true,
@@ -110,7 +107,6 @@ export async function readWordDocumentFile(): Promise<Uint8Array> {
   }
 }
 
-/** Flat OPC is an internal compiler representation, never a model contract. */
 export function wordDocumentFileToOoxml(bytes: Uint8Array): string {
   const parts = readWordPackage(bytes);
   const types = wordContentTypes(parts);
@@ -230,7 +226,6 @@ export function insertWordDocumentFile(
   );
 }
 
-/** Keep the existing string backup API without losing the complete original. */
 export function encodeWordDocumentBackup(
   snapshot: WordDocumentPackageSnapshot,
 ): string {

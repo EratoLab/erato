@@ -37,17 +37,11 @@ import type { WordDocumentCapture } from "../utils/wordDocumentCapture";
 
 export interface WordChatInputProps {
   chatInputProps: AddinChatInputRenderProps;
-  /** Minted once per pane load by the host; the chip resets when it changes. */
   documentIdentity: string;
-  /** Hands the send-time capture to the host, which pairs it with the reply. */
   stagePendingCapture: (capture: WordDocumentCapture | null) => void;
 }
 
-/**
- * Add a per-chat, opt-in document chip to the shared composer. Its state lives
- * only in React; persisting it through Office document settings would write
- * an application identifier into the DOCX.
- */
+/** Keep the document toggle in memory; Office settings would persist it into the DOCX. */
 export function WordChatInput({
   chatInputProps,
   documentIdentity,
@@ -55,9 +49,7 @@ export function WordChatInput({
 }: WordChatInputProps) {
   const { chatId } = chatInputProps;
   const availableFacetIds = useAvailableActionFacetIds();
-  // A chip must never promise context the send cannot carry: an unadvertised
-  // facet id hard-400s the whole request, so with neither facet configured the
-  // chip is not rendered at all.
+  // An unadvertised facet would reject the entire send with HTTP 400.
   const reviewAvailable = availableFacetIds.has(WORD_DOCUMENT_REVIEW_FACET_ID);
   const composeAvailable = availableFacetIds.has(WORD_COMPOSE_FACET_ID);
   const authoringAvailable = availableFacetIds.has(WORD_AUTHORING_FACET_ID);
@@ -67,9 +59,7 @@ export function WordChatInput({
   const [isDocumentIncluded, setIsDocumentIncluded] = useState(false);
   const lastChatIdRef = useRef(chatId);
   if (chatId !== lastChatIdRef.current) {
-    // A brand-new chat receiving its id on first send is the same
-    // conversation continuing; resetting there would switch the chip off at
-    // the exact moment the user had just switched it on.
+    // Receiving an ID for a new chat is continuation, not a switch to another conversation.
     const isNewChatGettingItsId =
       lastChatIdRef.current == null && chatId != null;
     lastChatIdRef.current = chatId;
@@ -176,8 +166,6 @@ export function WordChatInput({
         return;
       }
 
-      // The read is authoritative and always fresh: the document rides EVERY
-      // send while the chip is on. A failure must not block the send.
       preparingRef.current = true;
       setPreparing(true);
       void capture()
@@ -218,8 +206,7 @@ export function WordChatInput({
               send(undefined, null);
               return;
             }
-            // Paging can discover an additional size limit. Finalize it before
-            // telling the model which operations this exact snapshot permits.
+            // Finalize paging limits before exposing whole-document availability.
             wordDocumentReadSession.activate(build?.authoring);
             setAuthoringNotice({
               authoringIssue: build?.authoring?.issue,
@@ -244,8 +231,6 @@ export function WordChatInput({
                     authoring: build?.authoring,
                     ordinalMap: build?.ordinalMap ?? new Map(),
                     paragraphsSent: build?.coverage.paragraphsSent ?? 0,
-                    // What the model actually read, straight from the renderer:
-                    // the write path edits this set and nothing else.
                     renderedOrdinals: build?.renderedOrdinals ?? new Set(),
                     partialOrdinal: build?.partialOrdinal ?? null,
                   }
@@ -317,8 +302,6 @@ export function WordChatInput({
 
       <AddinChatInputCore
         {...chatInputProps}
-        // The action facet rides implicitly with every send from here, so the
-        // per-chat write switch pauses the Word actions too.
         pausesHostActionsWhenWritesOff
         disabled={chatInputProps.disabled || preparing}
         onSendMessage={handleSendMessage}
@@ -327,13 +310,6 @@ export function WordChatInput({
   );
 }
 
-/**
- * The chip states what the send will actually carry. Truncation is normal
- * operation and is reported in paragraph counts, not as an error.
- *
- * Only this copy is localized — the facet arguments are model-facing prompt
- * content and never go through lingui.
- */
 function chipLabel(enabled: boolean, preview: WordDocumentPreview): string {
   if (!enabled) {
     return t({

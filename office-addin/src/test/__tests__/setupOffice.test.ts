@@ -68,8 +68,7 @@ describe("Office.js test setup", () => {
         expect(
           Office.context.requirements.isSetSupported("NestedAppAuth", "1.1"),
         ).toBe(true);
-        // Load-bearing: with `Office.onReady` present, `loadOfficeJs` never
-        // appends the CDN script whose onload cannot fire under jsdom.
+        // Without Office.onReady, loadOfficeJs waits for a CDN script that never loads in jsdom.
         expect(typeof Office.onReady).toBe("function");
         await expect(Office.onReady()).resolves.toEqual(MOCK_WORD_READY_INFO);
       } finally {

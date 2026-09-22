@@ -401,7 +401,6 @@ describe("ThemeProvider", () => {
     expect(varsCss).toContain("--theme-message-assistant: #ede9fe;");
     expect(varsCss).toContain("--theme-diff-added-fg: #115533;");
     expect(varsCss).toContain("--theme-diff-added-bg: #e0ffee;");
-    // Older customer themes inherit defaults for the new semantic palette.
     expect(varsCss).toContain("--theme-diff-removed-fg: #91354b;");
     expect(varsCss).toContain("--theme-diff-removed-bg: #fbe9ed;");
     expect(varsCss).toContain("--theme-code-inline-bg: #eef2ff;");

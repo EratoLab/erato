@@ -15,7 +15,6 @@ import { useActionFacetClientActions } from "../core/clientActions/useAvailableA
 
 import type { AddinChatHostProps } from "../core/AddinChatCore";
 
-/** Word composition of the generic chat surface. */
 export function WordAddinChat({ assistantId }: { assistantId?: string } = {}) {
   return <AddinChatCore assistantId={assistantId} Host={WordAddinChatHost} />;
 }
@@ -32,21 +31,11 @@ function WordAddinChatHost({ controller }: AddinChatHostProps) {
     maxSizeFormatted,
   });
 
-  // Minted once per pane load and held in memory — nothing is written into the
-  // file. Owned here rather than inside the read hook so the chip's
-  // reset-on-document-change is driven by a value the host can change.
   const [documentIdentity] = useState(resolveWordDocumentIdentity);
 
-  // `capturesByAssistantMessageId` is the write path's input: the card
-  // resolves the model's ordinals against the capture stamped on the replying
-  // message, and fails closed when this pane no longer has it.
   const captures = useWordDocumentCaptures(controller);
   controller.hostCallbacksRef.current = captures.hostCallbacks;
 
-  // The artifact envelope: what makes the registered Word fences render as cards at
-  // all, and what carries the consent policy and the send-time identity onto
-  // each assistant message. Built here, where both the facet the send used and
-  // the capture it produced are known.
   const clientActionsByFacetId = useActionFacetClientActions();
   const { messages, messageOrder } = controller;
   const { capturesByAssistantMessageId } = captures;

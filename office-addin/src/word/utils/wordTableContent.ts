@@ -87,7 +87,6 @@ export interface WordTableContent<T> {
     format: WordTableRowFormatting;
     cells: (WordTableCell<T> & { sourceIndex: number; text: string })[];
   }[];
-  /** Structural wrappers are retained by keep; rebuilding needs explicit blocks. */
   sourcePatchSupported: boolean;
 }
 
@@ -255,7 +254,6 @@ interface PlacedCell<T> {
   originRow: number;
 }
 
-/** Expand semantic row spans to physical Word cells and require a complete grid. */
 function tableGrid<T>(
   rows: WordTableRow<T>[],
   columns?: number[],
@@ -626,7 +624,6 @@ function applyCellFormat(
     );
 }
 
-/** Text is only for reading/review. Native source cells remain host-owned XML. */
 function cellText(cell: Element): string {
   const visit = (element: Element): string => {
     if (element.namespaceURI === WORDPROCESSING_NS) {
@@ -792,9 +789,7 @@ export function compileWordTableBlock<T>(
         wordAttribute(wordChild(tblPrEx, "jc")) ||
         alignment);
     if (rowAlignment !== "left") nonLeadingRow = true;
-    // Word serializes centered/right-aligned tables with the inherited alignment
-    // on every row. Materialize that value before import instead of relaxing
-    // verification for arbitrary row-property changes.
+    // Word copies centered/right table alignment onto each row; materialize it before import.
     if (
       block.format?.alignment !== undefined ||
       (!wordChild(rowProps, "jc") && ["center", "right"].includes(rowAlignment))
@@ -912,9 +907,7 @@ export function compileWordTableBlock<T>(
     }
     table.append(tr);
   }
-  // ISO 29500 tblInd is ignored whenever any resulting row is not left-aligned.
-  // A retained indent must not make an otherwise correct native write fail its
-  // comparison when Word discards that contradictory property.
+  // Word discards tblInd if any row is not left-aligned (ISO 29500); omit the ineffective indent.
   if (nonLeadingRow) {
     if ((block.format?.indent ?? 0) > 0)
       throw new Error("Table indentation requires left alignment");

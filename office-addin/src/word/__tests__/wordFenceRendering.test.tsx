@@ -14,11 +14,6 @@ import { buildWordArtifact } from "../utils/buildWordArtifact";
 
 import type { ContentPart, HostArtifact } from "@erato/frontend/library";
 
-// The REAL `MessageContent`, the REAL `componentRegistry` and the REAL Word
-// renderer: only the three chat-shell hooks the card reaches through
-// `useClientActionConfirmFlow` are stubbed, because a chat provider is not
-// what this suite is about. Everything that decides whether a fence becomes a
-// card runs untouched.
 vi.mock("@erato/frontend/library", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   useChatContext: () => ({
@@ -39,19 +34,7 @@ vi.mock("@erato/frontend/library", async (importOriginal) => ({
   usePersistedState: () => [{}, () => {}],
 }));
 
-/**
- * The seam between the artifact Word stamps and the SHIPPED frontend rule that
- * turns a fence into a host card. Nothing here is mocked: the real
- * `MessageContent` classifies the fences, and the real Word renderer is
- * registered in the real `componentRegistry` slot.
- *
- * The cards themselves are exercised in `WordHostCardRenderer.test.tsx`; this
- * suite only asks whether the fence reaches a card at all. The card DOES
- * render (with its buttons disabled — the artifact carries no capture), which
- * is why the three chat-shell hooks below have to be stubbed: keep them, or
- * the real `useChatContext` throws and every case here goes red for a reason
- * that has nothing to do with fence classification.
- */
+/** Keep fence classification and the host renderer real; only chat-shell hooks are stubbed. */
 const EDITS_FENCE =
   '```erato-word-edits\n{"edits":[{"paragraph":2,"text":"Revised."}]}\n```';
 const INSERT_FENCE = "```erato-word-insert\nA drafted paragraph.\n```";
@@ -60,7 +43,6 @@ const UNRELATED_FENCE = '```json\n{"paragraph": 2}\n```';
 const textContent = (text: string): ContentPart[] =>
   [{ content_type: "text", text }] as unknown as ContentPart[];
 
-/** The feature config the add-in shell supplies in production. */
 function renderMessage(content: ContentPart[], hostArtifact: HostArtifact) {
   return render(
     <ThemeProvider>
@@ -86,8 +68,6 @@ describe("the Word fences through the shipped host-card slot", () => {
   beforeEach(() => {
     i18n.load("en", {});
     i18n.activate("en");
-    // The real ThemeProvider reads the host's colour-scheme preference; jsdom
-    // ships no matchMedia.
     vi.stubGlobal(
       "ResizeObserver",
       class {
@@ -125,7 +105,6 @@ describe("the Word fences through the shipped host-card slot", () => {
     expect(
       container.querySelector('[data-testid="word-insert-card"]'),
     ).not.toBeNull();
-    // The unrelated fence still renders as an ordinary code block.
     expect(
       container.querySelectorAll("pre.message-content-code-block"),
     ).toHaveLength(1);
@@ -140,8 +119,6 @@ describe("the Word fences through the shipped host-card slot", () => {
       withoutLanguages,
     );
 
-    // The host-card gate reads exactly that list, so without it BOTH fences
-    // are ordinary code blocks — no card, no button, no way to consent.
     expect(
       container.querySelector('[data-testid="word-edits-card"]'),
     ).toBeNull();

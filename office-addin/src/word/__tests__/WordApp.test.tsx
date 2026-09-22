@@ -146,8 +146,6 @@ describe("Word task pane composition", () => {
     i18n.activate("en");
     spies.callLog.length = 0;
     word = installMockWordDocument();
-    // `Office.onReady()` is awaited by `OfficeProvider`; the log entry is what
-    // orders it against the auth-source build.
     word.onReady.mockImplementation(
       (): Promise<{ host: string; platform: string }> => {
         spies.callLog.push("Office.onReady");
@@ -183,10 +181,6 @@ describe("Word task pane composition", () => {
     expect(
       screen.getByTestId("addin-history-drawer-trigger"),
     ).toBeInTheDocument();
-    // `loadOfficeJs` short-circuits because `Office.onReady` is already a
-    // function, so what this pins is that office.js is CONSUMED, not that a
-    // script tag exists — under jsdom that script's `onload` would never fire
-    // and the provider would park on its loading branch forever.
     expect(
       appendChild.mock.calls.some(
         ([node]) =>
@@ -210,9 +204,6 @@ describe("Word task pane composition", () => {
     renderPane();
     await screen.findByTestId("word-message-list");
 
-    // The single generic host-card slot ERMAIN-543 shipped: Word dispatches
-    // its two fence tags inside that one renderer rather than claiming a slot
-    // per fence. Outlook's three slots and Teams' two stay untouched.
     expect(Object.keys(componentRegistry)).toEqual(["HostCardCodeBlock"]);
   });
 

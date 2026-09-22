@@ -9,8 +9,7 @@
   overflow-wrap: anywhere;
   line-height: 1.5;
 }
-/* Reuse the frontend DOCX viewer's paper palette for authored document colors.
-   Shared Card frames, controls, captions and review chrome keep the app theme. */
+/* Document colors use the DOCX paper palette; review controls use the app theme. */
 .word-rich-preview__paper {
   color: var(--docx-preview-page-fg);
   background: var(--docx-preview-page-bg);
@@ -18,8 +17,6 @@
 .word-rich-preview__text.word-rich-preview__paper {
   padding: var(--theme-spacing-control-gap);
 }
-/* A paragraph inside a shaded cell inherits that cell's background. Explicit
-   paragraph shading remains inline and takes precedence over this default. */
 .word-rich-preview__table
   > tbody
   > tr

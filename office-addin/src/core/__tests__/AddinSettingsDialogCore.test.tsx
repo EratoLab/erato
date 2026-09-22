@@ -166,9 +166,6 @@ describe("AddinSettingsDialogCore", () => {
   });
 
   it("spawns the shared pane but NO host tab for an entities-only contribution", () => {
-    // A host with client actions but no host behaviour to configure (Word)
-    // must be able to reach the shared "MCP & Apps" pane without paying for
-    // an empty tab of its own.
     render(
       <AddinSettingsDialogCore
         isOpen={true}

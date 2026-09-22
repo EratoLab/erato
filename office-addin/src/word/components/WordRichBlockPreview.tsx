@@ -36,7 +36,6 @@ const color = (value: string | undefined): string | undefined =>
   value && /^#?[a-fA-F0-9]{6}$/.test(value)
     ? `#${value.replace(/^#/, "")}`
     : undefined;
-// Document measurements belong to the preview, not to application chrome.
 const points = (value: number | undefined) =>
   value === undefined ? undefined : `${value / 12}em`;
 const highlights: Record<string, string> = {
@@ -216,7 +215,6 @@ function TablePreview({
         <table
           className="docx-preview-theme word-rich-preview__paper word-rich-preview__table"
           style={{
-            // Preserve readable columns; the enclosing region scrolls inside the pane.
             minWidth: `${Math.max(columnCount, 1) * 6}em`,
             backgroundColor: color(format.shading),
             borderTop: border(format.borders?.top),
@@ -644,7 +642,6 @@ function NativeEditPreview({
   );
 }
 
-/** Word owns final pagination and rendering. This is the readable approval draft. */
 export function WordRichBlockPreview({ block, snapshot }: PreviewProps) {
   if (block.type === "table")
     return <TablePreview block={block} snapshot={snapshot} />;

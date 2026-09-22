@@ -128,7 +128,6 @@ describe("structured Word submissions", () => {
     expect(parseWordDocumentPlan(JSON.stringify(corrected))?.deleted).toEqual(
       [],
     );
-    // Normalization does not alter the persisted tool arguments.
     expect(corrected).not.toHaveProperty("deleted");
   });
 

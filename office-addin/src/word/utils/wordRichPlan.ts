@@ -25,7 +25,6 @@ const text = (v: unknown): v is string =>
   typeof v === "string" &&
   !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(v);
 
-/** Bounded typed vocabulary. Model strings never become markup. */
 export function parseWordBlock(
   value: unknown,
   depth = 0,

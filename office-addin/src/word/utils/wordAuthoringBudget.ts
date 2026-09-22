@@ -16,10 +16,7 @@ type WordAuthoringBudgetResult =
       details?: string[];
     };
 
-/** Conservative reservation for paged input, the excerpt and a rewritten output.
- * Uses the deployment's actual model/context setting and includes chat/files.
- * This is an estimate, not a promise that a model will finish its output.
- */
+/** A conservative preflight estimate; it cannot guarantee the model’s eventual output size. */
 export async function checkWordAuthoringBudget(
   snapshot: WordAuthoringSnapshot,
   args: {

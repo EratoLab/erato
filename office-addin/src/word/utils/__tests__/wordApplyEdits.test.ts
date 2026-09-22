@@ -78,9 +78,7 @@ describe("applyWordEdits", () => {
       capture: captureOf(texts),
     });
 
-    // The queue order is the discriminating assertion: with ids resolved at
-    // execution time the RESULT is order-independent, so only the order the
-    // commands were issued in can prove the rule holds.
+    // Stable IDs make the resulting text order-independent; assert command order separately.
     expect(
       word.word
         .writes()
@@ -121,8 +119,6 @@ describe("applyWordEdits", () => {
     });
 
     expect(bodyText()).toEqual(["All three, merged."]);
-    // D-31: no style is assigned by the executor — the head paragraph keeps
-    // the one the document already gave it.
     expect(
       word.word.writes().filter((write) => write.kind === "style"),
     ).toEqual([]);
@@ -238,9 +234,6 @@ describe("applyWordEdits", () => {
 
   it("keeps the snapshot when the WRITE sync rejects mid-batch", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    // Paragraph 2 sits in a locked content control. The batch is applied in
-    // descending order, so paragraph 3 has already been rewritten when the
-    // command for 2 is rejected: an Office.js batch is not a transaction.
     word.word.failWriteOn("id-2");
 
     const result = await applyWordEdits({
@@ -253,8 +246,6 @@ describe("applyWordEdits", () => {
 
     expect(bodyText()[2]).toBe("Charlie, revised.");
     expect(result.hostFailed).toBe(true);
-    // The document MOVED, so the snapshot is exactly what the user needs — it
-    // is the only thing standing between a partial batch and no way back.
     expect(result.snapshotOoxml).not.toBeNull();
     expect(result.outcomes.map((outcome) => outcome.status)).toEqual([
       "failed",
@@ -282,9 +273,6 @@ describe("applyWordEdits", () => {
       capture: captureOf(texts),
     });
 
-    // Edit 1 was never queued: the host's rejection says nothing about it, and
-    // calling it "failed" would tell the user Word refused a change it never
-    // saw.
     expect(result.outcomes.map((outcome) => outcome.status)).toEqual([
       "changed",
       "failed",

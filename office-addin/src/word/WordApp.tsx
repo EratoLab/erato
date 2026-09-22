@@ -14,14 +14,9 @@ import {
 import { OfficeProvider, useOffice } from "../providers/OfficeProvider";
 import { OfficeThemeProvider } from "../providers/OfficeThemeProvider";
 
-// Module scope, exactly as the Outlook and Teams compositions do it: the
-// frontend classifies a Word fence as a host card only while the slot is
-// registered, so registering inside an effect would render the first
-// message's fences as plain code blocks.
+// Register before the first React render; the component registry is a mutable global.
 installWordComponentRegistrations();
 
-// Distinct from Outlook's "Microsoft Office add-in" and Teams' "Microsoft
-// Teams tab": the sidecar identifies the surface, not the bundle.
 const WORD_SIDECAR_CLIENT_INFO = createBrowserClientInfo({
   name: "erato-office-addin",
   version: import.meta.env.VITE_APP_VERSION ?? "unversioned",
@@ -48,12 +43,6 @@ function WordFeatureConfig({ children }: { children: React.ReactNode }) {
   );
 }
 
-/**
- * Word task-pane composition with document inclusion and reviewed write actions.
- * The literal word platform selects the backend's Word action facets.
- * Office.js nullifies history.pushState/replaceState, so avoid router navigation
- * after mounting this route.
- */
 export default function WordApp() {
   return (
     <SharedAddinShell sidecarClientInfo={WORD_SIDECAR_CLIENT_INFO}>

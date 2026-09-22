@@ -24,7 +24,6 @@ export const sixParagraphXml = () =>
       .join(""),
   );
 
-/** Emulate harmless changes observed in native Word exports, beyond an echo. */
 export function wordSerializationNoise(ooxml: string): string {
   const doc = new DOMParser().parseFromString(ooxml, "application/xml");
   for (const p of Array.from(doc.getElementsByTagNameNS(W, "p")))

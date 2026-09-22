@@ -35,8 +35,6 @@ describe("insertWordTextAtCursor", () => {
   });
 
   it("NEVER replaces a non-empty selection — it inserts after it", async () => {
-    // Replacing a selection is `word.replace_selection`, which is v2. Doing it
-    // here would silently destroy the user's highlighted text.
     word.word.setSelection("A passage the user highlighted");
 
     await expect(insertWordTextAtCursor("Drafted text.")).resolves.toBe(true);

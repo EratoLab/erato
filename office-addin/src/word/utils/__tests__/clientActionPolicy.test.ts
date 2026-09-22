@@ -25,9 +25,7 @@ describe("the Word decision store", () => {
   });
 
   it("drops another host's entries on read", () => {
-    // Two hosts must never share a key: each store's parse drops what it does
-    // not implement, so a shared key would have each pane deleting the other's
-    // decisions on the next write.
+    // Each host drops unknown actions on read, so sharing storage would erase the other host’s choices.
     expect(
       wordClientActionDecisionStore.persistedOptions.parse?.({
         "outlook_reply_from_read/outlook.reply": "always",
@@ -39,7 +37,6 @@ describe("the Word decision store", () => {
   it("drops an unimplemented Word action and an unknown decision value", () => {
     expect(
       wordClientActionDecisionStore.persistedOptions.parse?.({
-        // v2, not in this build's registry.
         "word_selection/word.replace_selection": "always",
         "word_document_review/word.apply_edits": "sometimes",
       }),
@@ -52,8 +49,6 @@ describe("the Word decision store", () => {
         "word_document_review/word.apply_edits": "always",
       });
 
-    // Nothing stored under the Word key yet, so the write is just the map —
-    // the forward-compatibility merge is covered by the core suite.
     expect(JSON.parse(serialized!)).toEqual({
       "word_document_review/word.apply_edits": "always",
     });

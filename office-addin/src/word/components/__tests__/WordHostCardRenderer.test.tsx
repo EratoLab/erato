@@ -22,10 +22,6 @@ import type { MockWordHost } from "../../../test/mocks/word/document";
 import type { WordDocumentCapture } from "../../utils/wordDocumentCapture";
 import type * as EratoLibrary from "@erato/frontend/library";
 
-// Mocked at the same seams as the Outlook renderer suites: the artifact the
-// host stamps, the chat snapshot, and the persisted decisions. Everything
-// under test — the fence parser, the registry dispatch, the write gate and the
-// executor against the Word mock — runs for real.
 const mockUseHostArtifact = vi.fn();
 const mockUseChatContext = vi.fn();
 const mockUsePersistedState = vi.fn();
@@ -300,8 +296,6 @@ describe("WordHostCardRenderer", () => {
     });
 
     it("re-checks identity at execution, not only at render", async () => {
-      // The card can be opened against document A and resolved after the pane
-      // has switched to document B.
       const artifact = makeArtifact({
         clientActionPresentation: "auto_prompt",
         proposedClientAction: APPLY,
@@ -445,9 +439,6 @@ describe("WordHostCardRenderer", () => {
       );
       await flush();
 
-      // Under a standing grant this card is the only place the user learns
-      // anything: telling them nothing was written, with no way back, is the
-      // one outcome a half-applied batch must never produce.
       expect(screen.getByRole("alert")).toHaveTextContent(
         "Some changes may already be in the document",
       );

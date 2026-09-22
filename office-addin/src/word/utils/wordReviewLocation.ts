@@ -16,7 +16,6 @@ export type WordLocationResult =
   | "identity-mismatch"
   | "unavailable";
 
-/** Read only. Tracking is owned by Word and is never changed by the add-in. */
 export async function readWordTrackingMode(): Promise<WordTrackingMode> {
   const word = wordWriteHost();
   if (!word) return "unknown";
@@ -52,7 +51,6 @@ export function originalWordAnchor(
     : null;
 }
 
-/** Ordered, contiguous, exact verification, shared by navigation and result capture. */
 export function verifiedAnchorPositions(
   anchor: WordReviewAnchor,
   current: readonly { uniqueLocalId: string; text: string }[],
@@ -76,7 +74,6 @@ export function verifiedAnchorPositions(
   return positions;
 }
 
-/** Explicit navigation only: no text search, ordinal fallback, or document markers. */
 export async function showWordReviewLocation(
   anchor: WordReviewAnchor,
   currentIdentity: string | null,

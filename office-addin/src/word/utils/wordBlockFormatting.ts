@@ -125,7 +125,6 @@ const highlights = [
 ];
 const underlineStyles = ["single", "double", "dotted", "dash", "wave"];
 
-/** Extra keys allow the run parser to validate { text, ...format } in one pass. */
 export function parseWordRunFormatting(
   value: unknown,
   extraKeys: readonly string[] = [],
@@ -478,7 +477,6 @@ const propertyOrder: Record<string, string[]> = {
   ],
 };
 
-/** Replace one owned property; keep all other properties and extension metadata. */
 export function putWordProperty(parent: Element, value: Element): void {
   const existing = wordChild(parent, value.localName);
   if (existing) {

@@ -10,24 +10,13 @@ import type {
 import type { WordDocumentCapture } from "../utils/wordDocumentCapture";
 
 export interface WordDocumentCaptures {
-  /**
-   * Written by the composer immediately before it calls `onSendMessage`. The
-   * capture cannot ride `beforeSend`, whose only argument is the bare
-   * `hostContextIdentity` string.
-   */
+  /** Stage separately: beforeSend receives only hostContextIdentity. */
   stagePendingCapture: (capture: WordDocumentCapture | null) => void;
-  /** Assign to `controller.hostCallbacksRef.current` at render. */
   hostCallbacks: AddinChatHostCallbacks;
-  /** ERMAIN-822's input: completed assistant message id → its send-time capture. */
   capturesByAssistantMessageId: ReadonlyMap<string, WordDocumentCapture>;
 }
 
-/**
- * Pair a staged send-time capture with its completed assistant message.
- * The message ID is unavailable at send time. Promote only when this session
- * observes exactly one completion; ambiguous completions receive no capture
- * and cannot enable writes against an unknown source.
- */
+/** The reply ID is unknown at send time; bind only an unambiguous fresh completion. */
 export function useWordDocumentCaptures(
   controller: AddinChatController,
 ): WordDocumentCaptures {
@@ -42,9 +31,7 @@ export function useWordDocumentCaptures(
   const { currentChatId, messageOrder, messages } = controller;
   useEffect(() => {
     if (freshTrackerChatIdRef.current !== currentChatId) {
-      // A brand-new chat receiving its id on first send is the SAME
-      // conversation continuing, not a chat switch: discarding the tracker
-      // there would drop the capture for the very first exchange.
+      // A new chat receiving its server ID must retain its pending capture.
       const isNewChatGettingItsId =
         freshTrackerChatIdRef.current == null && currentChatId != null;
       freshTrackerChatIdRef.current = currentChatId;
@@ -69,10 +56,7 @@ export function useWordDocumentCaptures(
     },
     hostCallbacks: {
       beforeSend: (hostContextIdentity) => {
-        // The composer stages the capture just before it sends, so this only
-        // has to clear it: a send that carries no document identity (chip off,
-        // or an unreadable document) must never promote a stale capture from
-        // an earlier turn.
+        // A send without document context must not inherit an earlier pending capture.
         if (hostContextIdentity == null) {
           pendingCaptureRef.current = null;
         }

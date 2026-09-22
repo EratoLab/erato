@@ -2,20 +2,15 @@ import { useMessagingStore } from "@erato/frontend/library";
 
 import type { WordDocumentReadSession } from "./wordDocumentReadTool";
 
-/** Arm immediately before sending. The shared store receives the server's
- * assistant_message_started event synchronously, before client_tool_call,
- * even when both arrive in one SSE chunk with no React render between them.
- * Bind once: an approval continuation keeps the same message; a task child or
- * later reaction needs its own explicit capture instead of adopting this one.
- */
+/** Bind before sending: SSE can deliver ownership and a tool request before React renders.
+ * Approval continuations keep their owner; task children and later requests need a new capture. */
 export function bindWordDocumentReadRequest(
   session: WordDocumentReadSession,
   snapshot: string,
   chatId: string | null,
 ): () => void {
   const initial = useMessagingStore.getState();
-  // A new chat's stream key is rebound to its real id by chat_created. Keep
-  // this send's key, not the global newlyCreatedChatId or active chat later on.
+  // The stream alias must belong to the request that captured this document.
   const streamKey = chatId ?? initial.activeStreamKey;
   const previousId = initial.getStreaming(streamKey).currentMessageId;
   let sawPendingSend = false;
@@ -26,8 +21,7 @@ export function bindWordDocumentReadRequest(
       sawPendingSend = true;
       return;
     }
-    // A failed/aborted send with no server message must not leave a grant
-    // waiting to bind to a later task reaction in this chat.
+    // An aborted send must not bind its snapshot to a later task.
     if (sawPendingSend && !messageId) {
       unsubscribe();
       return;
@@ -40,8 +34,7 @@ export function bindWordDocumentReadRequest(
       visited.add(resolvedChatId);
       resolvedChatId = state.streamKeyAliases[resolvedChatId];
     }
-    // An upload can create a persisted chat before its first send. In that
-    // case the captured key is already the real id and needs no alias.
+    // Uploads can create the chat before streaming, so a new chat need not have an alias.
     session.bindRequest(snapshot, { chatId: resolvedChatId, messageId });
     unsubscribe();
   });

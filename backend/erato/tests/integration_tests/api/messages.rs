@@ -1787,8 +1787,6 @@ async fn test_token_usage_estimate_with_composable_payload(pool: Pool<Postgres>)
     );
 }
 
-/// Responses estimates must read the unsaved draft through the synthetic
-/// repository, including when replaying reasoning from a previous turn.
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_token_usage_estimate_responses_with_unsaved_draft(pool: Pool<Postgres>) {
     use erato::db::entity::messages;

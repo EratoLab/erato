@@ -145,15 +145,12 @@ describe("WordChatInput", () => {
     expect(facet?.args?.document_identity).toBe(IDENTITY);
     expect(facet?.args?.paragraphs_sent).toBe("3");
     expect(facet?.args?.paragraphs_total).toBe("3");
-    // hostContextIdentity is argument 6 of the 11-arg onSendMessage.
     expect(lastIdentity()).toBe(IDENTITY);
     expect(staged.at(-1)?.identity).toBe(IDENTITY);
     expect(staged.at(-1)?.ordinalMap.get(3)).toEqual({
       uniqueLocalId: "id-3",
       text: "Revenue grew.",
     });
-    // The write path edits what the model READ, not the whole window: the
-    // blank paragraph 2 is numbered and captured, but never writable.
     expect([...(staged.at(-1)?.renderedOrdinals ?? [])]).toEqual([1, 3]);
     expect(staged.at(-1)?.partialOrdinal).toBeNull();
   });
@@ -283,7 +280,6 @@ describe("WordChatInput", () => {
 
     expect(setItem).not.toHaveBeenCalled();
     expect(removeItem).not.toHaveBeenCalled();
-    // `Office.context.document.settings` would persist into the .docx itself.
     expect(word.document.settings.set).not.toHaveBeenCalled();
     expect(word.document.settings.saveAsync).not.toHaveBeenCalled();
     setItem.mockRestore();

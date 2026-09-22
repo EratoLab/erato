@@ -1,11 +1,5 @@
 import type { WordDocumentCapture } from "./wordDocumentCapture";
 
-/**
- * Pure parsing, source resolution and verification for erato-word-edits.
- * Rejection reasons are machine codes localized by the report card.
- */
-
-/** One edit as the model writes it inside the fence. */
 export interface WordEdit {
   /** 1-based paragraph ordinal, as the document text showed it. */
   paragraph: number;
@@ -15,11 +9,7 @@ export interface WordEdit {
   text: string;
 }
 
-/**
- * Return null for incomplete or invalid payloads, including streaming input.
- * Validate the entire edit list: dropping a malformed entry would apply only
- * part of the proposed instruction.
- */
+/** Reject the whole list when any edit is malformed; applying a subset would change the request. */
 export function parseWordEdits(content: string): WordEdit[] | null {
   let parsed: unknown;
   try {
@@ -66,67 +56,39 @@ export function parseWordEdits(content: string): WordEdit[] | null {
   return edits;
 }
 
-/** Why an edit will not be applied. Mapped to localized copy by the card. */
 export type WordEditRejection =
-  /** The ordinal was not rendered into the send, so the model never read it. */
   | "unknown-ordinal"
-  /** The edit covers the paragraph the send could only include in part. */
   | "partial-ordinal"
-  /** Two edits in the same batch cover the same paragraph. */
   | "overlapping"
-  /** The paragraph's current text differs from what the model was shown. */
   | "changed";
 
 export type WordEditStatus = "applied" | "failed" | WordEditRejection;
 
-/** One line of the per-edit report. */
 export interface WordEditOutcome {
-  /**
-   * Position in the model's list. The identity of an edit, because an ordinal
-   * is NOT unique: a model may name paragraph 3 twice, and the second one is
-   * rejected as overlapping — keying the report by ordinal would then let one
-   * line inherit the other's verdict and report a skipped edit as applied.
-   */
+  /** Use list position as the edit identity; multiple edits can name the same paragraph. */
   index: number;
-  /** First ordinal the edit targets. */
   paragraph: number;
-  /** Last ordinal, when the edit spans a range. */
   through?: number;
   status: WordEditStatus;
-  /** Short, code-point-safe excerpt of the replacement text. */
   excerpt: string;
 }
 
-/** An edit that survived resolution, with the paragraphs it maps to. */
 export interface ResolvedWordEdit {
-  /** Position in the model's list; carried so the report cannot misattribute. */
   index: number;
   paragraph: number;
   through?: number;
   text: string;
-  /**
-   * The targeted paragraphs in ascending document order. The FIRST one keeps
-   * its style and receives the replacement; the rest are removed.
-   */
   targets: { ordinal: number; uniqueLocalId: string; sentText: string }[];
   excerpt: string;
 }
 
 export interface WordEditPlan {
-  /** Ordered ascending by start ordinal; the executor applies them reversed. */
   resolved: ResolvedWordEdit[];
-  /** Edits rejected before any document read. */
   rejected: WordEditOutcome[];
 }
 
 const EXCERPT_CODE_POINTS = 60;
 
-/**
- * A short, code-point-safe excerpt for the report. Cuts on a code point, never
- * inside a surrogate pair, so an emoji or an astral character never renders as
- * a replacement glyph. A replacement can be tens of kilobytes; the report line
- * must stay one line.
- */
 export function editExcerpt(text: string): string {
   const collapsed = text.replace(/\s+/gu, " ").trim();
   const points = [...collapsed];
@@ -135,32 +97,8 @@ export function editExcerpt(text: string): string {
     : `${points.slice(0, EXCERPT_CODE_POINTS).join("")}…`;
 }
 
-/**
- * Phase one, part one: map each edit onto the paragraphs the send captured.
- * Writes nothing and reads nothing from the live document.
- *
- * Rejections here are final:
- * - an edit whose first or last ordinal is not in `capture.renderedOrdinals`
- *   is `unknown-ordinal`: the send rendered no line for it, so the model
- *   cannot have read it and an ordinal it guessed must not be written. NO
- *   fallback search is issued — that is the whole point of addressing by
- *   ordinal;
- * - an edit touching `capture.partialOrdinal` is `partial-ordinal`. That
- *   paragraph WAS shown, but only a prefix of it, and a replacement would
- *   delete the rest. It gets its own code so the report can say so;
- * - an ordinal outside `1..capture.paragraphsSent`, or one the capture has no
- *   entry for, is `unknown-ordinal` as well. This still covers the INTERIOR of
- *   a span, which the rendered-set gate deliberately does not;
- * - an edit whose paragraphs overlap an EARLIER edit's is `overlapping`.
- *   Earlier wins, so the outcome does not depend on how the model happened to
- *   order its list.
- *
- * A range is required to be ascending and contiguous by construction: it names
- * `paragraph..through`, every ordinal in between must resolve, and the
- * paragraphs are taken in ascending order. Its two ENDS must be paragraphs the
- * model actually read; blank paragraphs between them are part of the passage
- * it read and stay replaceable.
- */
+/** Endpoints must be fully read; blank interior paragraphs remain in the span.
+ * Never locate an unknown ordinal by searching its text. */
 export function planWordEdits(
   edits: readonly WordEdit[],
   capture: WordDocumentCapture,
@@ -180,8 +118,6 @@ export function planWordEdits(
       excerpt,
     });
 
-    // The ends of the edit are what the model claims to have read; check them
-    // against what was actually rendered before resolving anything.
     if (
       capture.partialOrdinal !== null &&
       edit.paragraph <= capture.partialOrdinal &&
@@ -238,29 +174,11 @@ export function planWordEdits(
 }
 
 export interface WordEditVerification {
-  /** Survivors, ordered DESCENDING by start ordinal — the application order. */
   applicable: ResolvedWordEdit[];
-  /** Edits dropped because the document moved under them. */
   skipped: WordEditOutcome[];
 }
 
-/**
- * Phase one, part two: compare each target paragraph's CURRENT text against
- * the text the model was shown.
- *
- * Exact string equality, deliberately: no trimming, no whitespace collapsing,
- * no case folding, no similarity threshold. A paragraph the user touched since
- * the send is skipped and reported, never overwritten — partial application is
- * what makes a standing "always allow" grant safe, because the executor may
- * apply less than was consented to and never more.
- *
- * A paragraph whose id no longer resolves (the user deleted it) counts as
- * changed for the same reason.
- *
- * The result is ordered DESCENDING by start ordinal. A replacement containing
- * a newline creates paragraphs and shifts everything after it, so applying
- * last-to-first leaves the not-yet-applied targets where the plan found them.
- */
+/** Whitespace changes count as later edits. Apply from the end because newlines shift paragraph positions. */
 export function verifyWordEdits(
   plan: WordEditPlan,
   currentTextById: ReadonlyMap<string, string | null>,
@@ -305,14 +223,6 @@ export function verifyWordEdits(
   return { applicable, skipped };
 }
 
-/**
- * The report lines for one batch, in the order the model wrote the edits —
- * which is the order the user read them in, not the reverse order they were
- * applied in.
- *
- * Ordered by the edit's position in the list, never by its ordinal: two edits
- * may name the same paragraph, and each must keep its own verdict.
- */
 export function buildWordEditReport(
   outcomes: readonly WordEditOutcome[],
 ): WordEditOutcome[] {

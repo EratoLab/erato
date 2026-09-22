@@ -40,8 +40,6 @@ describe("buildWordArtifact", () => {
       capture,
     });
 
-    // Without this exact list the frontend's host-card gate never fires and
-    // both fences render as plain code blocks with no way to consent.
     expect(artifact?.cardFenceLanguages).toEqual([
       "erato-word-edits",
       "erato-word-insert",
@@ -92,7 +90,6 @@ describe("buildWordArtifact", () => {
       })?.proposedClientAction,
     ).toBe("word.apply_edits");
 
-    // Advertised set says apply_edits only; an unadvertised proposal is dropped.
     expect(
       buildWordArtifact({
         facetId: "word_document_review",
@@ -118,8 +115,6 @@ describe("buildWordArtifact", () => {
   });
 
   it("stamps neither identity nor freshness for a message this pane never captured", () => {
-    // History after a pane reload: the card then shows a stated reason instead
-    // of resolving ordinals against an empty map.
     const artifact = buildWordArtifact({
       facetId: "word_document_review",
       clientActionInfo: reviewInfo,
@@ -130,8 +125,6 @@ describe("buildWordArtifact", () => {
 
     expect(artifact?.itemIdentity).toBeUndefined();
     expect(artifact?.isFreshCompletion).toBeUndefined();
-    // The artifact still exists, so the fences still card — with the buttons
-    // disabled and the reason stated.
     expect(artifact?.cardFenceLanguages).toHaveLength(3);
   });
 

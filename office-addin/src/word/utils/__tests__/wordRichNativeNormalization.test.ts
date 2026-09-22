@@ -261,8 +261,6 @@ describe("native full-document formatting normalization", () => {
       all(doc, "fonts")[0].append(font);
     });
     expect(matches(source, after)).toBe(true);
-    // Compare-and-swap still observes package changes; write verification alone
-    // permits Word adding font definitions it needs to render new content.
     expect(wordDocumentFingerprint(source)).not.toBe(
       wordDocumentFingerprint(after),
     );

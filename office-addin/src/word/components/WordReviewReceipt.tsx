@@ -2,7 +2,6 @@ import { t } from "@lingui/core/macro";
 
 import type { WordReviewState } from "../utils/wordReviewState";
 
-/** A retained outcome, with the full comparison available through Show details. */
 export function WordReviewReceipt({
   review,
   kind,

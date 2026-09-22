@@ -34,8 +34,6 @@ describe("word document identity", () => {
     const identity = resolveWordDocumentIdentity();
 
     expect(identity).toMatch(/^pane-session:[0-9a-f-]{36}$/);
-    // A fresh token per call is correct here (one call per pane load) but the
-    // values must not collide.
     expect(resolveWordDocumentIdentity()).not.toBe(identity);
   });
 
@@ -44,7 +42,6 @@ describe("word document identity", () => {
   });
 
   it("derives the name from a Windows local path", () => {
-    // Word on Windows desktop reports a local path, not a URL.
     word.document.url = "C:\\Users\\erato\\Documents\\Quarterly Review.docx";
     expect(resolveWordDocumentName()).toBe("Quarterly Review.docx");
   });

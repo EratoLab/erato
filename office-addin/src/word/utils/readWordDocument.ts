@@ -31,15 +31,8 @@ const wordGlobal = (): WordGlobal | null => {
     : null;
 };
 
-/**
- * Read body paragraphs in one Word.run; authoring also captures the full DOCX
- * when supported. getText() omits hidden/deleted text on the WordApi 1.7 floor.
- *
- * Two syncs are required: collection items must load before per-paragraph reads
- * can be queued. These reads are not atomic; authoring checks the captured
- * package and rechecks live state before writing. Failure returns { ok: false }
- * so sending can continue without a document facet.
- */
+/** Load IDs before queuing getText; its value is unreadable until the second sync.
+ * Exclude hidden and deleted text. A Word.run with two syncs is not an atomic read. */
 export async function readWordDocument(
   includeAuthoring = false,
 ): Promise<WordDocumentReadResult> {
@@ -79,8 +72,7 @@ export async function readWordDocument(
       };
     });
     if (includeAuthoring && result.authoring && supportsWordDocumentPackage()) {
-      // A failed full capture is not silently downgraded to body-only authoring:
-      // it could otherwise turn a request to clear the document into a partial clear.
+      // A failed full capture must not degrade into a partial rewrite or clear.
       const full = await captureWordDocumentPackage();
       return {
         ...result,

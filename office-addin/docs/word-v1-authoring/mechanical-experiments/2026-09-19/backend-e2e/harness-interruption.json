@@ -1,6 +1,0 @@
-{
-  "reason": "Word task-pane polling suspended during long model response; command 10 completed after fixture switch. Stop and scope queue before reuse.",
-  "discardedChatId": "01a0bad6-3039-7a20-b2ee-8611919620f9",
-  "discardedBaselineCapture": 11,
-  "modelFailure": false
-}

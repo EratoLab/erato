@@ -56,9 +56,6 @@ describe("readWordDocument", () => {
   it("reads the ids and the text inside ONE Word.run", async () => {
     await readWordDocument();
 
-    // One run is what makes the ids and the send-time text consistent with
-    // each other. The mock throws if a getText() result is read before the
-    // sync that resolves it, so a correct read is also proven to be ordered.
     expect(word.word.run).toHaveBeenCalledTimes(1);
     expect(word.word.syncCount()).toBe(2);
   });

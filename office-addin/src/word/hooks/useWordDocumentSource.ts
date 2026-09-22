@@ -11,36 +11,25 @@ import type {
 import type { WordAuthoringSnapshot } from "../utils/wordDocumentPlan";
 
 export type WordDocumentStatus =
-  /** No read has completed yet. */
   | "unknown"
-  /** The read failed or the host was unavailable. */
   | "unreadable"
-  /** Readable, but no paragraph carries text. */
   | "empty"
-  /** Readable, with content. */
   | "included";
 
 export interface WordDocumentPreview {
   authoringIssue?: WordAuthoringSnapshot["issue"];
   authoringDetails?: string[];
   status: WordDocumentStatus;
-  /** null until a read has completed, or when the read failed. */
   coverage: WordDocumentCoverage | null;
-  /** The document changed since the last send in this chat. */
   changedSinceLastSend: boolean;
 }
 
 export interface WordDocumentSource {
   preview: WordDocumentPreview;
-  /**
-   * The authoritative send-time read. Always reads fresh — the facet rides
-   * every send while the chip is on, so there is no de-dup and no cache.
-   * Resolves to null when the document could not be read.
-   */
   capture: () => Promise<WordDocumentBuild | null>;
 }
 
-/** FNV-1a. Only ever compared against itself, to label "changed since last send". */
+/** Only for UI change detection; never use this hash to authorize a write. */
 function hashDocument(text: string, total: number): string {
   let hash = 0x811c9dc5;
   for (let index = 0; index < text.length; index += 1) {
@@ -50,15 +39,7 @@ function hashDocument(text: string, total: number): string {
   return `${total}:${(hash >>> 0).toString(16)}`;
 }
 
-/**
- * The pane's view of the open document: a cheap read for the chip's label, and
- * the authoritative read that produces the facet arguments at send time.
- *
- * The labelling read runs when the chip is switched on and when the pane
- * regains focus. There is deliberately no `onParagraphAdded` /
- * `onParagraphChanged` wiring: v1 needs a "changed since last send" label, not
- * a live indicator, and the change hash is NEVER a reason to skip a send.
- */
+/** Label reads are advisory; each send captures fresh document state. */
 export function useWordDocumentSource({
   enabled,
   documentIdentity,
@@ -74,12 +55,8 @@ export function useWordDocumentSource({
     changedSinceLastSend: false,
   });
   const lastSentHashRef = useRef<string | null>(null);
-  // Focus and chip-on can land together; a second read while one is in flight
-  // buys nothing and would race the state it writes.
   const inFlightRef = useRef(false);
-  // A labelling read started before a send can resolve after it. Without a
-  // ticket the older, successful result would overwrite the send's verdict and
-  // the chip would claim the document was included when it was not.
+  // Ignore older label reads that finish after a newer send has reported its result.
   const readSeqRef = useRef(0);
 
   const read = useCallback(
@@ -107,10 +84,8 @@ export function useWordDocumentSource({
           result.authoring.fullDocument,
         );
         build.authoring.documentUrl = result.authoring.documentUrl;
-        // The native inventory also contains tables and anchored ranges. It is
-        // authoritative for structural plans; it cannot be compared one-for-one
-        // with Word's paragraph collection. Bind navigation only when exact and
-        // unambiguous. The live native package is checked again before writing.
+        // Native body blocks exclude table-cell paragraphs and can group anchored ranges.
+        // Their count cannot be used as a paragraph collection ordinal.
         for (const block of build.authoring.blocks) {
           if (block.type === "native") continue;
           const matches = result.paragraphs.filter(
@@ -152,8 +127,6 @@ export function useWordDocumentSource({
     });
   }, [read]);
 
-  // A different document means a different pane session: the counts, the
-  // status and the "changed" baseline all belong to the old one.
   useEffect(() => {
     lastSentHashRef.current = null;
     setPreview({
@@ -175,8 +148,6 @@ export function useWordDocumentSource({
     lastSentHashRef.current = build
       ? hashDocument(build.args.document_text, build.coverage.paragraphsTotal)
       : null;
-    // The label states what the send actually carried, so a "changed" flag
-    // raised before the send must not survive it.
     setPreview((previous) =>
       previous.changedSinceLastSend
         ? { ...previous, changedSinceLastSend: false }

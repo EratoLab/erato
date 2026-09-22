@@ -15,7 +15,6 @@ import type { ClientToolExecutor, ContentPart } from "@erato/frontend/library";
 export const WORD_SUBMIT_PLAN_TOOL = "submit_document_plan";
 export const WORD_SUBMIT_PLAN_ACTION = "word.apply_document_plan";
 
-/** Validate and prepare against an immutable capture. No Office.js or writes. */
 export function createWordDocumentSubmissionExecutor(
   session: WordDocumentReadSession,
 ): ClientToolExecutor {
@@ -77,8 +76,7 @@ export function createWordDocumentSubmissionExecutor(
           ],
         };
     } catch (error) {
-      // Only known fixed compiler diagnostics can cross the tool boundary.
-      // Never return raw errors, document XML, host details or artifact copies.
+      // Return schema paths and constraints, never document contents, in parser diagnostics.
       const hints: Record<string, string> = {
         "Unknown or repeated source row":
           "Table row sourceIndex must identify a unique row in the selected source table.",
@@ -107,8 +105,7 @@ export function createWordDocumentSubmissionExecutor(
     }
     if (context.signal?.aborted)
       return { ok: false, error: "Document submission stopped." };
-    // Deterministic by tool-call ID. The backend persists the original input
-    // and this receipt; a result-POST retry does not create another draft.
+    // Key by tool call ID so a retried submission POST returns the same receipt.
     return {
       ok: true,
       result: {
@@ -123,7 +120,6 @@ export function createWordDocumentSubmissionExecutor(
 const object = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** Restore only one server-accepted submission, never pending/failed drafts. */
 export function acceptedWordDocumentSubmission(
   content: ContentPart[] | undefined,
 ): { toolCallId: string; content: string } | undefined {

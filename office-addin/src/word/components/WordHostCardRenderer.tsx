@@ -51,15 +51,10 @@ import type {
 import type { WordWriteBlockReason } from "../utils/wordWriteGate";
 import type { HostCardCodeBlockProps } from "@erato/frontend/library";
 
-/** The confirmed payload: what the card shows and what the executor writes. */
 type WordCardPayload =
   | { kind: "edits"; edits: WordEdit[] }
   | { kind: "insert"; text: string };
 
-/**
- * Dispatch Word paragraph-edit, insertion and document-plan cards through the
- * shared HostCardCodeBlock slot. Unknown tags remain visible as raw code.
- */
 export function WordHostCardRenderer({
   language,
   content,
@@ -86,7 +81,6 @@ export function WordHostCardRenderer({
   );
 }
 
-/** Unknown tags remain inspectable through the shared code renderer. */
 function RawFence({ content }: { content: string }) {
   return (
     <div className="my-2 overflow-auto" data-testid="word-card-raw">

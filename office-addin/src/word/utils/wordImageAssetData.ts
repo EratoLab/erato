@@ -6,7 +6,6 @@ export interface WordImageAsset {
   fileId: string;
   name: string;
   mime: NonNullable<WordImageSpec["data"]>["mime"];
-  /** Host-only immutable bytes, never included in the document read tool. */
   base64: string;
   widthPx: number;
   heightPx: number;

@@ -7,7 +7,6 @@ import type {
 } from "../utils/wordDocumentPlan";
 import type { WordSectionPlan, WordSectionStories } from "../utils/wordStories";
 
-/** Word-specific page geometry; application controls continue to use the kit. */
 export function WordSectionPlanPreview({
   section,
   index,

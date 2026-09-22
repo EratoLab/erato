@@ -7,12 +7,7 @@ import {
 
 import type { ContentPart } from "@erato/frontend/library";
 
-/**
- * A stand-in host registry. The core fence bans importing a host module, so
- * these tests bind the validator to a local type guard over the same three
- * action ids the Outlook build implements — the shape the binding under test
- * is generic over, not Outlook's registry itself.
- */
+/** Use a local action guard: the core import fence excludes host registries. */
 const IMPLEMENTED = [
   "outlook.reply",
   "outlook.reply_all",
@@ -122,15 +117,11 @@ describe("extractProposedClientAction", () => {
     const proposal = [
       toolUsePart({ input: { action: "outlook.create_appointment" } }),
     ];
-    // In the registry AND in the facet's client_actions → accepted.
     expect(
       extractProposedClientAction(proposal, ["outlook.create_appointment"]),
     ).toBe("outlook.create_appointment");
-    // Removed from the facet's client_actions → ignored despite the registry.
     expect(extractProposedClientAction(proposal, [])).toBeUndefined();
     expect(extractProposedClientAction(proposal, ALLOWED)).toBeUndefined();
-    // Allowed by the facet but outside the registry → ignored (the second
-    // gate; asserted with a look-alike id the add-in does not implement).
     expect(
       extractProposedClientAction(
         [toolUsePart({ input: { action: "outlook.create_meeting" } })],

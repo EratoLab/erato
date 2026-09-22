@@ -445,8 +445,7 @@ export function compileWordContentControl<T>(
   return control;
 }
 
-/** The representations below are equivalent in Word. This function changes a
- * comparison clone only; field instructions/results and control values remain. */
+/** Normalize comparison clones only; authored field instructions and data must still match. */
 export function normalizeWordInlineForComparison(doc: Document): void {
   const XMLNS = "http://www.w3.org/2000/xmlns/";
   for (const field of all(doc, "fldSimple")) {
@@ -477,8 +476,7 @@ export function normalizeWordInlineForComparison(doc: Document): void {
       ),
     );
   }
-  // Word serializes field code/markers as distinct runs even when an edit was
-  // made inside a single run. Retain run attributes/properties when splitting.
+  // Word can repartition field instructions across runs without changing the field.
   for (const r of all(doc, "r")) {
     const children = Array.from(r.children).filter(
       (e) => !(e.namespaceURI === W && e.localName === "rPr"),

@@ -64,8 +64,6 @@ INSTALLED_FRONTEND_LIBRARY_ENTRY_PATH = (
 LOCAL_AUTH_DIR = OFFICE_ADDIN_DIR / "local-auth"
 VITE_BIN_PATH = OFFICE_ADDIN_DIR / "node_modules" / ".bin" / "vite"
 VITE_CACHE_DIR = OFFICE_ADDIN_DIR / "node_modules" / ".vite"
-# Every manifests/manifest-local-*.xml carries this origin; the funnel
-# variants are that origin swapped for the public Tailscale URL.
 MANIFEST_LOCAL_ORIGIN = f"https://localhost:{OFFICE_ADDIN_PORT}"
 MANIFEST_LOCAL_PATH = OFFICE_ADDIN_DIR / "manifests" / "manifest-local.xml"
 MANIFEST_FUNNEL_PATH = OFFICE_ADDIN_DIR / "manifests" / "manifest-funnel.xml"
@@ -92,28 +90,20 @@ MANIFEST_VERSION_OVERRIDES_CLOSE_TAG = "</VersionOverrides>"
 
 
 class FunnelManifestVariant(NamedTuple):
-    """One sideloadable file and the banner lines saying where it goes."""
 
     path: Path
     instructions: tuple[str, ...]
 
 
 class FunnelManifestSpec(NamedTuple):
-    """A hand-resolved local manifest and the funnel artifacts it renders to.
-
-    The on-prem strip is the one transform that differs per manifest, so it is
-    data: `onprem=None` means the manifest is already VersionOverridesV1_0-only
-    and must not be put through `make_onprem_manifest`.
-    """
+    """onprem=None skips the VersionOverrides transform for an already V1_0-only manifest."""
 
     source_path: Path
     funnel: FunnelManifestVariant
     onprem: FunnelManifestVariant | None = None
 
 
-# Teaching the document add-in a new Office app is a <Host> line inside
-# manifest-local-document.xml, not a row here: it stays ONE catalog entry.
-# A row is for a genuinely separate add-in identity.
+# Each entry is a separate catalog identity; additional hosts belong in its manifest.
 FUNNEL_MANIFEST_SPECS = (
     FunnelManifestSpec(
         source_path=MANIFEST_LOCAL_PATH,
@@ -156,12 +146,8 @@ MANIFEST_FUNNEL_APP_PACKAGE_PATH = (
 )
 MANIFEST_UNIFIED_LOCAL_HOST = f"localhost:{OFFICE_ADDIN_PORT}"
 ADDIN_PUBLIC_DIR = OFFICE_ADDIN_DIR / "public"
-# oauth2-proxy answers its ping path with a bare "OK" ahead of every auth
-# check, so it is the one probe that separates "our proxy is up" from
-# "something else owns the port". Docker host networking hides such a
-# collision — the container stays up and logs a clean start while the macOS
-# loopback still belongs to the squatter — and since the Tailscale funnel
-# forwards to this port, every add-in request then lands on the wrong server.
+# Docker can report a running proxy while another process owns macOS loopback.
+# Verify oauth2-proxy’s unauthenticated /ping response before exposing the funnel.
 AUTH_PROXY_PING_PATH = "/ping"
 AUTH_PROXY_PING_BODY = "OK"
 AUTH_PROXY_READY_TIMEOUT_SECONDS = 30
@@ -456,7 +442,6 @@ def auth_proxy_ping_response(address: str) -> str | None:
 
 
 def verify_auth_proxy() -> None:
-    """Fail loudly unless OUR proxy owns AUTH_PROXY_PORT."""
     deadline = time.time() + AUTH_PROXY_READY_TIMEOUT_SECONDS
     address: str | None = None
     while time.time() < deadline:
@@ -599,8 +584,6 @@ def make_onprem_manifest(contents: str) -> str:
 def render_funnel_manifest(source_path: Path, funnel_url: str) -> str:
     contents = source_path.read_text(encoding="utf-8")
     rendered = contents.replace(MANIFEST_LOCAL_ORIGIN, funnel_url.rstrip("/"))
-    # The local manifests are hand-resolved; a placeholder means the table
-    # points at a backend template, which Office rejects on sideload.
     if "{{" in rendered:
         raise ValueError(
             f"{source_path.name} still contains {{{{…}}}} placeholders — the "
@@ -612,7 +595,6 @@ def render_funnel_manifest(source_path: Path, funnel_url: str) -> str:
 
 
 def write_funnel_manifests(funnel_url: str) -> list[FunnelManifestVariant]:
-    """Renders every funnel manifest, returning the artifacts actually written."""
     written: list[FunnelManifestVariant] = []
     for spec in FUNNEL_MANIFEST_SPECS:
         rendered = render_funnel_manifest(spec.source_path, funnel_url)
@@ -622,16 +604,11 @@ def write_funnel_manifests(funnel_url: str) -> list[FunnelManifestVariant]:
         if spec.onprem is None:
             continue
 
-        # The on-prem variant is best-effort: a manifest-local.xml the
-        # transform can't parse must not kill the whole dev session (this runs
-        # after the auth proxy is already up), so warn and keep EXO
-        # development — and the fail-loud EXO funnel manifest written above —
-        # going.
+        # The proxy is already running; a failed optional on-prem variant must not stop EXO development.
         try:
             onprem_contents = make_onprem_manifest(rendered)
         except ValueError as error:
-            # Remove any previous run's copy so a stale manifest (pointing at
-            # an old funnel URL) can't be sideloaded by mistake.
+            # Remove stale output so a previous funnel URL cannot be sideloaded.
             spec.onprem.path.unlink(missing_ok=True)
             print(
                 f"Warning: skipping {spec.onprem.path.name} — {error}. "

@@ -10,7 +10,6 @@ import type {
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
-/** Readable object inventories include no XML or binary payloads. */
 export function wordSourceDetails(
   source: string,
   ref: string,
@@ -50,7 +49,6 @@ export interface WordResolvedSource {
   kind?: "table" | "image" | "drawing";
 }
 
-/** Only immutable, fully read snapshot objects can supply native bytes. */
 export function resolveWordSource(
   snapshot: WordAuthoringSnapshot,
   ref: string,

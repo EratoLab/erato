@@ -60,8 +60,6 @@ describe("resolveWordWriteGate", () => {
   });
 
   it("blocks when the capture was taken against a different document", () => {
-    // The stamp and the pane agree, but the capture came from elsewhere —
-    // the ordinals would resolve against the wrong snapshot.
     expect(
       resolveWordWriteGate({
         capture: capture("pane-session:old"),

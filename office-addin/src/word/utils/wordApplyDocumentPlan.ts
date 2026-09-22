@@ -144,7 +144,6 @@ export async function applyWordDocumentPlan(
   let stage: WordDocumentDiagnostic["stage"] = "compile";
   try {
     const compiled = compileWordDocumentPlan(plan, snapshot);
-    // A serializer failure must stop before the native write boundary.
     const prepared = captureWordAuthoringSnapshot(
       compiled,
       snapshot.identity,
@@ -217,7 +216,6 @@ export async function applyWordDocumentPlan(
   }
 }
 
-/** The original snapshot remains available even if restoration is interrupted. */
 export async function revertWordDocumentPlan(
   before: string,
   expectedAfter: string,
@@ -285,8 +283,6 @@ export async function revertWordDocumentPlan(
   }
 }
 
-/** The model still supplies a typed plan. Only the host compiles a DOCX and
- * imports it at document scope, with an independent original saved first. */
 async function applyFullDocument(
   plan: WordDocumentPlan,
   snapshot: WordAuthoringSnapshot,

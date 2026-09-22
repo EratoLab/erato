@@ -26,7 +26,6 @@ export interface WordReviewState {
   locationGeneration?: number;
   tracking?: WordTrackingMode;
   automatic?: boolean;
-  /** Completed batches default to a receipt; keep the user's disclosure choice. */
   detailsExpanded?: boolean;
   documentPlanStatus?: WordDocumentApplyStatus | "revert-stale";
   documentPlanDiagnostic?: WordDocumentDiagnostic;

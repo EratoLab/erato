@@ -54,10 +54,7 @@ function view(xml: string): PackageView {
   return { doc, parts, roots, body };
 }
 
-/** Native Word declares many unused compatibility namespaces on every new
- * story. Retain the meaning of every used namespace; only unused declarations
- * and the serialization identities already ignored by the base comparator
- * disappear. Unknown/unbound prefixes are never silently accepted. */
+/** Normalize a comparison clone only; unused compatibility namespace aliases do not affect content. */
 function normalizeCompatibility(v: PackageView): void {
   for (const root of v.roots.values()) {
     for (const element of [root, ...all(root, "*", "*")]) {
@@ -226,9 +223,7 @@ function normalizeInheritedFormatting(v: PackageView): void {
   }
 }
 
-/** w:id on these elements links an anchor to its story; it is not the displayed
- * footnote number or the comment's durable identity. Canonical IDs preserve the
- * complete placement/repetition graph, including bookmark endpoints. */
+/** w:id allocation can change without changing the annotation anchor graph. */
 function normalizeAnchorIds(v: PackageView): void {
   for (const [kind, names] of [
     ["footnote", ["footnoteReference"]],
@@ -314,8 +309,7 @@ const onlyAttributes = (e: Element, ns: string, names: string[]) =>
       (a.namespaceURI === ns && names.includes(a.localName)),
   );
 
-/** New classic comments acquire default modern records in Word. Existing
- * durable IDs, resolution/reply metadata, and unknown extensions stay exact. */
+/** Word materializes default modern-comment metadata on import. */
 function normalizeNewCommentMetadata(
   expected: PackageView,
   actual: PackageView,
@@ -528,9 +522,7 @@ function emptyOptionalPart(root: Element): boolean {
       (root.namespaceURI === CID && root.localName === "commentsIds"))
   );
 }
-/** Native import registers fonts needed by authored runs. Existing definitions
- * (including embedded font relationships) and every requested rFonts value
- * remain exact; only additional, uniquely named registrations are optional. */
+/** Word can add font registrations needed by new content; existing definitions must remain exact. */
 function normalizeAddedFonts(expected: PackageView, actual: PackageView): void {
   const before = expected.roots.get("/word/fontTable.xml"),
     after = actual.roots.get("/word/fontTable.xml");
@@ -575,11 +567,8 @@ function definitions(
   return result;
 }
 
-/** Native Word completes an unused linked character style from the unchanged
- * paragraph partner's effective typography after importing another document.
- * This is a catalog repair, not permission to change a style applied to content.
- * https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.linkedstyle
- */
+/** Word completes unused linked character styles on import.
+ * Referenced styles and existing formatting remain part of verification. */
 function normalizeUnusedLinkedCharacterStyles(
   expected: PackageView,
   actual: PackageView,
@@ -720,10 +709,7 @@ function normalizeUnusedLinkedCharacterStyles(
   }
 }
 
-/** Definitions added during native import can remain after restoring a clean
- * document. Keep all expected definitions, defaults and the transitive closure
- * of actual content/style references. Only additional unreachable registrations
- * are optional; changing a referenced style or introducing a default is not. */
+/** Restoration may leave extra unused definitions; all original and referenced definitions must match. */
 function normalizeAddedStyles(
   expected: PackageView,
   actual: PackageView,
@@ -759,8 +745,6 @@ function normalizeAddedStyles(
             attribute.namespaceURI === W &&
             attribute.localName === "styleId"
           ) &&
-          // Known style bindings and unknown exact-ID references both keep the
-          // definition; do not assume an extension cannot refer to a style.
           ((element.namespaceURI === W &&
             referenceNames.has(element.localName)) ||
             attribute.namespaceURI !== W)
@@ -798,8 +782,7 @@ function normalizeAddedStyles(
         newLatent = all(afterRoot, W, "lsdException").find(
           (e) => attr(e, "name").toLowerCase() === name.toLowerCase(),
         );
-      // Activating an unused built-in heading registers its gallery priority.
-      // Formatting, visibility, locking and all other latent properties remain.
+      // Word supplies gallery priority for built-in heading styles on import.
       if (
         oldLatent &&
         newLatent &&
@@ -836,9 +819,7 @@ function removeOptionalPart(v: PackageView, path: string, type: string): void {
   }
 }
 
-/** numId is a list instance, not an allocator-only identity. It stays exact so
- * splitting a continuing list cannot pass. Only newly assigned optional IDs on
- * matching definitions, and extra definitions with no references, may differ. */
+/** numId identifies a list instance, not just its definition; distinct instances must not collapse. */
 function normalizeAddedNumbering(
   expected: PackageView,
   actual: PackageView,
@@ -942,8 +923,7 @@ function normalizeAddedNumbering(
       .filter((e) => e.namespaceURI === W && e.localName === "num")
       .map((e) => attr(direct(e, "abstractNumId"))),
   );
-  // Preserve old abstract definitions even if unused; their identities may be
-  // renumbered by native import, so compare by the resolved complete definition.
+  // Word can reindex abstract numbering definitions while preserving their contents.
   const comparison = createWordXmlComparison(actual.doc),
     originalComparison = createWordXmlComparison(expected.doc);
   const originalSignatures = new Map<string, number>();
@@ -987,9 +967,7 @@ function normalizeAddedNumbering(
     removeOptionalPart(actual, path, "numbering");
 }
 
-/** A clean document can retain the two standard, unused note separators after
- * native restoration. A note body, anchor, custom separator or settings change
- * must still fail. Existing note parts are always compared in full. */
+/** Word materializes standard note separators on import; retain any custom separators. */
 function normalizeAddedNoteSeparators(
   expected: PackageView,
   actual: PackageView,
@@ -1098,9 +1076,7 @@ function normalizeAddedNoteSeparators(
   }
 }
 
-/** Definition tables are keyed maps. Their XML order is not paragraph/list
- * order. Preserve every definition, instance ID and reference; sort only known
- * distinct keyed entries, leaving other schema children in their positions. */
+/** Definition tables are keyed collections; their order is not document order. */
 function normalizeDefinitionOrder(v: PackageView): void {
   const comparison = createWordXmlComparison(v.doc);
   for (const [path, local, key] of [
@@ -1141,10 +1117,7 @@ function normalizeDefinitionOrder(v: PackageView): void {
   }
 }
 
-/** These two optional records store allocation history for future VML IDs.
- * Never discard a shape default with fill, stroke, layout rules or extensions.
- * https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.vml.office.shapeidmap
- */
+/** These optional records store VML allocation history; shape defaults with rendering properties must stay. */
 function normalizeShapeIdBookkeeping(v: PackageView): void {
   const O = "urn:schemas-microsoft-com:office:office",
     V = "urn:schemas-microsoft-com:vml";
@@ -1231,8 +1204,7 @@ function packageSignatures(v: PackageView): Map<string, string> {
       const clone = root.cloneNode(false) as Element;
       for (const rel of entries) {
         const copy = rel.cloneNode(true) as Element;
-        // The base comparator resolves Id to target content. Keep that check
-        // even for unknown implicit relationships to a binary/media part.
+        // Unknown implicit or binary relationships still require exact content comparison.
         clone.append(copy);
       }
       if (
@@ -1253,9 +1225,7 @@ function packageSignatures(v: PackageView): Map<string, string> {
   return result;
 }
 
-/** This is post-write verification only. Never use it for proposal staleness,
- * Apply/Revert CAS, or ownership checks; their full capture fingerprint stays
- * stricter and includes all original package parts and bindings. */
+/** These normalizations apply only to write verification; stale-state fingerprints remain strict. */
 export function wordFullDocumentComparisonIssue(
   expectedXml: string,
   actualXml: string,

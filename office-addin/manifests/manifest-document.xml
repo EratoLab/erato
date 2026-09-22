@@ -13,23 +13,10 @@
   <IconUrl DefaultValue="{{OFFICE_ADDIN_MANIFEST_ICON_URL}}" />
   <HighResolutionIconUrl DefaultValue="{{OFFICE_ADDIN_MANIFEST_HIGH_RESOLUTION_ICON_URL}}" />
   <SupportUrl DefaultValue="{{OFFICE_ADDIN_MANIFEST_SUPPORT_URL}}" />
-  <!--
-    Host-neutral by design: the add-in is named for documents, not for Word,
-    so Excel and PowerPoint later join THIS catalog entry by adding their own
-    <Host> and bumping <Version> — one admin action instead of a second entry
-    and a second install. v1 declares the Word host alone, because an
-    admin-deployed host downloads on next launch, making a declared host a
-    live promise that must not run ahead of its facets.
-  -->
   <Hosts>
     <Host Name="Document" />
   </Hosts>
-  <!--
-    Activation floor. Erato does not support end-of-support builds, and
-    Office LTSC 2021 leaves support on 2026-10-14, so the floor is the
-    WordApi version the supported estate all clears. Below it the add-in
-    simply does not appear, with no error message. That is intended.
-  -->
+  <!-- Hosts below this activation floor do not show the add-in. -->
   <Requirements>
     <Sets>
       <Set Name="WordApi" MinVersion="1.7" />
@@ -38,30 +25,8 @@
   <DefaultSettings>
     <SourceLocation DefaultValue="https://localhost:3002/public/platform-office-addin/word" />
   </DefaultSettings>
-  <!--
-    ReadWriteDocument is declared up front even though this manifest version
-    only opens the pane. Delivery is one manifest deployed once per customer
-    through a catalog or the Integrated apps portal, so narrowing it now would
-    force a manifest re-deploy and a second admin consent when reading and
-    writing land — exactly what the one-manifest decision exists to avoid.
-  -->
   <Permissions>ReadWriteDocument</Permissions>
-  <!--
-    The ribbon button is an additive affordance, not the way in: the
-    SharePoint app catalog route carries no ribbon button and no context
-    menu, the same path iPad already needs, so everything must also be
-    reachable inside the pane once it is open.
-
-    This element deliberately carries NO Requirements child. A requirement
-    here gates the commands node, and Microsoft describes the SharePoint
-    catalog as unsupported for add-ins with any feature requiring a
-    version-overrides element. Keeping the node requirement-free is part of
-    what lets ONE manifest serve both delivery routes.
-
-    None of the OFFICE_ADDIN_MANIFEST_LAUNCH_EVENT_* placeholders appear in
-    this file: `manifest_supports_launch_events` is true only for the mail
-    manifest, and this variant must render none.
-  -->
+  <!-- Keep command-specific Requirements absent for the SharePoint catalog route. -->
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
     <Hosts>
       <Host xsi:type="Document">

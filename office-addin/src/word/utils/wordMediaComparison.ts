@@ -1,7 +1,4 @@
-/** Native Word 2010+ renders the DrawingML choice, not its legacy VML fallback.
- * Only this explicitly supported choice is projected; unknown MC constructs stay.
- * https://learn.microsoft.com/en-us/office/open-xml/general/introduction-to-markup-compatibility
- */
+/** Prefer DrawingML in AlternateContent; its VML fallback describes the same shape. */
 const MC = "http://schemas.openxmlformats.org/markup-compatibility/2006";
 const XMLNS = "http://www.w3.org/2000/xmlns/";
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
@@ -101,15 +98,13 @@ export function wordMediaMutationContainer(drawing: Element): Element {
   return alternate && knownChoice(alternate) === choice ? alternate : drawing;
 }
 
-/** Apply only to a comparison clone. Geometry, text, links, crops, colors,
- * unknown shape data and every binary relationship stay in the comparison. */
+/** Normalize known import differences on a clone; unknown properties remain exact. */
 export function normalizeWordMediaForComparison(doc: Document): void {
   for (const alternate of all(doc, MC, "AlternateContent")) {
     const choice = knownChoice(alternate);
     if (choice) alternate.replaceWith(...Array.from(choice.childNodes));
   }
-  // DrawingML CT_RelativeRect gives every omitted edge a zero offset.
-  // Word commonly omits the untouched edges after cropping one side.
+  // Word may omit zero crop offsets on import.
   for (const rectangle of all(doc, A, "srcRect")) {
     for (const edge of ["l", "t", "r", "b"])
       if (rectangle.getAttribute(edge) === "0") rectangle.removeAttribute(edge);

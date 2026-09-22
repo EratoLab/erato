@@ -16,13 +16,7 @@ import { UserSettingsTabContent } from "./UserSettingsTabContent";
 type SettingsTab = "appearance" | "user" | "audio" | "serversTools" | "host";
 
 export interface AddinSettingsHostContribution {
-  /**
-   * The host tab's four fields travel together: a host either contributes a
-   * tab or it does not. They are optional because a host may contribute ONLY
-   * an entity to the shared "MCP & Apps" pane (Word does), and forcing it to
-   * declare a heading for a tab it has no content for would spawn an empty
-   * tab. The tab is gated on `content`, not on the contribution existing.
-   */
+  /** Tool-only contributions need no host tab; content controls tab visibility. */
   tabLabel?: string;
   heading?: string;
   description?: string;

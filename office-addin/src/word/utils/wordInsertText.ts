@@ -1,10 +1,6 @@
 import { wordWriteHost } from "./wordWriteHost";
 
-/**
- * Insert the reviewed fence text after a nonempty selection, preserving it.
- * For a collapsed selection, Office.js Replace inserts at the cursor.
- * Return false on host failure; never insert the assistant's surrounding prose.
- */
+/** After inserts beyond a selection; Replace would delete the highlighted content. */
 export async function insertWordTextAtCursor(text: string): Promise<boolean> {
   const word = wordWriteHost();
   if (!word) return false;

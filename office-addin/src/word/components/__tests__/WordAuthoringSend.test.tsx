@@ -226,8 +226,7 @@ describe("authoring send integration", () => {
     const mixed = mixedAuthoringXml();
     mocks.read.mockResolvedValue({
       ok: true,
-      // Word's paragraph collection has cell paragraphs too. Its size and
-      // ordinals deliberately differ from the native body inventory.
+      // Word includes table-cell paragraphs here, unlike the native body block inventory.
       paragraphs: [
         "Background: the pilot starts in October.",
         "Region",
