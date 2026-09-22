@@ -45,13 +45,16 @@ const renderStep = (
   toolName?: string,
   streaming = true,
   config: Parameters<typeof StaticFeatureConfigProvider>[0]["config"] = {},
+  // Overrides what the timeline resolved for this step. Only the interrupted
+  // rule needs it: every other case is decided by the envelope alone.
+  status?: "running" | "done" | "error" | "interrupted",
 ) =>
   render(
     <QueryClientProvider client={queryClient}>
       <StaticFeatureConfigProvider config={config}>
         <ToolUseStep
           part={part(output, toolName)}
-          status={streaming ? "running" : "done"}
+          status={status ?? (streaming ? "running" : "done")}
           isStreaming={streaming}
           isCollapsed={false}
           isLastStep
@@ -460,6 +463,51 @@ describe("delegation step", () => {
 
     expect(screen.getByTestId("delegation-trace")).toBeInTheDocument();
     expect(screen.getByText("search_web")).toBeInTheDocument();
+  });
+
+  it("carries interrupted through to a working slot whose writer died", () => {
+    renderStep(
+      { ...IDENTITY, status: "working" },
+      "delegate_task",
+      false,
+      {},
+      "interrupted",
+    );
+
+    expect(screen.getByText("Interrupted")).toBeInTheDocument();
+  });
+
+  it("carries interrupted through to an orphaned queued slot", () => {
+    renderStep({ status: "queued" }, "delegate_task", false, {}, "interrupted");
+
+    expect(screen.getByText("Interrupted")).toBeInTheDocument();
+  });
+
+  it("never calls a run parked on a decision interrupted", () => {
+    // The park outlives the turn by design, so an inactive trace says
+    // nothing about whether this run was abandoned.
+    renderStep(
+      { ...IDENTITY, status: "input_required" },
+      "delegate_task",
+      false,
+      {},
+      "interrupted",
+    );
+
+    expect(screen.queryByText("Interrupted")).toBeNull();
+    expect(screen.getByText("Needs your decision")).toBeInTheDocument();
+  });
+
+  it("never calls a settled run interrupted", () => {
+    renderStep(
+      { ...IDENTITY, status: "completed" },
+      "delegate_task",
+      false,
+      {},
+      "interrupted",
+    );
+
+    expect(screen.queryByText("Interrupted")).toBeNull();
   });
 
   it("shows a queued slot as queued — neither running nor failed", () => {

@@ -4,6 +4,7 @@ import {
   ErrorIcon,
   HourglassIcon,
   ToolsIcon,
+  WarningCircleIcon,
 } from "@/components/ui/icons";
 
 import type { TraceStepStatus } from "./types";
@@ -13,8 +14,8 @@ const ICON_CLASS = "size-4";
 
 /**
  * Pick the rail icon for a step, given its content type and current status.
- * `done` and `error` render generic terminal icons; the running state shows
- * the type-specific glyph.
+ * `done`, `error` and `interrupted` render generic terminal icons; the
+ * running state shows the type-specific glyph.
  */
 export const railIconFor = (
   contentType: ContentPart["content_type"],
@@ -22,6 +23,10 @@ export const railIconFor = (
 ): React.ReactNode => {
   if (status === "error") {
     return <ErrorIcon className={ICON_CLASS} />;
+  }
+  // Deliberately not the error glyph: an abandoned call did not fail.
+  if (status === "interrupted") {
+    return <WarningCircleIcon className={ICON_CLASS} />;
   }
   if (status === "done") {
     return <CheckCircleIcon className={ICON_CLASS} />;

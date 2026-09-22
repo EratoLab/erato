@@ -5268,6 +5268,11 @@ msgid "trace.tool.failed"
 msgstr "Falló"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolStatusPill.tsx
+msgid "trace.tool.interrupted"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 #: src/components/ui/Trace/steps/ToolUseStep.tsx
 msgid "trace.tool.preparing"

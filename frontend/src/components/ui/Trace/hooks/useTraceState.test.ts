@@ -30,9 +30,34 @@ describe("stepStatus", () => {
     expect(stepStatus(toolStep("in_progress"), true, true)).toBe("running");
   });
 
-  it("settles every tool call once the trace stops writing", () => {
-    expect(stepStatus(toolStep("in_progress"), true, false)).toBe("done");
-    expect(stepStatus(toolStep("in_progress"), false, false)).toBe("done");
+  it("calls an unfinished tool call interrupted once nothing is left to finish it", () => {
+    expect(stepStatus(toolStep("in_progress"), true, false)).toBe(
+      "interrupted",
+    );
+    expect(stepStatus(toolStep("in_progress"), false, false)).toBe(
+      "interrupted",
+    );
+  });
+
+  it("never reports an unfinished call as a success", () => {
+    // The regression this rule exists for: a crash-orphaned call used to
+    // render with the rail's green check, asserting an outcome it never had.
+    expect(stepStatus(toolStep("in_progress"), true, false)).not.toBe("done");
+    expect(stepStatus(toolStep("preparing"), true, false)).not.toBe("done");
+  });
+
+  it("leaves an unfinished call alone while the chat still owes an outcome", () => {
+    // A turn parked on an approval, or one generating on another replica,
+    // will settle the part later — that is not an orphan.
+    expect(stepStatus(toolStep("in_progress"), true, false, true)).toBe("done");
+    expect(stepStatus(toolStep("in_progress"), false, false, true)).toBe(
+      "done",
+    );
+  });
+
+  it("keeps a settled call's own outcome regardless of the chat's state", () => {
+    expect(stepStatus(toolStep("success"), true, false)).toBe("done");
+    expect(stepStatus(toolStep("error"), true, false)).toBe("error");
   });
 
   it("reads a finished tool call off its own status, not its position", () => {

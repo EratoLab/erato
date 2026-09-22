@@ -13,7 +13,7 @@ import { TraceDoneMarker } from "./TraceDoneMarker";
 import { TraceThinkingPlaceholder } from "./TraceThinkingPlaceholder";
 import { parseReasoningSegments } from "./hooks/useReasoningSegments";
 import { useThinkingGap } from "./hooks/useThinkingGap";
-import { stepStatus } from "./hooks/useTraceState";
+import { stepStatus, useIsCurrentChatBusy } from "./hooks/useTraceState";
 import { ReasoningStep } from "./steps/ReasoningStep";
 import { ToolUseStep } from "./steps/ToolUseStep";
 import { isTraceablePart, type LogicalStep, type TraceablePart } from "./types";
@@ -193,6 +193,10 @@ const TraceTimeline = ({
   toolApprovalStatuses,
 }: TraceTimelineProps) => {
   const placeholderIsLastNode = !showDoneMarker;
+  // Read here rather than threaded from the parent: both the streaming and
+  // the cold-load branch render this timeline, and only the cold-load one
+  // could ever show an orphan — a prop would have to cross both for one.
+  const isChatBusy = useIsCurrentChatBusy();
 
   return (
     <div className="min-w-0 py-1.5">
@@ -203,7 +207,7 @@ const TraceTimeline = ({
         // the Done marker, or both.
         const isLastNodeInTimeline =
           isLastStep && !showDoneMarker && !showThinkingPlaceholder;
-        const status = stepStatus(step, isLastStep, isTraceActive);
+        const status = stepStatus(step, isLastStep, isTraceActive, isChatBusy);
         const isCollapsed = !isLastStep || hasLaterContent;
 
         const stepNode = renderStep({

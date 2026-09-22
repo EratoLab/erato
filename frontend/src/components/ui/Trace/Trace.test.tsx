@@ -2,8 +2,9 @@ import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { Trace } from "./Trace";
@@ -28,7 +29,9 @@ const reasoningPart = (text: string): ContentPart => ({
   text,
 });
 
-const toolUsePart = (status: "success" | "error" = "success"): ContentPart => ({
+const toolUsePart = (
+  status: "success" | "error" | "in_progress" | "preparing" = "success",
+): ContentPart => ({
   content_type: "tool_use",
   status,
   tool_call_id: "tool-abc",
@@ -83,6 +86,74 @@ const renderTrace = (
     </QueryClientProvider>,
   );
 };
+
+describe("Trace — a call the writer never finished", () => {
+  const CHAT = "chat-under-test";
+
+  beforeEach(() => {
+    useGenerationStatusStore.setState({
+      statusByChatId: {},
+      currentChatId: null,
+    });
+  });
+
+  it("marks a crash-orphaned tool call interrupted rather than done", () => {
+    renderTrace([toolUsePart("in_progress")]);
+
+    expect(screen.getByText("Interrupted")).toBeInTheDocument();
+  });
+
+  it("does not claim an unfinished call succeeded", () => {
+    // The regression: on a cold load an `in_progress` part used to fall
+    // through to `done` and draw the rail's green check.
+    const { container } = renderTrace([toolUsePart("in_progress")]);
+
+    expect(container.querySelector(".text-theme-success-fg")).toBeNull();
+  });
+
+  it("leaves the call alone while the chat is still generating", () => {
+    useGenerationStatusStore.setState({
+      currentChatId: CHAT,
+      statusByChatId: {
+        [CHAT]: {
+          kind: "running",
+          startedAt: new Date().toISOString(),
+          localSeenAt: Date.now(),
+        },
+      },
+    });
+
+    renderTrace([toolUsePart("in_progress")]);
+
+    expect(screen.queryByText("Interrupted")).toBeNull();
+  });
+
+  it("leaves the call alone while the chat is parked on an approval", () => {
+    // `action_required` is a deliberate, server-durable park — the part is
+    // unsettled on purpose and will be settled when the user answers.
+    useGenerationStatusStore.setState({
+      currentChatId: CHAT,
+      statusByChatId: {
+        [CHAT]: {
+          kind: "action_required",
+          startedAt: new Date().toISOString(),
+          localSeenAt: Date.now(),
+        },
+      },
+    });
+
+    renderTrace([toolUsePart("in_progress")]);
+
+    expect(screen.queryByText("Interrupted")).toBeNull();
+  });
+
+  it("still reports a genuinely failed call as failed", () => {
+    renderTrace([toolUsePart("error")]);
+
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(screen.queryByText("Interrupted")).toBeNull();
+  });
+});
 
 describe("Trace — default (unmasked) mode", () => {
   it("renders reasoning segment title without masking", () => {
