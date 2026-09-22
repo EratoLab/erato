@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createSidecarChatTools,
   GET_SIDECAR_SEARCH_FIELDS_TOOL,
+  GET_SIDECAR_DOCUMENT_TOOL,
 } from "./chatTools";
 import { resolveSidecarMailboxId } from "./mailboxAccess";
 
@@ -440,5 +441,131 @@ describe("shared desktop sidecar tools", () => {
     await expect(
       resolveSidecarMailboxId(env.client, " OTHER@example.test "),
     ).resolves.toBe(mailboxId);
+  });
+});
+
+describe("sidecar document retrieval", () => {
+  const documentId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+  const input = { documentId };
+  const document = {
+    filename: "message.eml",
+    mimeType: "message/rfc822",
+    contentBase64: globalThis.btoa("document bytes"),
+  };
+  const setupDocument = () => {
+    const env = setup({ "sources.get_document.v1": { ...document } });
+    return {
+      ...env,
+      tool: () =>
+        env.tools().find((item) => item.name === GET_SIDECAR_DOCUMENT_TOOL)!,
+    };
+  };
+
+  it.each([undefined, "subject", "subject_with_thread"])(
+    "uploads scope %s and replays without duplicate uploads",
+    async (subject_scope) => {
+      const env = setupDocument();
+      const tool = env.tool();
+      const args = { ...input, ...(subject_scope ? { subject_scope } : {}) };
+      const signal = new AbortController().signal;
+      const outcome = await tool.execute(args, { ...context, signal });
+      expect(outcome).toMatchObject({
+        ok: true,
+        fileUploadIds: ["uploaded-file"],
+        result: {
+          filename: document.filename,
+          mimeType: document.mimeType,
+          documentId,
+          subject_scope: subject_scope ?? "subject",
+          fileId: "uploaded-file",
+        },
+      });
+      expect(env.uploadAttachment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: document.filename,
+          type: document.mimeType,
+          size: 14,
+        }),
+        "chat",
+        signal,
+      );
+      expect(JSON.parse(env.request.mock.calls[0][0]).params).toEqual(args);
+      expect(JSON.stringify(outcome)).not.toContain(document.contentBase64);
+      expect(JSON.stringify(outcome)).not.toContain("contentBase64");
+      expect(await tool.execute(args, context)).toEqual(outcome);
+      expect(env.uploadAttachment).toHaveBeenCalledTimes(1);
+      expect(env.request).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([
+    {},
+    { documentId: "bad" },
+    { ...input, subject_scope: "all" },
+    { ...input, path: "/tmp/file" },
+  ])("rejects invalid input %j before transport", async (args) => {
+    const env = setupDocument();
+    expect(await env.tool().execute(args, context)).toMatchObject({
+      ok: false,
+    });
+    expect(env.request).not.toHaveBeenCalled();
+    expect(env.uploadAttachment).not.toHaveBeenCalled();
+  });
+
+  it.each(["disabled", "count", "no-chat", "unsupported", "aborted"])(
+    "does no retrieval when %s",
+    async (mode) => {
+      const env = setupDocument();
+      if (mode === "disabled") env.options.uploadsEnabled = false;
+      if (mode === "count") env.options.maxFiles = 0;
+      if (mode === "unsupported")
+        env.supports.mockImplementation(
+          (method) => method !== "sources.get_document.v1",
+        );
+      const tool = env.tool();
+      if (mode === "unsupported") expect(tool.isAvailable()).toBe(false);
+      expect(
+        await tool.execute(input, {
+          ...context,
+          chatId: mode === "no-chat" ? null : "chat",
+          signal: mode === "aborted" ? AbortSignal.abort() : undefined,
+        }),
+      ).toMatchObject({ ok: false });
+      expect(env.request).not.toHaveBeenCalled();
+      expect(env.uploadAttachment).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([1, 13, 14])(
+    "enforces the decoded size limit of %s bytes",
+    async (limit) => {
+      const env = setupDocument();
+      env.options.maxUploadBytes = limit;
+      expect(await env.tool().execute(input, context)).toMatchObject({
+        ok: limit === 14,
+      });
+      expect(env.uploadAttachment).toHaveBeenCalledTimes(limit === 14 ? 1 : 0);
+    },
+  );
+
+  it.each([{}, { ...document, contentBase64: "%%%" }])(
+    "rejects malformed results %j",
+    async (result) => {
+      const env = setup({ "sources.get_document.v1": result });
+      const tool = env
+        .tools()
+        .find((item) => item.name === GET_SIDECAR_DOCUMENT_TOOL)!;
+      expect(await tool.execute(input, context)).toMatchObject({ ok: false });
+      expect(env.uploadAttachment).not.toHaveBeenCalled();
+    },
+  );
+
+  it("reports upload failures without claiming a file was attached", async () => {
+    const env = setupDocument();
+    env.uploadAttachment.mockRejectedValue(new Error("offline"));
+    expect(await env.tool().execute(input, context)).toEqual({
+      ok: false,
+      error: "offline",
+    });
   });
 });
