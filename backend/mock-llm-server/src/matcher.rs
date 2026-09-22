@@ -3,6 +3,7 @@ use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Static response configuration with chunks and delay
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -15,6 +16,16 @@ pub struct StaticResponseConfig {
     /// If None, uses delay_ms for all chunks
     #[serde(default)]
     pub initial_delay_ms: Option<u64>,
+    /// Close the answer with a marker that no other invocation of this rule
+    /// repeats.
+    ///
+    /// Two generations of the same deterministic rule are otherwise byte
+    /// identical, so a test cannot tell a result it is looking at again from one
+    /// that was quietly produced a second time. A rule whose answer has to
+    /// survive a later turn untouched carries this; nothing else should, because
+    /// it costs the rule its reproducibility.
+    #[serde(default)]
+    pub distinct_per_invocation: bool,
 }
 
 /// Tool call response configuration
@@ -156,6 +167,19 @@ const DELEGATE_TO_ASSISTANT_TOOL_NAME: &str = "delegate_to_assistant";
 
 /// Characters of a tool result a trace answer repeats.
 const TOOL_TRACE_RESULT_CHARS: usize = 160;
+
+/// Counts every answer served under `distinct_per_invocation`, across all rules
+/// and all requests, so no two of them can collide however the server is driven.
+static INVOCATION_MARKER_SEQ: AtomicU64 = AtomicU64::new(0);
+
+/// Marker appended to a `distinct_per_invocation` answer. Kept to one token so a
+/// spec can capture it with the answer it closes.
+fn next_invocation_marker() -> String {
+    format!(
+        " #gen{}",
+        INVOCATION_MARKER_SEQ.fetch_add(1, Ordering::Relaxed)
+    )
+}
 
 /// Match rule that checks user message pattern using substring matching
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -527,6 +551,15 @@ impl Matcher {
                 delay_ms: config.delay_ms,
                 ..Default::default()
             }),
+            ResponseConfig::Static(config) if config.distinct_per_invocation => {
+                let mut chunks = config.chunks.clone();
+                chunks.push(next_invocation_marker());
+                ResponseConfig::Static(StaticResponseConfig {
+                    chunks,
+                    distinct_per_invocation: false,
+                    ..config.clone()
+                })
+            }
             _ => response.clone(),
         }
     }

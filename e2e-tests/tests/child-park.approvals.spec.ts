@@ -58,6 +58,17 @@ const MIXED_PLAIN_BRIEF = "Mixed plain child brief";
 /** The ungated sibling's answer, committed before the turn asks about the other. */
 const MIXED_PLAIN_ANSWER = "MIXED-PLAIN-CHILD-ANSWER";
 
+/**
+ * The whole of that answer, including the marker no second generation of it
+ * repeats.
+ *
+ * The sibling's rule is otherwise deterministic, so a result that had been
+ * quietly produced again would be byte-identical to the one committed before the
+ * decision and "not re-run" would be unassertable. The mock closes this one
+ * answer with a per-generation marker precisely so it is not.
+ */
+const MIXED_PLAIN_ANSWER_PATTERN = /MIXED-PLAIN-CHILD-ANSWER[^#]*#gen\d+/;
+
 /** The gated child's answer once allowed: its own trace. */
 const MIXED_GATED_CHILD_TRACE = "MIXED-GATED-CHILD-CONTEXT";
 
@@ -74,6 +85,26 @@ const RESUME_TIMEOUT_MS = 90000;
 
 const TASK_STEP =
   '[data-testid="tool-call-item"][data-tool-name="delegate_task"]';
+
+/**
+ * The child chats this origin has spawned, read from the server rather than from
+ * the transcript: a run dispatched a second time is a second chat, which the
+ * turn's own steps would not show.
+ *
+ * A delegated run is hidden from the listing unless asked for, so both flags are
+ * needed.
+ */
+const childRunCount = async (page: Page, originChatId: string) => {
+  const response = await page.request.get(
+    `/api/v1beta/me/recent_chats?include_delegated=true&origin_chat_id=${originChatId}`,
+  );
+  expect(
+    response.ok(),
+    `listing the origin's delegated runs should succeed, got ${response.status()}`,
+  ).toBe(true);
+  const listing = (await response.json()) as { chats: unknown[] };
+  return listing.chats.length;
+};
 
 /**
  * Selects the planning facet, which is what offers the tool: enabling the
@@ -152,7 +183,12 @@ test("denies a parked child, which finishes in prose, and the origin turn comple
   await expect(item).toHaveCount(1);
   await expect(item).toContainText(GATED_TOOL);
   await expect(item).toContainText(GATED_SERVER);
-  await expect(item).not.toHaveAttribute("data-child-chat-id", "");
+  // Matched as an id rather than as "not empty", which an attribute that had
+  // been dropped altogether would also satisfy.
+  await expect(item).toHaveAttribute(
+    "data-child-chat-id",
+    /^[0-9a-fA-F-]{36}$/,
+  );
 
   const parkedStep = assistantMessage.locator(TASK_STEP);
   await expect(parkedStep).toContainText("Needs your decision", {
@@ -202,6 +238,10 @@ test("commits the sibling that finished before it asks, and leaves the parked ch
     page,
     MIXED_TASKS_PROMPT,
   );
+  const originChatId = new URL(page.url()).pathname.split("/").pop() ?? "";
+  expect(originChatId, "the origin chat is the one we just sent in").toMatch(
+    /^[0-9a-fA-F-]{36}$/,
+  );
 
   // Two tasks, one question: the stop covers only the child that asked.
   await expect(approval).toHaveAttribute("data-item-count", "1");
@@ -235,6 +275,21 @@ test("commits the sibling that finished before it asks, and leaves the parked ch
   // Slot 1 is the sibling, finished and committed before the turn asked.
   expect(parkedSnapshot[1]).toContain(MIXED_PLAIN_BRIEF);
   expect(parkedSnapshot[1]).toContain(MIXED_PLAIN_ANSWER);
+  // The exact answer it settled with, marker and all, so the same slot can be
+  // shown to be carrying THAT answer afterwards rather than an identical one.
+  const siblingAnswer = parkedSnapshot[1]
+    .match(MIXED_PLAIN_ANSWER_PATTERN)?.[0]
+    // Playwright normalizes the whitespace of the text it reads but not of the
+    // needle it is given.
+    .replace(/\s+/g, " ");
+  expect(
+    siblingAnswer,
+    "the sibling's committed answer carries its generation marker",
+  ).toBeTruthy();
+  const parkedChildRuns = await childRunCount(page, originChatId);
+  expect(parkedChildRuns, "both children were dispatched before the stop").toBe(
+    2,
+  );
 
   await expect(gatedStep.getByTestId("delegation-reason")).toContainText(
     "Waiting for your decision",
@@ -248,9 +303,8 @@ test("commits the sibling that finished before it asks, and leaves the parked ch
     loadingTimeoutMs: RESUME_TIMEOUT_MS,
   });
 
-  // The resumed child settled into the slot its placeholder was holding, and
-  // the sibling behind it was not disturbed or re-run: still two slots, still
-  // in dispatch order, each with its own child's answer.
+  // The resumed child settled into the slot its placeholder was holding: still
+  // two slots, still in dispatch order, each with its own child's answer.
   await expect(steps).toHaveCount(2);
   await expect(gatedStep).toContainText(
     `${MIXED_GATED_CHILD_TRACE}: ${GATED_TOOL}[`,
@@ -258,7 +312,18 @@ test("commits the sibling that finished before it asks, and leaves the parked ch
   );
   await expect(gatedStep).toContainText("approval probe published");
   await expect(gatedStep.getByTestId("delegation-reason")).toHaveCount(0);
-  await expect(plainStep).toContainText(MIXED_PLAIN_ANSWER);
+
+  // And the sibling behind it was not disturbed or re-run. Its slot still holds
+  // the SAME answer, marker included — a continuation that re-dispatched the
+  // whole batch would have put a second generation of it there, which the marker
+  // is what makes visible.
+  await expect(plainStep).toContainText(String(siblingAnswer));
+  // Nor was a second run started behind it: a re-dispatch is a new child chat,
+  // which no step of this turn would show.
+  expect(
+    await childRunCount(page, originChatId),
+    "the resumed turn dispatches nothing it had already dispatched",
+  ).toBe(parkedChildRuns);
 
   await expect(assistantMessage).toContainText(MIXED_PARENT_ANSWER, {
     timeout: RESUME_TIMEOUT_MS,

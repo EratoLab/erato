@@ -446,7 +446,14 @@ const PAIRED_TASK_CHILD_BRIEF_B: &str =
 /// The paired children answer with their own tool trace, so the decision a
 /// child's call was settled with is visible in the answer that reaches the
 /// origin chat — an approval by its result, a denial by its refusal.
-const PAIRED_TASK_CHILD_TRACE_PREFIX: &str = "PAIRED-CHILD-CONTEXT";
+///
+/// One marker per child rather than one for the pair: the two children run the
+/// same brief against the same tool, so a shared marker would make their answers
+/// identical and a result delivered into the wrong parent call would read as the
+/// right one.
+const PAIRED_TASK_CHILD_A_TRACE_PREFIX: &str = "PAIRED-CHILD-A-CONTEXT";
+
+const PAIRED_TASK_CHILD_B_TRACE_PREFIX: &str = "PAIRED-CHILD-B-CONTEXT";
 
 /// Typed into the origin chat by the deny half of the child-park e2e: one task,
 /// one gated call, one refusal. Kept to a single child on purpose — denial is
@@ -877,15 +884,30 @@ pub fn get_default_mocks() -> Vec<Mock> {
                 delay_ms: 100,
             }),
         },
+        // One answer rule per brief, not one for the prefix both share: the pair
+        // is indistinguishable otherwise, and the origin turn's two slots are
+        // exactly what has to be told apart.
         Mock {
-            name: "PairedGatedTaskChildAnswer".to_string(),
-            description: "Answers a paired child with the call it was allowed or refused"
+            name: "PairedGatedTaskChildAnswerA".to_string(),
+            description: "Answers paired child A with the call it was allowed or refused"
                 .to_string(),
             match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
-                pattern: PAIRED_TASK_CHILD_BRIEF_PREFIX.to_string(),
+                pattern: PAIRED_TASK_CHILD_BRIEF_A.to_string(),
             })],
             response: ResponseConfig::ToolTrace(ToolTraceResponseConfig {
-                prefix: PAIRED_TASK_CHILD_TRACE_PREFIX.to_string(),
+                prefix: PAIRED_TASK_CHILD_A_TRACE_PREFIX.to_string(),
+                delay_ms: 200,
+            }),
+        },
+        Mock {
+            name: "PairedGatedTaskChildAnswerB".to_string(),
+            description: "Answers paired child B with the call it was allowed or refused"
+                .to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: PAIRED_TASK_CHILD_BRIEF_B.to_string(),
+            })],
+            response: ResponseConfig::ToolTrace(ToolTraceResponseConfig {
+                prefix: PAIRED_TASK_CHILD_B_TRACE_PREFIX.to_string(),
                 delay_ms: 200,
             }),
         },
@@ -1063,6 +1085,10 @@ pub fn get_default_mocks() -> Vec<Mock> {
                     ".".to_string(),
                 ],
                 delay_ms: 200,
+                // The sibling's result has to survive the other child's
+                // resumption untouched, and "untouched" is only an assertion if
+                // a second dispatch would say something else.
+                distinct_per_invocation: true,
                 ..Default::default()
             }),
         },
@@ -1632,6 +1658,7 @@ pub fn get_default_mocks() -> Vec<Mock> {
                 ],
                 delay_ms: 20,
                 initial_delay_ms: Some(5000),
+                ..Default::default()
             }),
         },
         Mock {
@@ -2364,27 +2391,47 @@ mod tests {
             }
         }
 
-        let denied_child_answer = match_default_mocks(
-            json!([
-                {"role": "system", "content": "Answer the delegated probe task."},
-                {"role": "user", "content": delegate_preamble_message()},
-                {"role": "user", "content": PAIRED_TASK_CHILD_BRIEF_B},
-                {"role": "assistant", "content": null, "tool_calls": [
-                    {"id": "call_9", "type": "function", "function": {"name": "publish_approval_probe", "arguments": "{}"}},
-                ]},
-                {"role": "tool", "tool_call_id": "call_9", "content": "{\"status\":\"rejected\",\"error\":\"The user denied this tool call.\"}"},
-            ]),
-            None,
-        );
-        match denied_child_answer {
-            ResponseConfig::Static(config) => assert_eq!(
-                config.chunks.join(""),
-                format!(
-                    "{PAIRED_TASK_CHILD_TRACE_PREFIX}: publish_approval_probe\
-                     [{{\"status\":\"rejected\",\"error\":\"The user denied this tool call.\"}}]"
-                )
+        // Each child's answer carries ITS OWN marker and not its sibling's: one
+        // result delivered into both parent slots is only detectable if the two
+        // answers differ.
+        for (brief, own, other_marker) in [
+            (
+                PAIRED_TASK_CHILD_BRIEF_A,
+                PAIRED_TASK_CHILD_A_TRACE_PREFIX,
+                PAIRED_TASK_CHILD_B_TRACE_PREFIX,
             ),
-            other => panic!("denied child answer matched {other:?}"),
+            (
+                PAIRED_TASK_CHILD_BRIEF_B,
+                PAIRED_TASK_CHILD_B_TRACE_PREFIX,
+                PAIRED_TASK_CHILD_A_TRACE_PREFIX,
+            ),
+        ] {
+            let denied_child_answer = match_default_mocks(
+                json!([
+                    {"role": "system", "content": "Answer the delegated probe task."},
+                    {"role": "user", "content": delegate_preamble_message()},
+                    {"role": "user", "content": brief},
+                    {"role": "assistant", "content": null, "tool_calls": [
+                        {"id": "call_9", "type": "function", "function": {"name": "publish_approval_probe", "arguments": "{}"}},
+                    ]},
+                    {"role": "tool", "tool_call_id": "call_9", "content": "{\"status\":\"rejected\",\"error\":\"The user denied this tool call.\"}"},
+                ]),
+                None,
+            );
+            match denied_child_answer {
+                ResponseConfig::Static(config) => {
+                    let answer = config.chunks.join("");
+                    assert_eq!(
+                        answer,
+                        format!(
+                            "{own}: publish_approval_probe\
+                             [{{\"status\":\"rejected\",\"error\":\"The user denied this tool call.\"}}]"
+                        )
+                    );
+                    assert!(!answer.contains(other_marker));
+                }
+                other => panic!("denied child answer for {brief} matched {other:?}"),
+            }
         }
 
         let origin_answer = match_default_mocks(
@@ -2394,7 +2441,7 @@ mod tests {
                 {"role": "assistant", "content": null},
                 {"role": "tool", "content": json!({
                     "status": "completed",
-                    "result": format!("{PAIRED_TASK_CHILD_TRACE_PREFIX}: publish_approval_probe[approval probe published]"),
+                    "result": format!("{PAIRED_TASK_CHILD_A_TRACE_PREFIX}: publish_approval_probe[approval probe published]"),
                     "truncated": false,
                 }).to_string()},
             ]),
@@ -2546,10 +2593,10 @@ mod tests {
             None,
         );
         match plain_child_answer {
-            ResponseConfig::Static(config) => assert_eq!(
-                config.chunks.join(""),
-                "MIXED-PLAIN-CHILD-ANSWER: the mock files are listed."
-            ),
+            ResponseConfig::Static(config) => assert!(config
+                .chunks
+                .join("")
+                .starts_with("MIXED-PLAIN-CHILD-ANSWER: the mock files are listed.")),
             other => panic!("plain child answer matched {other:?}"),
         }
 
@@ -2595,6 +2642,41 @@ mod tests {
                 "MIXED-TASKS-PARENT-ANSWER: both tasks reported back."
             ),
             other => panic!("origin answer matched {other:?}"),
+        }
+    }
+
+    /// The lever the park-after-settle e2e reads "the sibling was not re-run"
+    /// off: two dispatches of the same brief answer differently, so a result
+    /// that is still the one committed before the decision can be recognised as
+    /// that one rather than as an identical replacement.
+    #[test]
+    fn the_mixed_pair_s_sibling_answers_each_dispatch_differently() {
+        use serde_json::json;
+
+        let answer = || {
+            let response = match_default_mocks(
+                json!([
+                    {"role": "system", "content": "Answer the delegated probe task."},
+                    {"role": "user", "content": delegate_preamble_message()},
+                    {"role": "user", "content": MIXED_PLAIN_TASK_CHILD_BRIEF},
+                    {"role": "assistant", "content": null, "tool_calls": [
+                        {"id": "call_5", "type": "function", "function": {"name": "list_files", "arguments": "{}"}},
+                    ]},
+                    {"role": "tool", "tool_call_id": "call_5", "content": "{\"files\":[\"a.txt\"]}"},
+                ]),
+                None,
+            );
+            match response {
+                ResponseConfig::Static(config) => config.chunks.join(""),
+                other => panic!("plain child answer matched {other:?}"),
+            }
+        };
+
+        let first = answer();
+        let second = answer();
+        assert_ne!(first, second);
+        for generated in [&first, &second] {
+            assert!(generated.starts_with("MIXED-PLAIN-CHILD-ANSWER"));
         }
     }
 

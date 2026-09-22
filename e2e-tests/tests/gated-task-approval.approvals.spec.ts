@@ -111,8 +111,13 @@ test("parks a task child on its gated call and finishes the run in the origin ch
   await expect(item).toContainText(GATED_TOOL);
   await expect(item).toContainText(GATED_SERVER);
   // The child chat the decision covers, which is what makes this the origin's
-  // surface for another chat's question rather than its own.
-  await expect(item).not.toHaveAttribute("data-child-chat-id", "");
+  // surface for another chat's question rather than its own. Matched as an id
+  // rather than as "not empty", which an attribute that had been dropped
+  // altogether would also satisfy.
+  await expect(item).toHaveAttribute(
+    "data-child-chat-id",
+    /^[0-9a-fA-F-]{36}$/,
+  );
 
   // The origin turn says so on the step as well as in the card: the task has
   // not failed and has not finished, it is waiting on the user.

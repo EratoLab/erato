@@ -332,10 +332,27 @@ test("withdrawing a plan declines every task in it and the turn still finishes i
   await expect(assistantMessage).not.toContainText(CHILD_ANSWER_A);
   await expect(assistantMessage).not.toContainText(CHILD_ANSWER_B);
 
-  // Both slots are settled rather than abandoned, and BOTH refusals reached the
-  // model: the origin's answer quotes the trace of a request carrying two of
+  // Both slots are settled rather than abandoned, and each of them was settled
+  // with ITS OWN refusal.
+  //
+  // Per task rather than per occurrence: the refusal text is the same for every
+  // declined task, so counting two of them somewhere in the message cannot tell
+  // two denials from one item's denial written twice while the other item was
+  // dropped. Each row is found by the brief it was planned with — the only thing
+  // a task is identified by — and has to carry the refusal itself.
+  const steps = assistantMessage.locator(TASK_STEP);
+  await expect(steps).toHaveCount(2);
+  for (const brief of [BRIEF_A, BRIEF_B]) {
+    const step = steps.filter({ hasText: brief });
+    await expect(step).toHaveCount(1);
+    await expect(step).toContainText(PLAN_DENIAL_TEXT, {
+      timeout: RESUME_TIMEOUT_MS,
+    });
+  }
+
+  // And both of those refusals reached the model rather than only the
+  // transcript: the origin's answer is the trace of a request carrying two of
   // them, which is what "denies every open item" means from the model's side.
-  await expect(assistantMessage.locator(TASK_STEP)).toHaveCount(2);
   await expect(assistantMessage).toContainText(
     inParentAnswer(PLAN_DENIAL_TEXT, PLAN_DENIAL_TEXT),
     { timeout: RESUME_TIMEOUT_MS },
@@ -367,6 +384,15 @@ test("dispatches the same planned batch unasked under the shipped async_only def
   // about, and the turn runs to its answer without a decision being available at
   // any point. Waiting for the answer IS the assertion — a gated turn would park
   // here and never produce one.
+  //
+  // What this proves is that the SHIPPED default dispatches an awaited batch
+  // unasked, and no more than that. A control test for "the default deployment
+  // is unaffected" cannot detect the gate being deleted, because under
+  // `async_only` an awaited batch is exactly what the gate is supposed to let
+  // through: deleting it would change nothing here. What a deleted gate does
+  // break is the dispatch `async_only` DOES ask about, and that is asserted in
+  // `async-park.approvals.spec.ts`, where a detached task under this same
+  // default has to raise a card before it runs.
   await expect(assistantMessage).toContainText(PARENT_TRACE, {
     timeout: RESUME_TIMEOUT_MS,
   });

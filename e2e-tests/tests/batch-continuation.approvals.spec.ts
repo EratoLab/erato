@@ -44,8 +44,29 @@ const PENDING_TOOL = "list_files";
 /** What the origin's own answer says once both paired tasks are settled. */
 const PAIRED_PARENT_ANSWER = "PAIRED-TASKS-PARENT-ANSWER";
 
-/** What a paired child's answer opens with: its own turn's tool trace. */
-const CHILD_TRACE = "PAIRED-CHILD-CONTEXT";
+/**
+ * The briefs the two paired calls carry, which is what says which slot is which
+ * without leaning on the order the answers came back in.
+ */
+const PAIRED_BRIEF_A = "Paired gated child brief A";
+const PAIRED_BRIEF_B = "Paired gated child brief B";
+
+/**
+ * What each paired child's answer opens with: its own turn's tool trace, under a
+ * marker only that child uses.
+ *
+ * The pair runs the same brief against the same tool, so a marker shared by both
+ * would make their answers identical — and one child's result delivered into
+ * both parent calls would read exactly like two children answering.
+ */
+const CHILD_A_TRACE = "PAIRED-CHILD-A-CONTEXT";
+const CHILD_B_TRACE = "PAIRED-CHILD-B-CONTEXT";
+
+/** Each paired slot, with the answer it owes and the one it must not carry. */
+const PAIRED_CHILDREN = [
+  { brief: PAIRED_BRIEF_A, own: CHILD_A_TRACE, sibling: CHILD_B_TRACE },
+  { brief: PAIRED_BRIEF_B, own: CHILD_B_TRACE, sibling: CHILD_A_TRACE },
+];
 
 /** What a refused call leaves in the child's context, and so in its answer. */
 const DENIAL_TEXT = "The user denied this tool call.";
@@ -121,7 +142,13 @@ const parkOnBothPairedTasks = async (page: Page): Promise<Locator> => {
   await expect(items).toHaveCount(2);
   for (const item of await items.all()) {
     await expect(item).toContainText(GATED_TOOL);
-    await expect(item).not.toHaveAttribute("data-child-chat-id", "");
+    // The child chat the row covers, matched as an id rather than as "not
+    // empty": an attribute that had been dropped altogether would satisfy the
+    // latter.
+    await expect(item).toHaveAttribute(
+      "data-child-chat-id",
+      /^[0-9a-fA-F-]{36}$/,
+    );
   }
   return assistantMessage;
 };
@@ -146,8 +173,17 @@ test("resumes an approved batch with the call it had already made back in the mo
   // The park is mid-batch, which is what this file is about: the call before the
   // gated one has run and has its step, and the call after it has none, because
   // the park abandoned the rest of the queue.
-  await expect(assistantMessage.locator(toolStep(EARLIER_TOOL))).toHaveCount(1);
-  await expect(assistantMessage.locator(toolStep(PENDING_TOOL))).toHaveCount(0);
+  //
+  // Read as ONE snapshot of the step list rather than as two waits: the two
+  // halves are a claim about a single moment, and asserted separately the second
+  // could be satisfied by a queue that had simply not got there yet.
+  const parkedSteps = await assistantMessage
+    .locator('[data-testid="tool-call-item"]')
+    .evaluateAll((nodes) =>
+      nodes.map((node) => node.getAttribute("data-tool-name") ?? ""),
+    );
+  expect(parkedSteps.filter((name) => name === EARLIER_TOOL)).toHaveLength(1);
+  expect(parkedSteps).not.toContain(PENDING_TOOL);
 
   await approval
     .getByRole("button", { name: "Allow once", exact: true })
@@ -255,17 +291,29 @@ test("refuses a decision that answers only one of two open items, keeps the card
     loadingTimeoutMs: RESUME_TIMEOUT_MS,
   });
 
-  // Both children resumed, each made the call it had stopped on, and both
-  // answers came back into this chat as the results of the parent's two calls.
+  // Both children resumed, each made the call it had stopped on, and each
+  // answer came back into the parent call that asked for it.
   const steps = assistantMessage.locator(TASK_STEP);
   await expect(steps).toHaveCount(2);
-  for (const step of await steps.all()) {
+  for (const [index, child] of PAIRED_CHILDREN.entries()) {
+    const step = steps.nth(index);
+    // Which slot this is, taken from the brief the parent dispatched it with
+    // rather than from the answer it came back with, or the claim would be
+    // circular.
+    await expect(step.getByTestId("delegation-brief")).toContainText(
+      child.brief,
+    );
     // The child's answer is its own tool trace, so the allowed call and the
     // result it returned are both in the answer this chat received. Asserted as
     // two substrings because the result is the MCP envelope the tool replied
     // with, not the bare text inside it.
-    await expect(step).toContainText(`${CHILD_TRACE}: ${GATED_TOOL}[`);
+    await expect(step).toContainText(`${child.own}: ${GATED_TOOL}[`, {
+      timeout: RESUME_TIMEOUT_MS,
+    });
     await expect(step).toContainText("approval probe published");
+    // And its sibling's answer is NOT here: one result delivered into both
+    // calls is otherwise indistinguishable from two children answering.
+    await expect(step).not.toContainText(child.sibling);
     await expect(step.getByTestId("delegation-reason")).toHaveCount(0);
   }
   await expect(assistantMessage).toContainText(PAIRED_PARENT_ANSWER);
@@ -293,13 +341,22 @@ test("withdrawing denies both open items and the turn still finishes in prose", 
     loadingTimeoutMs: RESUME_TIMEOUT_MS,
   });
 
-  // Every open item was refused — both children saw the denial in the context of
-  // the turn that followed it, which is what their answer repeats.
+  // Every open item was refused — BOTH children saw the denial in the context of
+  // the turn that followed it, which is what their answer repeats. Read per
+  // child, because a single refused child whose answer was delivered into both
+  // slots would satisfy a count of two denials.
   const steps = assistantMessage.locator(TASK_STEP);
   await expect(steps).toHaveCount(2);
-  for (const step of await steps.all()) {
-    await expect(step).toContainText(CHILD_TRACE);
+  for (const [index, child] of PAIRED_CHILDREN.entries()) {
+    const step = steps.nth(index);
+    await expect(step.getByTestId("delegation-brief")).toContainText(
+      child.brief,
+    );
+    await expect(step).toContainText(child.own, {
+      timeout: RESUME_TIMEOUT_MS,
+    });
     await expect(step).toContainText(DENIAL_TEXT);
+    await expect(step).not.toContainText(child.sibling);
   }
 
   // And the turn finished anyway: a denial ends the call, not the run, so the
