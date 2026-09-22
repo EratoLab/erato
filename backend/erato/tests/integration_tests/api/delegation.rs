@@ -15098,6 +15098,136 @@ async fn approve_always_upserts_on_child_server_and_tool(pool: Pool<Postgres>) {
     assert!(decision["user_tool_approval_setting_id"].is_string());
 }
 
+/// A `wait` child answered on its own card, with the turn that dispatched it
+/// gone.
+///
+/// Archiving is the only route that reaches this: a withdrawal or a settlement
+/// closes the child's own copy, and a crashed parent still reads as covering.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_child_answered_on_its_own_card_settles_the_orphaned_origin_slot(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_child_reaches_the_gate(&mut mocks, GATED_BRIEF, "call_child_probe");
+    mock_child_answers_after_the_gate(&mut mocks);
+    mock_parent_plans_one_task(&mut mocks, PARK_USER_MESSAGE, GATED_BRIEF, "call_task_one");
+    mock_parent_final_answer(&mut mocks, PARK_USER_MESSAGE);
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        gate_mock_mcp_tools_on_approval,
+    )
+    .await;
+    let server = app_server(app_state.clone());
+
+    let (origin_chat_id, parent_message_id, child_chat_id, child_message_id) =
+        park_one_child(&server, &app_state).await;
+
+    // Asserted before the repair so a pass cannot be a run that never parked.
+    let parked_slot = slot_for(
+        &content_of(&message_row(&app_state.db, parent_message_id).await),
+        "call_task_one",
+    );
+    assert_eq!(parked_slot["output"]["status"], "input_required");
+    assert_eq!(parked_slot["status"], "in_progress");
+
+    archive_chat_via_api(&server, &origin_chat_id.to_string()).await;
+
+    post_continuestream(&server, child_message_id, "approve")
+        .await
+        .assert_status_ok();
+    wait_for_generation_state(&app_state.db, child_chat_id, "completed").await;
+
+    let settled = slot_for(
+        &content_of(&message_row(&app_state.db, parent_message_id).await),
+        "call_task_one",
+    );
+    assert_ne!(
+        settled["output"]["status"], "input_required",
+        "the origin must stop asking a question the user has answered: {settled}"
+    );
+    assert_eq!(
+        settled["output"]["status"], "completed",
+        "the child's own outcome is what the slot reports: {settled}"
+    );
+    assert_eq!(
+        settled["status"], "success",
+        "a settled slot is a finished tool call, not one still in flight: {settled}"
+    );
+    assert!(
+        !settled["ended_at"].is_null(),
+        "a finished call carries when it finished: {settled}"
+    );
+    assert_eq!(
+        settled["output"]["child_run_id"],
+        json!(child_chat_id),
+        "the slot still names the run it was waiting on: {settled}"
+    );
+    assert!(
+        settled["output"]["result"]
+            .as_str()
+            .is_some_and(|text| !text.is_empty()),
+        "the child's answer reaches the origin, not just its status: {settled}"
+    );
+}
+
+/// D20: while the origin holds the open approval, nothing settles the slot
+/// behind it. Pins the slot rather than the refusal, which
+/// `child_card_continuestream_returns_409_covered_by_parent_while_open` covers.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_covered_child_never_settles_the_origin_slot(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_child_reaches_the_gate(&mut mocks, GATED_BRIEF, "call_child_probe");
+    mock_child_answers_after_the_gate(&mut mocks);
+    mock_parent_plans_one_task(&mut mocks, PARK_USER_MESSAGE, GATED_BRIEF, "call_task_one");
+    mock_parent_final_answer(&mut mocks, PARK_USER_MESSAGE);
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        gate_mock_mcp_tools_on_approval,
+    )
+    .await;
+    let server = app_server(app_state.clone());
+
+    let (_origin_chat_id, parent_message_id, child_chat_id, child_message_id) =
+        park_one_child(&server, &app_state).await;
+
+    post_continuestream(&server, child_message_id, "approve")
+        .await
+        .assert_status(http::StatusCode::CONFLICT);
+
+    let slot = slot_for(
+        &content_of(&message_row(&app_state.db, parent_message_id).await),
+        "call_task_one",
+    );
+    assert_eq!(
+        slot["output"]["status"], "input_required",
+        "the origin is still the one asking: {slot}"
+    );
+    assert_eq!(slot["status"], "in_progress");
+    assert_eq!(
+        generation_state(&app_state.db, child_chat_id).await,
+        "awaiting_approval",
+        "the refusal leaves the child exactly as it was"
+    );
+}
+
 /// Park one child of a fresh origin chat, and hand back the four ids the two
 /// surfaces are addressed by.
 async fn park_one_child(
