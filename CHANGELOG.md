@@ -28,6 +28,7 @@ Typical "Notable changes" categories to copy & paste:
 
 #### Features and enhancements
 
+- **The composer now says in advance when delegated work will stop to be approved.** On a deployment whose `[delegation.tasks.approval] mode` can interrupt a dispatch, a quiet line beneath the composer states it before the user sends, rather than letting the approval stop be the first they hear of the policy — which reads as the product refusing to act rather than asking. The wording follows what the mode actually stops: every run under `always`, the plan under `plan`, background tasks under `async_only`. It stays silent when nothing can be stopped, including on a default deployment and wherever `async_only` is set but `async` is not an offered run mode.
 - Delegation configuration moved to a top-level `[delegation]` section, in preparation for model-planned delegated tasks. The `erato` tool namespace and the tool names `delegate_task` / `collect_tasks` are now reserved for built-in tools.
 - A delegated run now reports **why** it ended, not just that it did, and the delegate's answer reaches the delegating model inside an `untrusted-data` frame so a child's output cannot issue instructions to its parent.
 - **Model-planned delegated tasks (`delegate_task`).** The model can run a self-contained sub-task in a separate conversation and get its result back in the same turn, to keep long or noisy work out of the main conversation. Off by default.
@@ -68,6 +69,13 @@ Typical "Notable changes" categories to copy & paste:
 
 #### Stability improvements
 
+- **A tool call the server never finished is now named as interrupted, and is eventually settled.** A hard crash mid-turn leaves the assistant row holding `tool_use` parts that no exit will ever answer. Two changes end them.
+
+  In the UI, such a call used to render on reload with the rail's green check — the interface asserted success for a call that never returned. It now renders as **interrupted**, a new trace step state distinct from a failure, because the call did not fail: it was abandoned. The rule fires only on positive evidence that nothing is left to settle the part, so a turn parked on an approval, a generation still running on another replica, and a detached `async` dispatch all keep their previous rendering.
+
+  In the backend, the cleanup worker's tick now also settles those parts durably, in the same crash-recovery half as the task-result delivery backstop (so it deletes nothing and is not behind the data-retention opt-in). A `working` or `queued` delegation placeholder on a chat with no writer left becomes a terminal `cancelled` part carrying the new reason `interrupted`, keeping its child ids where a run had actually launched. Pre-existing orphaned rows are picked up by the first tick after upgrade; a live generation, an approval park, and a slot whose child is still writing are never touched.
+
+- **A delegated task answered from its own chat no longer leaves the conversation that asked for it still asking.** A `wait` task is awaited by the turn that dispatched it, and that turn is what writes the answer into its slot. If the origin chat was archived while the task was parked on a tool approval, the task stayed answerable on its own — but nothing was left to carry the outcome home, so the origin kept showing "waiting for your decision" indefinitely, visible again the moment the chat was unarchived. The outcome is now written back into the slot it was owed to. The origin's own card keeps its authority: while it still holds the open approval for that task, nothing settles the slot behind it.
 - A chat whose provider connection stalls without closing no longer stays "running" forever. A turn that receives no content from its provider for `generation_status.provider_idle_timeout_secs` (new, default 600) now fails as a provider error and releases the chat's generation lease. The budget bounds silence, not length: an answer that keeps streaming is never cut off, however long it takes. Note that it is measured on content rather than on socket traffic — keep-alive pings and empty deltas are dropped by the provider adapter and do not reset it. Set the option to `0` for the previous unbounded behaviour.
 
 #### Wire changes

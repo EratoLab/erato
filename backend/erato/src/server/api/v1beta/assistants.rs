@@ -85,6 +85,10 @@ pub struct AssistantFile {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub external_id_ews_id: Option<String>,
+    /// Outlook source references for reopening the original email.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<crate::models::outlook_provenance::OutlookFileProvenance>, nullable = false)]
+    pub outlook_provenance: Option<serde_json::Value>,
     /// The original filename
     pub filename: String,
     /// Pre-signed URL for downloading the file.
@@ -307,6 +311,7 @@ async fn file_info_to_assistant_file(
     Ok(AssistantFile {
         id: file.id.to_string(),
         external_id_ews_id: file.external_id_ews_id,
+        outlook_provenance: file.outlook_provenance,
         filename: file.filename,
         download_url,
         preview_url,

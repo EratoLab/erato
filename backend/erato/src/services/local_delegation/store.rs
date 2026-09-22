@@ -829,6 +829,8 @@ mod tests {
             pending(&db, "owner", None).await.unwrap()[0].state,
             "completed"
         );
+        // Cancelling an old completed job cannot abort a newer chat generation.
+        assert_eq!(cancel(&db, id, "owner").await.unwrap(), None);
         assert_eq!(
             accepted_receipt(&db, id, "owner", &package).await.unwrap(),
             Some(receipt)

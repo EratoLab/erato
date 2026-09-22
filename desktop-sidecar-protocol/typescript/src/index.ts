@@ -66,6 +66,9 @@ export type {
   OutlookListMailboxesV1Params,
   OutlookListMailboxesV1Result,
   OutlookMailbox,
+  OutlookMailboxReference,
+  OutlookMessageReference,
+  OutlookFileProvenance,
   OutlookMessageBody,
   OutlookMessageRecipient,
   OutlookSearchEmailsV1Params,
@@ -120,3 +123,4 @@ export type {
   LocalExportsAckV1Result,
 } from "./generated/index.js";
 export { supportsStrictLocalDelegation } from "./localDelegation.js";
+export { validateOutlookFileProvenance } from "./generated/validators.mjs";

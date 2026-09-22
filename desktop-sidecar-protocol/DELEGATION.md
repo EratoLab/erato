@@ -1,6 +1,6 @@
 # Strict snapshot delegation, contract v1
 
-Status: reserved, disabled. ERMAIN-862 / ERDSCAR-9. Package 0.1.26 extends
+Status: reserved, disabled. ERMAIN-862 / ERDSCAR-9. Package 0.1.27 extends
 0.1.25; the latter is identical in both repositories and retains `external_ids`
 and `topLevelParent`. Transport protocol remains 1.0. This document is the
 shared design record. It does not certify a security implementation.

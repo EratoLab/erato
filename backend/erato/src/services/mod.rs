@@ -16,6 +16,7 @@ pub mod file_storage;
 pub mod file_type_detection;
 pub mod genai;
 pub mod genai_langfuse;
+pub mod interrupted_parts;
 pub mod langfuse;
 pub mod mcp_manager;
 pub mod mcp_oauth;

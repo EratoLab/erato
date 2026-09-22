@@ -38,6 +38,7 @@ export const validateLocalExportsReadV1Params: Validator;
 export const validateLocalExportsReadV1Result: Validator;
 export const validateLocalExportsAckV1Params: Validator;
 export const validateLocalExportsAckV1Result: Validator;
+export const validateOutlookFileProvenance: Validator;
 export const validateIndexingBenchmarkListV1Params: Validator;
 export const validateIndexingBenchmarkListV1Result: Validator;
 export const validateIndexingBenchmarkStartV1Params: Validator;

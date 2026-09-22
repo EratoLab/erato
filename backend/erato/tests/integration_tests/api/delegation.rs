@@ -1944,6 +1944,7 @@ async fn insert_fixed_parent_file(
         owner_user_id: ActiveValue::Set(owner_user_id.to_string()),
         audio_transcription: ActiveValue::Set(None),
         external_id_ews_id: ActiveValue::Set(None),
+        outlook_provenance: ActiveValue::Set(None),
     };
     erato::db::entity::file_uploads::Entity::insert(file)
         .exec(db)
@@ -8389,6 +8390,263 @@ async fn a_running_task_is_persisted_at_its_slot_before_it_finishes(pool: Pool<P
     );
     assert_eq!(task_parts[0]["output"]["status"], "cancelled");
     assert_eq!(task_parts[0]["output"]["reason"], "timeout");
+}
+
+/// The sweep, proven against the bytes a real dispatch writes rather than a
+/// fixture someone typed.
+///
+/// `a_running_task_is_persisted_at_its_slot_before_it_finishes` shows the
+/// launch commit leaves an `in_progress` slot carrying `output.status:
+/// "working"`. What it cannot show is what becomes of that slot when the
+/// process that owed it an answer never comes back — the exit that would have
+/// settled it is precisely the one a crash skips.
+///
+/// So: drive the same real dispatch, lift the placeholder the server actually
+/// persisted straight out of `raw_message`, replant it under a chat whose
+/// lease has gone stale (the state a killed replica leaves behind) and assert
+/// the cleanup tick ends it. The live turn running alongside is the control:
+/// a real generation, mid-flight, that the sweep must not touch.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_placeholder_a_real_dispatch_wrote_is_settled_by_the_sweep(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&["CRASH-SHAPE-BRIEF"], &[]));
+        mock_llm_sse_response(
+            then,
+            vec![
+                BodyAction::Delay(std::time::Duration::from_secs(30)),
+                BodyAction::Bytes("data: [DONE]\n\n".into()),
+            ],
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["crash shape question"],
+                &["CRASH-SHAPE-BRIEF"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_crash_shape",
+                "delegate_task",
+                json!({ "task": "CRASH-SHAPE-BRIEF: stall", "facet_ids": ["plan"] }),
+            )]),
+        );
+    });
+
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        config.delegation.run_timeout_seconds = 5;
+    })
+    .await;
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server_addr = listener.local_addr().unwrap();
+    let app: Router = erato::server::router::router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    let client = reqwest::Client::new();
+    let base_url = format!("http://{server_addr}");
+    let create_response = client
+        .post(format!("{base_url}/api/v1beta/me/chats"))
+        .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap();
+    let chat_id = create_response.json::<Value>().await.unwrap()["chat_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let origin_id = Uuid::parse_str(&chat_id).unwrap();
+
+    let streaming = tokio::spawn({
+        let client = client.clone();
+        let base_url = base_url.clone();
+        let chat_id = chat_id.clone();
+        async move {
+            client
+                .post(format!("{base_url}/api/v1beta/me/messages/submitstream"))
+                .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+                .json(&json!({
+                    "existing_chat_id": chat_id,
+                    "user_message": "crash shape question",
+                    "input_files_ids": [],
+                    "selected_facet_ids": ["plan"],
+                }))
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap()
+        }
+    });
+
+    // Read the durable column, not the API projection: `raw_message` is what
+    // the sweep scans, so `raw_message` is what has to be proven.
+    let mut committed = None;
+    for _ in 0..40 {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        let rows = erato::db::entity::messages::Entity::find()
+            .filter(erato::db::entity::messages::Column::ChatId.eq(origin_id))
+            .all(&app_state.db)
+            .await
+            .unwrap();
+        let found = rows.iter().find(|row| {
+            row.raw_message["content"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|part| {
+                    part["content_type"] == "tool_use"
+                        && part["status"] == "in_progress"
+                        && part["output"]["status"] == "working"
+                })
+        });
+        if let Some(row) = found {
+            committed = Some(row.raw_message.clone());
+            break;
+        }
+    }
+    let committed = committed.expect("the real dispatch must commit a running slot to the row");
+
+    let origin = erato::db::entity::chats::Entity::find_by_id(origin_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("origin chat");
+
+    // The crash: the same bytes, under a lease nobody is refreshing any more.
+    let stale: sea_orm::prelude::DateTimeWithTimeZone =
+        (chrono::Utc::now() - chrono::Duration::seconds(600)).into();
+    let now: sea_orm::prelude::DateTimeWithTimeZone = chrono::Utc::now().into();
+    let crashed_chat = Uuid::new_v4();
+    erato::db::entity::chats::ActiveModel {
+        id: ActiveValue::Set(crashed_chat),
+        owner_user_id: ActiveValue::Set(origin.owner_user_id.clone()),
+        generation_state: ActiveValue::Set(Some("errored".to_string())),
+        generation_started_at: ActiveValue::Set(Some(stale)),
+        generation_heartbeat_at: ActiveValue::Set(Some(stale)),
+        created_at: ActiveValue::Set(now),
+        updated_at: ActiveValue::Set(now),
+        ..Default::default()
+    }
+    .insert(&app_state.db)
+    .await
+    .expect("insert crashed chat");
+
+    let crashed_message = Uuid::new_v4();
+    erato::db::entity::messages::ActiveModel {
+        id: ActiveValue::Set(crashed_message),
+        chat_id: ActiveValue::Set(crashed_chat),
+        raw_message: ActiveValue::Set(committed.clone()),
+        created_at: ActiveValue::Set(now),
+        updated_at: ActiveValue::Set(now),
+        is_message_in_active_thread: ActiveValue::Set(true),
+        ..Default::default()
+    }
+    .insert(&app_state.db)
+    .await
+    .expect("insert crashed message");
+
+    let cleanup_args = erato::actors::cleanup_worker::CleanupWorkerArgs {
+        db: app_state.db.clone(),
+        cleanup_enabled: false,
+        cleanup_archived_max_age_days: 30,
+        delegated_run_auto_archive_after_days: 0,
+        generation_stale_after_secs: app_state.config.generation_status.stale_after_secs,
+        result_max_chars: app_state.config.delegation.result_max_chars,
+    };
+    let tick = || erato::actors::cleanup_worker::run_cleanup_tick(&cleanup_args);
+    let part_of = async |message_id: Uuid| -> Value {
+        erato::db::entity::messages::Entity::find_by_id(message_id)
+            .one(&app_state.db)
+            .await
+            .unwrap()
+            .expect("message")
+            .raw_message["content"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|part| part["content_type"] == "tool_use")
+            .cloned()
+            .expect("the tool part survives")
+    };
+
+    // First tick, with the child this slot names still genuinely running. A
+    // crash takes the child down with the parent, so a child that is still
+    // writing is evidence the slot is not orphaned at all — and the guard has
+    // a real live run to prove itself against, not a synthetic one.
+    tick().await.expect("tick must not fail");
+    assert_eq!(
+        part_of(crashed_message).await["status"],
+        "in_progress",
+        "a slot whose child is still writing must survive the sweep"
+    );
+
+    // Let the run finish, which is the state a killed replica leaves: the
+    // parent's exit never settled the slot, and the child is not writing
+    // either. The placeholder bytes under test are still the ones the real
+    // dispatch committed mid-flight.
+    streaming.await.unwrap();
+
+    tick().await.expect("tick must not fail");
+
+    let settled = erato::db::entity::messages::Entity::find_by_id(crashed_message)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("crashed message")
+        .raw_message;
+    let settled_part = settled["content"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|part| part["content_type"] == "tool_use")
+        .cloned()
+        .expect("the tool part survives the settle");
+    assert_ne!(
+        settled_part["status"], "in_progress",
+        "the sweep must end a slot the real dispatch left running: {settled_part}"
+    );
+    assert_eq!(settled_part["output"]["status"], "cancelled");
+    assert_eq!(settled_part["output"]["reason"], "interrupted");
+    assert!(
+        settled_part["output"]["child_run_id"].is_string(),
+        "a run that had started keeps the child it started: {settled_part}"
+    );
+
+    // The control: a real generation was in flight throughout. Whatever it
+    // ends as, it must not be wearing the sweep's reason.
+    let origin_rows = erato::db::entity::messages::Entity::find()
+        .filter(erato::db::entity::messages::Column::ChatId.eq(origin_id))
+        .all(&app_state.db)
+        .await
+        .unwrap();
+    for row in &origin_rows {
+        for part in row.raw_message["content"].as_array().into_iter().flatten() {
+            assert_ne!(
+                part["output"]["reason"], "interrupted",
+                "the sweep reached into a live turn: {part}"
+            );
+        }
+    }
 }
 
 /// The index a task call announces is the index it settles at. The frontend
@@ -14841,6 +15099,136 @@ async fn approve_always_upserts_on_child_server_and_tool(pool: Pool<Postgres>) {
     assert!(decision["user_tool_approval_setting_id"].is_string());
 }
 
+/// A `wait` child answered on its own card, with the turn that dispatched it
+/// gone.
+///
+/// Archiving is the only route that reaches this: a withdrawal or a settlement
+/// closes the child's own copy, and a crashed parent still reads as covering.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_child_answered_on_its_own_card_settles_the_orphaned_origin_slot(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_child_reaches_the_gate(&mut mocks, GATED_BRIEF, "call_child_probe");
+    mock_child_answers_after_the_gate(&mut mocks);
+    mock_parent_plans_one_task(&mut mocks, PARK_USER_MESSAGE, GATED_BRIEF, "call_task_one");
+    mock_parent_final_answer(&mut mocks, PARK_USER_MESSAGE);
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        gate_mock_mcp_tools_on_approval,
+    )
+    .await;
+    let server = app_server(app_state.clone());
+
+    let (origin_chat_id, parent_message_id, child_chat_id, child_message_id) =
+        park_one_child(&server, &app_state).await;
+
+    // Asserted before the repair so a pass cannot be a run that never parked.
+    let parked_slot = slot_for(
+        &content_of(&message_row(&app_state.db, parent_message_id).await),
+        "call_task_one",
+    );
+    assert_eq!(parked_slot["output"]["status"], "input_required");
+    assert_eq!(parked_slot["status"], "in_progress");
+
+    archive_chat_via_api(&server, &origin_chat_id.to_string()).await;
+
+    post_continuestream(&server, child_message_id, "approve")
+        .await
+        .assert_status_ok();
+    wait_for_generation_state(&app_state.db, child_chat_id, "completed").await;
+
+    let settled = slot_for(
+        &content_of(&message_row(&app_state.db, parent_message_id).await),
+        "call_task_one",
+    );
+    assert_ne!(
+        settled["output"]["status"], "input_required",
+        "the origin must stop asking a question the user has answered: {settled}"
+    );
+    assert_eq!(
+        settled["output"]["status"], "completed",
+        "the child's own outcome is what the slot reports: {settled}"
+    );
+    assert_eq!(
+        settled["status"], "success",
+        "a settled slot is a finished tool call, not one still in flight: {settled}"
+    );
+    assert!(
+        !settled["ended_at"].is_null(),
+        "a finished call carries when it finished: {settled}"
+    );
+    assert_eq!(
+        settled["output"]["child_run_id"],
+        json!(child_chat_id),
+        "the slot still names the run it was waiting on: {settled}"
+    );
+    assert!(
+        settled["output"]["result"]
+            .as_str()
+            .is_some_and(|text| !text.is_empty()),
+        "the child's answer reaches the origin, not just its status: {settled}"
+    );
+}
+
+/// D20: while the origin holds the open approval, nothing settles the slot
+/// behind it. Pins the slot rather than the refusal, which
+/// `child_card_continuestream_returns_409_covered_by_parent_while_open` covers.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_covered_child_never_settles_the_origin_slot(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_child_reaches_the_gate(&mut mocks, GATED_BRIEF, "call_child_probe");
+    mock_child_answers_after_the_gate(&mut mocks);
+    mock_parent_plans_one_task(&mut mocks, PARK_USER_MESSAGE, GATED_BRIEF, "call_task_one");
+    mock_parent_final_answer(&mut mocks, PARK_USER_MESSAGE);
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        gate_mock_mcp_tools_on_approval,
+    )
+    .await;
+    let server = app_server(app_state.clone());
+
+    let (_origin_chat_id, parent_message_id, child_chat_id, child_message_id) =
+        park_one_child(&server, &app_state).await;
+
+    post_continuestream(&server, child_message_id, "approve")
+        .await
+        .assert_status(http::StatusCode::CONFLICT);
+
+    let slot = slot_for(
+        &content_of(&message_row(&app_state.db, parent_message_id).await),
+        "call_task_one",
+    );
+    assert_eq!(
+        slot["output"]["status"], "input_required",
+        "the origin is still the one asking: {slot}"
+    );
+    assert_eq!(slot["status"], "in_progress");
+    assert_eq!(
+        generation_state(&app_state.db, child_chat_id).await,
+        "awaiting_approval",
+        "the refusal leaves the child exactly as it was"
+    );
+}
+
 /// Park one child of a fresh origin chat, and hand back the four ids the two
 /// surfaces are addressed by.
 async fn park_one_child(
@@ -16398,6 +16786,21 @@ async fn local_research_parks_and_resumes_in_the_single_backend(pool: Pool<Postg
     })
     .await
     .expect("initial generation must park durably");
+    // Main's crash-orphan cleanup must preserve a live durable consent stop.
+    erato::services::interrupted_parts::sweep_interrupted_tool_parts(&app_state.db, 90).await;
+    assert_eq!(
+        store::get(&app_state.db, job.id, &owner)
+            .await
+            .unwrap()
+            .state,
+        "waiting_for_local_result"
+    );
+    let parked = message_row(&app_state.db, job.message_id).await;
+    assert!(
+        content_of(&parked)
+            .iter()
+            .any(|part| part["output"]["status"] == "awaiting_local_consent")
+    );
     let path = format!("/api/v1beta/me/local-delegation/jobs/{}", job.id);
     server
         .post(&format!("{path}/claim"))

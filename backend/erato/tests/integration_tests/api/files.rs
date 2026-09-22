@@ -82,9 +82,9 @@ async fn upload_file_to_chat(
     upload_response.json()
 }
 
-/// EWS metadata survives both upload modes and all resolved file response paths.
+/// Outlook metadata survives both upload modes and all resolved file response paths.
 #[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn test_file_external_ews_id_roundtrip(pool: Pool<Postgres>) {
+async fn test_file_outlook_metadata_roundtrip(pool: Pool<Postgres>) {
     use erato::db::entity::{file_uploads, messages};
     use sea_orm::{ActiveModelTrait, EntityTrait, Set};
 
@@ -98,53 +98,81 @@ async fn test_file_external_ews_id_roundtrip(pool: Pool<Postgres>) {
     let chat_id = create_chat(&server).await;
     let ews_id = "AAMkAGI+opaque/id==&value%";
 
+    let fixtures: Value = serde_json::from_str(include_str!(
+        "../../../../../desktop-sidecar-protocol/conformance/fixtures/outlook-file-provenance.json"
+    ))
+    .unwrap();
+    let provenances: Vec<Option<&Value>> = std::iter::once(None)
+        .chain(
+            fixtures["valid"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|fixture| Some(&fixture["value"])),
+        )
+        .collect();
     for associate_chat in [false, true] {
         for external_id in [None, Some(ews_id)] {
-            let mut request = server
-                .post("/api/v1beta/me/files")
-                .with_bearer_token(TEST_JWT_TOKEN);
-            if associate_chat {
-                request = request.add_query_param("chat_id", &chat_id);
-            }
-            if let Some(external_id) = external_id {
-                request = request.add_query_param("external_id_ews_id", external_id);
-            }
-            let response = request
-                .multipart(
-                    MultipartForm::new().add_part(
-                        "file",
-                        Part::bytes(b"EWS metadata test".to_vec())
-                            .file_name("source.txt")
-                            .mime_type("text/plain"),
-                    ),
-                )
-                .await;
-            response.assert_status_ok();
-            let uploaded: Value = response.json();
-            let file = &uploaded["files"][0];
-            assert_eq!(file["external_id_ews_id"].as_str(), external_id);
-            let file_id = file["id"].as_str().unwrap();
-            let file_uuid = Uuid::parse_str(file_id).unwrap();
-            let stored = file_uploads::Entity::find_by_id(file_uuid)
-                .one(&state.db)
-                .await
-                .unwrap()
-                .unwrap();
-            assert_eq!(stored.external_id_ews_id.as_deref(), external_id);
+            for provenance in &provenances {
+                let mut request = server
+                    .post("/api/v1beta/me/files")
+                    .with_bearer_token(TEST_JWT_TOKEN);
+                if associate_chat {
+                    request = request.add_query_param("chat_id", &chat_id);
+                }
+                if let Some(external_id) = external_id {
+                    request = request.add_query_param("external_id_ews_id", external_id);
+                }
+                let mut form = MultipartForm::new();
+                if let Some(provenance) = provenance {
+                    form = form.add_text(
+                        "outlook_provenance",
+                        serde_json::to_string(provenance).unwrap(),
+                    );
+                }
+                let response = request
+                    .multipart(
+                        form.add_part(
+                            "file",
+                            Part::bytes(b"Identical bytes with distinct Outlook origins".to_vec())
+                                .file_name("source.txt")
+                                .mime_type("text/plain"),
+                        ),
+                    )
+                    .await;
+                response.assert_status_ok();
+                let uploaded: Value = response.json();
+                let file = &uploaded["files"][0];
+                assert_eq!(file["external_id_ews_id"].as_str(), external_id);
+                assert_eq!(file.get("outlook_provenance"), *provenance);
+                let file_id = file["id"].as_str().unwrap();
+                let file_uuid = Uuid::parse_str(file_id).unwrap();
+                let stored = file_uploads::Entity::find_by_id(file_uuid)
+                    .one(&state.db)
+                    .await
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(stored.external_id_ews_id.as_deref(), external_id);
+                assert_eq!(stored.outlook_provenance.as_ref(), *provenance);
 
-            // File pointers are resolved through this endpoint.
-            let resolved = server
-                .get(&format!("/api/v1beta/files/{file_id}"))
-                .with_bearer_token(TEST_JWT_TOKEN)
-                .await;
-            resolved.assert_status_ok();
-            assert_eq!(
-                resolved.json::<Value>()["external_id_ews_id"].as_str(),
-                external_id
-            );
+                // File pointers are resolved through this endpoint.
+                let resolved = server
+                    .get(&format!("/api/v1beta/files/{file_id}"))
+                    .with_bearer_token(TEST_JWT_TOKEN)
+                    .await;
+                resolved.assert_status_ok();
+                assert_eq!(
+                    resolved.json::<Value>()["external_id_ews_id"].as_str(),
+                    external_id
+                );
 
-            if associate_chat {
-                messages::ActiveModel {
+                assert_eq!(
+                    resolved.json::<Value>().get("outlook_provenance"),
+                    *provenance
+                );
+
+                if associate_chat {
+                    messages::ActiveModel {
                     id: Set(Uuid::new_v4()),
                     chat_id: Set(Uuid::parse_str(&chat_id).unwrap()),
                     raw_message: Set(
@@ -156,42 +184,175 @@ async fn test_file_external_ews_id_roundtrip(pool: Pool<Postgres>) {
                 .insert(&state.db)
                 .await
                 .unwrap();
-                let response = server
-                    .get(&format!("/api/v1beta/chats/{chat_id}/messages"))
-                    .with_bearer_token(TEST_JWT_TOKEN)
-                    .await;
-                response.assert_status_ok();
-                let response: Value = response.json();
-                let attachment = response["messages"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .flat_map(|message| message["files"].as_array().unwrap())
-                    .find(|file| file["id"] == file_id)
-                    .unwrap();
-                assert_eq!(attachment["external_id_ews_id"].as_str(), external_id);
-            } else {
-                let response = server.post("/api/v1beta/assistants")
+                    let response = server
+                        .get(&format!("/api/v1beta/chats/{chat_id}/messages"))
+                        .with_bearer_token(TEST_JWT_TOKEN)
+                        .await;
+                    response.assert_status_ok();
+                    let response: Value = response.json();
+                    let attachment = response["messages"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .flat_map(|message| message["files"].as_array().unwrap())
+                        .find(|file| file["id"] == file_id)
+                        .unwrap();
+                    assert_eq!(attachment["external_id_ews_id"].as_str(), external_id);
+                    assert_eq!(attachment.get("outlook_provenance"), *provenance);
+                } else {
+                    let response = server.post("/api/v1beta/assistants")
                     .with_bearer_token(TEST_JWT_TOKEN)
                     .json(&json!({"name": "EWS test", "prompt": "Use the file", "file_ids": [file_id]}))
                     .await;
-                response.assert_status(StatusCode::CREATED);
-                let assistant: Value = response.json();
-                let assistant_id = assistant["id"].as_str().unwrap();
-                let response = server
-                    .get(&format!("/api/v1beta/assistants/{assistant_id}"))
-                    .with_bearer_token(TEST_JWT_TOKEN)
-                    .await;
-                response.assert_status_ok();
-                let assistant: Value = response.json();
-                assert_eq!(assistant["files"][0]["id"], file_id);
-                assert_eq!(
-                    assistant["files"][0]["external_id_ews_id"].as_str(),
-                    external_id
-                );
+                    response.assert_status(StatusCode::CREATED);
+                    let assistant: Value = response.json();
+                    let assistant_id = assistant["id"].as_str().unwrap();
+                    let response = server
+                        .get(&format!("/api/v1beta/assistants/{assistant_id}"))
+                        .with_bearer_token(TEST_JWT_TOKEN)
+                        .await;
+                    response.assert_status_ok();
+                    let assistant: Value = response.json();
+                    assert_eq!(assistant["files"][0]["id"], file_id);
+                    assert_eq!(assistant["files"][0].get("outlook_provenance"), *provenance);
+                    assert_eq!(
+                        assistant["files"][0]["external_id_ews_id"].as_str(),
+                        external_id
+                    );
+                }
             }
         }
     }
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_file_outlook_metadata_rejects_invalid_parts(pool: Pool<Postgres>) {
+    use erato::db::entity::file_uploads;
+    use erato::models::outlook_provenance::MAX_OUTLOOK_PROVENANCE_BYTES;
+    use sea_orm::{EntityTrait, PaginatorTrait};
+
+    let state = test_app_state(hermetic_app_config(None, None), pool).await;
+    let app = router(state.clone())
+        .split_for_parts()
+        .0
+        .with_state(state.clone());
+    let server = TestServer::new(app.into_make_service()).unwrap();
+    let valid = r#"{"version":1,"origins":[{"topLevelParent":{"external_ids":[{"key":"ews_id","value":"parent-ews-id"}]}}]}"#;
+    for (form, status) in [
+        (
+            MultipartForm::new().add_text("outlook_provenance", "not json"),
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            MultipartForm::new().add_text(
+                "outlook_provenance",
+                valid.replace("\"version\":1", "\"version\":2"),
+            ),
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            MultipartForm::new().add_text("outlook_provenance", r#"{"version":1,"origins":[]}"#),
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            MultipartForm::new().add_text(
+                "outlook_provenance",
+                " ".repeat(MAX_OUTLOOK_PROVENANCE_BYTES + 1),
+            ),
+            StatusCode::PAYLOAD_TOO_LARGE,
+        ),
+        (
+            MultipartForm::new()
+                .add_text("outlook_provenance", valid)
+                .add_text("outlook_provenance", valid),
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            MultipartForm::new().add_part(
+                "outlook_provenance",
+                Part::bytes(valid.as_bytes().to_vec()).file_name("metadata.json"),
+            ),
+            StatusCode::BAD_REQUEST,
+        ),
+    ] {
+        let response = server
+            .post("/api/v1beta/me/files")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .multipart(form.add_part(
+                "file",
+                Part::bytes(b"must not be stored".to_vec()).file_name("source.txt"),
+            ))
+            .await;
+        response.assert_status(status);
+        assert_eq!(
+            file_uploads::Entity::find().count(&state.db).await.unwrap(),
+            0
+        );
+    }
+    // Metadata alone is not an upload and cannot create a phantom attachment.
+    server
+        .post("/api/v1beta/me/files")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .multipart(MultipartForm::new().add_text("outlook_provenance", valid))
+        .await
+        .assert_status_bad_request();
+    assert_eq!(
+        file_uploads::Entity::find().count(&state.db).await.unwrap(),
+        0
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_file_outlook_metadata_batch_scope_and_access(pool: Pool<Postgres>) {
+    use crate::test_utils::JwtTokenBuilder;
+    let state = test_app_state(hermetic_app_config(None, None), pool).await;
+    let app = router(state.clone()).split_for_parts().0.with_state(state);
+    let server = TestServer::new(app.into_make_service()).unwrap();
+    let provenance = json!({"version":1,"origins":[{"topLevelParent":{"external_ids":[{"key":"ews_id","value":"parent-ews-id"}]}}]});
+    let form = MultipartForm::new()
+        .add_text("outlook_provenance", provenance.to_string())
+        .add_part("file", Part::bytes(b"one".to_vec()).file_name("one.txt"))
+        .add_part("file", Part::bytes(b"two".to_vec()).file_name("two.txt"));
+    let response = server
+        .post("/api/v1beta/me/files")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .multipart(form)
+        .await;
+    response.assert_status_ok();
+    let uploaded: Value = response.json();
+    let files = uploaded["files"].as_array().unwrap();
+    assert_eq!(files.len(), 2);
+    let other_user = JwtTokenBuilder::new()
+        .subject("unrelated-outlook-user")
+        .build();
+    for file in files {
+        assert_eq!(file["outlook_provenance"], provenance);
+        assert!(file.get("external_id_ews_id").is_none()); // Never copy a parent's EWS ID.
+        let denied = server
+            .get(&format!(
+                "/api/v1beta/files/{}",
+                file["id"].as_str().unwrap()
+            ))
+            .with_bearer_token(&other_user)
+            .await;
+        assert!(!denied.status_code().is_success());
+        assert!(!denied.text().contains("parent-ews-id"));
+    }
+
+    // A late metadata part must not retroactively change an earlier file's identity.
+    let response = server
+        .post("/api/v1beta/me/files")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .multipart(
+            MultipartForm::new()
+                .add_part(
+                    "file",
+                    Part::bytes(b"legacy".to_vec()).file_name("legacy.txt"),
+                )
+                .add_text("outlook_provenance", provenance.to_string()),
+        )
+        .await;
+    response.assert_status_bad_request();
 }
 
 /// Test file upload to a chat.

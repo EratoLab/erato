@@ -3893,6 +3893,10 @@ export type UploadFileVariables = {
  * This endpoint accepts a multipart form with one or more files and returns UUIDs for each.
  * If chat_id is provided, files are associated with that chat. If not provided, files are created
  * as standalone uploads that can be linked to assistants later.
+ * An optional `outlook_provenance` text part carries version 1 OutlookFileProvenance JSON
+ * (maximum 64 KiB). It must occur exactly once before any files and applies to every file
+ * in the request. Upload files with different origins in separate requests. The original
+ * EWS ID query parameter remains independent; a containing email's ID never replaces it.
  */
 /**
  * WORKAROUND: This endpoint requires a multipart/form-data request.
@@ -3931,6 +3935,10 @@ export const fetchUploadFile = (
  * This endpoint accepts a multipart form with one or more files and returns UUIDs for each.
  * If chat_id is provided, files are associated with that chat. If not provided, files are created
  * as standalone uploads that can be linked to assistants later.
+ * An optional `outlook_provenance` text part carries version 1 OutlookFileProvenance JSON
+ * (maximum 64 KiB). It must occur exactly once before any files and applies to every file
+ * in the request. Upload files with different origins in separate requests. The original
+ * EWS ID query parameter remains independent; a containing email's ID never replaces it.
  */
 export const useUploadFile = (
   options?: Omit<

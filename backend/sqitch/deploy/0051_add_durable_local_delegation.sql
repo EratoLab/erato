@@ -1,4 +1,4 @@
--- Deploy erato:0050_add_durable_local_delegation to pg
+-- Deploy erato:0051_add_durable_local_delegation to pg
 BEGIN;
 -- This table is deliberately LOGGED. Neither in-process channels nor the
 -- UNLOGGED generation-command queue own acceptance or continuation recovery.

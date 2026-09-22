@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/outlook/mailbox-reference.schema.json",
+  "title": "OutlookMailboxReference",
+  "description": "Mailbox context captured with a message reference. Local IDs are scoped to the originating Outlook installation; emailAddress identifies the mailbox owner, including a shared mailbox, not necessarily the signed-in user.",
+  "type": "object",
+  "properties": {
+    "mailboxId": {
+      "description": "Local sidecar mailbox ID. Both the compact Outlook RPC spelling and the UUID spelling used by search are accepted. Not a Microsoft Graph mailbox ID or a portable device identity.",
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+    },
+    "emailAddress": {
+      "description": "SMTP address of the mailbox owning the referenced item, when known.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "\\S"
+    },
+    "profileName": {
+      "description": "Name of the originating Outlook profile, when available. A profile name alone does not identify a mailbox.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "\\S"
+    }
+  },
+  "anyOf": [
+    {
+      "required": ["mailboxId"],
+      "properties": {
+        "mailboxId": {
+          "description": "Local sidecar mailbox ID. Both the compact Outlook RPC spelling and the UUID spelling used by search are accepted. Not a Microsoft Graph mailbox ID or a portable device identity.",
+          "type": "string",
+          "pattern": "^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+        }
+      }
+    },
+    {
+      "required": ["emailAddress"],
+      "properties": {
+        "emailAddress": {
+          "description": "SMTP address of the mailbox owning the referenced item, when known.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "\\S"
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

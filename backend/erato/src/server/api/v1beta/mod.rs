@@ -1828,6 +1828,11 @@ pub struct FrequentAssistantsResponse {
 #[allow(unused)]
 struct MultipartFormFile {
     name: String,
+    /// Optional version 1 OutlookFileProvenance JSON text (maximum 64 KiB).
+    /// Send exactly once, before all file parts; applies to every file in this request.
+    /// Files with different origins must be uploaded in separate requests.
+    #[schema(nullable = false)]
+    outlook_provenance: Option<String>,
     #[schema(format = Binary, content_media_type = "application/octet-stream")]
     file: String,
 }
@@ -1841,6 +1846,10 @@ pub struct FileUploadItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     external_id_ews_id: Option<String>,
+    /// Outlook source references for reopening the original email.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<crate::models::outlook_provenance::OutlookFileProvenance>, nullable = false)]
+    outlook_provenance: Option<serde_json::Value>,
     /// The original filename of the uploaded file
     filename: String,
     /// Pre-signed URL for downloading the file directly from storage
@@ -1935,6 +1944,10 @@ pub struct PromptOptimizerResponse {
 /// This endpoint accepts a multipart form with one or more files and returns UUIDs for each.
 /// If chat_id is provided, files are associated with that chat. If not provided, files are created
 /// as standalone uploads that can be linked to assistants later.
+/// An optional `outlook_provenance` text part carries version 1 OutlookFileProvenance JSON
+/// (maximum 64 KiB). It must occur exactly once before any files and applies to every file
+/// in the request. Upload files with different origins in separate requests. The original
+/// EWS ID query parameter remains independent; a containing email's ID never replaces it.
 #[utoipa::path(
     post,
     path = "/me/files",
@@ -2000,12 +2013,39 @@ pub async fn upload_file(
         get_file_capabilities(supports_image_understanding, supports_audio_input);
 
     let mut uploaded_files = Vec::new();
+    let mut outlook_provenance = None;
 
     // Process the multipart form
     while let Some(mut field) = multipart.next_field().await.map_err(|e| {
         tracing::error!("Failed to process multipart form: {}", e);
         StatusCode::BAD_REQUEST
     })? {
+        if field.name() == Some("outlook_provenance") {
+            // Parse before storing any bytes. A metadata part is never a file.
+            if outlook_provenance.is_some()
+                || !uploaded_files.is_empty()
+                || field.file_name().is_some()
+            {
+                return Err(StatusCode::BAD_REQUEST);
+            }
+            use crate::models::outlook_provenance::{
+                MAX_OUTLOOK_PROVENANCE_BYTES, OutlookFileProvenance,
+            };
+            let mut bytes = Vec::new();
+            while let Some(chunk) = field.chunk().await.map_err(|_| StatusCode::BAD_REQUEST)? {
+                if bytes.len() + chunk.len() > MAX_OUTLOOK_PROVENANCE_BYTES {
+                    return Err(StatusCode::PAYLOAD_TOO_LARGE);
+                }
+                bytes.extend_from_slice(&chunk);
+            }
+            let provenance =
+                OutlookFileProvenance::parse(&bytes).map_err(|_| StatusCode::BAD_REQUEST)?;
+            outlook_provenance = Some(
+                serde_json::to_value(provenance)
+                    .map_err(|error| log_internal_server_error(error.into()))?,
+            );
+            continue;
+        }
         if uploaded_files.len() >= max_files {
             tracing::warn!(
                 "User {} attempted to upload more than {} files in one request",
@@ -2064,6 +2104,7 @@ pub async fn upload_file(
                 app_state.default_file_storage_provider_id(),
                 file_path,
                 params.get("external_id_ews_id").cloned(),
+                outlook_provenance.clone(),
             )
             .await
         } else {
@@ -2076,6 +2117,7 @@ pub async fn upload_file(
                 app_state.default_file_storage_provider_id(),
                 file_path,
                 params.get("external_id_ews_id").cloned(),
+                outlook_provenance.clone(),
             )
             .await
         }
@@ -2128,6 +2170,7 @@ pub async fn upload_file(
         uploaded_files.push(FileUploadItem {
             id: file_upload.id.to_string(),
             external_id_ews_id: file_upload.external_id_ews_id,
+            outlook_provenance: file_upload.outlook_provenance,
             filename,
             download_url,
             preview_url: Some(preview_url),
@@ -2400,6 +2443,7 @@ async fn link_sharepoint_file_impl(
         files: vec![FileUploadItem {
             id: file_upload.id.to_string(),
             external_id_ews_id: file_upload.external_id_ews_id,
+            outlook_provenance: file_upload.outlook_provenance,
             filename,
             preview_url: Some(proxied_preview_url_for_file(&file_upload.id)),
             download_url,
@@ -2949,6 +2993,7 @@ async fn assemble_chat_messages_response(
                     file_capability,
                     audio_transcription: file_upload.audio_transcription,
                     external_id_ews_id: file_upload.external_id_ews_id,
+                    outlook_provenance: file_upload.outlook_provenance,
                 },
             );
         }
@@ -3458,6 +3503,7 @@ pub async fn frequent_assistants(
                     AssistantFile {
                         id: file.id.to_string(),
                         external_id_ews_id: file.external_id_ews_id,
+                        outlook_provenance: file.outlook_provenance,
                         filename: file.filename,
                         download_url: Some(format!("/api/v1beta/files/{}", file.id)),
                         preview_url: Some(proxied_preview_url_for_file(&file.id)),
@@ -3945,6 +3991,7 @@ pub async fn get_file(
         file_capability,
         audio_transcription: file_upload.audio_transcription,
         external_id_ews_id: file_upload.external_id_ews_id,
+        outlook_provenance: file_upload.outlook_provenance,
     }))
 }
 

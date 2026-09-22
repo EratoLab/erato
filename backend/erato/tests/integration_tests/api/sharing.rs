@@ -427,6 +427,7 @@ async fn test_full_assistant_sharing_flow(pool: Pool<Postgres>) {
         "seaweedfs".to_string(),
         "test_path.txt".to_string(),
         None,
+        None,
     )
     .await
     .expect("Failed to create file");

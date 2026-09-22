@@ -90,6 +90,14 @@ interface AssistantsFeatureConfig {
   /** Whether the deployment lets a delegated run be sent to the background */
   delegationAllowBackground: boolean;
   /**
+   * Whether the deployment offers delegated tasks at all. Needed alongside
+   * the approval mode below, which the backend publishes ungated: a
+   * deployment can be configured to demand approval while tasks are off, and
+   * a client reading the mode alone would announce a stop that nothing can
+   * reach.
+   */
+  delegationTasksEnabled: boolean;
+  /**
    * Whether the deployment can run a delegated task asynchronously — which is
    * the only run mode a retry starts, so this is what gates the retry
    * affordance. The backend derives it from the same predicate the retry
@@ -289,6 +297,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
     enabled: false,
     delegationEnabled: false,
     delegationAllowBackground: false,
+    delegationTasksEnabled: false,
     delegationTasksAllowAsync: false,
     delegationTasksApprovalMode: "async_only",
     enableEditSharing: true,
@@ -405,9 +414,10 @@ function createFeatureConfig(
       delegationAllowBackground: Boolean(
         environment.assistantsDelegationAllowBackground,
       ),
-      // The Env field carries no `assistants` prefix, unlike its neighbour
-      // above: it is the backend's own `DELEGATION_TASKS_ALLOW_ASYNC`, named
-      // after the config it derives from rather than after this section.
+      // The Env fields carry no `assistants` prefix, unlike their neighbour
+      // above: they are the backend's own `DELEGATION_TASKS_*`, named after
+      // the config they derive from rather than after this section.
+      delegationTasksEnabled: Boolean(environment.delegationTasksEnabled),
       delegationTasksAllowAsync: Boolean(environment.delegationTasksAllowAsync),
       delegationTasksApprovalMode: environment.delegationTasksApprovalMode,
       enableEditSharing: environment.assistantsEnableEditSharing ?? true,

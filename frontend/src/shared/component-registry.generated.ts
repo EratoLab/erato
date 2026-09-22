@@ -354,6 +354,7 @@ export { formatThinkingDuration } from "@/components/ui/Trace/hooks/useThinkingD
 export { useDurationBetween } from "@/components/ui/Trace/hooks/useThinkingDuration";
 export { useThinkingGap } from "@/components/ui/Trace/hooks/useThinkingGap";
 export { stepStatus } from "@/components/ui/Trace/hooks/useTraceState";
+export { useIsCurrentChatBusy } from "@/components/ui/Trace/hooks/useTraceState";
 export { railIconFor } from "@/components/ui/Trace/icons";
 export { railIconForSidecarStatus } from "@/components/ui/Trace/icons";
 export { NestedTraceView } from "@/components/ui/Trace/NestedTraceView";

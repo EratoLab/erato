@@ -91,7 +91,7 @@ const PlainToolUseStep = ({
             status={status}
             approvalStatus={approvalStatus}
             label={
-              part.status === "preparing"
+              part.status === "preparing" && status !== "interrupted"
                 ? t({ id: "trace.tool.preparing", message: "Preparing" })
                 : undefined
             }

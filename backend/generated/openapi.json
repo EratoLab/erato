@@ -2078,7 +2078,7 @@
           "files"
         ],
         "summary": "Upload files and return UUIDs for each",
-        "description": "This endpoint accepts a multipart form with one or more files and returns UUIDs for each.\nIf chat_id is provided, files are associated with that chat. If not provided, files are created\nas standalone uploads that can be linked to assistants later.",
+        "description": "This endpoint accepts a multipart form with one or more files and returns UUIDs for each.\nIf chat_id is provided, files are associated with that chat. If not provided, files are created\nas standalone uploads that can be linked to assistants later.\nAn optional `outlook_provenance` text part carries version 1 OutlookFileProvenance JSON\n(maximum 64 KiB). It must occur exactly once before any files and applies to every file\nin the request. Upload files with different origins in separate requests. The original\nEWS ID query parameter remains independent; a containing email's ID never replaces it.",
         "operationId": "upload_file",
         "parameters": [
           {
@@ -4716,6 +4716,10 @@
           "is_sharepoint_file": {
             "type": "boolean",
             "description": "True when this file is stored in Sharepoint"
+          },
+          "outlook_provenance": {
+            "$ref": "#/components/schemas/OutlookFileProvenance",
+            "description": "Outlook source references for reopening the original email."
           },
           "preview_url": {
             "type": [
@@ -7552,6 +7556,10 @@
             "type": "boolean",
             "description": "Indicates the file is stored in Sharepoint"
           },
+          "outlook_provenance": {
+            "$ref": "#/components/schemas/OutlookFileProvenance",
+            "description": "Outlook source references for reopening the original email."
+          },
           "preview_url": {
             "type": [
               "string",
@@ -8851,6 +8859,10 @@
           },
           "name": {
             "type": "string"
+          },
+          "outlook_provenance": {
+            "type": "string",
+            "description": "Optional version 1 OutlookFileProvenance JSON text (maximum 64 KiB).\nSend exactly once, before all file parts; applies to every file in this request.\nFiles with different origins must be uploaded in separate requests."
           }
         }
       },
@@ -9015,6 +9027,100 @@
             "description": "List of users in the organization"
           }
         }
+      },
+      "OutlookExternalId": {
+        "type": "object",
+        "required": [
+          "key",
+          "value"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OutlookFileOrigin": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/OutlookMessageReference",
+            "description": "The uploaded email's own identity; a thread export identifies only its anchor."
+          },
+          "topLevelParent": {
+            "$ref": "#/components/schemas/OutlookMessageReference",
+            "description": "The outermost containing mailbox message, separate from the document's identity."
+          }
+        },
+        "additionalProperties": false
+      },
+      "OutlookFileProvenance": {
+        "type": "object",
+        "required": [
+          "version",
+          "origins"
+        ],
+        "properties": {
+          "origins": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OutlookFileOrigin"
+            },
+            "description": "All distinct origins, including multiple containing emails for identical bytes.",
+            "minItems": 1
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Contract version. Only version 1 is supported.",
+            "maximum": 1,
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "OutlookMailboxReference": {
+        "type": "object",
+        "properties": {
+          "emailAddress": {
+            "type": "string",
+            "description": "SMTP address of the owning mailbox, including shared mailboxes."
+          },
+          "mailboxId": {
+            "type": "string",
+            "description": "Local mailbox ID, never a Graph mailbox identifier."
+          },
+          "profileName": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OutlookMessageReference": {
+        "type": "object",
+        "required": [
+          "external_ids"
+        ],
+        "properties": {
+          "documentId": {
+            "type": "string",
+            "description": "Local catalog UUID, scoped to its originating sidecar installation."
+          },
+          "external_ids": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OutlookExternalId"
+            }
+          },
+          "mailbox": {
+            "$ref": "#/components/schemas/OutlookMailboxReference"
+          }
+        },
+        "additionalProperties": false
       },
       "PendingResponse": {
         "type": "object",

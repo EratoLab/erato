@@ -2277,6 +2277,21 @@ msgid "chat.share.warning.title"
 msgstr "Die Unterhaltung kann sensible Informationen enthalten"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatTaskPlanAdvisory.tsx
+msgid "chat.task_approval.always"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatTaskPlanAdvisory.tsx
+msgid "chat.task_approval.asyncOnly"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatTaskPlanAdvisory.tsx
+msgid "chat.task_approval.plan"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "chat.warning.budget.limit_reached.header"
 msgstr "Budgetlimit erreicht"
@@ -5157,6 +5172,11 @@ msgstr "Am Budget für Tool-Aufrufe gestoppt; die Antwort kann unvollständig se
 
 #. js-lingui-explicit-id
 #: src/lib/delegation/delegationLabels.ts
+msgid "trace.delegation.reason.interrupted"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.noAnswer"
 msgstr "Der Lauf endete ohne Antwort"
 
@@ -5316,6 +5336,11 @@ msgstr ""
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.failed"
 msgstr "Fehlgeschlagen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolStatusPill.tsx
+msgid "trace.tool.interrupted"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallItem.tsx

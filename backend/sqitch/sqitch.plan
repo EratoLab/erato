@@ -50,4 +50,5 @@
 0047_add_async_delivery_and_latest_generation_indexes 2026-09-20T00:00:00Z bdart <dfiebig@bdart.de> # Index the async delivery lookups and the latest-generation probe
 0048_add_client_tool_file_approval 2026-09-22T12:00:00Z Codex <codex@openai.com> # Persist client tool file approval preference
 0049_add_external_id_ews_id_to_file_uploads 2026-09-22T13:00:00Z Codex <codex@openai.com> # Track external EWS IDs on file uploads
-0050_add_durable_local_delegation 2026-09-22T18:00:00Z Codex <codex@openai.com> # Logged native delegation checkpoints, results and continuation leases
+0050_add_outlook_provenance_to_file_uploads 2026-09-22T19:00:00Z Codex <codex@openai.com> # Preserve Outlook source references on file uploads
+0051_add_durable_local_delegation 2026-09-22T20:00:00Z Codex <codex@openai.com> # Logged native delegation checkpoints, approved results and single-backend continuation

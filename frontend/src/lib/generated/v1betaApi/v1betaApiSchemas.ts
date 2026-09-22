@@ -289,6 +289,7 @@ export type AssistantFile = {
    * True when this file is stored in Sharepoint
    */
   is_sharepoint_file: boolean;
+  outlook_provenance?: OutlookFileProvenance;
   /**
    * Proxied URL for inline preview without forcing download when available.
    */
@@ -1726,6 +1727,7 @@ export type FileUploadItem = {
    * Indicates the file is stored in Sharepoint
    */
   is_sharepoint_file: boolean;
+  outlook_provenance?: OutlookFileProvenance;
   /**
    * Proxied URL for inline preview without forcing download when available
    */
@@ -2369,6 +2371,12 @@ export type MultipartFormFile = {
    */
   file: Blob;
   name: string;
+  /**
+   * Optional version 1 OutlookFileProvenance JSON text (maximum 64 KiB).
+   * Send exactly once, before all file parts; applies to every file in this request.
+   * Files with different origins must be uploaded in separate requests.
+   */
+  outlook_provenance?: string;
 };
 
 /**
@@ -2497,6 +2505,54 @@ export type OrganizationUsersResponse = {
    * List of users in the organization
    */
   users: OrganizationUser[];
+};
+
+export type OutlookExternalId = {
+  key: string;
+  value: string;
+};
+
+export type OutlookFileOrigin = {
+  document?: OutlookMessageReference;
+  topLevelParent?: OutlookMessageReference;
+};
+
+export type OutlookFileProvenance = {
+  /**
+   * All distinct origins, including multiple containing emails for identical bytes.
+   *
+   * @minItems 1
+   */
+  origins: OutlookFileOrigin[];
+  /**
+   * Contract version. Only version 1 is supported.
+   *
+   * @format int32
+   * @maximum 1
+   * @minimum 1
+   */
+  version: number;
+};
+
+export type OutlookMailboxReference = {
+  /**
+   * SMTP address of the owning mailbox, including shared mailboxes.
+   */
+  emailAddress?: string;
+  /**
+   * Local mailbox ID, never a Graph mailbox identifier.
+   */
+  mailboxId?: string;
+  profileName?: string;
+};
+
+export type OutlookMessageReference = {
+  /**
+   * Local catalog UUID, scoped to its originating sidecar installation.
+   */
+  documentId?: string;
+  external_ids: OutlookExternalId[];
+  mailbox?: OutlookMailboxReference;
 };
 
 export type PendingResponse = {

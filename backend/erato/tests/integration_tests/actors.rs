@@ -177,6 +177,7 @@ async fn test_cleanup_logic_with_file_uploads(pool: Pool<Postgres>) {
         file_storage_path: ActiveValue::Set("/uploads/test_file1.txt".to_string()),
         audio_transcription: ActiveValue::Set(None),
         external_id_ews_id: ActiveValue::Set(None),
+        outlook_provenance: ActiveValue::Set(None),
         created_at: ActiveValue::Set(Utc::now().into()),
         updated_at: ActiveValue::Set(Utc::now().into()),
     };
@@ -191,6 +192,7 @@ async fn test_cleanup_logic_with_file_uploads(pool: Pool<Postgres>) {
         file_storage_path: ActiveValue::Set("/bucket/test_file2.pdf".to_string()),
         audio_transcription: ActiveValue::Set(None),
         external_id_ews_id: ActiveValue::Set(None),
+        outlook_provenance: ActiveValue::Set(None),
         created_at: ActiveValue::Set(Utc::now().into()),
         updated_at: ActiveValue::Set(Utc::now().into()),
     };
@@ -1052,5 +1054,274 @@ async fn cleanup_tick_sweeps_without_cleanup_enabled_and_archives_with_it(pool: 
             .unwrap()
             .is_none(),
         "with the opt-in set, the retention half must still run"
+    );
+}
+
+/// Stage an assistant row holding wait-path placeholders a dying process left
+/// behind: one `working` slot naming a child, one `queued` slot that never
+/// launched, and one call that really did finish.
+///
+/// Written straight into the column for the same reason `stage_owed_delivery`
+/// is: what the sweep has to repair is a row, not a process.
+async fn stage_orphaned_parts(db: &DatabaseConnection, chat_id: Uuid, child_chat_id: Uuid) -> Uuid {
+    let now: DateTimeWithTimeZone = Utc::now().into();
+    let id = Uuid::new_v4();
+    messages::Entity::insert(messages::ActiveModel {
+        id: ActiveValue::Set(id),
+        chat_id: ActiveValue::Set(chat_id),
+        raw_message: ActiveValue::Set(json!({
+            "role": "assistant",
+            "content": [
+                {
+                    "content_type": "tool_use",
+                    "tool_call_id": "call_done",
+                    "tool_name": "delegate_task",
+                    "status": "success",
+                    "input": { "task": "already answered" },
+                    "output": { "status": "completed", "result": "42" },
+                },
+                {
+                    "content_type": "tool_use",
+                    "tool_call_id": "call_working",
+                    "tool_name": "delegate_task",
+                    "status": "in_progress",
+                    "input": { "task": "in flight when the process died" },
+                    "output": {
+                        "status": "working",
+                        "child_run_id": child_chat_id,
+                        "delegate_chat_id": child_chat_id,
+                        "assistant_name": "Research",
+                    },
+                },
+                {
+                    "content_type": "tool_use",
+                    "tool_call_id": "call_queued",
+                    "tool_name": "delegate_task",
+                    "status": "in_progress",
+                    "input": { "task": "never got a slot" },
+                    "output": { "status": "queued" },
+                },
+            ],
+        })),
+        created_at: ActiveValue::Set(now),
+        updated_at: ActiveValue::Set(now),
+        is_message_in_active_thread: ActiveValue::Set(true),
+        ..Default::default()
+    })
+    .exec(db)
+    .await
+    .expect("insert assistant message");
+    id
+}
+
+async fn parts_of(db: &DatabaseConnection, message_id: Uuid) -> Vec<Value> {
+    messages::Entity::find_by_id(message_id)
+        .one(db)
+        .await
+        .unwrap()
+        .expect("message should exist")
+        .raw_message["content"]
+        .as_array()
+        .expect("content array")
+        .clone()
+}
+
+fn part_named<'a>(parts: &'a [Value], tool_call_id: &str) -> &'a Value {
+    parts
+        .iter()
+        .find(|part| part["tool_call_id"] == tool_call_id)
+        .unwrap_or_else(|| panic!("no part {tool_call_id}"))
+}
+
+/// Give `chat_id` a generation lease that went stale, the way a process that
+/// died mid-turn leaves one behind.
+async fn set_generation(
+    db: &DatabaseConnection,
+    chat_id: Uuid,
+    state: Option<&str>,
+    heartbeat_age: Duration,
+) {
+    let beat: DateTimeWithTimeZone = (Utc::now() - heartbeat_age).into();
+    set_chat_columns(
+        db,
+        chat_id,
+        chats::ActiveModel {
+            generation_state: ActiveValue::Set(state.map(str::to_string)),
+            generation_started_at: ActiveValue::Set(Some(beat)),
+            generation_heartbeat_at: ActiveValue::Set(Some(beat)),
+            ..Default::default()
+        },
+    )
+    .await;
+}
+
+fn sweep_args(db: &DatabaseConnection) -> CleanupWorkerArgs {
+    CleanupWorkerArgs {
+        db: db.clone(),
+        // The settle is crash recovery: it must run on a deployment that
+        // never opted into deleting anything.
+        cleanup_enabled: false,
+        cleanup_archived_max_age_days: 30,
+        delegated_run_auto_archive_after_days: 0,
+        generation_stale_after_secs: 30,
+        result_max_chars: 4000,
+    }
+}
+
+/// The D17 residual: a hard crash mid-batch leaves `in_progress` placeholders
+/// that no exit will ever answer, and until they are ended the history walk
+/// replays them as tool calls the model was never answered on.
+///
+/// # Test Categories
+/// - `uses-db`
+///
+/// # Test Behavior
+/// Stages `working` and `queued` placeholders on a chat whose lease went
+/// stale, runs a tick, and asserts both settled to `cancelled/interrupted`
+/// with the child ids kept only where one was ever launched — that a call
+/// that really finished is untouched, and that a second tick changes nothing.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn cleanup_tick_settles_crash_orphaned_tool_parts(pool: Pool<Postgres>) {
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+    let me =
+        erato::models::user::get_or_create_user(&db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+            .await
+            .unwrap();
+    let me_id = me.id.to_string();
+
+    let origin = insert_chat(&db, &me_id, None, Utc::now().into()).await;
+    let child = insert_chat(&db, &me_id, None, Utc::now().into()).await;
+    let message = stage_orphaned_parts(&db, origin, child).await;
+
+    // The reaper on the streaming maintenance loop gets to a stale row long
+    // before this tick does, so by the time the sweep runs the row reads
+    // `errored`. Keying on `running` would match nothing in production.
+    set_generation(&db, origin, Some("errored"), Duration::seconds(600)).await;
+
+    run_cleanup_tick(&sweep_args(&db))
+        .await
+        .expect("tick must not fail");
+
+    let parts = parts_of(&db, message).await;
+
+    let working = part_named(&parts, "call_working");
+    assert_eq!(
+        working["status"], "error",
+        "a slot nothing will ever answer must not stay in_progress"
+    );
+    assert_eq!(working["output"]["status"], "cancelled");
+    assert_eq!(working["output"]["reason"], "interrupted");
+    assert_eq!(
+        working["output"]["delegate_chat_id"],
+        json!(child),
+        "a run that started keeps the child it started, so the user can still open it"
+    );
+    assert_eq!(working["output"]["child_run_id"], json!(child));
+    assert_eq!(
+        working["output"]["assistant_name"], "Research",
+        "settling states the outcome; it does not strip what the slot already knew"
+    );
+
+    let queued = part_named(&parts, "call_queued");
+    assert_eq!(queued["status"], "error");
+    assert_eq!(queued["output"]["status"], "cancelled");
+    assert_eq!(queued["output"]["reason"], "interrupted");
+    assert!(
+        queued["output"].get("delegate_chat_id").is_none()
+            && queued["output"].get("child_run_id").is_none(),
+        "a slot that never launched must settle without a child: a reader has to be \
+         able to tell it from a run that started"
+    );
+
+    let done = part_named(&parts, "call_done");
+    assert_eq!(
+        done["status"], "success",
+        "a call that really finished is not the sweep's business"
+    );
+    assert_eq!(done["output"]["result"], "42");
+
+    // Idempotence: nothing is left for a second pass to find.
+    let before = parts_of(&db, message).await;
+    run_cleanup_tick(&sweep_args(&db))
+        .await
+        .expect("tick must not fail");
+    assert_eq!(
+        parts_of(&db, message).await,
+        before,
+        "a settled row must be invisible to the next sweep"
+    );
+}
+
+/// The destructive case the sweep must never become: an unsettled slot is the
+/// normal state of plenty of healthy work, so "the chat is not generating" is
+/// not on its own evidence that anything was orphaned.
+///
+/// # Test Categories
+/// - `uses-db`
+///
+/// # Test Behavior
+/// Runs a tick against three chats that each still owe an outcome — a fresh
+/// lease, an approval park, and a stale origin whose child is still writing —
+/// and asserts every placeholder survived untouched.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn cleanup_tick_leaves_placeholders_alone_while_a_writer_remains(pool: Pool<Postgres>) {
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+    let me =
+        erato::models::user::get_or_create_user(&db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+            .await
+            .unwrap();
+    let me_id = me.id.to_string();
+    let now: DateTimeWithTimeZone = Utc::now().into();
+
+    // (a) Still generating, lease fresh.
+    let live = insert_chat(&db, &me_id, None, now).await;
+    let live_child = insert_chat(&db, &me_id, None, now).await;
+    let live_message = stage_orphaned_parts(&db, live, live_child).await;
+    set_generation(&db, live, Some("running"), Duration::seconds(1)).await;
+
+    // (b) Parked on an approval. The park is deliberate and outlives the
+    // turn, and its queued siblings are unsettled on purpose.
+    let parked = insert_chat(&db, &me_id, None, now).await;
+    let parked_child = insert_chat(&db, &me_id, None, now).await;
+    let parked_message = stage_orphaned_parts(&db, parked, parked_child).await;
+    set_generation(
+        &db,
+        parked,
+        Some("awaiting_approval"),
+        Duration::seconds(600),
+    )
+    .await;
+
+    // (c) Origin is gone, but the child it launched is somehow still writing.
+    let stale = insert_chat(&db, &me_id, None, now).await;
+    let busy_child = insert_chat(&db, &me_id, None, now).await;
+    let stale_message = stage_orphaned_parts(&db, stale, busy_child).await;
+    set_generation(&db, stale, Some("errored"), Duration::seconds(600)).await;
+    set_generation(&db, busy_child, Some("running"), Duration::seconds(1)).await;
+
+    let before: Vec<Vec<Value>> = vec![
+        parts_of(&db, live_message).await,
+        parts_of(&db, parked_message).await,
+        parts_of(&db, stale_message).await,
+    ];
+
+    run_cleanup_tick(&sweep_args(&db))
+        .await
+        .expect("tick must not fail");
+
+    assert_eq!(
+        parts_of(&db, live_message).await,
+        before[0],
+        "a live generation must never be touched by the sweep"
+    );
+    assert_eq!(
+        parts_of(&db, parked_message).await,
+        before[1],
+        "an approval park is not a crash: its slots are unsettled on purpose"
+    );
+    assert_eq!(
+        parts_of(&db, stale_message).await[1],
+        before[2][1],
+        "a slot whose child is still writing must keep its placeholder"
     );
 }
