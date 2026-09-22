@@ -740,3 +740,30 @@ silently dropping email attachments or substituting indexed text. Retrieval
 requires local content; it does not download missing content. Exports are
 limited to 47 MiB before the outer base64 encoding to fit the client's 64 MiB
 response limit. Oversized exports return `sidecar_internal`.
+
+## 20. Document external identities and attachment navigation
+
+`outlook.get_conversation.v1` messages and attachments, `search.query.v1` hits,
+and `sources.get_document.v1` results expose `external_ids`: an array of
+`{key, value}` objects for that document. Current sidecars SHOULD always include
+it, using an empty array when no external identity is known. Keys are open-ended;
+known keys include `email_message_id`, `ews_id`, and `teams_message_id`. Values
+are opaque, case-sensitive strings and MUST be preserved exactly. In particular,
+an EWS ID MUST NOT be fabricated from an Internet Message-ID or a local record ID.
+A conversation carries identities separately on each message and attachment,
+so IDs from different documents cannot be confused. For a thread export,
+`external_ids` identifies the requested subject, not every exported message.
+
+Attachments also expose `topLevelParent`, an object with `external_ids` and an
+optional `documentId` UUID. It identifies the outermost containing document
+(the mailbox message for Outlook), never a folder or an intermediate embedded
+message. Clients can use its external IDs directly for navigation, or pass its
+`documentId` to `sources.get_document.v1` when present. Live conversation retrieval
+can return the parent's IDs before it is indexed, in which case `documentId` is
+omitted. Parent IDs MUST NOT be copied into the attachment's own `external_ids`.
+Top-level documents and attachments whose parent cannot be resolved omit
+`topLevelParent`; an empty parent `external_ids` array means the parent is known
+but has no external IDs. Deleted parents MUST NOT be returned.
+
+These new fields are optional in the v1 schemas so responses from older sidecars
+remain valid. Clients MUST tolerate missing fields and unknown identifier keys.
