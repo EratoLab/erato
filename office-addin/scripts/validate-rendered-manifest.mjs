@@ -1,10 +1,6 @@
 #!/usr/bin/env node
-// Validates manifests/manifest.xml AS THE BACKEND SERVES IT. `office:validate`
-// runs the validator over the raw template, whose {{…}} tokens fail before
-// the schema is even reached, so the manifest customers actually upload was
-// never validated. This substitutes the placeholders the way router.rs does,
-// renders the launch-event blocks both absent and present, and validates
-// each result against Microsoft's schema service (network required).
+// Resolve placeholders before schema validation; otherwise invalid URLs hide structural errors.
+// Uses the Microsoft manifest validator, which requires network access.
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -12,7 +8,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const template = readFileSync(join(root, "manifests/manifest.xml"), "utf8");
+
+const MANIFESTS = [
+  { name: "manifest.xml", launchEvents: true },
+  { name: "manifest-document.xml", launchEvents: false },
+];
 
 // Synthetic values in the shape the backend renders. The version is the one
 // value that cannot mirror production: the backend derives it from the crate
@@ -53,7 +53,7 @@ const LAUNCH_EVENT_BLOCKS = {
 <bt:Url id="launchEventScriptUrl" DefaultValue="https://example.com/public/component-kits/example/launchevent.js"/>`,
 };
 
-function render({ withLaunchEvents }) {
+function render({ manifest, template, withLaunchEvents }) {
   let rendered = template.replaceAll(
     "https://localhost:3002",
     "https://example.com",
@@ -63,8 +63,15 @@ function render({ withLaunchEvents }) {
       `^([ \\t]*)<!--\\{\\{${name}\\}\\}-->[ \\t]*\\n`,
       "m",
     );
-    if (!line.test(rendered)) {
-      throw new Error(`manifest.xml no longer carries the ${name} placeholder`);
+    if (line.test(rendered) !== manifest.launchEvents) {
+      throw new Error(
+        manifest.launchEvents
+          ? `${manifest.name} no longer carries the ${name} placeholder`
+          : `${manifest.name} must not carry the ${name} placeholder`,
+      );
+    }
+    if (!manifest.launchEvents) {
+      continue;
     }
     rendered = rendered.replace(line, (_match, indent) =>
       withLaunchEvents
@@ -92,18 +99,25 @@ function render({ withLaunchEvents }) {
 const outDir = mkdtempSync(join(tmpdir(), "erato-manifest-"));
 const validator = join(root, "node_modules/.bin/office-addin-manifest");
 let failed = false;
-for (const withLaunchEvents of [false, true]) {
-  const file = join(
-    outDir,
-    withLaunchEvents ? "manifest-launch-events.xml" : "manifest-plain.xml",
-  );
-  writeFileSync(file, render({ withLaunchEvents }));
-  console.log(
-    `Validating the served manifest ${withLaunchEvents ? "with" : "without"} launch events: ${file}`,
-  );
-  const result = spawnSync(validator, ["validate", file], {
-    stdio: "inherit",
-  });
-  if (result.status !== 0) failed = true;
+for (const manifest of MANIFESTS) {
+  const template = readFileSync(join(root, "manifests", manifest.name), "utf8");
+  const variants = manifest.launchEvents ? [false, true] : [false];
+  for (const withLaunchEvents of variants) {
+    const file = join(
+      outDir,
+      `${manifest.name.replace(/\.xml$/, "")}${withLaunchEvents ? "-launch-events" : ""}.xml`,
+    );
+    writeFileSync(file, render({ manifest, template, withLaunchEvents }));
+    const variantLabel = manifest.launchEvents
+      ? ` ${withLaunchEvents ? "with" : "without"} launch events`
+      : "";
+    console.log(
+      `Validating the served ${manifest.name}${variantLabel}: ${file}`,
+    );
+    const result = spawnSync(validator, ["validate", file], {
+      stdio: "inherit",
+    });
+    if (result.status !== 0) failed = true;
+  }
 }
 process.exit(failed ? 1 : 0);

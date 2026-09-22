@@ -173,6 +173,20 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
         config.integrations.ms_office.addin.manifest.icon_path,
         "assets/color-icon-192x192.png"
     );
+    assert_eq!(
+        config.integrations.ms_office.addin.document.addin_id,
+        "15a5d0e8-e96a-4e26-b6a1-bd8f429468c2"
+    );
+    assert_eq!(
+        config
+            .integrations
+            .ms_office
+            .addin
+            .document
+            .manifest
+            .display_name,
+        "Erato for Documents"
+    );
     assert_eq!(config.integrations.ms_office.ews_api_endpoint, None);
     assert!(!config.integrations.ms_office.ews_skip_tls_validation);
     assert!(!config.cleanup_enabled);
@@ -4585,6 +4599,124 @@ model_name = "gpt-4o"
         config.delegation,
         erato_config::config::DelegationConfig::default(),
         "erato.template.toml's delegation block drifted from the Rust defaults"
+    );
+}
+
+#[test]
+fn test_ms_office_addin_document_template_block_matches_rust_defaults() {
+    // The surrounding mail example intentionally differs from Default; compare only the document block.
+    let template = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../erato.template.toml"
+    ))
+    .expect("read erato.template.toml");
+    let start = template
+        .find("# [integrations.ms_office.addin.document]")
+        .expect("template contains the document add-in block");
+    let end = template[start..]
+        .find("\n#\n")
+        .map(|offset| start + offset)
+        .expect("document add-in block is terminated by a bare comment line");
+    let uncommented: String = template[start..end]
+        .lines()
+        .map(|line| {
+            line.strip_prefix("# ")
+                .or_else(|| line.strip_prefix("#"))
+                .unwrap_or(line)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    temp_file
+        .write_all(
+            format!(
+                r#"
+{uncommented}
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#
+            )
+            .as_bytes(),
+        )
+        .expect("Failed to write configuration");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let mut builder = AppConfig::config_schema_builder(
+        Some(vec![temp_file.path().to_string_lossy().into_owned()]),
+        false,
+    )
+    .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+    let config: AppConfig = builder
+        .build()
+        .expect("Failed to build config schema")
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    assert_eq!(
+        config.integrations.ms_office.addin.document,
+        erato_config::config::MsOfficeAddinDocumentConfig::default(),
+        "erato.template.toml's document add-in block drifted from the Rust defaults"
+    );
+}
+
+#[test]
+fn test_ms_office_addin_document_id_must_be_present_and_distinct() {
+    use erato_config::config::{
+        MsOfficeAddinConfig, MsOfficeAddinDocumentConfig, MsOfficeAddinDocumentManifestConfig,
+    };
+
+    let defaults = MsOfficeAddinConfig::default();
+    defaults
+        .validate()
+        .expect("stock defaults declare two distinct add-in ids");
+
+    let mut empty = MsOfficeAddinConfig::default();
+    empty.document.addin_id = "   ".to_string();
+    let error = empty
+        .validate()
+        .expect_err("an empty document add-in id is rejected");
+    assert!(
+        error.to_string().contains("cannot be empty"),
+        "unexpected error: {error}"
+    );
+
+    let mut duplicate = MsOfficeAddinConfig::default();
+    duplicate.document.addin_id = duplicate.addin_id.clone();
+    let error = duplicate
+        .validate()
+        .expect_err("a document add-in id equal to the mail id is rejected");
+    assert!(
+        error.to_string().contains("must differ"),
+        "unexpected error: {error}"
+    );
+
+    let blank_name = MsOfficeAddinConfig {
+        document: MsOfficeAddinDocumentConfig {
+            addin_id: "11111111-1111-1111-1111-111111111111".to_string(),
+            manifest: MsOfficeAddinDocumentManifestConfig {
+                display_name: " ".to_string(),
+                description: "Erato".to_string(),
+            },
+        },
+        ..Default::default()
+    };
+    let error = blank_name
+        .validate()
+        .expect_err("an empty document display name is rejected");
+    assert!(
+        error.to_string().contains("display_name"),
+        "unexpected error: {error}"
     );
 }
 

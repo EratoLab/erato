@@ -5204,6 +5204,10 @@ pub struct MsOfficeAddinConfig {
     #[serde(default)]
     pub manifest: MsOfficeAddinManifestConfig,
 
+    // A distinct default identity keeps existing deployments valid when this block is omitted.
+    #[serde(default)]
+    pub document: MsOfficeAddinDocumentConfig,
+
     #[serde(default)]
     pub default_settings: MsOfficeAddinDefaultSettings,
 
@@ -5258,6 +5262,7 @@ impl Default for MsOfficeAddinConfig {
             serve_bundle_legacy_path: default_ms_office_addin_serve_bundle_legacy_path(),
             frontend_bundle_path: default_ms_office_addin_frontend_bundle_path(),
             manifest: MsOfficeAddinManifestConfig::default(),
+            document: MsOfficeAddinDocumentConfig::default(),
             default_settings: MsOfficeAddinDefaultSettings::default(),
             launch_event_runtime: None,
             launch_events: Vec::new(),
@@ -5274,6 +5279,7 @@ impl MsOfficeAddinConfig {
         }
 
         self.manifest.validate()?;
+        self.document.validate(&self.addin_id)?;
         self.validate_launch_events()?;
 
         Ok(())
@@ -5319,6 +5325,79 @@ impl MsOfficeAddinConfig {
                 ));
             }
             declared_events.push(launch_event.event);
+        }
+
+        Ok(())
+    }
+}
+
+/// Document add-ins need a catalog identity distinct from mail. Other branding is inherited at render time.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct MsOfficeAddinDocumentConfig {
+    #[serde(default = "default_ms_office_addin_document_id")]
+    pub addin_id: String,
+
+    #[serde(default)]
+    pub manifest: MsOfficeAddinDocumentManifestConfig,
+}
+
+impl Default for MsOfficeAddinDocumentConfig {
+    fn default() -> Self {
+        Self {
+            addin_id: default_ms_office_addin_document_id(),
+            manifest: MsOfficeAddinDocumentManifestConfig::default(),
+        }
+    }
+}
+
+impl MsOfficeAddinDocumentConfig {
+    /// A catalog rejects two add-ins with the same identity.
+    pub fn validate(&self, mail_addin_id: &str) -> Result<(), Report> {
+        if self.addin_id.trim().is_empty() {
+            return Err(eyre!(
+                "Microsoft Office document add-in id cannot be empty when the add-in is configured."
+            ));
+        }
+        if self.addin_id.trim() == mail_addin_id.trim() {
+            return Err(eyre!(
+                "Microsoft Office document add-in id must differ from `integrations.ms_office.addin.addin_id`; two add-ins in one catalog cannot share an id."
+            ));
+        }
+
+        self.manifest.validate()
+    }
+}
+
+/// Document-specific overrides; other manifest fields inherit the mail configuration at render time.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct MsOfficeAddinDocumentManifestConfig {
+    #[serde(default = "default_ms_office_addin_document_manifest_display_name")]
+    pub display_name: String,
+
+    #[serde(default = "default_ms_office_addin_document_manifest_description")]
+    pub description: String,
+}
+
+impl Default for MsOfficeAddinDocumentManifestConfig {
+    fn default() -> Self {
+        Self {
+            display_name: default_ms_office_addin_document_manifest_display_name(),
+            description: default_ms_office_addin_document_manifest_description(),
+        }
+    }
+}
+
+impl MsOfficeAddinDocumentManifestConfig {
+    pub fn validate(&self) -> Result<(), Report> {
+        for (key, value) in [
+            ("display_name", &self.display_name),
+            ("description", &self.description),
+        ] {
+            if value.trim().is_empty() {
+                return Err(eyre!(
+                    "Microsoft Office document add-in manifest field `{key}` cannot be empty."
+                ));
+            }
         }
 
         Ok(())
@@ -5430,6 +5509,20 @@ fn default_ms_office_addin_msal_authority() -> String {
 
 fn default_ms_office_addin_id() -> String {
     "ee94d041-bd77-446c-8854-421648f50e7c".to_string()
+}
+
+/// A distinct compile-time constant, never generated: the document add-in's
+/// catalog identity must be stable across deployments and across restarts.
+fn default_ms_office_addin_document_id() -> String {
+    "15a5d0e8-e96a-4e26-b6a1-bd8f429468c2".to_string()
+}
+
+fn default_ms_office_addin_document_manifest_display_name() -> String {
+    "Erato for Documents".to_string()
+}
+
+fn default_ms_office_addin_document_manifest_description() -> String {
+    "Erato AI assistant for Word documents".to_string()
 }
 
 fn default_ms_office_addin_serve_bundle_legacy_path() -> bool {

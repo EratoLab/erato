@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "snapshot": "native-fixture",
+  "readToken": "native-read",
+  "scope": "body",
+  "entries": [
+    {
+      "kind": "insert",
+      "blocks": [
+        {
+          "id": "recommendation",
+          "type": "heading",
+          "level": 1,
+          "text": "Reorganized recommendation"
+        }
+      ]
+    },
+    {
+      "kind": "keep",
+      "source": ["b9"]
+    },
+    {
+      "kind": "keep",
+      "source": ["b1"]
+    },
+    {
+      "kind": "keep",
+      "source": ["b2"]
+    },
+    {
+      "kind": "keep",
+      "source": ["b3"]
+    },
+    {
+      "kind": "keep",
+      "source": ["b4"]
+    },
+    {
+      "kind": "keep",
+      "source": ["b5"]
+    },
+    {
+      "kind": "keep",
+      "source": ["b6"]
+    },
+    {
+      "kind": "keep",
+      "source": ["b7"]
+    },
+    {
+      "kind": "keep",
+      "source": ["b8"]
+    }
+  ],
+  "deleted": []
+}

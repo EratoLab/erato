@@ -629,3 +629,9 @@ export {
   readSidecarConversation,
   resolveSidecarMailboxId,
 } from "@/lib/desktopSidecar/mailboxAccess";
+
+export { Select, type SelectProps } from "@/components/ui/Input/Select";
+export {
+  TextComparison,
+  type TextComparisonView,
+} from "@/components/ui/Message/TextComparison";

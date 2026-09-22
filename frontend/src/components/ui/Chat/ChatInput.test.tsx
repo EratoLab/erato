@@ -5744,7 +5744,7 @@ describe("ChatInput", () => {
       });
 
       expect(writeToggle().description).toBe(
-        "Off, only tools the server marks read-only are offered. Also pauses Outlook actions like Reply and Send.",
+        "Off, only tools the server marks read-only are offered. Also pauses actions in the host application.",
       );
     });
 

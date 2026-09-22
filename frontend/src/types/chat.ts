@@ -88,6 +88,8 @@ export interface HostArtifact {
    * against the fence tag as written.
    */
   cardFenceLanguages?: readonly string[];
+  /** Review hint only; the host still owns consent and live-state validation. */
+  submittedCard?: { toolCallId: string; language: string; content: string };
   /**
    * Replaces the default set of drifted fence tags rescued as the email
    * artifact when `bodyFormat` is present (the default covers the tags
@@ -120,14 +122,7 @@ export interface HostArtifact {
    * persistent "always allow" for these.
    */
   alwaysAskClientActions?: string[];
-  /**
-   * The client action the model proposed for this message via the
-   * `propose_client_action` tool, already validated by the host against
-   * {@link HostArtifact.allowedClientActions} and the tool-call status.
-   * Used as a render hint (e.g. which button is primary) — auto-surfaced
-   * only under `auto_prompt` presentation and the user's local approval
-   * preferences, never on history reloads.
-   */
+  /** Host-validated proposal; a rendering hint, never authorization to write. */
   proposedClientAction?: string;
   /**
    * Producer-computed verdict (host only) for whether an UNFENCED whole

@@ -87,7 +87,7 @@ describe("buildMcpToolsSection", () => {
 
   it("names the paused host actions where the host proposes them", () => {
     expect(toggleOf(build({ pausesHostActions: true })).description).toBe(
-      "Off, only tools the server marks read-only are offered. Also pauses Outlook actions like Reply and Send.",
+      "Off, only tools the server marks read-only are offered. Also pauses actions in the host application.",
     );
   });
 

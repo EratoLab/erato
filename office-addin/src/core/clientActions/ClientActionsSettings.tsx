@@ -28,7 +28,7 @@ export interface ClientActionsSettingsProps<TAction extends string> {
    */
   copy: {
     intro: string;
-    alwaysAllowHelper: string;
+    alwaysAllowHelper: string | ((action: TAction) => string);
   };
 }
 
@@ -75,7 +75,10 @@ export function ClientActionsSettings<TAction extends string>({
         id: "officeAddin.settings.addin.clientActions.always.label",
         message: "Always allow",
       }),
-      helper: copy.alwaysAllowHelper,
+      helper:
+        typeof copy.alwaysAllowHelper === "string"
+          ? copy.alwaysAllowHelper
+          : "",
     },
     never: {
       label: t({
@@ -174,7 +177,10 @@ export function ClientActionsSettings<TAction extends string>({
                       helper={
                         lockedAlways
                           ? alwaysLockedHelper
-                          : decisionOptionLabels[decision].helper
+                          : decision === "always" &&
+                              typeof copy.alwaysAllowHelper === "function"
+                            ? copy.alwaysAllowHelper(action)
+                            : decisionOptionLabels[decision].helper
                       }
                     />
                   );

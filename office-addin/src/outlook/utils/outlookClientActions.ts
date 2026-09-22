@@ -1,6 +1,10 @@
 import { t } from "@lingui/core/macro";
 
+import { extractProposedClientAction as extractProposedClientActionFor } from "../../core/clientActions/proposedClientAction";
+
 import type { ContentPart, HostArtifact } from "@erato/frontend/library";
+
+export { CLIENT_ACTION_TOOL_NAME } from "../../core/clientActions/proposedClientAction";
 
 /**
  * Id of the config-defined action facet (erato.toml only) that lets the model
@@ -8,12 +12,6 @@ import type { ContentPart, HostArtifact } from "@erato/frontend/library";
  * opening Outlook's reply / reply-all form.
  */
 export const OUTLOOK_REPLY_FROM_READ_FACET_ID = "outlook_reply_from_read";
-
-/**
- * Name of the backend's synthetic tool through which the model proposes a
- * client action. Must match `CLIENT_ACTION_TOOL_NAME` in the backend.
- */
-export const CLIENT_ACTION_TOOL_NAME = "propose_client_action";
 
 /**
  * Actions whose payload is the message's email draft — executed by the
@@ -116,49 +114,15 @@ export function offerableAppointmentClientActions(
   );
 }
 
-/**
- * Extract the model's validated client-action proposal from an assistant
- * message's content parts.
- *
- * The proposal is only accepted when ALL of the following hold — anything
- * else returns `undefined` (render plain buttons, never "best effort"):
- * - a `propose_client_action` tool_use part exists with status `"success"`
- *   (the backend already validated the input against the facet's enum),
- * - its `input.action` is a string,
- * - the action is in `allowedActions` (the facet's `client_actions` from
- *   `GET /me/facets` — revalidated here, never trusted from message text),
- * - the action is implemented by this add-in.
- */
 export function extractProposedClientAction(
   content: ContentPart[] | undefined,
   allowedActions: readonly string[],
 ): OutlookClientAction | undefined {
-  for (const part of content ?? []) {
-    if (part.content_type !== "tool_use") {
-      continue;
-    }
-    if (part.tool_name !== CLIENT_ACTION_TOOL_NAME) {
-      continue;
-    }
-    if (part.status !== "success") {
-      continue;
-    }
-    const input: unknown = part.input;
-    if (typeof input !== "object" || input === null || Array.isArray(input)) {
-      continue;
-    }
-    const action = (input as Record<string, unknown>).action;
-    if (typeof action !== "string") {
-      continue;
-    }
-    if (!allowedActions.includes(action)) {
-      continue;
-    }
-    if (isImplementedClientAction(action)) {
-      return action;
-    }
-  }
-  return undefined;
+  return extractProposedClientActionFor(
+    content,
+    allowedActions,
+    isImplementedClientAction,
+  );
 }
 
 /**

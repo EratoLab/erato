@@ -169,10 +169,11 @@ export function buildMcpToolsSection({
           message: "Allow write operations",
         }),
         description: pausesHostActions
-          ? t({
-              id: "chatInput.connectors.allowWrites.descriptionWithHostActions",
+          ? // A new Lingui ID avoids reusing translations that name Outlook.
+            t({
+              id: "chatInput.connectors.allowWrites.descriptionHostActions",
               message:
-                "Off, only tools the server marks read-only are offered. Also pauses Outlook actions like Reply and Send.",
+                "Off, only tools the server marks read-only are offered. Also pauses actions in the host application.",
             })
           : t({
               id: "chatInput.connectors.allowWrites.description",

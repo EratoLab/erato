@@ -462,6 +462,8 @@ function MarkdownCode({
   }
 
   if (isBlockCode && rules.isHostCardLanguage(language)) {
+    // An accepted submission replaces the echoed fence to avoid a second actionable card.
+    if (artifact?.submittedCard?.language === language) return null;
     return <HostCardBlock language={language} content={codeContent} />;
   }
 
@@ -1295,6 +1297,17 @@ export const MessageContent = memo(function MessageContent({
     [content],
   );
 
+  const submittedCard = hostArtifact?.submittedCard;
+  const hasSubmittedCard =
+    submittedCard &&
+    fenceRulesFor(hostArtifact).isHostCardLanguage(submittedCard.language) &&
+    content.some(
+      (part) =>
+        part.content_type === "tool_use" &&
+        part.tool_call_id === submittedCard.toolCallId &&
+        part.status === "success",
+    );
+
   const traceDurationMs = React.useMemo(
     () =>
       durationFromTracePartsOrLegacyMessageTimestamps(
@@ -1340,9 +1353,9 @@ export const MessageContent = memo(function MessageContent({
           // (text/image) content exists below it.
           const lastTracePartIndex =
             cluster.startIndex + cluster.parts.length - 1;
-          const hasLaterContent = content
-            .slice(lastTracePartIndex + 1)
-            .some(isRenderableContentPart);
+          const hasLaterContent =
+            !!hasSubmittedCard ||
+            content.slice(lastTracePartIndex + 1).some(isRenderableContentPart);
 
           return (
             <Trace
@@ -1441,6 +1454,15 @@ export const MessageContent = memo(function MessageContent({
 
         return null;
       })}
+      {hasSubmittedCard && (
+        <HostArtifactContext.Provider value={hostArtifact}>
+          <HostCardBlock
+            key={submittedCard.toolCallId}
+            language={submittedCard.language}
+            content={submittedCard.content}
+          />
+        </HostArtifactContext.Provider>
+      )}
       {messageId && <ClientToolFileApprovals messageId={messageId} />}
     </article>
   );

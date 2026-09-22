@@ -1787,6 +1787,98 @@ async fn test_token_usage_estimate_with_composable_payload(pool: Pool<Postgres>)
     );
 }
 
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_token_usage_estimate_responses_with_unsaved_draft(pool: Pool<Postgres>) {
+    use erato::db::entity::messages;
+
+    // No model server: estimating must work without making a generation call.
+    let mut config = hermetic_app_config(None, Some("http://127.0.0.1:9/v1/".to_string()));
+    let provider = config
+        .chat_providers
+        .as_mut()
+        .unwrap()
+        .providers
+        .get_mut("mock-llm")
+        .unwrap();
+    provider.provider_kind = "openai_responses".to_string();
+    provider.model_name = "gpt-5.2".to_string();
+    provider.model_capabilities.context_size_tokens = 400_000;
+    let app_state = test_app_state(config, pool).await;
+    let user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .unwrap();
+    let chat = chats::ActiveModel {
+        id: ActiveValue::Set(Uuid::new_v4()),
+        owner_user_id: ActiveValue::Set(user.id.to_string()),
+        ..Default::default()
+    }
+    .insert(&app_state.db)
+    .await
+    .unwrap();
+    let mut previous_id = None;
+    for (role, text) in [
+        ("user", "Rewrite my document."),
+        ("assistant", "Ready to edit."),
+    ] {
+        let message = messages::ActiveModel {
+            id: ActiveValue::Set(Uuid::new_v4()),
+            chat_id: ActiveValue::Set(chat.id),
+            previous_message_id: ActiveValue::Set(previous_id),
+            raw_message: ActiveValue::Set(json!({
+                "role": role,
+                "content": [{"content_type": "text", "text": text}]
+            })),
+            generation_parameters: ActiveValue::Set((role == "assistant").then(|| {
+                json!({
+                    "generation_chat_provider_id": "mock-llm"
+                })
+            })),
+            generation_metadata: ActiveValue::Set((role == "assistant").then(|| {
+                json!({
+                    "reasoning_summary": "I read the document.",
+                    "reasoning_item_encrypted_content": ["test-encrypted-reasoning"]
+                })
+            })),
+            is_message_in_active_thread: ActiveValue::Set(true),
+            ..Default::default()
+        }
+        .insert(&app_state.db)
+        .await
+        .unwrap();
+        previous_id = Some(message.id);
+    }
+    let db = app_state.db.clone();
+    let server = crate::test_utils::create_test_server(app_state);
+    let messages_before = messages::Entity::find().all(&db).await.unwrap();
+
+    for mut request in [
+        json!({"new_chat": {}}),
+        json!({"existing_chat_id": chat.id}),
+        json!({"chat_previous_message_id": previous_id}),
+    ] {
+        request["chat_provider_id"] = json!("mock-llm");
+        request["user_message"] = json!("Reorganize this short document.");
+        let response = server
+            .post("/api/v1beta/token_usage/estimate")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&request)
+            .await;
+        response.assert_status_ok();
+        let usage: Value = response.json();
+        assert_eq!(usage["stats"]["max_tokens"], 400_000);
+        let total = usage["stats"]["total_tokens"].as_u64().unwrap();
+        assert!(total > 0 && total + 8192 < 360_000);
+        if request.get("new_chat").is_none() {
+            assert!(usage["stats"]["history_tokens"].as_u64().unwrap() > 0);
+        }
+    }
+    assert_eq!(
+        messages::Entity::find().all(&db).await.unwrap(),
+        messages_before,
+        "Token estimates must not persist drafts or modify chat history"
+    );
+}
+
 /// Inline virtual files contribute to the per-file breakdown and token total
 /// without persisting any `file_uploads` row. Add-in flow: previewed Outlook
 /// email body is included in the estimate without orphaning storage.

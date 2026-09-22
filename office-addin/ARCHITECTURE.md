@@ -1,7 +1,7 @@
 # Office add-in architecture
 
 One host-neutral core drives the whole add-in chat experience; each Microsoft
-host (Outlook and Teams today; Word, Excel, PowerPoint later) is a thin
+host (Outlook, Teams and Word today; Excel and PowerPoint later) is a thin
 composition root that injects host behavior through a fixed set of seams.
 Adding a host is meant to be mechanical: compose the core with host providers,
 implement the seams listed below, and never modify the core itself.
@@ -17,7 +17,8 @@ implement the seams listed below, and never modify the core itself.
   per-host store factory (`clientActionPolicy.ts`), the confirm-card state
   machine and auto-prompt one-shot (`useClientActionConfirmFlow.ts`), the
   settings rows (`ClientActionsSettings.tsx`), the facet lookup
-  (`useAvailableActionFacets.ts`) and the fresh-completion tracker. They are
+  (`useAvailableActionFacets.ts`), the proposal validator
+  (`proposedClientAction.ts`) and the fresh-completion tracker. They are
   generic over the action id (`TAction extends string`); each host keeps its
   own action registry and executors and binds them in (Outlook:
   `outlook/utils/outlookClientActions.ts` + the store in
@@ -31,14 +32,17 @@ implement the seams listed below, and never modify the core itself.
   `providers/` (the TeamsJS lifecycle, theme and auth roots) and
   `auth/isTeamsNestedAppAuthSupported.ts`. `@microsoft/teams-js` is imported
   here and nowhere else.
+- `src/word` — the Word task pane at `/office-addin/word`. `WordApp.tsx`
+  composes the shared Office.js providers with Word auth, session, document
+  capture, review and write components. Document protocols and OOXML
+  compilation stay under `src/word/utils`; shared UI comes from the frontend library.
 - The shared Office.js ring — stays in `src/providers`, `src/hooks`,
   `src/utils`: `OfficeProvider`, `OfficeThemeProvider`, `useOfficeTheme`,
   `utils/officeTheme/`, `officeAsync.ts`, the drag-drop broker
   (`officeDragAndDropBroker.ts` + `useOfficeDragAndDrop.ts`), and
   `detectExchangeOnPrem.ts`. This ring is office.js-generic and is planned to
-  become `src/office` when the second Office.js host (Word/Excel) arrives.
-  `detectExchangeOnPrem` is mailbox-flavored; at that point it should be
-  injected into `OfficeProvider` rather than imported by it.
+  become `src/office`. Word also consumes this ring. The rename and injection
+  of the mailbox-specific `detectExchangeOnPrem` remain separate work.
 - `src/auth` — the MSAL/NAA auth sources (`entraAuthSource.ts`,
   `EntraNaaAuthSource.ts`, `isNestedAppAuthSupported.ts`,
   `UnsupportedAuthSource.ts`), consumed by host auth roots.
@@ -57,7 +61,8 @@ implement the seams listed below, and never modify the core itself.
    isolated storage (`erato.addin.neutral.currentChat.v1`). Outlook supplies
    `OutlookAddinSessionController` (mail-item anchor + session policy); Teams
    supplies `createNeutralAddinSessionController` bound to
-   `erato.addin.teams.currentChat.v1`, so its selection is independent of both.
+   `erato.addin.teams.currentChat.v1`; Word uses
+   `erato.addin.word.currentChat.v1`. Each host keeps an independent selection.
 3. **Auth** — a host auth provider mounts `SessionAuthProvider`
    (`src/core/SessionAuthProvider.tsx`) with an `AuthSource`; `AuthGate` reads
    only the `SessionAuthCore` fields. The NAA source
@@ -69,7 +74,7 @@ implement the seams listed below, and never modify the core itself.
    description, content, optional system description, appearance notice and
    `serversToolsEntities` — the host's rows in the Servers & Tools pane, e.g.
    Outlook's actions entity wrapping the core `ClientActionsSettings`).
-   No contribution means no host tab.
+   A host tab requires `content`; Word contributes tool rows without a host tab.
 5. **Component registry** — hosts assign `componentRegistry` overrides at
    host-module eval: `src/outlook/OutlookApp.tsx` calls
    `installOutlookComponentRegistrations()` at module scope, before React
@@ -77,13 +82,14 @@ implement the seams listed below, and never modify the core itself.
    document — contributions stay route-local because only the matched lazy
    route module is evaluated. `src/teams/TeamsApp.tsx` mirrors this with
    `installTeamsComponentRegistrations()`, which contributes only
-   `ChatAddMenuExtraContent`. Component-kit registrations are re-applied at the
+   `ChatAddMenuExtraContent`. Word registers its renderer in `HostCardCodeBlock`.
+   Component-kit registrations are re-applied at the
    entry point via `applyComponentKitRegistrations()` in `src/main.tsx`.
 6. **Platform identifier** — stamped explicitly per host, never inferred from
    a host SDK: the `platform` prop on `AddinChatProviderCore` flows into
    messaging and is sent as the `X-Erato-Platform` request header. Values:
-   `web` (shared-frontend default), `outlook`, `teams`, `addin-neutral`
-   (`NeutralAddinChatPage` default), future `word`/`excel`.
+   `web` (shared-frontend default), `outlook`, `teams`, `word`, `addin-neutral`
+   (`NeutralAddinChatPage` default), future `excel`.
 
 ## Boundary enforcement (`eslint.config.mjs`)
 
@@ -92,12 +98,12 @@ implement the seams listed below, and never modify the core itself.
   `no-restricted-globals` for `Office`/`OfficeRuntime` and a name-based
   `no-restricted-imports` denylist (`**/OfficeProvider`, `**/Outlook*`,
   `**/outlook/**`, `**/sessionPolicy/**`, `**/useOutlook*`, `**/Teams*`,
-  `**/teams/**`, `@microsoft/teams-js`).
-- Host peer fence — `src/outlook/**` and `src/teams/**` may not import each
-  other: one host SDK and one set of registry overrides per document. The
+  `**/teams/**`, `@microsoft/teams-js`, `**/Word*`, `**/word/**`).
+- Host peer fence — `src/outlook/**`, `src/teams/**` and `src/word/**` may not
+  import each other: one host SDK and one set of registry overrides per document. The
   Teams block also carries the `Office`/`OfficeRuntime` global ban.
 - Residue-ring guard — `src/hooks`, `src/providers`, `src/utils`, `src/auth`
-  may not import `**/outlook/**` or `**/teams/**` (test mocks excepted):
+  may not import `**/outlook/**`, `**/teams/**` or `**/word/**` (test mocks excepted):
   shared code must not depend on a host module; move it out or invert the
   dependency.
 - Characterization tests —
@@ -141,6 +147,22 @@ feature-specific overrides inline in `SharedAddinShell`.
   route or save/restore the history functions around SDK load.
 - Only one host SDK per loaded document: host SDKs patch globals, and the
   component registry holds exactly one host's overrides.
+
+## The Word host
+
+`WordApp` composes the shared shell and Office.js providers with Word auth
+without a mailbox dependency. The manifest uses a distinct document add-in
+identity and inherits deployment branding from the mail configuration.
+
+Document inclusion is opt-in. Each send captures fresh state, bound to its
+chat/turn and the open document. The host validates submitted structured plans
+before offering consent; accepted plans still pass live-state checks before writing.
+The compiler owns native XML, while the model receives typed document data.
+Behavior instructions and action facets come from deployment configuration.
+
+Writes are serialized across cards. Office.js batches can partially apply on
+failure, so recovery preserves the original body or full file as appropriate.
+Captures and recovery state live in pane memory and are lost on reload.
 
 ## The Teams host
 

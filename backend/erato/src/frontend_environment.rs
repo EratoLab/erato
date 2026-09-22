@@ -111,6 +111,10 @@ const TEAMS_M365_FRAME_ANCESTORS: &[&str] = &[
     "https://outlook.office365.com",
     "https://outlook-sdf.office365.com",
 ];
+/// CSP requires every ancestor to match, including the Word web frame and SharePoint host.
+/// Deployments can extend this set through frontend.extra_frame_ancestors.
+const WORD_OFFICE_FRAME_ANCESTORS: &[&str] =
+    &["https://*.officeapps.live.com", "https://*.sharepoint.com"];
 
 #[derive(Debug, Clone, Default)]
 /// Map of values that will be provided as environment-variable-like global variables to the frontend.
@@ -258,6 +262,7 @@ fn build_content_security_policy(config: &AppConfig) -> Option<HeaderValue> {
             OUTLOOK_OFFICE_FRAME_ANCESTORS
                 .iter()
                 .chain(TEAMS_M365_FRAME_ANCESTORS.iter())
+                .chain(WORD_OFFICE_FRAME_ANCESTORS.iter())
                 .map(ToString::to_string),
         );
     }
@@ -1170,7 +1175,7 @@ mod tests {
     }
 
     #[test]
-    fn content_security_policy_includes_outlook_and_teams_when_office_addin_is_enabled() {
+    fn content_security_policy_includes_outlook_teams_and_word_when_office_addin_is_enabled() {
         let mut config = AppConfig::default();
         config.integrations.ms_office.addin.enabled = true;
 
@@ -1181,7 +1186,8 @@ mod tests {
                 " https://outlook.office.com https://outlook.cloud.microsoft",
                 " https://teams.microsoft.com https://*.teams.microsoft.com",
                 " https://*.microsoft365.com https://*.office.com https://*.cloud.microsoft",
-                " https://outlook.office365.com https://outlook-sdf.office365.com"
+                " https://outlook.office365.com https://outlook-sdf.office365.com",
+                " https://*.officeapps.live.com https://*.sharepoint.com"
             ))
         );
     }

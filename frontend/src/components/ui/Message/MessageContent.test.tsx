@@ -14,7 +14,7 @@ import { messages as enMessages } from "@/locales/en/messages.json";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
-import { MessageContent } from "./MessageContent";
+import { MessageContent, useHostArtifact } from "./MessageContent";
 
 const mermaidMock = vi.hoisted(() => ({
   initialize: vi.fn(),
@@ -1366,6 +1366,84 @@ describe("MessageContent", () => {
   });
 
   describe("host artifact envelope (hostArtifact prop)", () => {
+    it("renders a saved tool submission through the host card without an assistant text fence", () => {
+      const original = componentRegistry.HostCardCodeBlock;
+      componentRegistry.HostCardCodeBlock = function SubmittedCardStub({
+        content,
+      }) {
+        const artifact = useHostArtifact();
+        return (
+          <div data-testid="submitted-card">
+            {artifact?.facetId}: {content}
+          </div>
+        );
+      };
+      try {
+        const tool = toolUseContent({});
+        const artifact = {
+          facetId: "editor",
+          renderMode: "suggestions" as const,
+          cardFenceLanguages: ["editor-draft"],
+          submittedCard: {
+            toolCallId: "tool-call-123",
+            language: "editor-draft",
+            content: "Saved draft",
+          },
+        };
+        const view = renderWithTheme(
+          <MessageContent content={[tool]} hostArtifact={artifact} />,
+        );
+        expect(screen.getByTestId("submitted-card")).toHaveTextContent(
+          "editor: Saved draft",
+        );
+        view.unmount();
+        renderWithTheme(
+          <MessageContent
+            content={[{ ...tool, status: "error" }]}
+            hostArtifact={artifact}
+          />,
+        );
+        expect(screen.queryByTestId("submitted-card")).toBeNull();
+      } finally {
+        componentRegistry.HostCardCodeBlock = original;
+      }
+    });
+
+    it("renders one submitted card when a model also echoes the legacy fence", () => {
+      const original = componentRegistry.HostCardCodeBlock;
+      componentRegistry.HostCardCodeBlock = function SubmittedCardStub({
+        content,
+      }) {
+        return <div data-testid="submitted-card">{content}</div>;
+      };
+      try {
+        renderWithTheme(
+          <MessageContent
+            content={[
+              ...textContent("```editor-draft\nOld echo\n```"),
+              toolUseContent({}),
+            ]}
+            hostArtifact={{
+              facetId: "editor",
+              renderMode: "suggestions",
+              cardFenceLanguages: ["editor-draft"],
+              submittedCard: {
+                toolCallId: "tool-call-123",
+                language: "editor-draft",
+                content: "Accepted draft",
+              },
+            }}
+          />,
+        );
+        expect(screen.getAllByTestId("submitted-card")).toHaveLength(1);
+        expect(screen.getByTestId("submitted-card")).toHaveTextContent(
+          "Accepted draft",
+        );
+      } finally {
+        componentRegistry.HostCardCodeBlock = original;
+      }
+    });
+
     it("treats a drifted email fence as the artifact via hostArtifact", () => {
       const { container } = renderWithTheme(
         <MessageContent
@@ -1739,7 +1817,13 @@ describe("MessageContent", () => {
   });
 });
 
-it("renders local file consent inline in the originating message using the shared action card", () => {
+it("renders local file consent alongside a submitted host card in the originating message", () => {
+  const original = componentRegistry.HostCardCodeBlock;
+  componentRegistry.HostCardCodeBlock = function SubmittedCardStub({
+    content,
+  }) {
+    return <div data-testid="submitted-card">{content}</div>;
+  };
   const file = new File(["local contents"], "review.txt", {
     type: "text/plain",
   });
@@ -1762,19 +1846,36 @@ it("renders local file consent inline in the originating message using the share
   try {
     renderWithTheme(
       <MessageContent
-        content={textContent("Retrieved a file.")}
+        content={[...textContent("Retrieved a file."), toolUseContent({})]}
         messageId="file-message"
+        hostArtifact={{
+          facetId: "editor",
+          renderMode: "suggestions",
+          cardFenceLanguages: ["editor-draft"],
+          submittedCard: {
+            toolCallId: "tool-call-123",
+            language: "editor-draft",
+            content: "Saved draft",
+          },
+        }}
       />,
     );
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(
       screen.getByTestId("client-tool-file-approval").closest("article"),
     ).not.toBeNull();
+    expect(screen.getByTestId("submitted-card")).toHaveTextContent(
+      "Saved draft",
+    );
+    expect(screen.getByTestId("submitted-card").closest("article")).toBe(
+      screen.getByTestId("client-tool-file-approval").closest("article"),
+    );
     fireEvent.click(
       screen.getByRole("button", { name: "Upload selected files" }),
     );
     expect(finish).toHaveBeenCalledWith(new Set([file]));
   } finally {
+    componentRegistry.HostCardCodeBlock = original;
     useClientToolFileApprovalStore.setState({ requests: [] });
   }
 });

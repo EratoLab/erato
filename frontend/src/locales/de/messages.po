@@ -2308,8 +2308,13 @@ msgstr "Aus: Es werden nur Tools angeboten, die der Server als schreibgeschützt
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
-msgid "chatInput.connectors.allowWrites.descriptionWithHostActions"
-msgstr "Aus: Es werden nur Tools angeboten, die der Server als schreibgeschützt kennzeichnet. Pausiert auch Outlook-Aktionen wie Antworten und Senden."
+msgid "chatInput.connectors.allowWrites.descriptionHostActions"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+#~ msgid "chatInput.connectors.allowWrites.descriptionWithHostActions"
+#~ msgstr "Aus: Es werden nur Tools angeboten, die der Server als schreibgeschützt kennzeichnet. Pausiert auch Outlook-Aktionen wie Antworten und Senden."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
@@ -4994,6 +4999,51 @@ msgstr ""
 #: src/components/ui/Message/TaskPlanApprovalCard.tsx
 msgid "taskPlanApproval.unnamedTask"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.added"
+msgstr "+ Hinzugefügt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.changes"
+msgstr "Änderungen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.empty"
+msgstr "Leerer Text"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.fullComparison"
+msgstr "Vollständige Texte für diese große Änderung werden angezeigt."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.original"
+msgstr "Original"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.proposed"
+msgstr "Vorschlag"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.removed"
+msgstr "− Entfernt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.textViews"
+msgstr "Textvergleich"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.whitespace"
+msgstr "· Leerzeichen · ↵ Absatzumbruch · ⇥ Tabulator bei Änderungen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalDecisionActions.tsx

@@ -19,8 +19,11 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
 import zipfile
 from pathlib import Path
+from typing import NamedTuple
 from urllib.parse import urlparse
 
 
@@ -61,10 +64,17 @@ INSTALLED_FRONTEND_LIBRARY_ENTRY_PATH = (
 LOCAL_AUTH_DIR = OFFICE_ADDIN_DIR / "local-auth"
 VITE_BIN_PATH = OFFICE_ADDIN_DIR / "node_modules" / ".bin" / "vite"
 VITE_CACHE_DIR = OFFICE_ADDIN_DIR / "node_modules" / ".vite"
+MANIFEST_LOCAL_ORIGIN = f"https://localhost:{OFFICE_ADDIN_PORT}"
 MANIFEST_LOCAL_PATH = OFFICE_ADDIN_DIR / "manifests" / "manifest-local.xml"
 MANIFEST_FUNNEL_PATH = OFFICE_ADDIN_DIR / "manifests" / "manifest-funnel.xml"
 MANIFEST_FUNNEL_ONPREM_PATH = (
     OFFICE_ADDIN_DIR / "manifests" / "manifest-funnel-onprem.xml"
+)
+MANIFEST_LOCAL_DOCUMENT_PATH = (
+    OFFICE_ADDIN_DIR / "manifests" / "manifest-local-document.xml"
+)
+MANIFEST_FUNNEL_DOCUMENT_PATH = (
+    OFFICE_ADDIN_DIR / "manifests" / "manifest-funnel-document.xml"
 )
 # Fixed identity distinct from manifest-local.xml so the on-prem variant can
 # be installed alongside the EXO add-in without colliding in OWA.
@@ -77,6 +87,58 @@ MANIFEST_V1_1_OPEN_TAG_PATTERN = re.compile(
     r'<VersionOverrides\b[^>]*xsi:type="VersionOverridesV1_1"[^>]*>'
 )
 MANIFEST_VERSION_OVERRIDES_CLOSE_TAG = "</VersionOverrides>"
+
+
+class FunnelManifestVariant(NamedTuple):
+
+    path: Path
+    instructions: tuple[str, ...]
+
+
+class FunnelManifestSpec(NamedTuple):
+    """onprem=None skips the VersionOverrides transform for an already V1_0-only manifest."""
+
+    source_path: Path
+    funnel: FunnelManifestVariant
+    onprem: FunnelManifestVariant | None = None
+
+
+# Each entry is a separate catalog identity; additional hosts belong in its manifest.
+FUNNEL_MANIFEST_SPECS = (
+    FunnelManifestSpec(
+        source_path=MANIFEST_LOCAL_PATH,
+        funnel=FunnelManifestVariant(
+            path=MANIFEST_FUNNEL_PATH,
+            instructions=(
+                "Upload manifests/manifest-funnel.xml via "
+                "https://aka.ms/olksideload",
+            ),
+        ),
+        onprem=FunnelManifestVariant(
+            path=MANIFEST_FUNNEL_ONPREM_PATH,
+            instructions=(
+                "On Exchange SE OWA, sideload "
+                "manifests/manifest-funnel-onprem.xml via",
+                "Get Add-ins → My add-ins → Add a custom add-in "
+                "→ Add from file",
+            ),
+        ),
+    ),
+    FunnelManifestSpec(
+        source_path=MANIFEST_LOCAL_DOCUMENT_PATH,
+        funnel=FunnelManifestVariant(
+            path=MANIFEST_FUNNEL_DOCUMENT_PATH,
+            instructions=(
+                "In Word, copy manifests/manifest-funnel-document.xml into",
+                "~/Library/Containers/com.microsoft.Word/Data/Documents/wef, "
+                "then use",
+                "Insert → Add-ins → My Add-ins (Word for the web: "
+                "Upload My Add-in)",
+            ),
+        ),
+    ),
+)
+
 MANIFEST_UNIFIED_PATH = OFFICE_ADDIN_DIR / "manifests" / "manifest.json"
 MANIFEST_FUNNEL_UNIFIED_PATH = OFFICE_ADDIN_DIR / "manifests" / "manifest-funnel.json"
 MANIFEST_FUNNEL_APP_PACKAGE_PATH = (
@@ -84,6 +146,11 @@ MANIFEST_FUNNEL_APP_PACKAGE_PATH = (
 )
 MANIFEST_UNIFIED_LOCAL_HOST = f"localhost:{OFFICE_ADDIN_PORT}"
 ADDIN_PUBLIC_DIR = OFFICE_ADDIN_DIR / "public"
+# Docker can report a running proxy while another process owns macOS loopback.
+# Verify oauth2-proxy’s unauthenticated /ping response before exposing the funnel.
+AUTH_PROXY_PING_PATH = "/ping"
+AUTH_PROXY_PING_BODY = "OK"
+AUTH_PROXY_READY_TIMEOUT_SECONDS = 30
 ENTRA_TEMPLATE_PATH = LOCAL_AUTH_DIR / "oauth2-proxy-entra-id.template.cfg"
 ENTRA_CONFIG_PATH = LOCAL_AUTH_DIR / "oauth2-proxy-entra-id.cfg"
 REQUIRED_COMMANDS = ("docker", "node", "pnpm", "tailscale")
@@ -356,13 +423,57 @@ def start_auth_proxy() -> None:
         cwd=LOCAL_AUTH_DIR,
         print_stderr_on_success=False,
     )
+    verify_auth_proxy()
     print(f"Auth proxy available at http://localhost:{AUTH_PROXY_PORT}")
 
 
+def auth_proxy_ping_response(address: str) -> str | None:
+    host = f"[{address}]" if ":" in address else address
+    url = f"http://{host}:{AUTH_PROXY_PORT}{AUTH_PROXY_PING_PATH}"
+    # Loopback, so an ambient http_proxy must never be consulted.
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with opener.open(url, timeout=2) as response:
+            if response.status != 200:
+                return None
+            return response.read(64).decode("utf-8", "replace").strip()
+    except (urllib.error.URLError, OSError):
+        return None
+
+
+def verify_auth_proxy() -> None:
+    deadline = time.time() + AUTH_PROXY_READY_TIMEOUT_SECONDS
+    address: str | None = None
+    while time.time() < deadline:
+        address = find_listener_on_port(AUTH_PROXY_PORT)
+        if address is not None:
+            if auth_proxy_ping_response(address) == AUTH_PROXY_PING_BODY:
+                return
+
+        time.sleep(0.5)
+
+    if address is None:
+        print(
+            f"Auth proxy never listened on localhost:{AUTH_PROXY_PORT}; check "
+            "`docker compose logs oauth2-proxy` in office-addin/local-auth",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            f"localhost:{AUTH_PROXY_PORT} answers but is not oauth2-proxy "
+            f"(no {AUTH_PROXY_PING_BODY!r} on {AUTH_PROXY_PING_PATH}). The "
+            "Tailscale funnel forwards to that port, so every add-in request "
+            "would reach the wrong server. Identify the owner with "
+            f"`lsof -nP -iTCP:{AUTH_PROXY_PORT} -sTCP:LISTEN`, stop it "
+            "and retry",
+            file=sys.stderr,
+        )
+    sys.exit(1)
+
+
 def load_funnel_status() -> dict:
-    result = run_command(
+    result = run_quiet_command(
         ["tailscale", "funnel", "status", "--json"],
-        capture_output=True,
     )
     return json.loads(result.stdout)
 
@@ -470,30 +581,46 @@ def make_onprem_manifest(contents: str) -> str:
     return updated_contents
 
 
-def write_funnel_manifest(funnel_url: str) -> None:
-    manifest_contents = MANIFEST_LOCAL_PATH.read_text(encoding="utf-8")
-    updated_contents = manifest_contents.replace(
-        "https://localhost:3002",
-        funnel_url.rstrip("/"),
-    )
-    MANIFEST_FUNNEL_PATH.write_text(updated_contents, encoding="utf-8")
-    # The on-prem variant is best-effort: a manifest-local.xml the transform
-    # can't parse must not kill the whole dev session (this runs after the
-    # auth proxy is already up), so warn and keep EXO development — and the
-    # fail-loud EXO funnel manifest written above — going.
-    try:
-        onprem_contents = make_onprem_manifest(updated_contents)
-    except ValueError as error:
-        # Remove any previous run's copy so a stale manifest (pointing at an
-        # old funnel URL) can't be sideloaded by mistake.
-        MANIFEST_FUNNEL_ONPREM_PATH.unlink(missing_ok=True)
-        print(
-            f"Warning: skipping {MANIFEST_FUNNEL_ONPREM_PATH.name} — {error}. "
-            "EXO development is unaffected.",
-            file=sys.stderr,
+def render_funnel_manifest(source_path: Path, funnel_url: str) -> str:
+    contents = source_path.read_text(encoding="utf-8")
+    rendered = contents.replace(MANIFEST_LOCAL_ORIGIN, funnel_url.rstrip("/"))
+    if "{{" in rendered:
+        raise ValueError(
+            f"{source_path.name} still contains {{{{…}}}} placeholders — the "
+            "funnel manifests render from manifests/manifest-local-*.xml, "
+            "not from the backend templates"
         )
-        return
-    MANIFEST_FUNNEL_ONPREM_PATH.write_text(onprem_contents, encoding="utf-8")
+
+    return rendered
+
+
+def write_funnel_manifests(funnel_url: str) -> list[FunnelManifestVariant]:
+    written: list[FunnelManifestVariant] = []
+    for spec in FUNNEL_MANIFEST_SPECS:
+        rendered = render_funnel_manifest(spec.source_path, funnel_url)
+        spec.funnel.path.write_text(rendered, encoding="utf-8")
+        written.append(spec.funnel)
+
+        if spec.onprem is None:
+            continue
+
+        # The proxy is already running; a failed optional on-prem variant must not stop EXO development.
+        try:
+            onprem_contents = make_onprem_manifest(rendered)
+        except ValueError as error:
+            # Remove stale output so a previous funnel URL cannot be sideloaded.
+            spec.onprem.path.unlink(missing_ok=True)
+            print(
+                f"Warning: skipping {spec.onprem.path.name} — {error}. "
+                "EXO development is unaffected.",
+                file=sys.stderr,
+            )
+            continue
+
+        spec.onprem.path.write_text(onprem_contents, encoding="utf-8")
+        written.append(spec.onprem)
+
+    return written
 
 
 # The bare host is substituted rather than the https:// origin because
@@ -559,23 +686,39 @@ def funnel_is_correct(status: dict) -> bool:
 
 def ensure_funnel() -> None:
     try:
+        connection = run_quiet_command(["tailscale", "status", "--json"])
+        backend_state = json.loads(connection.stdout).get("BackendState", "unknown")
+        if backend_state != "Running":
+            print(
+                f"Tailscale is not connected (state: {backend_state}). "
+                "Connect in the Tailscale app or run `tailscale up`, then retry.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
         status = load_funnel_status()
-    except subprocess.CalledProcessError as error:
-        print(error.stderr, file=sys.stderr)
-        raise
 
-    if funnel_is_correct(status):
-        proxy_port = extract_funnel_proxy_port(status)
-        print(f"Tailscale funnel already targets localhost:{proxy_port}")
-        return
+        if funnel_is_correct(status):
+            proxy_port = extract_funnel_proxy_port(status)
+            print(f"Tailscale funnel already targets localhost:{proxy_port}")
+            return
 
-    print(f"Updating Tailscale funnel to localhost:{FUNNEL_TARGET_PORT}")
-    run_command(
-        ["tailscale", "funnel", "--bg", str(FUNNEL_TARGET_PORT)],
-        capture_output=True,
-    )
+        print(f"Updating Tailscale funnel to localhost:{FUNNEL_TARGET_PORT}")
+        run_quiet_command(
+            ["tailscale", "funnel", "--bg", str(FUNNEL_TARGET_PORT)],
+        )
 
-    updated_status = load_funnel_status()
+        updated_status = load_funnel_status()
+    except subprocess.CalledProcessError:
+        print(
+            "Could not prepare Tailscale Funnel; see the command output above.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    except json.JSONDecodeError as error:
+        print(f"Could not read Tailscale status: {error}", file=sys.stderr)
+        sys.exit(1)
+
     if not funnel_is_correct(updated_status):
         print(
             "Tailscale funnel did not settle on the expected port",
@@ -591,7 +734,7 @@ def print_funnel_url() -> None:
         print("Could not determine Tailscale funnel URL", file=sys.stderr)
         return
 
-    write_funnel_manifest(funnel_url)
+    written_manifests = write_funnel_manifests(funnel_url)
     # Best-effort like the on-prem XML variant above: a Teams package that
     # can't be rendered must not take the Outlook dev session down with it.
     app_package_written = True
@@ -612,19 +755,14 @@ def print_funnel_url() -> None:
         "",
         redirect_status,
         "",
-        ("Upload manifests/manifest-funnel.xml via https://aka.ms/olksideload"),
     ]
+    for manifest in written_manifests:
+        lines += list(manifest.instructions)
     if app_package_written:
         lines += [
-            ("In Teams, upload manifests/manifest-funnel.zip via"),
-            ("Apps → Manage your apps → Upload a custom app"),
+            "In Teams, upload manifests/manifest-funnel.zip via",
+            "Apps → Manage your apps → Upload a custom app",
         ]
-    lines += [
-        (
-            "On Exchange SE OWA, sideload manifests/manifest-funnel-onprem.xml via"
-        ),
-        ("Get Add-ins → My add-ins → Add a custom add-in → Add from file"),
-    ]
     width = max(len(line) for line in lines) + 4
     border = "#" * width
 

@@ -2308,8 +2308,13 @@ msgstr "Desactivado: solo se ofrecen las herramientas que el servidor marca como
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
-msgid "chatInput.connectors.allowWrites.descriptionWithHostActions"
-msgstr "Desactivado: solo se ofrecen las herramientas que el servidor marca como de solo lectura. También pausa las acciones de Outlook como Responder y Enviar."
+msgid "chatInput.connectors.allowWrites.descriptionHostActions"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+#~ msgid "chatInput.connectors.allowWrites.descriptionWithHostActions"
+#~ msgstr "Desactivado: solo se ofrecen las herramientas que el servidor marca como de solo lectura. También pausa las acciones de Outlook como Responder y Enviar."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
@@ -4994,6 +4999,51 @@ msgstr ""
 #: src/components/ui/Message/TaskPlanApprovalCard.tsx
 msgid "taskPlanApproval.unnamedTask"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.added"
+msgstr "+ Añadido"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.changes"
+msgstr "Cambios"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.empty"
+msgstr "Texto vacío"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.fullComparison"
+msgstr "Se muestran los textos completos de este cambio extenso."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.original"
+msgstr "Original"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.proposed"
+msgstr "Propuesto"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.removed"
+msgstr "− Eliminado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.textViews"
+msgstr "Comparación de texto"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TextComparison.tsx
+msgid "textComparison.whitespace"
+msgstr "· espacio · ↵ salto de párrafo · ⇥ tabulación al cambiar"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalDecisionActions.tsx

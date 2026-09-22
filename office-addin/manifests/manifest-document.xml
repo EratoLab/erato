@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xsi:type="TaskPaneApp">
+  <Id>{{OFFICE_ADDIN_ID}}</Id>
+  <Version>{{OFFICE_ADDIN_MANIFEST_VERSION}}</Version>
+  <ProviderName>{{OFFICE_ADDIN_MANIFEST_PROVIDER_NAME}}</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="{{OFFICE_ADDIN_MANIFEST_DISPLAY_NAME}}" />
+  <Description DefaultValue="{{OFFICE_ADDIN_MANIFEST_DESCRIPTION}}" />
+  <IconUrl DefaultValue="{{OFFICE_ADDIN_MANIFEST_ICON_URL}}" />
+  <HighResolutionIconUrl DefaultValue="{{OFFICE_ADDIN_MANIFEST_HIGH_RESOLUTION_ICON_URL}}" />
+  <SupportUrl DefaultValue="{{OFFICE_ADDIN_MANIFEST_SUPPORT_URL}}" />
+  <Hosts>
+    <Host Name="Document" />
+  </Hosts>
+  <!-- Hosts below this activation floor do not show the add-in. -->
+  <Requirements>
+    <Sets>
+      <Set Name="WordApi" MinVersion="1.7" />
+    </Sets>
+  </Requirements>
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://localhost:3002/public/platform-office-addin/word" />
+  </DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+  <!-- Keep command-specific Requirements absent for the SharePoint catalog route. -->
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Document">
+        <DesktopFormFactor>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="eratoGroup">
+                <Label resid="groupLabel" />
+                <Icon>
+                  <bt:Image size="16" resid="icon16" />
+                  <bt:Image size="32" resid="icon32" />
+                  <bt:Image size="80" resid="icon80" />
+                </Icon>
+                <Control xsi:type="Button" id="eratoTaskpaneButton">
+                  <Label resid="buttonLabel" />
+                  <Supertip>
+                    <Title resid="buttonLabel" />
+                    <Description resid="buttonDesc" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="icon16" />
+                    <bt:Image size="32" resid="icon32" />
+                    <bt:Image size="80" resid="icon80" />
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>eratoTaskpane</TaskpaneId>
+                    <SourceLocation resid="taskPaneUrl" />
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    <Resources>
+      <bt:Images>
+        <bt:Image id="icon16" DefaultValue="{{OFFICE_ADDIN_MANIFEST_ICON_16_URL}}" />
+        <bt:Image id="icon32" DefaultValue="{{OFFICE_ADDIN_MANIFEST_ICON_32_URL}}" />
+        <bt:Image id="icon80" DefaultValue="{{OFFICE_ADDIN_MANIFEST_ICON_80_URL}}" />
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="taskPaneUrl" DefaultValue="https://localhost:3002/public/platform-office-addin/word" />
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="groupLabel" DefaultValue="{{OFFICE_ADDIN_MANIFEST_GROUP_LABEL}}" />
+        <bt:String id="buttonLabel" DefaultValue="{{OFFICE_ADDIN_MANIFEST_BUTTON_LABEL}}" />
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="buttonDesc" DefaultValue="{{OFFICE_ADDIN_MANIFEST_BUTTON_DESCRIPTION}}" />
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>

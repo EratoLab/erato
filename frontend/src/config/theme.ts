@@ -157,6 +157,10 @@ export type ThemeColors = {
       foreground: string;
     };
   };
+  diff: {
+    added: { foreground: string; background: string };
+    removed: { foreground: string; background: string };
+  };
   status: {
     info: {
       foreground: string;
@@ -479,6 +483,10 @@ export const defaultTheme: Theme = {
         foreground: colors.neutral[50],
       },
     },
+    diff: {
+      added: { foreground: "#1c6640", background: "#e6f3eb" },
+      removed: { foreground: "#91354b", background: "#fbe9ed" },
+    },
     status: {
       info: {
         foreground: colors.neutral[800],
@@ -694,6 +702,10 @@ export const darkTheme: Theme = {
         background: colors.neutral[600],
         foreground: colors.neutral[50],
       },
+    },
+    diff: {
+      added: { foreground: "#a7f3d0", background: "#143e2d" },
+      removed: { foreground: "#fecdd3", background: "#51212e" },
     },
     status: {
       info: {

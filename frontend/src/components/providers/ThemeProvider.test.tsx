@@ -286,6 +286,9 @@ describe("ThemeProvider", () => {
                 message: {
                   assistant: "#ede9fe",
                 },
+                diff: {
+                  added: { foreground: "#115533", background: "#e0ffee" },
+                },
                 code: {
                   inline: {
                     background: "#eef2ff",
@@ -397,6 +400,10 @@ describe("ThemeProvider", () => {
       "--theme-focus-ring-error: rgba(127, 29, 29, 0.24);",
     );
     expect(varsCss).toContain("--theme-message-assistant: #ede9fe;");
+    expect(varsCss).toContain("--theme-diff-added-fg: #115533;");
+    expect(varsCss).toContain("--theme-diff-added-bg: #e0ffee;");
+    expect(varsCss).toContain("--theme-diff-removed-fg: #91354b;");
+    expect(varsCss).toContain("--theme-diff-removed-bg: #fbe9ed;");
     expect(varsCss).toContain("--theme-code-inline-bg: #eef2ff;");
     expect(varsCss).toContain("--theme-code-inline-fg: #312e81;");
     expect(varsCss).toContain("--theme-code-inline-border: #c7d2fe;");

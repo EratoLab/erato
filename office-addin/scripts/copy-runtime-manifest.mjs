@@ -3,7 +3,11 @@ import path from "node:path";
 
 const officeAddinDir = path.resolve(import.meta.dirname, "..");
 const outputDir = path.join(officeAddinDir, "dist");
-const manifestNames = ["manifest.xml", "manifest-exchange-server.xml"];
+const manifestNames = [
+  "manifest.xml",
+  "manifest-exchange-server.xml",
+  "manifest-document.xml",
+];
 
 fs.mkdirSync(outputDir, { recursive: true });
 

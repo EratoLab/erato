@@ -16,10 +16,11 @@ import { UserSettingsTabContent } from "./UserSettingsTabContent";
 type SettingsTab = "appearance" | "user" | "audio" | "serversTools" | "host";
 
 export interface AddinSettingsHostContribution {
-  tabLabel: string;
-  heading: string;
-  description: string;
-  content: ReactNode;
+  /** Tool-only contributions need no host tab; content controls tab visibility. */
+  tabLabel?: string;
+  heading?: string;
+  description?: string;
+  content?: ReactNode;
   systemDescription?: string;
   appearanceNotice?: ReactNode;
   /**
@@ -62,7 +63,7 @@ export function AddinSettingsDialogCore({
       "user",
       ...(audioSettingsEnabled ? (["audio"] as const) : []),
       ...(serversToolsTabEnabled ? (["serversTools"] as const) : []),
-      ...(hostContribution ? (["host"] as const) : []),
+      ...(hostContribution?.content != null ? (["host"] as const) : []),
     ],
     [audioSettingsEnabled, serversToolsTabEnabled, hostContribution],
   );
@@ -270,7 +271,7 @@ export function AddinSettingsDialogCore({
             </section>
           ) : null}
 
-          {hostContribution ? (
+          {hostContribution?.content != null ? (
             <section
               id={panelIds.host}
               role="tabpanel"

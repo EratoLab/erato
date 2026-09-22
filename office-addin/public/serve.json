@@ -5,6 +5,10 @@
       "destination": "index.html"
     },
     {
+      "source": "/word",
+      "destination": "index.html"
+    },
+    {
       "source": "/setup",
       "destination": "index.html"
     }

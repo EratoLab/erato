@@ -6,7 +6,7 @@ export interface FormFieldProps {
   /**
    * Label text for the form field
    */
-  label: string;
+  label?: string;
   /**
    * Whether the field is required
    * @default false
@@ -20,6 +20,7 @@ export interface FormFieldProps {
    * Help text to display below the field
    */
   helpText?: string;
+  helpTextId?: string;
   /**
    * Optional action element to display inline after the label (e.g., InfoTooltip)
    */
@@ -71,6 +72,7 @@ export const FormField: React.FC<FormFieldProps> = ({
   required = false,
   error,
   helpText,
+  helpTextId,
   labelAction,
   labelInlineAction,
   children,
@@ -79,30 +81,34 @@ export const FormField: React.FC<FormFieldProps> = ({
 }) => {
   return (
     <div className={clsx("w-full", className)}>
-      <label
-        htmlFor={htmlFor}
-        className="mb-2 flex items-center justify-between text-base font-semibold text-theme-fg-primary"
-      >
-        <span className="inline-flex items-center gap-1.5">
-          <span className="inline-flex items-center gap-1">
-            <span>{label}</span>
-            {required && (
-              <span className="ml-1 text-theme-error-fg" role="presentation">
-                *
-              </span>
+      {label != null && (
+        <label
+          htmlFor={htmlFor}
+          className="mb-2 flex items-center justify-between text-base font-semibold text-theme-fg-primary"
+        >
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-1">
+              <span>{label}</span>
+              {required && (
+                <span className="ml-1 text-theme-error-fg" role="presentation">
+                  *
+                </span>
+              )}
+            </span>
+            {labelInlineAction && (
+              <span className="flex items-center">{labelInlineAction}</span>
             )}
           </span>
-          {labelInlineAction && (
-            <span className="flex items-center">{labelInlineAction}</span>
+          {labelAction && (
+            <span className="flex items-center gap-2">{labelAction}</span>
           )}
-        </span>
-        {labelAction && (
-          <span className="flex items-center gap-2">{labelAction}</span>
-        )}
-      </label>
+        </label>
+      )}
       {children}
       {helpText && !error && (
-        <p className="mt-2 text-sm text-theme-fg-secondary">{helpText}</p>
+        <p id={helpTextId} className="mt-2 text-sm text-theme-fg-secondary">
+          {helpText}
+        </p>
       )}
     </div>
   );

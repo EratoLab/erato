@@ -11,4 +11,5 @@ target
 
 erato.toml
 erato.toml.backup
+erato.toml.bak*
 !latency/erato.toml

@@ -164,4 +164,18 @@ describe("AddinSettingsDialogCore", () => {
     expect(screen.getByText("Outlook behavior")).toBeInTheDocument();
     expect(screen.queryByRole("tabpanel", { name: "Appearance" })).toBeNull();
   });
+
+  it("spawns the shared pane but NO host tab for an entities-only contribution", () => {
+    render(
+      <AddinSettingsDialogCore
+        isOpen={true}
+        onClose={() => {}}
+        hostContribution={{
+          serversToolsEntities: <div data-testid="host-entities" />,
+        }}
+      />,
+    );
+
+    expect(tabNames()).toEqual(["Appearance", "User settings", "MCP & Apps"]);
+  });
 });

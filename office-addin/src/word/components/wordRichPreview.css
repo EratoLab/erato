@@ -1,0 +1,126 @@
+.word-rich-preview {
+  min-width: 0;
+  max-width: 100%;
+  margin-block: var(--theme-spacing-control-gap);
+  color: var(--theme-fg-primary);
+}
+.word-rich-preview__text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+/* Document colors use the DOCX paper palette; review controls use the app theme. */
+.word-rich-preview__paper {
+  color: var(--docx-preview-page-fg);
+  background: var(--docx-preview-page-bg);
+}
+.word-rich-preview__text.word-rich-preview__paper {
+  padding: var(--theme-spacing-control-gap);
+}
+.word-rich-preview__table
+  > tbody
+  > tr
+  > :is(td, th)
+  > .word-rich-preview__paper,
+.word-rich-preview__table
+  > tbody
+  > tr
+  > :is(td, th)
+  > .word-rich-preview__list-item
+  > .word-rich-preview__paper {
+  background-color: transparent;
+  padding: 0;
+}
+.word-rich-preview__table > tbody > tr > td > .word-rich-preview__hint,
+.word-rich-preview__table > tbody > tr > th > .word-rich-preview__hint {
+  color: var(--docx-preview-page-fg);
+  opacity: 0.72;
+}
+.word-rich-preview__heading {
+  font-weight: var(--theme-font-weight-semibold);
+  font-size: var(--theme-font-size-lg);
+}
+.word-rich-preview__hint {
+  display: block;
+  font-size: var(--theme-font-size-xs);
+  color: var(--theme-fg-secondary);
+  line-height: 1.5;
+}
+.word-rich-preview__table-scroll {
+  max-width: 100%;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+.word-rich-preview__table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: var(--theme-font-size-sm);
+}
+.word-rich-preview__table caption {
+  text-align: start;
+  padding-block-end: var(--theme-spacing-control-gap);
+  color: var(--theme-fg-primary);
+  background: var(--card-bg, var(--theme-bg-primary));
+}
+.word-rich-preview__table th,
+.word-rich-preview__table td {
+  min-width: 0;
+  vertical-align: top;
+  text-align: start;
+  padding: var(--theme-spacing-control-gap);
+  border: 1px solid var(--docx-preview-page-border, var(--theme-border));
+}
+.word-rich-preview__table th {
+  font-weight: var(--theme-font-weight-semibold);
+}
+.word-rich-preview__table .word-rich-preview__text {
+  margin-block: var(--theme-spacing-control-gap);
+}
+.word-rich-preview__media {
+  margin: 0;
+}
+.word-rich-preview__media figcaption {
+  margin-block-start: var(--theme-spacing-control-gap);
+  font-size: var(--theme-font-size-sm);
+}
+.word-rich-preview__drawing {
+  display: inline-block;
+  max-width: 100%;
+  max-height: 20rem;
+  object-fit: contain;
+}
+.word-rich-preview__image-frame {
+  display: inline-block;
+  position: relative;
+  max-width: 100%;
+  overflow: hidden;
+  vertical-align: middle;
+}
+.word-rich-preview__image {
+  position: absolute;
+  max-width: none;
+  object-fit: fill;
+}
+.word-rich-preview__drawing {
+  width: 12em;
+  height: auto;
+}
+.word-rich-preview__placeholder {
+  padding: var(--theme-spacing-message-padding-y)
+    var(--theme-spacing-message-padding-x);
+  color: var(--theme-fg-secondary);
+  background: var(--theme-bg-secondary);
+  border: 1px dashed var(--theme-border);
+}
+.word-rich-preview__changes {
+  padding-inline-start: var(--theme-spacing-message-padding-x);
+}
+.word-rich-preview__changes > li {
+  margin-block: var(--theme-spacing-control-gap);
+}
+.word-rich-preview__list-item {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--theme-spacing-control-gap);
+}

@@ -3943,6 +3943,69 @@
         }
       }
     },
+    "/office-addin/manifest-document.xml": {
+      "get": {
+        "tags": [],
+        "summary": "Get the document task-pane Office add-in manifest with runtime URL substitutions.",
+        "operationId": "office_addin_document_manifest",
+        "parameters": [
+          {
+            "name": "base_url",
+            "in": "query",
+            "description": "Optional externally reachable deployment base URL used to rewrite the manifest.\nExample: https://app.example.com",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rendered document task-pane Office add-in manifest",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid base_url query parameter",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Office add-in is disabled or manifest is unavailable",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed to render manifest",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/office-addin/manifest-exchange-server.xml": {
       "get": {
         "tags": [],
