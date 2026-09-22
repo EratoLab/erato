@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-open-data-directory-v1-result.schema.json",
+  "title": "SidecarOpenDataDirectoryV1Result",
+  "type": "object",
+  "required": ["opened"],
+  "properties": {
+    "opened": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": true
+}

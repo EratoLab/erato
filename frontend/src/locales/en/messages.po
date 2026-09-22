@@ -3845,6 +3845,16 @@ msgstr "Launch Desktop Sidecar"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "preferences.dialog.desktopSidecar.openDataDirectory"
+msgstr "Open data directory"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "preferences.dialog.desktopSidecar.openDataDirectory.error"
+msgstr "Could not open the sidecar data directory."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
 msgid "preferences.dialog.desktopSidecar.retry"
 msgstr "Retry connection"
 
