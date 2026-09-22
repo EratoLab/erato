@@ -5637,6 +5637,15 @@
           }
         }
       },
+      "ClientToolFileApproval": {
+        "type": "string",
+        "description": "Default handling of files retrieved by client tools before they leave the device.",
+        "enum": [
+          "never_allow",
+          "ask",
+          "always_allow"
+        ]
+      },
       "ClientToolResultRequest": {
         "type": "object",
         "required": [
@@ -10195,6 +10204,16 @@
       "UpdateProfilePreferencesRequest": {
         "type": "object",
         "properties": {
+          "client_tool_file_approval": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ClientToolFileApproval"
+              }
+            ]
+          },
           "preference_assistant_additional_information": {
             "type": [
               "string",
@@ -10281,6 +10300,10 @@
           "organization_group_ids"
         ],
         "properties": {
+          "client_tool_file_approval": {
+            "$ref": "#/components/schemas/ClientToolFileApproval",
+            "description": "Effective decision, including the configured default when no user override exists."
+          },
           "email": {
             "type": "string",
             "description": "The user's email address. Shouldn't be used as a unique identifier, as it may change."

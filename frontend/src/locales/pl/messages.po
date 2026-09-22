@@ -1566,6 +1566,26 @@ msgstr "Podgląd załącznika"
 #~ msgstr "Podgląd załączonego pliku:"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
+msgid "chat.fileApproval.approve"
+msgstr "Prześlij wybrane pliki"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
+msgid "chat.fileApproval.description"
+msgstr "Wybrane pliki zostaną przesłane do Erato, a ich zawartość udostępniona dostawcy AI. Przejrzyj pliki przed podjęciem decyzji."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
+msgid "chat.fileApproval.reject"
+msgstr "Odrzuć wszystkie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
+msgid "chat.fileApproval.title"
+msgstr "Zezwolić na przesłanie tych plików?"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 msgid "chat.fileDrop.overlay.label"
 msgstr "Upuść, aby przesłać"
@@ -3774,6 +3794,26 @@ msgstr ""
 #~ msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/ClientToolFileApprovalSetting.tsx
+msgid "preferences.dialog.desktopSidecar.fileApproval"
+msgstr "Jak obsługiwać przesyłanie plików pobranych przez sidecar?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/ClientToolFileApprovalSetting.tsx
+#~ msgid "preferences.dialog.desktopSidecar.fileApproval.always"
+#~ msgstr "Zawsze zezwalaj"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/ClientToolFileApprovalSetting.tsx
+#~ msgid "preferences.dialog.desktopSidecar.fileApproval.ask"
+#~ msgstr "Pytaj"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/ClientToolFileApprovalSetting.tsx
+#~ msgid "preferences.dialog.desktopSidecar.fileApproval.never"
+#~ msgstr "Nigdy nie zezwalaj"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
 msgid "preferences.dialog.desktopSidecar.heading"
 msgstr ""
@@ -4326,6 +4366,7 @@ msgid "preferences.dialog.mcpServers.tools.permissions.heading"
 msgstr "Uprawnienia narzędzi"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/ClientToolFileApprovalSetting.tsx
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.save.error"
 msgstr "Nie udało się zapisać preferencji. Spróbuj ponownie."

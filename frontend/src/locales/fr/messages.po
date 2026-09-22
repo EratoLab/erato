@@ -1566,6 +1566,26 @@ msgstr "Aperçu de la pièce jointe"
 #~ msgstr "Aperçu du fichier joint :"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
+msgid "chat.fileApproval.approve"
+msgstr "Importer les fichiers sélectionnés"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
+msgid "chat.fileApproval.description"
+msgstr "Les fichiers sélectionnés seront importés dans Erato et leur contenu sera partagé avec le fournisseur d’IA. Prévisualisez les fichiers avant de décider."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
+msgid "chat.fileApproval.reject"
+msgstr "Tout refuser"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
+msgid "chat.fileApproval.title"
+msgstr "Autoriser l’importation de ces fichiers ?"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 msgid "chat.fileDrop.overlay.label"
 msgstr "Déposez pour téléverser"
@@ -3774,6 +3794,26 @@ msgstr ""
 #~ msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/ClientToolFileApprovalSetting.tsx
+msgid "preferences.dialog.desktopSidecar.fileApproval"
+msgstr "Comment gérer les téléversements de fichiers récupérés par le sidecar ?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/ClientToolFileApprovalSetting.tsx
+#~ msgid "preferences.dialog.desktopSidecar.fileApproval.always"
+#~ msgstr "Toujours autoriser"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/ClientToolFileApprovalSetting.tsx
+#~ msgid "preferences.dialog.desktopSidecar.fileApproval.ask"
+#~ msgstr "Demander"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/ClientToolFileApprovalSetting.tsx
+#~ msgid "preferences.dialog.desktopSidecar.fileApproval.never"
+#~ msgstr "Ne jamais autoriser"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
 msgid "preferences.dialog.desktopSidecar.heading"
 msgstr ""
@@ -4326,6 +4366,7 @@ msgid "preferences.dialog.mcpServers.tools.permissions.heading"
 msgstr "Autorisations des outils"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/ClientToolFileApprovalSetting.tsx
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.save.error"
 msgstr "Impossible d’enregistrer les préférences. Veuillez réessayer."

@@ -818,6 +818,8 @@ async fn fetch_entra_id_profile_photo_data_url(
 
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct UpdateProfilePreferencesRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_tool_file_approval: Option<crate::config::ClientToolFileApproval>,
     /// Preferred name to address the user with.
     #[serde(default, deserialize_with = "deserialize_patch_optional_string")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -921,6 +923,7 @@ pub async fn update_profile_preferences(
         &app_state.db,
         &user_id,
         models::user_preference::UpdateUserPreferencesInput {
+            client_tool_file_approval: request.client_tool_file_approval,
             nickname: request.preference_nickname,
             job_title: request.preference_job_title,
             assistant_custom_instructions: request.preference_assistant_custom_instructions,
@@ -946,6 +949,9 @@ pub async fn update_profile_preferences(
     })?;
 
     let mut profile = me_user.profile.clone();
+    if let Some(value) = request.client_tool_file_approval {
+        profile.client_tool_file_approval = value;
+    }
     profile.preference_nickname = updated_prefs.nickname;
     profile.preference_job_title = updated_prefs.job_title;
     profile.preference_assistant_custom_instructions = updated_prefs.assistant_custom_instructions;

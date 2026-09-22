@@ -32,6 +32,7 @@ function setup(responses: Record<string, unknown>) {
   const supports = vi.spyOn(client, "supports").mockReturnValue(true);
   const uploadAttachment = vi.fn(async () => ({ id: "uploaded-file" }));
   const options = {
+    approveFiles: vi.fn(async (files: File[]) => new Set(files)),
     uploadAttachment,
     uploadsEnabled: true,
     maxUploadBytes: 1000,
@@ -63,6 +64,66 @@ function conversation(): OutlookGetConversationV1Result {
 }
 
 describe("shared desktop sidecar tools", () => {
+  it("uploads only individually approved attachments, including duplicate hashes", async () => {
+    const data = conversation();
+    data.messages[0].attachments.push({
+      ...data.messages[0].attachments[0],
+      name: "duplicate.txt",
+    });
+    const env = setup({ "outlook.get_conversation.v1": data });
+    env.options.approveFiles.mockImplementation(
+      async (files) => new Set([files[0]]),
+    );
+    const result = await env
+      .tools()[1]
+      .execute({ ...anchor, includeAttachments: true }, context);
+    expect(env.options.approveFiles).toHaveBeenCalledTimes(1);
+    expect(env.options.approveFiles.mock.calls[0][0]).toHaveLength(2);
+    expect(env.uploadAttachment).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        messages: [
+          {
+            attachments: [
+              { status: "uploaded" },
+              { status: "rejected", fileId: undefined },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
+  it("does not upload while approval is pending and caches rejection for replay", async () => {
+    const env = setup({ "outlook.get_conversation.v1": conversation() });
+    let decide!: (files: Set<File>) => void;
+    env.options.approveFiles.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          decide = resolve;
+        }),
+    );
+    const tool = env.tools()[1];
+    const result = tool.execute(
+      { ...anchor, includeAttachments: true },
+      context,
+    );
+    await vi.waitFor(() => expect(env.options.approveFiles).toHaveBeenCalled());
+    expect(env.uploadAttachment).not.toHaveBeenCalled();
+    decide(new Set());
+    expect(await result).toMatchObject({
+      ok: true,
+      fileUploadIds: [],
+      result: {
+        messages: [{ attachments: [{ status: "rejected" }] }],
+      },
+    });
+    await tool.execute({ ...anchor, includeAttachments: true }, context);
+    expect(env.options.approveFiles).toHaveBeenCalledTimes(1);
+    expect(env.uploadAttachment).not.toHaveBeenCalled();
+  });
+
   it("returns discovered metadata descriptors through the pinned contract", async () => {
     const fields = [
       {
@@ -460,6 +521,28 @@ describe("sidecar document retrieval", () => {
         env.tools().find((item) => item.name === GET_SIDECAR_DOCUMENT_TOOL)!,
     };
   };
+
+  it.each(["reject", "abort", "failure"])(
+    "never uploads a document after approval %s",
+    async (mode) => {
+      const env = setupDocument();
+      const controller = new AbortController();
+      env.options.approveFiles.mockImplementation(async (files) => {
+        if (mode === "failure") throw new Error("Preference unavailable");
+        if (mode === "abort") {
+          controller.abort();
+          return new Set(files);
+        }
+        return new Set();
+      });
+      const result = await env
+        .tool()
+        .execute(input, { ...context, signal: controller.signal });
+      expect(result.ok).toBe(false);
+      expect(env.uploadAttachment).not.toHaveBeenCalled();
+      expect(JSON.stringify(result)).not.toContain(document.contentBase64);
+    },
+  );
 
   it.each([undefined, "subject", "subject_with_thread"])(
     "uploads scope %s and replays without duplicate uploads",

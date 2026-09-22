@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handleClientToolCall } from "./handleClientToolCall";
+import { handleToolCallUpdate } from "./handleToolCallUpdate";
 import {
   abortClientToolCalls,
   registerClientToolExecutor,
   resetClientToolRegistryForTests,
+  trackClientToolCallAbort,
 } from "../clientToolExecutors";
 
 import type { MessageSubmitStreamingResponseClientToolCall } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -48,6 +50,21 @@ describe("handleClientToolCall", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     resetClientToolRegistryForTests();
+  });
+
+  it("cancels pending local approval when the server times out the tool", () => {
+    const signal = trackClientToolCallAbort("expired-call", "chat-1");
+    const other = trackClientToolCallAbort("other-call", "chat-1");
+    handleToolCallUpdate({
+      message_type: "tool_call_update",
+      message_id: "msg-1",
+      content_index: 0,
+      tool_call_id: "expired-call",
+      tool_name: "get_sidecar_document",
+      status: "error",
+    });
+    expect(signal.aborted).toBe(true);
+    expect(other.aborted).toBe(false);
   });
 
   it("runs the registered executor and POSTs its result", async () => {
