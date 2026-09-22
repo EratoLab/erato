@@ -1,6 +1,14 @@
 /* This file is generated from the canonical JSON schemas. Do not edit. */
 
 /**
+ * Externally relatable identifiers for the document. Identifier keys are open-ended so new identifier kinds do not require a protocol change.
+ */
+export type DocumentExternalIds = {
+  key: string;
+  value: string;
+}[];
+
+/**
  * One message of an Outlook conversation, with its body and attachment bytes carried inline.
  */
 export interface OutlookConversationMessage {
@@ -27,6 +35,7 @@ export interface OutlookConversationMessage {
   conversationIndex?: string;
   body?: OutlookMessageBody;
   attachments: OutlookAttachmentReference[];
+  external_ids?: DocumentExternalIds;
   [k: string]: unknown;
 }
 /**
@@ -93,5 +102,17 @@ export interface OutlookAttachmentReference {
    * Stable code explaining why bytes are not available, present instead of contentBytes. Known values include unsupported_attachment.
    */
   unavailableReason?: string;
+  external_ids?: DocumentExternalIds;
+  topLevelParent?: TopLevelParent;
   [k: string]: unknown;
+}
+/**
+ * The outermost containing document, never a folder. External IDs belong to that parent, not to the attachment.
+ */
+export interface TopLevelParent {
+  /**
+   * Catalog UUID, when indexed; can be passed to sources.get_document.v1.
+   */
+  documentId?: string;
+  external_ids: DocumentExternalIds;
 }

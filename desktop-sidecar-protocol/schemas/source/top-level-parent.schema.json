@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/source/top-level-parent.schema.json",
+  "title": "TopLevelParent",
+  "description": "The outermost containing document, never a folder. External IDs belong to that parent, not to the attachment.",
+  "type": "object",
+  "properties": {
+    "documentId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Catalog UUID, when indexed; can be passed to sources.get_document.v1."
+    },
+    "external_ids": {
+      "$ref": "./external-ids.schema.json"
+    }
+  },
+  "required": ["external_ids"],
+  "additionalProperties": false
+}

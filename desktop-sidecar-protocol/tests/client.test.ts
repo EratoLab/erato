@@ -97,6 +97,14 @@ describe("DesktopSidecarClient", () => {
 
     const attachment = message?.attachments[0];
     expect(attachment?.contentBytes).toBeDefined();
+    expect(message?.external_ids).toContainEqual({
+      key: "ews_id",
+      value: "AQMk/CaseSensitive+MockEwsId==",
+    });
+    expect(attachment?.external_ids).toEqual([]);
+    expect(attachment?.topLevelParent?.external_ids).toEqual(
+      message?.external_ids,
+    );
     expect(
       Buffer.from(attachment!.contentBytes!, "base64").toString("utf8"),
     ).toBe("mock attachment bytes");
