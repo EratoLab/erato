@@ -882,6 +882,7 @@ fn delegated_run_outcome_expression(generation_stale_after_secs: u64) -> String 
                     OR ("chats"."generation_state" = 'running'
                         AND "chats"."generation_heartbeat_at" > now() - make_interval(secs => {generation_stale_after_secs}))
                     OR "chats"."generation_state" = 'awaiting_approval'
+                    OR EXISTS (SELECT 1 FROM local_delegation_jobs j WHERE j.chat_id="chats".id AND j.generation_id="chats".active_generation_id AND j.state IN ('waiting_for_local_result','awaiting_authenticated_resume','continuing'))
                 THEN NULL
                 WHEN "chats"."generation_state" IS DISTINCT FROM 'errored'
                     AND "latest_msg"."role" = 'assistant'
@@ -2024,6 +2025,7 @@ pub(crate) fn generation_unfinished_condition(alias: &str, param_index: u8) -> S
     format!(
         r#"COALESCE(
             {alias}."generation_state" = 'awaiting_approval'
+            OR EXISTS (SELECT 1 FROM local_delegation_jobs j WHERE j.chat_id={alias}.id AND j.generation_id={alias}.active_generation_id AND j.state IN ('waiting_for_local_result','awaiting_authenticated_resume','continuing'))
             OR (
                 {alias}."generation_state" = 'running'
                 AND {alias}."generation_heartbeat_at" > now() - make_interval(secs => ${param_index}::double precision)

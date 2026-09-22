@@ -31,6 +31,10 @@ mod test_utils;
 // Using a (possibly brittle?) life-before-main method to set the DATABASE_URL before any tests run.
 #[ctor]
 fn set_test_db_url() {
+    // Allow an isolated caller-owned PostgreSQL instance for local qualification.
+    if std::env::var_os("DATABASE_URL").is_some() {
+        return;
+    }
     unsafe {
         std::env::set_var(
             "DATABASE_URL",

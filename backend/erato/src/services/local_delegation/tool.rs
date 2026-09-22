@@ -27,6 +27,51 @@ pub fn plan(input: &Value, now: i64) -> Result<Value, contract::Invalid> {
     }
     Ok(plan)
 }
+/// Initial rollout is deliberately a leaf: explicitly selected local research,
+/// in an async task with durable parent delivery, and no other execution tools.
+/// Ordinary chats, mention runs, awaited children and wildcard opt-ins stay off.
+pub fn eligible(
+    config: &crate::config::AppConfig,
+    chat: &crate::db::entity::chats::Model,
+    allowlist: &[String],
+    other_tools: bool,
+) -> bool {
+    if !config.desktop_sidecar.local_delegation.enabled
+        || !config.delegation.tasks.enabled
+        || other_tools
+        || !allowlist.iter().any(|p| p == "local/collect_evidence")
+    {
+        return false;
+    }
+    let Ok(Some(scope)) = crate::models::chat::parse_chat_configuration(chat) else {
+        return false;
+    };
+    let (Some(task), Some(origin)) = (scope.task, scope.provenance) else {
+        return false;
+    };
+    task.route == crate::models::chat::DelegateRoute::Task
+        && config
+            .delegation
+            .tasks
+            .run_modes
+            .contains(&erato_config::config::TaskRunMode::Async)
+        && origin.kind == crate::models::chat::ChatProvenanceKind::Delegation
+        && origin.origin_chat_id.is_some()
+        && origin.origin_message_id.is_some()
+        && task.facet_ids.iter().any(|id| {
+            config.facets.facets.get(id).is_some_and(|f| {
+                f.tool_call_allowlist
+                    .iter()
+                    .any(|p| p == "local/collect_evidence")
+            })
+        })
+        && origin.depth == 1
+        && origin.adopted_at.is_none()
+        && origin.run_mode == Some(crate::models::message::ProvenanceRunMode::Async)
+        && task.max_client_tool_calls_per_task.is_some_and(|n| n > 0)
+        && task.max_server_tool_calls_per_task.is_some()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1621,7 +1621,15 @@ pub(crate) async fn build_result_envelope<C: sea_orm::ConnectionTrait>(
             .and_then(|part| part.get("content_type"))
             .and_then(|content_type| content_type.as_str())
             .is_some_and(|content_type| content_type == "tool_approval_request");
-        if stopped_on_approval && status == DelegationRunStatus::Completed {
+        let stopped_on_local_consent = content.iter().any(|part| {
+            part["content_type"] == "tool_use"
+                && part["tool_name"] == crate::services::local_delegation::tool::NAME
+                && part["status"] == "in_progress"
+                && part["output"]["status"] == "awaiting_local_consent"
+        });
+        if (stopped_on_approval || stopped_on_local_consent)
+            && status == DelegationRunStatus::Completed
+        {
             // The child stopped to ask, which is not a result and not a
             // failure. The awaited path normally never gets here — it hands
             // the request to the origin turn before building an envelope —

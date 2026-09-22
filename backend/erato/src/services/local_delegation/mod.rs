@@ -4,6 +4,7 @@ pub mod contract;
 pub mod signing;
 pub mod store;
 pub mod tool;
+pub mod uploads;
 
 use crate::models::message::{ContentPart, GenerationMetadata};
 use serde::{Deserialize, Serialize};
@@ -37,6 +38,11 @@ impl Consumption {
 #[serde(deny_unknown_fields)]
 pub struct Checkpoint {
     pub version: u32,
+    pub selected_facets: Vec<String>,
+    pub max_tool_calls: u32,
+    pub max_model_turns: u32,
+    pub result_applied: bool,
+    pub model_finished: bool,
     pub request: genai::chat::ChatRequest,
     pub content: Vec<ContentPart>,
     pub pending_calls: Vec<genai::chat::ToolCall>,

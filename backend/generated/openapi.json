@@ -2390,9 +2390,12 @@
           }
         ],
         "requestBody": {
+          "description": "Exact native-approved export validated against desktop-sidecar-protocol ApprovedLocalExport",
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "type": "object"
+              }
             }
           },
           "required": true
@@ -2407,6 +2410,30 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/v1beta/me/local-delegation/jobs/{id}/resume": {
+      "post": {
+        "tags": [
+          "local_delegation"
+        ],
+        "operationId": "resume",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": ""
           }
         }
       }
@@ -8993,9 +9020,13 @@
         "type": "object",
         "required": [
           "enabled",
+          "accountId",
           "jobs"
         ],
         "properties": {
+          "accountId": {
+            "type": "string"
+          },
           "enabled": {
             "type": "boolean"
           },
@@ -9004,6 +9035,13 @@
             "items": {
               "$ref": "#/components/schemas/JobResponse"
             }
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
           }
         }
       },

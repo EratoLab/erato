@@ -1,7 +1,7 @@
 //! Authenticated rendezvous. Bodies contain cloud-known plans or approved bytes;
 //! native handles, pre-consent statuses and error reports are not accepted here.
 use super::me_profile_middleware::MeProfile;
-use crate::services::local_delegation::{signing::Signer, store};
+use crate::services::local_delegation::{signing::Signer, store, uploads};
 use crate::{
     policy::{
         engine::{PolicyEngine, authorize},
@@ -111,9 +111,18 @@ impl From<store::PendingJob> for JobResponse {
         }
     }
 }
+#[derive(Deserialize, ToSchema, Default)]
+#[serde(deny_unknown_fields)]
+pub struct PendingQuery {
+    pub after: Option<Uuid>,
+}
+
 #[derive(Serialize, ToSchema)]
 pub struct PendingResponse {
     pub enabled: bool,
+    #[serde(rename = "accountId")]
+    pub account_id: String,
+    pub next: Option<Uuid>,
     pub jobs: Vec<JobResponse>,
 }
 #[derive(Serialize, ToSchema)]
@@ -153,6 +162,7 @@ pub async fn context(
 }
 #[utoipa::path(get,path="/me/local-delegation/jobs",responses((status=200,body=PendingResponse)))]
 pub async fn pending(
+    axum::extract::Query(query): axum::extract::Query<PendingQuery>,
     State(state): State<AppState>,
     Extension(me): Extension<MeProfile>,
     Extension(policy): Extension<PolicyEngine>,
@@ -160,20 +170,25 @@ pub async fn pending(
     if !state.config.desktop_sidecar.local_delegation.enabled {
         return Ok(Json(PendingResponse {
             enabled: false,
+            account_id: me.id.clone(),
+            next: None,
             jobs: vec![],
         }));
     }
     signer(&state)?;
-    store::recover(&state.db).await.map_err(unavailable)?;
+    store::recover(&state.db, state.config.generation_status.stale_after_secs)
+        .await
+        .map_err(unavailable)?;
     policy
         .rebuild_data_if_needed_req(&state.db, &state.config)
         .await
         .map_err(unavailable)?;
     let mut jobs = Vec::new();
-    for job in store::pending(&state.db, &me.id)
+    let page = store::pending(&state.db, &me.id, query.after)
         .await
-        .map_err(unavailable)?
-    {
+        .map_err(unavailable)?;
+    let next = (page.len() == 128).then(|| page.last().unwrap().id);
+    for job in page {
         if authorize!(
             policy,
             &me.to_subject(),
@@ -187,6 +202,8 @@ pub async fn pending(
     }
     Ok(Json(PendingResponse {
         enabled: true,
+        account_id: me.id.clone(),
+        next,
         jobs,
     }))
 }
@@ -224,7 +241,7 @@ pub async fn claim(
         authorization,
     }))
 }
-#[utoipa::path(post,path="/me/local-delegation/jobs/{id}/complete",params(("id"=Uuid,Path)),request_body=Value,responses((status=200,body=ReceiptResponse)))]
+#[utoipa::path(post,path="/me/local-delegation/jobs/{id}/complete",params(("id"=Uuid,Path)),request_body(content=Object,description="Exact native-approved export validated against desktop-sidecar-protocol ApprovedLocalExport"),responses((status=200,body=ReceiptResponse)))]
 pub async fn complete(
     State(state): State<AppState>,
     Extension(me): Extension<MeProfile>,
@@ -233,8 +250,24 @@ pub async fn complete(
     Json(package): Json<Value>,
 ) -> Result<Json<ReceiptResponse>, ApiError> {
     let signer = signer(&state)?;
-    authorize_job(&state, &policy, &me, id).await?;
-    let receipt = store::accept(&state.db, id, &me.id, &package, |claims| {
+    let job = authorize_job(&state, &policy, &me, id).await?;
+    if let Some(receipt) = store::accepted_receipt(&state.db, id, &me.id, &package)
+        .await
+        .map_err(conflict)?
+    {
+        return Ok(Json(ReceiptResponse { receipt }));
+    }
+    authorize!(
+        &policy,
+        &me.to_subject(),
+        &Resource::Chat(job.chat_id.to_string()),
+        Action::Update
+    )
+    .map_err(|_| (StatusCode::FORBIDDEN, "Attachment access denied"))?;
+    let files = uploads::stage(&state, &job, &package)
+        .await
+        .map_err(conflict)?;
+    let receipt = store::accept_files(&state.db, id, &me.id, &package, files, |claims| {
         signer.sign("receipt-claims", claims)
     })
     .await
@@ -249,9 +282,34 @@ pub async fn cancel(
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     signer(&state)?;
-    authorize_job(&state, &policy, &me, id).await?;
-    store::cancel(&state.db, id, &me.id)
+    let job = authorize_job(&state, &policy, &me, id).await?;
+    let cancelled_generation = store::cancel(&state.db, id, &me.id)
         .await
         .map_err(conflict)?;
+    // The durable terminal state rejects late writes; the existing local task
+    // signal promptly stops this single replica's active model request.
+    if let Some(task) = state.background_tasks.get_task(&job.chat_id).await
+        && cancelled_generation == Some(task.generation_id)
+    {
+        task.request_abort();
+    }
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(post,path="/me/local-delegation/jobs/{id}/resume",params(("id"=Uuid,Path)),responses((status=202)))]
+pub async fn resume(
+    State(state): State<AppState>,
+    Extension(me): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    signer(&state)?;
+    authorize_job(&state, &policy, &me, id).await?;
+    store::recover(&state.db, state.config.generation_status.stale_after_secs)
+        .await
+        .map_err(unavailable)?;
+    super::message_streaming::local_jobs::launch(state, policy, me, id)
+        .await
+        .map_err(conflict)?;
+    Ok(StatusCode::ACCEPTED)
 }

@@ -1,3 +1,4 @@
+pub(crate) mod local_jobs;
 use crate::config::{
     FacetsConfig, HallucinationSuppressionConfig, McpToolApprovalConfig, McpToolApprovalPreset,
 };
@@ -3499,6 +3500,18 @@ pub(crate) async fn prepare_chat_request_with_adapters(
             ));
         }
     }
+    if !mcp_claimed_names.contains(crate::services::local_delegation::tool::NAME)
+        && crate::services::local_delegation::tool::eligible(
+            &app_state.config,
+            chat,
+            &client_tool_allowlist,
+            !chat_request_tools.is_empty(),
+        )
+    {
+        chat_request_tools.push(crate::services::local_delegation::tool::build(
+            effective_model_settings.compat_omit_strict,
+        ));
+    }
     if !chat_request_tools.is_empty() {
         chat_request.tools = Some(chat_request_tools);
     } else {
@@ -5647,6 +5660,54 @@ async fn stream_generate_chat_completion<
             // and neither delegation tool (`delegate_to_assistant`,
             // `delegate_task`) is a client tool; hallucinated names were
             // already rejected by the `allowed_tool_names` check above.
+            if unfinished_tool_call.fn_name == crate::services::local_delegation::tool::NAME {
+                let task = streaming_task
+                    .ok_or_else(|| eyre!("Local delegation requires a durable generation lease"))?;
+                let metadata = build_generation_metadata(
+                    total_prompt_tokens,
+                    total_completion_tokens,
+                    total_total_tokens,
+                    total_reasoning_tokens,
+                    langfuse_trace_id.clone(),
+                    false,
+                    None,
+                    non_empty_string(&captured_reasoning_summary),
+                    non_empty_vec(&captured_reasoning_items),
+                    non_empty_vec(&captured_reasoning_item_encrypted_content),
+                );
+                let content = local_jobs::park_initial(
+                    app_state,
+                    task,
+                    &user_id,
+                    chat_id,
+                    assistant_message_id,
+                    chat_provider_id.ok_or_else(|| eyre!("Missing local research provider"))?,
+                    &unfinished_tool_call,
+                    unfinished_tool_calls.iter().cloned().collect(),
+                    current_turn_chat_request.clone(),
+                    current_message_content.clone(),
+                    &current_turn_tool_responses,
+                    metadata,
+                    crate::services::local_delegation::Consumption {
+                        model_turns: current_turn.saturating_sub(1) as u32,
+                        tool_calls: current_tool_call_count,
+                        server_tool_calls: task_server_tool_calls,
+                        client_tool_calls: task_client_tool_calls,
+                        submission_attempts: submission_attempts
+                            .iter()
+                            .map(|(k, v)| (k.clone(), *v))
+                            .collect(),
+                        client_action_already_proposed,
+                    },
+                    task_tool_budgets,
+                    &allowed_tool_names,
+                )
+                .await?;
+                // The job transaction already persisted content and metadata. The
+                // ordinary tail only publishes that durable row, then releases its lease.
+                break 'loop_call_turns Ok((content, None));
+            }
+
             if !available_mcp_tools_by_name.contains_key(unfinished_tool_call.fn_name.as_str()) {
                 let call_id = unfinished_tool_call.call_id.clone();
                 let tool_name = unfinished_tool_call.fn_name.clone();
@@ -8050,15 +8111,25 @@ async fn bg_stream_update_assistant_message_completion(
     assistant_message_id: Uuid,
 ) -> Result<(), Report> {
     let _persistence_timer = crate::latency::StageTimer::new("generation.final_persistence");
-    let updated_assistant_message = crate::models::message::update_message_content(
-        &app_state.db,
-        policy,
-        &me_user.to_subject(),
-        &assistant_message_id,
-        final_content_parts.clone(),
-    )
-    .await
-    .wrap_err("Failed to update assistant message content")?;
+    let updated_assistant_message = if local_jobs::is_waiting(&final_content_parts) {
+        get_message_by_id(
+            &app_state.db,
+            policy,
+            &me_user.to_subject(),
+            &assistant_message_id,
+        )
+        .await?
+    } else {
+        crate::models::message::update_message_content(
+            &app_state.db,
+            policy,
+            &me_user.to_subject(),
+            &assistant_message_id,
+            final_content_parts.clone(),
+        )
+        .await
+        .wrap_err("Failed to update assistant message content")?
+    };
 
     mark_task_awaiting_approval_if_parked(task, &final_content_parts);
 
@@ -13461,6 +13532,27 @@ pub async fn abort_message_stream(
         )
     })?
     .0;
+
+    let local_aborted = crate::services::local_delegation::store::abort_chat(
+        &app_state.db,
+        request.chat_id,
+        &me_user.id,
+    )
+    .await
+    .map_err(|_| {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to cancel local task".into(),
+        )
+    })?;
+    if local_aborted {
+        if let Some(task) = app_state.background_tasks.get_task(&request.chat_id).await {
+            task.request_abort();
+        }
+        return Ok(Json(AbortStreamResponse {
+            abort_requested: true,
+        }));
+    }
 
     if let Some(task) = app_state.background_tasks.get_task(&request.chat_id).await {
         task.request_abort();

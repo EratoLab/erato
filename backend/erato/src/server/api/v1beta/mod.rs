@@ -154,6 +154,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/local-delegation/context", post(local_delegation::context))
         .route("/local-delegation/jobs", get(local_delegation::pending))
         .route(
+            "/local-delegation/jobs/{id}/resume",
+            post(local_delegation::resume),
+        )
+        .route(
             "/local-delegation/jobs/{id}/claim",
             post(local_delegation::claim),
         )
@@ -467,6 +471,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         local_delegation::claim,
         local_delegation::complete,
         local_delegation::cancel,
+        local_delegation::resume,
         desktop_sidecar::organization_configuration,
         desktop_sidecar::distribution,
         desktop_sidecar::download_distribution_artifact,

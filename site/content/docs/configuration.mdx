@@ -612,8 +612,8 @@ Office actions, arbitrary scripts and local inference are outside this profile.
 `backend_origin` is the canonical HTTPS issuer, for example
 `https://erato.example.com`. `signing_key_id` selects an Ed25519 key in
 `verification_keys`, a map of key IDs to base64url public keys without padding.
-`signing_private_key_pem` is the matching PKCS#8 PEM secret, held only by backend
-replicas. Distribute the same signing authority across replicas. Personalized
+`signing_private_key_pem` is the matching PKCS#8 PEM secret, held only by the single
+backend replica. This task feature supports one backend replica only. Personalized
 native downloads receive only the origin and public verification keys. Retain
 old public keys for at least the maximum seven-day job lifetime plus the
 seven-day receipt/tombstone retention period; update installations before rotation.

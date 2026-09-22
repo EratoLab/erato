@@ -84,6 +84,9 @@ impl TaskOutcome {
 /// mounted approval card would strand it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Takeover {
+    /// Authenticated recovery of this durable local job through the existing
+    /// chat generation lifecycle (single backend replica).
+    ResumeLocalJob(Uuid),
     /// A user-initiated write: may take a parked lease.
     TakeParked,
     /// A system-initiated turn: leaves a parked lease alone.
@@ -304,13 +307,24 @@ impl BackgroundTaskManager {
         }
 
         let Some(db) = &self.db else {
+            if matches!(takeover, Takeover::ResumeLocalJob(_)) {
+                return Err(LeaseHeld {
+                    active_generation_id: None,
+                    started_at: None,
+                });
+            }
             // No persistence configured: there is no shared lease to contend
             // for, so fall back to the in-memory path.
             return Ok(self.start_task(chat_id, message_id).await);
         };
 
         let generation_id = Uuid::new_v4();
-        let take_parked = matches!(takeover, Takeover::TakeParked);
+        let take_parked = !matches!(takeover, Takeover::RefuseParked);
+        let local_job = if let Takeover::ResumeLocalJob(id) = takeover {
+            Some(id)
+        } else {
+            None
+        };
 
         let txn = match db.begin().await {
             Ok(txn) => txn,
@@ -329,6 +343,7 @@ impl BackgroundTaskManager {
             message_id,
             generation_id,
             take_parked,
+            local_job,
             stale_after_secs,
         )
         .await;
@@ -404,6 +419,7 @@ impl BackgroundTaskManager {
         message_id: Uuid,
         generation_id: Uuid,
         take_parked: bool,
+        local_job: Option<Uuid>,
         stale_after_secs: u64,
     ) -> Result<bool, sea_orm::DbErr> {
         // Serialize same-chat contenders. Transaction-scoped, so it is
@@ -415,6 +431,25 @@ impl BackgroundTaskManager {
             [chat_id.to_string().into()],
         );
         txn.query_one_raw(lock_statement).await?;
+        if let Some(id) = local_job {
+            // Consistent lock order with acceptance, archive and checkpoint writes.
+            let chat_lock = sea_orm::Statement::from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                "SELECT id FROM chats WHERE id=$1 AND archived_at IS NULL FOR UPDATE",
+                vec![chat_id.into()],
+            );
+            if txn.query_one_raw(chat_lock).await?.is_none() {
+                return Ok(false);
+            }
+            let job_lock = sea_orm::Statement::from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                "SELECT j.id FROM local_delegation_jobs j JOIN chats c ON c.id=j.chat_id WHERE j.id=$1 AND j.chat_id=$2 AND j.message_id=$3 AND j.generation_id=c.active_generation_id AND j.state IN ('awaiting_authenticated_resume','continuing') FOR UPDATE OF j",
+                vec![id.into(), chat_id.into(), message_id.into()],
+            );
+            if txn.query_one_raw(job_lock).await?.is_none() {
+                return Ok(false);
+            }
+        }
 
         // `generation_heartbeat_at` is nullable, and NULL compares to NULL
         // rather than to false, so a row left 'running' without one would
@@ -452,6 +487,19 @@ impl BackgroundTaskManager {
 
         if txn.query_one_raw(claim_statement).await?.is_none() {
             return Ok(false);
+        }
+
+        if let Some(id) = local_job {
+            txn.execute_raw(sea_orm::Statement::from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                "UPDATE local_delegation_jobs SET state='continuing',generation_id=$2 WHERE id=$1",
+                vec![id.into(), generation_id.into()],
+            ))
+            .await?;
+        } else {
+            crate::services::local_delegation::store::abandon_in(txn, chat_id)
+                .await
+                .map_err(|error| sea_orm::DbErr::Custom(error.to_string()))?;
         }
 
         // Only now is the shared row ours to replace: doing this before the
@@ -985,7 +1033,11 @@ impl BackgroundTaskManager {
                 POSTGRES_QUERY_GENERATION_REAP,
                 r#"
                 UPDATE chats
-                SET generation_state = 'errored', generation_ended_at = now()
+                SET generation_state = CASE WHEN EXISTS (
+                    SELECT 1 FROM local_delegation_jobs j WHERE j.chat_id=chats.id
+                    AND j.generation_id=chats.active_generation_id
+                    AND j.state IN ('waiting_for_local_result','awaiting_authenticated_resume','continuing')
+                ) THEN 'awaiting_approval' ELSE 'errored' END, generation_ended_at = now()
                 WHERE generation_state = 'running'
                   AND generation_heartbeat_at < now() - make_interval(secs => $1::double precision)
                 "#,

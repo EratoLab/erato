@@ -16288,3 +16288,200 @@ async fn facet_override_beats_global_policy(pool: Pool<Postgres>) {
             .is_empty()
     );
 }
+
+/// Native-reviewed research uses the real initial tool loop, authenticated APIs
+/// and the existing single-replica task lifecycle. No native plaintext is supplied
+/// until the synthetic approved package is posted.
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn local_research_parks_and_resumes_in_the_single_backend(pool: Pool<Postgres>) {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    use erato::services::local_delegation::{contract, store};
+    use sea_orm::ConnectionTrait;
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post().path("/v1/chat/completions").matcher(BodyContainsMatcher::new(&["APPROVED_LOCAL_MARKER"], &[]));
+        then.status(http::StatusCode::OK).json(json!({"id":"final","object":"chat.completion","created":1,"model":"gpt-3.5-turbo","choices":[{"index":0,"message":{"role":"assistant","content":"LOCAL-RESEARCH-FINISHED"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":4,"total_tokens":14}}));
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["local_collect_evidence"],
+                &["APPROVED_LOCAL_MARKER"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_local",
+                "local_collect_evidence",
+                json!({"queryVariants":["quarterly"]}),
+            )]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["LOCAL-CHILD-BRIEF"],
+                &["local_collect_evidence"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&[
+                "Task queued for local review.",
+            ]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post().path("/v1/chat/completions").matcher(BodyContainsMatcher::new(&["LOCAL-ROOT-REQUEST"], &["LOCAL-CHILD-BRIEF", "local_collect_evidence"]));
+        mock_llm_sse_response(then, crate::test_utils::build_openai_tool_calls_streaming_response(&[("call_parent_local", "delegate_task", json!({"task":"LOCAL-CHILD-BRIEF: collect evidence", "facet_ids":["local_research"],"run_mode":"async"}))]));
+    });
+    // Isolated storage endpoint: no dependency on the developer's SeaweedFS.
+    mocks.mock(|when, then| {
+        when.put();
+        then.status(http::StatusCode::OK);
+    });
+    let (mut config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    config.delegation.tasks.enabled = true;
+    config.delegation.tasks.run_modes = vec![erato_config::config::TaskRunMode::Async];
+    config.desktop_sidecar.allowed_origins = vec!["https://app.example".into()];
+    config.desktop_sidecar.local_delegation = serde_json::from_value(json!({"enabled":true,"backend_origin":"https://erato.example","signing_key_id":"fixture","signing_private_key_pem":"-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIAcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH\n-----END PRIVATE KEY-----\n","verification_keys":{"fixture":"6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw"}})).unwrap();
+    for (id, allowlist) in [
+        ("plan", vec!["erato/delegate_task"]),
+        ("local_research", vec!["local/collect_evidence"]),
+    ] {
+        config.facets.facets.insert(
+            id.into(),
+            serde_json::from_value(json!({"display_name":id,"tool_call_allowlist":allowlist}))
+                .unwrap(),
+        );
+        config.facet_permissions.rules.insert(
+            id.into(),
+            erato_config::config::FacetPermissionRule::AllowAll {
+                facet_ids: vec![id.into()],
+            },
+        );
+    }
+    config.facets.facets.get_mut("plan").unwrap().delegation = Some(serde_json::from_value(json!({"child_facet_ids":["local_research"],"run_modes":["async"],"max_server_tool_calls_per_task":0,"max_client_tool_calls_per_task":2})).unwrap());
+    config.file_storage_providers.insert("seaweedfs".into(), serde_json::from_value(json!({"provider_kind":"s3","config":{"endpoint":_llm.url("/").to_string(),"bucket":"local-test","region":"us-east-1","access_key_id":"fixture","secret_access_key":"fixture"}})).unwrap());
+    let app_state = test_app_state(config, pool).await;
+    let server = app_server(app_state.clone());
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let owner = me.id.to_string();
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, "LOCAL-ROOT-REQUEST", &["plan"]).await;
+    assert!(!format!("{events:?}").contains("APPROVED_LOCAL_MARKER"));
+    let parent_message = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    let approved_plan =
+        post_continuestream_decisions(&server, parent_message, &[("plan:1:0", "approve")]).await;
+    approved_plan.assert_status_ok();
+
+    let job = tokio::time::timeout(std::time::Duration::from_secs(15), async {
+        loop {
+            let jobs = store::pending(&app_state.db, &owner, None).await.unwrap();
+            if let Some(job) = jobs.into_iter().next() {
+                break job;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("initial generation must park durably");
+    let path = format!("/api/v1beta/me/local-delegation/jobs/{}", job.id);
+    server
+        .post(&format!("{path}/claim"))
+        .json(&json!({"deviceId":"d".repeat(43)}))
+        .await
+        .assert_status(http::StatusCode::UNAUTHORIZED);
+    let claim = server
+        .post(&format!("{path}/claim"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header("origin", "https://app.example")
+        .json(&json!({"deviceId":"d".repeat(43)}))
+        .await;
+    claim.assert_status_ok();
+    let claim = claim.json::<Value>();
+    server
+        .post(&format!("{path}/claim"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header("origin", "https://app.example")
+        .json(&json!({"deviceId":"x".repeat(43)}))
+        .await
+        .assert_status(http::StatusCode::CONFLICT);
+    let bytes = b"APPROVED_LOCAL_MARKER";
+    let mut package = json!({"binding":claim["job"]["binding"],"exportId":"e".repeat(43),"snapshotId":"s".repeat(43),"grantId":"g".repeat(43),"approvedAt":chrono::Utc::now().timestamp(),"expiresAt":job.plan["expiresAt"],"artifacts":[{"artifactId":"a".repeat(43),"filename":"approved.txt","mediaType":"text/plain","byteLength":bytes.len(),"sha256":contract::digest(bytes),"contentBase64":STANDARD.encode(bytes)}]});
+    package["manifestDigest"] = json!(contract::manifest_digest(&package).unwrap());
+    let accepted = server
+        .post(&format!("{path}/complete"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&package)
+        .await;
+    accepted.assert_status_ok();
+    let retry = server
+        .post(&format!("{path}/complete"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&package)
+        .await;
+    retry.assert_status_ok();
+    assert_eq!(accepted.json::<Value>(), retry.json::<Value>());
+    server
+        .post(&format!("{path}/resume"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .assert_status(http::StatusCode::ACCEPTED);
+    tokio::time::timeout(std::time::Duration::from_secs(15), async {
+        loop {
+            if store::get(&app_state.db, job.id, &owner)
+                .await
+                .unwrap()
+                .state
+                == "completed"
+            {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("the task must complete the saved checkpoint");
+    let row = app_state
+        .db
+        .query_one_raw(sea_orm::Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT checkpoint FROM local_delegation_jobs WHERE id=$1",
+            vec![job.id.into()],
+        ))
+        .await
+        .unwrap()
+        .unwrap();
+    let checkpoint: Value = row.try_get("", "checkpoint").unwrap();
+    assert_eq!(checkpoint["consumption"]["tool_calls"], 1);
+    assert_eq!(checkpoint["consumption"]["client_tool_calls"], 1);
+    assert_eq!(checkpoint["consumption"]["model_turns"], 2);
+    assert!(checkpoint.to_string().contains("LOCAL-RESEARCH-FINISHED"));
+    server
+        .post(&format!("{path}/complete"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&package)
+        .await
+        .assert_status_ok();
+    assert_eq!(
+        store::pending(&app_state.db, &owner, None)
+            .await
+            .unwrap()
+            .len(),
+        1,
+        "completed receipt remains recoverable by a returning native device"
+    );
+}

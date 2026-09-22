@@ -16,9 +16,7 @@ CREATE TABLE public.local_delegation_jobs (
     origin text,
     state text NOT NULL DEFAULT 'waiting_for_local_result'
         CHECK (state IN ('waiting_for_local_result','awaiting_authenticated_resume','continuing','completed','cancelled','expired')),
-    fence bigint NOT NULL DEFAULT 0 CHECK (fence >= 0),
     generation_id uuid,
-    lease_until timestamptz,
     approved_export jsonb,
     server_outcome jsonb CHECK (server_outcome IS NULL OR server_outcome IN ('{"status":"expired"}'::jsonb,'{"status":"cancelled"}'::jsonb)),
     receipt text,
@@ -34,7 +32,6 @@ CREATE TABLE public.local_delegation_jobs (
 );
 CREATE INDEX local_delegation_owner_pending_idx ON public.local_delegation_jobs(owner_user_id,created_at)
     WHERE state IN ('waiting_for_local_result','awaiting_authenticated_resume','continuing');
-CREATE INDEX local_delegation_lease_idx ON public.local_delegation_jobs(lease_until)
-    WHERE state='continuing';
+CREATE INDEX local_delegation_chat_idx ON public.local_delegation_jobs(chat_id);
 COMMENT ON TABLE public.local_delegation_jobs IS 'Durable local task/checkpoint, exact approved export and continuation intent; never store frontend/native handles, native statuses, or access/refresh tokens';
 COMMIT;
