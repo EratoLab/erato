@@ -18,10 +18,12 @@ Windows AppContainer worker/descendant tokens and synthetic-cache reads were
 exercised on Parallels, but that narrow test is not platform qualification.
 See the native repository's `security-probes/README.md` and reproducers.
 No production platform is qualified, and no durable native/backend/coordinator
-integration has been implemented past this prerequisite. The decision is to
-keep macOS strict mode unavailable and qualify Windows independently, or first
-prove an additional supported macOS enforcement mechanism. Neither option
-weakens the pre-consent guarantee. All reserved methods remain disabled.
+integration has been implemented past this prerequisite. Owner decision
+(2026-09-22): defer a signed macOS application for now. Keep strict delegation
+unavailable on macOS and qualify the Windows boundary independently. The
+macOS signing/confinement work no longer blocks Windows development; the
+pre-consent guarantee remains unchanged. All reserved methods remain disabled
+until the Windows security and recovery prerequisites pass.
 
 ## Trust and rollout
 
