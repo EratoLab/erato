@@ -19,6 +19,8 @@ pub struct Model {
     pub owner_user_id: String,
     #[sea_orm(column_type = "Text", nullable)]
     pub audio_transcription: Option<String>,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub external_id_ews_id: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

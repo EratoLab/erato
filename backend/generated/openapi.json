@@ -2089,6 +2089,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "external_id_ews_id",
+            "in": "query",
+            "description": "Optional external EWS ID to persist on each file in this request. Upload files with different IDs in separate requests.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -4428,6 +4437,10 @@
               "null"
             ],
             "description": "Pre-signed URL for downloading the file.\nNull when file contents are unavailable for the current user due to missing permissions."
+          },
+          "external_id_ews_id": {
+            "type": "string",
+            "description": "External Exchange Web Services ID for deep linking to the original item."
           },
           "file_capability": {
             "$ref": "#/components/schemas/FileCapability",
@@ -7216,6 +7229,10 @@
           "download_url": {
             "type": "string",
             "description": "Pre-signed URL for downloading the file directly from storage"
+          },
+          "external_id_ews_id": {
+            "type": "string",
+            "description": "External Exchange Web Services ID for deep linking to the original item."
           },
           "file_capability": {
             "$ref": "#/components/schemas/FileCapability",

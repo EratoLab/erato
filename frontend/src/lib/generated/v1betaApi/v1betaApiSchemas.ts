@@ -264,6 +264,10 @@ export type AssistantFile = {
    * Null when file contents are unavailable for the current user due to missing permissions.
    */
   download_url?: string | null | undefined;
+  /**
+   * External Exchange Web Services ID for deep linking to the original item.
+   */
+  external_id_ews_id?: string;
   file_capability: FileCapability;
   /**
    * Indicates that file contents are unavailable for the current user due to missing permissions.
@@ -1683,6 +1687,10 @@ export type FileUploadItem = {
    * Pre-signed URL for downloading the file directly from storage
    */
   download_url: string;
+  /**
+   * External Exchange Web Services ID for deep linking to the original item.
+   */
+  external_id_ews_id?: string;
   file_capability: FileCapability;
   /**
    * Indicates that file contents are unavailable for the current user due to missing permissions.
