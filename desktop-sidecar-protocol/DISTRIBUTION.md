@@ -508,16 +508,24 @@ define:
   which belong to the build and deployment pipeline.
 
 These concerns MAY affect how bytes are produced or verified, but they MUST NOT
-add fields to this manifest or write derived files into the artifact root.
+add signing/integrity fields to this manifest or write derived files into the artifact root.
 
 ## Strict delegation packaging gate
 
-The reserved strict snapshot contract in [DELEGATION.md](./DELEGATION.md) does
-not qualify current distribution artifacts. Native `content_release` policy
-values are `legacy` and `strict_snapshot_v1`; the latter currently refuses
-startup. Do not personalize older bootstrap-v1 binaries with this requirement:
-unknown fields were historically ignored. Support must be validated against
-the actual artifact, not inferred from the presence of a JSON field.
+The strict snapshot contract in [DELEGATION.md](./DELEGATION.md) does not by
+itself qualify distribution artifacts. Each manifest target MAY declare
+`local_delegation_profile: "strict_snapshot_v1"`; omitted/null means unsupported.
+Current native Windows/macOS builds declare this implementation profile; Linux
+must not. A strict backend MUST exclude targets without that exact profile.
+This is a compatibility gate, not a statement of host qualification. Deployment
+still verifies the artifact's trusted source and tested behavior.
+
+The personalized bootstrap uses `content_release: "strict_snapshot_v1"` and a
+`local_delegation` object containing `backend_origin` and `verification_keys`
+(public Ed25519 base64url keys by key ID). Backend signing private keys MUST NOT
+be included. Unsupported review platforms or missing/invalid trust policy fail
+startup closed. Do not personalize older bootstrap-v1 binaries with this
+requirement: unknown fields were historically ignored.
 
 Native exact-snapshot delegation requires bundled inert review assets, private
 review-to-store communication and tested consent/export/recovery behavior.
