@@ -4701,13 +4701,15 @@ fn test_ms_office_addin_document_id_must_be_present_and_distinct() {
         "unexpected error: {error}"
     );
 
-    let mut blank_name = MsOfficeAddinConfig::default();
-    blank_name.document = MsOfficeAddinDocumentConfig {
-        addin_id: "11111111-1111-1111-1111-111111111111".to_string(),
-        manifest: MsOfficeAddinDocumentManifestConfig {
-            display_name: " ".to_string(),
-            description: "Erato".to_string(),
+    let blank_name = MsOfficeAddinConfig {
+        document: MsOfficeAddinDocumentConfig {
+            addin_id: "11111111-1111-1111-1111-111111111111".to_string(),
+            manifest: MsOfficeAddinDocumentManifestConfig {
+                display_name: " ".to_string(),
+                description: "Erato".to_string(),
+            },
         },
+        ..Default::default()
     };
     let error = blank_name
         .validate()
