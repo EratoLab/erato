@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-document-v1-params.schema.json",
+  "title": "SourcesGetDocumentV1Params",
+  "type": "object",
+  "properties": {
+    "documentId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "subject_scope": {
+      "type": "string",
+      "enum": ["subject", "subject_with_thread"],
+      "default": "subject"
+    }
+  },
+  "required": ["documentId"],
+  "additionalProperties": false
+}

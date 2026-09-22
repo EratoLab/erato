@@ -75,6 +75,8 @@ export type {
   SourceFolderHierarchyNode,
   SourcesGetFolderHierarchyV1Params,
   SourcesGetFolderHierarchyV1Result,
+  SourcesGetDocumentV1Params,
+  SourcesGetDocumentV1Result,
   SourcesListV1Params,
   SourcesListV1Result,
   ProtocolErrorData,

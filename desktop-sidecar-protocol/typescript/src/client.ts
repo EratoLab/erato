@@ -37,6 +37,8 @@ import {
   validateSidecarRestartV1Result,
   validateSidecarConfigureV1Params,
   validateSidecarConfigureV1Result,
+  validateSourcesGetDocumentV1Params,
+  validateSourcesGetDocumentV1Result,
   validateSourcesListV1Params,
   validateSourcesListV1Result,
   validateSourcesGetFolderHierarchyV1Params,
@@ -83,6 +85,8 @@ import type {
   SidecarRestartV1Result,
   SidecarConfigureV1Params,
   SidecarConfigureV1Result,
+  SourcesGetDocumentV1Params,
+  SourcesGetDocumentV1Result,
   SourcesListV1Params,
   SourcesListV1Result,
   SourcesGetFolderHierarchyV1Params,
@@ -196,6 +200,10 @@ const builtInContracts: Readonly<Record<string, SidecarMethodContract>> = {
   "outlook.list_mailboxes.v1": {
     validateParams: validateOutlookListMailboxesV1Params,
     validateResult: validateOutlookListMailboxesV1Result,
+  },
+  "sources.get_document.v1": {
+    validateParams: validateSourcesGetDocumentV1Params,
+    validateResult: validateSourcesGetDocumentV1Result,
   },
   "sources.list.v1": {
     validateParams: validateSourcesListV1Params,
@@ -344,6 +352,11 @@ export class DesktopSidecarClient {
     params: OutlookListMailboxesV1Params,
     options?: InvokeOptions,
   ): Promise<OutlookListMailboxesV1Result>;
+  async invoke(
+    method: "sources.get_document.v1",
+    params: SourcesGetDocumentV1Params,
+    options?: InvokeOptions,
+  ): Promise<SourcesGetDocumentV1Result>;
   async invoke(
     method: "sources.list.v1",
     params: SourcesListV1Params,
