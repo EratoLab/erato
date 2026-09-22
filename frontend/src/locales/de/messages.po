@@ -4654,8 +4654,8 @@ msgstr "Benutzer"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
-msgid "sidecar.indexing.attachments"
-msgstr "{indexed} / {total} Anhänge indexiert"
+#~ msgid "sidecar.indexing.attachments"
+#~ msgstr "{indexed} / {total} Anhänge indexiert"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -4664,13 +4664,23 @@ msgstr "Lokale Suche auf diesem Gerät"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
-msgid "sidecar.indexing.documents"
-msgstr "{indexed} / {total} Dokumente indexiert"
+msgid "sidecar.indexing.decreasePriority"
+msgstr "Priorität verringern"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
-msgid "sidecar.indexing.emails"
-msgstr "{indexed} / {total} E-Mails indexiert"
+msgid "sidecar.indexing.discoveredTotals"
+msgstr "Die Gesamtzahlen beziehen sich auf erfasste Dokumente und können während des Scans steigen."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#~ msgid "sidecar.indexing.documents"
+#~ msgstr "{indexed} / {total} Dokumente indexiert"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#~ msgid "sidecar.indexing.emails"
+#~ msgstr "{indexed} / {total} E-Mails indexiert"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -4679,13 +4689,28 @@ msgstr "Keine lokalen Postfächer gefunden."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.emptyDocuments"
+msgstr "Leere Dokumente enthalten keinen durchsuchbaren Text. Daher liegt die Abdeckung unter 100%."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.enable"
 msgstr "Indexierung für {mailbox} aktivieren"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
-msgid "sidecar.indexing.knownTotals"
-msgstr "Die Gesamtzahlen beziehen sich auf erfasste Elemente. Ein Strich bedeutet, dass noch keine Statistiken verfügbar sind."
+msgid "sidecar.indexing.increasePriority"
+msgstr "Priorität erhöhen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#~ msgid "sidecar.indexing.knownTotals"
+#~ msgstr "Die Gesamtzahlen beziehen sich auf erfasste Elemente. Ein Strich bedeutet, dass noch keine Statistiken verfügbar sind."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.lastScan"
+msgstr "Letzter erfolgreicher Scan {time}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -4709,8 +4734,53 @@ msgstr "Priorität für {mailbox} erhöhen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.noDocuments"
+msgstr "Noch keine Dokumente gefunden"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.noScan"
+msgstr "Noch kein erfolgreicher Scan"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.parallelism"
 msgstr "Parallele Indexierungsvorgänge"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.parallelismHelp"
+msgstr "Maximale Anzahl gleichzeitig verarbeiteter Dokumente."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.progress"
+msgstr "{percentage}% von {total} Dokumenten indexiert"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.progressUnavailable"
+msgstr "Indexierungsfortschritt nicht verfügbar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.reset"
+msgstr "Sidecar-Indizes zurücksetzen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.resetConfirm"
+msgstr "Alle lokalen Suchindizes löschen? Original-E-Mails, Anhänge und Einstellungen bleiben erhalten. Die Indexierung bleibt angehalten, bis sie fortgesetzt oder der Sidecar neu gestartet wird."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.resetError"
+msgstr "Der Abschluss des Zurücksetzens konnte nicht bestätigt werden. Prüfen Sie den Status oder versuchen Sie es erneut."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.resetSuccess"
+msgstr "Lokale Suchindizes gelöscht. Die Indexierung ist angehalten."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -4724,13 +4794,98 @@ msgstr "Indexierungseinstellungen konnten nicht gespeichert werden. Bitte erneut
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.source.outlook"
+msgstr "Outlook"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#~ msgid "sidecar.indexing.status.attention"
+#~ msgstr "Handlungsbedarf"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.status.complete"
+msgstr "Indexierung abgeschlossen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.status.current"
+msgstr "Aktuell"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.status.disabled"
+msgstr "Deaktiviert"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.status.indexing"
+msgstr "Wird indexiert"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.status.indexingUnavailable"
+msgstr "Indexierung nicht verfügbar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.status.partial"
+msgstr "Teilweise indexiert"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.status.scanFailed"
+msgstr "Scan fehlgeschlagen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.status.scanning"
+msgstr "Wird gescannt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.status.sourceUnavailable"
+msgstr "Quelle nicht verfügbar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.status.stopped"
+msgstr "Angehalten"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.status.unavailable"
+msgstr "Status nicht verfügbar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.status.waiting"
+msgstr "Wartet"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.terminal"
+msgstr "Einige Dokumente sind leer oder konnten nicht indexiert werden. Daher liegt die Abdeckung unter 100%."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.throttle"
 msgstr "Dokumente pro Minute"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.throttleHelp"
+msgstr "Maximale Anzahl von Dokumenten, deren Verarbeitung pro Minute beginnen kann."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.title"
 msgstr "Postfachindexierung"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.unsaved"
+msgstr "Ungespeicherte Änderungen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx

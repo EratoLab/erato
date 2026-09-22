@@ -4,6 +4,7 @@ import { expectSidecarConfigurationAccepted } from "./__tests__/configurationTes
 import {
   initializeMailboxConfiguration,
   mailboxCoverage,
+  mailboxIndexingSummary,
   orderedMailboxes,
 } from "./indexingConfiguration";
 
@@ -136,5 +137,176 @@ describe("mailbox indexing configuration", () => {
     });
     segment.coverage.knownEligible = null as unknown as number;
     expect(mailboxCoverage(status, sharedId, "file").total).toBeNull();
+  });
+});
+
+describe("mailbox indexing summary", () => {
+  function fixture() {
+    const segment = {
+      mailboxId: sharedUuid,
+      kind: "email",
+      fileType: null,
+      backlog: {
+        discoveryComplete: true,
+        remaining: 0,
+        inProgress: 0,
+        blocked: 0,
+      },
+      coverage: {
+        indexedCurrent: 640,
+        knownEligible: 640,
+        emptyCurrent: 0,
+        unindexableCurrent: 0,
+        stale: 0,
+        neverProcessed: 0,
+        pendingDeletions: 0,
+      },
+    };
+    return {
+      state: "running",
+      discovery: [
+        {
+          mailboxId: sharedId,
+          state: "complete",
+          discoveryComplete: true,
+          accessible: true,
+          lastSuccessfulScanAt: "2026-09-22T10:00:00Z",
+        },
+      ],
+      generations: [
+        {
+          role: "active",
+          segments: [
+            segment,
+            {
+              ...segment,
+              kind: "file",
+              coverage: {
+                ...segment.coverage,
+                indexedCurrent: 436,
+                knownEligible: 436,
+              },
+            },
+            { ...segment, mailboxId: null },
+            { ...segment, fileType: "pdf" },
+          ],
+        },
+        { role: "building", segments: [segment] },
+      ],
+    } as unknown as IndexingStatusV1Result;
+  }
+  it("combines only active mailbox aggregates and uses the successful scan", () => {
+    expect(mailboxIndexingSummary(fixture(), sharedId, true)).toMatchObject({
+      total: 1076,
+      indexed: 1076,
+      percentage: 100,
+      state: "current",
+      lastScan: Date.parse("2026-09-22T10:00:00Z"),
+    });
+  });
+  it("prioritizes disabled, blocked and stopped states over completion", () => {
+    const status = fixture();
+    status.discovery[0].state = "failed";
+    expect(mailboxIndexingSummary(status, sharedId, false).state).toBe(
+      "disabled",
+    );
+    expect(mailboxIndexingSummary(status, sharedId, true).state).toBe(
+      "scanFailed",
+    );
+    status.state = "stopped";
+    expect(mailboxIndexingSummary(status, sharedId, true).state).toBe(
+      "stopped",
+    );
+    status.state = "blocked";
+    expect(mailboxIndexingSummary(status, sharedId, true).state).toBe(
+      "indexingUnavailable",
+    );
+  });
+  it("distinguishes inaccessible sources from blocked processing", () => {
+    const status = fixture();
+    status.discovery[0].accessible = false;
+    status.discovery[0].state = "failed";
+    expect(mailboxIndexingSummary(status, sharedId, true).state).toBe(
+      "sourceUnavailable",
+    );
+    status.discovery[0].accessible = true;
+    status.discovery[0].state = "complete";
+    status.generations[0].segments[0].backlog.blocked = 1;
+    expect(mailboxIndexingSummary(status, sharedId, true).state).toBe(
+      "indexingUnavailable",
+    );
+    expect(mailboxIndexingSummary(status, sharedId, false).state).toBe(
+      "disabled",
+    );
+  });
+  it("does not mistake incomplete scans or unavailable counters for completion", () => {
+    const status = fixture();
+    status.discovery[0].discoveryComplete = false;
+    expect(mailboxIndexingSummary(status, sharedId, true).state).toBe(
+      "unavailable",
+    );
+    status.discovery[0].state = "scanning";
+    expect(mailboxIndexingSummary(status, sharedId, true).state).toBe(
+      "scanning",
+    );
+    status.discovery[0].lastSuccessfulScanAt = null;
+    expect(mailboxIndexingSummary(status, sharedId, true).lastScan).toBeNull();
+    status.generations[0].segments[0].coverage.knownEligible = null;
+    expect(
+      mailboxIndexingSummary(status, sharedId, true).percentage,
+    ).toBeNull();
+  });
+  it("requires in-progress work for indexing and distinguishes queued work", () => {
+    const status = fixture();
+    const row = status.generations[0].segments[0];
+    row.backlog.remaining = 1;
+    expect(mailboxIndexingSummary(status, sharedId, true).state).toBe(
+      "waiting",
+    );
+    row.backlog.inProgress = 1;
+    expect(mailboxIndexingSummary(status, sharedId, true).state).toBe(
+      "indexing",
+    );
+    row.backlog.inProgress = 0;
+    row.backlog.remaining = 0;
+    row.coverage.pendingDeletions = 1;
+    expect(mailboxIndexingSummary(status, sharedId, true).state).toBe(
+      "waiting",
+    );
+  });
+  it("never rounds incomplete coverage to 100 and explains terminal outcomes", () => {
+    const status = fixture();
+    const row = status.generations[0].segments[0];
+    row.coverage.indexedCurrent = 639;
+    row.coverage.emptyCurrent = 1;
+    expect(mailboxIndexingSummary(status, sharedId, true)).toMatchObject({
+      percentage: 99,
+      terminal: true,
+      state: "complete",
+    });
+    row.coverage.emptyCurrent = 0;
+    row.coverage.unindexableCurrent = 1;
+    expect(mailboxIndexingSummary(status, sharedId, true)).toMatchObject({
+      terminal: true,
+      state: "partial",
+    });
+  });
+  it("handles empty and missing inventories explicitly", () => {
+    const status = fixture();
+    for (const row of status.generations[0].segments) {
+      row.coverage.knownEligible = 0;
+      row.coverage.indexedCurrent = 0;
+    }
+    expect(mailboxIndexingSummary(status, sharedId, true)).toMatchObject({
+      total: 0,
+      percentage: null,
+      state: "current",
+    });
+    status.generations = [];
+    expect(mailboxIndexingSummary(status, sharedId, true)).toMatchObject({
+      total: null,
+      percentage: null,
+      state: "unavailable",
+    });
   });
 });
