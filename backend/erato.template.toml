@@ -463,6 +463,28 @@ chat_provider_ids = ["test-token-limit"]
 # # lets the user's next message compose it. "interrupt" is a reserved spelling
 # # with no implementation and is rejected at load (default: "when_idle")
 # scheduling = "when_idle"
+# # Whether a task child that hits an approval-gated MCP call parks and asks, so
+# # the user can decide and the child carries on. An awaited child's request is
+# # surfaced on the turn that delegated it; a detached "async" child stops on its
+# # own card and the origin conversation is told by an "input_required" result.
+# # Turning this off refuses the child's gated call instead, which means the
+# # child finishes without it (default: true)
+# propagate_child_mcp_approvals = true
+#
+# # When the user is asked before the model's planned tasks are dispatched. The
+# # whole batch is shown as one card with one item per task, so a plan can be
+# # approved in part; nothing is created before the decision.
+# [delegation.tasks.approval]
+# # "never" dispatches without asking. "always" asks about every batch that
+# # contains a task. "plan" asks only once a batch reaches plan_min_tasks tasks.
+# # "async_only" asks about the tasks that detach and leaves awaited ones alone,
+# # which makes it equivalent to "never" until "async" is in run_modes above
+# # (default: "async_only")
+# mode = "async_only"
+# # From how many tasks in one batch mode = "plan" asks. Below two there is no
+# # plan to review, only a single call - which is what "always" is for. At least
+# # 2 (default: 2)
+# plan_min_tasks = 2
 
 # Starter prompts feature configuration
 # [starter_prompts]
@@ -713,3 +735,10 @@ chat_provider_ids = ["test-token-limit"]
 # max_client_tool_calls_per_task = 40
 # max_server_tool_calls_per_task = 4
 # child_facet_ids = ["web_search"]
+#
+# # The approval policy this facet runs under. Merged with the global one by
+# # taking the stricter mode and the lower threshold, so selecting a second
+# # planning facet can only ever make a turn ask more.
+# [facets.facets.plan.delegation.approval]
+# mode = "plan"
+# plan_min_tasks = 3

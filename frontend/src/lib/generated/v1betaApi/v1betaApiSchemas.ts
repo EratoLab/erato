@@ -73,9 +73,66 @@ export type AllDrivesResponse = {
   drives: Drive[];
 };
 
+/**
+ * Body of the `409` `continuestream` answers when the named row has nothing
+ * left to decide: a duplicate resume, not a decision the server refused.
+ */
+export type AlreadyContinuedError = {
+  /**
+   * Always `already_continued`.
+   */
+  code: string;
+};
+
 export type ApplyUserToolApprovalSettingsBatchRequest = {
   decisions: UserToolApprovalDecisionEntry[];
   mcp_server_id: string;
+};
+
+/**
+ * One decision of a continuation, naming the approval it answers.
+ */
+export type ApprovalDecisionItem = {
+  /**
+   * @example call_abc123
+   */
+  approval_id: string;
+  decision: ToolApprovalDecision;
+};
+
+/**
+ * Body of the `400` answers when the submitted decisions do not match the
+ * approvals a parked turn has open.
+ *
+ * Two lists rather than one message, because the client's recovery differs:
+ * `missing` means it has to ask the user the remaining questions, `unknown`
+ * means the card it rendered is stale and the row needs refetching.
+ */
+export type ApprovalDecisionsError = {
+  /**
+   * Always `decisions_mismatch`.
+   */
+  code: string;
+  /**
+   * Open approvals that no submitted decision covers.
+   */
+  missing: string[];
+  /**
+   * Submitted approval ids this turn does not have open.
+   */
+  unknown: string[];
+};
+
+/**
+ * One decision the user owes on a parked turn. A stop carries several of
+ * these when a batch parked on more than one call.
+ */
+export type ApprovalItem = {
+  approval_id: string;
+  child?: null | ChildApprovalRef;
+  input: Value;
+  tool_call_id: string;
+  tool_name: string;
 };
 
 /**
@@ -864,6 +921,28 @@ export type ChatModel = {
   model_icon?: string | null | undefined;
 };
 
+/**
+ * The gated call a delegated child parked on, copied onto the parent's
+ * approval item so the card renders without reading the child's chat.
+ */
+export type ChildApprovalRef = {
+  annotations: ToolApprovalAnnotations;
+  /**
+   * @format uuid
+   */
+  child_chat_id: string;
+  /**
+   * @format uuid
+   */
+  child_message_id: string;
+  child_tool_call_id: string;
+  input: Value;
+  mcp_server_id: string;
+  preset: string;
+  requested_at: string;
+  tool_name: string;
+};
+
 export type ClientToolResultRequest = {
   /**
    * The chat whose suspended generation is awaiting this result.
@@ -1044,9 +1123,20 @@ export type ContentPartTaskResult = {
   parent_tool_call_id: string;
   reason?: string;
   /**
-   * Which delivery for this task this is. `0` is the first; a later value
-   * means the result was delivered again after the origin branched away
-   * from the first one.
+   * How many times this same result was delivered again after the origin
+   * branched away from an earlier delivery of it. `0` on every first-time
+   * delivery, including a parked run's follow-up answer.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  redeliveries?: number;
+  /**
+   * Which delivery for this task this is. `0` is the first, and every
+   * further delivery of the same run bumps it — including the answer a
+   * parked `async` run delivers after its card is decided, which is a
+   * SECOND result and not the first one repeated. `redeliveries` is the
+   * field that says "you have seen this before".
    *
    * @format int32
    * @minimum 0
@@ -1082,7 +1172,12 @@ export type ContentPartTextFilePointer = {
  */
 export type ContentPartToolApproval = {
   always_allow?: boolean;
+  approval_id?: null | undefined;
   approved_at: string;
+  /**
+   * @format uuid
+   */
+  child_chat_id?: null | undefined;
   tool_call_id: string;
   /**
    * @format uuid
@@ -1100,8 +1195,16 @@ export type ContentPartToolApprovalRequest = {
    */
   allow_always: boolean;
   annotations: ToolApprovalAnnotations;
+  /**
+   * Every decision this stop covers. An `mcp_tool` stop carries one item
+   * describing the same call as the flat fields above; readers that branch
+   * on `kind` first may use either.
+   */
+  approvals?: ApprovalItem[];
   input: Value;
+  kind?: ToolApprovalKind;
   mcp_server_id: string;
+  pending_tool_calls?: PendingToolCall[];
   preset: string;
   requested_at: string;
   tool_call_id: string;
@@ -1112,11 +1215,21 @@ export type ContentPartToolApprovalRequest = {
  * Records a user rejection in the assistant message lifecycle.
  */
 export type ContentPartToolRejection = {
+  approval_id?: null | undefined;
+  /**
+   * @format uuid
+   */
+  child_chat_id?: null | undefined;
   /**
    * Both fields default, so rejections stored before standing denials
    * existed still parse.
    */
   never_allow?: boolean;
+  /**
+   * Why the call was rejected when the user did not decide it directly.
+   * The only value is `withdrawn`.
+   */
+  reason?: null | undefined;
   rejected_at: string;
   tool_call_id: string;
   /**
@@ -1126,16 +1239,42 @@ export type ContentPartToolRejection = {
 };
 
 /**
- * Rehydrates a generation that was deliberately stopped for MCP tool approval.
+ * Rehydrates a generation that was deliberately stopped for tool approval.
+ *
+ * A stop can cover several decisions, so the body names each one. The legacy
+ * shape `{ message_id, decision }` carries no `approval_id` and is therefore
+ * accepted only while exactly one approval is open — otherwise it would have
+ * to guess which call the user answered.
  */
 export type ContinueStreamRequest = {
-  decision: ToolApprovalDecision;
+  decision?: null | ToolApprovalDecision;
+  decisions?: ApprovalDecisionItem[];
   /**
    * The assistant message/generation that contains the pending approval request.
    *
    * @format uuid
    */
   message_id: string;
+};
+
+/**
+ * Body of the `409` `continuestream` answers on a delegated child whose
+ * request is currently being asked about in the chat that started it.
+ *
+ * `parent_message_id` is where the question actually is: the client follows it
+ * rather than telling the user their own chat is broken.
+ */
+export type CoveredByParentError = {
+  /**
+   * Always `covered_by_parent`.
+   */
+  code: string;
+  /**
+   * The origin row whose approval part carries this child's request.
+   *
+   * @format uuid
+   */
+  parent_message_id: string;
 };
 
 /**
@@ -2310,6 +2449,16 @@ export type OrganizationUsersResponse = {
 };
 
 /**
+ * A call of the parked batch that was never popped. The parked part is the
+ * only record of these, so the continuation has to replay them from here.
+ */
+export type PendingToolCall = {
+  call_id: string;
+  fn_arguments: Value;
+  fn_name: string;
+};
+
+/**
  * Request to optimize a prompt using the configured prompt optimizer.
  */
 export type PromptOptimizerRequest = {
@@ -3071,7 +3220,14 @@ export type ToolApprovalDecision =
   | "approve"
   | "reject"
   | "approve_always"
-  | "reject_always";
+  | "reject_always"
+  | "withdraw";
+
+/**
+ * Which surface a durable approval stop belongs to. `McpTool` is the
+ * default so rows written before the other kinds existed keep parsing.
+ */
+export type ToolApprovalKind = "mcp_tool" | "delegated_task" | "task_plan";
 
 export type ToolCallStatus = "preparing" | "in_progress" | "success" | "error";
 

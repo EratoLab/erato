@@ -1,5 +1,6 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -44,6 +45,102 @@ const renderWithTheme = (ui: React.ReactElement) => {
     </I18nProvider>,
   );
 };
+
+/** Approval cards read cached chat state, so they need a query client. */
+const renderWithQueryClient = (ui: React.ReactElement) =>
+  renderWithTheme(
+    <QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>,
+  );
+
+const planApprovalRequest = (): ContentPart =>
+  ({
+    content_type: "tool_approval_request",
+    tool_call_id: "call-a",
+    tool_name: "delegate_task",
+    mcp_server_id: "",
+    input: { task: "Draft the changelog" },
+    annotations: {
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: true,
+      readOnlyHint: false,
+    },
+    preset: "",
+    allow_always: false,
+    requested_at: "2026-08-06T00:00:00Z",
+    kind: "task_plan",
+    approvals: [
+      {
+        approval_id: "plan:0:0",
+        tool_call_id: "call-a",
+        tool_name: "delegate_task",
+        input: { task: "Draft the changelog" },
+      },
+      {
+        approval_id: "plan:0:1",
+        tool_call_id: "call-b",
+        tool_name: "delegate_task",
+        input: { task: "Check the migration notes" },
+      },
+    ],
+  }) as unknown as ContentPart;
+
+/**
+ * The parent's stop on a parked child. A re-park of the same child reuses the
+ * parent's `delegate_task` call id as both the approval id and the part's, which
+ * is what makes the second stop indistinguishable from the first by id alone.
+ */
+const childApprovalRequest = (): ContentPart =>
+  ({
+    content_type: "tool_approval_request",
+    tool_call_id: "call-task",
+    tool_name: "delegate_task",
+    mcp_server_id: "",
+    input: { task: "Publish the notes" },
+    annotations: {
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+      readOnlyHint: false,
+    },
+    preset: "",
+    allow_always: false,
+    requested_at: "2026-08-06T00:00:00Z",
+    kind: "delegated_task",
+    approvals: [
+      {
+        approval_id: "call-task",
+        tool_call_id: "call-task",
+        tool_name: "delegate_task",
+        input: { task: "Publish the notes" },
+        child: {
+          child_chat_id: "33333333-3333-3333-3333-333333333333",
+          child_message_id: "44444444-4444-4444-4444-444444444444",
+          child_tool_call_id: "child-call-1",
+          tool_name: "publish_approval_probe",
+          mcp_server_id: "mock_mcp_approval",
+          input: { channel: "release" },
+          annotations: {
+            destructiveHint: false,
+            idempotentHint: false,
+            openWorldHint: false,
+            readOnlyHint: false,
+          },
+          preset: "restrictive",
+          requested_at: "2026-08-06T00:00:00Z",
+        },
+      },
+    ],
+  }) as unknown as ContentPart;
+
+const planDecision = (approvalId: string, toolCallId: string): ContentPart =>
+  ({
+    content_type: "tool_approval",
+    tool_call_id: toolCallId,
+    approval_id: approvalId,
+    always_allow: false,
+    approved_at: "2026-08-06T00:01:00Z",
+  }) as unknown as ContentPart;
 
 const textContent = (text: string): ContentPart[] => [
   { content_type: "text", text },
@@ -1585,6 +1682,58 @@ describe("MessageContent", () => {
         screen.queryByTestId("message-assistant-mention"),
       ).not.toBeInTheDocument();
       expect(screen.getByText("@Faker")).toBeInTheDocument();
+    });
+  });
+
+  describe("approval stops", () => {
+    it("keeps the card up while part of the stop is still open", () => {
+      renderWithQueryClient(
+        <MessageContent
+          messageId="message-1"
+          content={[planApprovalRequest(), planDecision("plan:0:0", "call-a")]}
+        />,
+      );
+
+      // The server takes the whole stop in one request, so a card that hid on
+      // the first decision would leave the rest unanswerable.
+      expect(screen.getByTestId("task-plan-approval")).toBeInTheDocument();
+    });
+
+    it("asks again when the same child parks a second time", () => {
+      renderWithQueryClient(
+        <MessageContent
+          messageId="message-1"
+          content={[
+            childApprovalRequest(),
+            planDecision("call-task", "call-task"),
+            childApprovalRequest(),
+          ]}
+        />,
+      );
+
+      // The second stop reuses the first's ids, so only its position says that
+      // the decision above answered the question below it. Read unscoped, both
+      // cards vanish and the turn can never be finished.
+      expect(screen.getAllByTestId("delegated-task-approval")).toHaveLength(1);
+    });
+
+    it("hides the card once every item of the stop is decided", () => {
+      renderWithQueryClient(
+        <MessageContent
+          messageId="message-1"
+          content={[
+            planApprovalRequest(),
+            planDecision("plan:0:0", "call-a"),
+            planDecision("plan:0:1", "call-b"),
+          ]}
+        />,
+      );
+
+      // The decisions are represented beside their steps in the trace from
+      // here on.
+      expect(
+        screen.queryByTestId("task-plan-approval"),
+      ).not.toBeInTheDocument();
     });
   });
 });

@@ -264,7 +264,7 @@ pub enum GenerationErrorType {
 }
 
 /// Metadata about the generation process, including usage statistics
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GenerationMetadata {
     /// Number of prompt tokens used during generation
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -312,6 +312,14 @@ pub struct GenerationMetadata {
     /// tool off for this chat. Lets the UI explain why a tool was not used.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mcp_tools_disabled_by_user: Option<Vec<String>>,
+    /// Set while an approval continuation owes this message its answer, and
+    /// cleared by the write that ends the turn. Whether the answer was reached
+    /// cannot be read off the row's parts: a turn that says something and then
+    /// calls another tool commits that text mid-turn, so a `text` part proves
+    /// nothing. Without this, a continuation that died after that commit could
+    /// never be retried.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub continuation_in_flight: Option<bool>,
 }
 
 /// Role of the message author (as defined by the LLM providers)
@@ -379,6 +387,53 @@ pub struct ToolApprovalAnnotations {
     pub open_world_hint: bool,
 }
 
+/// Which surface a durable approval stop belongs to. `McpTool` is the
+/// default so rows written before the other kinds existed keep parsing.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolApprovalKind {
+    #[default]
+    McpTool,
+    DelegatedTask,
+    TaskPlan,
+}
+
+/// The gated call a delegated child parked on, copied onto the parent's
+/// approval item so the card renders without reading the child's chat.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct ChildApprovalRef {
+    pub child_chat_id: Uuid,
+    pub child_message_id: Uuid,
+    pub child_tool_call_id: String,
+    pub tool_name: String,
+    pub mcp_server_id: String,
+    pub input: JsonValue,
+    pub annotations: ToolApprovalAnnotations,
+    pub preset: String,
+    pub requested_at: String,
+}
+
+/// One decision the user owes on a parked turn. A stop carries several of
+/// these when a batch parked on more than one call.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct ApprovalItem {
+    pub approval_id: String,
+    pub tool_call_id: String,
+    pub tool_name: String,
+    pub input: JsonValue,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub child: Option<ChildApprovalRef>,
+}
+
+/// A call of the parked batch that was never popped. The parked part is the
+/// only record of these, so the continuation has to replay them from here.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct PendingToolCall {
+    pub call_id: String,
+    pub fn_name: String,
+    pub fn_arguments: JsonValue,
+}
+
 /// A durable request for user approval before an MCP tool call is executed.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ContentPartToolApprovalRequest {
@@ -392,6 +447,35 @@ pub struct ContentPartToolApprovalRequest {
     /// persistent approval settings are disabled.
     pub allow_always: bool,
     pub requested_at: String,
+    #[serde(default)]
+    pub kind: ToolApprovalKind,
+    /// Every decision this stop covers. An `mcp_tool` stop carries one item
+    /// describing the same call as the flat fields above; readers that branch
+    /// on `kind` first may use either.
+    #[serde(default)]
+    pub approvals: Vec<ApprovalItem>,
+    #[serde(default)]
+    pub pending_tool_calls: Vec<PendingToolCall>,
+}
+
+impl ContentPartToolApprovalRequest {
+    /// Every decision this stop covers, in the order the calls were made.
+    ///
+    /// Rows written before `approvals` existed describe their single call in
+    /// the flat fields only, so those are projected into one item keyed by the
+    /// call id — the same id `gate_mcp_tool_call` now writes.
+    pub fn approval_items(&self) -> Vec<ApprovalItem> {
+        if !self.approvals.is_empty() {
+            return self.approvals.clone();
+        }
+        vec![ApprovalItem {
+            approval_id: self.tool_call_id.clone(),
+            tool_call_id: self.tool_call_id.clone(),
+            tool_name: self.tool_name.clone(),
+            input: self.input.clone(),
+            child: None,
+        }]
+    }
 }
 
 /// Records a user approval in the assistant message lifecycle.
@@ -403,6 +487,10 @@ pub struct ContentPartToolApproval {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_tool_approval_setting_id: Option<Uuid>,
     pub approved_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub child_chat_id: Option<Uuid>,
 }
 
 /// Records a user rejection in the assistant message lifecycle.
@@ -416,6 +504,14 @@ pub struct ContentPartToolRejection {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user_tool_approval_setting_id: Option<Uuid>,
     pub rejected_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub child_chat_id: Option<Uuid>,
+    /// Why the call was rejected when the user did not decide it directly.
+    /// The only value is `withdrawn`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -476,10 +572,17 @@ pub struct ContentPartTaskResult {
     pub summary: String,
     /// Whether `summary` was shortened to fit.
     pub truncated: bool,
-    /// Which delivery for this task this is. `0` is the first; a later value
-    /// means the result was delivered again after the origin branched away
-    /// from the first one.
+    /// Which delivery for this task this is. `0` is the first, and every
+    /// further delivery of the same run bumps it — including the answer a
+    /// parked `async` run delivers after its card is decided, which is a
+    /// SECOND result and not the first one repeated. `redeliveries` is the
+    /// field that says "you have seen this before".
     pub sequence: u32,
+    /// How many times this same result was delivered again after the origin
+    /// branched away from an earlier delivery of it. `0` on every first-time
+    /// delivery, including a parked run's follow-up answer.
+    #[serde(default)]
+    pub redeliveries: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -615,18 +718,26 @@ impl MessageSchema {
             Resolved,
         }
 
-        let mut pending: HashMap<&str, State> = HashMap::new();
+        let mut pending: HashMap<String, State> = HashMap::new();
         for part in &self.content {
             match part {
                 ContentPart::ToolApprovalRequest(request) => {
-                    if pending
-                        .insert(request.tool_call_id.as_str(), State::Requested)
-                        .is_some()
-                    {
-                        return Err(eyre!(
-                            "Duplicate tool approval request for {}",
-                            request.tool_call_id
-                        ));
+                    // A batch park asks about more than one call, and its
+                    // per-item decisions have to be able to land on the row.
+                    for item in request.approval_items() {
+                        let tool_call_id = item.tool_call_id;
+                        // Only an UNANSWERED duplicate is a broken row. A
+                        // delegated child that stops again puts its origin slot
+                        // on a second card, and the slot never moves, so there
+                        // is no later `ToolUse` closing the first question.
+                        if let Some(State::Requested) =
+                            pending.insert(tool_call_id.clone(), State::Requested)
+                        {
+                            return Err(eyre!(
+                                "Duplicate tool approval request for {}",
+                                tool_call_id
+                            ));
+                        }
                     }
                 }
                 ContentPart::ToolApproval(approval) => {
@@ -1936,5 +2047,118 @@ mod task_result_marker_tests {
                 .as_str(),
             Some(TASK_RESULT_INITIATOR_WIRE),
         );
+    }
+}
+
+#[cfg(test)]
+mod tool_approval_part_tests {
+    use super::{ContentPart, ContentPartToolRejection, ToolApprovalKind};
+    use serde_json::json;
+
+    /// Approval rows are durable and predate every field this stop now carries,
+    /// so a row written by an older release has to keep resuming — as an
+    /// `mcp_tool` stop describing the one call it recorded.
+    #[test]
+    fn approval_request_old_row_parses_as_mcp_tool() {
+        let row = json!({
+            "content_type": "tool_approval_request",
+            "tool_call_id": "call-1",
+            "tool_name": "publish",
+            "mcp_server_id": "server",
+            "input": {"topic": "news"},
+            "annotations": {
+                "readOnlyHint": false,
+                "destructiveHint": true,
+                "idempotentHint": false,
+                "openWorldHint": true
+            },
+            "preset": "restrictive",
+            "allow_always": true,
+            "requested_at": "2026-01-01T00:00:00Z"
+        });
+
+        let ContentPart::ToolApprovalRequest(request) =
+            serde_json::from_value::<ContentPart>(row).expect("an old row still parses")
+        else {
+            panic!("expected an approval request");
+        };
+        assert_eq!(request.kind, ToolApprovalKind::McpTool);
+        assert!(request.approvals.is_empty());
+        assert!(request.pending_tool_calls.is_empty());
+
+        let items = request.approval_items();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].approval_id, "call-1");
+        assert_eq!(items[0].tool_call_id, "call-1");
+        assert_eq!(items[0].tool_name, "publish");
+        assert_eq!(items[0].input, json!({"topic": "news"}));
+        assert!(items[0].child.is_none());
+    }
+
+    /// The projection has to agree with what the gate writes, or a row written
+    /// now and a row written before would be decided under different ids.
+    #[test]
+    fn approval_items_prefers_the_recorded_list() {
+        let row = json!({
+            "content_type": "tool_approval_request",
+            "tool_call_id": "call-1",
+            "tool_name": "publish",
+            "mcp_server_id": "server",
+            "input": {},
+            "annotations": {
+                "readOnlyHint": false,
+                "destructiveHint": false,
+                "idempotentHint": false,
+                "openWorldHint": false
+            },
+            "preset": "permissive",
+            "allow_always": false,
+            "requested_at": "2026-01-01T00:00:00Z",
+            "kind": "delegated_task",
+            "approvals": [
+                {
+                    "approval_id": "parent-call-1",
+                    "tool_call_id": "parent-call-1",
+                    "tool_name": "delegate_task",
+                    "input": {"task": "summarize"}
+                }
+            ],
+            "pending_tool_calls": [
+                {"call_id": "call-2", "fn_name": "search", "fn_arguments": {}}
+            ]
+        });
+
+        let ContentPart::ToolApprovalRequest(request) =
+            serde_json::from_value::<ContentPart>(row).expect("a kinded row parses")
+        else {
+            panic!("expected an approval request");
+        };
+        assert_eq!(request.kind, ToolApprovalKind::DelegatedTask);
+        let items = request.approval_items();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].approval_id, "parent-call-1");
+        assert_eq!(request.pending_tool_calls.len(), 1);
+        assert_eq!(request.pending_tool_calls[0].call_id, "call-2");
+    }
+
+    #[test]
+    fn rejection_row_without_the_new_fields_parses() {
+        let row = json!({
+            "content_type": "tool_rejection",
+            "tool_call_id": "call-1",
+            "rejected_at": "2026-01-01T00:00:00Z"
+        });
+        let ContentPart::ToolRejection(ContentPartToolRejection {
+            approval_id,
+            child_chat_id,
+            reason,
+            ..
+        }) = serde_json::from_value::<ContentPart>(row).expect("an old rejection still parses")
+        else {
+            panic!("expected a rejection");
+        };
+        assert!(approval_id.is_none());
+        assert!(child_chat_id.is_none());
+        assert!(reason.is_none());
     }
 }

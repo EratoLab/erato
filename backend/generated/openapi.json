@@ -2731,7 +2731,14 @@
             }
           },
           "400": {
-            "description": "The message has no pending approval or the decision is invalid"
+            "description": "The message has no pending approval, the decision is invalid, or the submitted decisions do not cover the open approvals (JSON, code = decisions_mismatch)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalDecisionsError"
+                }
+              }
+            }
           },
           "401": {
             "description": "When no valid JWT token is provided"
@@ -2740,7 +2747,7 @@
             "description": "When the chat does not exist or is not accessible"
           },
           "409": {
-            "description": "When the chat is archived (plain text), or the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running)",
+            "description": "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), or the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError)",
             "content": {
               "application/json": {
                 "schema": {
@@ -4157,6 +4164,19 @@
           }
         }
       },
+      "AlreadyContinuedError": {
+        "type": "object",
+        "description": "Body of the `409` `continuestream` answers when the named row has nothing\nleft to decide: a duplicate resume, not a decision the server refused.",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Always `already_continued`."
+          }
+        }
+      },
       "ApplyUserToolApprovalSettingsBatchRequest": {
         "type": "object",
         "required": [
@@ -4171,6 +4191,86 @@
             }
           },
           "mcp_server_id": {
+            "type": "string"
+          }
+        }
+      },
+      "ApprovalDecisionItem": {
+        "type": "object",
+        "description": "One decision of a continuation, naming the approval it answers.",
+        "required": [
+          "approval_id",
+          "decision"
+        ],
+        "properties": {
+          "approval_id": {
+            "type": "string",
+            "example": "call_abc123"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/ToolApprovalDecision"
+          }
+        }
+      },
+      "ApprovalDecisionsError": {
+        "type": "object",
+        "description": "Body of the `400` answers when the submitted decisions do not match the\napprovals a parked turn has open.\n\nTwo lists rather than one message, because the client's recovery differs:\n`missing` means it has to ask the user the remaining questions, `unknown`\nmeans the card it rendered is stale and the row needs refetching.",
+        "required": [
+          "code",
+          "missing",
+          "unknown"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Always `decisions_mismatch`."
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Open approvals that no submitted decision covers."
+          },
+          "unknown": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Submitted approval ids this turn does not have open."
+          }
+        }
+      },
+      "ApprovalItem": {
+        "type": "object",
+        "description": "One decision the user owes on a parked turn. A stop carries several of\nthese when a batch parked on more than one call.",
+        "required": [
+          "approval_id",
+          "tool_call_id",
+          "tool_name",
+          "input"
+        ],
+        "properties": {
+          "approval_id": {
+            "type": "string"
+          },
+          "child": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ChildApprovalRef"
+              }
+            ]
+          },
+          "input": {
+            "$ref": "#/components/schemas/Value"
+          },
+          "tool_call_id": {
+            "type": "string"
+          },
+          "tool_name": {
             "type": "string"
           }
         }
@@ -5491,6 +5591,52 @@
           }
         }
       },
+      "ChildApprovalRef": {
+        "type": "object",
+        "description": "The gated call a delegated child parked on, copied onto the parent's\napproval item so the card renders without reading the child's chat.",
+        "required": [
+          "child_chat_id",
+          "child_message_id",
+          "child_tool_call_id",
+          "tool_name",
+          "mcp_server_id",
+          "input",
+          "annotations",
+          "preset",
+          "requested_at"
+        ],
+        "properties": {
+          "annotations": {
+            "$ref": "#/components/schemas/ToolApprovalAnnotations"
+          },
+          "child_chat_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "child_message_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "child_tool_call_id": {
+            "type": "string"
+          },
+          "input": {
+            "$ref": "#/components/schemas/Value"
+          },
+          "mcp_server_id": {
+            "type": "string"
+          },
+          "preset": {
+            "type": "string"
+          },
+          "requested_at": {
+            "type": "string"
+          },
+          "tool_name": {
+            "type": "string"
+          }
+        }
+      },
       "ClientToolResultRequest": {
         "type": "object",
         "required": [
@@ -5983,10 +6129,16 @@
           "reason": {
             "type": "string"
           },
+          "redeliveries": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many times this same result was delivered again after the origin\nbranched away from an earlier delivery of it. `0` on every first-time\ndelivery, including a parked run's follow-up answer.",
+            "minimum": 0
+          },
           "sequence": {
             "type": "integer",
             "format": "int32",
-            "description": "Which delivery for this task this is. `0` is the first; a later value\nmeans the result was delivered again after the origin branched away\nfrom the first one.",
+            "description": "Which delivery for this task this is. `0` is the first, and every\nfurther delivery of the same run bumps it — including the answer a\nparked `async` run delivers after its card is decided, which is a\nSECOND result and not the first one repeated. `redeliveries` is the\nfield that says \"you have seen this before\".",
             "minimum": 0
           },
           "status": {
@@ -6037,8 +6189,21 @@
           "always_allow": {
             "type": "boolean"
           },
+          "approval_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "approved_at": {
             "type": "string"
+          },
+          "child_chat_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
           },
           "tool_call_id": {
             "type": "string"
@@ -6073,11 +6238,27 @@
           "annotations": {
             "$ref": "#/components/schemas/ToolApprovalAnnotations"
           },
+          "approvals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApprovalItem"
+            },
+            "description": "Every decision this stop covers. An `mcp_tool` stop carries one item\ndescribing the same call as the flat fields above; readers that branch\non `kind` first may use either."
+          },
           "input": {
             "$ref": "#/components/schemas/Value"
           },
+          "kind": {
+            "$ref": "#/components/schemas/ToolApprovalKind"
+          },
           "mcp_server_id": {
             "type": "string"
+          },
+          "pending_tool_calls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PendingToolCall"
+            }
           },
           "preset": {
             "type": "string"
@@ -6101,9 +6282,29 @@
           "rejected_at"
         ],
         "properties": {
+          "approval_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "child_chat_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
           "never_allow": {
             "type": "boolean",
             "description": "Both fields default, so rejections stored before standing denials\nexisted still parse."
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the call was rejected when the user did not decide it directly.\nThe only value is `withdrawn`."
           },
           "rejected_at": {
             "type": "string"
@@ -6122,19 +6323,50 @@
       },
       "ContinueStreamRequest": {
         "type": "object",
-        "description": "Rehydrates a generation that was deliberately stopped for MCP tool approval.",
+        "description": "Rehydrates a generation that was deliberately stopped for tool approval.\n\nA stop can cover several decisions, so the body names each one. The legacy\nshape `{ message_id, decision }` carries no `approval_id` and is therefore\naccepted only while exactly one approval is open — otherwise it would have\nto guess which call the user answered.",
         "required": [
-          "message_id",
-          "decision"
+          "message_id"
         ],
         "properties": {
           "decision": {
-            "$ref": "#/components/schemas/ToolApprovalDecision"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ToolApprovalDecision"
+              }
+            ]
+          },
+          "decisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApprovalDecisionItem"
+            }
           },
           "message_id": {
             "type": "string",
             "format": "uuid",
             "description": "The assistant message/generation that contains the pending approval request."
+          }
+        }
+      },
+      "CoveredByParentError": {
+        "type": "object",
+        "description": "Body of the `409` `continuestream` answers on a delegated child whose\nrequest is currently being asked about in the chat that started it.\n\n`parent_message_id` is where the question actually is: the client follows it\nrather than telling the user their own chat is broken.",
+        "required": [
+          "code",
+          "parent_message_id"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Always `covered_by_parent`."
+          },
+          "parent_message_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The origin row whose approval part carries this child's request."
           }
         }
       },
@@ -8424,6 +8656,26 @@
           }
         }
       },
+      "PendingToolCall": {
+        "type": "object",
+        "description": "A call of the parked batch that was never popped. The parked part is the\nonly record of these, so the continuation has to replay them from here.",
+        "required": [
+          "call_id",
+          "fn_name",
+          "fn_arguments"
+        ],
+        "properties": {
+          "call_id": {
+            "type": "string"
+          },
+          "fn_arguments": {
+            "$ref": "#/components/schemas/Value"
+          },
+          "fn_name": {
+            "type": "string"
+          }
+        }
+      },
       "PromptOptimizerRequest": {
         "type": "object",
         "description": "Request to optimize a prompt using the configured prompt optimizer.",
@@ -9655,7 +9907,17 @@
           "approve",
           "reject",
           "approve_always",
-          "reject_always"
+          "reject_always",
+          "withdraw"
+        ]
+      },
+      "ToolApprovalKind": {
+        "type": "string",
+        "description": "Which surface a durable approval stop belongs to. `McpTool` is the\ndefault so rows written before the other kinds existed keep parsing.",
+        "enum": [
+          "mcp_tool",
+          "delegated_task",
+          "task_plan"
         ]
       },
       "ToolCallStatus": {

@@ -64,7 +64,7 @@ const navigateToNewChatViaSidebar = async (page: Page) => {
 };
 
 test(
-  "MCP tool calls pause for approval and continue after an allow-once decision",
+  "MCP tool calls pause for approval, continue after an allow-once decision, and refuse a second continuation of the same decision",
   { tag: TAG_CI },
   async ({ page }) => {
     await page.goto("/");
@@ -87,13 +87,34 @@ test(
 
     await page.getByRole("button", { name: "Allow once", exact: true }).click();
 
-    await expect(page.getByTestId("message-assistant").last()).toContainText(
+    const assistantMessage = page.getByTestId("message-assistant").last();
+    await expect(assistantMessage).toContainText(
       "The secret content has been read successfully.",
       { timeout: 30000 },
     );
     await expect(page.getByTestId("tool-call-item")).toHaveAttribute(
       "data-tool-name",
       "publish_approval_probe",
+    );
+
+    // The decision is taken once. A client that retried the request it never saw
+    // the answer to — a second tab, a double click, a dropped response — must not
+    // answer the same question twice and append a second answer to this message.
+    // `409 already_continued` is what the card reads to tell that apart from a
+    // decision the server refused, so it is asserted where the decision that
+    // settled the row was taken.
+    const messageId = await assistantMessage.getAttribute("data-message-id");
+    expect(
+      messageId,
+      "the settled assistant message carries its id",
+    ).toBeTruthy();
+    const second = await page.request.post(
+      "/api/v1beta/me/messages/continuestream",
+      { data: { message_id: messageId, decision: "approve" } },
+    );
+    expect(second.status()).toBe(409);
+    expect(((await second.json()) as { code?: string }).code).toBe(
+      "already_continued",
     );
   },
 );

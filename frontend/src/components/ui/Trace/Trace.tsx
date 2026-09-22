@@ -1,5 +1,9 @@
 import { useState } from "react";
 
+import {
+  isDelegationToolName,
+  parseDelegationEnvelope,
+} from "@/lib/delegation/delegationEnvelope";
 import { useTraceFeature } from "@/providers/FeatureConfigProvider";
 
 import { TraceClusterHeader } from "./TraceClusterHeader";
@@ -14,7 +18,10 @@ import { ReasoningStep } from "./steps/ReasoningStep";
 import { ToolUseStep } from "./steps/ToolUseStep";
 import { isTraceablePart, type LogicalStep, type TraceablePart } from "./types";
 
-import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  ContentPart,
+  ToolUse,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ReactNode } from "react";
 
 interface TraceProps {
@@ -287,6 +294,26 @@ interface RenderStepArgs {
   toolApprovalStatuses: Record<string, ToolApprovalStatus>;
 }
 
+/**
+ * The decision that belongs beside this step.
+ *
+ * Usually the call's own id, which is what the decision part records. A
+ * delegated task is the exception: the decision may have been taken on the
+ * child's chat rather than on the parent's call, so the child this slot
+ * dispatched is the second way in.
+ */
+const approvalStatusForStep = (
+  part: ToolUse & { content_type: "tool_use" },
+  statuses: Record<string, ToolApprovalStatus | undefined>,
+): ToolApprovalStatus | undefined => {
+  const byCall = part.tool_call_id ? statuses[part.tool_call_id] : undefined;
+  if (byCall !== undefined || !isDelegationToolName(part.tool_name)) {
+    return byCall;
+  }
+  const childChatId = parseDelegationEnvelope(part.output)?.delegateChatId;
+  return childChatId ? statuses[childChatId] : undefined;
+};
+
 const renderStep = (args: RenderStepArgs): ReactNode => {
   switch (args.step.kind) {
     case "reasoning":
@@ -309,11 +336,10 @@ const renderStep = (args: RenderStepArgs): ReactNode => {
           isStreaming={args.isStreaming}
           isCollapsed={args.isCollapsed}
           isLastStep={args.isLastStep}
-          approvalStatus={
-            args.step.part.tool_call_id
-              ? args.toolApprovalStatuses[args.step.part.tool_call_id]
-              : undefined
-          }
+          approvalStatus={approvalStatusForStep(
+            args.step.part,
+            args.toolApprovalStatuses,
+          )}
         />
       );
     default: {

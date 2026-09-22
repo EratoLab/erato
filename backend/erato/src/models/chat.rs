@@ -7,7 +7,7 @@ use crate::metrics_constants::{
     POSTGRES_QUERY_COUNT_RECENT_CHATS, POSTGRES_QUERY_DELEGATED_RUN_OUTCOME,
     POSTGRES_QUERY_DELEGATION_RETRY_IN_FLIGHT, POSTGRES_QUERY_FREQUENT_ASSISTANTS,
     POSTGRES_QUERY_LIST_GENERATING_CHATS, POSTGRES_QUERY_LIST_RECENT_CHATS,
-    POSTGRES_QUERY_REDELIVER_BRANCHED_RESULTS,
+    POSTGRES_QUERY_MARK_RUN_ADOPTED, POSTGRES_QUERY_REDELIVER_BRANCHED_RESULTS,
 };
 use crate::models::message::{GenerationParameters, ProvenanceRunMode};
 use crate::models::pagination;
@@ -186,6 +186,13 @@ pub struct ChatProvenance {
     /// The assistant bound to the origin chat at spawn time, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin_assistant_id: Option<Uuid>,
+    /// Delegation only, awaited runs only: the origin's assistant row whose
+    /// approval part carries this run's parked request. The link exists so a
+    /// decision taken on this chat's own card can be refused while the origin
+    /// still owns the question — without it the same approval could be
+    /// answered twice, once on each surface.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_message_id: Option<Uuid>,
     /// History before this instant belongs to a different assistant context:
     /// when the replay anchor predates it, prompt composition re-injects the
     /// current assistant's head and strips the replayed system plane.
@@ -2257,24 +2264,47 @@ pub async fn auto_archive_stale_delegated_runs(
 ///
 /// The run's own turns never come through here: they are driven by the
 /// dispatcher rather than by a request from the user.
+///
+/// The `chat` argument is only the caller's reason to write, never the payload:
+/// it was read before the request did its own work, and the child's tail can
+/// record a delivery in between. A whole-column rewrite from that snapshot
+/// would put the row back the way it looked before the delivery existed, and
+/// nothing would ever notice — the recorder has already returned and the run
+/// reads as owing nothing. Scoped to `{provenance,adopted_at}` so the write
+/// carries the one fact it means, and conditional on the key being absent so a
+/// second adoption cannot move the timestamp.
 pub async fn mark_delegated_run_adopted(
     conn: &DatabaseConnection,
     chat: &chats::Model,
 ) -> Result<(), Report> {
-    let Some(mut configuration) = parse_chat_configuration(chat)? else {
+    let Some(configuration) = parse_chat_configuration(chat)? else {
         return Ok(());
     };
-    let Some(provenance) = configuration.provenance.as_mut() else {
+    let Some(provenance) = configuration.provenance.as_ref() else {
         return Ok(());
     };
     if provenance.kind != ChatProvenanceKind::Delegation || provenance.adopted_at.is_some() {
         return Ok(());
     }
-    provenance.adopted_at = Some(Utc::now().into());
+    let adopted_at: DateTimeWithTimeZone = Utc::now().into();
 
-    let mut chat_active: chats::ActiveModel = chat.clone().into();
-    chat_active.assistant_configuration = ActiveValue::Set(Some(configuration.to_json()?));
-    chat_active.update(conn).await?;
+    conn.execute_raw(named_statement_from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        POSTGRES_QUERY_MARK_RUN_ADOPTED,
+        format!(
+            r#"
+            UPDATE "chats"
+            SET "assistant_configuration" = jsonb_set(
+                "assistant_configuration", '{{provenance,adopted_at}}', $2::jsonb, true)
+            WHERE "id" = $1
+              AND ("assistant_configuration" #>> '{{provenance,kind}}') = '{delegation}'
+              AND ("assistant_configuration" #> '{{provenance,adopted_at}}') IS NULL
+            "#,
+            delegation = ChatProvenanceKind::Delegation.as_str(),
+        ),
+        [chat.id.into(), serde_json::to_value(adopted_at)?.into()],
+    ))
+    .await?;
 
     Ok(())
 }
@@ -2305,11 +2335,12 @@ pub struct BranchedDeliveryOutcome {
 /// re-appended results.
 ///
 /// One path-scoped `jsonb_set`, never a read-modify-write of the whole
-/// envelope: `mark_delegated_run_adopted` above replaces the entire
-/// `assistant_configuration` column from a possibly stale in-memory row, with
-/// no transaction and no version guard, and it fires on every user write into
-/// a delegated chat. Scoping the write to `{provenance,result_delivery}` keeps
-/// the two from erasing each other.
+/// envelope. Every writer of this column works the same way — adoption touches
+/// only `{provenance,adopted_at}` and this touches only
+/// `{provenance,result_delivery}` — so two of them landing in either order each
+/// keep what the other wrote, whatever either had read beforehand. Merging into
+/// the stored row rather than replacing it is what makes that true; a whole-
+/// envelope write here would reintroduce the race from the other side.
 pub async fn requeue_or_supersede_branched_deliveries(
     conn: &DatabaseConnection,
     origin_chat_id: &Uuid,
@@ -2754,6 +2785,7 @@ mod result_delivery_serde_tests {
             kind: ChatProvenanceKind::Delegation,
             origin_chat_id: None,
             origin_message_id: None,
+            parent_message_id: None,
             origin_assistant_id: None,
             rebase_cutoff: None,
             depth: 1,

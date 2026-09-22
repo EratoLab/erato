@@ -4390,11 +4390,22 @@ async fn test_submit_to_normal_existing_chat_still_succeeds(pool: Pool<Postgres>
 // MCP tool approval: the durable park and its `continuestream` continuation.
 // ---------------------------------------------------------------------------
 
+/// Which `continuestream` body a continuation is driven with. Both are live
+/// wire shapes: the legacy one stays accepted while a single approval is open.
+#[derive(Clone, Copy)]
+enum ApprovalDecisionBody {
+    /// `{ message_id, decision }` — no `approval_id` anywhere.
+    Legacy,
+    /// `{ message_id, decisions: [{ approval_id, decision }] }`.
+    Named,
+}
+
 /// Under the restrictive approval preset an open-world MCP tool call stops the
 /// turn durably: the approval request is the last persisted content part, the
 /// chat is parked, and no answer was streamed. `continuestream` with an
 /// approval then calls the tool, replays the call and its result to the model
-/// and finishes the SAME assistant message.
+/// and finishes the SAME assistant message — together with the call the turn
+/// had already run before the gate stopped it.
 ///
 /// # Test Categories
 /// - `uses-db`
@@ -4402,7 +4413,11 @@ async fn test_submit_to_normal_existing_chat_still_succeeds(pool: Pool<Postgres>
 /// - `sse-streaming`
 /// - `uses-mocked-llm`
 /// - `uses-mock-mcp`
-async fn continuestream_resumes_a_parked_tool_approval(pool: Pool<Postgres>, tasks_enabled: bool) {
+async fn continuestream_resumes_a_parked_tool_approval(
+    pool: Pool<Postgres>,
+    tasks_enabled: bool,
+    decision_body: ApprovalDecisionBody,
+) {
     const TOOL_RESULT: &str = "approval probe published";
     let continuation_recorder = RequestBodyRecorder::new();
 
@@ -4421,18 +4436,17 @@ async fn continuestream_resumes_a_parked_tool_approval(pool: Pool<Postgres>, tas
             );
         });
     }
-    // The parked turn: call the approval-gated tool.
+    // The parked turn: one closed-world call that runs, then the gated one.
     mocks.mock(|when, then| {
         when.post()
             .path("/v1/chat/completions")
             .matcher(BodyContainsMatcher::new(&[], &[TOOL_RESULT]));
         mock_llm_sse_response(
             then,
-            build_openai_tool_calls_streaming_response(&[(
-                "call_probe",
-                "publish_approval_probe",
-                json!({}),
-            )]),
+            build_openai_tool_calls_streaming_response(&[
+                ("call_read", "read_approval_fixture", json!({})),
+                ("call_probe", "publish_approval_probe", json!({})),
+            ]),
         );
     });
 
@@ -4494,6 +4508,18 @@ async fn continuestream_resumes_a_parked_tool_approval(pool: Pool<Postgres>, tas
     assert_eq!(approval_request["tool_name"], "publish_approval_probe");
     assert_eq!(approval_request["mcp_server_id"], "mock_mcp_approval");
     assert_eq!(approval_request["preset"], "restrictive");
+    // The gated call is also recorded as a decision the client can name.
+    assert_eq!(approval_request["kind"], "mcp_tool");
+    let approvals = approval_request["approvals"].as_array().unwrap();
+    assert_eq!(approvals.len(), 1);
+    assert_eq!(approvals[0]["approval_id"], "call_probe");
+    assert_eq!(approvals[0]["tool_name"], "publish_approval_probe");
+    assert!(
+        approval_request["pending_tool_calls"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
     assert_eq!(
         chats::Entity::find_by_id(chat_id)
             .one(&db)
@@ -4508,10 +4534,16 @@ async fn continuestream_resumes_a_parked_tool_approval(pool: Pool<Postgres>, tas
     let continued = server
         .post("/api/v1beta/me/messages/continuestream")
         .with_bearer_token(TEST_JWT_TOKEN)
-        .json(&json!({
-            "message_id": assistant_message_id,
-            "decision": "approve",
-        }))
+        .json(&match decision_body {
+            ApprovalDecisionBody::Legacy => json!({
+                "message_id": assistant_message_id,
+                "decision": "approve",
+            }),
+            ApprovalDecisionBody::Named => json!({
+                "message_id": assistant_message_id,
+                "decisions": [{ "approval_id": "call_probe", "decision": "approve" }],
+            }),
+        })
         .await;
     continued.assert_status_ok();
     let continued_events = parse_sse_events(&continued);
@@ -4523,6 +4555,11 @@ async fn continuestream_resumes_a_parked_tool_approval(pool: Pool<Postgres>, tas
     let continuation_bodies = continuation_recorder.bodies();
     assert_eq!(continuation_bodies.len(), 1);
     assert!(continuation_bodies[0].contains("call_probe"));
+    assert!(
+        continuation_bodies[0].contains("call_read")
+            && continuation_bodies[0].contains(READ_FIXTURE_RESULT),
+        "the call the parked turn ran before the gate is replayed too"
+    );
 
     // One message, extended in place.
     let resumed = erato::db::entity::messages::Entity::find_by_id(assistant_message_id)
@@ -4537,13 +4574,22 @@ async fn continuestream_resumes_a_parked_tool_approval(pool: Pool<Postgres>, tas
         .collect();
     assert_eq!(
         content_types,
-        vec!["tool_approval_request", "tool_approval", "tool_use", "text"]
+        vec![
+            "tool_use",
+            "tool_approval_request",
+            "tool_approval",
+            "tool_use",
+            "text"
+        ]
     );
-    assert_eq!(resumed_content[1]["tool_call_id"], "call_probe");
-    assert_eq!(resumed_content[1]["always_allow"], false);
-    assert_eq!(resumed_content[2]["status"], "success");
+    assert_eq!(resumed_content[0]["tool_call_id"], "call_read");
+    assert_eq!(resumed_content[2]["tool_call_id"], "call_probe");
+    assert_eq!(resumed_content[2]["always_allow"], false);
+    // The decision names the approval it answered, whichever body carried it.
+    assert_eq!(resumed_content[2]["approval_id"], "call_probe");
+    assert_eq!(resumed_content[3]["status"], "success");
     assert!(
-        serde_json::to_string(&resumed_content[2]["output"])
+        serde_json::to_string(&resumed_content[3]["output"])
             .unwrap()
             .contains(TOOL_RESULT)
     );
@@ -4569,7 +4615,24 @@ async fn continuestream_resumes_a_parked_tool_approval(pool: Pool<Postgres>, tas
 /// - `uses-mock-mcp`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_continuestream_resumes_a_parked_tool_approval(pool: Pool<Postgres>) {
-    continuestream_resumes_a_parked_tool_approval(pool, false).await;
+    continuestream_resumes_a_parked_tool_approval(pool, false, ApprovalDecisionBody::Legacy).await;
+}
+
+/// The same park answered by naming the approval. A client that posts
+/// `decisions[]` must get exactly the legacy outcome, or the two shapes have
+/// drifted and the batch form is not a superset of the one it replaces.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn continuestream_resumes_a_parked_tool_approval_from_a_decisions_array(
+    pool: Pool<Postgres>,
+) {
+    continuestream_resumes_a_parked_tool_approval(pool, false, ApprovalDecisionBody::Named).await;
 }
 
 /// Gate ON, and this is the arm that had no coverage at all.
@@ -4590,7 +4653,1689 @@ async fn test_continuestream_resumes_a_parked_tool_approval(pool: Pool<Postgres>
 /// - `uses-mock-mcp`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn continuestream_resumes_a_parked_tool_approval_under_the_task_gate(pool: Pool<Postgres>) {
-    continuestream_resumes_a_parked_tool_approval(pool, true).await;
+    continuestream_resumes_a_parked_tool_approval(pool, true, ApprovalDecisionBody::Legacy).await;
+}
+
+/// Park a turn on an approval-gated MCP call, then post `decisions` at it.
+///
+/// Returns the answer body and the chat's `generation_state` afterwards: a body
+/// the server refuses must leave the park answerable, or a client that posts a
+/// stale card once has destroyed the only way to resume the turn.
+async fn continuestream_with_decisions(
+    pool: Pool<Postgres>,
+    decisions: serde_json::Value,
+) -> (axum::http::StatusCode, serde_json::Value, Option<String>) {
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post().path("/v1/chat/completions");
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[(
+                "call_probe",
+                "publish_approval_probe",
+                json!({}),
+            )]),
+        );
+    });
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.mcp_servers.insert(
+        "mock_mcp_approval".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url(),
+            "/mcp/approval-policy",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_server_permissions.rules.insert(
+        "allow-mock-mcp".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["mock_mcp_approval".to_string()],
+        },
+    );
+    app_config.mcp_servers_global.approval = erato::config::McpToolApprovalConfig {
+        enabled: true,
+        preset: erato::config::McpToolApprovalPreset::Restrictive,
+        allow_always: false,
+    };
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let db = app_state.db.clone();
+    let server = app_server(app_state);
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "publish the approval probe" }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let chat_id = Uuid::parse_str(&extract_chat_id(&events).expect("Expected chat_id")).unwrap();
+    let assistant_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+
+    let answer = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": assistant_message_id,
+            "decisions": decisions,
+        }))
+        .await;
+    let status = answer.status_code();
+    let body: serde_json::Value = answer.json();
+
+    let generation_state = chats::Entity::find_by_id(chat_id)
+        .one(&db)
+        .await
+        .unwrap()
+        .unwrap()
+        .generation_state;
+
+    (status, body, generation_state)
+}
+
+/// A body that answers something other than the open approval leaves the
+/// question unanswered, and the server says which one is still owed rather
+/// than resuming on a decision the user never gave.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn continuestream_with_missing_approval_id_returns_400_listing_missing(pool: Pool<Postgres>) {
+    let (status, body, generation_state) = continuestream_with_decisions(
+        pool,
+        json!([{ "approval_id": "call_other", "decision": "approve" }]),
+    )
+    .await;
+
+    assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], "decisions_mismatch");
+    assert_eq!(body["missing"], json!(["call_probe"]));
+    assert_eq!(body["unknown"], json!(["call_other"]));
+    assert_eq!(generation_state.as_deref(), Some("awaiting_approval"));
+}
+
+/// An id this turn never opened is refused even when every open approval IS
+/// answered: it means the client is deciding against a card that has moved on,
+/// and the extra decision would be silently dropped.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn continuestream_with_unknown_approval_id_returns_400(pool: Pool<Postgres>) {
+    let (status, body, generation_state) = continuestream_with_decisions(
+        pool,
+        json!([
+            { "approval_id": "call_probe", "decision": "approve" },
+            { "approval_id": "call_other", "decision": "approve" }
+        ]),
+    )
+    .await;
+
+    assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], "decisions_mismatch");
+    assert_eq!(body["missing"], json!([]));
+    assert_eq!(body["unknown"], json!(["call_other"]));
+    assert_eq!(generation_state.as_deref(), Some("awaiting_approval"));
+}
+
+/// The two tools of the approval-policy fixture, by the result each returns:
+/// `read_approval_fixture` is closed-world and runs unchallenged under the
+/// restrictive preset, `publish_approval_probe` is open-world and is gated.
+const READ_FIXTURE_RESULT: &str = "closed-world approval fixture read";
+const PUBLISH_PROBE_RESULT: &str = "approval probe published";
+const APPROVAL_DENIAL: &str = "The user denied this tool call.";
+
+/// The approval-policy MCP server, reachable and gated by the restrictive
+/// preset.
+fn with_approval_probe_server(app_config: &mut erato::config::AppConfig) {
+    app_config.mcp_servers.insert(
+        "mock_mcp_approval".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url(),
+            "/mcp/approval-policy",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_server_permissions.rules.insert(
+        "allow-mock-mcp".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["mock_mcp_approval".to_string()],
+        },
+    );
+    app_config.mcp_servers_global.approval = erato::config::McpToolApprovalConfig {
+        enabled: true,
+        preset: erato::config::McpToolApprovalPreset::Restrictive,
+        allow_always: false,
+    };
+}
+
+/// Submit a turn that parks on the approval gate and hand back what a test
+/// needs to answer it.
+async fn park_a_turn_on_the_approval_gate(
+    pool: Pool<Postgres>,
+    mocks: MockSet,
+) -> (erato::state::AppState, TestServer, Uuid, Uuid, Value) {
+    park_a_turn_on_the_approval_gate_with_config(pool, mocks, |_| {}).await
+}
+
+/// The same park, for a test that also needs something in the app config.
+async fn park_a_turn_on_the_approval_gate_with_config(
+    pool: Pool<Postgres>,
+    mocks: MockSet,
+    configure: impl FnOnce(&mut erato::config::AppConfig),
+) -> (erato::state::AppState, TestServer, Uuid, Uuid, Value) {
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    with_approval_probe_server(&mut app_config);
+    configure(&mut app_config);
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let server = app_server(app_state.clone());
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "publish the approval probe" }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let chat_id = Uuid::parse_str(&extract_chat_id(&events).expect("Expected chat_id")).unwrap();
+    let assistant_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+
+    let parked = Messages::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("Expected the parked assistant message");
+    let content = parked.raw_message["content"].clone();
+    // The mock server is deliberately left out of the return: every test below
+    // drops it and reads the row instead.
+    (app_state, server, chat_id, assistant_message_id, content)
+}
+
+/// A turn that ran two calls before the gate stopped it must hand the model
+/// BOTH of them when it is resumed. The continuation used to rebuild the
+/// context from the single gated call, so everything the turn had already done
+/// vanished between the park and the answer — the model saw a tool response for
+/// work it had no record of asking for.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn continuation_replays_earlier_calls_of_parked_turn(pool: Pool<Postgres>) {
+    let continuation_recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = continuation_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &[READ_FIXTURE_RESULT, PUBLISH_PROBE_RESULT],
+                    &[],
+                ))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                build_openai_text_streaming_response(&["REPLAYED-BATCH-ANSWER"]),
+            );
+        });
+    }
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &[READ_FIXTURE_RESULT]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[
+                ("call_read", "read_approval_fixture", json!({})),
+                ("call_probe", "publish_approval_probe", json!({})),
+            ]),
+        );
+    });
+
+    let (app_state, server, _chat_id, assistant_message_id, parked_content) =
+        park_a_turn_on_the_approval_gate(pool, mocks).await;
+
+    let parked_types: Vec<&str> = parked_content
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|part| part["content_type"].as_str().unwrap())
+        .collect();
+    assert_eq!(parked_types, vec!["tool_use", "tool_approval_request"]);
+
+    let continued = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "message_id": assistant_message_id, "decision": "approve" }))
+        .await;
+    continued.assert_status_ok();
+    assert_eq!(
+        extract_full_text(&parse_sse_events(&continued)),
+        "REPLAYED-BATCH-ANSWER"
+    );
+
+    let bodies = continuation_recorder.bodies();
+    assert_eq!(bodies.len(), 1);
+    assert!(
+        bodies[0].contains("call_read") && bodies[0].contains(READ_FIXTURE_RESULT),
+        "the call the parked turn already ran is replayed to the model"
+    );
+    assert!(bodies[0].contains("call_probe") && bodies[0].contains(PUBLISH_PROBE_RESULT));
+
+    let resumed = Messages::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("Expected the resumed assistant message");
+    let types: Vec<&str> = resumed.raw_message["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|part| part["content_type"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        types,
+        vec![
+            "tool_use",
+            "tool_approval_request",
+            "tool_approval",
+            "tool_use",
+            "text"
+        ]
+    );
+}
+
+/// A client-executed tool leaves an ordinary `ToolUse` on the row, and the
+/// replay has to carry it like any other: only the synthetic
+/// `propose_client_action` proposal is request-scoped and skipped. Dropping a
+/// real client round-trip would hand the provider a turn whose tool responses
+/// no longer match its calls, which is the failure this whole derivation
+/// exists to prevent — and it is the one class of processed call the park
+/// itself cannot produce, so the part is seeded.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn continuation_replays_a_client_tool_call_of_parked_turn(pool: Pool<Postgres>) {
+    const CLIENT_TOOL_RESULT: &str = "client read the mailbox file";
+    let continuation_recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = continuation_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &[CLIENT_TOOL_RESULT, PUBLISH_PROBE_RESULT],
+                    &[],
+                ))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                build_openai_text_streaming_response(&["CLIENT-TOOL-REPLAY-ANSWER"]),
+            );
+        });
+    }
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &[CLIENT_TOOL_RESULT]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[(
+                "call_probe",
+                "publish_approval_probe",
+                json!({}),
+            )]),
+        );
+    });
+
+    let (app_state, server, _chat_id, assistant_message_id, parked_content) =
+        park_a_turn_on_the_approval_gate_with_config(pool, mocks, |app_config| {
+            app_config.client_tools.tools.insert(
+                "outlook_read_file".to_string(),
+                ClientToolConfig {
+                    name: "read_file".to_string(),
+                    namespace: Some("outlook".to_string()),
+                    description: "Reads a file from the mailbox".to_string(),
+                    parameters: r#"{"type":"object","properties":{}}"#.to_string(),
+                    timeout_ms: None,
+                    ..Default::default()
+                },
+            );
+            app_config.facets.tool_call_allowlist = vec!["outlook/read_file".to_string()];
+        })
+        .await;
+
+    // The round-trip the client already completed in the parked turn.
+    let mut content = vec![json!({
+        "content_type": "tool_use",
+        "tool_call_id": "call_client",
+        "tool_name": "read_file",
+        "status": "success",
+        "input": {},
+        "output": { "content": [{ "type": "text", "text": CLIENT_TOOL_RESULT }] },
+    })];
+    content.extend(parked_content.as_array().unwrap().iter().cloned());
+    let row = Messages::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut raw_message = row.raw_message.clone();
+    raw_message["content"] = Value::Array(content);
+    let mut active: erato::db::entity::messages::ActiveModel = row.into();
+    active.raw_message = ActiveValue::Set(raw_message);
+    active
+        .update(&app_state.db)
+        .await
+        .expect("the client round-trip persists");
+
+    let continued = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "message_id": assistant_message_id, "decision": "approve" }))
+        .await;
+    continued.assert_status_ok();
+    assert_eq!(
+        extract_full_text(&parse_sse_events(&continued)),
+        "CLIENT-TOOL-REPLAY-ANSWER"
+    );
+
+    let bodies = continuation_recorder.bodies();
+    assert_eq!(bodies.len(), 1);
+    assert!(
+        bodies[0].contains("call_client") && bodies[0].contains(CLIENT_TOOL_RESULT),
+        "the client tool's call and its response are both replayed"
+    );
+}
+
+/// The calls the model made AFTER the gated one exist nowhere but the approval
+/// part: the park abandoned the queue they were sitting in. Recording them at
+/// the park and replaying them through the normal dispatch path is what makes
+/// the rest of the batch happen at all — before this, approving one call of a
+/// batch silently dropped every other call in it.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn continuation_processes_pending_tool_calls_after_decision(pool: Pool<Postgres>) {
+    let continuation_recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = continuation_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &[PUBLISH_PROBE_RESULT, READ_FIXTURE_RESULT],
+                    &[],
+                ))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                build_openai_text_streaming_response(&["PENDING-BATCH-ANSWER"]),
+            );
+        });
+    }
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &[PUBLISH_PROBE_RESULT]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[
+                ("call_probe", "publish_approval_probe", json!({})),
+                ("call_read", "read_approval_fixture", json!({})),
+            ]),
+        );
+    });
+
+    let (app_state, server, _chat_id, assistant_message_id, parked_content) =
+        park_a_turn_on_the_approval_gate(pool, mocks).await;
+
+    let approval_request = parked_content
+        .as_array()
+        .unwrap()
+        .last()
+        .expect("Expected the approval request")
+        .clone();
+    assert_eq!(approval_request["content_type"], "tool_approval_request");
+    let pending = approval_request["pending_tool_calls"].as_array().unwrap();
+    assert_eq!(pending.len(), 1, "Got: {}", approval_request);
+    assert_eq!(pending[0]["call_id"], "call_read");
+    assert_eq!(pending[0]["fn_name"], "read_approval_fixture");
+
+    let continued = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "message_id": assistant_message_id, "decision": "approve" }))
+        .await;
+    continued.assert_status_ok();
+    assert_eq!(
+        extract_full_text(&parse_sse_events(&continued)),
+        "PENDING-BATCH-ANSWER"
+    );
+
+    let resumed = Messages::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("Expected the resumed assistant message");
+    let parts = resumed.raw_message["content"].as_array().unwrap().clone();
+    let types: Vec<&str> = parts
+        .iter()
+        .map(|part| part["content_type"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        types,
+        vec![
+            "tool_approval_request",
+            "tool_approval",
+            "tool_use",
+            "tool_use",
+            "text"
+        ]
+    );
+    assert_eq!(parts[2]["tool_call_id"], "call_probe");
+    assert_eq!(parts[3]["tool_call_id"], "call_read");
+    assert_eq!(parts[3]["status"], "success");
+    assert!(
+        serde_json::to_string(&parts[3]["output"])
+            .unwrap()
+            .contains(READ_FIXTURE_RESULT)
+    );
+
+    let bodies = continuation_recorder.bodies();
+    assert_eq!(bodies.len(), 1);
+    assert!(bodies[0].contains("call_read"));
+}
+
+/// A continuation that persisted its decision and then died — the backend
+/// restarted, the generation was swept to `errored` — must resume the model
+/// call on retry. It used to answer `400`: the guard asked whether the LAST
+/// part was an approval request, and by then it was not, so the only way to
+/// finish the turn was gone. The decision is written before the model is
+/// contacted precisely so this retry is possible.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn continuestream_retry_after_crash_resumes_instead_of_400(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[PUBLISH_PROBE_RESULT], &[]));
+        mock_llm_sse_response(
+            then,
+            build_openai_text_streaming_response(&["CRASH-RETRY-ANSWER"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &[PUBLISH_PROBE_RESULT]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[(
+                "call_probe",
+                "publish_approval_probe",
+                json!({}),
+            )]),
+        );
+    });
+
+    let (app_state, server, chat_id, assistant_message_id, parked_content) =
+        park_a_turn_on_the_approval_gate(pool, mocks).await;
+
+    // What the lost continuation had already written: the decision and the
+    // gated call's outcome, with the generation swept to `errored` by the
+    // restart.
+    let mut content = parked_content.as_array().unwrap().clone();
+    content.push(json!({
+        "content_type": "tool_approval",
+        "tool_call_id": "call_probe",
+        "approval_id": "call_probe",
+        "always_allow": false,
+        "approved_at": Utc::now().to_rfc3339(),
+    }));
+    content.push(json!({
+        "content_type": "tool_use",
+        "tool_call_id": "call_probe",
+        "tool_name": "publish_approval_probe",
+        "status": "success",
+        "input": {},
+        "output": { "content": [{ "type": "text", "text": PUBLISH_PROBE_RESULT }] },
+    }));
+    let row = Messages::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut raw_message = row.raw_message.clone();
+    raw_message["content"] = Value::Array(content);
+    let mut active: erato::db::entity::messages::ActiveModel = row.into();
+    active.raw_message = ActiveValue::Set(raw_message);
+    active
+        .update(&app_state.db)
+        .await
+        .expect("the settled row persists");
+
+    let chat = chats::Entity::find_by_id(chat_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut active: chats::ActiveModel = chat.into();
+    active.generation_state = ActiveValue::Set(Some("errored".to_string()));
+    active
+        .update(&app_state.db)
+        .await
+        .expect("the crashed generation persists");
+
+    let retried = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "message_id": assistant_message_id, "decision": "approve" }))
+        .await;
+    retried.assert_status_ok();
+    assert_eq!(
+        extract_full_text(&parse_sse_events(&retried)),
+        "CRASH-RETRY-ANSWER"
+    );
+
+    let resumed = Messages::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let types: Vec<&str> = resumed.raw_message["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|part| part["content_type"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        types,
+        vec!["tool_approval_request", "tool_approval", "tool_use", "text"],
+        "the retry must not decide or call anything a second time"
+    );
+}
+
+/// The same crash, one step later: the continuation had already dispatched one
+/// of the calls the park abandoned, so the row ends in a `ToolUse` that answers
+/// no approval. The resume must still happen — this is exactly the dead end the
+/// old tail-shaped guard created — and the call that already ran must not run
+/// again, in the row or in the model's context.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn continuestream_retry_resumes_after_a_pending_call_already_ran(pool: Pool<Postgres>) {
+    let continuation_recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = continuation_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[PUBLISH_PROBE_RESULT], &[]))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                build_openai_text_streaming_response(&["PENDING-CRASH-RETRY-ANSWER"]),
+            );
+        });
+    }
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &[PUBLISH_PROBE_RESULT]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[
+                ("call_probe", "publish_approval_probe", json!({})),
+                ("call_read", "read_approval_fixture", json!({})),
+            ]),
+        );
+    });
+
+    let (app_state, server, chat_id, assistant_message_id, parked_content) =
+        park_a_turn_on_the_approval_gate(pool, mocks).await;
+
+    let mut content = parked_content.as_array().unwrap().clone();
+    content.push(json!({
+        "content_type": "tool_approval",
+        "tool_call_id": "call_probe",
+        "approval_id": "call_probe",
+        "always_allow": false,
+        "approved_at": Utc::now().to_rfc3339(),
+    }));
+    content.push(json!({
+        "content_type": "tool_use",
+        "tool_call_id": "call_probe",
+        "tool_name": "publish_approval_probe",
+        "status": "success",
+        "input": {},
+        "output": { "content": [{ "type": "text", "text": PUBLISH_PROBE_RESULT }] },
+    }));
+    // The pending call the lost continuation got as far as running.
+    content.push(json!({
+        "content_type": "tool_use",
+        "tool_call_id": "call_read",
+        "tool_name": "read_approval_fixture",
+        "status": "success",
+        "input": {},
+        "output": { "content": [{ "type": "text", "text": READ_FIXTURE_RESULT }] },
+    }));
+    let row = Messages::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut raw_message = row.raw_message.clone();
+    raw_message["content"] = Value::Array(content);
+    let mut active: erato::db::entity::messages::ActiveModel = row.into();
+    active.raw_message = ActiveValue::Set(raw_message);
+    active
+        .update(&app_state.db)
+        .await
+        .expect("the half-finished row persists");
+
+    let chat = chats::Entity::find_by_id(chat_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut active: chats::ActiveModel = chat.into();
+    active.generation_state = ActiveValue::Set(Some("errored".to_string()));
+    active
+        .update(&app_state.db)
+        .await
+        .expect("the crashed generation persists");
+
+    let retried = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "message_id": assistant_message_id, "decision": "approve" }))
+        .await;
+    retried.assert_status_ok();
+    assert_eq!(
+        extract_full_text(&parse_sse_events(&retried)),
+        "PENDING-CRASH-RETRY-ANSWER"
+    );
+
+    let resumed = Messages::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let parts = resumed.raw_message["content"].as_array().unwrap().clone();
+    let types: Vec<&str> = parts
+        .iter()
+        .map(|part| part["content_type"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        types,
+        vec![
+            "tool_approval_request",
+            "tool_approval",
+            "tool_use",
+            "tool_use",
+            "text"
+        ],
+        "the retry re-runs nothing it finds already recorded"
+    );
+
+    let bodies = continuation_recorder.bodies();
+    assert_eq!(bodies.len(), 1);
+    assert_eq!(
+        bodies[0].matches("call_read").count(),
+        2,
+        "the already-run pending call appears once as a call and once as its response: {}",
+        bodies[0]
+    );
+}
+
+/// Posting the same decision twice — a retried request, two open tabs — is a
+/// conflict, not a bad request: the row is fine and the body is fine, the turn
+/// has simply moved on. The client has to be able to tell that apart from a
+/// decision the server refused, because only one of the two is worth asking the
+/// user about again.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn duplicate_continuestream_returns_409_already_continued(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[PUBLISH_PROBE_RESULT], &[]));
+        mock_llm_sse_response(
+            then,
+            build_openai_text_streaming_response(&["DUPLICATE-GUARD-ANSWER"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &[PUBLISH_PROBE_RESULT]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[(
+                "call_probe",
+                "publish_approval_probe",
+                json!({}),
+            )]),
+        );
+    });
+
+    let (_app_state, server, _chat_id, assistant_message_id, _parked_content) =
+        park_a_turn_on_the_approval_gate(pool, mocks).await;
+
+    let body = json!({ "message_id": assistant_message_id, "decision": "approve" });
+    let first = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&body)
+        .await;
+    first.assert_status_ok();
+    assert_eq!(
+        extract_full_text(&parse_sse_events(&first)),
+        "DUPLICATE-GUARD-ANSWER"
+    );
+
+    let second = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&body)
+        .await;
+    assert_eq!(second.status_code(), axum::http::StatusCode::CONFLICT);
+    let error: Value = second.json();
+    assert_eq!(error["code"], "already_continued");
+}
+
+/// The same duplicate, on a chat whose LATEST generation failed. `errored` on
+/// the chat row says nothing about which message failed — any later turn, or
+/// the reaper, writes it — so a settled row must be recognised by its own
+/// content, not by the chat's lifecycle. Without that, a stale tab re-posting
+/// an old decision re-runs the model on a turn that already answered and
+/// appends a second `text` part to it.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn continuestream_refuses_an_answered_turn_after_a_later_generation_errored(
+    pool: Pool<Postgres>,
+) {
+    let continuation_recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = continuation_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[PUBLISH_PROBE_RESULT], &[]))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                build_openai_text_streaming_response(&["SETTLED-TURN-ANSWER"]),
+            );
+        });
+    }
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &[PUBLISH_PROBE_RESULT]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[(
+                "call_probe",
+                "publish_approval_probe",
+                json!({}),
+            )]),
+        );
+    });
+
+    let (app_state, server, chat_id, assistant_message_id, _parked_content) =
+        park_a_turn_on_the_approval_gate(pool, mocks).await;
+
+    let body = json!({ "message_id": assistant_message_id, "decision": "approve" });
+    let first = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&body)
+        .await;
+    first.assert_status_ok();
+    assert_eq!(
+        extract_full_text(&parse_sse_events(&first)),
+        "SETTLED-TURN-ANSWER"
+    );
+
+    // What a later failed generation on this chat leaves behind, whatever it
+    // was generating.
+    let chat = chats::Entity::find_by_id(chat_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut active: chats::ActiveModel = chat.into();
+    active.generation_state = ActiveValue::Set(Some("errored".to_string()));
+    active
+        .update(&app_state.db)
+        .await
+        .expect("the later failure persists");
+
+    let stale = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&body)
+        .await;
+    assert_eq!(stale.status_code(), axum::http::StatusCode::CONFLICT);
+    assert_eq!(stale.json::<Value>()["code"], "already_continued");
+    assert_eq!(
+        continuation_recorder.bodies().len(),
+        1,
+        "the answered turn must not reach the model a second time"
+    );
+
+    let settled = Messages::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let types: Vec<&str> = settled.raw_message["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|part| part["content_type"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        types,
+        vec!["tool_approval_request", "tool_approval", "tool_use", "text"],
+        "the row keeps the one answer it produced"
+    );
+}
+
+/// Taking the request back is a decision about the turn, not about one call in
+/// it: EVERY open approval is rejected with `reason: "withdrawn"`, which is how
+/// a client tells a call the user refused from one they never answered — and
+/// the turn still finishes, so the user gets an answer rather than a chat stuck
+/// on a card they dismissed.
+///
+/// The MCP gate cannot open two approvals in one park yet — 5.3's child
+/// propagation is what does — so the second item is seeded onto the row. The
+/// fan-out is the whole point of the test, and a single-item park would assert
+/// nothing about it.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn withdraw_rejects_all_open_and_turn_continues(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[APPROVAL_DENIAL], &[]));
+        mock_llm_sse_response(
+            then,
+            build_openai_text_streaming_response(&["WITHDRAWN-ANSWER"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &[APPROVAL_DENIAL]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[(
+                "call_probe",
+                "publish_approval_probe",
+                json!({}),
+            )]),
+        );
+    });
+
+    let (app_state, server, chat_id, assistant_message_id, parked_content) =
+        park_a_turn_on_the_approval_gate(pool, mocks).await;
+
+    let mut content = parked_content.as_array().unwrap().clone();
+    let approval_request = content
+        .last_mut()
+        .expect("Expected the approval request last");
+    assert_eq!(approval_request["content_type"], "tool_approval_request");
+    approval_request["approvals"] = json!([
+        {
+            "approval_id": "call_probe",
+            "tool_call_id": "call_probe",
+            "tool_name": "publish_approval_probe",
+            "input": {},
+        },
+        {
+            "approval_id": "call_second",
+            "tool_call_id": "call_second",
+            "tool_name": "publish_approval_probe",
+            "input": {},
+        },
+    ]);
+    let row = Messages::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut raw_message = row.raw_message.clone();
+    raw_message["content"] = Value::Array(content);
+    let mut active: erato::db::entity::messages::ActiveModel = row.into();
+    active.raw_message = ActiveValue::Set(raw_message);
+    active
+        .update(&app_state.db)
+        .await
+        .expect("the two-item park persists");
+
+    // The single-value form carries no `approval_id`, so on a two-item park it
+    // would decide a call it never named. A withdrawal is a decision value like
+    // any other and gets no exemption from that.
+    let legacy = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "message_id": assistant_message_id, "decision": "withdraw" }))
+        .await;
+    assert_eq!(legacy.status_code(), axum::http::StatusCode::BAD_REQUEST);
+
+    let withdrawn = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": assistant_message_id,
+            "decisions": [
+                { "approval_id": "call_probe", "decision": "withdraw" },
+                { "approval_id": "call_second", "decision": "withdraw" },
+            ],
+        }))
+        .await;
+    withdrawn.assert_status_ok();
+    assert_eq!(
+        extract_full_text(&parse_sse_events(&withdrawn)),
+        "WITHDRAWN-ANSWER"
+    );
+
+    let resumed = Messages::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let parts = resumed.raw_message["content"].as_array().unwrap().clone();
+    let types: Vec<&str> = parts
+        .iter()
+        .map(|part| part["content_type"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        types,
+        vec![
+            "tool_approval_request",
+            "tool_rejection",
+            "tool_use",
+            "tool_rejection",
+            "tool_use",
+            "text"
+        ]
+    );
+    assert_eq!(parts[1]["approval_id"], "call_probe");
+    assert_eq!(parts[1]["reason"], "withdrawn");
+    assert_eq!(parts[1]["never_allow"], false);
+    assert_eq!(parts[2]["status"], "error");
+    assert_eq!(parts[3]["approval_id"], "call_second");
+    assert_eq!(parts[3]["reason"], "withdrawn");
+    assert_eq!(parts[4]["tool_call_id"], "call_second");
+    assert_eq!(parts[4]["status"], "error");
+    assert_eq!(
+        chats::Entity::find_by_id(chat_id)
+            .one(&app_state.db)
+            .await
+            .unwrap()
+            .unwrap()
+            .generation_state
+            .as_deref(),
+        Some("completed")
+    );
+}
+
+/// The crash a row's own shape cannot describe. A turn that says something
+/// before its next tool call commits that text mid-turn, so after the restart
+/// the row looks answered: the resume used to be refused forever, and widening
+/// the set of parts that "mean nothing" cannot help, because a `text` part is
+/// exactly what an answered turn leaves behind. The claim the continuation
+/// records on the message is what tells the two apart.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn continuestream_retry_after_a_mid_turn_text_commit_resumes(pool: Pool<Postgres>) {
+    const MID_TURN_PROSE: &str = "MID-TURN-PROSE";
+    let continuation_recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = continuation_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[MID_TURN_PROSE], &[]))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                build_openai_text_streaming_response(&["RESUMED-AFTER-TEXT"]),
+            );
+        });
+    }
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &[MID_TURN_PROSE]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[(
+                "call_probe",
+                "publish_approval_probe",
+                json!({}),
+            )]),
+        );
+    });
+
+    let (app_state, server, chat_id, assistant_message_id, parked_content) =
+        park_a_turn_on_the_approval_gate(pool, mocks).await;
+
+    // What a continuation that streamed prose and then died leaves behind: the
+    // decision, the gated call's outcome, and a `text` part committed while the
+    // turn was still running.
+    let mut content = parked_content.as_array().unwrap().clone();
+    content.push(json!({
+        "content_type": "tool_approval",
+        "tool_call_id": "call_probe",
+        "approval_id": "call_probe",
+        "always_allow": false,
+        "approved_at": Utc::now().to_rfc3339(),
+    }));
+    content.push(json!({
+        "content_type": "tool_use",
+        "tool_call_id": "call_probe",
+        "tool_name": "publish_approval_probe",
+        "status": "success",
+        "input": {},
+        "output": { "content": [{ "type": "text", "text": PUBLISH_PROBE_RESULT }] },
+    }));
+    content.push(json!({ "content_type": "text", "text": MID_TURN_PROSE }));
+    let row = Messages::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut raw_message = row.raw_message.clone();
+    raw_message["content"] = Value::Array(content);
+    let mut active: erato::db::entity::messages::ActiveModel = row.into();
+    active.raw_message = ActiveValue::Set(raw_message);
+    active
+        .update(&app_state.db)
+        .await
+        .expect("the half-streamed row persists");
+
+    let chat = chats::Entity::find_by_id(chat_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut active: chats::ActiveModel = chat.into();
+    active.generation_state = ActiveValue::Set(Some("errored".to_string()));
+    active
+        .update(&app_state.db)
+        .await
+        .expect("the crashed generation persists");
+
+    let body = json!({ "message_id": assistant_message_id, "decision": "approve" });
+    // Read off the row alone, this is indistinguishable from a turn that
+    // answered — and a turn that answered must never be resumed.
+    let without_claim = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&body)
+        .await;
+    assert_eq!(
+        without_claim.status_code(),
+        axum::http::StatusCode::CONFLICT
+    );
+    assert_eq!(without_claim.json::<Value>()["code"], "already_continued");
+
+    // The claim the lost continuation had taken on the message before it wrote
+    // anything, which the write that ends a turn releases.
+    let row = Messages::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut active: erato::db::entity::messages::ActiveModel = row.into();
+    active.generation_metadata = ActiveValue::Set(Some(json!({ "continuation_in_flight": true })));
+    active
+        .update(&app_state.db)
+        .await
+        .expect("the continuation's claim persists");
+
+    let retried = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&body)
+        .await;
+    retried.assert_status_ok();
+    assert_eq!(
+        extract_full_text(&parse_sse_events(&retried)),
+        "RESUMED-AFTER-TEXT"
+    );
+
+    let bodies = continuation_recorder.bodies();
+    assert_eq!(bodies.len(), 1);
+    assert!(
+        bodies[0].contains(PUBLISH_PROBE_RESULT),
+        "the resumed turn still carries what it had already done"
+    );
+
+    let resumed = Messages::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let parts = resumed.raw_message["content"].as_array().unwrap().clone();
+    let types: Vec<&str> = parts
+        .iter()
+        .map(|part| part["content_type"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        types,
+        vec!["tool_approval_request", "tool_approval", "tool_use", "text"],
+        "the retry decides nothing and calls nothing a second time"
+    );
+    assert_eq!(
+        parts[3]["text"],
+        format!("{MID_TURN_PROSE}RESUMED-AFTER-TEXT"),
+        "the answer continues the prose the turn had already committed"
+    );
+    let released = Messages::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        released
+            .generation_metadata
+            .as_ref()
+            .is_none_or(|metadata| { metadata.get("continuation_in_flight").is_none() }),
+        "the finished turn releases its claim: {:?}",
+        released.generation_metadata
+    );
+}
+
+/// The crash retry's whole point, on the case that has something left to do: the
+/// continuation died before it ever reached the calls the park abandoned, so the
+/// resume has to seed them into the dispatch loop rather than answer around
+/// them.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn continuestream_retry_after_crash_runs_the_calls_the_park_abandoned(pool: Pool<Postgres>) {
+    let continuation_recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = continuation_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &[PUBLISH_PROBE_RESULT, READ_FIXTURE_RESULT],
+                    &[],
+                ))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                build_openai_text_streaming_response(&["ABANDONED-CALLS-ANSWER"]),
+            );
+        });
+    }
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &[PUBLISH_PROBE_RESULT]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[
+                ("call_probe", "publish_approval_probe", json!({})),
+                ("call_read", "read_approval_fixture", json!({})),
+            ]),
+        );
+    });
+
+    let (app_state, server, chat_id, assistant_message_id, parked_content) =
+        park_a_turn_on_the_approval_gate(pool, mocks).await;
+
+    let mut content = parked_content.as_array().unwrap().clone();
+    content.push(json!({
+        "content_type": "tool_approval",
+        "tool_call_id": "call_probe",
+        "approval_id": "call_probe",
+        "always_allow": false,
+        "approved_at": Utc::now().to_rfc3339(),
+    }));
+    content.push(json!({
+        "content_type": "tool_use",
+        "tool_call_id": "call_probe",
+        "tool_name": "publish_approval_probe",
+        "status": "success",
+        "input": {},
+        "output": { "content": [{ "type": "text", "text": PUBLISH_PROBE_RESULT }] },
+    }));
+    let row = Messages::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut raw_message = row.raw_message.clone();
+    raw_message["content"] = Value::Array(content);
+    let mut active: erato::db::entity::messages::ActiveModel = row.into();
+    active.raw_message = ActiveValue::Set(raw_message);
+    active
+        .update(&app_state.db)
+        .await
+        .expect("the settled row persists");
+
+    let chat = chats::Entity::find_by_id(chat_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut active: chats::ActiveModel = chat.into();
+    active.generation_state = ActiveValue::Set(Some("errored".to_string()));
+    active
+        .update(&app_state.db)
+        .await
+        .expect("the crashed generation persists");
+
+    let retried = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "message_id": assistant_message_id, "decision": "approve" }))
+        .await;
+    retried.assert_status_ok();
+    assert_eq!(
+        extract_full_text(&parse_sse_events(&retried)),
+        "ABANDONED-CALLS-ANSWER"
+    );
+
+    let resumed = Messages::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let parts = resumed.raw_message["content"].as_array().unwrap().clone();
+    let types: Vec<&str> = parts
+        .iter()
+        .map(|part| part["content_type"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        types,
+        vec![
+            "tool_approval_request",
+            "tool_approval",
+            "tool_use",
+            "tool_use",
+            "text"
+        ]
+    );
+    assert_eq!(parts[3]["tool_call_id"], "call_read");
+    assert_eq!(parts[3]["status"], "success");
+
+    let bodies = continuation_recorder.bodies();
+    assert_eq!(bodies.len(), 1);
+    assert_eq!(
+        bodies[0].matches("call_read").count(),
+        2,
+        "the abandoned call is seeded once and answered once: {}",
+        bodies[0]
+    );
+}
+
+/// An abandoned call obeys the same tool set as the gated one. The dispatch loop
+/// fails a whole turn on a call naming a tool it was not offered, so a tool the
+/// user denied while the card was waiting has to be refused before the calls are
+/// seeded — the model gets an error it can work around, and the turn still
+/// answers.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn continuation_refuses_an_abandoned_call_denied_after_the_park(pool: Pool<Postgres>) {
+    const REFUSAL: &str = "has disabled the tool";
+    let continuation_recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = continuation_recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[REFUSAL], &[]))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                build_openai_text_streaming_response(&["DENIED-PENDING-ANSWER"]),
+            );
+        });
+    }
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &[REFUSAL]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[
+                ("call_probe", "publish_approval_probe", json!({})),
+                ("call_read", "read_approval_fixture", json!({})),
+            ]),
+        );
+    });
+
+    let (app_state, server, _chat_id, assistant_message_id, parked_content) =
+        park_a_turn_on_the_approval_gate(pool, mocks).await;
+    let approval_request = parked_content
+        .as_array()
+        .unwrap()
+        .last()
+        .expect("Expected the approval request")
+        .clone();
+    assert_eq!(
+        approval_request["pending_tool_calls"][0]["fn_name"],
+        "read_approval_fixture"
+    );
+
+    // The denial lands on the abandoned call's tool, not on the gated one.
+    let denied = server
+        .post("/api/v1beta/me/mcp-tool-approval-settings")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "mcp_server_id": "mock_mcp_approval",
+            "tool_name": "read_approval_fixture",
+            "decision": "denied",
+        }))
+        .await;
+    denied.assert_status_ok();
+
+    let continued = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "message_id": assistant_message_id, "decision": "approve" }))
+        .await;
+    continued.assert_status_ok();
+    assert_eq!(
+        extract_full_text(&parse_sse_events(&continued)),
+        "DENIED-PENDING-ANSWER"
+    );
+
+    let bodies = continuation_recorder.bodies();
+    assert_eq!(bodies.len(), 1);
+    assert!(
+        !bodies[0].contains(READ_FIXTURE_RESULT),
+        "a denied tool must not be executed"
+    );
+    let offers = recorded_tool_offers(&bodies);
+    assert_eq!(offers.len(), 1);
+    assert!(
+        !offers[0].iter().any(|name| name == "read_approval_fixture"),
+        "{:?}",
+        offers[0]
+    );
+
+    let resumed = Messages::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let parts = resumed.raw_message["content"].as_array().unwrap().clone();
+    let types: Vec<&str> = parts
+        .iter()
+        .map(|part| part["content_type"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        types,
+        vec![
+            "tool_approval_request",
+            "tool_approval",
+            "tool_use",
+            "tool_use",
+            "text"
+        ]
+    );
+    assert_eq!(parts[2]["tool_call_id"], "call_probe");
+    assert_eq!(parts[2]["status"], "success");
+    assert_eq!(parts[3]["tool_call_id"], "call_read");
+    assert_eq!(parts[3]["status"], "error");
+    assert!(
+        parts[3]["output"]["error"]
+            .as_str()
+            .unwrap()
+            .contains(REFUSAL),
+        "{}",
+        parts[3]["output"]
+    );
+}
+
+/// A call that fails settles like any other outcome. Giving up in the middle of
+/// the decision loop would leave the items before it recorded and the ones after
+/// it open, and a card whose set no longer matches the row is one the client
+/// cannot answer: resubmitting what it was shown is a `decisions_mismatch`
+/// naming the items already settled.
+///
+/// The MCP gate cannot open two approvals in one park yet, so the pair is seeded
+/// onto the row, on a server whose tool always fails.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn continuation_settles_every_open_item_when_a_call_fails(pool: Pool<Postgres>) {
+    const CALL_FAILURE: &str = "Failed to call MCP tool";
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[CALL_FAILURE], &[]));
+        mock_llm_sse_response(
+            then,
+            build_openai_text_streaming_response(&["FAILED-CALLS-ANSWER"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &[CALL_FAILURE]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[(
+                "call_probe",
+                "publish_approval_probe",
+                json!({}),
+            )]),
+        );
+    });
+
+    let (app_state, server, chat_id, assistant_message_id, parked_content) =
+        park_a_turn_on_the_approval_gate_with_config(pool, mocks, |app_config| {
+            app_config.mcp_servers.insert(
+                "mock_mcp_error".to_string(),
+                mcp_server_config(
+                    &mock_mcp_base_url(),
+                    "/mcp/error",
+                    McpServerAuthenticationConfig::None,
+                ),
+            );
+            app_config.mcp_server_permissions.rules.insert(
+                "allow-mock-mcp-error".to_string(),
+                erato::config::McpServerPermissionRule::AllowAll {
+                    mcp_server_ids: vec!["mock_mcp_error".to_string()],
+                },
+            );
+        })
+        .await;
+
+    let mut content = parked_content.as_array().unwrap().clone();
+    let approval_request = content
+        .last_mut()
+        .expect("Expected the approval request last");
+    approval_request["mcp_server_id"] = json!("mock_mcp_error");
+    approval_request["approvals"] = json!([
+        {
+            "approval_id": "call_first",
+            "tool_call_id": "call_first",
+            "tool_name": "read_file",
+            "input": { "path": "first.txt" },
+        },
+        {
+            "approval_id": "call_second",
+            "tool_call_id": "call_second",
+            "tool_name": "read_file",
+            "input": { "path": "second.txt" },
+        },
+    ]);
+    let row = Messages::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut raw_message = row.raw_message.clone();
+    raw_message["content"] = Value::Array(content);
+    let mut active: erato::db::entity::messages::ActiveModel = row.into();
+    active.raw_message = ActiveValue::Set(raw_message);
+    active
+        .update(&app_state.db)
+        .await
+        .expect("the two-item park persists");
+
+    let continued = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": assistant_message_id,
+            "decisions": [
+                { "approval_id": "call_first", "decision": "approve" },
+                { "approval_id": "call_second", "decision": "approve" },
+            ],
+        }))
+        .await;
+    continued.assert_status_ok();
+    assert_eq!(
+        extract_full_text(&parse_sse_events(&continued)),
+        "FAILED-CALLS-ANSWER"
+    );
+
+    let resumed = Messages::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let parts = resumed.raw_message["content"].as_array().unwrap().clone();
+    let types: Vec<&str> = parts
+        .iter()
+        .map(|part| part["content_type"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        types,
+        vec![
+            "tool_approval_request",
+            "tool_approval",
+            "tool_use",
+            "tool_approval",
+            "tool_use",
+            "text"
+        ],
+        "both items settle even though both calls failed"
+    );
+    assert_eq!(parts[2]["tool_call_id"], "call_first");
+    assert_eq!(parts[2]["status"], "error");
+    assert!(
+        parts[2]["output"]["error"]
+            .as_str()
+            .unwrap()
+            .contains(CALL_FAILURE),
+        "{}",
+        parts[2]["output"]
+    );
+    assert_eq!(parts[4]["tool_call_id"], "call_second");
+    assert_eq!(parts[4]["status"], "error");
+    assert_eq!(
+        chats::Entity::find_by_id(chat_id)
+            .one(&app_state.db)
+            .await
+            .unwrap()
+            .unwrap()
+            .generation_state
+            .as_deref(),
+        Some("completed")
+    );
 }
 
 /// The wire contract the web client seeds its streaming buffer from: a
@@ -8701,6 +10446,7 @@ async fn seed_delivered_child(
             kind: ChatProvenanceKind::Delegation,
             origin_chat_id: Some(origin_chat_id),
             origin_message_id: Some(origin_message_id),
+            parent_message_id: None,
             origin_assistant_id: None,
             rebase_cutoff: None,
             depth: 1,

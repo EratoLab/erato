@@ -27,6 +27,7 @@ pub const POSTGRES_QUERY_GENERATION_TRY_START: &str = "generation_try_start";
 pub const POSTGRES_QUERY_GENERATION_LEASE_HOLDER: &str = "generation_lease_holder";
 pub const POSTGRES_QUERY_GENERATION_DISPLACED: &str = "generation_displaced";
 pub const POSTGRES_QUERY_RESOLVE_SYSTEM_DELIVERED_TIP: &str = "resolve_system_delivered_tip";
+pub const POSTGRES_QUERY_MARK_RUN_ADOPTED: &str = "mark_run_adopted";
 pub const POSTGRES_QUERY_REDELIVER_BRANCHED_RESULTS: &str = "redeliver_branched_results";
 pub const POSTGRES_QUERY_DELIVERY_RECORD: &str = "delivery_record";
 pub const POSTGRES_QUERY_DELIVERY_CLAIM: &str = "delivery_claim";
@@ -36,6 +37,7 @@ pub const POSTGRES_QUERY_DELIVERY_DUPLICATE_PROBE: &str = "delivery_duplicate_pr
 pub const POSTGRES_QUERY_DELIVERY_SWEEP_REQUEUE: &str = "delivery_sweep_requeue";
 pub const POSTGRES_QUERY_DELIVERY_SWEEP_SCAN: &str = "delivery_sweep_scan";
 pub const POSTGRES_QUERY_DELIVERY_SWEEP_CLAIM: &str = "delivery_sweep_claim";
+pub const POSTGRES_QUERY_DELIVERY_REARM: &str = "delivery_rearm";
 /// Terminal outcome of ONE delegated run, using the listing's own expression.
 pub const POSTGRES_QUERY_DELEGATED_RUN_OUTCOME: &str = "delegated_run_outcome";
 /// Whether a retry of a given failed run is already working.
@@ -72,6 +74,7 @@ pub const KNOWN_POSTGRES_QUERY_IDS: &[&str] = &[
     POSTGRES_QUERY_GENERATION_LEASE_HOLDER,
     POSTGRES_QUERY_GENERATION_DISPLACED,
     POSTGRES_QUERY_RESOLVE_SYSTEM_DELIVERED_TIP,
+    POSTGRES_QUERY_MARK_RUN_ADOPTED,
     POSTGRES_QUERY_REDELIVER_BRANCHED_RESULTS,
     POSTGRES_QUERY_DELIVERY_RECORD,
     POSTGRES_QUERY_DELIVERY_CLAIM,
@@ -81,6 +84,7 @@ pub const KNOWN_POSTGRES_QUERY_IDS: &[&str] = &[
     POSTGRES_QUERY_DELIVERY_SWEEP_REQUEUE,
     POSTGRES_QUERY_DELIVERY_SWEEP_SCAN,
     POSTGRES_QUERY_DELIVERY_SWEEP_CLAIM,
+    POSTGRES_QUERY_DELIVERY_REARM,
     POSTGRES_QUERY_DELEGATED_RUN_OUTCOME,
     POSTGRES_QUERY_DELEGATION_RETRY_IN_FLIGHT,
     POSTGRES_QUERY_DELEGATION_TOOL_CALL,

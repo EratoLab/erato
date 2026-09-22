@@ -357,6 +357,8 @@
   "delegation.preamble": {},
   "delegation.result_max_chars": {},
   "delegation.run_timeout_seconds": {},
+  "delegation.tasks.approval.mode": {},
+  "delegation.tasks.approval.plan_min_tasks": {},
   "delegation.tasks.child_facet_ids.[]": {},
   "delegation.tasks.enabled": {},
   "delegation.tasks.max_client_tool_calls_per_task": {},
@@ -365,6 +367,7 @@
   "delegation.tasks.max_tasks_per_turn": {},
   "delegation.tasks.multitask_strategy": {},
   "delegation.tasks.persona": {},
+  "delegation.tasks.propagate_child_mcp_approvals": {},
   "delegation.tasks.result_template": {},
   "delegation.tasks.run_modes.[]": {},
   "delegation.tasks.scheduling": {},
@@ -475,6 +478,20 @@
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.additional_system_prompt.source` instead.",
       "replacement_key": "facets.facets.<facet-id>.additional_system_prompt.source"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.delegation.approval.mode": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.delegation.approval.mode` instead.",
+      "replacement_key": "facets.facets.<facet-id>.delegation.approval.mode"
+    }
+  },
+  "experimental_facets.facets.<facet-id>.delegation.approval.plan_min_tasks": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.delegation.approval.plan_min_tasks` instead.",
+      "replacement_key": "facets.facets.<facet-id>.delegation.approval.plan_min_tasks"
     }
   },
   "experimental_facets.facets.<facet-id>.delegation.child_facet_ids.[]": {
@@ -661,6 +678,8 @@
   "facets.facets.<facet-id>.additional_system_prompt.prompt": {},
   "facets.facets.<facet-id>.additional_system_prompt.prompt_name": {},
   "facets.facets.<facet-id>.additional_system_prompt.source": {},
+  "facets.facets.<facet-id>.delegation.approval.mode": {},
+  "facets.facets.<facet-id>.delegation.approval.plan_min_tasks": {},
   "facets.facets.<facet-id>.delegation.child_facet_ids.[]": {},
   "facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task": {},
   "facets.facets.<facet-id>.delegation.max_parallel": {},

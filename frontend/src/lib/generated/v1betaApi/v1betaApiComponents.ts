@@ -5059,10 +5059,16 @@ export const useClientToolResult = (
   });
 };
 
-export type ContinueMessageSseError = Fetcher.ErrorWrapper<{
-  status: 409;
-  payload: Schemas.GenerationRunningError;
-}>;
+export type ContinueMessageSseError = Fetcher.ErrorWrapper<
+  | {
+      status: 400;
+      payload: Schemas.ApprovalDecisionsError;
+    }
+  | {
+      status: 409;
+      payload: Schemas.GenerationRunningError;
+    }
+>;
 
 export type ContinueMessageSseVariables = {
   body: Schemas.ContinueStreamRequest;

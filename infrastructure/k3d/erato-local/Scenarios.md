@@ -24,6 +24,49 @@ Enables the assistants feature. This allows testing assistant creation, manageme
 
 Also enables in-chat delegation, which needs a scripted delegate: the mock LLM is the sole chat provider here, because a delegated child inherits the first entry of `priority_order` rather than the parent's provider. A mock MCP server gives the delegate a real tool to call.
 
+### `approvals` - Parked Approval Testing
+
+**Configuration File:** `config/erato.scenario-approvals.toml`
+
+`assistants` plus the approval half of `many-models`, because neither drives a
+parked approval on its own: `assistants` has the task route and the mock LLM as
+sole chat provider (so a parent and its child are both scriptable) but no
+approval configuration, while `many-models` has the restrictive preset and the
+gated mock MCP server but no tasks and a live default model, which answers the
+child turn itself.
+
+Approval is deliberately not enabled inside `assistants`: its specs complete the
+calls this scenario parks on. The gated server is left out of the planning
+facet's allowlist, so while a turn is narrowed to that facet a call under
+decision can only have come from a task child. A turn with no facet selected
+reaches every authorized server, which is how the same scenario also drives a
+gated call the origin chat makes itself.
+
+It offers both task run modes, which is what lets one scenario drive both
+places a child can raise a question. An awaited child asks in the slot it holds
+on the origin turn; a detached (`async`) child has no such slot and asks on its
+own card, with the origin told about it by a delivered `task_result` row and
+told the answer by a second one. Offering `async` also un-inerts the shipped
+`[delegation.tasks.approval]` default, so every detached dispatch here is asked
+about before it happens — which is that default's whole purpose and is only
+reachable in a deployment that offers the mode.
+
+It carries three planning facets rather than one. `plan` overrides nothing, so a
+turn under it runs the shipped global `[delegation.tasks.approval]` default
+`async_only`; `plan_gate` sets `mode = "plan"` through
+`[facets.facets.plan_gate.delegation.approval]`; `plan_serial` narrows
+`max_parallel` to 1 through `[facets.facets.plan_serial.delegation]`. All three
+keys are per-deployment configuration, and a scenario per value would cost a
+cluster switch and a CI matrix entry each, so the facets express the variants
+inside one scenario — selecting one or the other is then the only difference
+between a planned batch that parks and the same batch that dispatches, or between
+a batch that runs in parallel and the same batch that has to queue.
+
+A facet may only ever narrow, which is why the cap lives on a facet and the
+approval mode does too: a facet's `max_parallel` is merged as a MINIMUM and its
+approval `mode` as the STRICTEST, so `plan_serial` can lower the cap to 1 but no
+facet could set `mode = "never"` to switch the shipped dispatch approval off.
+
 ### `many-models` - Model Selector Testing
 
 **Configuration File:** `config/erato.scenario-many-models.toml`
@@ -52,6 +95,7 @@ infrastructure/k3d/erato-local/
 │   ├── erato.scenario-basic.toml           # Basic scenario config
 │   ├── erato.scenario-tight-budget.toml    # Tight-budget scenario config
 │   ├── erato.scenario-assistants.toml      # Assistants scenario config
+│   ├── erato.scenario-approvals.toml       # Approvals scenario config
 │   └── erato.scenario-many-models.toml     # Many-models scenario config
 ├── templates/
 │   └── erato-test-scenario-configmap.yaml  # Mounts scenario TOML as ConfigMap
@@ -68,7 +112,7 @@ Scenarios can be switched using the `switch-test-scenario` script:
 infrastructure/scripts/switch-test-scenario --scenario <scenario-name>
 ```
 
-Valid scenario names: `basic`, `tight-budget`, `assistants`, `many-models`, `multi-replica`
+Valid scenario names: `basic`, `tight-budget`, `assistants`, `approvals`, `many-models`, `multi-replica`
 
 The script:
 1. Validates the scenario name
@@ -113,6 +157,12 @@ To add a new test scenario:
    ```python
    VALID_SCENARIOS = ["basic", "tight-budget", "assistants", "<name>"]
    ```
+
+   Also add it to the scenario list in
+   `templates/erato-scenario-secrets.yaml`. That range is what creates the
+   Secret holding the generated `.auto.toml`, and `setup-dev` mounts that
+   Secret by name - a scenario missing from the list fails the install on a
+   secret that does not exist.
 
 4. **Create a setup file:**
    ```typescript

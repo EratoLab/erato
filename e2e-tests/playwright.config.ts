@@ -31,6 +31,7 @@ const standardScenarios = [
   { name: "basic", storageState: "playwright/.auth/user.json" },
   { name: "tight-budget", storageState: "playwright/.auth/user.json" },
   { name: "assistants", storageState: "playwright/.auth/user.json" },
+  { name: "approvals", storageState: "playwright/.auth/user.json" },
   { name: "many-models", storageState: "playwright/.auth/user.json" },
   { name: "multi-replica", storageState: "playwright/.auth/user.json" },
 ];
@@ -93,7 +94,7 @@ export default defineConfig({
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
     baseURL: baseUrl,
-    ignoreHTTPSErrors: baseUrl === "https://app.erato.internal",
+    ignoreHTTPSErrors: baseUrl.startsWith("https://app.erato.internal"),
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: "on-first-retry",
