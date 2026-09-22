@@ -2007,6 +2007,7 @@ async fn test_message_submit_with_completed_audio_transcription(pool: Pool<Postg
         file_storage_provider_id: ActiveValue::Set("local".to_string()),
         file_storage_path: ActiveValue::Set("/fixtures/sales-summary-1-1.mp3".to_string()),
         audio_transcription: ActiveValue::Set(Some(audio_transcription)),
+        external_id_ews_id: ActiveValue::Set(None),
         created_at: ActiveValue::Set(Utc::now().into()),
         updated_at: ActiveValue::Set(Utc::now().into()),
     };
@@ -2129,6 +2130,7 @@ async fn test_chat_summary_generated_for_audio_only_first_message(pool: Pool<Pos
         file_storage_provider_id: ActiveValue::Set("local".to_string()),
         file_storage_path: ActiveValue::Set("/fixtures/quarterly-update.mp3".to_string()),
         audio_transcription: ActiveValue::Set(Some(audio_transcription)),
+        external_id_ews_id: ActiveValue::Set(None),
         created_at: ActiveValue::Set(Utc::now().into()),
         updated_at: ActiveValue::Set(Utc::now().into()),
     };

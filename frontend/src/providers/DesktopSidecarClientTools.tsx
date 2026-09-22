@@ -25,12 +25,17 @@ export function DesktopSidecarClientTools() {
       uploadsEnabled: enabled,
       maxUploadBytes: maxSizeBytes,
       maxFiles,
-      uploadAttachment: async (file, chatId, signal) => {
+      uploadAttachment: async (file, chatId, signal, externalIdEwsId) => {
         const body = new FormData();
         body.append("file", file, file.name);
         const response = await fetchUploadFile(
           {
-            queryParams: { chat_id: chatId },
+            queryParams: {
+              chat_id: chatId,
+              ...(externalIdEwsId !== undefined
+                ? { external_id_ews_id: externalIdEwsId }
+                : {}),
+            },
             body: body as unknown as UploadFileVariables["body"],
           },
           signal,

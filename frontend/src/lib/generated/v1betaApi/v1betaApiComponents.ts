@@ -3874,6 +3874,10 @@ export type UploadFileQueryParams = {
    * Optional chat ID to associate the file with. If not provided, creates standalone files.
    */
   chat_id?: string;
+  /**
+   * Optional external EWS ID to persist on each file in this request. Upload files with different IDs in separate requests.
+   */
+  external_id_ews_id?: string;
 };
 
 export type UploadFileError = Fetcher.ErrorWrapper<undefined>;

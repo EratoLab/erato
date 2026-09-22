@@ -24,7 +24,12 @@ export const GET_SIDECAR_FOLDER_HIERARCHY_TOOL = "get_sidecar_folder_hierarchy";
 export const GET_SIDECAR_DOCUMENT_TOOL = "get_sidecar_document";
 
 export interface SidecarAttachmentUpload {
-  (file: File, chatId: string, signal?: AbortSignal): Promise<{ id: string }>;
+  (
+    file: File,
+    chatId: string,
+    signal?: AbortSignal,
+    externalIdEwsId?: string,
+  ): Promise<{ id: string }>;
 }
 
 export interface SidecarChatToolOptions {
@@ -283,7 +288,7 @@ export function createSidecarChatTools(
             : new Set<File>();
         context?.signal?.throwIfAborted();
         const fileUploadIds: string[] = [];
-        const uploadedByHash = new Map<string, string>();
+        const uploadedByIdentity = new Map<string, string>();
         let remainingBodyChars = 80_000;
         let remainingUploadBytes = options.maxUploadBytes;
         let partial = conversation.state !== "ok";
@@ -302,6 +307,13 @@ export function createSidecarChatTools(
             // Never pass base64 to the model. Selected bytes use the ordinary
             // authenticated upload and file extraction path, with its limits.
             const { contentBytes, ...metadata } = attachment;
+            const externalIdEwsId = attachment.external_ids?.find(
+              (id) => id.key === "ews_id",
+            )?.value;
+            // Equal bytes can belong to distinct Outlook items. Preserve their identities.
+            const uploadKey = attachment.sha256
+              ? JSON.stringify([attachment.sha256, externalIdEwsId ?? null])
+              : undefined;
             let status =
               contentBytes === undefined ? "unavailable" : "not_requested";
             let fileId: string | undefined;
@@ -313,8 +325,8 @@ export function createSidecarChatTools(
                 ? names.includes(attachment.name ?? "")
                 : !attachment.isInline);
             if (selected && contentBytes !== undefined) {
-              fileId = attachment.sha256
-                ? uploadedByHash.get(attachment.sha256)
+              fileId = uploadKey
+                ? uploadedByIdentity.get(uploadKey)
                 : undefined;
               const localFile = localFiles.get(attachment);
               if (!options.uploadsEnabled || !context?.chatId) {
@@ -340,11 +352,11 @@ export function createSidecarChatTools(
                     localFile,
                     context.chatId,
                     context.signal,
+                    externalIdEwsId,
                   );
                   fileId = uploaded.id;
                   fileUploadIds.push(fileId);
-                  if (attachment.sha256)
-                    uploadedByHash.set(attachment.sha256, fileId);
+                  if (uploadKey) uploadedByIdentity.set(uploadKey, fileId);
                   remainingUploadBytes -= localFile.size;
                   status = "uploaded";
                 } catch (cause) {
@@ -512,11 +524,10 @@ export function createSidecarChatTools(
         if (options.maxFiles < 1) {
           throw new Error("The file count limit prevents document uploads.");
         }
-        const { filename, mimeType, contentBase64 } = await client.invoke(
-          "sources.get_document.v1",
-          args,
-          { signal: context.signal },
-        );
+        const { filename, mimeType, contentBase64, external_ids } =
+          await client.invoke("sources.get_document.v1", args, {
+            signal: context.signal,
+          });
         context.signal?.throwIfAborted();
         if (
           Math.floor((contentBase64.length * 3) / 4) - 2 >
@@ -544,6 +555,7 @@ export function createSidecarChatTools(
           file,
           context.chatId,
           context.signal,
+          external_ids?.find((id) => id.key === "ews_id")?.value,
         );
         return {
           ok: true,

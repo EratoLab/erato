@@ -81,6 +81,10 @@ pub struct AssistantWithFiles {
 pub struct AssistantFile {
     /// The unique ID of the file
     pub id: String,
+    /// External Exchange Web Services ID for deep linking to the original item.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub external_id_ews_id: Option<String>,
     /// The original filename
     pub filename: String,
     /// Pre-signed URL for downloading the file.
@@ -302,6 +306,7 @@ async fn file_info_to_assistant_file(
 
     Ok(AssistantFile {
         id: file.id.to_string(),
+        external_id_ews_id: file.external_id_ews_id,
         filename: file.filename,
         download_url,
         preview_url,

@@ -176,6 +176,7 @@ async fn test_cleanup_logic_with_file_uploads(pool: Pool<Postgres>) {
         file_storage_provider_id: ActiveValue::Set("local".to_string()),
         file_storage_path: ActiveValue::Set("/uploads/test_file1.txt".to_string()),
         audio_transcription: ActiveValue::Set(None),
+        external_id_ews_id: ActiveValue::Set(None),
         created_at: ActiveValue::Set(Utc::now().into()),
         updated_at: ActiveValue::Set(Utc::now().into()),
     };
@@ -189,6 +190,7 @@ async fn test_cleanup_logic_with_file_uploads(pool: Pool<Postgres>) {
         file_storage_provider_id: ActiveValue::Set("s3".to_string()),
         file_storage_path: ActiveValue::Set("/bucket/test_file2.pdf".to_string()),
         audio_transcription: ActiveValue::Set(None),
+        external_id_ews_id: ActiveValue::Set(None),
         created_at: ActiveValue::Set(Utc::now().into()),
         updated_at: ActiveValue::Set(Utc::now().into()),
     };

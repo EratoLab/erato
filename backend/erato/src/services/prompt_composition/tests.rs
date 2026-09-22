@@ -658,6 +658,7 @@ mod test_cases {
         let file_id = Uuid::new_v4();
         let now: DateTimeWithTimeZone = chrono::Utc::now().into();
         let file_info = FileInfo {
+            external_id_ews_id: None,
             id: file_id,
             filename: "assistant_file.txt".to_string(),
             file_storage_provider_id: "test".to_string(),
@@ -717,6 +718,7 @@ mod test_cases {
         let file_id = Uuid::new_v4();
         let now: DateTimeWithTimeZone = chrono::Utc::now().into();
         let file_info = FileInfo {
+            external_id_ews_id: None,
             id: file_id,
             filename: "assistant_file.txt".to_string(),
             file_storage_provider_id: "test".to_string(),
@@ -976,6 +978,7 @@ mod test_cases {
         );
 
         let file_info = FileInfo {
+            external_id_ews_id: None,
             id: assistant_file_id,
             filename: "context.txt".to_string(),
             file_storage_provider_id: "test".to_string(),
@@ -1097,6 +1100,7 @@ mod test_cases {
 
         let now: DateTimeWithTimeZone = chrono::Utc::now().into();
         let assistant_file_info = FileInfo {
+            external_id_ews_id: None,
             id: assistant_file_id,
             filename: "assistant_context.txt".to_string(),
             file_storage_provider_id: "test".to_string(),
@@ -1288,6 +1292,7 @@ mod test_cases {
 
         let now: DateTimeWithTimeZone = chrono::Utc::now().into();
         let file_info = FileInfo {
+            external_id_ews_id: None,
             id: assistant_file_id,
             filename: "context.txt".to_string(),
             file_storage_provider_id: "test".to_string(),

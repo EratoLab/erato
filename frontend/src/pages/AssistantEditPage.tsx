@@ -45,6 +45,7 @@ const toFileUploadItems = (files: AssistantFile[]): FileUploadItem[] =>
           {
             id: file.id,
             filename: file.filename,
+            external_id_ews_id: file.external_id_ews_id,
             // Preserve preview-only assistant files so existing previews keep
             // working even when downloads are unavailable to the current user.
             download_url: downloadUrl ?? "",
