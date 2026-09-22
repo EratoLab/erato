@@ -5,6 +5,7 @@ import { MockSidecar } from "../test-server/src/server.js";
 import {
   validateLocalTaskStatus,
   validateLocalTasksStartV1Params,
+  validateLocalTasksCancelV1Params,
   validateLocalTasksReviewV1Params,
   validateLocalExportsReadV1Params,
   validateLocalExportsAckV1Params,
@@ -134,6 +135,21 @@ describe("strict local delegation contract", () => {
     expect(
       validateLocalTasksStartV1Params({ ...start, authorization: "approved" }),
     ).toBe(false);
+  });
+
+  it("cancels a logical binding after lost start acknowledgement without admitting mixed targets", () => {
+    const bound = { contextHandle, binding: start.binding, plan: start.plan };
+    expect(validateLocalTasksCancelV1Params(bound)).toBe(true);
+    expect(validateLocalTasksCancelV1Params({ contextHandle, handle })).toBe(
+      true,
+    );
+    for (const invalid of [
+      { contextHandle },
+      { ...bound, handle },
+      { contextHandle, binding: start.binding },
+      { ...bound, approved: true },
+    ])
+      expect(validateLocalTasksCancelV1Params(invalid)).toBe(false);
   });
 
   it("never accepts browser consent bits, preferences or grant credentials", () => {

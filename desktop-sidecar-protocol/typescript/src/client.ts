@@ -1,3 +1,4 @@
+import { supportsStrictLocalDelegation } from "./localDelegation.js";
 import { SidecarClientError, SidecarRpcError } from "./errors.js";
 import {
   validateCancelResult,
@@ -172,6 +173,9 @@ export interface SidecarCapability {
 }
 
 export interface SidecarSnapshot {
+  /** A validated declaration from discovery; never infer strict support from a single RPC. */
+  localDelegation?: DiscoverResult["localDelegation"];
+  strictLocalDelegation?: boolean;
   state: SidecarReadinessState;
   protocolVersion: string | null;
   serverInfo: { name: string; version: string } | null;
@@ -678,6 +682,8 @@ export class DesktopSidecarClient {
         instanceId: result.instanceId,
         catalogue,
         capabilities,
+        localDelegation: result.localDelegation,
+        strictLocalDelegation: supportsStrictLocalDelegation(result),
         error: null,
       });
     } catch (error) {

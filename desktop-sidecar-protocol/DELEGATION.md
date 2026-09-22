@@ -233,3 +233,27 @@ selection/source mutation, account/device/job mismatch, expiry/cancel races,
 lost receipts, duplicate uploads, pane closure and two-replica fenced recovery.
 Contract/mock tests alone do not meet these exit conditions. Strict delegation
 stays disabled until both issues' implementation and qualification are complete.
+
+## Initial backend execution scope
+
+The first integration offers `local_collect_evidence` only to explicitly opted-in
+asynchronous task children at depth one, with a positive frozen client-call
+budget and an exclusive local-research tool scope. The task's selected facet must
+name `local/collect_evidence` exactly. Wildcards, ordinary chats, assistant mentions,
+awaited children, adopted runs, MCP tools and general Office actions do not acquire
+this capability. Async results use the existing durable parent-delivery/rearm path.
+This initial scope avoids claiming restart-safe execution of arbitrary external
+tool effects. It can be widened only with matching checkpoint/approval recovery.
+
+Approved artifacts use immutable storage keys derived from job/export/artifact
+identity and content hash. SQL attachment links, exact package, signed receipt and
+continuation intent commit together. A crash before SQL commit can leave an
+unreferenced approved blob; retry reuses its key. Deployment storage lifecycle
+must account for these orphan blobs without deleting committed attachments.
+
+Cancellation may name either the native handle or the cloud-known binding and
+plan. The latter atomically creates a cancelled tombstone without executing the
+plan, so a lost start response or closed pane cannot prevent cancellation or let
+a delayed start resurrect the job. Never implement this as start-then-cancel.
+Completed cloud jobs retain receipts for reconciliation through paginated owner
+queries, covering a lost native acknowledgement after continuation has finished.

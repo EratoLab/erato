@@ -2,17 +2,39 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-cancel-v1-params.schema.json",
   "title": "LocalTasksCancelV1Params",
-  "type": "object",
-  "properties": {
-    "contextHandle": {
-      "type": "string",
-      "pattern": "^[A-Za-z0-9_-]{32,128}$"
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "contextHandle": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{32,128}$"
+        },
+        "handle": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{32,128}$"
+        }
+      },
+      "required": ["contextHandle", "handle"],
+      "additionalProperties": false
     },
-    "handle": {
-      "type": "string",
-      "pattern": "^[A-Za-z0-9_-]{32,128}$"
+    {
+      "type": "object",
+      "properties": {
+        "contextHandle": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{32,128}$"
+        },
+        "binding": {
+          "$ref": "../delegation/binding.schema.json"
+        },
+        "plan": {
+          "$ref": "../delegation/plan.schema.json"
+        }
+      },
+      "required": ["contextHandle", "binding", "plan"],
+      "additionalProperties": false
     }
-  },
-  "required": ["contextHandle", "handle"],
-  "additionalProperties": false
+  ],
+  "description": "Cancel by opaque handle, or atomically create/cancel a logical binding tombstone after a lost start acknowledgement. Binding cancellation never starts collection."
 }
