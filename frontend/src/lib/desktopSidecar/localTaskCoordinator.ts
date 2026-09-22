@@ -252,7 +252,7 @@ export class LocalTaskCoordinator {
             try {
               await this.api.resume(job.id, this.#abort.signal);
             } catch {
-              /* A competing replica/view can hold the lease. */
+              /* Another frontend view may already have resumed this job. */
             }
           }
           if (job.state === "completed") this.#views.delete(job.id);

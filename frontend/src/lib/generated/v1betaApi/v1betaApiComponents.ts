@@ -4464,7 +4464,7 @@ export type CompletePathParams = {
 export type CompleteError = Fetcher.ErrorWrapper<undefined>;
 
 export type CompleteVariables = {
-  body?: null | undefined;
+  body?: Record<string, any>;
   pathParams: CompletePathParams;
 } & V1betaApiContext["fetcherOptions"];
 
@@ -4475,7 +4475,7 @@ export const fetchComplete = (
   v1betaApiFetch<
     Schemas.ReceiptResponse,
     CompleteError,
-    void,
+    Record<string, any>,
     {},
     {},
     CompletePathParams
