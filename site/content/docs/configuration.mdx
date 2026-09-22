@@ -2637,6 +2637,37 @@ Override this ID to install multiple add-in instances in the same tenant.
 
 **Type:** `string`
 
+##### `integrations.ms_office.addin.document.addin_id`
+
+{/* erato_toml_config_key: integrations.ms_office.addin.document.addin_id */}
+
+The Word add-in manifest ID, served by `/office-addin/manifest-document.xml`.
+It must be nonempty and differ from the Outlook ID in `integrations.ms_office.addin.addin_id` so both add-ins can be installed in the same catalog.
+
+**Default value:** `"15a5d0e8-e96a-4e26-b6a1-bd8f429468c2"`
+
+**Type:** `string`
+
+##### `integrations.ms_office.addin.document.manifest.display_name`
+
+{/* erato_toml_config_key: integrations.ms_office.addin.document.manifest.display_name */}
+
+The nonempty display name shown for the Word add-in. Other branding, such as the provider name and icons, inherits from `integrations.ms_office.addin.manifest`.
+
+**Default value:** `"Erato for Documents"`
+
+**Type:** `string`
+
+##### `integrations.ms_office.addin.document.manifest.description`
+
+{/* erato_toml_config_key: integrations.ms_office.addin.document.manifest.description */}
+
+The nonempty description shown for the Word add-in.
+
+**Default value:** `"Erato AI assistant for Word documents"`
+
+**Type:** `string`
+
 ##### `integrations.ms_office.addin.msal_authority`
 
 {/* erato_toml_config_key: integrations.ms_office.addin.msal_authority */}
