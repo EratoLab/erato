@@ -5,36 +5,13 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::LazyLock;
 
-static SCHEMAS: LazyLock<BTreeMap<&'static str, jsonschema::Validator>> = LazyLock::new(|| {
-    macro_rules! schema {
-        ($name:literal) => {
-            (
-                $name,
-                include_str!(concat!(
-                    "../../../../../desktop-sidecar-protocol/schemas/delegation/",
-                    $name,
-                    ".schema.json"
-                )),
-            )
-        };
-    }
-    let sources = [
-        schema!("binding"),
-        schema!("plan"),
-        schema!("context-claims"),
-        schema!("job-claims"),
-        schema!("receipt-claims"),
-        schema!("approved-export"),
-    ];
-    let documents: Vec<_> = sources
-        .iter()
-        .map(|(name, source)| {
-            (
-                *name,
-                serde_json::from_str::<Value>(source).expect("bundled shared schema"),
-            )
-        })
-        .collect();
+// Generated from desktop-sidecar-protocol, checked by its check:generated command.
+// Keep this inside backend/ so container builds need no files outside their context.
+static SCHEMAS: LazyLock<BTreeMap<String, jsonschema::Validator>> = LazyLock::new(|| {
+    let documents: BTreeMap<String, Value> = serde_json::from_str(include_str!(
+        "../../../../generated/local_delegation_schemas.json"
+    ))
+    .expect("bundled shared schemas");
     documents
         .iter()
         .map(|(name, document)| {
@@ -45,7 +22,7 @@ static SCHEMAS: LazyLock<BTreeMap<&'static str, jsonschema::Validator>> = LazyLo
                 )
             });
             (
-                *name,
+                name.clone(),
                 jsonschema::options()
                     .with_resources(resources)
                     .build(document)

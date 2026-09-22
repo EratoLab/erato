@@ -174,7 +174,7 @@ A decline, cancellation, revocation or expiry rejects every subsequent read.
 Already released bytes cannot be recalled.
 
 The frontend uploads the entire approved package through normal backend auth.
-Any replica revalidates ownership, exact job/attempt/device, current permissions,
+The single backend revalidates ownership, exact job/attempt/device, current permissions,
 expiry and terminal state. It recomputes all hashes and enforces size limits.
 A logged PostgreSQL transaction commits immutable result identity, attachment
 finalization references, a durable receipt and continuation intent together.
@@ -192,11 +192,16 @@ bearer tokens; their signatures confer no backend API access.
 
 ## Backend continuation authorization decision
 
+The task feature supports **one backend replica only**, as confirmed by the
+owner on 2026-09-22. Multiple concurrent backend replicas and their qualification
+are outside this work. Reuse the existing task lifecycle and generation ownership;
+multiple frontend panes still require idempotent requests.
+
 Choose **live re-authentication on resume** for v1. ERMAIN-759's stored-principal
 design is not assumed implemented. No access/refresh token is persisted. Receipt
 acceptance leaves a logged continuation intent, even if no generation can start.
-An authenticated frontend's later resume request can reach any replica, freshly
-revalidate subject/permissions and claim the intent plus chat lease atomically.
+An authenticated frontend's later resume request freshly revalidates the
+subject/permissions and resumes through the existing chat-generation lifecycle.
 A worker runs under that live authorized context. After process loss or expired
 lease it returns to `awaiting_authenticated_resume`; a database-only sweeper must
 not reconstruct authority from a user ID. Upload and cloud continuation can wait
@@ -206,8 +211,10 @@ Checkpoint before releasing generation: model replay context, assistant message
 and pending tool call, completed sibling calls/results, pending batch order,
 effective facets/tool policy, origin/child ownership, consumed model/tool budgets,
 logical attempt and expiry. Resume never replays completed side effects or resets
-budgets. Use monotonically increasing fencing tokens; every checkpoint/result,
-message write and terminal commit checks the current token and chat lease.
+budgets. Every checkpoint/result, message write and terminal commit checks the
+existing generation ID plus job/chat state, so cancellation or a new user turn
+invalidates older work. No separate continuation lease, heartbeat or distributed
+scheduler is introduced.
 Persisted progress after a crash advances the same checkpoint. Never use live
 oneshots or UNLOGGED generation commands as the source of truth.
 
@@ -230,7 +237,7 @@ network/IPC confinement and new macOS signing work are outside this scope.
 
 Then qualify native process death at every persistence boundary, immutable
 selection/source mutation, account/device/job mismatch, expiry/cancel races,
-lost receipts, duplicate uploads, pane closure and two-replica fenced recovery.
+lost receipts, duplicate uploads, pane closure and single-backend restart recovery.
 Contract/mock tests alone do not meet these exit conditions. Strict delegation
 stays disabled until both issues' implementation and qualification are complete.
 
@@ -257,3 +264,8 @@ plan, so a lost start response or closed pane cannot prevent cancellation or let
 a delayed start resurrect the job. Never implement this as start-then-cancel.
 Completed cloud jobs retain receipts for reconciliation through paginated owner
 queries, covering a lost native acknowledgement after continuation has finished.
+
+Backend validators use the generated `backend/generated/local_delegation_schemas.json`
+bundle so the existing backend Docker build context remains self-contained.
+`pnpm run generate` refreshes it from these canonical schemas, and
+`pnpm run check:generated` detects drift.
