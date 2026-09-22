@@ -147,3 +147,13 @@ Index lifecycle: `indexing.start.v1` resumes or requests a shadow rebuild;
 `indexing.stop.v1` drains work and preserves files. Both return indexing statistics.
 `search.query.v1` searches individual indexed emails, files and Teams messages.
 See SPEC section 17.
+
+## Outlook source references
+
+Package 0.1.26 defines `OutlookFileProvenance`, `OutlookMessageReference`, and
+`OutlookMailboxReference` for preserving an uploaded email's identity separately
+from an attachment's containing message. The library also exports
+`validateOutlookFileProvenance`. See [the source-reference contract](SPEC.md#201-outlook-identifier-formats-and-mailbox-scope)
+for native EntryID/StoreID keys, mailbox scoping, and mapping from the existing
+RPC results. This is a contract for subsequent persistence and navigation work;
+existing RPC payloads are unchanged.

@@ -12,6 +12,7 @@ export interface Validator {
   errors?: ValidationError[] | null;
 }
 
+export const validateOutlookFileProvenance: Validator;
 export const validateIndexingBenchmarkListV1Params: Validator;
 export const validateIndexingBenchmarkListV1Result: Validator;
 export const validateIndexingBenchmarkStartV1Params: Validator;
