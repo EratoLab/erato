@@ -28,6 +28,7 @@ Typical "Notable changes" categories to copy & paste:
 
 #### Features and enhancements
 
+- **The composer now says in advance when delegated work will stop to be approved.** On a deployment whose `[delegation.tasks.approval] mode` can interrupt a dispatch, a quiet line beneath the composer states it before the user sends, rather than letting the approval stop be the first they hear of the policy — which reads as the product refusing to act rather than asking. The wording follows what the mode actually stops: every run under `always`, the plan under `plan`, background tasks under `async_only`. It stays silent when nothing can be stopped, including on a default deployment and wherever `async_only` is set but `async` is not an offered run mode.
 - Delegation configuration moved to a top-level `[delegation]` section, in preparation for model-planned delegated tasks. The `erato` tool namespace and the tool names `delegate_task` / `collect_tasks` are now reserved for built-in tools.
 - A delegated run now reports **why** it ended, not just that it did, and the delegate's answer reaches the delegating model inside an `untrusted-data` frame so a child's output cannot issue instructions to its parent.
 - **Model-planned delegated tasks (`delegate_task`).** The model can run a self-contained sub-task in a separate conversation and get its result back in the same turn, to keep long or noisy work out of the main conversation. Off by default.

@@ -84,6 +84,7 @@ import { AssistantMentionPopover } from "./AssistantMentionPopover";
 import { ChatInputAddControls } from "./ChatInputAddControls";
 import { ChatInputAudioModeButton } from "./ChatInputAudioModeButton";
 import { ChatInputTokenUsage } from "./ChatInputTokenUsage";
+import { ChatTaskPlanAdvisory } from "./ChatTaskPlanAdvisory";
 import { ChatUsageAdvisory } from "./ChatUsageAdvisory";
 import { DelegationRunModePopover } from "./DelegationRunModePopover";
 import { FacetSelector } from "./FacetSelector";
@@ -3317,6 +3318,9 @@ export const ChatInput = ({
           )}
         </div>
       </form>
+      {/* Above the AI advisory: this one is about what happens to THIS
+          message, which is the more immediate of the two. */}
+      <ChatTaskPlanAdvisory />
       {renderUsageAdvisory ? <ChatUsageAdvisory /> : null}
     </div>
   );

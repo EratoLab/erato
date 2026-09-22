@@ -2277,6 +2277,21 @@ msgid "chat.share.warning.title"
 msgstr "La conversación puede contener información confidencial"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatTaskPlanAdvisory.tsx
+msgid "chat.task_approval.always"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatTaskPlanAdvisory.tsx
+msgid "chat.task_approval.asyncOnly"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatTaskPlanAdvisory.tsx
+msgid "chat.task_approval.plan"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "chat.warning.budget.limit_reached.header"
 msgstr "Límite presupuestario alcanzado"
