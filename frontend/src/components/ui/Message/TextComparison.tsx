@@ -74,7 +74,7 @@ export function TextComparison({
   ];
   const shown = original === null ? "proposed" : view;
   return (
-    <div className="text-comparison" data-ui="text-comparison">
+    <div className="text-comparison text-sm" data-ui="text-comparison">
       <TabRail
         value={shown}
         onChange={setView}

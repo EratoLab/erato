@@ -447,6 +447,210 @@ function WordActionCard({
       data-testid={
         payload.kind === "edits" ? "word-edits-card" : "word-insert-card"
       }
+      footer={
+        <div className="word-review__footer">
+          {idle && offeredActions.length > 0 && (
+            <>
+              <p className="word-review__hint">
+                {payload.kind === "edits"
+                  ? t({
+                      id: "officeAddin.word.review.batchScope",
+                      message: `This applies all ${total} proposed edits, including rows hidden by filters. Changed paragraphs will be skipped and listed.`,
+                    })
+                  : t({
+                      id: "officeAddin.word.card.confirmInsert",
+                      message:
+                        "This inserts the text below into the open document at the cursor. A selected passage is never replaced.",
+                    })}
+              </p>
+              {!confirmCard && (
+                <Button
+                  type="button"
+                  variant="primary"
+                  disabled={
+                    operationInProgress || isConfirmPending || !gate.allowed
+                  }
+                  onClick={() => void execute()}
+                >
+                  {applyLabel}
+                </Button>
+              )}
+            </>
+          )}
+          {confirmCard && (
+            <ActionConfirmationCard
+              key={confirmCard.requestId}
+              title={
+                payload.kind === "edits"
+                  ? t({
+                      id: "officeAddin.word.review.consent",
+                      message: "Apply this batch?",
+                    })
+                  : t({
+                      id: "officeAddin.word.review.insertConsent",
+                      message: "Insert this text?",
+                    })
+              }
+              description={
+                payload.kind === "edits"
+                  ? t({
+                      id: "officeAddin.word.review.consentScope",
+                      message: `Apply all ${total} edits reviewed above to the open document.`,
+                    })
+                  : entry.displayLabel()
+              }
+              allowOnceLabel={applyLabel}
+              onAllowOnce={() => {
+                if (gate.allowed && idle && !operationInProgress)
+                  allowCard(confirmCard);
+              }}
+              onAlwaysAllow={() => {
+                if (
+                  !gate.allowed ||
+                  !idle ||
+                  operationInProgress ||
+                  enforcedAskActions.includes(confirmCard.action)
+                )
+                  return;
+                setDecisions({
+                  ...decisions,
+                  [decisionKey(facetId, confirmCard.action)]: "always",
+                });
+                allowCard(confirmCard);
+              }}
+              alwaysAllowDisabledReason={
+                enforcedAskActions.includes(confirmCard.action)
+                  ? t({
+                      id: "officeAddin.word.card.alwaysAllowLocked",
+                      message:
+                        "Your organization requires confirmation each time this action runs automatically.",
+                    })
+                  : undefined
+              }
+              onDeny={() => {
+                denyCard(confirmCard);
+                updateReview(batchKey, { status: "denied", capture });
+              }}
+              isBusy={operationInProgress || !gate.allowed || !idle}
+              scrollIntoViewOnMount={confirmCard.autoTriggered}
+            />
+          )}
+          <div className="word-review__actions">
+            {completed && (
+              <Button
+                type="button"
+                variant="secondary"
+                aria-expanded={!collapsed}
+                aria-controls={detailsId}
+                onClick={() =>
+                  updateReview(batchKey, { detailsExpanded: collapsed })
+                }
+              >
+                {collapsed
+                  ? t({
+                      id: "officeAddin.word.review.showDetails",
+                      message: "Show details",
+                    })
+                  : t({
+                      id: "officeAddin.word.review.hideDetails",
+                      message: "Hide details",
+                    })}
+              </Button>
+            )}
+            <WordEditReport
+              outcomes={review.outcomes}
+              compact
+              note={message}
+              reverted={review.status === "reverted"}
+            />
+            {canRevert && (
+              <Button
+                type="button"
+                variant="secondary"
+                data-testid="word-revert-button"
+                disabled={operationInProgress}
+                onClick={() => {
+                  setRevertConfirmation(true);
+                }}
+              >
+                {t({
+                  id: "officeAddin.word.review.revertBatch",
+                  message: "Revert batch",
+                })}
+              </Button>
+            )}
+          </div>
+          {revertConfirmation && (
+            <Card
+              variant="surface"
+              tone="warning"
+              size="sm"
+              nested
+              bodyClassName="word-review__revert"
+              role="group"
+              aria-label={t({
+                id: "officeAddin.word.review.revertTitle",
+                message: "Restore the document body?",
+              })}
+            >
+              <strong>
+                {t({
+                  id: "officeAddin.word.review.revertWarning",
+                  message:
+                    "Restore the document body to just before this batch? This can remove later changes to the body.",
+                })}
+              </strong>
+              <div className="word-review__actions">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={operationInProgress}
+                  onClick={() => setRevertConfirmation(false)}
+                >
+                  {t({
+                    id: "officeAddin.word.review.keepText",
+                    message: "Keep current text",
+                  })}
+                </Button>
+                <Button
+                  type="button"
+                  variant="danger"
+                  disabled={operationInProgress || !canRevert}
+                  onClick={() => void handleRevert()}
+                >
+                  {t({
+                    id: "officeAddin.word.review.restoreBody",
+                    message: "Restore body",
+                  })}
+                </Button>
+              </div>
+              {!canRevert && (
+                <p>
+                  {t({
+                    id: "officeAddin.word.review.revertUnavailable",
+                    message:
+                      "Revert is unavailable: the snapshot was replaced, consumed, or belongs to another document.",
+                  })}
+                </p>
+              )}
+            </Card>
+          )}
+          {review.outcomes.some(
+            (item) => item.status === "applied" || item.status === "failed",
+          ) &&
+            !collapsed &&
+            !canRevert &&
+            review.status !== "reverting" && (
+              <p className="word-review__hint">
+                {t({
+                  id: "officeAddin.word.review.revertExpired",
+                  message:
+                    "Revert is unavailable for this batch. Its single-use snapshot was consumed or replaced.",
+                })}
+              </p>
+            )}
+        </div>
+      }
     >
       {collapsed && <WordReviewReceipt review={review} kind={payload.kind} />}
       <div id={detailsId} hidden={collapsed}>
@@ -503,208 +707,6 @@ function WordActionCard({
           {message}
         </Alert>
       )}
-      <div className="word-review__footer">
-        {idle && offeredActions.length > 0 && (
-          <>
-            <p className="word-review__hint">
-              {payload.kind === "edits"
-                ? t({
-                    id: "officeAddin.word.review.batchScope",
-                    message: `This applies all ${total} proposed edits, including rows hidden by filters. Changed paragraphs will be skipped and listed.`,
-                  })
-                : t({
-                    id: "officeAddin.word.card.confirmInsert",
-                    message:
-                      "This inserts the text below into the open document at the cursor. A selected passage is never replaced.",
-                  })}
-            </p>
-            {!confirmCard && (
-              <Button
-                type="button"
-                variant="primary"
-                disabled={
-                  operationInProgress || isConfirmPending || !gate.allowed
-                }
-                onClick={() => void execute()}
-              >
-                {applyLabel}
-              </Button>
-            )}
-          </>
-        )}
-        {confirmCard && (
-          <ActionConfirmationCard
-            key={confirmCard.requestId}
-            title={
-              payload.kind === "edits"
-                ? t({
-                    id: "officeAddin.word.review.consent",
-                    message: "Apply this batch?",
-                  })
-                : t({
-                    id: "officeAddin.word.review.insertConsent",
-                    message: "Insert this text?",
-                  })
-            }
-            description={
-              payload.kind === "edits"
-                ? t({
-                    id: "officeAddin.word.review.consentScope",
-                    message: `Apply all ${total} edits reviewed above to the open document.`,
-                  })
-                : entry.displayLabel()
-            }
-            allowOnceLabel={applyLabel}
-            onAllowOnce={() => {
-              if (gate.allowed && idle && !operationInProgress)
-                allowCard(confirmCard);
-            }}
-            onAlwaysAllow={() => {
-              if (
-                !gate.allowed ||
-                !idle ||
-                operationInProgress ||
-                enforcedAskActions.includes(confirmCard.action)
-              )
-                return;
-              setDecisions({
-                ...decisions,
-                [decisionKey(facetId, confirmCard.action)]: "always",
-              });
-              allowCard(confirmCard);
-            }}
-            alwaysAllowDisabledReason={
-              enforcedAskActions.includes(confirmCard.action)
-                ? t({
-                    id: "officeAddin.word.card.alwaysAllowLocked",
-                    message:
-                      "Your organization requires confirmation each time this action runs automatically.",
-                  })
-                : undefined
-            }
-            onDeny={() => {
-              denyCard(confirmCard);
-              updateReview(batchKey, { status: "denied", capture });
-            }}
-            isBusy={operationInProgress || !gate.allowed || !idle}
-            scrollIntoViewOnMount={confirmCard.autoTriggered}
-          />
-        )}
-        <div className="word-review__actions">
-          {completed && (
-            <Button
-              type="button"
-              variant="secondary"
-              aria-expanded={!collapsed}
-              aria-controls={detailsId}
-              onClick={() =>
-                updateReview(batchKey, { detailsExpanded: collapsed })
-              }
-            >
-              {collapsed
-                ? t({
-                    id: "officeAddin.word.review.showDetails",
-                    message: "Show details",
-                  })
-                : t({
-                    id: "officeAddin.word.review.hideDetails",
-                    message: "Hide details",
-                  })}
-            </Button>
-          )}
-          <WordEditReport
-            outcomes={review.outcomes}
-            compact
-            note={message}
-            reverted={review.status === "reverted"}
-          />
-          {canRevert && (
-            <Button
-              type="button"
-              variant="secondary"
-              data-testid="word-revert-button"
-              disabled={operationInProgress}
-              onClick={() => {
-                setRevertConfirmation(true);
-              }}
-            >
-              {t({
-                id: "officeAddin.word.review.revertBatch",
-                message: "Revert batch",
-              })}
-            </Button>
-          )}
-        </div>
-        {revertConfirmation && (
-          <Card
-            variant="surface"
-            tone="warning"
-            size="sm"
-            nested
-            bodyClassName="word-review__revert"
-            role="group"
-            aria-label={t({
-              id: "officeAddin.word.review.revertTitle",
-              message: "Restore the document body?",
-            })}
-          >
-            <strong>
-              {t({
-                id: "officeAddin.word.review.revertWarning",
-                message:
-                  "Restore the document body to just before this batch? This can remove later changes to the body.",
-              })}
-            </strong>
-            <div className="word-review__actions">
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={operationInProgress}
-                onClick={() => setRevertConfirmation(false)}
-              >
-                {t({
-                  id: "officeAddin.word.review.keepText",
-                  message: "Keep current text",
-                })}
-              </Button>
-              <Button
-                type="button"
-                variant="danger"
-                disabled={operationInProgress || !canRevert}
-                onClick={() => void handleRevert()}
-              >
-                {t({
-                  id: "officeAddin.word.review.restoreBody",
-                  message: "Restore body",
-                })}
-              </Button>
-            </div>
-            {!canRevert && (
-              <p>
-                {t({
-                  id: "officeAddin.word.review.revertUnavailable",
-                  message:
-                    "Revert is unavailable: the snapshot was replaced, consumed, or belongs to another document.",
-                })}
-              </p>
-            )}
-          </Card>
-        )}
-        {review.outcomes.some(
-          (item) => item.status === "applied" || item.status === "failed",
-        ) &&
-          !collapsed &&
-          !canRevert &&
-          review.status !== "reverting" && (
-            <p className="word-review__hint">
-              {t({
-                id: "officeAddin.word.review.revertExpired",
-                message:
-                  "Revert is unavailable for this batch. Its single-use snapshot was consumed or replaced.",
-              })}
-            </p>
-          )}
-      </div>
     </Card>
   );
 }

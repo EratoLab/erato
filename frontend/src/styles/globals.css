@@ -1525,7 +1525,6 @@ section[data-footnotes="true"] > .sr-only {
 }
 .text-comparison {
   min-width: 0;
-  font-size: var(--theme-font-size-sm);
   color: var(--theme-fg-primary);
 }
 .text-comparison [role="tabpanel"] {
@@ -1534,7 +1533,6 @@ section[data-footnotes="true"] > .sr-only {
 .text-comparison__text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  line-height: 1.7;
   margin-block: var(--theme-spacing-message-gap);
 }
 .text-comparison__legend {

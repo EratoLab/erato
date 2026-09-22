@@ -348,6 +348,230 @@ export function WordDocumentPlanCard({
       aria-label={entry.displayLabel()}
       className="word-review focus-ring"
       data-testid="word-document-plan-card"
+      footer={
+        <div className="word-review__footer">
+          {idle && offered && (
+            <>
+              <p className="word-review__hint">
+                {t({
+                  id: "officeAddin.word.authoring.applyScope",
+                  message:
+                    "Applies the complete structure and draft. If the source changed, the whole plan stops before writing.",
+                })}
+              </p>
+              {!confirmCard && (
+                <Button
+                  type="button"
+                  variant="primary"
+                  disabled={
+                    !ready || host.operationInProgress || isConfirmPending
+                  }
+                  onClick={() => void execute()}
+                >
+                  {entry.displayLabel()}
+                </Button>
+              )}
+            </>
+          )}
+          {confirmCard && (
+            <ActionConfirmationCard
+              key={confirmCard.requestId}
+              title={t({
+                id: "officeAddin.word.authoring.consent",
+                message: "Apply this document rewrite?",
+              })}
+              description={t({
+                id: "officeAddin.word.authoring.consentScope",
+                message: "Apply the entire structure and draft reviewed above.",
+              })}
+              allowOnceLabel={entry.displayLabel()}
+              onAllowOnce={() => {
+                if (ready && !host.operationInProgress) allowCard(confirmCard);
+              }}
+              onAlwaysAllow={() => {
+                if (
+                  !ready ||
+                  host.operationInProgress ||
+                  enforcedAskActions.includes(entry.action)
+                )
+                  return;
+                setDecisions({
+                  ...decisions,
+                  [decisionKey(facetId, entry.action)]: "always",
+                });
+                allowCard(confirmCard);
+              }}
+              alwaysAllowDisabledReason={
+                enforcedAskActions.includes(entry.action)
+                  ? t({
+                      id: "officeAddin.word.card.alwaysAllowLocked",
+                      message:
+                        "Your organization requires confirmation each time this action runs automatically.",
+                    })
+                  : undefined
+              }
+              onDeny={() => {
+                denyCard(confirmCard);
+                host.updateReview(key, { status: "denied", capture });
+              }}
+              isBusy={host.operationInProgress || !ready}
+              scrollIntoViewOnMount={confirmCard.autoTriggered}
+            />
+          )}
+          <div className="word-review__actions">
+            {completed && (
+              <Button
+                type="button"
+                variant="secondary"
+                aria-expanded={!collapsed}
+                aria-controls={detailsId}
+                onClick={() =>
+                  host.updateReview(key, { detailsExpanded: collapsed })
+                }
+              >
+                {collapsed
+                  ? t({
+                      id: "officeAddin.word.review.showDetails",
+                      message: "Show details",
+                    })
+                  : t({
+                      id: "officeAddin.word.review.hideDetails",
+                      message: "Hide details",
+                    })}
+              </Button>
+            )}
+            {snapshot && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setCopyNote("");
+                  const failed = () =>
+                    setCopyNote(
+                      t({
+                        id: "officeAddin.word.authoring.copyFailed",
+                        message: "The draft could not be copied.",
+                      }),
+                    );
+                  if (!navigator.clipboard) {
+                    failed();
+                    return;
+                  }
+                  try {
+                    void navigator.clipboard
+                      .writeText(wordPlanDraftText(plan, snapshot))
+                      .then(
+                        () =>
+                          setCopyNote(
+                            t({
+                              id: "officeAddin.word.authoring.copied",
+                              message: "Draft copied.",
+                            }),
+                          ),
+                        failed,
+                      );
+                  } catch {
+                    failed();
+                  }
+                }}
+              >
+                {t({
+                  id: "officeAddin.word.authoring.copy",
+                  message: "Copy draft",
+                })}
+              </Button>
+            )}
+            {canRevert && (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={host.operationInProgress}
+                onClick={() => void revert()}
+              >
+                {review.status === "done"
+                  ? t({
+                      id: "officeAddin.word.review.revertBatch",
+                      message: "Revert batch",
+                    })
+                  : recoverySlot && isWordDocumentBackup(recoverySlot.ooxml)
+                    ? t({
+                        id: "officeAddin.word.authoring.restoreDocument",
+                        message: "Restore original document",
+                      })
+                    : t({
+                        id: "officeAddin.word.authoring.restoreBody",
+                        message: "Restore original body",
+                      })}
+              </Button>
+            )}
+            {recoverySlot &&
+              (review.status !== "done" ||
+                review.documentPlanStatus === "revert-stale") && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    try {
+                      setCopyNote("");
+                      const original = isWordDocumentBackup(recoverySlot.ooxml)
+                        ? decodeWordDocumentBackup(recoverySlot.ooxml)
+                        : undefined;
+                      const url = URL.createObjectURL(
+                        new Blob(
+                          [
+                            original
+                              ? new Uint8Array(original.bytes).buffer
+                              : recoverySlot.ooxml,
+                          ],
+                          {
+                            type: original
+                              ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                              : "application/xml;charset=utf-8",
+                          },
+                        ),
+                      );
+                      const link = document.createElement("a");
+                      link.href = url;
+                      link.download = original
+                        ? "word-document-before-rewrite.docx"
+                        : "word-body-before-rewrite.xml";
+                      document.body.append(link);
+                      link.click();
+                      link.remove();
+                      globalThis.setTimeout(
+                        () => URL.revokeObjectURL(url),
+                        1000,
+                      );
+                    } catch {
+                      setCopyNote(
+                        t({
+                          id: "officeAddin.word.authoring.backupDownloadFailed",
+                          message:
+                            "The saved original could not be downloaded. It remains available in this pane.",
+                        }),
+                      );
+                    }
+                  }}
+                >
+                  {isWordDocumentBackup(recoverySlot.ooxml)
+                    ? t({
+                        id: "officeAddin.word.authoring.downloadDocument",
+                        message: "Download original document",
+                      })
+                    : t({
+                        id: "officeAddin.word.authoring.downloadBody",
+                        message: "Download original body",
+                      })}
+                </Button>
+              )}
+          </div>
+          {copyNote && (
+            <p role="status" className="word-review__hint">
+              {copyNote}
+            </p>
+          )}
+        </div>
+      }
     >
       {collapsed && <WordReviewReceipt review={review} kind="plan" />}
       <div id={detailsId} hidden={collapsed}>
@@ -425,225 +649,6 @@ export function WordDocumentPlanCard({
               .join(" · ")}
           </p>
         )}
-      <div className="word-review__footer">
-        {idle && offered && (
-          <>
-            <p className="word-review__hint">
-              {t({
-                id: "officeAddin.word.authoring.applyScope",
-                message:
-                  "Applies the complete structure and draft. If the source changed, the whole plan stops before writing.",
-              })}
-            </p>
-            {!confirmCard && (
-              <Button
-                type="button"
-                variant="primary"
-                disabled={
-                  !ready || host.operationInProgress || isConfirmPending
-                }
-                onClick={() => void execute()}
-              >
-                {entry.displayLabel()}
-              </Button>
-            )}
-          </>
-        )}
-        {confirmCard && (
-          <ActionConfirmationCard
-            key={confirmCard.requestId}
-            title={t({
-              id: "officeAddin.word.authoring.consent",
-              message: "Apply this document rewrite?",
-            })}
-            description={t({
-              id: "officeAddin.word.authoring.consentScope",
-              message: "Apply the entire structure and draft reviewed above.",
-            })}
-            allowOnceLabel={entry.displayLabel()}
-            onAllowOnce={() => {
-              if (ready && !host.operationInProgress) allowCard(confirmCard);
-            }}
-            onAlwaysAllow={() => {
-              if (
-                !ready ||
-                host.operationInProgress ||
-                enforcedAskActions.includes(entry.action)
-              )
-                return;
-              setDecisions({
-                ...decisions,
-                [decisionKey(facetId, entry.action)]: "always",
-              });
-              allowCard(confirmCard);
-            }}
-            alwaysAllowDisabledReason={
-              enforcedAskActions.includes(entry.action)
-                ? t({
-                    id: "officeAddin.word.card.alwaysAllowLocked",
-                    message:
-                      "Your organization requires confirmation each time this action runs automatically.",
-                  })
-                : undefined
-            }
-            onDeny={() => {
-              denyCard(confirmCard);
-              host.updateReview(key, { status: "denied", capture });
-            }}
-            isBusy={host.operationInProgress || !ready}
-            scrollIntoViewOnMount={confirmCard.autoTriggered}
-          />
-        )}
-        <div className="word-review__actions">
-          {completed && (
-            <Button
-              type="button"
-              variant="secondary"
-              aria-expanded={!collapsed}
-              aria-controls={detailsId}
-              onClick={() =>
-                host.updateReview(key, { detailsExpanded: collapsed })
-              }
-            >
-              {collapsed
-                ? t({
-                    id: "officeAddin.word.review.showDetails",
-                    message: "Show details",
-                  })
-                : t({
-                    id: "officeAddin.word.review.hideDetails",
-                    message: "Hide details",
-                  })}
-            </Button>
-          )}
-          {snapshot && (
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                setCopyNote("");
-                const failed = () =>
-                  setCopyNote(
-                    t({
-                      id: "officeAddin.word.authoring.copyFailed",
-                      message: "The draft could not be copied.",
-                    }),
-                  );
-                if (!navigator.clipboard) {
-                  failed();
-                  return;
-                }
-                try {
-                  void navigator.clipboard
-                    .writeText(wordPlanDraftText(plan, snapshot))
-                    .then(
-                      () =>
-                        setCopyNote(
-                          t({
-                            id: "officeAddin.word.authoring.copied",
-                            message: "Draft copied.",
-                          }),
-                        ),
-                      failed,
-                    );
-                } catch {
-                  failed();
-                }
-              }}
-            >
-              {t({
-                id: "officeAddin.word.authoring.copy",
-                message: "Copy draft",
-              })}
-            </Button>
-          )}
-          {canRevert && (
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={host.operationInProgress}
-              onClick={() => void revert()}
-            >
-              {review.status === "done"
-                ? t({
-                    id: "officeAddin.word.review.revertBatch",
-                    message: "Revert batch",
-                  })
-                : recoverySlot && isWordDocumentBackup(recoverySlot.ooxml)
-                  ? t({
-                      id: "officeAddin.word.authoring.restoreDocument",
-                      message: "Restore original document",
-                    })
-                  : t({
-                      id: "officeAddin.word.authoring.restoreBody",
-                      message: "Restore original body",
-                    })}
-            </Button>
-          )}
-          {recoverySlot &&
-            (review.status !== "done" ||
-              review.documentPlanStatus === "revert-stale") && (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  try {
-                    setCopyNote("");
-                    const original = isWordDocumentBackup(recoverySlot.ooxml)
-                      ? decodeWordDocumentBackup(recoverySlot.ooxml)
-                      : undefined;
-                    const url = URL.createObjectURL(
-                      new Blob(
-                        [
-                          original
-                            ? new Uint8Array(original.bytes).buffer
-                            : recoverySlot.ooxml,
-                        ],
-                        {
-                          type: original
-                            ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                            : "application/xml;charset=utf-8",
-                        },
-                      ),
-                    );
-                    const link = document.createElement("a");
-                    link.href = url;
-                    link.download = original
-                      ? "word-document-before-rewrite.docx"
-                      : "word-body-before-rewrite.xml";
-                    document.body.append(link);
-                    link.click();
-                    link.remove();
-                    globalThis.setTimeout(() => URL.revokeObjectURL(url), 1000);
-                  } catch {
-                    setCopyNote(
-                      t({
-                        id: "officeAddin.word.authoring.backupDownloadFailed",
-                        message:
-                          "The saved original could not be downloaded. It remains available in this pane.",
-                      }),
-                    );
-                  }
-                }}
-              >
-                {isWordDocumentBackup(recoverySlot.ooxml)
-                  ? t({
-                      id: "officeAddin.word.authoring.downloadDocument",
-                      message: "Download original document",
-                    })
-                  : t({
-                      id: "officeAddin.word.authoring.downloadBody",
-                      message: "Download original body",
-                    })}
-              </Button>
-            )}
-        </div>
-        {copyNote && (
-          <p role="status" className="word-review__hint">
-            {copyNote}
-          </p>
-        )}
-      </div>
     </Card>
   );
 }
