@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { TestTheme } from "../../../test/helpers/TestTheme";
 import { mixedAuthoringXml } from "../../../test/mocks/word/mixedAuthoringFixtures";
 import { WordWriteProvider } from "../../providers/WordWriteProvider";
 import { wordActionForFence } from "../../utils/wordClientActions";
@@ -95,6 +96,7 @@ async function interruptedDocument() {
     >
       <WordDocumentPlanCard entry={entry} content={JSON.stringify(plan)} />
     </WordWriteProvider>,
+    { wrapper: TestTheme },
   );
   fireEvent.click(
     screen.getByRole("button", { name: "Apply document rewrite" }),

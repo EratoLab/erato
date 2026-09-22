@@ -477,14 +477,27 @@ function WordActionCard({
             </h3>
             <pre className="word-review__text">{payload.text}</pre>
             {blockedReason && (
-              <p className="word-review__notice">{blockedReason}</p>
+              <Alert
+                type="info"
+                role="status"
+                className="[overflow-wrap:anywhere]"
+              >
+                {blockedReason}
+              </Alert>
             )}
           </div>
         )}
       </div>
       {message && !collapsed && (
-        <p
-          className="word-review__notice"
+        <Alert
+          type={
+            review.status === "error" ||
+            review.status === "write-failed" ||
+            review.status === "revert-failed"
+              ? "error"
+              : "info"
+          }
+          className="m-3 [overflow-wrap:anywhere]"
           role={
             review.status === "error" ||
             review.status === "write-failed" ||
@@ -494,7 +507,7 @@ function WordActionCard({
           }
         >
           {message}
-        </p>
+        </Alert>
       )}
       <div className="word-review__footer">
         {idle && offeredActions.length > 0 && (

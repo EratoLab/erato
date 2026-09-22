@@ -1264,10 +1264,10 @@
           <summary>Not every notice should interrupt a screen reader.</summary>
           <div>
             <p>
-              Shared Alert currently hardcodes <code>role="alert"</code>. Use it
-              for actionable alerts. Keep routine explanations passive and
-              progress/results politely announced where appropriate, or add an
-              explicit shared announcement API before broad migration.
+              Shared Alert now supports <code>role="status"</code> for polite
+              notices. Word uses it for routine explanations and retains
+              <code>role="alert"</code> for failures. This resolves the
+              fixed-role limitation recorded in the original audit.
             </p>
             <p class="source">
               frontend/src/components/ui/Feedback/Alert.tsx:93

@@ -1,4 +1,5 @@
 import {
+  Alert,
   Button,
   Card,
   DisclosureChevron,
@@ -270,13 +271,13 @@ export function WordReviewPanel({
             )}
           </Card>
         ) : (
-          <p className="word-review__notice">
+          <Alert type="info" role="status" className="[overflow-wrap:anywhere]">
             {t({
               id: "officeAddin.word.review.noOriginal",
               message:
                 "Original comparison and document coverage are unavailable after reload. The proposed text is shown below.",
             })}
-          </p>
+          </Alert>
         )}
         <p className="word-review__hint">{trackingDescription(tracking)}</p>
         {historical && (
@@ -294,7 +295,9 @@ export function WordReviewPanel({
           </p>
         )}
         {blockedReason && (
-          <p className="word-review__notice">{blockedReason}</p>
+          <Alert type="info" role="status" className="[overflow-wrap:anywhere]">
+            {blockedReason}
+          </Alert>
         )}
       </header>
       <div className="word-review__filters">
@@ -419,7 +422,11 @@ export function WordReviewPanel({
               {open && (
                 <div id={`${id}-edit-${index}`} className="word-review__detail">
                   {status && (
-                    <p className="word-review__notice">
+                    <Alert
+                      type="info"
+                      role="status"
+                      className="[overflow-wrap:anywhere]"
+                    >
                       {reverted && (status === "applied" || status === "failed")
                         ? t({
                             id: "officeAddin.word.review.bodyRestored",
@@ -427,7 +434,7 @@ export function WordReviewPanel({
                               "The document body was restored to just before this batch.",
                           })
                         : statusLabel(status)}
-                    </p>
+                    </Alert>
                   )}
                   <Button
                     type="button"
@@ -497,13 +504,17 @@ export function WordReviewPanel({
         })}
       </ol>
       {filtered.length === 0 && (
-        <p className="word-review__notice">
+        <Alert
+          type="info"
+          role="status"
+          className="m-3 [overflow-wrap:anywhere]"
+        >
           {t({
             id: "officeAddin.word.review.emptyFilter",
             message:
               "No edits match this filter. The batch scope has not changed.",
           })}
-        </p>
+        </Alert>
       )}
     </div>
   );

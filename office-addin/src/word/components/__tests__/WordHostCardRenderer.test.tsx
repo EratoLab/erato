@@ -10,6 +10,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { messages as frontendMessages } from "../../../../../frontend/src/locales/en/messages.json";
+import { TestTheme } from "../../../test/helpers/TestTheme";
 import {
   installMockWordDocument,
   uninstallMockWordDocument,
@@ -32,9 +33,6 @@ const mockUsePersistedState = vi.fn();
 vi.mock("@erato/frontend/library", async (importOriginal) => {
   return {
     ...(await importOriginal<typeof EratoLibrary>()),
-    Alert: ({ children }: { children: React.ReactNode }) => (
-      <div role="alert">{children}</div>
-    ),
     SyntaxHighlightedCode: ({ code }: { code: string }) => <pre>{code}</pre>,
     ActionConfirmationCard: (props: {
       description?: unknown;
@@ -171,6 +169,7 @@ function renderCard(options: {
         content={options.content ?? EDITS_FENCE}
       />
     </WordWriteProvider>,
+    { wrapper: TestTheme },
   );
   return { ...view, setDecisions };
 }

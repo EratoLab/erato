@@ -183,18 +183,6 @@
 .word-review__actions:empty {
   display: none;
 }
-.word-review__notice {
-  padding: var(--theme-spacing-message-padding-y)
-    var(--theme-spacing-message-padding-x);
-  border-left: 3px solid var(--theme-border);
-  background: var(--theme-bg-secondary);
-  color: var(--theme-fg-secondary);
-  font-size: var(--theme-font-size-sm);
-  overflow-wrap: anywhere;
-}
-.word-review [data-ui="card-body"] > .word-review__notice {
-  margin: 12px;
-}
 .word-review__revert {
   display: grid;
   gap: var(--theme-spacing-control-gap);

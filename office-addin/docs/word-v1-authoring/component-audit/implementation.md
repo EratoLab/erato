@@ -48,3 +48,18 @@ The frontend i18n check script refuses uncommitted catalogs. Equivalent validati
 | Actual-component browser scenarios                               | Passed; no page errors or horizontal overflow in checked layouts |
 
 The frontend library has been rebuilt and repacked in the main checkout, and the add-in installation refreshed. The lockfile change is solely the checksum of that local tarball; registry versions are unchanged. `dev-linked` uses the rebuilt library directly. Restart an already-running dev session and reload the Word pane before manual retesting. Live Microsoft Word testing remains a manual step.
+
+## Review follow-up — 22 September 2026
+
+All eight Word notice sites now use the shared `Alert`. Routine explanations and outcomes use `role="status"`; operation failures retain assertive `role="alert"` and the shared error tone. The local notice styles and selector reaching into Card's `data-ui="card-body"` are removed. Call sites own their spacing through Tailwind classes. `Select` is also exported from the Input barrel with its public prop type.
+
+Validation for this follow-up: 45 Word card/recovery tests passed with the actual shared Alert and a test theme provider. Frontend formatting, catalog extraction/compilation, lint, strict lint and typecheck passed; add-in typecheck and strict lint passed. The full frontend suite passed 2,571 tests with 11 existing skips when environment-file loading was isolated. Its normal local run hit the two development-configuration failures already described above (layout override and theme asset fetch); the user's environment files were left untouched. No production build or native Word run was performed for this follow-up.
+
+The review identified separate follow-ups, beyond these small integration fixes:
+
+- **Select field composition:** reuse FormField's label/help typography while preserving generated IDs, external `aria-describedby`, unlabeled native selects and error announcements. FormField currently renders labels/help text; Input renders its own error, so this needs an explicit accessibility contract rather than simply wrapping Select twice.
+- **Disclosure and chrome consistency:** unify paragraph and document-plan disclosures around the shared Row/DisclosureChevron pattern. Preserve expansion state, focus, hidden controls and large-document scrolling. Move remaining review chrome to Tailwind during that adjustment; document rendering remains Word-specific.
+- **XML helpers:** consolidate namespaces and DOM helpers only after checking direct-child versus descendant traversal, namespace filtering and optional-value semantics. Retain the separate comparison normalizers and their negative regression fixtures.
+- **Card lifecycle:** extract common approval/write orchestration without merging the different paragraph and full-document recovery policies. Cover request ownership, standing grants, interrupted writes, stale restoration and collapsed receipts before replacing either path.
+
+These follow-ups are recorded here; this cleanup does not implement them or create external planning issues. The native validation and visual evidence above remain dated records of their original runs.

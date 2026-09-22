@@ -61,7 +61,7 @@ This is a release-readiness finding about the newly added Word UI, separate from
 - Paragraph Revert has an inline warning that later body changes may be lost. Structural Revert refuses a changed post-apply document. Preserve each contract without introducing a modal solely for component reuse.
 - Preserve exact text/Unicode/whitespace and the comparison work limits when extracting TextComparison.
 - Native document markup, hyperlinks and suitable details/disclosure semantics may remain. Do not turn every HTML element into a new component.
-- Shared Alert currently hardcodes assertive alert semantics. Use appropriate passive/status semantics for routine Word notices; extend only if this use case needs it.
+- At the audited baseline, shared Alert hardcoded assertive semantics. The current API supports `role="status"`; the [implementation follow-up](implementation.md#review-follow-up--22-september-2026) replaces routine Word notices with that shared component.
 
 ## Verification and evidence
 

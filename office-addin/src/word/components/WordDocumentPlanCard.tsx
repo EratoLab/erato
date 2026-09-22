@@ -370,7 +370,11 @@ export function WordDocumentPlanCard({
             !gate.allowed ||
             !offered ||
             snapshot?.ownerMessageId !== messageId) && (
-            <p className="word-review__notice" role="status">
+            <Alert
+              type="info"
+              role="status"
+              className="m-3 [overflow-wrap:anywhere]"
+            >
               {issue
                 ? wordAuthoringIssueText(issue, snapshot?.issueDetails)
                 : !gate.allowed || snapshot?.ownerMessageId !== messageId
@@ -380,12 +384,19 @@ export function WordDocumentPlanCard({
                       message:
                         "This action is unavailable under the current action settings.",
                     })}
-            </p>
+            </Alert>
           )}
       </div>
       {status && !collapsed && (
-        <p
-          className="word-review__notice"
+        <Alert
+          type={
+            review.status === "error" ||
+            review.status === "write-failed" ||
+            review.status === "revert-failed"
+              ? "error"
+              : "info"
+          }
+          className="m-3 [overflow-wrap:anywhere]"
           role={
             review.status === "error" ||
             review.status === "write-failed" ||
@@ -395,7 +406,7 @@ export function WordDocumentPlanCard({
           }
         >
           {status}
-        </p>
+        </Alert>
       )}
       {!collapsed &&
         (review.documentPlanDiagnostic?.officeCode ||

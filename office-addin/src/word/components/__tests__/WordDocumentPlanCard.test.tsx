@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { TestTheme } from "../../../test/helpers/TestTheme";
 import {
   examplePlan,
   readySnapshot,
@@ -126,6 +127,7 @@ function setup() {
           content={JSON.stringify(plan)}
         />
       </WordWriteProvider>,
+      { wrapper: TestTheme },
     );
   return {
     snapshot,
@@ -248,6 +250,7 @@ describe("structural document review", () => {
           content={JSON.stringify(state.plan)}
         />
       </WordWriteProvider>,
+      { wrapper: TestTheme },
     );
     expect(screen.getByText("Saved document rewrite")).toBeVisible();
     expect(
