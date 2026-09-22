@@ -2257,6 +2257,160 @@
         ]
       }
     },
+    "/api/v1beta/me/local-delegation/context": {
+      "post": {
+        "tags": [
+          "local_delegation"
+        ],
+        "operationId": "context",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContextRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssertionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1beta/me/local-delegation/jobs": {
+      "get": {
+        "tags": [
+          "local_delegation"
+        ],
+        "operationId": "pending",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1beta/me/local-delegation/jobs/{id}/cancel": {
+      "post": {
+        "tags": [
+          "local_delegation"
+        ],
+        "operationId": "cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1beta/me/local-delegation/jobs/{id}/claim": {
+      "post": {
+        "tags": [
+          "local_delegation"
+        ],
+        "operationId": "claim",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1beta/me/local-delegation/jobs/{id}/complete": {
+      "post": {
+        "tags": [
+          "local_delegation"
+        ],
+        "operationId": "complete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1beta/me/mcp-tool-approval-settings": {
       "get": {
         "tags": [],
@@ -4407,6 +4561,17 @@
           }
         }
       },
+      "AssertionResponse": {
+        "type": "object",
+        "required": [
+          "assertion"
+        ],
+        "properties": {
+          "assertion": {
+            "type": "string"
+          }
+        }
+      },
       "Assistant": {
         "type": "object",
         "description": "An assistant model",
@@ -5713,6 +5878,33 @@
           }
         }
       },
+      "ClaimRequest": {
+        "type": "object",
+        "required": [
+          "deviceId"
+        ],
+        "properties": {
+          "deviceId": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ClaimResponse": {
+        "type": "object",
+        "required": [
+          "job",
+          "authorization"
+        ],
+        "properties": {
+          "authorization": {
+            "type": "string"
+          },
+          "job": {
+            "$ref": "#/components/schemas/JobResponse"
+          }
+        }
+      },
       "ClientToolFileApproval": {
         "type": "string",
         "description": "Default handling of files retrieved by client tools before they leave the device.",
@@ -6405,6 +6597,22 @@
             "format": "uuid"
           }
         }
+      },
+      "ContextRequest": {
+        "type": "object",
+        "required": [
+          "deviceId",
+          "challenge"
+        ],
+        "properties": {
+          "challenge": {
+            "type": "string"
+          },
+          "deviceId": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       },
       "ContinueStreamRequest": {
         "type": "object",
@@ -7664,6 +7872,42 @@
           }
         }
       },
+      "JobResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "chatId",
+          "messageId",
+          "state",
+          "plan"
+        ],
+        "properties": {
+          "binding": {},
+          "chatId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "messageId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "plan": {},
+          "receipt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "serverOutcome": {},
+          "state": {
+            "type": "string"
+          }
+        }
+      },
       "LinkFileRequest": {
         "type": "object",
         "description": "Request to link an external file (SharePoint, Google Drive, etc.)",
@@ -8745,6 +8989,24 @@
           }
         }
       },
+      "PendingResponse": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "jobs"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "jobs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JobResponse"
+            }
+          }
+        }
+      },
       "PendingToolCall": {
         "type": "object",
         "description": "A call of the parked batch that was never popped. The parked part is the\nonly record of these, so the continuation has to replay them from here.",
@@ -8812,6 +9074,17 @@
             "format": "uuid",
             "description": "The delivered `task_result` user row to react to.",
             "example": "00000000-0000-0000-0000-000000000000"
+          }
+        }
+      },
+      "ReceiptResponse": {
+        "type": "object",
+        "required": [
+          "receipt"
+        ],
+        "properties": {
+          "receipt": {
+            "type": "string"
           }
         }
       },

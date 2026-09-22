@@ -738,6 +738,11 @@ impl ClientToolFileApproval {
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct DesktopSidecarConfig {
+    /// Native exact-snapshot delegation. Disabled until native, recovery and host
+    /// qualification are complete; independent of legacy file-upload preferences.
+    #[serde(default)]
+    pub local_delegation: LocalDelegationConfig,
+
     /// Default file upload decision. Users may override this in Sidecar settings.
     #[serde(default)]
     pub file_upload_approval: ClientToolFileApproval,
@@ -788,6 +793,23 @@ pub struct DesktopSidecarConfig {
     /// logged-in frontend session is initialized.
     #[serde(default)]
     pub organization_configuration: DesktopSidecarOrganizationConfiguration,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct LocalDelegationConfig {
+    /// Enable the authenticated local-evidence workflow. Defaults to false.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Canonical HTTPS backend origin pinned in the native installation.
+    pub backend_origin: Option<String>,
+    /// Identifier of the active Ed25519 signing key.
+    pub signing_key_id: Option<String>,
+    /// Backend-only Ed25519 PKCS#8 PEM. Never included in native bootstrap.
+    pub signing_private_key_pem: Option<SecretConfigString>,
+    /// Public Ed25519 keys indexed by key ID, encoded as base64url without padding.
+    /// Retain old receipt verification keys for the maximum job/tombstone lifetime.
+    #[serde(default)]
+    pub verification_keys: std::collections::BTreeMap<String, String>,
 }
 
 impl DesktopSidecarConfig {
