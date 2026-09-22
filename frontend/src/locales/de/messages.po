@@ -5107,6 +5107,11 @@ msgstr "Am Budget für Tool-Aufrufe gestoppt; die Antwort kann unvollständig se
 
 #. js-lingui-explicit-id
 #: src/lib/delegation/delegationLabels.ts
+msgid "trace.delegation.reason.interrupted"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.noAnswer"
 msgstr "Der Lauf endete ohne Antwort"
 

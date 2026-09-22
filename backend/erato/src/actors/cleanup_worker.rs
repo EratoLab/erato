@@ -142,6 +142,18 @@ pub async fn run_cleanup_tick(args: &CleanupWorkerArgs) -> Result<(), ActorProce
         tracing::info!(?swept, "Backstop swept task result deliveries");
     }
 
+    // Also crash recovery, and above the opt-in line for the same reason: it
+    // deletes nothing, and a row whose tool call will never be answered is
+    // not something an operator should have to opt into repairing.
+    let settled = crate::services::interrupted_parts::sweep_interrupted_tool_parts(
+        &args.db,
+        args.generation_stale_after_secs,
+    )
+    .await;
+    if settled.touched() {
+        tracing::info!(?settled, "Backstop settled interrupted tool parts");
+    }
+
     // The retention half is the operator's opt-in to deleting data. Anything in
     // this tick that deletes nothing belongs above this line.
     if !args.cleanup_enabled {

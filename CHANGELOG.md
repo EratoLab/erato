@@ -68,6 +68,12 @@ Typical "Notable changes" categories to copy & paste:
 
 #### Stability improvements
 
+- **A tool call the server never finished is now named as interrupted, and is eventually settled.** A hard crash mid-turn leaves the assistant row holding `tool_use` parts that no exit will ever answer. Two changes end them.
+
+  In the UI, such a call used to render on reload with the rail's green check — the interface asserted success for a call that never returned. It now renders as **interrupted**, a new trace step state distinct from a failure, because the call did not fail: it was abandoned. The rule fires only on positive evidence that nothing is left to settle the part, so a turn parked on an approval, a generation still running on another replica, and a detached `async` dispatch all keep their previous rendering.
+
+  In the backend, the cleanup worker's tick now also settles those parts durably, in the same crash-recovery half as the task-result delivery backstop (so it deletes nothing and is not behind the data-retention opt-in). A `working` or `queued` delegation placeholder on a chat with no writer left becomes a terminal `cancelled` part carrying the new reason `interrupted`, keeping its child ids where a run had actually launched. Pre-existing orphaned rows are picked up by the first tick after upgrade; a live generation, an approval park, and a slot whose child is still writing are never touched.
+
 - A chat whose provider connection stalls without closing no longer stays "running" forever. A turn that receives no content from its provider for `generation_status.provider_idle_timeout_secs` (new, default 600) now fails as a provider error and releases the chat's generation lease. The budget bounds silence, not length: an answer that keeps streaming is never cut off, however long it takes. Note that it is measured on content rather than on socket traffic — keep-alive pings and empty deltas are dropped by the provider adapter and do not reset it. Set the option to `0` for the previous unbounded behaviour.
 
 #### Wire changes

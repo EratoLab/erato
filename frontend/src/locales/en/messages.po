@@ -5107,6 +5107,11 @@ msgstr "Stopped at its tool-call budget; the answer may be partial"
 
 #. js-lingui-explicit-id
 #: src/lib/delegation/delegationLabels.ts
+msgid "trace.delegation.reason.interrupted"
+msgstr "Stopped when the server restarted mid-run"
+
+#. js-lingui-explicit-id
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.noAnswer"
 msgstr "The run ended without an answer"
 

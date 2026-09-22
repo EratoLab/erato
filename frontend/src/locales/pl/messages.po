@@ -5107,6 +5107,11 @@ msgstr "Zatrzymany na limicie wywołań narzędzi; odpowiedź może być niepeł
 
 #. js-lingui-explicit-id
 #: src/lib/delegation/delegationLabels.ts
+msgid "trace.delegation.reason.interrupted"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.noAnswer"
 msgstr "Przebieg zakończył się bez odpowiedzi"
 

@@ -5107,6 +5107,11 @@ msgstr "Arrêtée à son budget d'appels d'outils ; la réponse peut être parti
 
 #. js-lingui-explicit-id
 #: src/lib/delegation/delegationLabels.ts
+msgid "trace.delegation.reason.interrupted"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.noAnswer"
 msgstr "L'exécution s'est terminée sans réponse"
 

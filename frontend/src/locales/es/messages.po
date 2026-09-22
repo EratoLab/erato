@@ -5107,6 +5107,11 @@ msgstr "Detenida en su límite de llamadas a herramientas; la respuesta puede se
 
 #. js-lingui-explicit-id
 #: src/lib/delegation/delegationLabels.ts
+msgid "trace.delegation.reason.interrupted"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.noAnswer"
 msgstr "La ejecución terminó sin respuesta"
 

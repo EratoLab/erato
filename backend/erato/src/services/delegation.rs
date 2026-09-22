@@ -1036,6 +1036,12 @@ pub enum DelegationRunReason {
     /// telling the origin model "it said nothing" would invite it to move on
     /// from a task that in fact never reported.
     ResultMissing,
+    /// The process that owed this slot an answer died mid-turn, and the
+    /// stale-lease sweep ended the slot rather than leave it unanswered
+    /// forever. Distinct from `result_missing`: there was never a run to
+    /// report, or it was cut off before it could, so nothing is lost by
+    /// saying so plainly.
+    Interrupted,
 }
 
 impl DelegationRunStatus {
@@ -1063,6 +1069,7 @@ impl DelegationRunReason {
             DelegationRunReason::ApprovalPending => "approval_pending",
             DelegationRunReason::ApprovalUnavailable => "approval_unavailable",
             DelegationRunReason::ResultMissing => "result_missing",
+            DelegationRunReason::Interrupted => "interrupted",
         }
     }
 }
