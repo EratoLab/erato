@@ -19,6 +19,7 @@ import {
   validateCancelParams,
   validateIndexingStartV1Params,
   validateIndexingStopV1Params,
+  validateSourcesGetDocumentV1Params,
   validateSearchQueryV1Params,
   validateSearchMetadataFieldsV1Params,
   validateSearchMetadataFieldsV1Result,
@@ -453,6 +454,15 @@ export class MockSidecar {
       return rpcResult(message.id, { accepted: true });
     }
 
+    if (message.method === "sources.get_document.v1") {
+      if (!validateSourcesGetDocumentV1Params(message.params))
+        return rpcError(message.id, -32602, "Invalid method parameters.");
+      return rpcResult(message.id, {
+        filename: "document.txt",
+        mimeType: "text/plain",
+        contentBase64: Buffer.from("Mock document").toString("base64"),
+      });
+    }
     if (message.method === "search.query.v1") {
       if (!validateSearchQueryV1Params(message.params))
         return rpcError(message.id, -32602, "Invalid method parameters.");

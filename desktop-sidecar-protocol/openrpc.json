@@ -311,15 +311,23 @@
         }
       },
       "errors": [
-        { "$ref": "#/components/errors/CapabilityUnavailable" },
-        { "$ref": "#/components/errors/InvalidParams" },
-        { "$ref": "#/components/errors/SidecarInternal" }
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
       ],
       "x-erato-capability": {
         "id": "sources.list",
         "major": 1,
         "method": "sources.list.v1",
-        "availability": { "state": "enabled" }
+        "availability": {
+          "state": "enabled"
+        }
       }
     },
     {
@@ -341,15 +349,23 @@
         }
       },
       "errors": [
-        { "$ref": "#/components/errors/CapabilityUnavailable" },
-        { "$ref": "#/components/errors/InvalidParams" },
-        { "$ref": "#/components/errors/SidecarInternal" }
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
       ],
       "x-erato-capability": {
         "id": "sources.get_folder_hierarchy",
         "major": 1,
         "method": "sources.get_folder_hierarchy.v1",
-        "availability": { "state": "enabled" }
+        "availability": {
+          "state": "enabled"
+        }
       }
     },
     {
@@ -873,6 +889,44 @@
           "state": "enabled"
         }
       }
+    },
+    {
+      "name": "sources.get_document.v1",
+      "summary": "Retrieve a catalog document as a base64-encoded file, optionally including its thread.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/sources-get-document-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/sources-get-document-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ],
+      "x-erato-capability": {
+        "id": "sources.get_document",
+        "major": 1,
+        "method": "sources.get_document.v1",
+        "availability": {
+          "state": "enabled"
+        }
+      }
     }
   ],
   "components": {
@@ -926,7 +980,7 @@
     }
   },
   "x-erato-catalogue": {
-    "revision": "9",
-    "digest": "sha256:6e212f0dc129e827998f8da693101fa0eb6c149a9ad28ed15e0835c4db9e8f1e"
+    "revision": "10",
+    "digest": "sha256:522228a794865d96241e7e7eb9878646f983ac8b34c5ef42edbbaae5773cfbc6"
   }
 }

@@ -310,6 +310,29 @@ describe("DesktopSidecarClient", () => {
     });
   });
 
+  it("retrieves document files with default and explicit scope", async () => {
+    const { client } = await setup();
+    await client.discover();
+    expect(client.supports("sources.get_document.v1")).toBe(true);
+    for (const scope of [
+      undefined,
+      "subject",
+      "subject_with_thread",
+    ] as const) {
+      const result = await client.invoke("sources.get_document.v1", {
+        documentId: "00000000-0000-0000-0000-000000000001",
+        ...(scope ? { subject_scope: scope } : {}),
+      });
+      expect(result.filename).toBe("document.txt");
+      expect(Buffer.from(result.contentBase64, "base64").toString()).toBe(
+        "Mock document",
+      );
+    }
+    const older = await setup({ omitMethods: ["sources.get_document.v1"] });
+    await older.client.discover();
+    expect(older.client.supports("sources.get_document.v1")).toBe(false);
+  });
+
   it("recognizes source browsing only when the sidecar advertises it", async () => {
     const current = await setup();
     await current.client.discover();
