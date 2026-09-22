@@ -2391,6 +2391,197 @@ fn generation_failure_error_value() -> Option<JsonValue> {
     serde_json::to_value(MessageSubmitStreamingResponseMessage::Error(error_event)).ok()
 }
 
+/// Settle an origin slot whose awaiting turn is gone.
+///
+/// A `wait` child's answer is written by the turn that dispatched it, and
+/// [`rearm_delivery_after_child_decision`] covers only `async` children, which
+/// own a `result_delivery` row to re-arm. With the turn gone the slot keeps
+/// the `input_required` envelope its park wrote, for ever.
+///
+/// D20 keeps the origin authoritative, so this stands down whenever
+/// [`origin_approval_covering_child`] holds. Hung off the tail rather than the
+/// continuation because editing or writing in the parked chat answers the
+/// question as much as the card does.
+async fn reconcile_orphaned_parent_slot(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    child_chat_id: Uuid,
+    child_assistant_message_id: Uuid,
+    outcome: TaskOutcome,
+    tool_budget_exhausted: bool,
+) {
+    if outcome == TaskOutcome::AwaitingApproval {
+        return;
+    }
+    let Ok(Some(child_chat)) = crate::db::entity::prelude::Chats::find_by_id(child_chat_id)
+        .one(&app_state.db)
+        .await
+    else {
+        return;
+    };
+    let Ok(Some(configuration)) = crate::models::chat::parse_chat_configuration(&child_chat) else {
+        return;
+    };
+    let Some(provenance) = configuration.provenance.as_ref() else {
+        return;
+    };
+    if provenance.kind != crate::models::chat::ChatProvenanceKind::Delegation {
+        return;
+    }
+    // Re-armed through its delivery row instead; doing both tells the origin twice.
+    if provenance.run_mode == Some(crate::models::message::ProvenanceRunMode::Async) {
+        return;
+    }
+    let Some(parent_message_id) = provenance.parent_message_id else {
+        return;
+    };
+    let Some(parent_tool_call_id) = configuration
+        .task
+        .as_ref()
+        .and_then(|task| task.parent_tool_call_id.clone())
+    else {
+        return;
+    };
+    if origin_approval_covering_child(app_state, policy, me_user, &child_chat)
+        .await
+        .is_some()
+    {
+        return;
+    }
+
+    let subject = me_user.to_subject();
+    let Ok(origin_chat) =
+        get_chat_by_message_id(&app_state.db, policy, &subject, &parent_message_id).await
+    else {
+        return;
+    };
+    // Deliberately no archived check, unlike the `async` path's
+    // `DELIVERY_REASON_ORIGIN_ARCHIVED`: that one appends a row and runs a
+    // reaction turn, this rewrites a slot already in the row. An archived
+    // origin is also the only route that reaches here at all — a withdrawal or
+    // a settlement closes the child's own copy, so those never run again.
+    //
+    // A running lease means the dispatching turn may yet write the slot itself.
+    if origin_chat.generation_state.as_deref() == Some("running") {
+        return;
+    }
+    let Ok(parent) = get_message_by_id(&app_state.db, policy, &subject, &parent_message_id).await
+    else {
+        return;
+    };
+    let Ok(mut parsed) = MessageSchema::validate(&parent.raw_message) else {
+        return;
+    };
+
+    // A settled slot means another path got there first; this is what keeps
+    // repeat tails idempotent.
+    let Some(slot) = parsed.content.iter().find_map(|part| match part {
+        ContentPart::ToolUse(tool_use)
+            if tool_use.tool_call_id == parent_tool_call_id
+                && tool_use.status == MessageToolCallStatus::InProgress =>
+        {
+            Some(tool_use.clone())
+        }
+        _ => None,
+    }) else {
+        return;
+    };
+
+    let spawned_at = provenance.rebase_cutoff.unwrap_or(child_chat.created_at);
+    // `build_result_envelope` reads a missing answer as `completed`/`no_answer`,
+    // which would report a task that never spoke as one that did.
+    let answered = crate::db::entity::prelude::Messages::find_by_id(child_assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .ok()
+        .flatten()
+        .is_some_and(|row| row.chat_id == child_chat_id && row.created_at > spawned_at);
+    if !answered {
+        return;
+    }
+
+    let envelope = crate::services::delegation::build_result_envelope(
+        &app_state.db,
+        child_chat_id,
+        child_assistant_message_id,
+        spawned_at,
+        child_chat.assistant_id,
+        None,
+        parent_tool_call_id.clone(),
+        if outcome == TaskOutcome::Errored {
+            crate::services::delegation::DelegationRunStatus::Failed
+        } else {
+            crate::services::delegation::DelegationRunStatus::Completed
+        },
+        // No tail reaching here runs under a deadline.
+        None,
+        tool_budget_exhausted,
+        app_state.config.delegation.result_max_chars,
+    )
+    .await;
+    // The row is still asking whatever the lease said; writing that back would
+    // swap one `input_required` for another and call the orphan closed.
+    if envelope.status == crate::services::delegation::DelegationRunStatus::InputRequired {
+        return;
+    }
+
+    let failed = envelope.status == crate::services::delegation::DelegationRunStatus::Failed;
+    let Ok(mut output) = serde_json::to_value(&envelope) else {
+        return;
+    };
+    // The envelope is composed apart from the trace on purpose, so the park's
+    // copy in this slot is the only one and has to be carried over by hand.
+    if let Some(object) = output.as_object_mut()
+        && let Some(trace) = slot.output.as_ref().and_then(|previous| {
+            previous.get(crate::services::delegation::DELEGATION_LOCAL_TRACE_KEY)
+        })
+    {
+        object.insert(
+            crate::services::delegation::DELEGATION_LOCAL_TRACE_KEY.to_string(),
+            trace.clone(),
+        );
+    }
+
+    for part in parsed.content.iter_mut() {
+        if let ContentPart::ToolUse(tool_use) = part
+            && tool_use.tool_call_id == parent_tool_call_id
+        {
+            tool_use.status = if failed {
+                MessageToolCallStatus::Error
+            } else {
+                MessageToolCallStatus::Success
+            };
+            tool_use.output = Some(output.clone());
+            tool_use.ended_at = Some(now_timestamp());
+        }
+    }
+
+    if let Err(error) = crate::models::message::update_message_content(
+        &app_state.db,
+        policy,
+        &subject,
+        &parent.id,
+        parsed.content.clone(),
+    )
+    .await
+    {
+        tracing::warn!(
+            %child_chat_id,
+            %parent_message_id,
+            %error,
+            "Could not settle an orphaned delegation slot in the origin chat"
+        );
+        return;
+    }
+    tracing::info!(
+        %child_chat_id,
+        %parent_message_id,
+        status = envelope.status.as_str(),
+        "Settled an orphaned delegation slot from the child's own decision"
+    );
+}
+
 /// The delivery work every generation tail on a user-writable chat owes: this
 /// chat may be a parked `async` child whose answer an origin is still waiting
 /// for, and it may itself be an origin with results owed to it.
@@ -2431,6 +2622,17 @@ async fn settle_tail_deliveries(
     }
     crate::services::task_delivery::drain_pending_deliveries(app_state, policy, me_user, chat_id)
         .await;
+    // The `wait` half: no delivery row to re-arm, so the slot is settled directly.
+    reconcile_orphaned_parent_slot(
+        app_state,
+        policy,
+        me_user,
+        chat_id,
+        task.message_id(),
+        outcome,
+        task.tool_budget_exhausted(),
+    )
+    .await;
 }
 
 /// Runs a generation inside the lifecycle a user submit and a delegated child
