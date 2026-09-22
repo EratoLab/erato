@@ -106,7 +106,12 @@ const MOCK_OUTLOOK_ATTACHMENT_BYTES = Buffer.from(
   "mock attachment bytes",
   "utf8",
 );
+const MOCK_OUTLOOK_EXTERNAL_IDS = [
+  { key: "email_message_id", value: "<mock-outlook-email@example.com>" },
+  { key: "ews_id", value: "AQMk/CaseSensitive+MockEwsId==" },
+];
 const MOCK_OUTLOOK_CONVERSATION_MESSAGE = {
+  external_ids: MOCK_OUTLOOK_EXTERNAL_IDS,
   internetMessageId: "<mock-outlook-email@example.com>",
   subject: "Mock Outlook message",
   from: { name: "Erato Test", emailAddress: "test@example.com" },
@@ -121,6 +126,8 @@ const MOCK_OUTLOOK_CONVERSATION_MESSAGE = {
   attachments: [
     {
       name: "mock-attachment.pdf",
+      external_ids: [],
+      topLevelParent: { external_ids: MOCK_OUTLOOK_EXTERNAL_IDS },
       contentType: "application/pdf",
       size: MOCK_OUTLOOK_ATTACHMENT_BYTES.byteLength,
       isInline: false,
@@ -459,6 +466,7 @@ export class MockSidecar {
         return rpcError(message.id, -32602, "Invalid method parameters.");
       return rpcResult(message.id, {
         filename: "document.txt",
+        external_ids: [],
         mimeType: "text/plain",
         contentBase64: Buffer.from("Mock document").toString("base64"),
       });

@@ -58,6 +58,9 @@
       "items": {
         "$ref": "../outlook/attachment-reference.schema.json"
       }
+    },
+    "external_ids": {
+      "$ref": "../source/external-ids.schema.json"
     }
   },
   "additionalProperties": true
