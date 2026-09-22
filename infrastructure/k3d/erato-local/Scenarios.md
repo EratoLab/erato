@@ -51,14 +51,21 @@ told the answer by a second one. Offering `async` also un-inerts the shipped
 about before it happens — which is that default's whole purpose and is only
 reachable in a deployment that offers the mode.
 
-It carries two planning facets rather than one. `plan` overrides nothing, so a
+It carries three planning facets rather than one. `plan` overrides nothing, so a
 turn under it runs the shipped global `[delegation.tasks.approval]` default
 `async_only`; `plan_gate` sets `mode = "plan"` through
-`[facets.facets.plan_gate.delegation.approval]`. The dispatch-approval policy is
-per-deployment configuration, and a second scenario for it would cost a cluster
-switch and a CI matrix entry, so the two facets express the two policies inside
-one scenario — selecting one or the other is then the only difference between a
-planned batch that parks and the same batch that dispatches.
+`[facets.facets.plan_gate.delegation.approval]`; `plan_serial` narrows
+`max_parallel` to 1 through `[facets.facets.plan_serial.delegation]`. All three
+keys are per-deployment configuration, and a scenario per value would cost a
+cluster switch and a CI matrix entry each, so the facets express the variants
+inside one scenario — selecting one or the other is then the only difference
+between a planned batch that parks and the same batch that dispatches, or between
+a batch that runs in parallel and the same batch that has to queue.
+
+A facet may only ever narrow, which is why the cap lives on a facet and the
+approval mode does too: a facet's `max_parallel` is merged as a MINIMUM and its
+approval `mode` as the STRICTEST, so `plan_serial` can lower the cap to 1 but no
+facet could set `mode = "never"` to switch the shipped dispatch approval off.
 
 ### `many-models` - Model Selector Testing
 

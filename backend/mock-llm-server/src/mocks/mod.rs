@@ -576,6 +576,77 @@ const ASYNC_DELIVERED_STATUS: &str = "status: completed";
 const ASYNC_PARK_NOTIFIED_ANSWER: &str = "ASYNC-DELIVERY-NOTIFIED";
 const ASYNC_PARK_ANSWERED_ANSWER: &str = "ASYNC-DELIVERY-ANSWERED";
 
+/// Typed into the origin chat by the queue e2e: THREE awaited tasks, which is
+/// more than one slot and so more than a `max_parallel` of 1 can start.
+///
+/// Three rather than two so the queue is a queue and not just a deferred call:
+/// two slots have to wait, and they have to come back in the order they were
+/// planned in.
+const QUEUED_TASKS_PARENT_PROMPT: &str = "plan a slow probe and two quick ones";
+
+/// Dispatched FIRST, and the only one that can start under a one-slot cap.
+///
+/// Its answer is held back long enough for a test to stand in the queued state
+/// rather than having to catch it between two fast turns. A parked child cannot
+/// serve here: parking frees the run's slot, so the queue would drain while the
+/// approval card was still on screen.
+const QUEUED_SLOW_CHILD_BRIEF: &str =
+    "Queued batch slow brief: hold the only slot while the others wait.";
+
+/// How long the slow child holds the slot. Comfortably inside the scenario's
+/// `run_timeout_seconds`, and far longer than the poll and render budget the
+/// queued assertions need.
+const QUEUED_SLOW_CHILD_DELAY_MS: u64 = 15_000;
+
+/// The two calls behind it, which the cap has nowhere to put. One brief each,
+/// because a shared brief could not tell which slot came back with which answer.
+const QUEUED_QUICK_CHILD_BRIEF_A: &str = "Queued batch quick brief A: answer at once.";
+const QUEUED_QUICK_CHILD_BRIEF_B: &str = "Queued batch quick brief B: answer at once.";
+
+const QUEUED_SLOW_CHILD_ANSWER: &str = "QUEUED-SLOW-CHILD-ANSWER";
+const QUEUED_QUICK_CHILD_ANSWER_A: &str = "QUEUED-QUICK-CHILD-A-ANSWER";
+const QUEUED_QUICK_CHILD_ANSWER_B: &str = "QUEUED-QUICK-CHILD-B-ANSWER";
+
+/// What the origin says once every slot of the batch is settled.
+const QUEUED_TASKS_PARENT_ANSWER: &str = "QUEUED-TASKS-PARENT-ANSWER";
+
+/// Typed into the origin chat by the retry e2e: one `async` task whose child
+/// cannot answer at all. Not a superstring of any other task prompt in either
+/// direction, for the reason every prompt here restates.
+const FAILING_TASK_PARENT_PROMPT: &str = "detach the doomed probe as a background task";
+
+/// The brief of the child that never answers.
+///
+/// It gets an error rule of its own rather than borrowing the generic
+/// `RateLimitError` further down the list. Borrowing looked cheaper — a child's
+/// brief IS the last user message of its first turn, so a brief containing
+/// "rate limit" would reach that rule — but matching is first-match substring
+/// over the whole list, and the generic error rules sit behind `Greeting`, whose
+/// "hi" pattern is inside any brief containing the word "this". A rule here, in
+/// the delegation group, is decided before any of that can interfere.
+const FAILING_TASK_CHILD_BRIEF: &str =
+    "Doomed child brief: the provider breaks on every turn of this run.";
+
+/// How long the doomed child takes to break.
+///
+/// A run that failed instantly would be indistinguishable from one that was
+/// never started, and — the reason this constant exists — a retry of it would be
+/// over before anything could ask whether a second retry is allowed while one is
+/// in flight. The retry carries the same brief, so it breaks the same way after
+/// the same wait, which is what makes that window a window.
+const FAILING_TASK_CHILD_DELAY_MS: u64 = 8_000;
+
+/// The status line a delivery carries when the run it reports did not answer.
+/// Keyed on like its two siblings, and for the same reason: only a run that
+/// broke delivers `failed`, so the reaction to it cannot stand in for either of
+/// the others.
+const ASYNC_FAILED_STATUS: &str = "status: failed";
+
+/// What the origin says when it is told a task broke. Its own marker, so a test
+/// can tell "the origin was told the run failed" from "the origin was handed an
+/// answer" — the distinction a retry offer turns on.
+const ASYNC_FAILED_ANSWER: &str = "ASYNC-DELIVERY-FAILED";
+
 fn build_delegation_child_answer_chunks() -> Vec<String> {
     [
         "CHILD-ANSWER",
@@ -1241,6 +1312,157 @@ pub fn get_default_mocks() -> Vec<Mock> {
             }),
         },
         Mock {
+            name: "QueuedTasksToolCalls".to_string(),
+            description: "Plans three awaited sub-tasks, of which a one-slot cap can start one"
+                .to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: QUEUED_TASKS_PARENT_PROMPT.to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCalls(ToolCallsResponseConfig {
+                tool_calls: vec![
+                    ToolCallDef {
+                        tool_name: "delegate_task".to_string(),
+                        arguments: format!(
+                            "{{\"task\": \"{QUEUED_SLOW_CHILD_BRIEF}\", \"expected_output\": \"One sentence.\"}}"
+                        ),
+                    },
+                    ToolCallDef {
+                        tool_name: "delegate_task".to_string(),
+                        arguments: format!(
+                            "{{\"task\": \"{QUEUED_QUICK_CHILD_BRIEF_A}\", \"expected_output\": \"One sentence.\"}}"
+                        ),
+                    },
+                    ToolCallDef {
+                        tool_name: "delegate_task".to_string(),
+                        arguments: format!(
+                            "{{\"task\": \"{QUEUED_QUICK_CHILD_BRIEF_B}\", \"expected_output\": \"One sentence.\"}}"
+                        ),
+                    },
+                ],
+                delay_ms: 100,
+            }),
+        },
+        Mock {
+            name: "QueuedSlowChildAnswer".to_string(),
+            description: "Answers the slow sub-task only after it has held its slot a while"
+                .to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: QUEUED_SLOW_CHILD_BRIEF.to_string(),
+            })],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec![
+                    QUEUED_SLOW_CHILD_ANSWER.to_string(),
+                    ": the".to_string(),
+                    " slot".to_string(),
+                    " is".to_string(),
+                    " free".to_string(),
+                    " again".to_string(),
+                    ".".to_string(),
+                ],
+                delay_ms: 50,
+                initial_delay_ms: Some(QUEUED_SLOW_CHILD_DELAY_MS),
+                ..Default::default()
+            }),
+        },
+        Mock {
+            name: "QueuedQuickChildAnswerA".to_string(),
+            description: "Answers the first queued sub-task as soon as it is allowed to start"
+                .to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: QUEUED_QUICK_CHILD_BRIEF_A.to_string(),
+            })],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec![
+                    QUEUED_QUICK_CHILD_ANSWER_A.to_string(),
+                    ": the".to_string(),
+                    " wait".to_string(),
+                    " is".to_string(),
+                    " over".to_string(),
+                    ".".to_string(),
+                ],
+                delay_ms: 50,
+                ..Default::default()
+            }),
+        },
+        Mock {
+            name: "QueuedQuickChildAnswerB".to_string(),
+            description: "Answers the second queued sub-task as soon as it is allowed to start"
+                .to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: QUEUED_QUICK_CHILD_BRIEF_B.to_string(),
+            })],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec![
+                    QUEUED_QUICK_CHILD_ANSWER_B.to_string(),
+                    ": the".to_string(),
+                    " wait".to_string(),
+                    " is".to_string(),
+                    " over".to_string(),
+                    ".".to_string(),
+                ],
+                delay_ms: 50,
+                ..Default::default()
+            }),
+        },
+        Mock {
+            name: "QueuedTasksAnswer".to_string(),
+            description: "Answers the origin once every slot of the queued batch is settled"
+                .to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: QUEUED_TASKS_PARENT_PROMPT.to_string(),
+            })],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec![
+                    QUEUED_TASKS_PARENT_ANSWER.to_string(),
+                    ": every".to_string(),
+                    " task".to_string(),
+                    " ran".to_string(),
+                    ".".to_string(),
+                ],
+                delay_ms: 100,
+                ..Default::default()
+            }),
+        },
+        Mock {
+            name: "FailingTaskParentToolCall".to_string(),
+            description: "Detaches a sub-task whose provider refuses its first turn".to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: FAILING_TASK_PARENT_PROMPT.to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
+                tool_name: "delegate_task".to_string(),
+                arguments: format!(
+                    "{{\"task\": \"{FAILING_TASK_CHILD_BRIEF}\", \"expected_output\": \"One sentence.\", \"run_mode\": \"async\"}}"
+                ),
+                delay_ms: 100,
+            }),
+        },
+        Mock {
+            name: "FailingTaskChildRefused".to_string(),
+            description: "Refuses every turn of the doomed sub-task, so its run fails".to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: FAILING_TASK_CHILD_BRIEF.to_string(),
+            })],
+            // The status a provider that is simply unavailable answers with. What
+            // the run needs is an INFRASTRUCTURE failure: a refusal the child
+            // could speak on top of would finish the run `completed`, and a
+            // completed run is deliberately not retryable.
+            response: ResponseConfig::Error(ErrorResponseConfig {
+                status_code: 429,
+                body: json!({
+                    "error": {
+                        "code": "429",
+                        "message": "Requests to the ChatCompletions_Create Operation have exceeded the call rate limit of your current pricing tier."
+                    }
+                }),
+                initial_delay_ms: Some(FAILING_TASK_CHILD_DELAY_MS),
+            }),
+        },
+        Mock {
             name: "AsyncParkChildToolCall".to_string(),
             description: "Returns the gated call on the detached child's first turn".to_string(),
             match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
@@ -1292,6 +1514,28 @@ pub fn get_default_mocks() -> Vec<Mock> {
         // one field the contract fixes, and so the pair cannot stand in for
         // each other: only a parked run produces `input_required`, and only a
         // run that has an answer produces `completed`.
+        Mock {
+            name: "AsyncDeliveryFailedReaction".to_string(),
+            description: "Reacts to a delivered result that says the run broke".to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: ASYNC_FAILED_STATUS.to_string(),
+                },
+            )],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec![
+                    ASYNC_FAILED_ANSWER.to_string(),
+                    ": the".to_string(),
+                    " task".to_string(),
+                    " did".to_string(),
+                    " not".to_string(),
+                    " finish".to_string(),
+                    ".".to_string(),
+                ],
+                delay_ms: 200,
+                ..Default::default()
+            }),
+        },
         Mock {
             name: "AsyncDeliveryNotifiedReaction".to_string(),
             description: "Reacts to a delivered result that says the run stopped to ask"
@@ -1346,6 +1590,9 @@ pub fn get_default_mocks() -> Vec<Mock> {
                 }),
                 MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
                     pattern: ASYNC_PLAIN_PARENT_PROMPT.to_string(),
+                }),
+                MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                    pattern: FAILING_TASK_PARENT_PROMPT.to_string(),
                 }),
             ],
             response: ResponseConfig::Static(StaticResponseConfig {
@@ -2986,6 +3233,161 @@ mod tests {
                 assert_eq!(config.chunks, vec!["Mock Summary Title"]);
             }
             _ => panic!("Expected Static response"),
+        }
+    }
+
+    /// The doomed probe's whole mechanism, in one place: the origin detaches the
+    /// task, and the brief it writes is what the child's own first turn is
+    /// refused for.
+    ///
+    /// Asserted as a pair rather than as "the brief contains 'rate limit'",
+    /// because the claim is not about the text — it is that the child turn
+    /// carrying this brief really resolves to a provider error. A brief that
+    /// stopped matching `RateLimitError` would leave the retry e2e with a task
+    /// that quietly succeeds.
+    #[test]
+    fn the_doomed_probe_detaches_a_task_whose_child_turn_is_refused() {
+        use serde_json::json;
+
+        let origin_turn = match_default_mocks(
+            json!([
+                {"role": "system", "content": "You are a helpful assistant"},
+                {"role": "user", "content": FAILING_TASK_PARENT_PROMPT},
+            ]),
+            None,
+        );
+        match origin_turn {
+            ResponseConfig::ToolCall(config) => {
+                assert_eq!(config.tool_name, "delegate_task");
+                assert!(config.arguments.contains(FAILING_TASK_CHILD_BRIEF));
+                // Detached, or there is no delivered row to offer a retry on.
+                assert!(config.arguments.contains("\"run_mode\": \"async\""));
+            }
+            other => panic!("origin turn matched {other:?}"),
+        }
+
+        let child_turn = match_default_mocks(
+            json!([
+                {"role": "system", "content": "Answer the delegated probe task."},
+                {"role": "user", "content": delegate_preamble_message()},
+                {"role": "user", "content": FAILING_TASK_CHILD_BRIEF},
+            ]),
+            None,
+        );
+        match child_turn {
+            ResponseConfig::Error(config) => {
+                assert_eq!(config.status_code, 429);
+                // It breaks slowly on purpose: a retry of it has to still be in
+                // flight for long enough that "one live retry per failure" is
+                // observable.
+                assert_eq!(config.initial_delay_ms, Some(FAILING_TASK_CHILD_DELAY_MS));
+            }
+            other => panic!("child turn matched {other:?}"),
+        }
+    }
+
+    /// The origin is told a broken run broke, under a marker of its own.
+    ///
+    /// Keyed on the status line, like the two reactions it sits beside: a
+    /// reaction shared with `completed` could not say whether the origin learned
+    /// the task had failed or thought it had an answer.
+    #[test]
+    fn a_failed_delivery_draws_its_own_reaction() {
+        use serde_json::json;
+
+        let reaction = match_default_mocks(
+            json!([
+                {"role": "system", "content": "You are a helpful assistant"},
+                {"role": "user", "content": FAILING_TASK_PARENT_PROMPT},
+                {"role": "assistant", "content": "dispatched"},
+                {"role": "user", "content": format!("A task you delegated earlier has finished. {ASYNC_FAILED_STATUS}")},
+            ]),
+            None,
+        );
+        match reaction {
+            ResponseConfig::Static(config) => {
+                assert!(config.chunks.join("").starts_with(ASYNC_FAILED_ANSWER))
+            }
+            other => panic!("reaction matched {other:?}"),
+        }
+    }
+
+    /// The queued batch: three awaited calls, the first of which is the only one
+    /// that can start under a one-slot cap and is the only one that takes any
+    /// time.
+    ///
+    /// The delay is asserted as well as the calls, because it is the mechanism:
+    /// a parked child would free its slot and drain the queue, so the slot has to
+    /// be held by a run that is simply still working.
+    #[test]
+    fn the_queued_batch_plans_three_awaited_tasks_behind_one_slow_one() {
+        use serde_json::json;
+
+        let origin_turn = match_default_mocks(
+            json!([
+                {"role": "system", "content": "You are a helpful assistant"},
+                {"role": "user", "content": QUEUED_TASKS_PARENT_PROMPT},
+            ]),
+            None,
+        );
+        match origin_turn {
+            ResponseConfig::ToolCalls(config) => {
+                assert_eq!(config.tool_calls.len(), 3);
+                assert!(config
+                    .tool_calls
+                    .iter()
+                    .all(|call| call.tool_name == "delegate_task"));
+                assert!(config.tool_calls[0]
+                    .arguments
+                    .contains(QUEUED_SLOW_CHILD_BRIEF));
+                assert!(config.tool_calls[1]
+                    .arguments
+                    .contains(QUEUED_QUICK_CHILD_BRIEF_A));
+                assert!(config.tool_calls[2]
+                    .arguments
+                    .contains(QUEUED_QUICK_CHILD_BRIEF_B));
+                // Awaited: the cap is about how many run at once, and a detached
+                // batch would settle every slot at launch and queue nothing.
+                assert!(config
+                    .tool_calls
+                    .iter()
+                    .all(|call| !call.arguments.contains("run_mode")));
+            }
+            other => panic!("origin turn matched {other:?}"),
+        }
+
+        let child_turn = |brief: &str| {
+            match_default_mocks(
+                json!([
+                    {"role": "system", "content": "Answer the delegated probe task."},
+                    {"role": "user", "content": delegate_preamble_message()},
+                    {"role": "user", "content": brief},
+                ]),
+                None,
+            )
+        };
+
+        match child_turn(QUEUED_SLOW_CHILD_BRIEF) {
+            ResponseConfig::Static(config) => {
+                assert!(config.chunks.join("").starts_with(QUEUED_SLOW_CHILD_ANSWER));
+                assert_eq!(config.initial_delay_ms, Some(QUEUED_SLOW_CHILD_DELAY_MS));
+            }
+            other => panic!("slow child turn matched {other:?}"),
+        }
+
+        for (brief, answer) in [
+            (QUEUED_QUICK_CHILD_BRIEF_A, QUEUED_QUICK_CHILD_ANSWER_A),
+            (QUEUED_QUICK_CHILD_BRIEF_B, QUEUED_QUICK_CHILD_ANSWER_B),
+        ] {
+            match child_turn(brief) {
+                ResponseConfig::Static(config) => {
+                    assert!(config.chunks.join("").starts_with(answer));
+                    // Nothing holds these back: the only wait they can show is
+                    // the queue's.
+                    assert_eq!(config.initial_delay_ms, None);
+                }
+                other => panic!("child turn for {brief} matched {other:?}"),
+            }
         }
     }
 }

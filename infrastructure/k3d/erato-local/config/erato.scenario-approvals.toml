@@ -87,7 +87,7 @@ K3D_TEST_SCENARIO = "approvals"
 # assistants scenario: /me/facets emits priority_order before the sorted
 # remainder, and alphabetically `plan` would win the first slot.
 [facets]
-priority_order = ["web_search", "plan", "plan_gate"]
+priority_order = ["web_search", "plan", "plan_gate", "plan_serial"]
 default_selected_facets = []
 
 [facets.facets.web_search]
@@ -125,3 +125,19 @@ disable_facet_prompt_template = true
 
 [facets.facets.plan_gate.delegation.approval]
 mode = "plan"
+
+# One slot at a time, so a batch of three has to queue the two calls it cannot
+# start rather than refuse them. `max_parallel` is per-deployment config and a
+# facet may only NARROW it, which is exactly the shape this needs: nothing else
+# about the turn changes, so a queued slot can only be explained by the cap. A
+# scenario of its own would add a cluster switch and a CI matrix entry for what a
+# facet selection already expresses, and lowering the cap on `plan` would make
+# every other spec's batch serial.
+[facets.facets.plan_serial]
+display_name = "Plan & queue"
+icon = "iconoir-strategy"
+tool_call_allowlist = ["erato/delegate_task", "mock_mcp_file/*"]
+disable_facet_prompt_template = true
+
+[facets.facets.plan_serial.delegation]
+max_parallel = 1
