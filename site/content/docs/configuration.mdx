@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # Configuration
 
 ## Ways to provide configuration
@@ -1266,6 +1268,7 @@ supports_reasoning_summary = true
 supports_encrypted_reasoning_content = true
 supports_audio_input = false
 supports_verbosity = false
+supports_strict_tool_calling = false
 cost_input_tokens_per_1m = 5.0
 cost_output_tokens_per_1m = 15.0
 ```
@@ -1278,6 +1281,7 @@ cost_output_tokens_per_1m = 15.0
 {/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.supports_reasoning_summary */}
 {/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.supports_encrypted_reasoning_content */}
 {/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.supports_verbosity */}
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.supports_strict_tool_calling */}
 {/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.cost_input_tokens_per_1m */}
 {/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.cost_output_tokens_per_1m */}
 
@@ -1288,6 +1292,7 @@ cost_output_tokens_per_1m = 15.0
 - **`supports_reasoning_summary`** _(default: true)_ - Whether the model supports returning reasoning summaries when reasoning is enabled
 - **`supports_encrypted_reasoning_content`** _(default: true)_ - Whether the model supports requesting encrypted reasoning content for stateless reasoning replay
 - **`supports_verbosity`** _(default: false)_ - Whether the model supports providing a verbosity parameter (for future support of advanced models)
+- **`supports_strict_tool_calling`** _(default: false)_ - Opt this model/endpoint into native strict arguments for configured client submissions. Currently supported by the OpenAI-compatible Chat Completions and Responses adapters. Other adapters retain local schema validation and bounded corrections. Set this only after verifying the endpoint's support; it is not inferred from the model name.
 - **`cost_input_tokens_per_1m`** _(default: 0.0)_ - Price per 1 million input tokens (unit-less, for cost estimation)
 - **`cost_output_tokens_per_1m`** _(default: 0.0)_ - Price per 1 million output tokens (unit-less, for cost estimation)
 
@@ -4347,6 +4352,98 @@ List of starter prompt IDs in the order they should be displayed.
 priority_order = ["research_topic", "draft_email", "summarize_notes"]
 ```
 
+### Optional desktop-sidecar client tools
+
+The web app and Office/Teams add-ins register `get_sidecar_search_fields`,
+`search_sidecar_index`, and `read_sidecar_conversation` when the configured desktop
+sidecar supports each capability. Tool definitions, input schemas, and facet
+prompts are maintained in the subscription configuration package. Load that
+package through the backend's normal TOML configuration; the public runtime
+provides the shared executors. Configuration still selects the tools through
+ordinary `[client_tools.tools.<id>]` entries and facet tool allowlists.
+Configure the sidecar endpoint and allowed origins separately as usual. Deploy
+the backend, frontend, and rebuilt add-in together before enabling these tools;
+older backends do not gate optional tools or resolve their attachment references.
+
+Client-tool executors can return uploaded files alongside their JSON result:
+
+```ts
+return { ok: true, result: { summary: "Files retrieved" }, fileUploadIds: [file.id] };
+```
+
+Upload files through the ordinary files API first. The client sends these IDs in
+the dedicated `file_upload_ids` field of `POST /api/v1beta/me/messages/clienttoolresult`.
+The backend checks access, extracts file text for the model, and attaches authorized
+files to the assistant message. Documents use rich file previews; images appear
+inline. Attachments persist when the chat is reloaded. Duplicate IDs are ignored,
+and at most `min(frontend.max_files, 20)` unique files are considered per result.
+Files remain attachable if text extraction fails or reaches its text limit; the
+tool result reports unavailable or truncated contents. Error and rejected
+validation results do not attach files. IDs nested inside arbitrary result JSON
+are not treated as attachments.
+
+#### `client_tools.tools.<key>.requires_client_registration`
+
+{/* erato_toml_config_key: client_tools.tools.<key>.requires_client_registration */}
+
+**Type:** `boolean` — **Default:** `false`
+
+Set this to `true` for optional client tools. They are offered only if their name
+appears in the requesting client's `X-Erato-Client-Tools` availability header.
+Configuration, facet allowlists, name collision handling, and the exclusion of
+client tools from delegated runs still apply. The header cannot enable an
+unconfigured or disallowed tool. Older clients and absent sidecars cannot offer
+these tools. Existing tools keep their prior behavior with the default `false`.
+Availability is captured for each new generation; a device that disconnects
+mid-turn returns an ordinary tool error. Discovery retries when the sidecar is
+unavailable at startup. Explicit task-result reactions also capture current
+availability. Reconnecting to a stream retains its original generation context;
+the existing MCP approval-continuation flow offers MCP tools only. There is no
+separate sharing-consent workflow.
+
+| Capability | Web and add-in behavior |
+| --- | --- |
+| Search field discovery | `get_sidecar_search_fields` invokes `search.metadata_fields.v1` with `{}`. Returns field names, value types, operators, descriptions, and applicable document kinds. This describes filter support, not the distinct values stored in an index. |
+| Index search | Emails, attachment files, and Teams messages; optional kind, source, sender, mailbox, date, and file-type filters, plus `metadata_filters` predicates. Returns metadata and source references, not excerpts or bodies. Only indexed local data is covered. |
+| Outlook conversation read | A search email's `readConversation` reference supplies the mailbox and Message-ID. Bodies are converted to readable text. Attachment metadata is always returned. |
+| Attachment contents | `includeAttachments=true` uploads selected available bytes using the normal authenticated file API. Server authorization and the existing file processor apply before attachment text enters the tool result. `attachmentNames` selects exact names; otherwise inline files are skipped. |
+| Missing or partial content | Explicit statuses for unavailable bytes, disabled uploads, limits, upload failures, unparseable files, and truncated bodies/text. Images can be downloaded, but this tool returns text; image understanding uses normal message attachments. |
+
+Each `metadata_filters` entry has `field`, `operator`, and `value`, as defined by
+the pinned `SearchQueryV1Params` contract. Metadata predicates and the existing
+`filters` are combined with AND. The runtime preserves the sidecar's descriptors
+and source-specific field names. Compact mailbox IDs are normalized for the
+existing `filters.mailboxId` and metadata `mailbox_id` equality, inequality, and
+membership predicates. Other metadata values are forwarded unchanged.
+An older sidecar without field discovery can still provide its existing search
+and conversation capabilities; each executor advertises availability separately.
+
+Conversation reads default to 20 messages (maximum 50), with up to 20,000 body
+characters per message and 80,000 across the result. Attachment count respects
+the configured chat limit, capped at 20, and combined bytes respect the configured
+upload-size limit. Extracted attachment text has a separate 80,000-character
+budget. An attachment search match without an email Message-ID cannot be read
+directly; search for its parent email first. Teams results provide metadata and
+links because the sidecar currently exposes no Teams body-read method.
+
+Client-tool file references use the requesting user's SharePoint access token
+when they refer to linked SharePoint files. Completed audio transcripts are
+returned as text within the same character budget; incomplete or failed
+transcriptions are reported explicitly. These tools do not start or wait for an
+audio transcription job.
+
+These tools are an additional local-data source. Outlook Exchange Online retains
+its Graph implementation and delegated/shared-mailbox scoping. Exchange SE and
+other on-premises Outlook installations retain their item-scoped EWS proxy and
+Office-host EWS conversation path; the optional sidecar conversation adapter
+still falls back to EWS on failure. On-premises shared/delegated mailboxes keep
+their existing restrictions: the adapter never substitutes the user's own mailbox.
+Teams Graph message, transcript, and file flows remain independent of the sidecar.
+The web app does not acquire Office.js or Graph host dependencies.
+
+This integration adds no source/folder browser, global indexing controls,
+restart action, or benchmark UI.
+
 ### `facets`
 
 {/* erato_toml_config_key: facets */}
@@ -4675,6 +4772,49 @@ The `action_facet` field is accepted on `submit`, `edit`, and `regenerate` endpo
 | Request field      | `selected_facet_ids`                                 | `action_facet`                     |
 | Prompt lifecycle   | Toggle-state based, persistent across messages       | Per-request, ephemeral             |
 | Base system prompt | May suppress historical replay on newly-enabled turn | Never suppresses — always additive |
+
+### Validated client submissions
+
+Client tools normally return a result to the model and continue generation. Add a
+`submission` table to a client tool to validate its arguments against its configured
+JSON Schema before dispatch, then finish generation immediately when the client
+accepts the draft. The client executor must only validate and stage the draft;
+applying it remains a separate action requiring user confirmation.
+
+```toml
+[client_tools.tools.submit_draft]
+name = "submit_draft"
+namespace = "editor"
+description = "Validate and stage a draft for review. Call alone after reading."
+parameters = '''{"type":"object","properties":{"title":{"type":"string"}},"required":["title"],"additionalProperties":false}'''
+
+[client_tools.tools.submit_draft.submission]
+max_attempts = 3
+native_schema = "auto"
+```
+
+Select the tool using `editor/submit_draft` in a global, regular-facet or
+action-facet `tool_call_allowlist`. Existing tools are unchanged when `submission`
+is absent. Schemas support local references, and never fetch external schemas.
+
+{/* erato_toml_config_key: client_tools.tools.<key>.submission.max_attempts */}
+{/* erato_toml_config_key: client_tools.tools.<key>.submission.native_schema */}
+
+- **`max_attempts`** _(default: 3, range: 1–10)_ - Total attempts per tool and generation, including the initial call. Schema errors and client failures return bounded feedback for correction; the final failed attempt ends generation. A timeout ends generation without retrying a possibly staged draft.
+- **`native_schema`** _(default: `"auto"`)_ - `auto` uses native enforcement when the adapter, explicit model capability and schema are compatible; otherwise it uses local validation and feedback. `off` always uses local validation. `required` rejects request preparation if native enforcement is unavailable, including when `compat_omit_strict` is enabled.
+
+Native enforcement does not replace the host's parser or domain checks. A schema
+must already fit the provider subset: object properties are all required and
+`additionalProperties` is false. Optional fields are never silently made required
+or rewritten. More general schemas continue to work through local validation.
+Gemini/Vertex and Ollama currently use that local path.
+
+The shared frontend executor may return `ok: false`, an `error` string and
+`validationErrors: [{ path, code, message }]`. Paths are JSON Pointers into the
+arguments. The backend passes at most 16 bounded diagnostics to the model, with
+the remaining attempt count. A successful executor returns a small receipt in
+`result`; the accepted arguments and receipt are persisted without an additional
+model call. The host's review UI can restore the draft from those records.
 
 ### `budget`
 

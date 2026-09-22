@@ -5,6 +5,7 @@ import { GenerationStatusPoller } from "./GenerationStatusPoller";
 import { McpOauthCallbackBoundary } from "./McpOauthCallbackBoundary";
 import { TabChatIndicator } from "./TabChatIndicator";
 import { ThemeProvider } from "./ThemeProvider";
+import { DesktopSidecarClientTools } from "../../providers/DesktopSidecarClientTools";
 import {
   DesktopSidecarConfigurationSync,
   DesktopSidecarProvider,
@@ -29,6 +30,7 @@ export function ClientProviders({ children }: PropsWithChildren) {
         <DesktopSidecarConfigurationSync />
         <ThemeProvider>
           <FeatureConfigProvider>
+            <DesktopSidecarClientTools />
             <I18nProvider>
               <>
                 <div

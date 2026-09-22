@@ -10,6 +10,16 @@ export type MailboxConfiguration = NonNullable<
   SidecarConfiguration["indexing_mailboxes"]
 >[number];
 
+export function indexingMailboxId(mailboxId: string): string {
+  // Discovery uses compact IDs; indexing configuration and statistics use UUIDs.
+  return mailboxId
+    .toLowerCase()
+    .replace(
+      /^([0-9a-f]{8})([0-9a-f]{4})([0-9a-f]{4})([0-9a-f]{4})([0-9a-f]{12})$/,
+      "$1-$2-$3-$4-$5",
+    );
+}
+
 export function effectiveMailboxes(
   configuration: SidecarConfigureV1Params,
 ): MailboxConfiguration[] {
@@ -44,7 +54,7 @@ export function initializeMailboxConfiguration(
     user_configuration: {
       ...configuration.user_configuration,
       indexing_mailboxes: matching.map((mailbox) => ({
-        mailbox_id: mailbox.id,
+        mailbox_id: indexingMailboxId(mailbox.id),
         enabled: true,
         priority: 0,
       })),
@@ -58,18 +68,19 @@ export function orderedMailboxes(
 ): (OutlookMailbox & { enabled: boolean; priority: number })[] {
   const overrides = new Map(
     effectiveMailboxes(configuration).map((entry) => [
-      entry.mailbox_id.toLowerCase(),
+      indexingMailboxId(entry.mailbox_id),
       entry,
     ]),
   );
   return mailboxes
-    .map((mailbox) => ({
-      ...mailbox,
-      enabled: overrides.get(mailbox.id.toLowerCase())?.enabled ?? true,
-      priority:
-        overrides.get(mailbox.id.toLowerCase())?.priority ??
-        DEFAULT_MAILBOX_PRIORITY,
-    }))
+    .map((mailbox) => {
+      const override = overrides.get(indexingMailboxId(mailbox.id));
+      return {
+        ...mailbox,
+        enabled: override?.enabled ?? true,
+        priority: override?.priority ?? DEFAULT_MAILBOX_PRIORITY,
+      };
+    })
     .sort(
       (a, b) =>
         a.priority - b.priority ||
@@ -82,13 +93,15 @@ export function mailboxCoverage(
   mailboxId: string,
   kind: "email" | "file",
 ) {
+  const id = indexingMailboxId(mailboxId);
   // Only active-generation mailbox aggregates: never sum generations or file-type breakdowns.
   const rows =
     status.generations
       .find((generation) => generation.role === "active")
       ?.segments.filter(
         (segment) =>
-          segment.mailboxId?.toLowerCase() === mailboxId.toLowerCase() &&
+          segment.mailboxId !== null &&
+          indexingMailboxId(segment.mailboxId) === id &&
           segment.kind === kind &&
           segment.fileType === null,
       ) ?? [];

@@ -1,3 +1,8 @@
+import {
+  readSidecarConversation,
+  resolveSidecarMailboxId,
+} from "@erato/frontend/library";
+
 import type { OutlookMessageFetcher } from "./fetchOutlookMessage";
 import type {
   FetchConversationOptions,
@@ -39,7 +44,7 @@ interface ConversionProgress {
 
 /**
  * Wrap an {@link OutlookMessageFetcher} so conversation loads go through the
- * desktop sidecar — whole thread plus any-size attachments read from the local
+ * desktop sidecar — whole thread plus locally available attachments read from the local
  * Outlook store — when it is available, bypassing the `makeEwsRequestAsync`
  * size caps that otherwise degrade Exchange SE threads to byte-less markers.
  *
@@ -60,6 +65,7 @@ export function createSidecarOutlookMessageFetcher(
     fetchConversationMessages: async (conversationId, options) => {
       if (
         !client.supports(GET_CONVERSATION) ||
+        !client.supports("outlook.list_mailboxes.v1") ||
         !context.anchorInternetMessageId ||
         !context.userEmailAddress
       ) {
@@ -86,24 +92,20 @@ async function fetchConversationViaSidecar(
   const userEmailAddress = context.userEmailAddress!;
   const signal = options?.signal;
 
-  const mailboxId = await resolveMailboxId(client, userEmailAddress, signal);
+  const mailboxId = await resolveSidecarMailboxId(
+    client,
+    userEmailAddress,
+    signal,
+  );
   if (!mailboxId) {
     throw new Error("No local Outlook mailbox matches the signed-in user.");
   }
 
-  const conversation = await client.invoke(
-    GET_CONVERSATION,
+  const conversation = await readSidecarConversation(
+    client,
     { mailboxId, anchor: { internetMessageId: anchorInternetMessageId } },
-    { signal },
+    signal,
   );
-
-  if (conversation.messages.length === 0) {
-    // A conversation always contains at least its anchor, so an empty result
-    // means the anchor Message-ID was not resolvable in the local store (a
-    // format mismatch, or an item not yet synced to the OST). Fall back to EWS
-    // rather than presenting an empty thread.
-    throw new Error("The sidecar returned no messages for the anchor.");
-  }
 
   const progress: ConversionProgress = { partial: conversation.state !== "ok" };
   const messages = conversation.messages.map((message) =>
@@ -111,23 +113,6 @@ async function fetchConversationViaSidecar(
   );
 
   return { messages, state: progress.partial ? "partial" : "ok" };
-}
-
-async function resolveMailboxId(
-  client: DesktopSidecarClient,
-  userEmailAddress: string,
-  signal: AbortSignal | undefined,
-): Promise<string | null> {
-  const { mailboxes } = await client.invoke(
-    "outlook.list_mailboxes.v1",
-    {},
-    { signal },
-  );
-  const target = userEmailAddress.trim().toLowerCase();
-  const match = mailboxes.find(
-    (mailbox) => mailbox.emailAddress?.trim().toLowerCase() === target,
-  );
-  return match?.id ?? null;
 }
 
 function mapConversationMessage(

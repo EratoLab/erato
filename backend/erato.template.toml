@@ -617,6 +617,11 @@ chat_provider_ids = ["test-token-limit"]
 # continues, so executors must be read-only/idempotent. Example: the Outlook
 # add-in's calendar read for appointment scheduling.
 #
+# Optional device tools should set requires_client_registration = true so they
+# are offered only when the current web/add-in client has a ready executor.
+# Existing tools default to false for backward compatibility. Sidecar tool
+# definitions and facet prompts are supplied by deployment configuration packages.
+#
 # [client_tools.tools.outlook_fetch_availability]
 # # Model-facing name; keep it dot-free (OpenAI/Anthropic reject "." in tool
 # # names). The namespace exists purely for allowlist selection ("outlook/*").

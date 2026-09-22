@@ -11,7 +11,7 @@ export interface SearchQueryV1Params {
     dateFrom?: number;
     dateTo?: number;
     fileType?: string;
-    kind?: "email" | "file";
+    kind?: "email" | "file" | "teams_message";
   };
 }
 export interface SearchMetadataFilter {

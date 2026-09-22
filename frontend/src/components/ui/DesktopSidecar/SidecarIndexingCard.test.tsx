@@ -2,22 +2,29 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useSidecarIndexing } from "@/hooks/useSidecarIndexing";
+import { expectSidecarConfigurationAccepted } from "@/lib/desktopSidecar/__tests__/configurationTestUtils";
 
 import { SidecarIndexingControls } from "./SidecarIndexingCard";
 
+import type { SidecarConfiguration } from "@erato/desktop-sidecar-protocol";
+
 vi.mock("@/hooks/useSidecarIndexing", () => ({ useSidecarIndexing: vi.fn() }));
 
-const save = vi.fn();
+const sharedId = "aabbccdd112244558899001122334455";
+const sharedUuid = "aabbccdd-1122-4455-8899-001122334455";
+const personalId = "bbccddee2233445599aa112233445566";
+const personalUuid = "bbccddee-2233-4455-99aa-112233445566";
+const save = vi.fn<(patch: Partial<SidecarConfiguration>) => void>();
 const data = {
   mailboxes: [
     {
-      id: "a",
+      id: sharedId,
       emailAddress: "shared@example.com",
       displayName: "Shared",
       source: "pst",
     },
     {
-      id: "b",
+      id: personalId,
       emailAddress: "personal@example.com",
       displayName: "Personal",
       source: "pst",
@@ -28,8 +35,12 @@ const data = {
     configuration: {
       user_configuration: {
         indexing_mailboxes: [
-          { mailbox_id: "a", enabled: true, priority: 10 },
-          { mailbox_id: "b", enabled: false, priority: 0 },
+          { mailbox_id: sharedUuid, enabled: true, priority: 10 },
+          {
+            mailbox_id: personalUuid.toUpperCase(),
+            enabled: false,
+            priority: 0,
+          },
         ],
       },
       organization_configuration: {},
@@ -39,13 +50,13 @@ const data = {
         role: "active",
         segments: [
           {
-            mailboxId: "b",
+            mailboxId: personalUuid,
             kind: "email",
             fileType: null,
             coverage: { indexedCurrent: 4, knownEligible: 10 },
           },
           {
-            mailboxId: "b",
+            mailboxId: personalUuid,
             kind: "file",
             fileType: null,
             coverage: { indexedCurrent: 2, knownEligible: 3 },
@@ -55,11 +66,24 @@ const data = {
     ],
   },
 };
+let currentData: typeof data;
+
+async function expectValidSavedConfiguration() {
+  expect(save).toHaveBeenCalledTimes(1);
+  await expectSidecarConfigurationAccepted({
+    ...currentData.status.configuration,
+    user_configuration: {
+      ...currentData.status.configuration.user_configuration,
+      ...save.mock.calls[0][0],
+    },
+  });
+}
 
 beforeEach(() => {
   save.mockReset();
+  currentData = globalThis.structuredClone(data);
   vi.mocked(useSidecarIndexing).mockReturnValue({
-    data,
+    data: currentData,
     isPending: false,
     error: null,
     save,
@@ -88,7 +112,7 @@ describe("mailbox indexing controls", () => {
       }),
     ).not.toBeChecked();
   });
-  it("writes explicit priorities when moving mailboxes and preserves enablement", () => {
+  it("writes explicit priorities when moving mailboxes and preserves enablement", async () => {
     render(<SidecarIndexingControls />);
     fireEvent.click(
       screen.getByRole("button", {
@@ -97,12 +121,13 @@ describe("mailbox indexing controls", () => {
     );
     expect(save).toHaveBeenCalledWith({
       indexing_mailboxes: [
-        { mailbox_id: "a", enabled: true, priority: 0 },
-        { mailbox_id: "b", enabled: false, priority: 1 },
+        { mailbox_id: sharedUuid, enabled: true, priority: 0 },
+        { mailbox_id: personalUuid, enabled: false, priority: 1 },
       ],
     });
+    await expectValidSavedConfiguration();
   });
-  it("toggles one mailbox without dropping other overrides", () => {
+  it("toggles one mailbox without dropping other overrides", async () => {
     render(<SidecarIndexingControls />);
     fireEvent.click(
       screen.getByRole("checkbox", {
@@ -111,12 +136,63 @@ describe("mailbox indexing controls", () => {
     );
     expect(save).toHaveBeenCalledWith({
       indexing_mailboxes: [
-        { mailbox_id: "a", enabled: true, priority: 10 },
-        { mailbox_id: "b", enabled: true, priority: 0 },
+        { mailbox_id: sharedUuid, enabled: true, priority: 10 },
+        { mailbox_id: personalUuid, enabled: true, priority: 0 },
       ],
     });
+    await expectValidSavedConfiguration();
   });
-  it("validates and saves global limits", () => {
+  it("writes a valid UUID when toggling a mailbox without an override", async () => {
+    currentData.status.configuration.user_configuration.indexing_mailboxes = [];
+    render(<SidecarIndexingControls />);
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Enable indexing for personal@example.com",
+      }),
+    );
+    expect(save).toHaveBeenCalledWith({
+      indexing_mailboxes: [
+        {
+          mailbox_id: personalUuid,
+          enabled: false,
+          priority: Number.MAX_SAFE_INTEGER,
+        },
+      ],
+    });
+    await expectValidSavedConfiguration();
+  });
+  it("preserves disconnected overrides and extra fields when moving mailboxes", async () => {
+    const disconnected = {
+      mailbox_id: "ccddee00-3344-4455-aabb-223344556677",
+      enabled: false,
+      priority: 7,
+      future_setting: true,
+    };
+    const entries =
+      currentData.status.configuration.user_configuration.indexing_mailboxes;
+    Object.assign(entries[0], { future_setting: "preserved" });
+    entries.push(disconnected);
+    render(<SidecarIndexingControls />);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Increase priority for shared@example.com",
+      }),
+    );
+    expect(save).toHaveBeenCalledWith({
+      indexing_mailboxes: [
+        disconnected,
+        {
+          mailbox_id: sharedUuid,
+          enabled: true,
+          priority: 0,
+          future_setting: "preserved",
+        },
+        { mailbox_id: personalUuid, enabled: false, priority: 1 },
+      ],
+    });
+    await expectValidSavedConfiguration();
+  });
+  it("validates and saves global limits", async () => {
     render(<SidecarIndexingControls />);
     fireEvent.change(
       screen.getByRole("spinbutton", { name: "Indexing parallelism" }),
@@ -140,5 +216,6 @@ describe("mailbox indexing controls", () => {
       indexing_parallelism: 3,
       indexing_documents_per_minute: 120,
     });
+    await expectValidSavedConfiguration();
   });
 });

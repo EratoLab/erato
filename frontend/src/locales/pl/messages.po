@@ -5072,6 +5072,12 @@ msgid "trace.tool.failed"
 msgstr "Niepowodzenie"
 
 #. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolCallItem.tsx
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.preparing"
+msgstr "Przygotowywanie"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Trace/NestedTraceView.tsx
 #: src/components/ui/Trace/steps/DelegationStep.tsx
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx

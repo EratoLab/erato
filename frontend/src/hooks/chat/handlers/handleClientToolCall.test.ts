@@ -73,6 +73,22 @@ describe("handleClientToolCall", () => {
     });
   });
 
+  it("delivers attachment file references through the ordinary result endpoint", async () => {
+    registerClientToolExecutor("read_sidecar_conversation", async () => ({
+      ok: true,
+      result: { messages: [] },
+      fileUploadIds: ["file-1"],
+    }));
+    await handleClientToolCall(
+      makeEvent({ tool_name: "read_sidecar_conversation" }),
+      deps,
+    );
+    expect(lastPostBody(fetchMock)).toMatchObject({
+      result: { messages: [] },
+      file_upload_ids: ["file-1"],
+    });
+  });
+
   it("POSTs an error when the executor returns a failure", async () => {
     registerClientToolExecutor("fetch_availability", async () => ({
       ok: false,
@@ -92,6 +108,29 @@ describe("handleClientToolCall", () => {
     await handleClientToolCall(makeEvent(), deps);
 
     expect(lastPostBody(fetchMock)).toMatchObject({ error: "kaboom" });
+  });
+
+  it("preserves parser diagnostics without resubmitting the draft", async () => {
+    const issues = [
+      {
+        path: "/items/0/source",
+        code: "unknown_reference",
+        message: "Use a current source ID.",
+      },
+    ];
+    registerClientToolExecutor("fetch_availability", async () => ({
+      ok: false,
+      error: "Draft validation failed",
+      validationErrors: issues,
+    }));
+    await handleClientToolCall(makeEvent(), deps);
+    expect(lastPostBody(fetchMock)).toEqual({
+      chat_id: "chat-1",
+      message_id: "msg-1",
+      tool_call_id: "call-1",
+      error: "Draft validation failed",
+      validation_errors: issues,
+    });
   });
 
   it("POSTs an error when no executor is registered", async () => {

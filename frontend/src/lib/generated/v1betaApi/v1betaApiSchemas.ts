@@ -957,6 +957,13 @@ export type ClientToolResultRequest = {
    */
   error?: string;
   /**
+   * Uploaded files to attach to the assistant message with rich previews and
+   * read with the normal file processor for this tool result. Each file is
+   * authorized before reading or attaching. Duplicate IDs are ignored; at
+   * most min(frontend.max_files, 20) unique files are considered.
+   */
+  file_upload_ids?: string[];
+  /**
    * The id of the assistant message whose generation emitted the client
    * tool call. Disambiguates a result from a task that has since been
    * replaced by a concurrent generation on the same chat.
@@ -970,6 +977,12 @@ export type ClientToolResultRequest = {
    * The `tool_call_id` from the `client_tool_call` event being answered.
    */
   tool_call_id: string;
+  /**
+   * Parser diagnostics for a rejected submission. Nonempty diagnostics are
+   * a failure even if a result is also supplied. Messages should be concise;
+   * the backend retains at most 16 issues with bounded field lengths.
+   */
+  validation_errors?: ClientToolValidationIssue[];
 };
 
 export type ClientToolResultResponse = {
@@ -978,6 +991,16 @@ export type ClientToolResultResponse = {
    * benign no-op (already delivered, timed out, aborted, or unknown id).
    */
   delivered: boolean;
+};
+
+/**
+ * Compact, parser-owned diagnostics. `path` is a JSON Pointer into the tool
+ * arguments (empty for the root); `code` is a stable validator error identifier.
+ */
+export type ClientToolValidationIssue = {
+  code: string;
+  message: string;
+  path: string;
 };
 
 export type CompleteMcpServerOauthResponse = {
@@ -3206,7 +3229,7 @@ export type ToolApprovalDecision =
  */
 export type ToolApprovalKind = "mcp_tool" | "delegated_task" | "task_plan";
 
-export type ToolCallStatus = "in_progress" | "success" | "error";
+export type ToolCallStatus = "preparing" | "in_progress" | "success" | "error";
 
 export type ToolUse = {
   /**

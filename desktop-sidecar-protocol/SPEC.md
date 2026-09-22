@@ -377,7 +377,13 @@ to false to reduce payload size; each defaults to true. These only omit extra
 segment rows. Global resource measurements, discovery and aggregate rows are
 unchanged. The server MUST include aggregate `email` and `file` rows for each
 reported generation, even when a kind has zero documents. Source rows include
-mailbox IDs when known. File type groups are mutually exclusive: PDF, Office,
+mailbox IDs when known. Sidecars indexing Teams messages also report
+`teams_message` segments, including an aggregate row even when no Teams messages
+are indexed. Teams segments have null `mailboxId` and `fileType`; source
+breakdowns identify the Teams source with `sourceId`. Earlier sidecars may omit
+Teams segments entirely.
+
+File type groups are mutually exclusive: PDF, Office,
 text, image, embedded email, archive and other; `fileType: null` means all types.
 An embedded `.eml` attachment is a `file` with `fileType: "email"`. A standalone
 file and an attachment are both `file`; attachment age derives from its parent.
@@ -617,11 +623,12 @@ start and stop return the same complete statistics shape as `indexing.status.v1`
 Stop does not change persistent configuration. Configure alone does not resume a
 stopped index. A successful stop returns state `stopped`.
 
-`search.query.v1` searches individual indexed emails and files across sources.
+`search.query.v1` searches individual indexed emails, files and Teams messages
+across sources.
 It complements `outlook.search_emails.v1`; attachments are independent results,
 and conversationKey associates results without indexing grouped conversations.
 Filters are combined with AND: sender is a case-insensitive exact address or name,
-mailboxId identifies a mailbox, kind selects email/file, fileType matches MIME type
+mailboxId identifies a mailbox, kind selects `email`, `file` or `teams_message`, fileType matches MIME type
 or filename extension, and dateFrom/dateTo are Unix seconds with an inclusive lower bound and exclusive upper bound. Reversed
 date bounds are invalid params. Files inherit available sender/mailbox/date/thread
 metadata from their parent email. Missing metadata does not satisfy a filter.
@@ -696,3 +703,40 @@ expiry and is independent of the disposable benchmark index. On startup,
 previously preparing/running records are marked failed with an interruption error
 and finish timestamp; partial volatile counters are not restored. Standalone CLI
 runs continue to return their results directly without writing runtime history.
+
+## Catalog document retrieval
+
+`sources.get_document.v1` accepts a `documentId` UUID from search results and
+optional `subject_scope` (`subject`, the default, or `subject_with_thread`).
+No filesystem path or source locator is accepted from clients. The result is
+`{ filename, mimeType, contentBase64 }`, using standard padded base64; empty
+files have an empty `contentBase64`.
+
+- Files, including email attachments, return their original payload bytes.
+  Thread scope has no effect on files. Storage containers are decoded.
+- Emails return `message/rfc822` `.eml` files with locally available attachments,
+  including nested attached emails. Thread scope returns one synthetic
+  `multipart/mixed` envelope containing a `message/rfc822` part per email,
+  matching the Office add-in's `synthesizeThreadEml` representation. Members
+  are ordered chronologically and scoped to the same source and mailbox.
+  Missing thread identity selects only the subject. The thread covers catalog
+  members, not uncached server-side history.
+- Teams messages return `application/json` (`teams-chat.json`) using the frontend
+  `TeamsTranscriptIndex` version 1 structure from
+  `frontend/src/utils/teams/teamsTranscriptIndex.ts`: `version`, `exportedAt`,
+  `timeZone`, `sections`, and `messages`. Unlike Markdown exports this is the
+  JSON payload itself, without a Markdown comment wrapper. Each message keeps
+  its structured conversation/message reference, sender, UTC timestamp, text,
+  and deep link when known. Unavailable edit timestamps/subjects are null;
+  assets are empty because cached shared-file payloads are not exported.
+  Thread scope selects at most 50 earlier and 50 later non-deleted cached
+  messages plus the anchor, chronologically with message ID as tie-breaker.
+  Channel messages stay within the anchor's reply chain; chats stay within
+  their conversation. Fewer cached neighbors are returned without padding.
+
+Unknown or deleted IDs return `invalid_params`. Missing, truncated, changed,
+unsupported, or unreadable source content returns `sidecar_internal`, without
+silently dropping email attachments or substituting indexed text. Retrieval
+requires local content; it does not download missing content. Exports are
+limited to 47 MiB before the outer base64 encoding to fit the client's 64 MiB
+response limit. Oversized exports return `sidecar_internal`.

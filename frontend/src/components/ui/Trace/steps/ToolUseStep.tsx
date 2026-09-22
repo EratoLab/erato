@@ -1,3 +1,5 @@
+import { t } from "@lingui/core/macro";
+
 import { ToolCallInput, ToolCallOutput } from "@/components/ui/ToolCall";
 import {
   isDelegationToolName,
@@ -85,7 +87,15 @@ const PlainToolUseStep = ({
           </>
         }
         titleSlot={
-          <ToolStatusPill status={status} approvalStatus={approvalStatus} />
+          <ToolStatusPill
+            status={status}
+            approvalStatus={approvalStatus}
+            label={
+              part.status === "preparing"
+                ? t({ id: "trace.tool.preparing", message: "Preparing" })
+                : undefined
+            }
+          />
         }
         defaultOpen={hasTrace}
         autoExpand={hasTrace}

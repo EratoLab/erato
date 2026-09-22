@@ -670,26 +670,7 @@ impl BackgroundTaskManager {
                                 .ok()
                                 .flatten()
                                 .unwrap_or(JsonValue::Null);
-                            let outcome = match payload {
-                                JsonValue::Object(ref object) if object.get("error").is_some() => {
-                                    ClientToolOutcome::Error(
-                                        object
-                                            .get("error")
-                                            .and_then(|value| value.as_str())
-                                            .unwrap_or("client tool failed")
-                                            .to_string(),
-                                    )
-                                }
-                                JsonValue::Object(ref object) if object.get("result").is_some() => {
-                                    ClientToolOutcome::Result(
-                                        object.get("result").cloned().unwrap_or(JsonValue::Null),
-                                    )
-                                }
-                                _ => ClientToolOutcome::Error(
-                                    "client tool returned neither a result nor an error"
-                                        .to_string(),
-                                ),
-                            };
+                            let outcome = ClientToolOutcome::from_payload(&payload);
                             let _ = task
                                 .deliver_client_tool_result(&tool_call_id, outcome)
                                 .await;
@@ -1573,6 +1554,7 @@ pub enum StreamingEvent {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolCallStatus {
+    Preparing,
     InProgress,
     Success,
     Error,
@@ -1855,12 +1837,12 @@ mod tests {
         let delivery = task
             .deliver_client_tool_result(
                 "call-1",
-                ClientToolOutcome::Result(serde_json::json!({ "ok": true })),
+                ClientToolOutcome::Result(serde_json::json!({ "ok": true }), vec![]),
             )
             .await;
         assert_eq!(delivery, ClientToolDelivery::Delivered);
         match rx.try_recv() {
-            Ok(ClientToolOutcome::Result(value)) => {
+            Ok(ClientToolOutcome::Result(value, _)) => {
                 assert_eq!(value, serde_json::json!({ "ok": true }))
             }
             other => panic!("expected the delivered result, got {other:?}"),

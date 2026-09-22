@@ -208,6 +208,9 @@
   "chat_provider.model_capabilities.supports_reasoning_summary": {
     "hide_in_docs": true
   },
+  "chat_provider.model_capabilities.supports_strict_tool_calling": {
+    "hide_in_docs": true
+  },
   "chat_provider.model_capabilities.supports_verbosity": {
     "hide_in_docs": true
   },
@@ -298,6 +301,7 @@
   "chat_providers.providers.<provider-id>.model_capabilities.supports_image_understanding": {},
   "chat_providers.providers.<provider-id>.model_capabilities.supports_reasoning": {},
   "chat_providers.providers.<provider-id>.model_capabilities.supports_reasoning_summary": {},
+  "chat_providers.providers.<provider-id>.model_capabilities.supports_strict_tool_calling": {},
   "chat_providers.providers.<provider-id>.model_capabilities.supports_verbosity": {},
   "chat_providers.providers.<provider-id>.model_description": {},
   "chat_providers.providers.<provider-id>.model_display_name": {},
@@ -339,6 +343,9 @@
   "client_tools.tools.<key>.name": {},
   "client_tools.tools.<key>.namespace": {},
   "client_tools.tools.<key>.parameters": {},
+  "client_tools.tools.<key>.requires_client_registration": {},
+  "client_tools.tools.<key>.submission.max_attempts": {},
+  "client_tools.tools.<key>.submission.native_schema": {},
   "client_tools.tools.<key>.timeout_ms": {},
   "database_url": {},
   "default_file_storage_provider": {},

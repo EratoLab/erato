@@ -5655,6 +5655,14 @@
             "type": "string",
             "description": "An error message if the client could not execute the tool. Provide this\nOR `result`."
           },
+          "file_upload_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Uploaded files to attach to the assistant message with rich previews and\nread with the normal file processor for this tool result. Each file is\nauthorized before reading or attaching. Duplicate IDs are ignored; at\nmost min(frontend.max_files, 20) unique files are considered."
+          },
           "message_id": {
             "type": "string",
             "format": "uuid",
@@ -5668,6 +5676,13 @@
           "tool_call_id": {
             "type": "string",
             "description": "The `tool_call_id` from the `client_tool_call` event being answered."
+          },
+          "validation_errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClientToolValidationIssue"
+            },
+            "description": "Parser diagnostics for a rejected submission. Nonempty diagnostics are\na failure even if a result is also supplied. Messages should be concise;\nthe backend retains at most 16 issues with bounded field lengths."
           }
         }
       },
@@ -5680,6 +5695,26 @@
           "delivered": {
             "type": "boolean",
             "description": "True if a suspended generation received this result; false if it was a\nbenign no-op (already delivered, timed out, aborted, or unknown id)."
+          }
+        }
+      },
+      "ClientToolValidationIssue": {
+        "type": "object",
+        "description": "Compact, parser-owned diagnostics. `path` is a JSON Pointer into the tool\narguments (empty for the root); `code` is a stable validator error identifier.",
+        "required": [
+          "path",
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
           }
         }
       },
@@ -9888,6 +9923,7 @@
       "ToolCallStatus": {
         "type": "string",
         "enum": [
+          "preparing",
           "in_progress",
           "success",
           "error"

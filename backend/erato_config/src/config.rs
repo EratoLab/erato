@@ -1483,7 +1483,22 @@ impl AppConfig {
                 );
             }
             match serde_json::from_str::<serde_json::Value>(&tool.parameters) {
-                Ok(value) if value.is_object() => {}
+                Ok(value) if value.is_object() => {
+                    if let Some(submission) = &tool.submission {
+                        if !(1..=10).contains(&submission.max_attempts) {
+                            panic!(
+                                "Client tool '{}' submission.max_attempts must be 1–10.",
+                                qualified
+                            );
+                        }
+                        if let Err(error) = crate::client_tool_schema::compile(&value) {
+                            panic!(
+                                "Client tool '{}' has an invalid submission schema: {}",
+                                qualified, error
+                            );
+                        }
+                    }
+                }
                 Ok(_) => panic!(
                     "Client tool '{}' parameters must be a JSON object (a JSON Schema).",
                     qualified
@@ -4591,11 +4606,63 @@ pub struct ClientToolConfig {
     /// deriving `Eq` (`serde_json::Value` is not `Eq`).
     pub parameters: String,
 
+    /// Offer this tool only when the requesting client advertises a ready
+    /// executor with this name. Keep false for legacy clients; set true for
+    /// optional device capabilities such as the desktop sidecar. This is an
+    /// availability hint, never an authorization grant or an allowlist bypass.
+    #[serde(default)]
+    pub requires_client_registration: bool,
+
     /// Optional per-tool park timeout in milliseconds. The agentic loop holds
     /// open at most this long awaiting the client's result before injecting an
     /// error tool response and continuing.
     #[serde(default)]
     pub timeout_ms: Option<u64>,
+
+    /// Opt into a validated draft submission. Validate arguments against
+    /// `parameters` before dispatch; a successful client result ends generation
+    /// without another inference call. The executor must only validate/stage a
+    /// draft; applying it remains a separate user-confirmed client action.
+    #[serde(default)]
+    pub submission: Option<ClientToolSubmissionConfig>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct ClientToolSubmissionConfig {
+    /// Maximum submissions of this tool per generation, including the initial
+    /// attempt and schema/client failures. Must be 1–10. Default: 3.
+    #[serde(default = "default_submission_max_attempts")]
+    pub max_attempts: u32,
+    /// Native enforcement supplements mandatory server and client validation.
+    /// Auto uses it only for a compatible schema, adapter and explicitly capable
+    /// model; off uses validation/feedback only; required rejects an unsupported
+    /// request before inference. Schemas are never silently rewritten.
+    #[serde(default)]
+    pub native_schema: ClientToolNativeSchema,
+}
+
+fn default_submission_max_attempts() -> u32 {
+    3
+}
+
+impl Default for ClientToolSubmissionConfig {
+    fn default() -> Self {
+        Self {
+            max_attempts: default_submission_max_attempts(),
+            native_schema: ClientToolNativeSchema::Auto,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[facet(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+#[repr(C)]
+pub enum ClientToolNativeSchema {
+    #[default]
+    Auto,
+    Off,
+    Required,
 }
 
 /// Default namespace for a client tool when none is configured.
@@ -5632,6 +5699,12 @@ pub struct ModelCapabilities {
     // Whether the model supports providing a verbosity parameter (for future support of GPT-5-type models)
     #[serde(default)]
     pub supports_verbosity: bool,
+    /// Whether this model/endpoint supports native strict function arguments.
+    /// Opt-in, independent of model name. Currently wired for OpenAI-compatible
+    /// Chat Completions and Responses adapters. Other adapters use local
+    /// validation unless native enforcement is required (then preparation fails).
+    #[serde(default)]
+    pub supports_strict_tool_calling: bool,
     // Price per 1 million input tokens (unit-less)
     #[serde(default)]
     pub cost_input_tokens_per_1m: f64,
@@ -5662,6 +5735,7 @@ impl Default for ModelCapabilities {
             supports_reasoning_summary: default_supports_reasoning_summary(),
             supports_encrypted_reasoning_content: default_supports_encrypted_reasoning_content(),
             supports_verbosity: false,
+            supports_strict_tool_calling: false,
             cost_input_tokens_per_1m: 0.0,
             cost_output_tokens_per_1m: 0.0,
         }

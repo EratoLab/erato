@@ -220,6 +220,29 @@ describe("DesktopSidecarClient", () => {
     ).toEqual({ parallelism: 1, documentsPerMinute: 40 });
   });
 
+  it("keeps the client ready to configure and search after Teams statistics", async () => {
+    const { client, sidecar } = await setup();
+    await client.discover();
+
+    const status = await client.invoke("indexing.status.v1", {});
+    expect(
+      status.generations.every((generation) =>
+        generation.segments.some((segment) => segment.kind === "teams_message"),
+      ),
+    ).toBe(true);
+    expect(status.configuration).toBeDefined();
+    const configuration = {
+      ...status.configuration!,
+      organization_configuration: { show_tray_icon: false },
+    };
+    await client.invoke("sidecar.configure.v1", configuration);
+    expect(sidecar.configuration).toEqual(configuration);
+    await client.invoke("search.query.v1", {
+      filters: { kind: "teams_message" },
+    });
+    expect(client.getSnapshot().state).toBe("ready");
+  });
+
   it("discovers an older sidecar without indexing statistics", async () => {
     const { client } = await setup({ omitMethods: ["indexing.status.v1"] });
     await client.discover();
@@ -285,6 +308,49 @@ describe("DesktopSidecarClient", () => {
       mailbox: { id: "8b7d2f4a6c9e1035d8a1b2c3e4f50617" },
       emails: [{ id: "mock-outlook-email", subject: "Mock Outlook message" }],
     });
+  });
+
+  it("retrieves document files with default and explicit scope", async () => {
+    const { client } = await setup();
+    await client.discover();
+    expect(client.supports("sources.get_document.v1")).toBe(true);
+    for (const scope of [
+      undefined,
+      "subject",
+      "subject_with_thread",
+    ] as const) {
+      const result = await client.invoke("sources.get_document.v1", {
+        documentId: "00000000-0000-0000-0000-000000000001",
+        ...(scope ? { subject_scope: scope } : {}),
+      });
+      expect(result.filename).toBe("document.txt");
+      expect(Buffer.from(result.contentBase64, "base64").toString()).toBe(
+        "Mock document",
+      );
+    }
+    const older = await setup({ omitMethods: ["sources.get_document.v1"] });
+    await older.client.discover();
+    expect(older.client.supports("sources.get_document.v1")).toBe(false);
+  });
+
+  it("recognizes source browsing only when the sidecar advertises it", async () => {
+    const current = await setup();
+    await current.client.discover();
+    expect(current.client.supports("sources.list.v1")).toBe(true);
+    expect(current.client.supports("sources.get_folder_hierarchy.v1")).toBe(
+      true,
+    );
+
+    const older = await setup({
+      omitMethods: ["sources.list.v1", "sources.get_folder_hierarchy.v1"],
+    });
+    await older.client.discover();
+    expect(older.client.supports("sources.list.v1")).toBe(false);
+    expect(older.client.supports("sources.get_folder_hierarchy.v1")).toBe(
+      false,
+    );
+    expect(older.client.supports("outlook.list_mailboxes.v1")).toBe(true);
+    expect(older.client.supports("search.query.v1")).toBe(true);
   });
 
   it("reuses ready data for concurrent requests on independent HTTP connections", async () => {

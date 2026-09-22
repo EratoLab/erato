@@ -3386,6 +3386,63 @@ config = {{ endpoint = "https://xxx.blob.core.windows.net", container = "xxx", a
 }
 
 #[test]
+fn submission_config_is_opt_in_and_defaults_to_three_attempts() {
+    let config = migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.read]
+name = "read_context"
+description = "Read context"
+parameters = '{"type":"object"}'
+
+[client_tools.tools.submit]
+name = "submit_draft"
+description = "Stage draft"
+parameters = '{"type":"object","properties":{"title":{"type":"string"}}}'
+[client_tools.tools.submit.submission]
+"#,
+    );
+    assert!(config.client_tools.tools["read"].submission.is_none());
+    let submission = config.client_tools.tools["submit"]
+        .submission
+        .as_ref()
+        .unwrap();
+    assert_eq!(submission.max_attempts, 3);
+    assert_eq!(
+        submission.native_schema,
+        erato::config::ClientToolNativeSchema::Auto
+    );
+}
+
+#[test]
+#[should_panic(expected = "submission.max_attempts must be 1–10")]
+fn submission_config_rejects_unbounded_attempts() {
+    migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.submit]
+name = "submit_draft"
+description = "Stage draft"
+parameters = '{"type":"object"}'
+[client_tools.tools.submit.submission]
+max_attempts = 100
+"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "invalid submission schema")]
+fn submission_config_validates_schema_keywords() {
+    migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.submit]
+name = "submit_draft"
+description = "Stage draft"
+parameters = '{"type":"object","properties":{"title":{"type":"typo"}}}'
+[client_tools.tools.submit.submission]
+"#,
+    );
+}
+
+#[test]
 fn test_top_level_client_tools_load_with_namespace() {
     let config = migrate_config_with_action_facets(
         r#"

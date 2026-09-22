@@ -41,7 +41,7 @@
           "type": "string"
         },
         "kind": {
-          "enum": ["email", "file"],
+          "enum": ["email", "file", "teams_message"],
           "type": "string"
         }
       },

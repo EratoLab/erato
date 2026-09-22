@@ -196,11 +196,14 @@ pub enum GenerationInitiator {
 pub const TASK_RESULT_INITIATOR_WIRE: &str = "task_result";
 
 /// Request-scoped context captured for a generation request.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GenerationRequestContext {
     /// The originating Erato platform for the request.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub platform: Option<String>,
+    /// Ready client executors at request time. Older stored requests have none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub registered_client_tools: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -343,6 +346,8 @@ impl fmt::Display for MessageRole {
 #[derive(Serialize, Deserialize, ToSchema, Clone, Debug, PartialEq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolCallStatus {
+    /// The provider is still generating arguments; the tool has not run.
+    Preparing,
     #[default]
     InProgress,
     Success,
@@ -1664,7 +1669,7 @@ fn is_action_facet_system_message(message: &InputMessage) -> bool {
 }
 
 /// Helper function to determine if a file is an image based on its extension
-fn is_image_file(filename: &str) -> bool {
+pub(crate) fn is_image_file(filename: &str) -> bool {
     if let Some(extension) = filename.rsplit('.').next() {
         matches!(
             extension.to_lowercase().as_str(),

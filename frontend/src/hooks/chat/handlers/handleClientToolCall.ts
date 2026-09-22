@@ -68,8 +68,16 @@ export async function handleClientToolCall(
       body = outcome.ok
         ? // Coalesce to explicit null so an empty success is delivered as a
           // result, not treated by the backend as "no result → tool error".
-          { ...base, result: (outcome.result ?? null) as unknown as Value }
-        : { ...base, error: outcome.error };
+          {
+            ...base,
+            result: (outcome.result ?? null) as unknown as Value,
+            file_upload_ids: outcome.fileUploadIds,
+          }
+        : {
+            ...base,
+            error: outcome.error,
+            validation_errors: outcome.validationErrors,
+          };
     } catch (error) {
       body = {
         ...base,

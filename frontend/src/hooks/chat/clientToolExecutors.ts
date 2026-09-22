@@ -6,9 +6,26 @@
  * re-execute on recovery; mutations belong on `propose_client_action`.
  */
 
+import type { ClientToolValidationIssue } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
+export type { ClientToolValidationIssue } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
 export type ClientToolExecutionResult =
-  | { ok: true; result: unknown }
-  | { ok: false; error: string };
+  | {
+      ok: true;
+      result: unknown;
+      /**
+       * Uploaded files to attach to the assistant message with rich previews.
+       * The server authorizes the IDs and also extracts their text for the model.
+       * Upload through the ordinary files API before returning these IDs.
+       */
+      fileUploadIds?: string[];
+    }
+  | {
+      ok: false;
+      error: string;
+      validationErrors?: ClientToolValidationIssue[];
+    };
 
 /**
  * Identifiers of the call being executed. Additive second parameter: existing
@@ -34,16 +51,21 @@ export type ClientToolExecutor = (
   context?: ClientToolCallContext,
 ) => Promise<ClientToolExecutionResult>;
 
-const executors = new Map<string, ClientToolExecutor>();
+const executors = new Map<
+  string,
+  { execute: ClientToolExecutor; isAvailable: () => boolean }
+>();
 
 /** Register an executor by tool name; returns an unregister function. */
 export function registerClientToolExecutor(
   name: string,
   executor: ClientToolExecutor,
+  isAvailable: () => boolean = () => true,
 ): () => void {
-  executors.set(name, executor);
+  const entry = { execute: executor, isAvailable };
+  executors.set(name, entry);
   return () => {
-    if (executors.get(name) === executor) {
+    if (executors.get(name) === entry) {
       executors.delete(name);
     }
   };
@@ -52,7 +74,21 @@ export function registerClientToolExecutor(
 export function getClientToolExecutor(
   name: string,
 ): ClientToolExecutor | undefined {
-  return executors.get(name);
+  const entry = executors.get(name);
+  return entry?.isAvailable() ? entry.execute : undefined;
+}
+
+/** A capability hint only; server configuration and facet allowlists still decide. */
+export function getClientToolHeaders(): Record<string, string> {
+  const names = [...executors.entries()]
+    .filter(
+      ([name, entry]) =>
+        /^[a-zA-Z0-9_-]{1,64}$/.test(name) && entry.isAvailable(),
+    )
+    .map(([name]) => name)
+    .sort()
+    .slice(0, 128);
+  return { "X-Erato-Client-Tools": names.join(",") };
 }
 
 // tool_call_ids handled this session, so a resumestream replay never re-runs a
