@@ -12,6 +12,9 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer, Registry};
 
+mod log_redaction;
+use log_redaction::RedactingFormatter;
+
 /// Returns the map of custom tracing groups.
 ///
 /// These groups allow enabling logs for a collection of modules using a single key.
@@ -128,19 +131,32 @@ pub fn init_telemetry(config: &AppConfig) -> Result<TelemetryGuard> {
     // 2. Setup Stdout Layer
     let fmt_layer = match config.logging.format {
         LoggingFormat::Plain => tracing_subscriber::fmt::layer()
-            .with_target(true)
-            .with_thread_ids(true)
-            .with_line_number(true)
-            .with_file(true)
-            .compact()
+            .event_format(RedactingFormatter::new(
+                tracing_subscriber::fmt::format()
+                    .with_target(true)
+                    .with_thread_ids(true)
+                    .with_line_number(true)
+                    .with_file(true)
+                    .compact(),
+                false,
+            ))
+            // Formatter failures must not trigger a fallback containing raw event fields.
+            .log_internal_errors(false)
             .with_filter(env_filter)
             .boxed(),
         LoggingFormat::Json => tracing_subscriber::fmt::layer()
             .json()
-            .with_target(true)
-            .with_thread_ids(true)
-            .with_line_number(true)
-            .with_file(true)
+            .event_format(RedactingFormatter::new(
+                tracing_subscriber::fmt::format()
+                    .json()
+                    .with_target(true)
+                    .with_thread_ids(true)
+                    .with_line_number(true)
+                    .with_file(true),
+                true,
+            ))
+            // Formatter failures must not trigger a fallback containing raw event fields.
+            .log_internal_errors(false)
             .with_filter(env_filter)
             .boxed(),
     };
