@@ -66,6 +66,9 @@ export type {
   OutlookListMailboxesV1Params,
   OutlookListMailboxesV1Result,
   OutlookMailbox,
+  OutlookMailboxReference,
+  OutlookMessageReference,
+  OutlookFileProvenance,
   OutlookMessageBody,
   OutlookMessageRecipient,
   OutlookSearchEmailsV1Params,
@@ -90,3 +93,4 @@ export type {
   SidecarConfigureV1Params,
   SidecarConfigureV1Result,
 } from "./generated/index.js";
+export { validateOutlookFileProvenance } from "./generated/validators.mjs";

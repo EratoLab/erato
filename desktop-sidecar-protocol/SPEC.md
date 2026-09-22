@@ -767,3 +767,83 @@ but has no external IDs. Deleted parents MUST NOT be returned.
 
 These new fields are optional in the v1 schemas so responses from older sidecars
 remain valid. Clients MUST tolerate missing fields and unknown identifier keys.
+
+### 20.1. Outlook identifier formats and mailbox scope
+
+The following keys identify different representations; clients MUST NOT pass one
+representation to an API expecting another or infer its type from its contents.
+
+| Key                | Meaning                                                                                                                      | Intended consumer                                                          |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `email_message_id` | Internet Message-ID header                                                                                                   | Mailbox-scoped rediscovery; not necessarily unique and not a navigation ID |
+| `ews_id`           | Opaque, case-sensitive EWS item identifier                                                                                   | Outlook Office.js message display                                          |
+| `outlook_entry_id` | Native message `PR_ENTRYID`, encoded as an even-length hexadecimal string, as returned by Classic Outlook `MailItem.EntryID` | Classic Outlook item navigation                                            |
+| `outlook_store_id` | The corresponding native Outlook store ID, encoded as an even-length hexadecimal string, as returned by `Store.StoreID`      | Selecting/verifying the message store                                      |
+
+Producers SHOULD include the native store ID with a native message EntryID when
+both are available. These are the actual IDs of the same item/store in the local
+Outlook profile, not parser-generated PST node IDs, local record IDs, an EWS
+envelope converted to hex, or an immutable Exchange entry substituted for the
+current native EntryID. Producers MUST omit IDs whose format or ownership they
+cannot establish. An identifier's presence is not proof that navigation works.
+Native IDs are local navigation hints and may become stale after moves, imports,
+profile changes, or changes of device; they MUST NOT replace durable source data.
+Conflicting values for the same known key MUST be treated as ambiguous by an
+opener, rather than choosing the first value. Unknown keys MUST be preserved.
+
+The standalone `OutlookMailboxReference` schema captures `mailboxId` (local
+sidecar ID), `emailAddress` (the owning mailbox's SMTP address), and `profileName`
+when known. Search's UUID spelling and Outlook RPCs' compact mailbox ID spelling
+are both valid. A local mailbox/catalog ID has meaning only in its originating
+installation and MUST be resolved against the current sidecar before use. It is
+not a Microsoft Graph mailbox identifier. The mailbox address MUST identify the
+item's owner, including a shared mailbox, not be replaced with the signed-in
+user's address. A profile name alone does not identify a mailbox.
+
+### 20.2. Persisted Outlook file provenance
+
+`schemas/outlook/file-provenance.schema.json` defines the standalone
+`OutlookFileProvenance` version 1 contract for subsequent upload/API integration.
+It is not a new field on any existing RPC response and does not itself implement
+upload storage or navigation. Its public TypeScript type and validation function
+are exported by the protocol library.
+
+The object contains `version: 1` and a nonempty `origins` array. Each origin has
+an optional `document` message reference and an optional `topLevelParent` message
+reference; at least one is required. Each message reference preserves its own
+`external_ids`, optional catalog `documentId`, and optional `mailbox` context.
+A reference requires at least one external ID or a catalog document ID. Missing
+mailbox context is allowed for legacy metadata and MUST remain unknown rather
+than being inferred from the currently active account. Openers must establish
+any missing scope required by their target API before navigation.
+
+Mapping rules for consumers:
+
+- An exported email contributes `document` from the export's own `external_ids`
+  and the requested catalog `documentId`. For `subject_with_thread`, it identifies
+  the requested anchor only; it MUST NOT be applied to every email in the export.
+- An ordinary file attachment contributes `topLevelParent`, using the existing
+  parent reference. Omit `document` when the file has no message identity.
+- An embedded email may have both references. Keep its own identity separate
+  from the containing mailbox message. Do not assume an embedded email's own IDs
+  belong to its parent's mailbox; carry only scope established for that item.
+- Capture mailbox context from the conversation's mailbox or the search/export
+  source's resolved mailbox descriptor. Do not discard it when bytes are uploaded.
+- When equal bytes are deduplicated across emails, preserve all distinct origins.
+  One parent's identity MUST NOT overwrite another. Equality of bytes or Internet
+  Message-ID alone does not establish equality of message references.
+- If neither reference can be populated, omit provenance rather than storing an
+  empty origin. Existing uploads without provenance remain valid.
+
+Provenance is untrusted metadata, not authorization to access a mailbox or an OS
+command. It contains no launch URL, credentials, command line, or local file path.
+Consumers construct host-specific actions from recognized, validated identifiers
+after an explicit user action. A missing/unresolvable original does not invalidate
+the uploaded preview. Graph/EWS resolution and mailbox access remain subject to
+the user's current permissions.
+
+Package 0.1.26 leaves all existing method schemas unchanged. Old clients already
+accept new identifier keys in `external_ids`; new clients continue to accept
+responses without native IDs or parent references. The provenance object's own
+version is independent of the RPC protocol/package version. Consumers MUST reject
+unsupported provenance versions, rather than interpret them as version 1.

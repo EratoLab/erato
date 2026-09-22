@@ -156,6 +156,21 @@ const typeTargets = [
     "OutlookMailbox",
   ],
   [
+    "schemas/outlook/mailbox-reference.schema.json",
+    "outlook-mailbox-reference.ts",
+    "OutlookMailboxReference",
+  ],
+  [
+    "schemas/outlook/message-reference.schema.json",
+    "outlook-message-reference.ts",
+    "OutlookMessageReference",
+  ],
+  [
+    "schemas/outlook/file-provenance.schema.json",
+    "outlook-file-provenance.ts",
+    "OutlookFileProvenance",
+  ],
+  [
     "schemas/outlook/email-summary.schema.json",
     "outlook-email-summary.ts",
     "OutlookEmailSummary",
@@ -338,6 +353,8 @@ const typeTargets = [
 ];
 
 const validatorTargets = {
+  validateOutlookFileProvenance:
+    "https://schemas.erato.ai/desktop-sidecar/v1/outlook/file-provenance.schema.json",
   validateIndexingBenchmarkListV1Params:
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-benchmark-list-v1-params.schema.json",
   validateIndexingBenchmarkListV1Result:

@@ -1,0 +1,72 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/outlook/message-reference.schema.json",
+  "title": "OutlookMessageReference",
+  "description": "A reference to one Outlook message, preserving its own identifiers and mailbox context. This is metadata, not an instruction or proof that the item is accessible.",
+  "type": "object",
+  "properties": {
+    "documentId": {
+      "description": "Originating sidecar catalog UUID, when indexed. Requires resolution against that catalog and is not portable across devices.",
+      "type": "string",
+      "format": "uuid"
+    },
+    "external_ids": {
+      "allOf": [
+        {
+          "$ref": "../source/external-ids.schema.json"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {},
+              "value": {}
+            },
+            "if": {
+              "properties": {
+                "key": {
+                  "enum": ["outlook_entry_id", "outlook_store_id"]
+                }
+              },
+              "required": ["key"]
+            },
+            "then": {
+              "properties": {
+                "value": {
+                  "type": "string",
+                  "pattern": "^(?:[0-9a-fA-F]{2})+$"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "mailbox": {
+      "$ref": "./mailbox-reference.schema.json"
+    }
+  },
+  "required": ["external_ids"],
+  "anyOf": [
+    {
+      "required": ["documentId"],
+      "properties": {
+        "documentId": {
+          "description": "Originating sidecar catalog UUID, when indexed. Requires resolution against that catalog and is not portable across devices.",
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    },
+    {
+      "properties": {
+        "external_ids": {
+          "type": "array",
+          "minItems": 1
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}
