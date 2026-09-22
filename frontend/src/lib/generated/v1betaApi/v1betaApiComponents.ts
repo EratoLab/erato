@@ -3893,6 +3893,10 @@ export type UploadFileVariables = {
  * This endpoint accepts a multipart form with one or more files and returns UUIDs for each.
  * If chat_id is provided, files are associated with that chat. If not provided, files are created
  * as standalone uploads that can be linked to assistants later.
+ * An optional `outlook_provenance` text part carries version 1 OutlookFileProvenance JSON
+ * (maximum 64 KiB). It must occur exactly once before any files and applies to every file
+ * in the request. Upload files with different origins in separate requests. The original
+ * EWS ID query parameter remains independent; a containing email's ID never replaces it.
  */
 /**
  * WORKAROUND: This endpoint requires a multipart/form-data request.
@@ -3931,6 +3935,10 @@ export const fetchUploadFile = (
  * This endpoint accepts a multipart form with one or more files and returns UUIDs for each.
  * If chat_id is provided, files are associated with that chat. If not provided, files are created
  * as standalone uploads that can be linked to assistants later.
+ * An optional `outlook_provenance` text part carries version 1 OutlookFileProvenance JSON
+ * (maximum 64 KiB). It must occur exactly once before any files and applies to every file
+ * in the request. Upload files with different origins in separate requests. The original
+ * EWS ID query parameter remains independent; a containing email's ID never replaces it.
  */
 export const useUploadFile = (
   options?: Omit<
@@ -7195,6 +7203,121 @@ export const useHealth = <TData = undefined,>(
   });
 };
 
+export type OfficeAddinDocumentManifestQueryParams = {
+  /**
+   * Optional externally reachable deployment base URL used to rewrite the manifest.
+   * Example: https://app.example.com
+   */
+  base_url?: null | undefined;
+};
+
+export type OfficeAddinDocumentManifestError = Fetcher.ErrorWrapper<undefined>;
+
+export type OfficeAddinDocumentManifestVariables = {
+  queryParams?: OfficeAddinDocumentManifestQueryParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchOfficeAddinDocumentManifest = (
+  variables: OfficeAddinDocumentManifestVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    OfficeAddinDocumentManifestError,
+    undefined,
+    {},
+    OfficeAddinDocumentManifestQueryParams,
+    {}
+  >({
+    url: "/office-addin/manifest-document.xml",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function officeAddinDocumentManifestQuery(
+  variables: OfficeAddinDocumentManifestVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<undefined>;
+};
+
+export function officeAddinDocumentManifestQuery(
+  variables: OfficeAddinDocumentManifestVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<undefined>)
+    | reactQuery.SkipToken;
+};
+
+export function officeAddinDocumentManifestQuery(
+  variables: OfficeAddinDocumentManifestVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/office-addin/manifest-document.xml",
+      operationId: "officeAddinDocumentManifest",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchOfficeAddinDocumentManifest(variables, signal),
+  };
+}
+
+export const useSuspenseOfficeAddinDocumentManifest = <TData = undefined,>(
+  variables: OfficeAddinDocumentManifestVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      undefined,
+      OfficeAddinDocumentManifestError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    undefined,
+    OfficeAddinDocumentManifestError,
+    TData
+  >({
+    ...officeAddinDocumentManifestQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useOfficeAddinDocumentManifest = <TData = undefined,>(
+  variables: OfficeAddinDocumentManifestVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      undefined,
+      OfficeAddinDocumentManifestError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    undefined,
+    OfficeAddinDocumentManifestError,
+    TData
+  >({
+    ...officeAddinDocumentManifestQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type OfficeAddinExchangeServerManifestQueryParams = {
   /**
    * Optional externally reachable deployment base URL used to rewrite the manifest.
@@ -7633,6 +7756,11 @@ export type QueryOperation =
       path: "/health";
       operationId: "health";
       variables: HealthVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/office-addin/manifest-document.xml";
+      operationId: "officeAddinDocumentManifest";
+      variables: OfficeAddinDocumentManifestVariables | reactQuery.SkipToken;
     }
   | {
       path: "/office-addin/manifest-exchange-server.xml";

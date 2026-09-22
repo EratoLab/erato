@@ -11626,6 +11626,7 @@ mod summary_generation_tests {
             file_storage_path: format!("/fixtures/{filename}"),
             audio_transcription: audio_transcription.map(str::to_string),
             external_id_ews_id: None,
+            outlook_provenance: None,
             created_at: chrono::Utc::now().into(),
             updated_at: chrono::Utc::now().into(),
         }
