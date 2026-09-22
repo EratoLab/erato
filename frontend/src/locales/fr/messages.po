@@ -2728,6 +2728,31 @@ msgid "common.yes"
 msgstr "Oui"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
+msgid "delegatedTaskApproval.childMissing"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
+msgid "delegatedTaskApproval.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
+msgid "delegatedTaskApproval.itemTitle"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
+msgid "delegatedTaskApproval.title"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
+msgid "delegatedTaskApproval.unnamedTask"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/pages/DesktopSidecarSetupPage.tsx
 msgid "desktopSidecar.setup.architecture.aarch64"
 msgstr "ARM 64 bits"
@@ -3236,6 +3261,7 @@ msgid "mcp.callback.openSettings"
 msgstr "Ouvrir les paramètres"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
 #: src/components/ui/Message/McpToolApprovalCard.tsx
 msgid "mcpApproval.alwaysAllowDisabled"
 msgstr "Verrouillé : votre organisation exige une confirmation chaque fois que cet outil s'exécute."
@@ -3246,6 +3272,7 @@ msgstr "Verrouillé : votre organisation exige une confirmation chaque fois que 
 #~ msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
 #: src/components/ui/Message/McpToolApprovalCard.tsx
 msgid "mcpApproval.openWorldWarning"
 msgstr ""
@@ -3279,6 +3306,11 @@ msgstr "Afficher formaté"
 #: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "message.showRawMarkdown.aria"
 msgstr "Afficher le markdown brut"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.inputRequired"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
@@ -3318,6 +3350,11 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
 msgid "message.taskResult.status.failed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.status.inputRequired"
 msgstr ""
 
 #. js-lingui-explicit-id
@@ -4659,8 +4696,8 @@ msgstr "Utilisateur"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
-msgid "sidecar.indexing.attachments"
-msgstr "{indexed} / {total} pièces jointes indexées"
+#~ msgid "sidecar.indexing.attachments"
+#~ msgstr "{indexed} / {total} pièces jointes indexées"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -4669,13 +4706,23 @@ msgstr "Recherche locale sur cet appareil"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
-msgid "sidecar.indexing.documents"
-msgstr "{indexed} / {total} documents indexés"
+msgid "sidecar.indexing.decreasePriority"
+msgstr "Diminuer la priorité"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
-msgid "sidecar.indexing.emails"
-msgstr "{indexed} / {total} e-mails indexés"
+msgid "sidecar.indexing.discoveredTotals"
+msgstr "Les totaux correspondent aux documents découverts et peuvent augmenter pendant l’analyse."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#~ msgid "sidecar.indexing.documents"
+#~ msgstr "{indexed} / {total} documents indexés"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#~ msgid "sidecar.indexing.emails"
+#~ msgstr "{indexed} / {total} e-mails indexés"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -4684,13 +4731,28 @@ msgstr "Aucune boîte mail locale trouvée."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.emptyDocuments"
+msgstr "Les documents vides ne contiennent aucun texte consultable. La couverture reste donc inférieure à 100%."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.enable"
 msgstr "Activer l’indexation de {mailbox}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
-msgid "sidecar.indexing.knownTotals"
-msgstr "Les totaux correspondent aux éléments détectés. Un tiret indique que les statistiques ne sont pas encore disponibles."
+msgid "sidecar.indexing.increasePriority"
+msgstr "Augmenter la priorité"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#~ msgid "sidecar.indexing.knownTotals"
+#~ msgstr "Les totaux correspondent aux éléments détectés. Un tiret indique que les statistiques ne sont pas encore disponibles."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.lastScan"
+msgstr "Dernière analyse réussie {time}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -4714,8 +4776,53 @@ msgstr "Augmenter la priorité de {mailbox}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.noDocuments"
+msgstr "Aucun document découvert pour le moment"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.noScan"
+msgstr "Aucune analyse réussie pour le moment"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.parallelism"
 msgstr "Processus d’indexation en parallèle"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.parallelismHelp"
+msgstr "Nombre maximal de documents traités simultanément."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.progress"
+msgstr "{percentage}% des {total} documents indexés"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.progressUnavailable"
+msgstr "Progression de l’indexation indisponible"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.reset"
+msgstr "Réinitialiser les index du sidecar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.resetConfirm"
+msgstr "Effacer tous les index de recherche locaux ? Les e-mails originaux, les pièces jointes et les paramètres sont conservés. L’indexation reste arrêtée jusqu’à sa reprise ou au redémarrage du sidecar."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.resetError"
+msgstr "Impossible de confirmer la fin de la réinitialisation. Vérifiez l’état ou réessayez."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.resetSuccess"
+msgstr "Index de recherche locaux effacés. L’indexation est arrêtée."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -4729,8 +4836,88 @@ msgstr "Impossible d’enregistrer les paramètres d’indexation. Veuillez rée
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.source.outlook"
+msgstr "Outlook"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+#~ msgid "sidecar.indexing.status.attention"
+#~ msgstr "Intervention nécessaire"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.status.complete"
+msgstr "Indexation terminée"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.status.current"
+msgstr "À jour"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.status.disabled"
+msgstr "Désactivé"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.status.indexing"
+msgstr "Indexation en cours"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.status.indexingUnavailable"
+msgstr "Indexation indisponible"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.status.partial"
+msgstr "Partiellement indexé"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.status.scanFailed"
+msgstr "Échec de l’analyse"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.status.scanning"
+msgstr "Analyse en cours"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.status.sourceUnavailable"
+msgstr "Source indisponible"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.status.stopped"
+msgstr "Arrêté"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.status.unavailable"
+msgstr "État indisponible"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.status.waiting"
+msgstr "En attente"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.terminal"
+msgstr "Certains documents sont vides ou n’ont pas pu être indexés. La couverture reste donc inférieure à 100%."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.throttle"
 msgstr "Documents par minute"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.throttleHelp"
+msgstr "Nombre maximal de documents dont le traitement peut commencer par minute."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
@@ -4739,8 +4926,38 @@ msgstr "Indexation des boîtes mail"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
+msgid "sidecar.indexing.unsaved"
+msgstr "Modifications non enregistrées"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarIndexingCard.tsx
 msgid "sidecar.indexing.upgrade"
 msgstr "Mettez à jour Desktop Sidecar pour configurer l’indexation."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskPlanApprovalCard.tsx
+msgid "taskPlanApproval.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskPlanApprovalCard.tsx
+msgid "taskPlanApproval.itemTitle"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskPlanApprovalCard.tsx
+msgid "taskPlanApproval.runMode.async"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskPlanApprovalCard.tsx
+msgid "taskPlanApproval.title"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskPlanApprovalCard.tsx
+msgid "taskPlanApproval.unnamedTask"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TextComparison.tsx
@@ -4786,6 +5003,51 @@ msgstr "Comparaison de texte"
 #: src/components/ui/Message/TextComparison.tsx
 msgid "textComparison.whitespace"
 msgstr "· espace · ↵ saut de paragraphe · ⇥ tabulation si modifiés"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalDecisionActions.tsx
+msgid "toolApproval.allowAll"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/OriginApprovalLink.tsx
+msgid "toolApproval.coveredByParent"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalDecisionActions.tsx
+msgid "toolApproval.denyAll"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "toolApproval.genericDescription"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "toolApproval.genericTitle"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalDecisionActions.tsx
+msgid "toolApproval.staged.allowed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalDecisionActions.tsx
+msgid "toolApproval.staged.denied"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalDecisionActions.tsx
+msgid "toolApproval.withdraw"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalDecisionActions.tsx
+msgid "toolApproval.withdraw.hint"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallInput.tsx

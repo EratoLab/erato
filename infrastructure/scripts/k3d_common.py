@@ -7,6 +7,7 @@ VALID_SCENARIOS = [
     "basic",
     "tight-budget",
     "assistants",
+    "approvals",
     "entra_id",
     "many-models",
     "multi-replica",

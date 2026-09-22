@@ -555,6 +555,7 @@ mod test_cases {
                     summary: "THE-CHILD-ANSWER".to_string(),
                     truncated: false,
                     sequence: 0,
+                    redeliveries: 0,
                 },
             )],
         );
@@ -617,6 +618,7 @@ mod test_cases {
                     summary: "ONCE".to_string(),
                     truncated: false,
                     sequence: 0,
+                    redeliveries: 0,
                 },
             )],
         );
@@ -3060,6 +3062,7 @@ mod test_cases {
                 kind,
                 origin_chat_id: Some(Uuid::new_v4()),
                 origin_message_id: None,
+                parent_message_id: None,
                 origin_assistant_id: None,
                 rebase_cutoff: None,
                 depth: 1,
@@ -3112,6 +3115,7 @@ mod test_cases {
                 kind: crate::models::chat::ChatProvenanceKind::Delegation,
                 origin_chat_id: Some(Uuid::new_v4()),
                 origin_message_id: None,
+                parent_message_id: None,
                 origin_assistant_id: None,
                 rebase_cutoff: None,
                 depth: 1,

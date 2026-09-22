@@ -60,3 +60,5 @@ export type { SourcesListV1Params } from "./sources-list-v1-params.js";
 export type { SourcesListV1Result } from "./sources-list-v1-result.js";
 export type { SourcesGetFolderHierarchyV1Params } from "./sources-get-folder-hierarchy-v1-params.js";
 export type { SourcesGetFolderHierarchyV1Result } from "./sources-get-folder-hierarchy-v1-result.js";
+export type { SourcesGetDocumentV1Params } from "./sources-get-document-v1-params.js";
+export type { SourcesGetDocumentV1Result } from "./sources-get-document-v1-result.js";

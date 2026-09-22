@@ -3182,6 +3182,55 @@ describe("useChatMessaging", () => {
       });
     };
 
+    // A batch of tasks that parked: each child's placeholder stays at the slot
+    // it reserved at launch, carrying `input_required`, and the approval part is
+    // appended last.
+    const parkedTaskMessage = {
+      id: "assistant-parked-tasks-1",
+      role: "assistant" as const,
+      createdAt: "2026-02-18T12:00:00.000Z",
+      status: "complete" as const,
+      content: [
+        { content_type: "text" as const, text: "Starting two tasks. " },
+        {
+          content_type: "tool_use" as const,
+          tool_call_id: "task-call-1",
+          tool_name: "delegate_task",
+          input: { task: "one" },
+          output: { status: "input_required", delegate_chat_id: "child-1" },
+          status: "in_progress" as const,
+        },
+        {
+          content_type: "tool_use" as const,
+          tool_call_id: "task-call-2",
+          tool_name: "delegate_task",
+          input: { task: "two" },
+          output: { status: "input_required", delegate_chat_id: "child-2" },
+          status: "in_progress" as const,
+        },
+        {
+          content_type: "tool_approval_request" as const,
+          tool_call_id: "task-call-1",
+          tool_name: "delegate_task",
+          mcp_server_id: "",
+          input: { task: "one" },
+          annotations: {},
+          preset: "restrictive",
+          allow_always: true,
+          requested_at: "2026-02-18T12:00:01.000Z",
+          kind: "delegated_task",
+        },
+      ],
+    };
+
+    const seedParkedTaskChat = () => {
+      act(() => {
+        useMessagingStore
+          .getState()
+          .setApiMessages([parkedTaskMessage as never], "chat1");
+      });
+    };
+
     const getContinueCall = () =>
       mockCreateSSEConnection.mock.calls.find((call: unknown[]) =>
         (call[0] as string).includes("/continuestream"),
@@ -3317,6 +3366,198 @@ describe("useChatMessaging", () => {
           status: "success",
           output: { published: true },
         }),
+      );
+    });
+
+    const taskItems = [
+      {
+        approval_id: "task-call-1",
+        tool_call_id: "task-call-1",
+        tool_name: "delegate_task",
+        input: { task: "one" },
+        child: { child_chat_id: "child-1", mcp_server_id: "mock_mcp_files" },
+      },
+      {
+        approval_id: "task-call-2",
+        tool_call_id: "task-call-2",
+        tool_name: "delegate_task",
+        input: { task: "two" },
+        child: { child_chat_id: "child-2", mcp_server_id: "mock_mcp_approval" },
+      },
+    ];
+
+    it("seeds only the decisions when the settled calls are children of this turn", async () => {
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      seedParkedTaskChat();
+
+      await act(async () => {
+        const pending = result.current.continueToolApproval({
+          messageId: parkedTaskMessage.id,
+          decision: "approve",
+          toolCallId: "task-call-1",
+          toolName: "delegate_task",
+          mcpServerId: "",
+          kind: "delegated_task",
+          approvalIds: ["task-call-1", "task-call-2"],
+          items: taskItems,
+        });
+        sseCallbacks.onOpen?.();
+        await pending;
+      });
+
+      // A parked child's slot already sits on the row and is overwritten where
+      // it stands, so seeding a call for it would push every later index out.
+      const seeded = useMessagingStore.getState().getStreaming("chat1");
+      expect(seeded.content.map((part) => part.content_type)).toEqual([
+        "text",
+        "tool_use",
+        "tool_use",
+        "tool_approval_request",
+        "tool_approval",
+        "tool_approval",
+      ]);
+      expect(seeded.content.slice(1, 3)).toEqual(
+        parkedTaskMessage.content.slice(1, 3),
+      );
+      expect(seeded.content[4]).toEqual(
+        expect.objectContaining({
+          approval_id: "task-call-1",
+          child_chat_id: "child-1",
+        }),
+      );
+    });
+
+    it("drops the roster of every server a standing answer was written on", async () => {
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      seedParkedTaskChat();
+      mockInvalidateQueries.mockClear();
+
+      await act(async () => {
+        const pending = result.current.continueToolApproval({
+          messageId: parkedTaskMessage.id,
+          decision: "approve_always",
+          toolCallId: "task-call-1",
+          toolName: "delegate_task",
+          mcpServerId: "",
+          kind: "delegated_task",
+          approvalIds: ["task-call-1", "task-call-2"],
+          itemDecisions: [
+            { approvalId: "task-call-1", decision: "approve_always" },
+            { approvalId: "task-call-2", decision: "approve_always" },
+          ],
+          items: taskItems,
+        });
+        sseCallbacks.onOpen?.();
+        await pending;
+      });
+
+      // Two children of one turn, two different servers: a grant on each is
+      // written where that child's tool lives.
+      const invalidated = mockInvalidateQueries.mock.calls.map(
+        (call) => (call[0] as { queryKey: unknown[] }).queryKey,
+      );
+      expect(invalidated).toEqual(
+        expect.arrayContaining([
+          ["mcpServerTools", "mock_mcp_files"],
+          ["mcpServerTools", "mock_mcp_approval"],
+        ]),
+      );
+    });
+
+    it("seeds a refusal slot only for the plan items that were declined", async () => {
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      seedParkedChat();
+
+      await act(async () => {
+        const pending = result.current.continueToolApproval({
+          messageId: parkedMessage.id,
+          decision: "approve",
+          toolCallId: "call-a",
+          toolName: "delegate_task",
+          mcpServerId: "",
+          kind: "task_plan",
+          approvalIds: ["plan:0:0", "plan:0:1"],
+          itemDecisions: [
+            { approvalId: "plan:0:0", decision: "approve" },
+            { approvalId: "plan:0:1", decision: "reject" },
+          ],
+          items: [
+            {
+              approval_id: "plan:0:0",
+              tool_call_id: "call-a",
+              tool_name: "delegate_task",
+              input: { task: "one" },
+            },
+            {
+              approval_id: "plan:0:1",
+              tool_call_id: "call-b",
+              tool_name: "delegate_task",
+              input: { task: "two" },
+            },
+          ],
+        });
+        sseCallbacks.onOpen?.();
+        await pending;
+      });
+
+      // An approved plan item is dispatched later in the turn and gets its slot
+      // then; a declined one is refused right away.
+      const seeded = useMessagingStore.getState().getStreaming("chat1");
+      expect(seeded.content.map((part) => part.content_type)).toEqual([
+        "text",
+        "tool_approval_request",
+        "tool_approval",
+        "tool_rejection",
+        "tool_use",
+      ]);
+      expect(seeded.content[4]).toEqual(
+        expect.objectContaining({ tool_call_id: "call-b", status: "error" }),
+      );
+      const call = getContinueCall();
+      expect(JSON.parse((call![1] as { body: string }).body)).toEqual({
+        message_id: parkedMessage.id,
+        decisions: [
+          { approval_id: "plan:0:0", decision: "approve" },
+          { approval_id: "plan:0:1", decision: "reject" },
+        ],
+      });
+    });
+
+    it("records a withdrawal as the denial it is", async () => {
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      seedParkedChat();
+
+      await act(async () => {
+        const pending = result.current.continueToolApproval({
+          messageId: parkedMessage.id,
+          decision: "withdraw",
+          toolCallId: "call_probe",
+          toolName: "publish_approval_probe",
+          mcpServerId: "mock_mcp_approval",
+        });
+        sseCallbacks.onOpen?.();
+        await pending;
+      });
+
+      const seeded = useMessagingStore.getState().getStreaming("chat1");
+      expect(seeded.content[2]).toEqual(
+        expect.objectContaining({
+          content_type: "tool_rejection",
+          reason: "withdrawn",
+        }),
+      );
+      // The turn goes on with the denial, so the gated call is settled as
+      // failed rather than left spinning.
+      expect(seeded.content[3]).toEqual(
+        expect.objectContaining({ content_type: "tool_use", status: "error" }),
       );
     });
 

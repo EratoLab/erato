@@ -185,6 +185,24 @@ fn framed_untrusted_block(value: &str) -> String {
     value.replace('<', "&lt;").replace('>', "&gt;")
 }
 
+/// What the model is told when the run has stopped to ask instead of finishing.
+///
+/// Emitted in place of `delegation.tasks.result_template`, not around it: that
+/// template introduces a finished result — the shipped default says "has
+/// finished" — and saying so about a run that is still waiting would invite the
+/// model to report the task as done and move on. There is deliberately no
+/// second template key for this: an operator retuning the wording could drop
+/// the only sentence saying the answer has not arrived yet, and the sentence
+/// naming where the decision is taken is the whole point of the delivery.
+const INPUT_REQUIRED_TEMPLATE: &str = concat!(
+    "A task you delegated earlier has NOT finished. It stopped to ask for a decision only a ",
+    "person can make, and what follows is only what it had reached when it ",
+    "stopped.{{truncated_note}} The decision is taken in the run's own conversation — the one ",
+    "identified by the `child_run_id` below — and never in this one. A further result ",
+    "carrying the real answer arrives once the decision has been made; until then nothing ",
+    "about this task has been reported.\n\n{{result}}"
+);
+
 /// Render a delivered task result for the model that has to react to it.
 ///
 /// The split here is the whole point. `template` is operator-tunable prose and
@@ -198,6 +216,9 @@ fn framed_untrusted_block(value: &str) -> String {
 /// `{{result}}` is guaranteed present: a template without it is rejected at
 /// config load, because such a template renders perfectly well and what it
 /// renders is a result with the answer silently missing.
+///
+/// An `input_required` delivery ignores the operator's template and uses
+/// [`INPUT_REQUIRED_TEMPLATE`] instead — see there for why.
 pub fn render_task_result(
     template: &str,
     part: &crate::models::message::ContentPartTaskResult,
@@ -217,6 +238,11 @@ pub fn render_task_result(
         ""
     };
 
+    let template = if part.status == DelegationRunStatus::InputRequired.as_str() {
+        INPUT_REQUIRED_TEMPLATE
+    } else {
+        template
+    };
     let body = template
         .replace("{{truncated_note}}", truncated_note)
         .replace("{{result}}", &framed);
@@ -434,6 +460,8 @@ pub(crate) struct EffectiveTasksConfig {
     pub child_facet_ids: Vec<String>,
     pub run_modes: Vec<erato_config::config::TaskRunMode>,
     pub scheduling: erato_config::config::TaskScheduling,
+    pub approval_mode: erato_config::config::TaskApprovalMode,
+    pub approval_plan_min_tasks: u32,
 }
 
 /// Merge the global `[delegation.tasks]` keys with the overrides of every
@@ -447,7 +475,10 @@ pub(crate) struct EffectiveTasksConfig {
 /// facet that states one — it is a single-valued choice with no meaningful
 /// "combination", and selection order is the user's own. `run_modes` unions
 /// for the same reason as child facet ids, with `wait` floored back in;
-/// `scheduling` takes the first, like persona.
+/// `scheduling` takes the first, like persona. The approval policy narrows like
+/// a cap rather than combining: the STRICTEST `mode` and the LOWEST
+/// `plan_min_tasks` win, so selecting a second facet can only ever make a turn
+/// ask more.
 pub(crate) fn effective_tasks_config(
     global: &erato_config::config::DelegationTasksConfig,
     facets: &crate::config::FacetsConfig,
@@ -462,6 +493,8 @@ pub(crate) fn effective_tasks_config(
         child_facet_ids: global.child_facet_ids.clone(),
         run_modes: global.run_modes.clone(),
         scheduling: global.scheduling,
+        approval_mode: global.approval.mode,
+        approval_plan_min_tasks: global.approval.plan_min_tasks,
     };
     let mut persona_set = false;
     let mut scheduling_set = false;
@@ -520,6 +553,14 @@ pub(crate) fn effective_tasks_config(
             effective.scheduling = value;
             scheduling_set = true;
         }
+        if let Some(approval) = overrides.approval.as_ref() {
+            if let Some(mode) = approval.mode {
+                effective.approval_mode = effective.approval_mode.strictest(mode);
+            }
+            if let Some(minimum) = approval.plan_min_tasks {
+                effective.approval_plan_min_tasks = effective.approval_plan_min_tasks.min(minimum);
+            }
+        }
     }
     // Load-time validation only sees the global pair, so a facet that lowers
     // the total below the global concurrency would break the invariant that
@@ -538,6 +579,65 @@ pub(crate) fn effective_tasks_config(
             .insert(0, erato_config::config::TaskRunMode::Wait);
     }
     effective
+}
+
+/// The `run_mode` a `delegate_task` call asked for, read without validating it.
+///
+/// The dispatch-approval gate runs before anything has validated the batch, so
+/// it reads the raw argument: an unoffered or misspelled mode is refused later
+/// by `validate_task_tool_call`, and asking the user about a call that cannot
+/// run would be a prompt with no outcome behind it.
+fn requested_run_mode(tool_call: &genai::chat::ToolCall) -> Option<&str> {
+    tool_call.fn_arguments.get("run_mode")?.as_str()
+}
+
+/// Which calls of one batch the dispatch-approval policy wants the user to see
+/// before any of them runs, as indices into `batch`.
+///
+/// Empty means dispatch as usual. The whole batch is inspected rather than one
+/// call at a time because `plan` is a statement about the batch's size, and a
+/// per-call gate would ask about the first task before it knew whether the
+/// second one existed.
+pub(crate) fn tasks_needing_dispatch_approval(
+    effective: &EffectiveTasksConfig,
+    batch: &[genai::chat::ToolCall],
+    is_task_call: impl Fn(&genai::chat::ToolCall) -> bool,
+) -> Vec<usize> {
+    let task_calls: Vec<usize> = batch
+        .iter()
+        .enumerate()
+        .filter(|(_, call)| is_task_call(call))
+        .map(|(index, _)| index)
+        .collect();
+    if task_calls.is_empty() {
+        return Vec::new();
+    }
+    match effective.approval_mode {
+        erato_config::config::TaskApprovalMode::Never => Vec::new(),
+        erato_config::config::TaskApprovalMode::Always => task_calls,
+        erato_config::config::TaskApprovalMode::Plan => {
+            if task_calls.len() as u32 >= effective.approval_plan_min_tasks {
+                task_calls
+            } else {
+                Vec::new()
+            }
+        }
+        // Inert while the deployment does not offer `async` at all: the mode is
+        // stored as the literal it is, so the question is asked here rather than
+        // encoded as a conditional default nobody can read back.
+        erato_config::config::TaskApprovalMode::AsyncOnly => {
+            if !effective
+                .run_modes
+                .contains(&erato_config::config::TaskRunMode::Async)
+            {
+                return Vec::new();
+            }
+            task_calls
+                .into_iter()
+                .filter(|index| requested_run_mode(&batch[*index]) == Some("async"))
+                .collect()
+        }
+    }
 }
 
 /// Everything the task route needs for one turn: what the model may ask for,
@@ -831,6 +931,55 @@ pub fn resolve_delegation_run_mode(
     mode
 }
 
+/// Whether this chat is a delegated run that may park on an approval-gated MCP
+/// call instead of having it refused.
+///
+/// Every condition is a surface that has to exist. A `task` child is asked
+/// about somewhere — an awaited run on the origin turn's `ToolUse` slot, an
+/// `async` run on its own card, with the `input_required` delivery as the
+/// notification — and the deployment has to allow the propagation at all.
+/// Anything else has nowhere to ask, so the call is refused and the child
+/// finishes without it: the mention route has no task slot, a `background`
+/// child re-enters the origin on no route whatsoever, and the kill-switch off
+/// means the deployment does not want the question raised.
+pub(crate) fn child_may_park_on_approval(
+    chat: &crate::db::entity::chats::Model,
+    config: &DelegationConfig,
+) -> bool {
+    if !config.tasks.propagate_child_mcp_approvals {
+        return false;
+    }
+    let Ok(Some(configuration)) = crate::models::chat::parse_chat_configuration(chat) else {
+        return false;
+    };
+    let Some(provenance) = configuration.provenance.as_ref() else {
+        return false;
+    };
+    if provenance.kind != crate::models::chat::ChatProvenanceKind::Delegation {
+        return false;
+    }
+    match provenance.run_mode.unwrap_or(ProvenanceRunMode::Wait) {
+        ProvenanceRunMode::Wait => {}
+        // An `async` park is only visible through the delivery that carries it,
+        // so the same gate `drain_pending_deliveries` and `/react` use decides
+        // whether there is a notification to park behind.
+        ProvenanceRunMode::Async => {
+            if !config
+                .tasks
+                .run_modes
+                .contains(&erato_config::config::TaskRunMode::Async)
+            {
+                return false;
+            }
+        }
+        ProvenanceRunMode::Background => return false,
+    }
+    configuration
+        .task
+        .as_ref()
+        .is_some_and(|task| task.route == crate::models::chat::DelegateRoute::Task)
+}
+
 /// Status of a delegated child run, as reported to the origin model.
 ///
 /// `failed` is infrastructure only — a run that could not be carried out.
@@ -871,9 +1020,15 @@ pub enum DelegationRunReason {
     #[allow(dead_code)] // Emitted by the task budgets change (ERMAIN-774).
     CapExceeded,
     /// Parked on an approval the user has not answered yet.
-    #[allow(dead_code)] // Emitted when children park (ERMAIN-766).
     ApprovalPending,
     /// Hit a gated call it could not ask about, so it could not continue.
+    ///
+    /// Not emitted on any path today: a run with nowhere to ask has the CALL
+    /// refused rather than the run stopped, so it finishes in prose and its
+    /// envelope is an ordinary `completed`. The value stays in the vocabulary
+    /// because it is the name for that class of outcome and clients already
+    /// render it.
+    #[allow(dead_code)]
     ApprovalUnavailable,
     /// The run finished but its answer row is gone - deleted, or never written
     /// because the process died mid-run. Distinct from `no_answer`, which means
@@ -1009,6 +1164,55 @@ pub(crate) enum DelegationDispatchOutcome {
     /// envelope requires the ids of a run that exists, and the absence of
     /// them is precisely what tells a reader this one never started.
     NeverStarted { reason: DelegationRunReason },
+    /// The child stopped on an approval nobody in its own chat is going to
+    /// answer, and the request is now the origin turn's to carry.
+    ///
+    /// Not an outcome: the run is unfinished, its slot stays open, and the
+    /// child's own request part remains the executable truth the continuation
+    /// decides against. The copy travelling here exists so the origin's card
+    /// renders without reading another chat.
+    Suspended {
+        child_chat_id: Uuid,
+        /// The child's parked assistant row — the one a continuation decides.
+        child_message_id: Uuid,
+        /// Absent for a task child dispatched on the bare model.
+        assistant_id: Option<Uuid>,
+        assistant_name: Option<String>,
+        request: Box<crate::models::message::ContentPartToolApprovalRequest>,
+        trace: DelegationTrace,
+    },
+}
+
+/// The approval request a parked child is waiting on, read off its own row.
+///
+/// `None` whenever the row cannot be read or does not end on a request: the
+/// caller then treats the run as an ordinary outcome rather than inventing a
+/// park with nothing behind it.
+pub(crate) async fn read_child_approval_request<C: sea_orm::ConnectionTrait>(
+    conn: &C,
+    child_chat_id: Uuid,
+    child_message_id: Uuid,
+) -> Option<crate::models::message::ContentPartToolApprovalRequest> {
+    use sea_orm::EntityTrait;
+
+    let row = crate::db::entity::messages::Entity::find_by_id(child_message_id)
+        .one(conn)
+        .await
+        .map_err(|error| {
+            tracing::warn!(%error, %child_chat_id, "Failed to read a parked child's approval");
+        })
+        .ok()
+        .flatten()
+        .filter(|row| row.chat_id == child_chat_id)?;
+    crate::models::message::MessageSchema::validate(&row.raw_message)
+        .ok()?
+        .content
+        .into_iter()
+        .rev()
+        .find_map(|part| match part {
+            crate::models::message::ContentPart::ToolApprovalRequest(request) => Some(request),
+            _ => None,
+        })
 }
 
 /// The parent generation's stream, and where on it the delegation tool part
@@ -1418,11 +1622,13 @@ pub(crate) async fn build_result_envelope<C: sea_orm::ConnectionTrait>(
             .and_then(|content_type| content_type.as_str())
             .is_some_and(|content_type| content_type == "tool_approval_request");
         if stopped_on_approval && status == DelegationRunStatus::Completed {
-            // The child wanted a gated tool and had no way to ask. Parking it
-            // and surfacing the request on the parent is ERMAIN-766; until
-            // then this is genuinely a run that could not be carried out.
-            status = DelegationRunStatus::Failed;
-            reason = Some(DelegationRunReason::ApprovalUnavailable);
+            // The child stopped to ask, which is not a result and not a
+            // failure. The awaited path normally never gets here — it hands
+            // the request to the origin turn before building an envelope —
+            // but the continuation that settles the slot afterwards does,
+            // when the resumed child parks a second time.
+            status = DelegationRunStatus::InputRequired;
+            reason = Some(DelegationRunReason::ApprovalPending);
         }
         let has_metadata_error = row
             .generation_metadata
@@ -1658,6 +1864,10 @@ pub(crate) struct LaunchRunSpec {
     /// Lands in the child's provenance INSERT, so nothing has to reopen the
     /// document afterwards.
     pub retry_of: Option<Uuid>,
+    /// The origin's assistant row that will carry this run's approval requests.
+    /// Only an awaited run has one: nothing is waiting on a detached run, so
+    /// there is no turn its parked request could be surfaced on.
+    pub parent_message_id: Option<Uuid>,
 }
 
 /// Start a delegated child run and return without awaiting it.
@@ -1798,6 +2008,9 @@ pub(crate) async fn launch_delegation(
         rebase_cutoff: Some(spawned_at),
         depth: parent_depth + 1,
         adopted_at: None,
+        parent_message_id: run
+            .parent_message_id
+            .filter(|_| !run.run_mode.is_detached()),
         legacy_expected_output: None,
         legacy_constraints: None,
         run_mode: (run.run_mode != ProvenanceRunMode::Wait).then_some(run.run_mode),
@@ -2056,6 +2269,26 @@ pub(crate) async fn await_delegation(
     trace.finish();
     progress.flush(&trace).await;
 
+    // Flag first, row second. The child's lifecycle tail records its outcome
+    // before this join can fire, so the in-memory flag is decisive and the row
+    // is read only for the request to copy — a row read on its own would have
+    // to guess whether a trailing request part belongs to this run.
+    if status == DelegationRunStatus::Completed
+        && child_task.derive_outcome(false)
+            == crate::services::background_tasks::TaskOutcome::AwaitingApproval
+        && let Some(request) =
+            read_child_approval_request(&app_state.db, child_chat_id, child_task.message_id()).await
+    {
+        return DelegationDispatchOutcome::Suspended {
+            child_chat_id,
+            child_message_id: child_task.message_id(),
+            assistant_id,
+            assistant_name: target_name,
+            request: Box::new(request),
+            trace: trace.snapshot(),
+        };
+    }
+
     DelegationDispatchOutcome::Completed {
         envelope: build_result_envelope(
             &app_state.db,
@@ -2128,6 +2361,10 @@ pub(crate) async fn dispatch_delegate_tool_call(
             scheduling: erato_config::config::TaskScheduling::default(),
             parent_tool_call_id: Some(tool_call.call_id.clone()),
             retry_of: None,
+            // The mention route has no parent approval surface: its children
+            // never park, so a link here would name a turn that can never
+            // cover them.
+            parent_message_id: None,
         },
         brief,
     )
@@ -2230,6 +2467,50 @@ pub(crate) fn task_placeholder_output(launched: &LaunchedDelegation) -> serde_js
 /// able to tell that from a run that started.
 pub(crate) fn queued_placeholder_output() -> serde_json::Value {
     serde_json::json!({ "status": "queued" })
+}
+
+/// The envelope of a run that has stopped to ask.
+///
+/// A real envelope rather than a bespoke object so the slot reads the same
+/// whether it is parked or settled. The slot that carries it keeps its
+/// `in_progress` tool status: the run is suspended, not over, and this is what
+/// says why it is not moving.
+pub(crate) fn suspended_envelope(
+    child_chat_id: Uuid,
+    assistant_id: Option<Uuid>,
+    assistant_name: Option<String>,
+    parent_tool_call_id: String,
+) -> DelegationResultEnvelope {
+    DelegationResultEnvelope {
+        status: DelegationRunStatus::InputRequired,
+        reason: Some(DelegationRunReason::ApprovalPending),
+        assistant_id,
+        assistant_name,
+        delegate_chat_id: child_chat_id,
+        child_run_id: child_chat_id,
+        parent_tool_call_id,
+        result: None,
+        truncated: false,
+    }
+}
+
+/// The settled output of a slot whose child a continuation resumed.
+///
+/// The trace is carried over from the part the park left behind rather than
+/// rebuilt: the resumed run's events go to a detached sink, so a fresh trace
+/// would show the user a delegate that did nothing.
+pub(crate) fn resumed_slot_output(
+    envelope: &DelegationResultEnvelope,
+    parked_output: Option<&serde_json::Value>,
+) -> serde_json::Value {
+    let mut value =
+        serde_json::to_value(envelope).unwrap_or_else(|_| json!({ "status": "failed" }));
+    if let Some(trace) = parked_output.and_then(|output| output.get(DELEGATION_LOCAL_TRACE_KEY))
+        && let Some(object) = value.as_object_mut()
+    {
+        object.insert(DELEGATION_LOCAL_TRACE_KEY.to_string(), trace.clone());
+    }
+    value
 }
 
 /// One `delegate_task` call that passed validation and is ready to launch.
@@ -2844,6 +3125,8 @@ mod tests {
             result_template: erato_config::config::DelegationTasksConfig::default().result_template,
             run_modes: vec![erato_config::config::TaskRunMode::Wait],
             scheduling: erato_config::config::TaskScheduling::default(),
+            propagate_child_mcp_approvals: true,
+            approval: erato_config::config::DelegationTasksApprovalConfig::default(),
         }
     }
 
@@ -2863,6 +3146,7 @@ mod tests {
                     child_facet_ids: Some(vec!["files".to_string()]),
                     run_modes: None,
                     scheduling: None,
+                    approval: None,
                 }),
             ),
         );
@@ -2881,6 +3165,7 @@ mod tests {
                     child_facet_ids: Some(vec!["web_search".to_string(), "mail".to_string()]),
                     run_modes: None,
                     scheduling: None,
+                    approval: None,
                 }),
             ),
         );
@@ -2910,6 +3195,218 @@ mod tests {
                 "files".to_string(),
                 "mail".to_string()
             ]
+        );
+    }
+
+    fn approval_overrides(
+        mode: Option<erato_config::config::TaskApprovalMode>,
+        plan_min_tasks: Option<u32>,
+    ) -> Option<erato_config::config::FacetDelegationOverrides> {
+        Some(erato_config::config::FacetDelegationOverrides {
+            max_tasks_per_turn: None,
+            max_server_tool_calls_per_task: None,
+            max_client_tool_calls_per_task: None,
+            max_parallel: None,
+            persona: None,
+            child_facet_ids: None,
+            run_modes: None,
+            scheduling: None,
+            approval: Some(erato_config::config::FacetDelegationApprovalOverrides {
+                mode,
+                plan_min_tasks,
+            }),
+        })
+    }
+
+    /// The approval policy narrows like a cap rather than combining: a facet
+    /// that asks less must not be able to buy the turn out of another facet's
+    /// policy, and a lower plan threshold is the stricter one.
+    #[test]
+    fn multi_facet_merge_takes_strictest_mode_and_min_plan_min_tasks() {
+        let mut facets = crate::config::FacetsConfig::default();
+        facets.facets.insert(
+            "lenient".to_string(),
+            planning_facet(
+                &["erato/delegate_task"],
+                approval_overrides(Some(erato_config::config::TaskApprovalMode::Never), Some(9)),
+            ),
+        );
+        facets.facets.insert(
+            "strict".to_string(),
+            planning_facet(
+                &["erato/delegate_task"],
+                approval_overrides(Some(erato_config::config::TaskApprovalMode::Plan), Some(4)),
+            ),
+        );
+
+        let mut global = tasks_config();
+        global.approval.mode = erato_config::config::TaskApprovalMode::AsyncOnly;
+        global.approval.plan_min_tasks = 6;
+        let effective = effective_tasks_config(
+            &global,
+            &facets,
+            &["lenient".to_string(), "strict".to_string()],
+        );
+
+        assert_eq!(
+            effective.approval_mode,
+            erato_config::config::TaskApprovalMode::Plan,
+            "`plan` is stricter than both `async_only` and `never`"
+        );
+        assert_eq!(effective.approval_plan_min_tasks, 4);
+
+        // Selection order must not change the answer.
+        let reversed = effective_tasks_config(
+            &global,
+            &facets,
+            &["strict".to_string(), "lenient".to_string()],
+        );
+        assert_eq!(reversed.approval_mode, effective.approval_mode);
+        assert_eq!(
+            reversed.approval_plan_min_tasks,
+            effective.approval_plan_min_tasks
+        );
+    }
+
+    fn task_batch(calls: &[(&str, Option<&str>)]) -> Vec<genai::chat::ToolCall> {
+        calls
+            .iter()
+            .map(|(call_id, run_mode)| genai::chat::ToolCall {
+                call_id: (*call_id).to_string(),
+                fn_name: erato_config::config::DELEGATE_TASK_TOOL_NAME.to_string(),
+                fn_arguments: match run_mode {
+                    Some(mode) => json!({ "task": "brief", "run_mode": mode }),
+                    None => json!({ "task": "brief" }),
+                },
+                thought_signatures: None,
+            })
+            .collect()
+    }
+
+    fn gate_scope(
+        mode: erato_config::config::TaskApprovalMode,
+        plan_min_tasks: u32,
+        run_modes: &[erato_config::config::TaskRunMode],
+    ) -> EffectiveTasksConfig {
+        let mut effective = scope_offering(&["plan"], run_modes).effective;
+        effective.approval_mode = mode;
+        effective.approval_plan_min_tasks = plan_min_tasks;
+        effective
+    }
+
+    fn gated_ids(effective: &EffectiveTasksConfig, batch: &[genai::chat::ToolCall]) -> Vec<String> {
+        tasks_needing_dispatch_approval(effective, batch, |call| {
+            call.fn_name == erato_config::config::DELEGATE_TASK_TOOL_NAME
+        })
+        .into_iter()
+        .map(|index| batch[index].call_id.clone())
+        .collect()
+    }
+
+    /// `never` is the only mode that lets a batch through untouched, and it must
+    /// do so whatever the batch contains.
+    #[test]
+    fn never_gates_nothing() {
+        let batch = task_batch(&[("a", Some("async")), ("b", None)]);
+        assert!(
+            gated_ids(
+                &gate_scope(
+                    erato_config::config::TaskApprovalMode::Never,
+                    2,
+                    &[
+                        erato_config::config::TaskRunMode::Wait,
+                        erato_config::config::TaskRunMode::Async
+                    ],
+                ),
+                &batch
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn always_gates_every_task_call_including_a_lone_wait() {
+        let batch = task_batch(&[("a", None)]);
+        assert_eq!(
+            gated_ids(
+                &gate_scope(
+                    erato_config::config::TaskApprovalMode::Always,
+                    2,
+                    &[erato_config::config::TaskRunMode::Wait],
+                ),
+                &batch
+            ),
+            vec!["a".to_string()]
+        );
+    }
+
+    /// The threshold is about the batch, which is why the whole batch is
+    /// inspected at once: a per-call hook would have had to ask about the first
+    /// task before it could know whether a second one existed.
+    #[test]
+    fn plan_gates_only_from_the_threshold_up() {
+        let effective = gate_scope(
+            erato_config::config::TaskApprovalMode::Plan,
+            2,
+            &[erato_config::config::TaskRunMode::Wait],
+        );
+        assert!(gated_ids(&effective, &task_batch(&[("a", None)])).is_empty());
+        assert_eq!(
+            gated_ids(&effective, &task_batch(&[("a", None), ("b", None)])),
+            vec!["a".to_string(), "b".to_string()]
+        );
+    }
+
+    /// `async_only` leaves the awaited calls of the same batch alone — they
+    /// report back into the turn that asked for them, so the user sees what they
+    /// did — and is inert while the deployment offers no detached mode at all.
+    #[test]
+    fn async_only_gates_the_detached_calls_and_nothing_when_async_is_unoffered() {
+        let batch = task_batch(&[("wait_one", None), ("detached", Some("async"))]);
+        let offering_async = gate_scope(
+            erato_config::config::TaskApprovalMode::AsyncOnly,
+            2,
+            &[
+                erato_config::config::TaskRunMode::Wait,
+                erato_config::config::TaskRunMode::Async,
+            ],
+        );
+        assert_eq!(
+            gated_ids(&offering_async, &batch),
+            vec!["detached".to_string()]
+        );
+
+        let wait_only = gate_scope(
+            erato_config::config::TaskApprovalMode::AsyncOnly,
+            2,
+            &[erato_config::config::TaskRunMode::Wait],
+        );
+        assert!(
+            gated_ids(&wait_only, &batch).is_empty(),
+            "a call that cannot run is not worth a prompt"
+        );
+    }
+
+    /// A batch with no task in it is never gated, whatever the mode says: the
+    /// policy is about dispatching tasks, and an MCP batch has its own gate.
+    #[test]
+    fn a_batch_without_a_task_call_is_never_gated() {
+        let batch = vec![genai::chat::ToolCall {
+            call_id: "mcp".to_string(),
+            fn_name: "search_web".to_string(),
+            fn_arguments: json!({}),
+            thought_signatures: None,
+        }];
+        assert!(
+            gated_ids(
+                &gate_scope(
+                    erato_config::config::TaskApprovalMode::Always,
+                    2,
+                    &[erato_config::config::TaskRunMode::Wait],
+                ),
+                &batch
+            )
+            .is_empty()
         );
     }
 
@@ -2996,6 +3493,7 @@ mod tests {
                     child_facet_ids: None,
                     run_modes: Some(vec![erato_config::config::TaskRunMode::Async]),
                     scheduling: Some(erato_config::config::TaskScheduling::Silent),
+                    approval: None,
                 }),
             ),
         );
@@ -3012,6 +3510,7 @@ mod tests {
                     child_facet_ids: None,
                     run_modes: Some(vec![erato_config::config::TaskRunMode::Wait]),
                     scheduling: Some(erato_config::config::TaskScheduling::WhenIdle),
+                    approval: None,
                 }),
             ),
         );
@@ -3061,6 +3560,8 @@ mod tests {
                 child_facet_ids: Vec::new(),
                 run_modes: run_modes.to_vec(),
                 scheduling: erato_config::config::TaskScheduling::default(),
+                approval_mode: erato_config::config::TaskApprovalMode::Never,
+                approval_plan_min_tasks: 2,
             },
         }
     }
@@ -3162,6 +3663,7 @@ mod tests {
                     child_facet_ids: None,
                     run_modes: None,
                     scheduling: None,
+                    approval: None,
                 }),
             ),
         );
@@ -3290,6 +3792,94 @@ mod tests {
         );
     }
 
+    fn delegated_chat(run_mode: &str, route: &str) -> crate::db::entity::chats::Model {
+        let now: sea_orm::prelude::DateTimeWithTimeZone = chrono::Utc::now().into();
+        crate::db::entity::chats::Model {
+            id: Uuid::new_v4(),
+            owner_user_id: "owner".to_string(),
+            created_at: now,
+            updated_at: now,
+            title_by_summary: None,
+            archived_at: None,
+            assistant_configuration: Some(json!({
+                "provenance": { "kind": "delegation", "run_mode": run_mode },
+                "task": { "route": route },
+            })),
+            assistant_id: None,
+            origin_chat_id: None,
+            title_by_user_provided: None,
+            is_pinned: false,
+            active_generation_id: None,
+            generation_state: None,
+            generation_started_at: None,
+            generation_heartbeat_at: None,
+            generation_ended_at: None,
+            mcp_write_tools_enabled: false,
+            disabled_mcp_server_ids: Vec::new(),
+            disabled_mcp_tools: Vec::new(),
+        }
+    }
+
+    fn park_config(run_modes: Vec<erato_config::config::TaskRunMode>) -> DelegationConfig {
+        let mut config = DelegationConfig::default();
+        config.tasks.run_modes = run_modes;
+        config
+    }
+
+    /// The gate is per run mode, and every `false` here is a run with nowhere
+    /// to put the question: a `background` child re-enters the origin on no
+    /// route at all, an `async` child is only asked about through the delivery
+    /// its origin gets — so a deployment that does not offer `async` tasks has
+    /// no such delivery — and the mention route has no task slot.
+    #[test]
+    fn only_a_task_child_with_somewhere_to_ask_may_park() {
+        use erato_config::config::TaskRunMode;
+
+        let offers_async = park_config(vec![TaskRunMode::Wait, TaskRunMode::Async]);
+        assert!(child_may_park_on_approval(
+            &delegated_chat("wait", "task"),
+            &offers_async
+        ));
+        assert!(child_may_park_on_approval(
+            &delegated_chat("async", "task"),
+            &offers_async
+        ));
+        assert!(!child_may_park_on_approval(
+            &delegated_chat("background", "task"),
+            &offers_async
+        ));
+        assert!(!child_may_park_on_approval(
+            &delegated_chat("wait", "assistant"),
+            &offers_async
+        ));
+        assert!(
+            !child_may_park_on_approval(
+                &delegated_chat("async", "task"),
+                &park_config(vec![TaskRunMode::Wait])
+            ),
+            "an async park announces itself through a delivery a wait-only deployment never makes"
+        );
+    }
+
+    /// The kill switch is exactly that: off, no child of any shape asks.
+    #[test]
+    fn the_propagation_kill_switch_refuses_every_child() {
+        let mut config = park_config(vec![
+            erato_config::config::TaskRunMode::Wait,
+            erato_config::config::TaskRunMode::Async,
+        ]);
+        config.tasks.propagate_child_mcp_approvals = false;
+
+        assert!(!child_may_park_on_approval(
+            &delegated_chat("wait", "task"),
+            &config
+        ));
+        assert!(!child_may_park_on_approval(
+            &delegated_chat("async", "task"),
+            &config
+        ));
+    }
+
     fn task_result_part(
         summary: &str,
         truncated: bool,
@@ -3302,6 +3892,7 @@ mod tests {
             summary: summary.to_string(),
             truncated,
             sequence: 0,
+            redeliveries: 0,
         }
     }
 
@@ -3375,6 +3966,52 @@ mod tests {
         assert_eq!(
             close_count, 1,
             "a child closing the tag must not produce a second one: {rendered}"
+        );
+    }
+
+    /// The origin model must not be told a parked run reported.
+    ///
+    /// The operator template introduces a finished result — the shipped default
+    /// says "has finished" — and a notification rendered through it would read
+    /// as the task's answer, which invites the model to summarise a run that has
+    /// not done anything yet and never to mention that someone has to decide.
+    ///
+    /// Mutation: let `input_required` fall through to the operator template and
+    /// this fails.
+    #[test]
+    fn a_parked_run_is_not_rendered_as_a_finished_one() {
+        let mut part = task_result_part("WHAT-IT-HAD-SO-FAR", false);
+        part.status = DelegationRunStatus::InputRequired.as_str().to_string();
+        part.reason = Some(DelegationRunReason::ApprovalPending.as_str().to_string());
+
+        let rendered = render_task_result(
+            "A task you delegated earlier has finished and its result is below. {{result}}",
+            &part,
+        );
+
+        assert!(
+            !rendered.contains("has finished and its result is below"),
+            "the operator's finished-result prose must not describe a park: {rendered}"
+        );
+        assert!(
+            rendered.contains("status: input_required"),
+            "the status line is still emitted by the renderer: {rendered}"
+        );
+        assert!(
+            rendered.contains("NOT finished"),
+            "the model has to be told the task has not reported: {rendered}"
+        );
+        assert!(
+            rendered.contains("child_run_id"),
+            "and where the decision is taken: {rendered}"
+        );
+        assert!(
+            rendered.contains("WHAT-IT-HAD-SO-FAR"),
+            "what the run reached still reaches the model: {rendered}"
+        );
+        assert!(
+            rendered.contains(RESULT_UNTRUSTED_GUIDANCE),
+            "the guidance is not the template's to lose: {rendered}"
         );
     }
 

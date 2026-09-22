@@ -475,7 +475,7 @@ export async function getScenarioData(
  * If in k3d but wrong scenario, switches to the required scenario.
  *
  * @param page - The Playwright page object (used to get browser context)
- * @param requiredScenario - The scenario that this test requires ('basic', 'tight-budget', 'assistants', 'many-models', or 'entra_id')
+ * @param requiredScenario - The scenario that this test requires ('basic', 'tight-budget', 'assistants', 'approvals', 'many-models', or 'entra_id')
  */
 export async function ensureTestScenario(
   page: Page,
@@ -483,6 +483,7 @@ export async function ensureTestScenario(
     | "basic"
     | "tight-budget"
     | "assistants"
+    | "approvals"
     | "many-models"
     | "multi-replica"
     | "entra_id",
@@ -553,12 +554,25 @@ export async function ensureTestScenario(
             const startTime = Date.now();
 
             while (Date.now() - startTime < maxWaitTime) {
-              // Reload the helper page to get fresh environment variables
-              await helperPage.reload();
-              await waitForEratoPageReady(helperPage);
-
-              // Check if scenario has changed
-              const newScenario = await getCurrentScenario(helperPage);
+              // Reload the helper page to get fresh environment variables.
+              //
+              // A switch rewrites the scenario ConfigMap and the reloader
+              // restarts the backend, so an attempt that lands inside that
+              // restart cannot load the page at all. That is the state this
+              // loop exists to wait out, so the attempt is discarded and
+              // retried rather than thrown: an unguarded attempt made the
+              // 2-minute budget a one-shot 10-second one, and every scenario's
+              // setup project failed on a well-timed reload.
+              let newScenario: string | null = null;
+              try {
+                await helperPage.reload();
+                await waitForEratoPageReady(helperPage);
+                newScenario = await getCurrentScenario(helperPage);
+              } catch (attemptError) {
+                console.log(
+                  `[K3D_SCENARIO] ⏳ Backend not serving yet: ${attemptError}`,
+                );
+              }
 
               if (newScenario === requiredScenario) {
                 console.log(

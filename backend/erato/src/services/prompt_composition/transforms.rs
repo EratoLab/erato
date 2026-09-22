@@ -652,37 +652,7 @@ pub async fn resolve_sequence(
             AbstractChatSequencePart::PreviousAssistantMessage { message_id } => {
                 let message = message_repo.get_message_by_id(&message_id).await?;
                 let parsed = MessageSchema::validate(&message.raw_message)?;
-                for content_part in parsed.content {
-                    match content_part {
-                        // Approval lifecycle content is host-side state. The
-                        // ToolUse appended after its resolution is the only
-                        // portion that must be replayed to the provider.
-                        ContentPart::ToolApprovalRequest(_)
-                        | ContentPart::ToolApproval(_)
-                        | ContentPart::ToolRejection(_) => {}
-                        ContentPart::ToolUse(tool_use) => {
-                            // Synthetic client-action proposals never replay
-                            // — see is_client_action_tool_use_message.
-                            if is_synthetic_client_action_tool_use(&tool_use) {
-                                continue;
-                            }
-                            input_messages.push(InputMessage {
-                                role: MessageRole::Assistant,
-                                content: ContentPart::ToolUse(tool_use.clone()),
-                            });
-                            input_messages.push(InputMessage {
-                                role: MessageRole::Tool,
-                                content: ContentPart::ToolUse(strip_ui_only_tool_output(tool_use)),
-                            });
-                        }
-                        content_part => {
-                            input_messages.push(InputMessage {
-                                role: parsed.role.clone(),
-                                content: content_part,
-                            });
-                        }
-                    }
-                }
+                input_messages.extend(replay_assistant_content(&parsed.role, parsed.content));
             }
 
             AbstractChatSequencePart::CurrentUserContent { content } => {
@@ -728,6 +698,49 @@ pub async fn resolve_sequence(
     let resolved = ResolvedChatSequence::new(input_messages);
 
     Ok((resolved, unresolved))
+}
+
+/// Shared with the approval continuation, which rebuilds the model context of a
+/// parked turn from the row rather than from a second, hand-assembled copy: two
+/// derivations of "what the model already saw" drift, and the one that drifts
+/// silently hands the provider a tool response with no matching call.
+pub(crate) fn replay_assistant_content(
+    role: &MessageRole,
+    content: Vec<ContentPart>,
+) -> Vec<InputMessage> {
+    let mut input_messages = Vec::new();
+    for content_part in content {
+        match content_part {
+            // Approval lifecycle content is host-side state. The
+            // ToolUse appended after its resolution is the only
+            // portion that must be replayed to the provider.
+            ContentPart::ToolApprovalRequest(_)
+            | ContentPart::ToolApproval(_)
+            | ContentPart::ToolRejection(_) => {}
+            ContentPart::ToolUse(tool_use) => {
+                // Synthetic client-action proposals never replay
+                // — see is_client_action_tool_use_message.
+                if is_synthetic_client_action_tool_use(&tool_use) {
+                    continue;
+                }
+                input_messages.push(InputMessage {
+                    role: MessageRole::Assistant,
+                    content: ContentPart::ToolUse(tool_use.clone()),
+                });
+                input_messages.push(InputMessage {
+                    role: MessageRole::Tool,
+                    content: ContentPart::ToolUse(strip_ui_only_tool_output(tool_use)),
+                });
+            }
+            content_part => {
+                input_messages.push(InputMessage {
+                    role: role.clone(),
+                    content: content_part,
+                });
+            }
+        }
+    }
+    input_messages
 }
 
 fn normalize_historical_input_message(input_msg: InputMessage) -> InputMessage {

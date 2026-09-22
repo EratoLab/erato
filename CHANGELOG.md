@@ -62,11 +62,27 @@ Typical "Notable changes" categories to copy & paste:
 
   `RecentChat` gains an optional `retry_of` naming the failed run a listed run replaces, so a client can durably swap a failed run's retry button for a link to its replacement instead of remembering the swap itself. The same value is recorded on the child's provenance as JSONB — **no migration**. The retry endpoint and its client affordance are served only where `[delegation.tasks]` is enabled with the `async` run mode; elsewhere the route is a `404` and no control is shown.
 
+- **The web client now renders the approval stops the backend learned to raise.** A parked delegated task and a planned batch of tasks each get their own card instead of the generic one: a task card names the sub-task by its brief and shows the call the CHILD stopped on — the tool, its server and its arguments — rather than the parent's `delegate_task` dispatch, and a plan card lists the tasks the model wants to run so they can be allowed or declined one at a time. One card covers the whole stop, however many items it has, and its answers are sent together, because the server takes a decision that covers every open approval or none.
+
+  "Always allow" is offered only where a grant can be written: on a parked task, keyed on the child's own server and tool. A plan has no always-allow at all — what may be dispatched unasked is the deployment's to say. Every card also offers **Withdraw**, which denies everything still open and lets the turn finish in prose, and a child card refused with `409 covered_by_parent` now says where the question actually is and links to the chat that started the task, instead of showing the refusal. Decisions already taken are shown beside the step they settled in the thinking trace, on the parent's task step as well as on a plain tool call.
+
 #### Stability improvements
 
 - A chat whose provider connection stalls without closing no longer stays "running" forever. A turn that receives no content from its provider for `generation_status.provider_idle_timeout_secs` (new, default 600) now fails as a provider error and releases the chat's generation lease. The budget bounds silence, not length: an answer that keeps streaming is never cut off, however long it takes. Note that it is measured on content rather than on socket traffic — keep-alive pings and empty deltas are dropped by the provider adapter and do not reset it. Set the option to `0` for the previous unbounded behaviour.
 
 #### Wire changes
+
+**Every MCP tool-approval continuation behaves differently, and none of it is behind a feature flag.** `POST /me/messages/continuestream` now works from the set of approvals a parked turn still has open rather than from the last content part of its row.
+
+- **The rest of the batch runs.** Calls a model made after the one that hit the approval gate used to be dropped — they lived only in an in-memory queue that died with the turn. They are now recorded on the approval part (`pending_tool_calls`) and dispatched after the decision, through the same filtered tool set: a call whose tool has since been denied, disabled or switched off is refused with an error the model can work around rather than executed.
+- **The resumed turn sees what it already did.** The model context is derived from the row's own parts, so the calls that ran before the gated one are replayed with their results instead of vanishing between the park and the answer.
+- **A retry after a crash resumes instead of answering `400`.** A continuation writes the decision and the gated call's outcome before it contacts the model, precisely so a retry is possible, but the old entry guard asked whether the row's last part was still an approval request. A `continuestream` retried after a restart now resumes the model call, decides nothing again and re-runs no tool it finds already recorded. A turn that did produce its answer is never resumed, whatever the chat's most recent generation did.
+- **A duplicate resume answers `409 { "code": "already_continued" }`** instead of `400`. Two tabs, or one retried request, is a conflict rather than a malformed body, and a client has to tell it apart from a decision the server refused. Like the other `409`s on this route it is discriminated by `code`; the generated schema declares `GenerationRunningError` for the status and carries `AlreadyContinuedError` as a type of its own. The web client does not render it specially yet.
+- **`withdraw` rejects every approval the turn has open**, each with `reason: "withdrawn"`, and the turn still finishes in prose rather than leaving the chat on a card the user dismissed.
+
+A continuation on the **task route** also keeps its `delegate_task` offer across the park, so a model interrupted mid-plan can finish it; the `@`-mention offer is still not replayed, and a turn reacting to a delivered task result is still not offered the tool at all.
+
+No deployment ordering is required: the legacy single-`decision` body stays accepted while exactly one approval is open, which is all the MCP gate opens today, so an older frontend keeps working against the new backend.
 
 **Delegated-run results report a new status vocabulary.** This changes values the shipped `@`-mention delegation route already emits, and it is not behind a feature flag.
 
@@ -76,7 +92,7 @@ Deploy the frontend of this release **before or with** the backend: an older fro
 | --- | --- |
 | `"status": "timeout"` | `"status": "cancelled"` with `"reason": "timeout"` |
 | `"status": "failed"` on a run that produced no text | `"status": "completed"` with `"reason": "no_answer"` |
-| `"status": "failed"` on a run stopped by an approval it could not raise | unchanged, plus `"reason": "approval_unavailable"` |
+| `"status": "failed"` on a run stopped by an approval it could not raise | `"status": "input_required"` with `"reason": "approval_pending"` while the decision is outstanding; a run that cannot ask at all has the CALL refused and still reports `completed` with its partial answer. `"reason": "approval_unavailable"` stays in the vocabulary but is no longer emitted |
 
 `failed` now means infrastructure failure only — a run that could not be carried out. The result envelope also gains `reason`, `child_run_id` (the same value as the existing `delegate_chat_id`, which is kept) and `parent_tool_call_id`, and `assistant_id` / `assistant_name` became optional: they are omitted entirely for a task child that runs on the bare model rather than as an assistant.
 
@@ -135,6 +151,51 @@ How it is presented to the model is tunable via the new `delegation.tasks.result
 A delivered result and the turn that reacted to it sit below the assistant message a client last saw, so submitting on that anchor would have knocked both off the conversation. The `user_message_saved` event's `message.previous_message_id` may therefore differ from the `previous_message_id` the client sent; clients already replace their optimistic row with the server's.
 
 Editing or regenerating a turn is still a branch operation and still branches. If the turn that started the task is itself still on the thread, the result is delivered again on the new branch — once, so repeated branching cannot accumulate re-appended results. If the user rewrote the very turn that started the task, the result is stale by definition and is marked superseded.
+
+**An approval stop can now describe more than one decision, and the continuation body can name which one it answers.** Additive: no existing approval behaviour changes, and rows written before this release keep resuming exactly as they did.
+
+`ContentPartToolApprovalRequest` gains three fields: `kind` (`"mcp_tool"`, `"delegated_task"` or `"task_plan"`; absent means `"mcp_tool"`), `approvals[]` — one entry per decision the stop covers, each with an `approval_id` and, for a decision that stands in for a delegated child, a `child` block naming that child's chat, message and gated call — and `pending_tool_calls[]`, the calls of the same batch that have not run yet. An MCP approval records itself as a single `approvals[]` entry whose `approval_id` is the tool call id, so nothing about the shipped single-call flow changes. **A client must branch on `kind` before reading `tool_name` and `mcp_server_id`:** for every kind but `mcp_tool` those describe no MCP tool, and `mcp_server_id` is an empty string.
+
+`ContinueStreamRequest` gains `decisions: [{ approval_id, decision }]`. The legacy body `{ message_id, decision }` is still accepted, but only while exactly one approval is open — it names no approval, so on a wider stop it could only guess. A body that leaves an open approval unanswered, or names one the turn does not have open, is a `400` with `{ "code": "decisions_mismatch", "missing": [...], "unknown": [...] }`, and the turn stays parked and answerable.
+
+`ToolApprovalDecision` gains `"withdraw"`: taking the question back rather than answering it. It rejects the open approvals with `reason: "withdrawn"` and the turn continues with those denials — a decision value, not an endpoint; there is no `withdrawapproval` route. `ContentPartToolApproval` and `ContentPartToolRejection` gain optional `approval_id` and `child_chat_id` recording which decision they settled, and `ContentPartToolRejection` gains an optional `reason` whose only value is `withdrawn`.
+
+No new configuration key, and no migration: the approval part is JSONB.
+
+**A delegated task that needs an approval now asks, on the turn that dispatched it.** New key `delegation.tasks.propagate_child_mcp_approvals` (default `true`) — on by default, so this changes behaviour for any deployment that has `[delegation.tasks]` on with the `wait` run mode.
+
+Before, a task child that reached an approval-gated MCP call had the call refused and finished without it: a child has no card of its own on the turn waiting for it, so nobody could be asked. Now the child stops, and the turn that dispatched it grows one approval part with `kind: "delegated_task"` — one item per parked child, `approval_id` naming the `delegate_task` call it covers, and a `child` block carrying that child's gated call so the card renders without a second chat read. The rest of the batch is still awaited and settled first; the part is appended last, so the row reads as parked exactly as an MCP stop does. Set the key to `false` to keep the old refusal.
+
+Answering that card resumes the child, not the parent: approving runs the call inside the child and its answer settles the origin's slot, denying reaches the child as an ordinary refused tool call it finishes around, and "always allow" is stored against the **child's** `(mcp_server_id, tool_name)` — never the synthetic `delegate_task` name. A child that hits a second gate re-parks the turn with a new card.
+
+Two wire consequences for a client:
+
+- The parked child's `delegate_task` part keeps its index and stays `in_progress` with `output.status: "input_required"` and `output.reason: "approval_pending"`. It is never written with a null output, and the continuation overwrites the same part with the settled envelope.
+- `POST /me/messages/continuestream` against a child whose request the origin is currently asking about answers `409 { "code": "covered_by_parent", "parent_message_id": … }` — the origin holds the slot the answer is owed to, so its card is the one that can act. The refusal lasts only while that approval is open: once it is settled or withdrawn, or the origin chat is archived or deleted, the child is an ordinary parked chat its owner can answer. A decision taken there settles the child alone; feeding it back into the origin's slot is a later change.
+
+An `@`-mentioned assistant's run still has its gated calls refused, because there is no turn to carry the request to and no card of its own to raise. An `async` task parks too — see below.
+
+**The user can now be asked before the model's planned tasks are dispatched at all.** New sub-table `[delegation.tasks.approval]` with `mode` (default `"async_only"`) and `plan_min_tasks` (default `2`, must be at least 2), plus the per-facet twin `[facets.facets.<facet-id>.delegation.approval]` carrying the same two keys.
+
+The shipped default is the literal `async_only`, not a value derived from `run_modes`: it asks before every `async` dispatch and leaves awaited tasks alone. **A deployment that already offers `run_modes = ["wait", "async"]` therefore starts asking where it did not before** — set `mode = "never"` to keep the old behaviour. With the default `run_modes = ["wait"]` there is nothing for it to ask about and the gate is inert, so most deployments see no change. The other modes are `always` (ask about any batch containing a task) and `plan` (ask once a batch reaches `plan_min_tasks` tasks).
+
+The gate runs over the whole batch before any of it is dispatched, so **no child chat, run or placeholder exists when the card appears**. It is one approval part with `kind: "task_plan"` and **one item per task** — `approval_id` is `"plan:<batch>:<n>"`, `tool_name` is `delegate_task`, `input` is the call's own arguments, and there is no `child` block, because there is no child yet. The task calls the policy did not target and the rest of the batch ride along in `pending_tool_calls` and run once the decision is in. As on every other approval part, `mcp_server_id` is `""` and a client must branch on `kind` first.
+
+A plan can be approved in part: the items the user keeps are re-seeded at the head of the batch in the order the model asked for them and dispatch through the normal path, so the per-turn and concurrency caps apply unchanged, while each item denied settles as a refusal `ToolUse` carrying `{"status": "rejected", "error": "The user declined this task."}` — no `reason`, because "the user said no" is not a run outcome. `withdraw` denies every open item and the turn still finishes in prose. There is no "always allow" for a plan: what may be dispatched unasked is the deployment's to say, not a per-user setting's.
+
+Where two selected planning facets both state a policy, the merge narrows rather than combines — strictest `mode` (`always` > `plan` > `async_only` > `never`) and lowest `plan_min_tasks` — so selecting a second facet can only ever make a turn ask more. Retrying a failed run from the origin chat never asks: the user's click is the approval.
+
+The injected frontend environment gains `DELEGATION_TASKS_APPROVAL_MODE`, the effective **global** mode as its config spelling, so a composer can say in advance that a plan will need approving. Per-facet overrides are deliberately not published: they are resolved per turn from the facet selection, and a client that read one would promise a policy the next turn might not run.
+
+**An `async` task that needs an approval now parks and says so, instead of finishing without the tool.** No new configuration key: this is the same `delegation.tasks.propagate_child_mcp_approvals` (default `true`) as an awaited task's park, and it only happens where `run_modes` contains `async`.
+
+Nothing is waiting on a detached task, so there is no turn to raise a card on — which is why such a run used to have its gated call refused. It now stops on its own card, in its own chat, and the conversation that started the task is told: a `task_result` row arrives with `"status": "input_required"` and `"reason": "approval_pending"`, and the reaction turn over it points at the run. There is no approval part on the origin; the run's own chat is the only place the question can be answered.
+
+**One `async` run can therefore deliver two `task_result` rows, told apart by `sequence`** — the notification, then the answer that follows the decision one higher. Usually `0` and `1`; if the origin branched away from the notification and it was delivered again in between, the pair is higher, so a client must compare the two rather than test for `1`. A client that treats a delivered result as final, or that keys a card on the child chat id alone, will see the second row replace nothing and must render both. Deciding on the run's card is what produces the second: the decision runs through `continuestream` on the child chat, so the child's own generation tails re-arm the delivery rather than the origin's. Denying is not cancelling — the run finishes in prose without the tool and the second row reads `completed`, exactly as an awaited task's denial does. Two is the maximum, not a promise: if the decision is taken before the notification has been delivered — an origin that is busy, or parked on an approval of its own, holds it — the answer replaces it and the conversation is told once, at `sequence` 1.
+
+**`task_result` parts gain `redeliveries`, and it — not `sequence` — is what means "you have seen this result before".** `sequence` counts deliveries owed by the run, so it is bumped both when a branch write knocks a delivery off the active thread and when a parked run is re-armed with its real answer; only the first of those is the same result arriving twice. A client that labelled a row as a repeat because `sequence > 0` will label a parked run's answer — the row the reader has been waiting for — as something they already saw, and must switch to `redeliveries > 0`. The field is absent on results delivered before this change, and those rows must keep reading `sequence > 0` as the repeat — back then nothing else could raise it — so a client that switches wholesale rather than falling back would silently de-badge every repeat already in its transcripts.
+
+A run that parks again after a decision does not deliver a third row: the notification the conversation already holds still describes the situation, and the `sequence` bump is spent on the answer.
 
 #### Deprecations
 

@@ -325,6 +325,16 @@ const typeTargets = [
     "sources-get-folder-hierarchy-v1-result.ts",
     "SourcesGetFolderHierarchyV1Result",
   ],
+  [
+    "schemas/methods/sources-get-document-v1-params.schema.json",
+    "sources-get-document-v1-params.ts",
+    "SourcesGetDocumentV1Params",
+  ],
+  [
+    "schemas/methods/sources-get-document-v1-result.schema.json",
+    "sources-get-document-v1-result.ts",
+    "SourcesGetDocumentV1Result",
+  ],
 ];
 
 const validatorTargets = {
@@ -418,6 +428,10 @@ const validatorTargets = {
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-folder-hierarchy-v1-params.schema.json",
   validateSourcesGetFolderHierarchyV1Result:
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-folder-hierarchy-v1-result.schema.json",
+  validateSourcesGetDocumentV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-document-v1-params.schema.json",
+  validateSourcesGetDocumentV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-document-v1-result.schema.json",
 };
 
 await rm(outputDirectory, { recursive: true, force: true });

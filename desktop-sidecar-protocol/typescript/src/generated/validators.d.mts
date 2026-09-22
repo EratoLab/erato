@@ -56,3 +56,5 @@ export const validateSourcesListV1Params: Validator;
 export const validateSourcesListV1Result: Validator;
 export const validateSourcesGetFolderHierarchyV1Params: Validator;
 export const validateSourcesGetFolderHierarchyV1Result: Validator;
+export const validateSourcesGetDocumentV1Params: Validator;
+export const validateSourcesGetDocumentV1Result: Validator;

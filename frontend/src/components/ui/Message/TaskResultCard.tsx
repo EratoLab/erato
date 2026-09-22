@@ -19,6 +19,11 @@ const statusLabel = (status: string): string | undefined => {
   switch (status) {
     case "completed":
       return undefined;
+    case "input_required":
+      return t({
+        id: "message.taskResult.status.inputRequired",
+        message: "Needs your decision",
+      });
     case "failed":
       return t({ id: "message.taskResult.status.failed", message: "Failed" });
     case "cancelled":
@@ -118,6 +123,13 @@ export const TaskResultCard = ({ part }: { part: ContentPartTaskResult }) => {
     id: "message.taskResult.openRun",
     message: "Open the task's run",
   });
+  // `redeliveries`, not `sequence`: a run that parked bumps `sequence` for its
+  // second, different result, and badging that as a repeat would tell the
+  // reader they have already seen the answer they were waiting for. Rows
+  // written before the field existed carry only `sequence`, and back then
+  // nothing but a redelivery could raise it.
+  const isRedelivery =
+    part.redeliveries === undefined ? part.sequence > 0 : part.redeliveries > 0;
 
   const openRunAffordance = openRun ? (
     <button
@@ -162,9 +174,7 @@ export const TaskResultCard = ({ part }: { part: ContentPartTaskResult }) => {
             {status}
           </span>
         )}
-        {/* `sequence` is 0-based: 0 is the first delivery, so anything above
-            it means this result reached the conversation more than once. */}
-        {part.sequence > 0 && (
+        {isRedelivery && (
           <span data-testid="task-result-sequence" className="text-xs">
             {t({
               id: "message.taskResult.sequence",
@@ -178,6 +188,39 @@ export const TaskResultCard = ({ part }: { part: ContentPartTaskResult }) => {
       {part.reason !== undefined && (
         <div data-testid="task-result-reason" className="mt-1 text-xs">
           {delegationReasonLabel(part.reason)}
+        </div>
+      )}
+
+      {/* The question is on the run's own chat, never here: nothing in this
+          conversation is waiting for the answer, so there is no card to mount
+          on this side. Saying so is the point of this delivery — the result
+          itself is only a notification. */}
+      {part.status === "input_required" && (
+        <div className="mt-1 text-xs" data-testid="task-result-input-required">
+          {t({
+            id: "message.taskResult.inputRequired",
+            message: "Answer it in the task's own chat:",
+          })}{" "}
+          {openRun ? (
+            <Button
+              variant="link"
+              size="sm"
+              onClick={() => openRun(part.child_chat_id)}
+              data-testid="task-result-input-required-open"
+            >
+              {openLabel}
+            </Button>
+          ) : (
+            <a
+              href={getChatUrl(part.child_chat_id)}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="task-result-input-required-open"
+              className="focus-ring-tight underline"
+            >
+              {openLabel}
+            </a>
+          )}
         </div>
       )}
 

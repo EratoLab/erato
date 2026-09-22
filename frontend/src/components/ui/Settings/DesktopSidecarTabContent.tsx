@@ -35,13 +35,20 @@ export function DesktopSidecarRow() {
     >
       <DesktopSidecarConfigurationSync />
       <DesktopSidecarEntityRow
+        defaultExpanded={attempt > 0}
         onRetry={() => setAttempt((currentAttempt) => currentAttempt + 1)}
       />
     </DesktopSidecarProvider>
   );
 }
 
-function DesktopSidecarEntityRow({ onRetry }: { onRetry: () => void }) {
+function DesktopSidecarEntityRow({
+  onRetry,
+  defaultExpanded,
+}: {
+  onRetry: () => void;
+  defaultExpanded: boolean;
+}) {
   const { client, snapshot } = useDesktopSidecar();
   const connected = snapshot.state === "ready";
   const connecting = snapshot.state === "discovering";
@@ -63,6 +70,9 @@ function DesktopSidecarEntityRow({ onRetry }: { onRetry: () => void }) {
 
   return (
     <EntityRow
+      // Retrying remounts the provider and this row. The retry action lives in
+      // the expanded details, so restore that state on the new attempt.
+      defaultExpanded={defaultExpanded}
       icon={<ComputerIcon className="size-4 text-theme-fg-secondary" />}
       name={t({
         id: "preferences.dialog.desktopSidecar.heading",

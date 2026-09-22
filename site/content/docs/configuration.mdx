@@ -4073,6 +4073,79 @@ This only takes effect when `delegation.tasks.enabled` is `true` and `async` is 
 scheduling = "when_idle"
 ```
 
+#### `delegation.tasks.propagate_child_mcp_approvals`
+
+{/* erato_toml_config_key: delegation.tasks.propagate_child_mcp_approvals */}
+
+What a task child does when it reaches an MCP tool call that needs the user's approval. With this on the child parks and asks: the user answers, the child resumes where it stopped, and a denial reaches it as an ordinary refused tool call it finishes around.
+
+Where the question appears depends on the run mode. A `wait` child is asked about on the turn that dispatched it, which is still waiting for it. An `async` child stops on its own card in its own chat, and the conversation that started the task is told by a result with status `input_required` linking to it; answering there delivers a second result carrying the run's real answer.
+
+Turning it off refuses the gated call inside the child instead. The child still finishes, but without whatever the call was for, and nobody is asked — which is why the default is on. Leave it off only where an approval prompt raised by work the user did not explicitly start is unacceptable.
+
+An @-mentioned assistant's run is not covered either way: it has neither a task slot on the turn waiting for it nor a card of its own, so its gated calls are refused whatever this says.
+
+This only takes effect when `delegation.tasks.enabled` is `true`.
+
+**Default value:** `true`
+
+**Type:** `boolean`
+
+**Example:**
+
+```toml
+[delegation.tasks]
+propagate_child_mcp_approvals = true
+```
+
+#### `delegation.tasks.approval.mode`
+
+{/* erato_toml_config_key: delegation.tasks.approval.mode */}
+
+When the user is asked before the tasks the model planned are dispatched. The whole batch is shown as a single card carrying one item per task, so a plan can be approved in part: the tasks the user keeps are dispatched in the order the model asked for them, and each one it drops reaches the model as a refused call it answers around. Nothing is created before the decision — no child chat, no run, no placeholder.
+
+- `never` dispatches every planned task without asking.
+- `always` asks about every batch that contains a task call.
+- `plan` asks only once a batch reaches [`plan_min_tasks`](#delegationtasksapprovalplan_min_tasks) task calls, so a single lookup goes through unprompted while a multi-step plan is reviewed.
+- `async_only` asks about the task calls that detach and leaves awaited ones alone.
+
+The default is `async_only`, written as that literal rather than derived from `run_modes`: an awaited task reports back into the turn that asked for it, so the user sees what it did, while a detached one runs on its own after the turn has ended. Until `async` is in [`delegation.tasks.run_modes`](#delegationtasksrun_modes) there is nothing for it to ask about, so it behaves exactly as `never` — and a deployment that later offers `async` gets the prompt that implies without having to remember to ask for it.
+
+A planning facet may run under a stricter policy of its own; see [`facets.facets.<facet-id>.delegation`](#facetsfacets).
+
+This only takes effect when `delegation.tasks.enabled` is `true`.
+
+**Default value:** `"async_only"`
+
+**Type:** `string` (one of `never`, `always`, `plan`, `async_only`)
+
+**Example:**
+
+```toml
+[delegation.tasks.approval]
+mode = "async_only"
+```
+
+#### `delegation.tasks.approval.plan_min_tasks`
+
+{/* erato_toml_config_key: delegation.tasks.approval.plan_min_tasks */}
+
+From how many task calls in one batch `mode = "plan"` asks. Read by that mode only.
+
+Must be at least 2. Below two there is no plan to review, only a single call with nothing to choose between — which is what `mode = "always"` is for, and writing it as a threshold of `1` would be that behaviour under a name that promises a review.
+
+**Default value:** `2`
+
+**Type:** `integer`
+
+**Example:**
+
+```toml
+[delegation.tasks.approval]
+mode = "plan"
+plan_min_tasks = 3
+```
+
 ### `assistant_hub`
 
 {/* erato_toml_config_key: assistant_hub */}
@@ -4455,6 +4528,8 @@ additional_system_prompt = "You are assisting inside the Outlook add-in. Keep re
 {/* erato_toml_config_key: facets.facets.<facet-id>.delegation.child_facet_ids.[] */}
 {/* erato_toml_config_key: facets.facets.<facet-id>.delegation.run_modes.[] */}
 {/* erato_toml_config_key: facets.facets.<facet-id>.delegation.scheduling */}
+{/* erato_toml_config_key: facets.facets.<facet-id>.delegation.approval.mode */}
+{/* erato_toml_config_key: facets.facets.<facet-id>.delegation.approval.plan_min_tasks */}
 
 A facet may override the [`delegation.tasks`](#delegationtasks) runtime keys while it is selected, so a dedicated planning facet can budget differently from the deployment default. Every key is optional and falls back to the global value.
 
@@ -4470,6 +4545,10 @@ max_parallel = 2
 max_client_tool_calls_per_task = 40
 max_server_tool_calls_per_task = 4
 child_facet_ids = ["web_search"]
+
+[facets.facets.plan.delegation.approval]
+mode = "plan"
+plan_min_tasks = 3
 ```
 
 - `max_tasks_per_turn` - Overrides `delegation.tasks.max_tasks_per_turn`.
@@ -4479,6 +4558,7 @@ child_facet_ids = ["web_search"]
 - `child_facet_ids` - Overrides `delegation.tasks.child_facet_ids`. Each entry must name a configured facet.
 - `run_modes` - Overrides `delegation.tasks.run_modes`. Unioned with the global list rather than replacing it, because a run mode is a capability the facet's author meant to grant; `wait` is always kept available.
 - `scheduling` - Overrides `delegation.tasks.scheduling`. The first selected facet that states one wins.
+- `approval.mode` and `approval.plan_min_tasks` - Override `delegation.tasks.approval.mode` and `delegation.tasks.approval.plan_min_tasks`. Merged like a cap rather than replacing: the strictest `mode` (`always` beats `plan` beats `async_only` beats `never`) and the lowest `plan_min_tasks` win, so selecting a second planning facet can only ever make a turn ask more.
 
 #### `facets.priority_order`
 

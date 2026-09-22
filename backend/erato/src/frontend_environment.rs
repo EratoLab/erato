@@ -48,6 +48,7 @@ const FRONTEND_ENV_KEY_ASSISTANTS_DELEGATION_ALLOW_BACKGROUND: &str =
     "ASSISTANTS_DELEGATION_ALLOW_BACKGROUND";
 const FRONTEND_ENV_KEY_DELEGATION_TASKS_ENABLED: &str = "DELEGATION_TASKS_ENABLED";
 const FRONTEND_ENV_KEY_DELEGATION_TASKS_ALLOW_ASYNC: &str = "DELEGATION_TASKS_ALLOW_ASYNC";
+const FRONTEND_ENV_KEY_DELEGATION_TASKS_APPROVAL_MODE: &str = "DELEGATION_TASKS_APPROVAL_MODE";
 const FRONTEND_ENV_KEY_STARTER_PROMPTS_ENABLED: &str = "STARTER_PROMPTS_ENABLED";
 const FRONTEND_ENV_KEY_PROMPT_OPTIMIZER_ENABLED: &str = "PROMPT_OPTIMIZER_ENABLED";
 const FRONTEND_ENV_KEY_USER_PREFERENCES_ENABLED: &str = "USER_PREFERENCES_ENABLED";
@@ -400,6 +401,13 @@ fn build_frontend_environment(
                     .run_modes
                     .contains(&erato_config::config::TaskRunMode::Async),
         ),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_DELEGATION_TASKS_APPROVAL_MODE.to_string(),
+        // The GLOBAL mode only. A per-facet override is resolved per turn from
+        // the facet selection the server knows about, so publishing one here
+        // would let the composer promise a policy the next turn does not run.
+        Value::String(config.delegation.tasks.approval.mode.as_str().to_string()),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_STARTER_PROMPTS_ENABLED.to_string(),
@@ -1342,6 +1350,47 @@ mod tests {
                 Some(&Value::Bool(false))
             );
         }
+    }
+
+    /// The GLOBAL mode, as its config spelling, and present whatever the
+    /// feature flags say: a composer that has to pre-announce an approval must
+    /// be able to read the policy without a second round trip.
+    #[test]
+    fn delegation_tasks_approval_mode_is_injected_for_both_frontends() {
+        for mode in [
+            erato_config::config::TaskApprovalMode::Never,
+            erato_config::config::TaskApprovalMode::Always,
+            erato_config::config::TaskApprovalMode::Plan,
+            erato_config::config::TaskApprovalMode::AsyncOnly,
+        ] {
+            let mut config = AppConfig::default();
+            config.delegation.tasks.enabled = true;
+            config.delegation.tasks.approval.mode = mode;
+
+            for frontend_kind in [FrontendKind::Web, FrontendKind::OfficeAddin] {
+                let environment = build_frontend_environment(&config, frontend_kind);
+                assert_eq!(
+                    environment
+                        .additional_environment
+                        .get(FRONTEND_ENV_KEY_DELEGATION_TASKS_APPROVAL_MODE),
+                    Some(&Value::String(mode.as_str().to_string())),
+                    "mode={mode:?} on {frontend_kind:?}"
+                );
+            }
+        }
+    }
+
+    /// The shipped default reaches the client as the literal it is, so a client
+    /// never has to reimplement "async_only behaves as never here".
+    #[test]
+    fn delegation_tasks_approval_mode_defaults_to_async_only() {
+        let environment = build_frontend_environment(&AppConfig::default(), FrontendKind::Web);
+        assert_eq!(
+            environment
+                .additional_environment
+                .get(FRONTEND_ENV_KEY_DELEGATION_TASKS_APPROVAL_MODE),
+            Some(&Value::String("async_only".to_string()))
+        );
     }
 
     #[test]

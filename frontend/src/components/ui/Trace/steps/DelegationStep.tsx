@@ -6,6 +6,10 @@ import { useDelegatedRunLiveStatus } from "@/hooks/chat/useDelegatedRunLiveStatu
 import { useDelegatedRunRetry } from "@/hooks/chat/useDelegatedRunRetry";
 import { DELEGATE_TASK_TOOL_NAME } from "@/lib/delegation/delegationEnvelope";
 import { delegationReasonLabel } from "@/lib/delegation/delegationLabels";
+import {
+  TASK_BRIEF_PREVIEW_CHARS,
+  taskBriefFromInput,
+} from "@/lib/delegation/taskBrief";
 import { useSidecarLocalTrace } from "@/lib/desktopSidecar/localTraceStore";
 import { useDelegatedRunOpener } from "@/providers/DelegatedRunOpenProvider";
 import { getChatUrl } from "@/utils/chat/urlUtils";
@@ -27,11 +31,12 @@ interface DelegationStepProps extends BaseStepProps {
   approvalStatus?: ToolApprovalStatus;
 }
 
-/** The delegate's answer is quoted, not reproduced — the run itself is a click away. */
+/**
+ * The delegate's answer is quoted, not reproduced — the run itself is a click
+ * away. The brief is quoted for the same reason, but at the length every
+ * surface quoting a brief shares: `TASK_BRIEF_PREVIEW_CHARS`.
+ */
 const RESULT_PREVIEW_CHARS = 280;
-
-/** Same reasoning for the brief, which is a sentence or two by design. */
-const BRIEF_PREVIEW_CHARS = 160;
 
 const stepLabel = (id: string): string =>
   id === "answer"
@@ -212,32 +217,6 @@ const backgroundPill = (
   }
 };
 
-/**
- * The brief the model wrote for the sub-task, off the tool call's own input.
- *
- * A task step's title can only say that a task ran; what it was is the part
- * worth reading, and unlike a mention run there is no assistant name standing
- * in for it. Bounded like the result: the step is a summary, and the run
- * itself is one click away.
- */
-const taskBrief = (input: unknown): string | undefined => {
-  if (typeof input !== "object" || input === null || Array.isArray(input)) {
-    return undefined;
-  }
-  const task = (input as Record<string, unknown>).task;
-  if (typeof task !== "string") {
-    return undefined;
-  }
-  const text = task.trim();
-  if (text.length === 0) {
-    return undefined;
-  }
-  const characters = [...text];
-  return characters.length > BRIEF_PREVIEW_CHARS
-    ? `${characters.slice(0, BRIEF_PREVIEW_CHARS).join("")}…`
-    : text;
-};
-
 const resultPreview = (result: string | undefined): string | undefined => {
   const text = result?.trim();
   if (!text) {
@@ -395,7 +374,7 @@ export const DelegationStep = ({
   // delegated to, and its brief would just repeat the conversation.
   const brief =
     part.tool_name === DELEGATE_TASK_TOOL_NAME
-      ? taskBrief(part.input)
+      ? taskBriefFromInput(part.input, TASK_BRIEF_PREVIEW_CHARS)
       : undefined;
   const preview = resultPreview(envelope.result);
   // Any reason the backend sends is shown. A `completed` run is exactly where

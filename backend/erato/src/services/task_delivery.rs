@@ -13,12 +13,18 @@
 //! — any tail, from any replica — finds it. The sweep is what covers the case
 //! where there is no next tail: it runs from the cleanup worker's five-minute
 //! tick, under nobody's request, with SQL and nothing else.
+//!
+//! One run can owe two results. An `async` child that parks on an approval
+//! delivers `input_required` and then, once the user has answered its card, the
+//! real answer ([`rearm_delivery_after_child_decision`]); the two rows are told
+//! apart by `ResultDelivery.sequence`.
 
 use crate::metrics_constants::{
     POSTGRES_QUERY_DELIVERY_CLAIM, POSTGRES_QUERY_DELIVERY_DUPLICATE_PROBE,
-    POSTGRES_QUERY_DELIVERY_NEXT_PENDING, POSTGRES_QUERY_DELIVERY_RECORD,
-    POSTGRES_QUERY_DELIVERY_STATE_SET, POSTGRES_QUERY_DELIVERY_SWEEP_CLAIM,
-    POSTGRES_QUERY_DELIVERY_SWEEP_REQUEUE, POSTGRES_QUERY_DELIVERY_SWEEP_SCAN,
+    POSTGRES_QUERY_DELIVERY_NEXT_PENDING, POSTGRES_QUERY_DELIVERY_REARM,
+    POSTGRES_QUERY_DELIVERY_RECORD, POSTGRES_QUERY_DELIVERY_STATE_SET,
+    POSTGRES_QUERY_DELIVERY_SWEEP_CLAIM, POSTGRES_QUERY_DELIVERY_SWEEP_REQUEUE,
+    POSTGRES_QUERY_DELIVERY_SWEEP_SCAN,
 };
 use crate::models::chat::{
     ChatProvenanceKind, DELIVERY_REASON_CHILD_ARCHIVED, DELIVERY_REASON_ORIGIN_ARCHIVED,
@@ -29,7 +35,7 @@ use crate::models::message::ProvenanceRunMode;
 use crate::policy::engine::PolicyEngine;
 use crate::query_metrics::named_statement_from_sql_and_values;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
-use crate::services::background_tasks::Takeover;
+use crate::services::background_tasks::{Takeover, TaskOutcome};
 use crate::services::delegation::{DelegationRunReason, DelegationRunStatus};
 use crate::state::AppState;
 use eyre::Report;
@@ -164,9 +170,10 @@ pub async fn record_pending_delivery(
 
     let payload = serde_json::to_value(&delivery).ok()?;
     // Path-scoped rather than a whole-envelope rewrite: the adoption path
-    // replaces `assistant_configuration` wholesale from a possibly stale
-    // in-memory row, and the two would otherwise erase each other. Conditional
-    // on nothing being there yet, so a re-run writes no second delivery id.
+    // writes `{provenance,adopted_at}` on the owner's first write into this
+    // chat, and either landing second must keep what the other wrote.
+    // Conditional on nothing being there yet, so a re-run writes no second
+    // delivery id.
     let rows = app_state
         .db
         .query_all_raw(named_statement_from_sql_and_values(
@@ -191,6 +198,241 @@ pub async fn record_pending_delivery(
         tracing::debug!(%child_chat_id, "A delivery was already recorded for this run");
     }
 
+    Some(origin_chat_id)
+}
+
+/// The envelope a re-arm writes over the finished notification.
+///
+/// Everything naming the notification's own delivery is cleared rather than
+/// carried: a re-arm is a NEW result owed to the origin, not the old one
+/// arriving twice. `redeliveries` is the sharp one —
+/// `requeue_or_supersede_branched_deliveries` only requeues a delivery a branch
+/// write knocked off while that count is still `0`, so an inherited count would
+/// spend the answer's one requeue on the notification and silently drop the
+/// answer the user unblocked.
+fn rearmed_envelope(
+    delivered: &ResultDelivery,
+    result_message_id: Option<Uuid>,
+    status: String,
+    reason: Option<String>,
+) -> ResultDelivery {
+    ResultDelivery {
+        state: ResultDeliveryState::Pending,
+        delivery_id: Uuid::new_v4(),
+        result_message_id,
+        status,
+        reason,
+        claimed_by: None,
+        claimed_at: None,
+        message_id: None,
+        reaction_message_id: None,
+        attempts: 0,
+        redeliveries: 0,
+        redelivery_of: None,
+        sequence: delivered.sequence.saturating_add(1),
+        at: sqlx::types::chrono::Utc::now().into(),
+    }
+}
+
+/// Owe the origin a second result, now that a parked `async` child has been
+/// answered.
+///
+/// The `input_required` delivery was only the notification, and the claim
+/// compare-and-set takes `pending` rows only, so nothing else can turn it into
+/// the answer. Without this hook the child's real answer would stay in its own
+/// chat forever and the conversation that asked for the task would be left
+/// holding the question.
+///
+/// Every child-side generation tail calls this, not only the continuation: a
+/// user who answers the card by writing into the parked chat, or by editing or
+/// regenerating in it, has moved the run on just as much, and a tail that
+/// skipped the check would strand the result it produced.
+pub async fn rearm_delivery_after_child_decision(
+    app_state: &AppState,
+    child_chat_id: Uuid,
+    child_assistant_message_id: Uuid,
+    outcome: TaskOutcome,
+    tool_budget_exhausted: bool,
+) -> Option<Uuid> {
+    // Parking again is not an answer: the notification the origin already holds
+    // still describes the truth, and a bump per question would deliver one row
+    // per approval rather than the two per run the contract names.
+    if outcome == TaskOutcome::AwaitingApproval {
+        return None;
+    }
+    let chat = crate::db::entity::prelude::Chats::find_by_id(child_chat_id)
+        .one(&app_state.db)
+        .await
+        .ok()??;
+    let configuration = parse_chat_configuration(&chat).ok()??;
+    let provenance = configuration.provenance?;
+    if provenance.kind != ChatProvenanceKind::Delegation
+        || provenance.run_mode != Some(ProvenanceRunMode::Async)
+    {
+        return None;
+    }
+    let delivered = provenance.result_delivery.as_ref()?;
+    if delivered.status != DelegationRunStatus::InputRequired.as_str() {
+        return None;
+    }
+    // Every state but the two closed ones, because the notification's progress
+    // is not the user's: an origin parked on an approval of its own holds the
+    // notification at `pending` for as long as it stays parked, and a re-arm
+    // that waited for `delivered` would abandon the answer for exactly as long.
+    // `claimed` is taken too — the delivery in flight fences its own append on
+    // the `delivery_id` this replaces, so it rolls that append back and the
+    // origin gets the answer rather than a question it can no longer act on.
+    // `superseded` and `failed` are left alone: the origin branched away or
+    // cannot be written to at all, which is as true of the answer as it was of
+    // the notification.
+    if !matches!(
+        delivered.state,
+        ResultDeliveryState::Pending
+            | ResultDeliveryState::Claimed
+            | ResultDeliveryState::Delivered
+            | ResultDeliveryState::Reacted
+    ) {
+        tracing::debug!(
+            %child_chat_id,
+            state = delivered.state.as_str(),
+            "A parked async task was answered, but its delivery is closed"
+        );
+        return None;
+    }
+    // The same gate `drain_pending_deliveries` uses, so a deployment that has
+    // switched `async` off mid-flight would refuse to deliver the re-armed row
+    // anyway. Loud rather than silent: the run's answer stays in its own chat
+    // and the origin keeps a question nobody will ever close.
+    if !app_state.config.delegation.tasks.enabled
+        || !app_state
+            .config
+            .delegation
+            .tasks
+            .run_modes
+            .contains(&erato_config::config::TaskRunMode::Async)
+    {
+        tracing::warn!(
+            %child_chat_id,
+            "A parked async task was answered after its deployment stopped offering async tasks; \
+             its result stays in its own chat"
+        );
+        return None;
+    }
+    let origin_chat_id = provenance.origin_chat_id?;
+    let parent_tool_call_id = configuration
+        .task
+        .as_ref()
+        .and_then(|task| task.parent_tool_call_id.clone())
+        .unwrap_or_default();
+    let spawned_at = provenance.rebase_cutoff.unwrap_or(chat.created_at);
+
+    // Probed before the envelope for the reason `record_pending_delivery`
+    // states: `build_result_envelope` maps a missing answer to `completed` /
+    // `no_answer`, which would tell the origin model the task reported when the
+    // row it would have reported is gone.
+    let answer_row = crate::db::entity::prelude::Messages::find_by_id(child_assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .ok()
+        .flatten()
+        .filter(|row| row.chat_id == child_chat_id && row.created_at > spawned_at);
+
+    let (result_message_id, status, reason) = match answer_row {
+        None => (
+            None,
+            DelegationRunStatus::Failed.as_str().to_string(),
+            Some(DelegationRunReason::ResultMissing.as_str().to_string()),
+        ),
+        Some(_) => {
+            let envelope = crate::services::delegation::build_result_envelope(
+                &app_state.db,
+                child_chat_id,
+                child_assistant_message_id,
+                spawned_at,
+                chat.assistant_id,
+                None,
+                parent_tool_call_id,
+                if outcome == TaskOutcome::Errored {
+                    DelegationRunStatus::Failed
+                } else {
+                    DelegationRunStatus::Completed
+                },
+                // No `cancelled` / `timeout` arm, unlike
+                // `record_pending_delivery`: none of the tails that call this
+                // runs the resumed turn under a deadline, so there is no
+                // deadline to report, and an abort reads as `completed` here
+                // exactly as `StreamingTask::derive_outcome` reads it
+                // everywhere. A deadline on the continuation would have to be
+                // threaded in here with it.
+                None,
+                tool_budget_exhausted,
+                app_state.config.delegation.result_max_chars,
+            )
+            .await;
+            // The row says it is still asking, whatever the lease outcome said.
+            // Delivering that again would spend the sequence bump on a repeat
+            // of the notification the origin already has.
+            if envelope.status == DelegationRunStatus::InputRequired {
+                return None;
+            }
+            (
+                Some(child_assistant_message_id),
+                envelope.status.as_str().to_string(),
+                envelope.reason.map(|reason| reason.as_str().to_string()),
+            )
+        }
+    };
+    let rearmed = rearmed_envelope(delivered, result_message_id, status, reason);
+
+    let payload = serde_json::to_value(&rearmed).ok()?;
+    // Fenced on the delivery this tail read, not only on its state: two tails
+    // finishing at once would otherwise both re-arm and the origin would be
+    // told twice. The id is enough on its own because nobody mints a new one
+    // for the same result — a deferred delivery goes back to `pending` under
+    // the id it was claimed with — so the widened state list cannot match some
+    // other delivery. Path-scoped for the reason the record step is — the
+    // adoption path rewrites the whole column from a possibly stale in-memory
+    // row.
+    let rows = app_state
+        .db
+        .query_all_raw(named_statement_from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            POSTGRES_QUERY_DELIVERY_REARM,
+            format!(
+                r#"
+            UPDATE "chats"
+            SET "assistant_configuration" = jsonb_set(
+                "assistant_configuration", '{{provenance,result_delivery}}', $3::jsonb, true)
+            WHERE "id" = $1
+              AND ("assistant_configuration" #>> '{{provenance,result_delivery,delivery_id}}') = $2
+              AND ("assistant_configuration" #>> '{{provenance,result_delivery,state}}')
+                  IN ('{pending}', '{claimed}', '{delivered_state}', '{reacted}')
+              AND ("assistant_configuration" #>> '{{provenance,result_delivery,status}}') = '{parked}'
+            RETURNING "id"
+            "#,
+                pending = ResultDeliveryState::Pending.as_str(),
+                claimed = ResultDeliveryState::Claimed.as_str(),
+                delivered_state = ResultDeliveryState::Delivered.as_str(),
+                reacted = ResultDeliveryState::Reacted.as_str(),
+                parked = DelegationRunStatus::InputRequired.as_str(),
+            ),
+            [
+                child_chat_id.into(),
+                delivered.delivery_id.to_string().into(),
+                payload.into(),
+            ],
+        ))
+        .await
+        .ok()?;
+    if rows.is_empty() {
+        tracing::debug!(%child_chat_id, "A parked async delivery was already re-armed");
+        return None;
+    }
+    tracing::info!(
+        %child_chat_id,
+        sequence = rearmed.sequence,
+        "Re-armed the delivery of an answered parked async task"
+    );
     Some(origin_chat_id)
 }
 
@@ -719,6 +961,7 @@ pub async fn deliver_task_result(
                         summary,
                         truncated,
                         sequence: delivery.sequence,
+                        redeliveries: delivery.redeliveries,
                     },
                 );
                 // A failed read here is NOT `None`: `None` means "no anchor",
@@ -1547,6 +1790,7 @@ async fn deliver_one_child_db_only(
                     // Verbatim: the sequence is 0-based and already correct on
                     // the envelope.
                     sequence: delivery.sequence,
+                    redeliveries: delivery.redeliveries,
                 },
             );
             let input_parameters = crate::models::message::InputParameters {
@@ -1804,6 +2048,56 @@ mod tests {
         assert_eq!(
             stored_delivery(&db, child_chat_id).await.state,
             ResultDeliveryState::Delivered
+        );
+    }
+
+    /// A re-armed delivery must start life owing nothing to the one it
+    /// replaces.
+    ///
+    /// `redeliveries` is the one that bites: a branch write only requeues a
+    /// knocked-off delivery while that count is `0` and supersedes past it, so
+    /// an answer inheriting the notification's count would be dropped the first
+    /// time the origin branched — after the user had already answered the card.
+    ///
+    /// Mutation: clone the notification's envelope instead of building a fresh
+    /// one and this fails.
+    #[test]
+    fn a_rearm_inherits_no_bookkeeping_from_the_notification_it_replaces() {
+        let mut notification = claimed_delivery("holder");
+        notification.state = ResultDeliveryState::Reacted;
+        notification.status = DelegationRunStatus::InputRequired.as_str().to_string();
+        notification.reason = Some("approval_pending".to_string());
+        notification.message_id = Some(Uuid::new_v4());
+        notification.reaction_message_id = Some(Uuid::new_v4());
+        notification.attempts = 3;
+        notification.redeliveries = 1;
+        notification.redelivery_of = Some(Uuid::new_v4());
+        notification.sequence = 2;
+
+        let answer_row = Uuid::new_v4();
+        let rearmed = rearmed_envelope(
+            &notification,
+            Some(answer_row),
+            DelegationRunStatus::Completed.as_str().to_string(),
+            None,
+        );
+
+        assert_eq!(rearmed.redeliveries, 0);
+        assert_eq!(rearmed.redelivery_of, None);
+        assert_eq!(rearmed.state, ResultDeliveryState::Pending);
+        assert_ne!(rearmed.delivery_id, notification.delivery_id);
+        assert_eq!(rearmed.attempts, 0);
+        assert_eq!(rearmed.claimed_by, None);
+        assert_eq!(rearmed.claimed_at, None);
+        assert_eq!(rearmed.message_id, None);
+        assert_eq!(rearmed.reaction_message_id, None);
+        assert_eq!(rearmed.result_message_id, Some(answer_row));
+        assert_eq!(rearmed.status, "completed");
+        assert_eq!(rearmed.reason, None);
+        assert_eq!(
+            rearmed.sequence, 3,
+            "the sequence is the one thing that carries: it is what tells the \
+             two rows apart in the origin"
         );
     }
 
